@@ -102,7 +102,7 @@ func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, server
 	}
 
 	m := newChatModel(projectInfo, serverHealth)
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.program = p
 
 	// Enable TUI mode for output routing
@@ -172,6 +172,10 @@ type chatModel struct {
 	menuActive bool
 	// Controller decouples data/state updates from the UI model
 	controller *Controller
+	// Track first render to ensure initial scroll to bottom
+	isFirstRender bool
+	// Track if we just started a new response (should auto-scroll)
+	justStartedResponse bool
 }
 
 // removed: old bottom menu state
@@ -388,8 +392,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		initialHistory = projectHistory
 	}
 
-	// Initialize viewport content with initial mode messages
+	// Initialize viewport content with initial mode messages and scroll to bottom
 	vp.SetContent(renderChatContent(chatModel{messages: initialMessages}))
+	vp.GotoBottom()
 
 	// Initialize overlay Quick Menu and toast
 	menuCfg := &uitk.Config{}
@@ -509,6 +514,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		quickMenu:          qm,
 		toast:              toast,
 		controller:         ctrl,
+		isFirstRender:      true,
 	}
 }
 
@@ -839,7 +845,27 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea, tiCmd = m.textarea.Update(msg)
 	}
 
-	m.viewport, vpCmd = m.viewport.Update(msg)
+	// Only pass non-keyboard events to viewport to prevent interference with textarea
+	// Viewport should handle mouse events and window size, but not keyboard input
+	shouldUpdateViewport := true
+	if _, ok := msg.(tea.KeyMsg); ok {
+		// Don't pass keyboard events to viewport - they're for textarea input
+		// This prevents spacebar triggering page-down, etc.
+		shouldUpdateViewport = false
+	}
+
+	// Track viewport position before update to detect user scrolling
+	wasAtBottomBeforeUpdate := m.viewport.AtBottom()
+
+	if shouldUpdateViewport {
+		m.viewport, vpCmd = m.viewport.Update(msg)
+	}
+
+	// If viewport was at bottom but user scrolled up (via mouse), stop auto-scrolling
+	// This allows breaking free from following streaming responses
+	if wasAtBottomBeforeUpdate && !m.viewport.AtBottom() && m.printing {
+		m.justStartedResponse = false
+	}
 
 	// Route all messages to toast
 	m.toast, cmd = m.toast.Update(msg)
@@ -880,6 +906,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(newWidth)
 		m.width = msg.Width
 		m.termHeight = msg.Height
+
+		// On first render, ensure content is fully loaded before scrolling to bottom
+		if m.isFirstRender {
+			m.isFirstRender = false
+			// Compute transcript and set viewport content first
+			m.transcript = computeTranscript(m)
+			m.setViewportContent()
+			// Now scroll to bottom with fully loaded content
+			m.viewport.GotoBottom()
+		}
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -1265,6 +1301,9 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue("")
 			m.thinking = true
 			m.printing = true
+			m.justStartedResponse = true // Mark that we're starting a new response
+			// Scroll to bottom when user sends a message - ensures they see the response
+			m.refreshViewportBottom()
 			// Update chatCtx with current selections (PROJECT mode)
 			if m.currentMode == ModeProject {
 				if m.currentModel != "" {
@@ -1317,6 +1356,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logDebug(fmt.Sprintf("RESPONSE MSG: %v", msg.content))
 		m.thinking = false
 		m.printing = true
+
+		// Check if viewport is at bottom before updating content
+		wasAtBottom := m.viewport.AtBottom()
+
 		if len(m.messages) == 0 || (len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") {
 			m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
 		} else {
@@ -1328,7 +1371,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m.setViewportContent()
+		// Auto-scroll during streaming if:
+		// 1. This is a fresh response (just sent a message), OR
+		// 2. Viewport was already at bottom (following along)
+		// This allows users to scroll up to read previous messages, but ensures
+		// new responses are visible when you just sent a message
+		if m.justStartedResponse || wasAtBottom {
+			m.refreshViewportBottom()
+		} else {
+			m.setViewportContent()
+		}
 
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
@@ -1338,6 +1390,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.thinking = false
 		m.err = msg.err
 		m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
+		m.justStartedResponse = false // Reset flag on error
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
 		}
@@ -1356,6 +1409,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.printing = false
 		m.streamCh = nil
+		m.justStartedResponse = false // Reset flag after streaming is complete
 
 	case designerReadyMsg:
 		m.designerStatus = "ready"
@@ -1522,10 +1576,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// For non-progress messages, add normally
 			m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
 		}
+		m.transcript = computeTranscript(m)
+		m.refreshViewportBottom()
+		return m, tea.Batch(cmds...)
 	}
 
 	m.transcript = computeTranscript(m)
-	m.refreshViewportBottom()
+	m.setViewportContent()
 
 	return m, tea.Batch(cmds...)
 }
