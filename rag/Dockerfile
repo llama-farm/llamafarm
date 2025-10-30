@@ -32,7 +32,8 @@ RUN mkdir -p /tmp/uv-cache && chmod 777 /tmp/uv-cache \
 WORKDIR /app
 
 # Copy dependency files first for better Docker layer caching
-COPY config/pyproject.toml config/uv.lock config/schema.yaml config/README.md ./config/
+COPY config/ ./config/
+COPY common/ ./common/
 COPY rag/pyproject.toml rag/uv.lock rag/README.md ./rag/
 
 # Install dependencies in separate layers (cached unless lock files change)

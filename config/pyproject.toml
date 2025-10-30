@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 # Package the current directory contents as the 'config' module
 packages = ["config", "config.helpers"]
-package-dir = {"config" = "."}
+package-dir = { "config" = "." }
 
 [project]
 name = "llamafarm-config"
