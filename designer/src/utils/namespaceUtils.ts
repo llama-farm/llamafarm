@@ -14,21 +14,13 @@ const DEFAULT_NAMESPACE = 'default'
 /**
  * Get the current user's namespace for API calls
  * 
- * TODO: Update this when user authentication is implemented
- * This could check localStorage, JWT tokens, or other auth mechanisms
+ * Checks localStorage for a stored namespace, falling back to default.
+ * Ready for authentication integration via setCurrentNamespace().
  * 
  * @returns The current namespace string
  */
 export function getCurrentNamespace(): string {
-  // For now, return a default namespace
-  // In the future, this could:
-  // - Check localStorage for user info
-  // - Parse JWT tokens
-  // - Call user info API
-  // - Use React context for user state
-  
   try {
-    // Check if there's a stored user namespace (for future use)
     const storedNamespace = localStorage.getItem('userNamespace')
     if (storedNamespace) {
       return storedNamespace
