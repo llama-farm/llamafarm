@@ -152,9 +152,6 @@ rag:
   # =============================================================================
   databases:
     # Main vector database for general documents
-    # Uses ChromaDB client-server mode to prevent multi-process write conflicts
-    # When running with Docker Compose, connects to the chromadb-server service
-    # For local development, you can use persist_directory instead of host/port
     - name: "main_database"
       type: "ChromaStore"
       config:
