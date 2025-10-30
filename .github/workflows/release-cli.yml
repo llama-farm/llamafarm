@@ -56,16 +56,16 @@ jobs:
 
       - name: Generate types (compile schema and generate Go types)
         run: |
-          # Compile schema (this also copies dereferenced schema to cli/cmd/config/schema.yaml)
+          # Compile schema (this also copies dereferenced schema to cli/cmd/config/schema.json)
           cd config
           uv run python compile_schema.py
 
           # Verify the dereferenced schema was copied
-          if [ ! -f "../cli/cmd/config/schema.yaml" ]; then
-            echo "❌ Error: schema.yaml not copied to cli/cmd/config by compile_schema.py"
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
             exit 1
           fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.yaml"
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
           # Generate Go types
           cd ../cli/cmd/config

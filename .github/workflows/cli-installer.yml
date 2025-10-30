@@ -23,7 +23,7 @@ on:
       - ".github/workflows/test-installer.yml"
   workflow_dispatch:
 
-# Ensure cli/config directory exists and copy config/schema.yaml before any job
+# Ensure cli/config directory exists and copy config/schema.json before any job
 # This step runs before all jobs using the workflow_call 'pre' trick
 jobs:
   quick-test:
@@ -50,11 +50,11 @@ jobs:
         run: |
           uv run python compile_schema.py
           # Verify the dereferenced schema was copied to cli/cmd/config
-          if [ ! -f "../cli/cmd/config/schema.yaml" ]; then
-            echo "❌ Error: schema.yaml not copied to cli/cmd/config by compile_schema.py"
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
             exit 1
           fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.yaml"
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -93,11 +93,11 @@ jobs:
         run: |
           uv run python compile_schema.py
           # Verify the dereferenced schema was copied to cli/cmd/config
-          if [ ! -f "../cli/cmd/config/schema.yaml" ]; then
-            echo "❌ Error: schema.yaml not copied to cli/cmd/config by compile_schema.py"
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
             exit 1
           fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.yaml"
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -128,11 +128,11 @@ jobs:
         run: |
           uv run python compile_schema.py
           # Verify the dereferenced schema was copied to cli/cmd/config
-          if [ ! -f "../cli/cmd/config/schema.yaml" ]; then
-            echo "❌ Error: schema.yaml not copied to cli/cmd/config by compile_schema.py"
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
             exit 1
           fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.yaml"
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -163,11 +163,11 @@ jobs:
         run: |
           uv run python compile_schema.py
           # Verify the dereferenced schema was copied to cli/cmd/config
-          if [ ! -f "../cli/cmd/config/schema.yaml" ]; then
-            echo "❌ Error: schema.yaml not copied to cli/cmd/config by compile_schema.py"
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
             exit 1
           fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.yaml"
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5

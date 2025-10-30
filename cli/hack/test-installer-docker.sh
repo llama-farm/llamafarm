@@ -192,8 +192,8 @@ test_cli_build() {
             }
 
             # Verify that the dereferenced schema was created and copied to CLI directory
-            if [ ! -f "../cli/cmd/config/schema.yaml" ]; then
-                echo 'Error: schema.yaml not copied to cli/cmd/config by compile_schema.py'
+            if [ ! -f "../cli/cmd/config/schema.json" ]; then
+                echo 'Error: schema.json not copied to cli/cmd/config by compile_schema.py'
                 exit 1
             fi
             echo 'Schema compiled and copied successfully'

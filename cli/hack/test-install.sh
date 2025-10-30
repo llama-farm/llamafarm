@@ -41,10 +41,6 @@ test_local_build() {
     cd config
     ./generate-types.sh || error "Failed to generate Python types"
 
-    # Copy schema and generate Go types
-    mkdir -p ../cli/cmd/config
-    cp schema.yaml ../cli/cmd/config/ || error "Failed to copy schema.yaml"
-
     # Install go-jsonschema if needed
     if ! command -v go-jsonschema >/dev/null 2>&1; then
         info "Installing go-jsonschema..."

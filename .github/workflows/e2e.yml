@@ -68,11 +68,11 @@ jobs:
           fi
           echo "✓ Datamodel validation passed"
           # Verify that compile_schema.py copied the dereferenced schema to cli/cmd/config
-          if [ ! -f "../cli/cmd/config/schema.yaml" ]; then
-            echo "❌ Error: schema.yaml not copied to cli/cmd/config by compile_schema.py"
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
             exit 1
           fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.yaml"
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Install go-jsonschema
         run: go install github.com/atombender/go-jsonschema@latest
