@@ -43,6 +43,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
+          python-version: "3.12"
 
       - name: Compile schema (dereference $refs)
         working-directory: config
