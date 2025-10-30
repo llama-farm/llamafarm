@@ -70,9 +70,14 @@ class EventLogService:
         )
 
         # Parse and filter events
+        from observability.path_utils import validate_file_path
+
         summaries = []
         for event_file in event_files:
             try:
+                # Security: Validate each event file path stays within event_logs directory
+                validate_file_path(str(event_file), str(event_logs_dir), "event")
+
                 with open(event_file) as f:
                     event_data = json.load(f)
 
@@ -128,8 +133,16 @@ class EventLogService:
         Returns:
             EventDetail or None if not found
         """
+        from observability.path_utils import validate_file_path
+
         event_logs_dir = EventLogService._get_event_logs_dir(namespace, project)
         event_file = event_logs_dir / f"{event_id}.json"
+
+        # Security: Validate the event file path stays within event_logs directory
+        try:
+            validate_file_path(str(event_file), str(event_logs_dir), "event")
+        except ValueError:
+            return None
 
         if not event_file.exists():
             return None

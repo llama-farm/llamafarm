@@ -155,13 +155,16 @@ class EventLogger:
         }
 
         # Get project path with security validation (follows ProjectService pattern)
-        from .path_utils import get_project_path
+        from .path_utils import get_project_path, validate_file_path
 
         project_dir = get_project_path(self.namespace, self.project)
         event_logs_dir = os.path.join(project_dir, "event_logs")
         os.makedirs(event_logs_dir, exist_ok=True)
 
         event_file = os.path.join(event_logs_dir, f"{event_id}.json")
+
+        # Security: Validate the event file path stays within event_logs directory
+        validate_file_path(event_file, event_logs_dir, "event")
 
         # Atomic write using tempfile + os.replace()
         with tempfile.NamedTemporaryFile(

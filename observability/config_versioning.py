@@ -84,13 +84,16 @@ def save_config_snapshot(
         ...     print("Config already exists")
     """
     # Get project path with security validation (follows ProjectService pattern)
-    from .path_utils import get_project_path
+    from .path_utils import get_project_path, validate_file_path
 
     project_dir = get_project_path(namespace, project)
     configs_dir = os.path.join(project_dir, "configs")
     os.makedirs(configs_dir, exist_ok=True)
 
     config_file = os.path.join(configs_dir, f"{config_hash}.json")
+
+    # Security: Validate the config file path stays within configs directory
+    validate_file_path(config_file, configs_dir, "config")
 
     # Check if already exists (deduplication)
     if os.path.exists(config_file):
@@ -143,10 +146,14 @@ def get_config_by_hash(
         ...     print("Config not found")
     """
     # Get project path with security validation (follows ProjectService pattern)
-    from .path_utils import get_project_path
+    from .path_utils import get_project_path, validate_file_path
 
     project_dir = get_project_path(namespace, project)
-    config_file = os.path.join(project_dir, "configs", f"{config_hash}.json")
+    configs_dir = os.path.join(project_dir, "configs")
+    config_file = os.path.join(configs_dir, f"{config_hash}.json")
+
+    # Security: Validate the config file path stays within configs directory
+    validate_file_path(config_file, configs_dir, "config")
 
     if not os.path.exists(config_file):
         return None
