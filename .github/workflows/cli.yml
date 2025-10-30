@@ -78,7 +78,7 @@ jobs:
         run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
 
       - name: Run generate-types (compiles schema and generates Go types)
-        run: npx --yes nx generate-types cli
+        run: nx generate-types cli
 
       - name: Create dist directory
         run: mkdir -p dist
