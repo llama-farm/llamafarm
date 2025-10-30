@@ -32,8 +32,8 @@ RUN mkdir -p /tmp/uv-cache && chmod 777 /tmp/uv-cache \
 WORKDIR /app
 
 # Copy dependency files first for better Docker layer caching
-COPY config/pyproject.toml config/uv.lock config/schema.yaml ./config/
-COPY rag/pyproject.toml rag/uv.lock ./rag/
+COPY config/pyproject.toml config/uv.lock config/schema.yaml config/README.md ./config/
+COPY rag/pyproject.toml rag/uv.lock rag/README.md ./rag/
 
 # Install dependencies in separate layers (cached unless lock files change)
 RUN cd config && uv sync --locked --all-extras
