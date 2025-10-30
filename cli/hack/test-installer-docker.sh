@@ -175,7 +175,7 @@ test_cli_build() {
             set -e
 
             # Install dependencies
-            apk add --no-cache git python3 py3-pip bash curl
+            apk add --no-cache git python3 py3-pip py3-yaml bash curl
 
             # Generate types first
             echo 'Generating types...'
