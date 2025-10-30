@@ -7,7 +7,7 @@
     "start": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "bash start.sh",
+        "command": "uv run python server.py",
         "cwd": "runtimes/universal"
       }
     },
