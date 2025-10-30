@@ -55,7 +55,9 @@ class EventLogger:
         self._events: list[dict[str, Any]] = []
         self._lock = threading.Lock()  # Thread safety
         self._start_time = datetime.now(timezone.utc)
+        self._last_event_time = self._start_time  # Track last event for delta duration
         self._metadata: dict[str, Any] = {}
+        self._summary_data: dict[str, Any] = {}  # Summary data from final event
 
     def log_event(self, event_name: str, data: dict[str, Any]) -> None:
         """
@@ -77,7 +79,9 @@ class EventLogger:
         """
         with self._lock:  # Thread-safe
             now = datetime.now(timezone.utc)
-            duration_ms = (now - self._start_time).total_seconds() * 1000
+            # Calculate duration as time since last event (not from start)
+            duration_ms = (now - self._last_event_time).total_seconds() * 1000
+            self._last_event_time = now  # Update for next event
 
             # Simple event structure - logger adds timestamp and duration
             # IMPORTANT: Copy the data dict to prevent mutations from affecting the log
@@ -89,6 +93,10 @@ class EventLogger:
             }
 
             self._events.append(event)
+
+            # If this is a final event (processing_complete, etc.), save summary data
+            if event_name.endswith("_complete") or event_name == "processing_complete":
+                self._summary_data = dict(data)
 
     def add_metadata(self, key: str, value: Any) -> None:
         """
@@ -134,17 +142,17 @@ class EventLogger:
             status: Event status ("completed" or "failed")
             error: Error message if status is "failed"
         """
-        # Generate event ID
+        # Generate event ID: timestamp-type-random (for easier time sorting)
         timestamp = self._start_time.strftime("%Y%m%d_%H%M%S")
         random_id = uuid.uuid4().hex[:6]
-        event_id = f"evt_{self.event_type}_{timestamp}_{random_id}"
+        event_id = f"evt_{timestamp}_{self.event_type}_{random_id}"
 
         # Build complete event structure
         full_event = {
             "event_id": event_id,
             "event_type": self.event_type,
             "request_id": self.request_id,
-            "timestamp": self._start_time.isoformat(),
+            # Note: No top-level timestamp - use first event's timestamp instead
             "namespace": self.namespace,
             "project": self.project,
             "config_hash": self.config_hash,
@@ -153,6 +161,10 @@ class EventLogger:
             "error": error,
             "metadata": self._metadata,
         }
+
+        # Merge summary data from final event (e.g., processing_complete) into top level
+        if self._summary_data:
+            full_event.update(self._summary_data)
 
         # Get project path with security validation (follows ProjectService pattern)
         from .path_utils import get_project_path, validate_file_path

@@ -93,6 +93,10 @@ class IngestHandler:
         self.processing_config = self._get_processing_config()
         self.database_config = self._get_database_config()
 
+        # Get project directory from config path
+        # Config path format: ~/.llamafarm/projects/{namespace}/{project}/llamafarm.yaml
+        project_dir = self.config_path.parent
+
         # Initialize components
         self.blob_processor = BlobProcessor(self.processing_config)
         self.embedder = self._initialize_embedder(self.database_config)
@@ -510,7 +514,7 @@ class IngestHandler:
                     "total_chunks": len(documents),
                     "stored_chunks": stored_count,
                     "skipped_chunks": skipped_count,
-                    "processing_time_seconds": round(elapsed_time, 2),
+                    "total_processing_time_ms": round(elapsed_time * 1000, 2),
                 })
                 event_logger.complete_event()
 
