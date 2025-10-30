@@ -87,7 +87,6 @@ jobs:
       - name: Build CLI binary
         working-directory: cli
         run: |
-          nx build cli
           go build -o lf main.go
           echo "✓ CLI binary built successfully"
 
