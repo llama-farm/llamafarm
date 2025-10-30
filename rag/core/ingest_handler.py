@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from core.blob_processor import BlobProcessor
 from core.logging import RAGStructLogger
-from core.processing_logger import ProcessingLogger
 from core.settings import settings
 from core.strategies.handler import SchemaHandler
 
@@ -68,11 +67,6 @@ class IngestHandler:
         self.data_processing_strategy = data_processing_strategy
         self.database = database
         self.dataset_name = dataset_name
-
-        # Initialize processing logger
-        # Get project directory from config path (parent of llamafarm.yaml)
-        project_dir = self.config_path.parent
-        self.process_logger = ProcessingLogger(str(project_dir), dataset_name)
 
         # Extract namespace and project from config path for event logging
         # Path format: ~/.llamafarm/projects/{namespace}/{project}/llamafarm.yaml
@@ -262,16 +256,6 @@ class IngestHandler:
                 logger.warning(f"Failed to initialize event logger: {e}")
                 event_logger = None
 
-        # Log file processing start
-        self.process_logger.log_file_processing(
-            filename,
-            "started",
-            {
-                "size_bytes": file_size,
-                "content_type": metadata.get("content_type", "unknown"),
-            },
-        )
-
         # Print file info
         logger.info(
             f"\n{'=' * 60}\n"
@@ -396,11 +380,6 @@ class IngestHandler:
                         logger.info(
                             f"[DUPLICATE] All {skipped_count} documents already in database - skipped"
                         )
-
-                        # Log duplicate detection
-                        self.process_logger.log_duplicate_detection(
-                            file_hash, skipped_count, "skipped_all"
-                        )
                 elif result is False:
                     # Database error occurred
                     logger.error("Database error occurred during document storage")
@@ -524,21 +503,6 @@ class IngestHandler:
                 status = "success"
                 reason = None
 
-            # Log final file processing status
-            self.process_logger.log_file_processing(
-                filename,
-                status,
-                {
-                    "total_chunks": len(documents),
-                    "stored_chunks": stored_count,
-                    "skipped_chunks": skipped_count,
-                    "parsers": list(set(parser_names)),
-                    "embedder": self.embedder.__class__.__name__,
-                    "processing_time_seconds": elapsed_time,
-                    "reason": reason,
-                },
-            )
-
             # Complete event logging
             if event_logger:
                 event_logger.log_event("processing_complete", {
@@ -574,13 +538,6 @@ class IngestHandler:
             # Fail event logging
             if event_logger:
                 event_logger.fail_event(str(e))
-
-            # Log error
-            self.process_logger.log_error(
-                "ingestion_error",
-                str(e),
-                {"filename": filename, "file_size": file_size},
-            )
 
             return {
                 "status": "error",
