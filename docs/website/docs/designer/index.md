@@ -29,6 +29,8 @@ Use the **CLI** when you want to:
 
 ## Accessing the Designer
 
+The Designer runs on different ports depending on how you start it. Both methods are fully functional—choose based on your workflow.
+
 ### Via the CLI (Recommended)
 
 The easiest way to start the Designer is through the `lf start` command:
@@ -40,13 +42,15 @@ lf start
 This automatically launches:
 - The FastAPI server (port 8000)
 - The RAG worker
-- The Designer web UI (port 7724)
+- The Designer web UI (port **7724**)
 
 Once started, open your browser to:
 
 ```
 http://localhost:7724
 ```
+
+**Why port 7724?** The CLI uses a dedicated port to avoid conflicts with other services and to allow running multiple LlamaFarm instances for different projects.
 
 ### Via Docker Compose
 
@@ -62,6 +66,8 @@ The Designer will be available at:
 ```
 http://localhost:3123
 ```
+
+**Why port 3123?** Docker Compose uses a different port to distinguish between CLI-managed and Docker Compose-managed deployments, allowing both to run simultaneously if needed.
 
 ![Designer Home Page](./screenshots/designer-home.png)
 *The Designer home page where you can create and select projects*

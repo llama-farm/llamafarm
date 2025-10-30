@@ -4,7 +4,11 @@
 
 Pharmaceutical and therapeutics companies undergoing FDA approval face a critical challenge: tracking hundreds of questions and answers across multiple rounds of FDA correspondence. LlamaFarm provides an automated solution to identify unanswered questions, validate existing answers, and maintain compliance throughout the approval process.
 
-**Watch the Full Demo:** [FDA Document Analysis with LlamaFarm](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25)
+This guide provides complete step-by-step instructions with code examples and configuration. All steps are self-contained and can be followed using only this documentation.
+
+:::tip Video Walkthrough Available
+A full video demonstration of this use case is available as a supplement to this guide: [FDA Document Analysis with LlamaFarm](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25)
+:::
 
 ## Business Problem
 
@@ -45,16 +49,14 @@ Answer Validation → Confidence Scoring → Summary Report
 
 ### Step 1: Ingest FDA Documents into Vector Database
 
-[Watch: Document Ingestion (0:27)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=27)
-
 Create a dataset and ingest all FDA correspondence:
 
 ```bash
 # Create dataset for FDA documents
-lf datasets add fda_correspondence -s universal_processor -b fda_db
+lf datasets create fda_correspondence -s universal_processor -b fda_db
 
-# Ingest documents (supports glob patterns)
-lf datasets ingest fda_correspondence ./fda_documents/*.pdf
+# Upload documents (supports glob patterns)
+lf datasets upload fda_correspondence ./fda_documents/*.pdf
 
 # Process into vector database
 lf datasets process fda_correspondence
@@ -63,8 +65,6 @@ lf datasets process fda_correspondence
 **Best Practice**: Organize documents by submission cycle (e.g., `cycle_1/`, `cycle_2/`) for easier tracking.
 
 ### Step 2: Start Recursive Script for Document Analysis
-
-[Watch: Agent Processing (0:38)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=38)
 
 Configure and run the FDA document analyzer agent:
 
@@ -91,8 +91,6 @@ The agent will:
 
 ### Step 3: Extract Questions from Documents
 
-[Watch: Question Extraction (0:48)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=48)
-
 The agent sends document chunks to the LLM with specialized prompts to identify regulatory questions:
 
 **System Prompt Example**:
@@ -116,8 +114,6 @@ Return questions in this format:
 
 ### Step 4: Validate Answers Against COFUS Database
 
-[Watch: Answer Validation (1:05)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=65)
-
 For each extracted question, the agent:
 
 1. Queries the COFUS database using RAG
@@ -133,8 +129,6 @@ lf rag query --database cofus_db \
 ```
 
 ### Step 5: Save Results and Confidence Scores
-
-[Watch: Results & Scoring (1:22)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=82)
 
 The agent generates structured output with confidence metrics:
 
@@ -153,8 +147,6 @@ The agent generates structured output with confidence metrics:
 **Confidence Threshold**: Focus on scores ≥ 90% for reliable answers. Questions with lower scores may require manual review.
 
 ### Step 6: Review Summary of Findings
-
-[Watch: Summary Report (1:43)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=103)
 
 Generate an executive summary report:
 
@@ -185,8 +177,6 @@ Next Actions:
 
 ### Step 7: Utilize Batch Orchestrator for Processing
 
-[Watch: Batch Processing (2:19)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=139)
-
 For large document sets, use the batch orchestrator:
 
 ```bash
@@ -208,8 +198,6 @@ lf agents logs batch_orchestrator --tail 100
 ```
 
 ### Step 8: Adjust Agents and System Prompts as Needed
-
-[Watch: Agent Customization (4:14)](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25?t=254)
 
 Customize agents based on your specific regulatory focus:
 
@@ -275,8 +263,8 @@ lf chat --model powerful --agent answer_validator
 
 ```bash
 # Add to existing dataset
-lf datasets ingest fda_correspondence ./new_documents/*.pdf
-lf datasets process fda_correspondence --incremental
+lf datasets upload fda_correspondence ./new_documents/*.pdf
+lf datasets process fda_correspondence
 ```
 
 ## Results & ROI
@@ -291,10 +279,11 @@ Organizations using this workflow report:
 ## Getting Started
 
 1. **Review the example**: Check out `examples/fda_rag/` in the LlamaFarm repository
-2. **Watch the demo**: [Full video walkthrough](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25)
-3. **Start small**: Begin with one submission cycle (5-10 documents)
-4. **Iterate**: Refine prompts and configuration based on results
-5. **Scale**: Expand to full document corpus once validated
+2. **Start small**: Begin with one submission cycle (5-10 documents)
+3. **Iterate**: Refine prompts and configuration based on results
+4. **Scale**: Expand to full document corpus once validated
+
+**Optional**: [Watch the full video walkthrough](https://loom.com/share/19b0f86d7e074025b12ca675c2257f25) for a visual demonstration of these steps.
 
 ## Additional Resources
 

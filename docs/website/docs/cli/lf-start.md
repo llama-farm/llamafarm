@@ -29,7 +29,7 @@ Environment variables:
 - Starts a config watcher so edits to `llamafarm.yaml` refresh automatically.
 - Launches a text UI for chatting with the current project; use `Ctrl+C` to exit.
 - Shows health diagnostics for server, storage, Ollama/vLLM, Celery, rag-service, and project state.
-- Also starts the Designer web UI at `http://localhost:7724` for visual project management.
+- Starts the Designer web UI at `http://localhost:7724` for visual project management (port 3123 when using Docker Compose directly).
 
 ## Example
 

@@ -59,7 +59,13 @@ lf start
 Hit `Ctrl+C` to exit the chat UI when you're done.
 
 :::tip Use the Designer Web UI
-Prefer a visual interface? Open `http://localhost:7724` in your browser to access the Designer, where you can manage projects, upload datasets, configure models, and test prompts—all without touching the command line. See the [Designer documentation](../designer/index.md) for details.
+Prefer a visual interface? Open `http://localhost:7724` in your browser to access the Designer, where you can manage projects, upload datasets, configure models, and test prompts—all without touching the command line.
+
+**Note:** The Designer port differs based on how you start LlamaFarm:
+- **CLI (`lf start`)**: Port 7724
+- **Docker Compose**: Port 3123
+
+See the [Designer documentation](../designer/index.md) for details.
 :::
 
 ### Running Services Manually (no Docker auto-start)

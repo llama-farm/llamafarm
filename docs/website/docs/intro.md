@@ -37,7 +37,7 @@ Get a fast introduction to LlamaFarm's core features and see it in action.
 - **Open for extension** – documentation includes patterns for registering new providers, stores, and utilities.
 
 :::tip Prefer Visual Tools?
-The **Designer Web UI** provides a browser-based interface for managing projects, uploading datasets, and testing your AI—all without touching the command line. It's automatically available at `http://localhost:7724` when you run `lf start`. [Learn more →](./designer/index.md)
+The **Designer Web UI** provides a browser-based interface for managing projects, uploading datasets, and testing your AI—all without touching the command line. It's automatically available at `http://localhost:7724` when you run `lf start` (or `http://localhost:3123` if using Docker Compose directly). [Learn more →](./designer/index.md)
 :::
 
 ## 🎥 In-Depth Tutorial
