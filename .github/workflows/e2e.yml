@@ -111,8 +111,8 @@ jobs:
           fi
           echo "✓ Project configuration exists"
           echo ""
-          echo "=== Config after init (first 30 lines) ==="
-          head -30 /tmp/e2e-test/llamafarm.yaml
+          echo "=== FULL CONFIG AFTER INIT ==="
+          cat /tmp/e2e-test/llamafarm.yaml
           echo ""
           echo "=== Checking critical fields ==="
           echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
@@ -137,6 +137,9 @@ jobs:
           fi
           echo "✓ Dataset created"
 
+      - name: Wait for config sync after dataset create
+        run: sleep 0.5
+
       - name: Debug config after dataset create
         run: |
           echo ""
@@ -160,6 +163,9 @@ jobs:
             exit 1
           fi
           echo "✓ All sample files uploaded"
+
+      - name: Wait for config sync after dataset upload
+        run: sleep 0.5
 
       - name: Debug config before dataset process
         run: |
