@@ -110,8 +110,14 @@ jobs:
             exit 1
           fi
           echo "✓ Project configuration exists"
-          echo "Configuration preview:"
-          head -20 /tmp/e2e-test/llamafarm.yaml
+          echo ""
+          echo "=== FULL CONFIG AFTER INIT ==="
+          cat /tmp/e2e-test/llamafarm.yaml
+          echo ""
+          echo "=== Checking critical fields ==="
+          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
+          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
 
       # ============================================================
       # Data Ingestion Test
@@ -131,6 +137,21 @@ jobs:
           fi
           echo "✓ Dataset created"
 
+      - name: Wait for config sync after dataset create
+        run: sleep 0.5
+
+      - name: Debug config after dataset create
+        run: |
+          echo ""
+          echo "=== Config after dataset create (first 40 lines) ==="
+          head -40 /tmp/e2e-test/llamafarm.yaml
+          echo ""
+          echo "=== Checking critical fields ==="
+          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
+          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
+          echo "datasets: $(grep -A5 '^datasets:' /tmp/e2e-test/llamafarm.yaml | head -6)"
+
       - name: Upload sample files
         working-directory: cli
         env:
@@ -143,14 +164,23 @@ jobs:
           fi
           echo "✓ All sample files uploaded"
 
-      - name: Debug config before processing
+      - name: Wait for config sync after dataset upload
+        run: sleep 0.5
+
+      - name: Debug config before dataset process
         run: |
-          echo "=== Contents of /tmp/e2e-test/llamafarm.yaml ==="
-          cat /tmp/e2e-test/llamafarm.yaml
-          echo "=== End of config file ==="
           echo ""
-          echo "Checking for namespace and name fields:"
-          grep -E "^(namespace|name):" /tmp/e2e-test/llamafarm.yaml || echo "⚠️ namespace or name field not found!"
+          echo "=== Config before dataset process ==="
+          echo "File exists: $(test -f /tmp/e2e-test/llamafarm.yaml && echo 'YES' || echo 'NO')"
+          echo "File size: $(stat -c%s /tmp/e2e-test/llamafarm.yaml 2>/dev/null || echo 'N/A')"
+          echo ""
+          echo "=== Full config content ==="
+          cat /tmp/e2e-test/llamafarm.yaml || echo "Failed to read config"
+          echo ""
+          echo "=== Critical fields check ==="
+          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
+          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
 
       - name: Process dataset
         working-directory: cli
