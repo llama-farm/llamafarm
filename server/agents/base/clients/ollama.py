@@ -1,5 +1,6 @@
 import datetime
 import json
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Literal
 
@@ -93,7 +94,7 @@ class LFAgentClientOllama(LFAgentClient):
             message.tool_calls = [
                 ChatCompletionMessageFunctionToolCall(
                     type="function",
-                    id=tool_call.function.name,
+                    id=f"call_{uuid.uuid4()}",
                     function=Function(
                         name=tool_call.function.name,
                         arguments=json.dumps(tool_call.function.arguments),
@@ -203,7 +204,7 @@ class LFAgentClientOllama(LFAgentClient):
                     ChoiceDeltaToolCall(
                         index=idx,
                         type="function",
-                        id=tool_call.function.name,
+                        id=f"call_{uuid.uuid4()}",
                         function=ChoiceDeltaToolCallFunction(
                             name=tool_call.function.name,
                             arguments=json.dumps(tool_call.function.arguments),

@@ -54,7 +54,13 @@ class LFAgentHistory:
             )
         elif role == "assistant":
             return LFChatCompletionAssistantMessageParam(
-                role="assistant", content=data.get("content", "")
+                role="assistant",
+                content=data.get("content"),
+                audio=data.get("audio"),
+                name=data.get("name"),
+                refusal=data.get("refusal"),
+                tool_calls=data.get("tool_calls"),
+                # reasoning=data.get("reasoning"),
             )
         elif role == "tool":
             return LFChatCompletionToolMessageParam(

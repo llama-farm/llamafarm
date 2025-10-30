@@ -73,7 +73,12 @@ func renderToolCall(content string, width int) string {
 	contentLines = append(contentLines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Render("🔧 Tool Call"))
 	contentLines = append(contentLines, "")
 	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Tool: ")+toolName)
-	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("ID: ")+toolID+"...")
+	// Truncate long IDs
+	displayID := toolID
+	if len(displayID) > 12 {
+		displayID = displayID[:12] + "..."
+	}
+	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("ID: ")+displayID)
 
 	if len(args) > 0 {
 		contentLines = append(contentLines, "")
@@ -307,7 +312,20 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 				if msg.Role == "user" {
 					devUserChatMessages = append(devUserChatMessages, msg.Content)
 				}
-				devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content})
+
+				// Handle messages with content and/or tool calls
+				if msg.Content != "" {
+					devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content})
+				}
+				if len(msg.ToolCalls) > 0 {
+					for _, tc := range msg.ToolCalls {
+						if tc.Function.Name != "" {
+							// Format as tool call marker for proper rendering
+							toolCallContent := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+							devMessages = append(devMessages, Message{Role: "assistant", Content: toolCallContent})
+						}
+					}
+				}
 			}
 			logDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
 		}
@@ -365,7 +383,20 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 			if msg.Role == "user" {
 				projectHistory = append(projectHistory, msg.Content)
 			}
-			projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content})
+
+			// Handle messages with content and/or tool calls
+			if msg.Content != "" {
+				projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content})
+			}
+			if len(msg.ToolCalls) > 0 {
+				for _, tc := range msg.ToolCalls {
+					if tc.Function.Name != "" {
+						// Format as tool call marker for proper rendering
+						toolCallContent := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+						projectMessages = append(projectMessages, Message{Role: "assistant", Content: toolCallContent})
+					}
+				}
+			}
 		}
 	} else {
 		// No project info, still create a session ID for future use

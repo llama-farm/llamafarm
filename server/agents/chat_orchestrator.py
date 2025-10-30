@@ -5,8 +5,15 @@ import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from atomic_agents import BaseTool  # type: ignore
+from atomic_agents import BaseTool
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_message import ChatCompletionMessage  # type: ignore
 from config.datamodel import LlamaFarmConfig, Provider
+from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
+from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk, ChoiceDelta
+from openai.types.chat.chat_completion_message_tool_call_param import (
+    Function,
+)
 
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
@@ -51,7 +58,7 @@ class ChatOrchestratorAgent(LFAgent):
     _mcp_enabled: bool = False
     _mcp_service: MCPService | None = None
     _mcp_tool_factory: MCPToolFactory | None = None
-    _mcp_tools: list[BaseTool] = []
+    _mcp_tools: list[type[BaseTool]] = []
 
     def __init__(
         self,
@@ -132,7 +139,8 @@ class ChatOrchestratorAgent(LFAgent):
                 # Get LLM response
                 response = await super().run_async(user_input=user_input, tools=tools)
 
-                tool_calls = response.choices[0].message.tool_calls
+                assistant_message = response.choices[0].message
+                tool_calls = assistant_message.tool_calls
 
                 # FIXME: only handle one tool call for now
                 tool_call = tool_calls[0] if tool_calls else None
@@ -147,6 +155,26 @@ class ChatOrchestratorAgent(LFAgent):
                     )
                     final_response = response
                     break
+
+                # Save the assistant tool call message to history
+                self.history.add_message(
+                    LFChatCompletionAssistantMessageParam(
+                        role="assistant",
+                        content=assistant_message.content,
+                        tool_calls=[
+                            ChatCompletionMessageFunctionToolCallParam(
+                                type="function",
+                                id=tool_call.id,
+                                function=Function(
+                                    name=tool_call.function.name,
+                                    arguments=tool_call.function.arguments,
+                                ),
+                            )
+                            for tool_call in tool_calls or []
+                            if hasattr(tool_call, "function")
+                        ],
+                    )
+                )
 
                 result = await self._execute_mcp_tool(
                     tool_call.function.name, tool_call.function.arguments
@@ -171,7 +199,7 @@ class ChatOrchestratorAgent(LFAgent):
                 LFChatCompletionAssistantMessageParam(
                     role="assistant",
                     content=final_response.choices[0].message.content,
-                    # reasoning=final_response.choices[0].message.reasoning, # TODO: we'll need to adjust types to support saving this
+                    # reasoning=final_response.choices[0].message.reasoning,
                 )
             )
             return final_response
@@ -185,14 +213,14 @@ class ChatOrchestratorAgent(LFAgent):
             model=self.model_name,
             object="chat.completion",
             choices=[
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": MAX_ITERATIONS_MESSAGE,
-                    },
-                    "finish_reason": "tool_calls_exceeded",
-                }  # type: ignore
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        content=MAX_ITERATIONS_MESSAGE,
+                    ),
+                    finish_reason="stop",
+                )
             ],
         )
 
@@ -212,8 +240,6 @@ class ChatOrchestratorAgent(LFAgent):
 
         while not done and iteration < MAX_TOOL_ITERATIONS:
             iteration += 1
-
-            logger.info("Starting tool calling iteration", iteration=iteration)
 
             # Stream chat with tools
             accumulated_content = ""  # Accumulate chunks for history
@@ -265,12 +291,32 @@ class ChatOrchestratorAgent(LFAgent):
                     iteration=iteration,
                 )
 
+                tool_call_message = LFChatCompletionAssistantMessageParam(
+                    role="assistant",
+                    content=choice.delta.content,
+                    tool_calls=[
+                        ChatCompletionMessageFunctionToolCallParam(
+                            type="function",
+                            id=tool_call.id or f"call_{uuid.uuid4()}",
+                            function=Function(
+                                name=tool_call.function.name,  # type: ignore
+                                arguments=tool_call.function.arguments,  # type: ignore
+                            ),
+                        )
+                        for tool_call in choice.delta.tool_calls or []
+                        if hasattr(tool_call, "function")
+                    ],
+                )
+                self.history.add_message(tool_call_message)
+                # Yield the tool call chunk - CLI will handle rendering
+                yield chunk
+
                 # Execute the MCP tool
                 result = await self._execute_mcp_tool(
                     tool_call.function.name, tool_call.function.arguments
                 )
 
-                # Add tool call and result to history with guidance
+                # Add tool call and result to history
                 self.history.add_message(
                     LFChatCompletionToolMessageParam(
                         role="tool",
@@ -280,7 +326,7 @@ class ChatOrchestratorAgent(LFAgent):
                 )
 
                 # Prepare for next iteration
-                current_input = None  # History already updated
+                current_input = None  # No need to pass input to next iteration
                 break  # Exit event loop, continue while loop
 
         # Add final accumulated content to history
@@ -296,18 +342,21 @@ class ChatOrchestratorAgent(LFAgent):
         # Save history
         if iteration >= MAX_TOOL_ITERATIONS:
             logger.warning("Max iterations reached", max_iterations=MAX_TOOL_ITERATIONS)
+
             yield LFChatCompletionChunk(
                 id=f"chat-{uuid.uuid4()}",
                 created=int(time.time()),
                 model=self.model_name,
+                object="chat.completion.chunk",
                 choices=[
-                    {
-                        "index": 0,
-                        "message": {
-                            "content": MAX_ITERATIONS_MESSAGE,
-                        },
-                        "finish_reason": "tool_calls_exceeded",
-                    }  # type: ignore
+                    ChoiceChunk(
+                        index=0,
+                        delta=ChoiceDelta(
+                            role="assistant",
+                            content=MAX_ITERATIONS_MESSAGE,
+                        ),
+                        finish_reason="stop",
+                    )
                 ],
             )
         self._persist_history_safe()

@@ -26,8 +26,6 @@ app = llama_farm_api()
 mcp = FastApiMCP(
     app,
     include_tags=["mcp"],
-    # describe_all_responses=True,
-    # describe_full_response_schema=True,
 )
 
 mcp.mount_http(

@@ -561,15 +561,20 @@ type SessionHistory struct {
 }
 
 type SessionHistoryMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	ToolCalls []struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	} `json:"tool_calls,omitempty"`
 }
 
 type SessionHistoryResponse struct {
-	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
+	Messages []SessionHistoryMessage `json:"messages"`
 }
 
 // fetchSessionHistory retrieves the chat history for a session from the server.
@@ -608,10 +613,9 @@ func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) Sess
 		logDebug(fmt.Sprintf("fetchSessionHistory: failed to decode history: %v, %s", err, string(body)))
 		return SessionHistory{}
 	}
-	var messages []SessionHistoryMessage
-	for _, msg := range result.Messages {
-		messages = append(messages, SessionHistoryMessage{Role: msg.Role, Content: msg.Content})
-	}
 
-	return SessionHistory{Messages: messages}
+	// Return the messages directly - they already have all fields including tool_calls
+	return SessionHistory{
+		Messages: result.Messages,
+	}
 }

@@ -272,7 +272,7 @@ def _delete_all_sessions(namespace: str, project_id: str) -> int:
 
 
 class ChatRequest(BaseModel):
-    messages: list[LFChatCompletionMessageParam]
+    messages: list[dict]
     model: str | None = None
     frequency_penalty: float | None = None
     logit_bias: dict[str, int] | None = None
