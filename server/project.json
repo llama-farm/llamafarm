@@ -1,5 +1,8 @@
 {
-  "root": "server/",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "server",
+  "projectType": "application",
+  "sourceRoot": "server",
   "targets": {
     "start": {
       "executor": "nx:run-commands",
