@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import asdict
 
 from config.datamodel import Provider
@@ -6,6 +7,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from server.services.model_service import ModelService
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadModelRequest(BaseModel):
@@ -40,10 +43,14 @@ async def download_model(request: DownloadModelRequest):
     """Download/cache a model for the given provider and model name."""
 
     async def event_stream():
-        async for evt in ModelService.download_model(
-            request.provider, request.model_name
-        ):
-            yield f"data: {json.dumps(evt)}\n\n"
+        try:
+            async for evt in ModelService.download_model(
+                request.provider, request.model_name
+            ):
+                yield f"data: {json.dumps(evt)}\n\n"
+        except Exception as e:
+            error_event = {"event": "error", "message": str(e)}
+            yield f"data: {json.dumps(error_event)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -71,12 +78,20 @@ def delete_model(model_name: str, provider: Provider = Provider.universal):
         500: For other errors
     """
     try:
-        result = ModelService.delete_model(provider, model_name)
-        return result
+        return ModelService.delete_model(provider, model_name)
     except ValueError as e:
         # Model not found or invalid provider
         if "not found" in str(e).lower():
+            logger.warning(f"Model '{model_name}' not found for deletion")
             raise HTTPException(status_code=404, detail=str(e)) from e
+        logger.error(f"Invalid request to delete model '{model_name}': {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(
+            f"Failed to delete model '{model_name}' for provider '{provider}': {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while deleting the model. Please contact support if the issue persists.",
+        ) from e

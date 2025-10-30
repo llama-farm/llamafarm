@@ -44,13 +44,29 @@ export async function* downloadModel(
 ): AsyncIterableIterator<DownloadEvent> {
   // Get base URL from apiClient config
   const baseURL = apiClient.defaults.baseURL || '/api/v1'
-  const response = await fetch(`${baseURL}/models/download`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  })
+  
+  // Set up AbortController for timeout
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
+  
+  let response: Response
+  try {
+    response = await fetch(`${baseURL}/models/download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    })
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out while downloading model')
+    }
+    throw new Error(`Network error while downloading model: ${error.message || error}`)
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to download model: ${response.statusText}`)

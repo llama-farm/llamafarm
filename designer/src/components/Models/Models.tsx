@@ -21,11 +21,14 @@ import {
 import { Label } from '../ui/label'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
-import { Checkbox } from '../ui/checkbox'
 import { parsePromptSets } from '../../utils/promptSets'
 import { useCachedModels } from '../../hooks/useModels'
 import modelService from '../../api/modelService'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
+import { PromptSetSelector } from './PromptSetSelector'
+import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
+import { CustomDownloadDialog } from './CustomDownloadDialog'
+import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
 
 interface TabBarProps {
   activeTab: string
@@ -148,52 +151,14 @@ function ModelCard({
           ) : null}
         </div>
         {/* Prompt sets multi-select column */}
-        <div className="mt-3 md:mt-0 md:justify-self-end w-full flex flex-col md:pl-4">
-          <div className="text-xs text-muted-foreground mb-1">Prompt sets</div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-full h-8 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between mr-6 md:mr-8">
-                <span className="truncate text-sm flex items-center gap-2">
-                  {selectedPromptSets.length > 0 ? (
-                    <>
-                      <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
-                        {selectedPromptSets.length}
-                      </span>
-                      <span className="truncate">
-                        {selectedPromptSets.join(', ')}
-                      </span>
-                    </>
-                  ) : (
-                    'All sets'
-                  )}
-                </span>
-                <FontIcon type="chevron-down" className="w-4 h-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-              {promptSetNames.map(name => (
-                <DropdownMenuItem
-                  key={name}
-                  className="w-full justify-start text-left"
-                  onSelect={e => e.preventDefault()}
-                >
-                  <label className="flex items-center gap-2 w-full">
-                    <Checkbox
-                      checked={selectedPromptSets.includes(name)}
-                      onCheckedChange={v => onTogglePromptSet(name, v)}
-                    />
-                    <span className="text-sm">{name}</span>
-                  </label>
-                </DropdownMenuItem>
-              ))}
-              <div className="h-px bg-border my-1" />
-              <DropdownMenuItem onClick={onClearPromptSets}>
-                <span className="text-xs text-muted-foreground">
-                  Clear selection (All sets)
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="mt-3 md:mt-0 md:justify-self-end w-full md:pl-4 mr-6 md:mr-8">
+          <PromptSetSelector
+            promptSetNames={promptSetNames}
+            selectedPromptSets={selectedPromptSets}
+            onTogglePromptSet={onTogglePromptSet}
+            onClearPromptSets={onClearPromptSets}
+            label="Prompt sets"
+          />
         </div>
       </div>
     </div>
@@ -229,95 +194,6 @@ function ProjectInferenceModels({
           selectedPromptSets={getSelected(m.id)}
           onTogglePromptSet={(name, checked) => onToggle(m.id, name, checked)}
           onClearPromptSets={() => onClear(m.id)}
-        />
-      ))}
-    </div>
-  )
-}
-
-interface DeviceModel {
-  id: string
-  name: string
-  modelIdentifier: string
-  meta: string
-  badges: string[]
-}
-
-function DeviceModelCard({
-  model,
-  onUse,
-  onDelete,
-  isInUse,
-}: {
-  model: DeviceModel
-  onUse: () => void
-  onDelete: () => void
-  isInUse?: boolean
-}) {
-  return (
-    <div className="w-full h-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative">
-      <div className="absolute top-2 right-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30">
-              <FontIcon type="overflow" className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[10rem] w-[10rem]">
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={onDelete}
-            >
-              Delete from disk
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className="text-sm text-muted-foreground">
-        {model.modelIdentifier}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="text-lg font-medium">{model.name}</div>
-      </div>
-
-      <div className="text-sm text-muted-foreground">{model.meta}</div>
-
-      <div className="mt-auto flex justify-end pt-2">
-        <Button
-          onClick={onUse}
-          size="sm"
-          disabled={isInUse}
-          className="w-auto px-6"
-        >
-          {isInUse ? 'Using' : 'Use'}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function DeviceModels({
-  models,
-  onUse,
-  onDelete,
-  isModelInUse,
-}: {
-  models: DeviceModel[]
-  onUse: (model: DeviceModel) => void
-  onDelete: (model: DeviceModel) => void
-  isModelInUse: (modelId: string) => boolean
-}) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-stretch">
-      {models.map(m => (
-        <DeviceModelCard
-          key={m.id}
-          model={m}
-          onUse={() => onUse(m)}
-          onDelete={() => onDelete(m)}
-          isInUse={isModelInUse(m.id)}
         />
       ))}
     </div>
@@ -560,8 +436,9 @@ function CloudModelsForm({
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+  let i = Math.floor(Math.log(bytes) / Math.log(1024))
+  if (i >= units.length) i = units.length - 1
   const val = bytes / Math.pow(1024, i)
   return `${val.toFixed(i >= 2 ? 1 : 0)} ${units[i]}`
 }
@@ -900,7 +777,7 @@ function AddOrChangeModels({
       id: cachedModel.id,
       name: cachedModel.name,
       modelIdentifier: cachedModel.name,
-      meta: `${(cachedModel.size / (1024 * 1024 * 1024)).toFixed(2)} GB`,
+      meta: formatBytes(cachedModel.size),
       badges: ['Local', 'Disk'],
     })) || []
 
@@ -944,73 +821,115 @@ function AddOrChangeModels({
 
   // Check if a device model is already in the project
   const isModelInUse = (modelId: string): boolean => {
-    return projectModels.some(
-      pm => pm.modelIdentifier === modelId || pm.name === modelId
-    )
+    return projectModels.some(pm => pm.modelIdentifier === modelId)
+  }
+
+  // Handle custom model download
+  const handleCustomModelDownload = async () => {
+    setCustomDownloadState('downloading')
+    setCustomDownloadProgress(5)
+    setCustomDownloadError('')
+    setBackgroundDownloadName(customModelName.trim())
+    setDownloadedBytes(0)
+    setTotalBytes(0)
+    setEstimatedTimeRemaining('')
+    const start = Date.now()
+
+    const downloadAsync = async () => {
+      try {
+        for await (const event of modelService.downloadModel({
+          model_name: customModelInput.trim(),
+          provider: 'universal',
+        })) {
+          if (event.event === 'progress') {
+            const d = Number(event.downloaded || 0)
+            const t = Number(event.total || 0)
+            setDownloadedBytes(d)
+            setTotalBytes(t)
+            if (t > 0 && isFinite(d) && d >= 0) {
+              const percent = Math.max(
+                5,
+                Math.min(95, Math.round((d / t) * 90) + 5)
+              )
+              setCustomDownloadProgress(percent)
+              const elapsedSec = (Date.now() - start) / 1000
+              if (elapsedSec > 0) {
+                const speed = d / elapsedSec
+                const remain = (t - d) / (speed || 1)
+                setEstimatedTimeRemaining(formatETA(remain))
+              }
+            }
+          } else if (event.event === 'done') {
+            setCustomDownloadProgress(100)
+            setCustomDownloadState('success')
+            setEstimatedTimeRemaining('')
+            onAddModel(
+              {
+                id: `custom-${customModelInput.trim()}`,
+                name: customModelName.trim(),
+                modelIdentifier: customModelInput.trim(),
+                meta:
+                  customModelDescription.trim() ||
+                  'Downloaded from HuggingFace',
+                badges: ['Local', 'HuggingFace'],
+                status: 'ready',
+              },
+              customSelectedPromptSets.length > 0
+                ? customSelectedPromptSets
+                : undefined
+            )
+            refetchCachedModels()
+            setTimeout(() => {
+              setCustomModelOpen(false)
+              onGoToProject()
+            }, 1000)
+            setTimeout(() => {
+              setShowBackgroundDownload(false)
+              setCustomDownloadState('idle')
+            }, 4000)
+          } else if (event.event === 'error') {
+            setCustomDownloadState('error')
+            setCustomDownloadError(
+              event.message ||
+                'Failed to download model. Please check the model name and try again.'
+            )
+            setShowBackgroundDownload(false)
+          }
+        }
+      } catch (error: any) {
+        setCustomDownloadState('error')
+        setCustomDownloadError(
+          error.message ||
+            'Failed to download model. Please check the model name and try again.'
+        )
+        setShowBackgroundDownload(false)
+      }
+    }
+
+    downloadAsync()
   }
 
   return (
     <>
       {/* Models on device section */}
-      <div className="flex flex-col gap-4 mb-8 md:mb-10">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="font-medium">Models on device</h3>
-            <div className="h-1" />
-            <div className="text-sm text-muted-foreground">
-              Models found on your local disk that are ready to use.
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              setIsManuallyRefreshing(true)
-              const startTime = Date.now()
-
-              // Trigger the actual refetch
-              await refetchCachedModels()
-
-              // Ensure we show the loading state for at least 800ms
-              const elapsed = Date.now() - startTime
-              const remaining = Math.max(0, 800 - elapsed)
-
-              setTimeout(() => {
-                setIsManuallyRefreshing(false)
-              }, remaining)
-            }}
-            disabled={isLoadingCachedModels || isManuallyRefreshing}
-            className="flex items-center gap-2"
-          >
-            {isLoadingCachedModels || isManuallyRefreshing ? (
-              <Loader size={14} className="border-primary" />
-            ) : (
-              <FontIcon type="recently-viewed" className="w-4 h-4" />
-            )}
-            {isLoadingCachedModels || isManuallyRefreshing
-              ? 'Refreshing...'
-              : 'Refresh'}
-          </Button>
-        </div>
-        {isLoadingCachedModels || isManuallyRefreshing ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader size={24} className="border-primary" />
-          </div>
-        ) : deviceModels.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card p-8 flex items-center justify-center">
-            <div className="text-sm text-muted-foreground text-center">
-              No models found on disk. Download models below to get started.
-            </div>
-          </div>
-        ) : (
-          <DeviceModels
-            models={deviceModels}
-            onUse={handleUseDeviceModel}
-            onDelete={handleDeleteDeviceModel}
-            isModelInUse={isModelInUse}
-          />
-        )}
-      </div>
+      <DeviceModelsSection
+        models={deviceModels}
+        isLoading={isLoadingCachedModels}
+        isRefreshing={isManuallyRefreshing}
+        onUse={handleUseDeviceModel}
+        onDelete={handleDeleteDeviceModel}
+        onRefresh={async () => {
+          setIsManuallyRefreshing(true)
+          const startTime = Date.now()
+          await refetchCachedModels()
+          const elapsed = Date.now() - startTime
+          const remaining = Math.max(0, 800 - elapsed)
+          setTimeout(() => {
+            setIsManuallyRefreshing(false)
+          }, remaining)
+        }}
+        isModelInUse={isModelInUse}
+      />
 
       {/* Download or use other models section */}
       <div className="flex flex-col gap-4">
@@ -1224,16 +1143,14 @@ function AddOrChangeModels({
       </div>
 
       {/* Custom model download dialog */}
-      <Dialog
+      <CustomDownloadDialog
         open={customModelOpen}
         onOpenChange={open => {
           setCustomModelOpen(open)
           if (!open) {
-            // If closing during download, move to background
             if (customDownloadState === 'downloading') {
               setShowBackgroundDownload(true)
             } else {
-              // Only reset if not downloading
               setCustomModelInput('')
               setCustomModelName('')
               setCustomModelDescription('')
@@ -1244,337 +1161,27 @@ function AddOrChangeModels({
             }
           }
         }}
-      >
-        <DialogContent>
-          <DialogTitle>Download model from HuggingFace</DialogTitle>
-          <DialogDescription>
-            <div className="mt-2 flex flex-col gap-3">
-              <p className="text-sm">
-                Enter the model name from HuggingFace to download and add it to
-                your project.
-              </p>
-
-              {/* Model input field */}
-              <div>
-                <label
-                  className="text-xs text-muted-foreground"
-                  htmlFor="custom-model-input"
-                >
-                  HuggingFace Model Name
-                </label>
-                <input
-                  id="custom-model-input"
-                  type="text"
-                  placeholder="e.g., meta-llama/Llama-3.2-1B"
-                  value={customModelInput}
-                  onChange={e => {
-                    setCustomModelInput(e.target.value)
-                    // Auto-populate name if empty
-                    if (!customModelName) {
-                      setCustomModelName(e.target.value)
-                    }
-                  }}
-                  disabled={customDownloadState === 'downloading'}
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                />
-                <div className="text-xs text-muted-foreground mt-1">
-                  Find models at{' '}
-                  <a
-                    href="https://huggingface.co/FacebookAI/roberta-large"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    HuggingFace
-                  </a>
-                </div>
-              </div>
-
-              {/* Name field */}
-              <div>
-                <label
-                  className="text-xs text-muted-foreground"
-                  htmlFor="custom-model-name"
-                >
-                  Name
-                </label>
-                <input
-                  id="custom-model-name"
-                  type="text"
-                  placeholder="Enter model name"
-                  value={customModelName}
-                  onChange={e => setCustomModelName(e.target.value)}
-                  disabled={customDownloadState === 'downloading'}
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                />
-              </div>
-
-              {/* Description field */}
-              <div>
-                <label
-                  className="text-xs text-muted-foreground"
-                  htmlFor="custom-model-description"
-                >
-                  Description (optional)
-                </label>
-                <textarea
-                  id="custom-model-description"
-                  rows={2}
-                  placeholder="Enter model description"
-                  value={customModelDescription}
-                  onChange={e => setCustomModelDescription(e.target.value)}
-                  disabled={customDownloadState === 'downloading'}
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                />
-              </div>
-
-              {/* Prompt sets dropdown */}
-              <div>
-                <label
-                  className="text-xs text-muted-foreground mb-1 block"
-                  htmlFor="custom-prompt-sets-trigger"
-                >
-                  Prompt sets
-                </label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      id="custom-prompt-sets-trigger"
-                      className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between"
-                      disabled={customDownloadState === 'downloading'}
-                    >
-                      <span className="truncate text-sm flex items-center gap-2">
-                        {customSelectedPromptSets.length > 0 ? (
-                          <>
-                            <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
-                              {customSelectedPromptSets.length}
-                            </span>
-                            <span className="truncate">
-                              {customSelectedPromptSets.join(', ')}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            All sets
-                          </span>
-                        )}
-                      </span>
-                      <FontIcon type="chevron-down" className="w-4 h-4" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-                    {promptSetNames.map(name => (
-                      <DropdownMenuItem
-                        key={name}
-                        className="w-full justify-start text-left"
-                        onSelect={e => e.preventDefault()}
-                      >
-                        <label className="flex items-center gap-2 w-full">
-                          <Checkbox
-                            checked={customSelectedPromptSets.includes(name)}
-                            onCheckedChange={v => {
-                              if (v) {
-                                setCustomSelectedPromptSets(prev => [
-                                  ...prev,
-                                  name,
-                                ])
-                              } else {
-                                setCustomSelectedPromptSets(prev =>
-                                  prev.filter(s => s !== name)
-                                )
-                              }
-                            }}
-                          />
-                          <span className="text-sm">{name}</span>
-                        </label>
-                      </DropdownMenuItem>
-                    ))}
-                    <div className="h-px bg-border my-1" />
-                    <DropdownMenuItem
-                      onClick={() => setCustomSelectedPromptSets([])}
-                    >
-                      <span className="text-xs text-muted-foreground">
-                        Clear selection
-                      </span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              {/* Metadata */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="text-muted-foreground">Provider</div>
-                <div>Ollama</div>
-                <div className="text-muted-foreground">Source</div>
-                <div>HuggingFace</div>
-              </div>
-
-              {/* Progress bar */}
-              {customDownloadState === 'downloading' && (
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">
-                      Downloading... {formatBytes(downloadedBytes)} /{' '}
-                      {formatBytes(totalBytes)}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {customDownloadProgress}%{' '}
-                      {estimatedTimeRemaining && `• ${estimatedTimeRemaining}`}
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all duration-300"
-                      style={{ width: `${customDownloadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Error message */}
-              {customDownloadState === 'error' && customDownloadError && (
-                <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
-                  <p className="text-sm text-destructive">
-                    {customDownloadError}
-                  </p>
-                </div>
-              )}
-            </div>
-          </DialogDescription>
-          <DialogFooter>
-            {customDownloadState === 'downloading' ? (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowBackgroundDownload(true)
-                  setCustomModelOpen(false)
-                }}
-              >
-                Download in background
-              </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={() => setCustomModelOpen(false)}
-              >
-                Cancel
-              </Button>
-            )}
-            <Button
-              disabled={
-                customDownloadState === 'downloading' ||
-                !customModelInput.trim() ||
-                !customModelName.trim()
-              }
-              onClick={async () => {
-                setCustomDownloadState('downloading')
-                setCustomDownloadProgress(5) // Start at 5% for better UX
-                setCustomDownloadError('')
-                setBackgroundDownloadName(customModelName.trim())
-                setDownloadedBytes(0)
-                setTotalBytes(0)
-                setEstimatedTimeRemaining('')
-                const start = Date.now()
-
-                const downloadAsync = async () => {
-                  try {
-                    // Start download with streaming progress
-                    for await (const event of modelService.downloadModel({
-                      model_name: customModelInput.trim(),
-                      provider: 'universal',
-                    })) {
-                      if (event.event === 'progress') {
-                        const d = Number(event.downloaded || 0)
-                        const t = Number(event.total || 0)
-                        setDownloadedBytes(d)
-                        setTotalBytes(t)
-                        // Calculate progress percentage (start from 5% to 95%) only if total known
-                        if (t > 0 && isFinite(d) && d >= 0) {
-                          const percent = Math.max(
-                            5,
-                            Math.min(95, Math.round((d / t) * 90) + 5)
-                          )
-                          setCustomDownloadProgress(percent)
-                          const elapsedSec = (Date.now() - start) / 1000
-                          if (elapsedSec > 0) {
-                            const speed = d / elapsedSec // bytes/sec
-                            const remain = (t - d) / (speed || 1)
-                            setEstimatedTimeRemaining(formatETA(remain))
-                          }
-                        }
-                      } else if (event.event === 'done') {
-                        setCustomDownloadProgress(100)
-                        setCustomDownloadState('success')
-                        setEstimatedTimeRemaining('')
-                        // Add model to project
-                        onAddModel(
-                          {
-                            id: `custom-${customModelInput.trim()}`,
-                            name: customModelName.trim(),
-                            modelIdentifier: customModelInput.trim(),
-                            meta:
-                              customModelDescription.trim() ||
-                              'Downloaded from HuggingFace',
-                            badges: ['Local', 'HuggingFace'],
-                            status: 'ready',
-                          },
-                          customSelectedPromptSets.length > 0
-                            ? customSelectedPromptSets
-                            : undefined
-                        )
-                        // Refresh cached models
-                        refetchCachedModels()
-                        // Close modal immediately but keep success toast
-                        setTimeout(() => {
-                          setCustomModelOpen(false)
-                          onGoToProject()
-                        }, 1000)
-                        // Hide success toast after 4 seconds
-                        setTimeout(() => {
-                          setShowBackgroundDownload(false)
-                          setCustomDownloadState('idle')
-                        }, 4000)
-                      } else if (event.event === 'error') {
-                        setCustomDownloadState('error')
-                        setCustomDownloadError(
-                          event.message ||
-                            'Failed to download model. Please check the model name and try again.'
-                        )
-                        setShowBackgroundDownload(false)
-                      }
-                    }
-                  } catch (error: any) {
-                    setCustomDownloadState('error')
-                    setCustomDownloadError(
-                      error.message ||
-                        'Failed to download model. Please check the model name and try again.'
-                    )
-                    setShowBackgroundDownload(false)
-                  }
-                }
-
-                // Start download
-                downloadAsync()
-              }}
-            >
-              {customDownloadState === 'downloading' && (
-                <span className="mr-2 inline-flex">
-                  <Loader
-                    size={14}
-                    className="border-blue-400 dark:border-blue-100"
-                  />
-                </span>
-              )}
-              {customDownloadState === 'success' && (
-                <span className="mr-2 inline-flex">
-                  <FontIcon type="checkmark-filled" className="w-4 h-4" />
-                </span>
-              )}
-              Download and add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        promptSetNames={promptSetNames}
+        customModelInput={customModelInput}
+        setCustomModelInput={setCustomModelInput}
+        customModelName={customModelName}
+        setCustomModelName={setCustomModelName}
+        customModelDescription={customModelDescription}
+        setCustomModelDescription={setCustomModelDescription}
+        customSelectedPromptSets={customSelectedPromptSets}
+        setCustomSelectedPromptSets={setCustomSelectedPromptSets}
+        customDownloadState={customDownloadState}
+        customDownloadProgress={customDownloadProgress}
+        customDownloadError={customDownloadError}
+        downloadedBytes={downloadedBytes}
+        totalBytes={totalBytes}
+        estimatedTimeRemaining={estimatedTimeRemaining}
+        onDownload={handleCustomModelDownload}
+        onMoveToBackground={() => {
+          setShowBackgroundDownload(true)
+          setCustomModelOpen(false)
+        }}
+      />
 
       {/* Device model confirmation dialog */}
       <Dialog
@@ -1637,76 +1244,22 @@ function AddOrChangeModels({
                   />
                 </div>
 
-                <div>
-                  <label
-                    className="text-xs text-muted-foreground mb-1 block"
-                    htmlFor="device-prompt-sets-trigger"
-                  >
-                    Prompt sets
-                  </label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        id="device-prompt-sets-trigger"
-                        className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between"
-                      >
-                        <span className="truncate text-sm flex items-center gap-2">
-                          {deviceSelectedPromptSets.length > 0 ? (
-                            <>
-                              <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
-                                {deviceSelectedPromptSets.length}
-                              </span>
-                              <span className="truncate">
-                                {deviceSelectedPromptSets.join(', ')}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              All sets
-                            </span>
-                          )}
-                        </span>
-                        <FontIcon type="chevron-down" className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-                      {promptSetNames.map(name => (
-                        <DropdownMenuItem
-                          key={name}
-                          className="w-full justify-start text-left"
-                          onSelect={e => e.preventDefault()}
-                        >
-                          <label className="flex items-center gap-2 w-full">
-                            <Checkbox
-                              checked={deviceSelectedPromptSets.includes(name)}
-                              onCheckedChange={v => {
-                                if (v) {
-                                  setDeviceSelectedPromptSets(prev => [
-                                    ...prev,
-                                    name,
-                                  ])
-                                } else {
-                                  setDeviceSelectedPromptSets(prev =>
-                                    prev.filter(s => s !== name)
-                                  )
-                                }
-                              }}
-                            />
-                            <span className="text-sm">{name}</span>
-                          </label>
-                        </DropdownMenuItem>
-                      ))}
-                      <div className="h-px bg-border my-1" />
-                      <DropdownMenuItem
-                        onClick={() => setDeviceSelectedPromptSets([])}
-                      >
-                        <span className="text-xs text-muted-foreground">
-                          Clear selection
-                        </span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                <PromptSetSelector
+                  promptSetNames={promptSetNames}
+                  selectedPromptSets={deviceSelectedPromptSets}
+                  onTogglePromptSet={(name, checked) => {
+                    if (checked) {
+                      setDeviceSelectedPromptSets(prev => [...prev, name])
+                    } else {
+                      setDeviceSelectedPromptSets(prev =>
+                        prev.filter(s => s !== name)
+                      )
+                    }
+                  }}
+                  onClearPromptSets={() => setDeviceSelectedPromptSets([])}
+                  triggerId="device-prompt-sets-trigger"
+                  label="Prompt sets"
+                />
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="text-muted-foreground">Provider</div>
@@ -1774,7 +1327,7 @@ function AddOrChangeModels({
       </Dialog>
 
       {/* Delete device model confirmation dialog */}
-      <Dialog
+      <DeleteDeviceModelDialog
         open={deleteConfirmModelOpen}
         onOpenChange={open => {
           setDeleteConfirmModelOpen(open)
@@ -1784,57 +1337,11 @@ function AddOrChangeModels({
             setDeleteError('')
           }
         }}
-      >
-        <DialogContent>
-          <DialogTitle>Delete model from disk?</DialogTitle>
-          <DialogDescription>
-            {modelToDelete && (
-              <div className="mt-2 flex flex-col gap-3">
-                <p className="text-sm">
-                  Are you sure you want to delete
-                  <span className="mx-1 font-medium text-foreground">
-                    {modelToDelete.name}
-                  </span>
-                  from disk? This will permanently remove the model files (
-                  {modelToDelete.meta}) and cannot be undone.
-                </p>
-
-                {deleteState === 'error' && deleteError && (
-                  <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
-                    <p className="text-sm text-destructive">{deleteError}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </DialogDescription>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setDeleteConfirmModelOpen(false)}
-              disabled={deleteState === 'deleting'}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDeleteDeviceModel}
-              disabled={deleteState === 'deleting'}
-            >
-              {deleteState === 'deleting' && (
-                <span className="mr-2 inline-flex">
-                  <Loader size={14} className="border-destructive-foreground" />
-                </span>
-              )}
-              {deleteState === 'success' && (
-                <span className="mr-2 inline-flex">
-                  <FontIcon type="checkmark-filled" className="w-4 h-4" />
-                </span>
-              )}
-              Delete from disk
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        model={modelToDelete}
+        deleteState={deleteState}
+        deleteError={deleteError}
+        onConfirmDelete={confirmDeleteDeviceModel}
+      />
 
       {/* Download model confirmation dialog */}
       <Dialog
@@ -1897,73 +1404,22 @@ function AddOrChangeModels({
                   />
                 </div>
 
-                <div>
-                  <label
-                    className="text-xs text-muted-foreground mb-1 block"
-                    htmlFor="prompt-sets-trigger"
-                  >
-                    Prompt sets
-                  </label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        id="prompt-sets-trigger"
-                        className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between"
-                      >
-                        <span className="truncate text-sm flex items-center gap-2">
-                          {selectedPromptSets.length > 0 ? (
-                            <>
-                              <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
-                                {selectedPromptSets.length}
-                              </span>
-                              <span className="truncate">
-                                {selectedPromptSets.join(', ')}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              All sets
-                            </span>
-                          )}
-                        </span>
-                        <FontIcon type="chevron-down" className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-                      {promptSetNames.map(name => (
-                        <DropdownMenuItem
-                          key={name}
-                          className="w-full justify-start text-left"
-                          onSelect={e => e.preventDefault()}
-                        >
-                          <label className="flex items-center gap-2 w-full">
-                            <Checkbox
-                              checked={selectedPromptSets.includes(name)}
-                              onCheckedChange={v => {
-                                if (v) {
-                                  setSelectedPromptSets(prev => [...prev, name])
-                                } else {
-                                  setSelectedPromptSets(prev =>
-                                    prev.filter(s => s !== name)
-                                  )
-                                }
-                              }}
-                            />
-                            <span className="text-sm">{name}</span>
-                          </label>
-                        </DropdownMenuItem>
-                      ))}
-                      <div className="h-px bg-border my-1" />
-                      <DropdownMenuItem
-                        onClick={() => setSelectedPromptSets([])}
-                      >
-                        <span className="text-xs text-muted-foreground">
-                          Clear selection
-                        </span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                <PromptSetSelector
+                  promptSetNames={promptSetNames}
+                  selectedPromptSets={selectedPromptSets}
+                  onTogglePromptSet={(name, checked) => {
+                    if (checked) {
+                      setSelectedPromptSets(prev => [...prev, name])
+                    } else {
+                      setSelectedPromptSets(prev =>
+                        prev.filter(s => s !== name)
+                      )
+                    }
+                  }}
+                  onClearPromptSets={() => setSelectedPromptSets([])}
+                  triggerId="prompt-sets-trigger"
+                  label="Prompt sets"
+                />
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="text-muted-foreground">Provider</div>

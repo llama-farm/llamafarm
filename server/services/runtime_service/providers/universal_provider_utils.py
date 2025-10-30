@@ -12,9 +12,7 @@ def _match(
 ) -> bool:
     if allow and not any(fnmatch.fnmatch(path, pat) for pat in allow):
         return False
-    if ignore and any(fnmatch.fnmatch(path, pat) for pat in ignore):
-        return False
-    return True
+    return not ignore or not any(fnmatch.fnmatch(path, pat) for pat in ignore)
 
 
 # ---------- per-file tqdm that forwards byte updates

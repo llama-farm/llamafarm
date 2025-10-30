@@ -167,23 +167,17 @@ class UniversalProvider(RuntimeProvider):
     @staticmethod
     def list_cached_models() -> list[CachedModel]:
         """List models that are available on this system"""
-
         cache_info = scan_cache_dir()
-
-        cached_models = []
-        for repo in cache_info.repos:
-            if repo.repo_type != "model":
-                continue
-
-            cached_models.append(
-                CachedModel(
-                    id=repo.repo_id,
-                    name=repo.repo_id,
-                    size=repo.size_on_disk,
-                    path=str(repo.repo_path),
-                )
+        return [
+            CachedModel(
+                id=repo.repo_id,
+                name=repo.repo_id,
+                size=repo.size_on_disk,
+                path=str(repo.repo_path),
             )
-        return cached_models
+            for repo in cache_info.repos
+            if repo.repo_type == "model"
+        ]
 
     @staticmethod
     async def download_model(model_name: str) -> AsyncIterator[dict]:
@@ -251,11 +245,14 @@ class UniversalProvider(RuntimeProvider):
         cache_info = scan_cache_dir()
 
         # Find the repo to delete
-        target_repo = None
-        for repo in cache_info.repos:
-            if repo.repo_id == model_name and repo.repo_type == "model":
-                target_repo = repo
-                break
+        target_repo = next(
+            (
+                repo
+                for repo in cache_info.repos
+                if repo.repo_id == model_name and repo.repo_type == "model"
+            ),
+            None,
+        )
 
         if not target_repo:
             raise NotFoundError(
