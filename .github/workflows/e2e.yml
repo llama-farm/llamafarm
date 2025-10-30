@@ -351,15 +351,19 @@ jobs:
 
           echo ""
 
-          # List all log files that exist
-          echo "--- All Log Files ---"
-          ls -lah "$HOME/.llamafarm/logs/" 2>/dev/null || echo "Logs directory does not exist"
+          # Display Universal Runtime logs if they exist
+          if [ -f "$HOME/.llamafarm/logs/universal-runtime.log" ]; then
+            echo "--- Universal Runtime Logs ---"
+            tail -100 "$HOME/.llamafarm/logs/universal-runtime.log"
+          else
+            echo "No Universal Runtime logs found at $HOME/.llamafarm/logs/universal-runtime.log"
+          fi
 
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-test-logs
-          path: $HOME/.llamafarm/logs/*
+          path: $HOME/.llamafarm/logs/
           retention-days: 7
           if-no-files-found: warn

@@ -114,24 +114,35 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-	// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
-	var createResp CreateProjectResponse
-	if err := json.Unmarshal(respBody, &createResp); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
-		os.Exit(1)
-	}
+		// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
+		var createResp CreateProjectResponse
+		if err := json.Unmarshal(respBody, &createResp); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
+			os.Exit(1)
+		}
 
-	yamlBytes, err := yaml.Marshal(createResp.Project.Config)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
-		os.Exit(1)
-	}
+		// Ensure name and namespace are explicitly set in the config
+		// (they should be in the server response, but we ensure they're there)
+		configMap := createResp.Project.Config
+		if configMap == nil {
+			configMap = make(map[string]interface{})
+		}
 
-	yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
-	if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
-		os.Exit(1)
-	}
+		// Explicitly set name and namespace to ensure they're present
+		configMap["name"] = projectName
+		configMap["namespace"] = ns
+
+		yamlBytes, err := yaml.Marshal(configMap)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
+			os.Exit(1)
+		}
+
+		yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
+		if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
+			os.Exit(1)
+		}
 
 		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absProjectDir)
 	},

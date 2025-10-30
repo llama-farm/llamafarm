@@ -7,11 +7,11 @@ import (
 
 func TestGetCurrentCLIVersion(t *testing.T) {
 	tests := []struct {
-		name              string
-		versionVar        string
-		envVar            string
-		expectedVersion   string
-		expectError       bool
+		name            string
+		versionVar      string
+		envVar          string
+		expectedVersion string
+		expectError     bool
 	}{
 		{
 			name:            "LF_VERSION_REF override takes priority",
