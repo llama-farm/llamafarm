@@ -74,8 +74,11 @@ jobs:
       - name: Install go-jsonschema
         run: go install github.com/atombender/go-jsonschema@latest
 
+      - name: Install Nx CLI
+        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+
       - name: Run generate-types (compiles schema and generates Go types)
-        run: npx nx generate-types cli
+        run: npx --yes nx generate-types cli
 
       - name: Create dist directory
         run: mkdir -p dist
