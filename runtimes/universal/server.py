@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifecycle (startup and shutdown)."""id
+    """Manage application lifecycle (startup and shutdown)."""
 
     # Startup
     logger.info("Starting Universal Runtime")
@@ -357,8 +357,8 @@ if __name__ == "__main__":
     # Write PID file for service discovery
     write_pid("universal-runtime")
 
-    port = int(os.getenv("PORT", "11540"))
-    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("LF_RUNTIME_PORT", os.getenv("PORT", "11540")))
+    host = os.getenv("LF_RUNTIME_HOST", os.getenv("HOST", "127.0.0.1"))
 
     logger.info(f"Starting LlamaFarm Universal Runtime on {host}:{port}")
     logger.info(f"Device: {get_device()}")
