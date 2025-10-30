@@ -197,7 +197,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'cust-support-copilot',
     slug: 'customer-support-copilot',
-    title: 'Customer Support Copilot for SaaS',
+    title: 'Customer Support Copilot (SaaS)',
     description:
       'Retrieves KB articles, past tickets, and changelogs to draft replies, suggest troubleshooting steps, and auto-route complex cases.',
     updatedAt: '2025-08-15T00:00:00.000Z',
@@ -460,7 +460,7 @@ export const sampleProjects: SampleProject[] = [
   {
     id: 'compliance-controls-navigator',
     slug: 'compliance-controls',
-    title: 'Compliance Controls Navigator (SOC 2/ISO 27001)',
+    title: 'Compliance Controls Navigator (SOC2/ISO27001)',
     description:
       'Maps controls to evidence, drafts audit responses, and schedules renewal reminders.',
     updatedAt: '2025-08-15T00:00:00.000Z',

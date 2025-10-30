@@ -17,7 +17,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Workaround for occasional resolution issues on some setups
+      'react-markdown': path.resolve(
+        __dirname,
+        './node_modules/react-markdown/index.js'
+      ),
     },
+  },
+  optimizeDeps: {
+    include: ['react-markdown', 'rehype-sanitize'],
   },
   build: {
     rollupOptions: {
@@ -30,10 +38,13 @@ export default defineConfig({
             '@codemirror/language',
             '@codemirror/commands',
             '@codemirror/lang-json',
+            '@codemirror/lang-yaml',
             '@codemirror/search',
             '@codemirror/theme-one-dark',
             '@lezer/highlight',
           ],
+          // YAML parsing
+          'yaml-validation': ['yaml'],
           // React vendor libraries
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           // UI vendor libraries

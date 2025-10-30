@@ -4,9 +4,15 @@ This service handles model resolution and provides utilities
 for working with multi-model configurations.
 """
 
-from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
+from collections.abc import AsyncIterator
 
-from core.logging import FastAPIStructLogger  # noqa: E402
+from config.datamodel import LlamaFarmConfig, Model, Provider  # noqa: E402
+from server.services.runtime_service.providers.base import CachedModel
+from server.services.runtime_service.providers.universal_provider import (
+    UniversalProvider,  # noqa: E402
+)
+
+from core.logging import FastAPIStructLogger
 
 logger = FastAPIStructLogger(__name__)
 
@@ -70,6 +76,58 @@ class ModelService:
             project_config: Project configuration
 
         Returns:
-            List of model metadata dicts with id, description, provider, model, is_default
+            List of model metadata dicts with id, description, provider,
+            model, is_default
         """
         return project_config.runtime.models or []
+
+    @staticmethod
+    def list_cached_models(
+        provider: Provider = Provider.universal,
+    ) -> list[CachedModel]:
+        """List all cached models with metadata.
+
+        Args:
+            project_config: Project configuration
+
+        Returns:
+            List of cached model metadata dicts with id, name, size, path
+        """
+
+        match provider:
+            case Provider.universal:
+                return UniversalProvider.list_cached_models()
+            case _:
+                raise ValueError(f"Unsupported provider: {provider.value}")
+
+    @staticmethod
+    async def download_model(
+        provider: Provider, model_name: str
+    ) -> AsyncIterator[dict]:
+        """Download/cache a model for the given provider and model name."""
+        match provider:
+            case Provider.universal:
+                async for evt in UniversalProvider.download_model(model_name):
+                    yield evt
+            case _:
+                raise ValueError(f"Unsupported provider: {provider}")
+
+    @staticmethod
+    def delete_model(provider: Provider, model_name: str) -> dict:
+        """Delete a cached model for the given provider and model name.
+
+        Args:
+            provider: The model provider
+            model_name: The model identifier to delete
+
+        Returns:
+            Dict with deleted model info including freed space
+
+        Raises:
+            ValueError: If provider is not supported
+        """
+        match provider:
+            case Provider.universal:
+                return UniversalProvider.delete_model(model_name)
+            case _:
+                raise ValueError(f"Unsupported provider: {provider}")

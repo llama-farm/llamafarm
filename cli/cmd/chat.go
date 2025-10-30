@@ -19,7 +19,6 @@ var (
 	runRAGScoreThreshold float64
 	runModel             string
 	dryRun               bool
-
 )
 
 // chatCmd represents the `lf chat` command

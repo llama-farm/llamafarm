@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useProject } from './useProjects'
 import { useActiveProject } from './useActiveProject'
+import yaml from 'yaml'
 import type { UseFormattedConfigReturn } from '../types/config'
 
 /**
@@ -26,9 +27,22 @@ export function useFormattedConfig(): UseFormattedConfigReturn {
   // Format the configuration for display
   const formattedConfig = useMemo(() => {
     if (error) {
+      // Escape error message for safe YAML embedding
+      const escapeYamlString = (str: string) => {
+        return str
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+          .replace(/\t/g, '\\t')
+      }
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const escapedErrorMessage = escapeYamlString(errorMessage)
+
       return `# Error loading project configuration
-# Error: ${error instanceof Error ? error.message : 'Unknown error'}
-# 
+# Error: ${escapedErrorMessage}
+#
 # Please check:
 # - Project exists and is accessible
 # - Network connection
@@ -36,12 +50,10 @@ export function useFormattedConfig(): UseFormattedConfigReturn {
 #
 # You can try refreshing to reload the configuration.
 
-{
-  "error": {
-    "message": "${error instanceof Error ? error.message : 'Unknown error'}",
-    "timestamp": "${new Date().toISOString()}"
-  }
-}`
+error:
+  message: "${escapedErrorMessage}"
+  timestamp: "${new Date().toISOString()}"
+`
     }
 
     if (!projectResponse || !activeProject) {
@@ -54,24 +66,36 @@ export function useFormattedConfig(): UseFormattedConfigReturn {
 #
 # Try selecting a project from the sidebar or creating a new one.
 
-{
-  "message": "No project configuration available",
-  "activeProject": ${activeProject ? `"${activeProject.project}"` : 'null'}
-}`
+message: "No project configuration available"
+activeProject: ${activeProject ? `"${activeProject.project}"` : 'null'}
+`
     }
 
-    // Return formatted JSON without hardcoded lastUpdated
-    // Note: Timestamps not included as they're not available from the API
-    const configData = {
-      project: activeProject.project,
-      namespace: activeProject.namespace,
-      config: projectResponse.project?.config || {},
-      metadata: {
-        source: "llamafarm-designer"
-      }
-    }
+    // Return the config as YAML
+    // This is the actual project configuration that can be edited
+    const config = projectResponse.project?.config || {}
 
-    return JSON.stringify(configData, null, 2)
+    try {
+      return yaml.stringify(config, {
+        indent: 2,
+        lineWidth: 0, // Don't wrap lines
+        minContentWidth: 0
+      })
+    } catch (yamlError) {
+      // Handle circular references or non-serializable values
+      return `# Error converting configuration to YAML
+# Error: ${yamlError instanceof Error ? yamlError.message : 'Failed to serialize configuration'}
+#
+# This could be due to:
+# - Circular references in the configuration
+# - Non-serializable values
+# - Invalid data structure
+#
+# Raw config (as JSON):
+
+${JSON.stringify(config, null, 2)}
+`
+    }
   }, [error, projectResponse, activeProject])
 
   return {

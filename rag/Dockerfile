@@ -12,6 +12,10 @@ ENV UV_CACHE_DIR=/tmp/uv-cache
 # Set UV to use a writable location for virtual environments
 ENV UV_PROJECT_ENVIRONMENT=/tmp/uv-venv
 
+# Optimize UV for faster builds
+ENV UV_NO_SYNC_IGNORE_FILES=1
+ENV UV_HTTP_TIMEOUT=300
+
 # Create a writable control directory for Celery filesystem transport
 RUN mkdir -p /tmp/control && chmod 777 /tmp/control
 
@@ -27,15 +31,17 @@ RUN mkdir -p /tmp/uv-cache && chmod 777 /tmp/uv-cache \
 # Set working directory
 WORKDIR /app
 
-# Copy the required packages from the monorepo
-# Note: This Dockerfile should be run from the repo root: docker build -f server/Dockerfile .
+# Copy dependency files first for better Docker layer caching
+COPY config/pyproject.toml config/uv.lock config/schema.yaml config/README.md ./config/
+COPY rag/pyproject.toml rag/uv.lock rag/README.md ./rag/
+
+# Install dependencies in separate layers (cached unless lock files change)
+RUN cd config && uv sync --locked --all-extras
+RUN cd rag && uv sync --locked
+
+# Now copy the rest of the source code (changes won't invalidate dependency cache)
 COPY config/ ./config/
 COPY rag/ ./rag/
-
-# Install each package with its own dependencies
-RUN ls -la config
-RUN cd config && uv sync --locked --all-extras --verbose
-RUN cd rag && uv sync --locked  --verbose
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh

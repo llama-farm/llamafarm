@@ -1,11 +1,11 @@
 """Base class for runtime providers."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-from config.datamodel import LlamaFarmConfig, Model
+from config.datamodel import Model
 
 from agents.base.clients.client import LFAgentClient
-from services.model_service import ModelService
 
 from .health import HealthCheckResult
 
@@ -48,3 +48,13 @@ class RuntimeProvider(ABC):
             HealthCheckResult with status, message, latency, and details
         """
         pass
+
+
+@dataclass
+class CachedModel:
+    """Cached model information."""
+
+    id: str
+    name: str
+    size: int
+    path: str

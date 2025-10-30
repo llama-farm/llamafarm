@@ -10,7 +10,7 @@ from core.logging import setup_logging
 from core.settings import settings
 
 # Configure logging FIRST, before anything else
-setup_logging(settings.LOG_JSON_FORMAT, settings.LOG_LEVEL)
+setup_logging(settings.LOG_JSON_FORMAT, settings.LOG_LEVEL, settings.LOG_FILE)
 
 # Create the data directory if it doesn't exist
 os.makedirs(settings.lf_data_dir, exist_ok=True)

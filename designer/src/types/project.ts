@@ -23,6 +23,10 @@ export interface Project {
   name: string
   /** Project configuration object */
   config: Record<string, any>
+  /** Validation error message if config has validation issues */
+  validation_error?: string | null
+  /** Last modified timestamp of the project config */
+  last_modified?: string | null
 }
 
 /**

@@ -4,9 +4,9 @@ import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import PageActions from '../common/PageActions'
-import { Mode } from '../ModeToggle'
 import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
+import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +41,7 @@ type Database = {
 function Databases() {
   const navigate = useNavigate()
   const { toast } = useToast()
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
   const activeProject = useActiveProject()
   const { data: projectResp } = useProject(
     activeProject?.namespace || '',

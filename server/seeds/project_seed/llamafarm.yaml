@@ -29,7 +29,7 @@ runtime:
 prompts:
   - name: default
     messages:
-      - role: "system"
+      - role: system
         content: |
           # BACKGROUND
           You are a helpful assistant that can help users create and manage LlamaFarm projects.

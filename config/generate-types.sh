@@ -2,7 +2,8 @@
 set -e
 echo "Compiling schema..."
 uv run python compile_schema.py
-echo "Generating types..."
+echo ""
+echo "Generating Python types..."
 uv run datamodel-codegen \
     --input schema.deref.yaml \
     --output datamodel.py \
@@ -12,4 +13,9 @@ uv run datamodel-codegen \
     --use-standard-collections \
     --formatters=ruff-format \
     --class-name=LlamaFarmConfig
-echo "Done!"
+echo "✅ Python types generated"
+echo ""
+echo "✅ Done!"
+echo ""
+echo "NOTE: To validate Go types during development, run:"
+echo "  ./generate-go-types.sh && ./validate-go-types.sh"

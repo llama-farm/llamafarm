@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -11,11 +12,16 @@ from core.base import Document, VectorStore
 from utils.hash_utils import DeduplicationTracker
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.stores.chroma_store.chroma_store")
 
 
 class ChromaStore(VectorStore):
     """ChromaDB vector store implementation."""
+
+    # Class-level client cache to prevent multiple clients for the same database
+    _client_cache: dict[str, chromadb.ClientAPI] = {}
+    _client_cache_lock = threading.Lock()
 
     def __init__(
         self,
@@ -30,7 +36,9 @@ class ChromaStore(VectorStore):
         # This allows docker-compose to set CHROMADB_HOST and CHROMADB_PORT
         # to connect to the chromadb-server service
         self.host = config.get("host") or os.getenv("CHROMADB_HOST")
-        self.port = config.get("port") or (int(os.getenv("CHROMADB_PORT")) if os.getenv("CHROMADB_PORT") else None)
+        self.port = config.get("port") or (
+            int(os.getenv("CHROMADB_PORT")) if os.getenv("CHROMADB_PORT") else None
+        )
         self.embedding_dimension = max(
             config.get("embedding_dimension", 768), 1
         )  # Ensure positive
@@ -46,17 +54,22 @@ class ChromaStore(VectorStore):
             )
             self.distance_metric = "cosine"
 
-        # Initialize ChromaDB client
+        # Initialize ChromaDB client (with caching for persistent clients)
         if self.host and self.port:
             # HTTP client - connects to ChromaDB server (recommended for production)
             # This prevents multi-process write conflicts (issue #279)
+            client_key = f"http://{self.host}:{self.port}"
             logger.info(
                 f"Using ChromaDB HTTP client connecting to {self.host}:{self.port}"
             )
-            self.client = chromadb.HttpClient(host=self.host, port=self.port)
+            self.client = self._get_or_create_client(
+                client_key, lambda: chromadb.HttpClient(host=self.host, port=self.port)
+            )
         else:
             # Persistent client - for local development only
             # WARNING: Multiple processes writing to the same persistent client can cause conflicts
+            # Use client cache to ensure only one client per database path
+            client_key = f"persistent://{self.persist_directory}"
             logger.info(
                 f"Using ChromaDB persistent client with persist_directory: {self.persist_directory}"
             )
@@ -64,7 +77,10 @@ class ChromaStore(VectorStore):
                 "Persistent client mode: ensure only one process writes to ChromaDB at a time. "
                 "For production, use client-server mode with host/port configuration."
             )
-            self.client = chromadb.PersistentClient(path=self.persist_directory)
+            self.client = self._get_or_create_client(
+                client_key,
+                lambda: chromadb.PersistentClient(path=self.persist_directory),
+            )
 
         self.collection = None
         self._setup_collection()
@@ -74,6 +90,46 @@ class ChromaStore(VectorStore):
         self.dedup_tracker = (
             DeduplicationTracker() if self.deduplication_enabled else None
         )
+
+    @classmethod
+    def _get_or_create_client(
+        cls, client_key: str, client_factory
+    ) -> chromadb.ClientAPI:
+        """Get or create a ChromaDB client from the cache.
+
+        This ensures that multiple ChromaStore instances using the same database
+        path share the same underlying client, preventing database contention.
+
+        Args:
+            client_key: Unique key identifying the client (e.g., path or host:port)
+            client_factory: Callable that creates a new client if one doesn't exist
+
+        Returns:
+            ChromaDB client instance
+        """
+        with cls._client_cache_lock:
+            if client_key not in cls._client_cache:
+                logger.info(f"Creating new ChromaDB client for: {client_key}")
+                cls._client_cache[client_key] = client_factory()
+            else:
+                logger.debug(f"Reusing existing ChromaDB client for: {client_key}")
+            return cls._client_cache[client_key]
+
+    @classmethod
+    def clear_client_cache(cls, client_key: Optional[str] = None) -> None:
+        """Clear the client cache.
+
+        Args:
+            client_key: Specific client key to remove. If None, clears entire cache.
+        """
+        with cls._client_cache_lock:
+            if client_key:
+                if client_key in cls._client_cache:
+                    logger.info(f"Removing client from cache: {client_key}")
+                    del cls._client_cache[client_key]
+            else:
+                logger.info("Clearing entire ChromaDB client cache")
+                cls._client_cache.clear()
 
     def validate_config(self) -> bool:
         """Validate configuration."""
@@ -135,7 +191,7 @@ class ChromaStore(VectorStore):
                 parsed[key] = value
         return parsed
 
-    def add_documents(self, documents: List[Document]) -> bool:
+    def add_documents(self, documents: list[Document]) -> bool:
         """Add documents to the vector store with deduplication support."""
         try:
             if not documents:

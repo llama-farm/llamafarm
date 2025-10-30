@@ -94,12 +94,22 @@ export const setActiveProject = (projectName: string): void => {
  * Convert API Project objects to UI ProjectItem objects
  */
 export const apiProjectsToProjectItems = (projects: Project[]): ProjectItem[] => {
-  return projects.map((project, idx) => ({
-    id: idx + 1,
-    name: project.name,
-    model: 'TinyLama', // TODO: Extract from project.config when available
-    lastEdited: '8/15/2025', // TODO: Use actual lastModified from API
-  }))
+  return projects.map((project, idx) => {
+    const defaultModel = project.config?.runtime?.default_model
+    const firstModel = project.config?.runtime?.models?.[0]?.name
+    const model = defaultModel || firstModel || 'No model'
+    
+    const lastEdited = project.last_modified 
+      ? new Date(project.last_modified).toLocaleDateString()
+      : new Date().toLocaleDateString()
+
+    return {
+      id: idx + 1,
+      name: project.name,
+      model,
+      lastEdited,
+    }
+  })
 }
 
 /**

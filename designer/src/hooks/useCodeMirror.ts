@@ -13,6 +13,7 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
     { EditorView, lineNumbers, keymap },
     { EditorState, StateEffect },
     { json },
+    { yaml },
     { defaultKeymap },
     {
       bracketMatching,
@@ -28,6 +29,7 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
     import('@codemirror/view'),
     import('@codemirror/state'),
     import('@codemirror/lang-json'),
+    import('@codemirror/lang-yaml'),
     import('@codemirror/commands'),
     import('@codemirror/language'),
     import('@codemirror/search'),
@@ -42,6 +44,7 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
     EditorState,
     StateEffect,
     json,
+    yaml,
     defaultKeymap,
     bracketMatching,
     indentOnInput,
@@ -51,6 +54,8 @@ const loadCodeMirrorModules = async (): Promise<CodeMirrorModules> => {
     highlightSelectionMatches,
     tags,
     oneDark,
+    linter: null as any, // Not used due to compatibility issues
+    lintGutter: null as any, // Not used due to compatibility issues
   }
 }
 
@@ -80,6 +85,7 @@ export function useCodeMirror(
     language: 'json',
     tabSize: 2,
     indentUnit: 2,
+    onChange: config.onChange,
     ...config,
   }
 
@@ -123,6 +129,7 @@ export function useCodeMirror(
       HighlightStyle,
       highlightSelectionMatches,
       json,
+      yaml,
       keymap,
       defaultKeymap,
       tags,
@@ -137,6 +144,16 @@ export function useCodeMirror(
     // Language support
     if (defaultConfig.language === 'json') {
       extensions.push(json())
+    } else if (defaultConfig.language === 'yaml') {
+      extensions.push(yaml())
+
+      // Real-time linting disabled due to CodeMirror module compatibility issues
+      // Validation happens on save instead (see ConfigEditor component)
+      // The linter extension causes: "Unrecognized extension value in extension set"
+      // This is a known issue with dynamic module loading in CodeMirror
+      //
+      // Alternative: Users will see validation errors when they click Save
+      // which prevents saving invalid configs
     }
 
     // Basic editing
@@ -209,6 +226,17 @@ export function useCodeMirror(
     ])
 
     extensions.push(syntaxHighlighting(customHighlightStyle))
+
+    // Add onChange listener if provided
+    if (defaultConfig.onChange && !defaultConfig.readOnly) {
+      const updateListener = modules.EditorView.updateListener.of((update: any) => {
+        if (update.docChanged) {
+          const newContent = update.state.doc.toString()
+          defaultConfig.onChange!(newContent)
+        }
+      })
+      extensions.push(updateListener)
+    }
 
     // Custom styling extension with proper theme backgrounds
     extensions.push(

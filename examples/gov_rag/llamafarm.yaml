@@ -3,13 +3,12 @@ name: raleigh-udo-demo
 namespace: default
 
 runtime:
-  default_model: udo-chat
   models:
     - name: udo-chat
-      description: "Primary model for UDO municipal ordinance queries"
+      description: 'Primary model for UDO municipal ordinance queries'
       provider: ollama
       model: llama3.1:8b
-      base_url: http://localhost:11434/v1
+      base_url: http://localhost:11434
       default: true
       prompt_format: unstructured
       model_api_parameters:
@@ -37,14 +36,13 @@ rag:
         port: 8000
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            auto_pull: true
-            base_url: http://localhost:11434
-            batch_size: 12
+            model: nomic-ai/nomic-embed-text-v2-moe
             dimension: 768
-            model: nomic-embed-text
+            batch_size: 12
             timeout: 60
+            auto_pull: true
           priority: 0
       retrieval_strategies:
         - name: ordinance_focus
@@ -53,6 +51,8 @@ rag:
             distance_metric: cosine
             top_k: 6
           default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: ordinance_focus
   data_processing_strategies:
     - name: udo_pdf_processor
       description: Parser tuned for municipal ordinance PDFs with heading extraction.
@@ -67,8 +67,6 @@ rag:
             chunk_overlap: 160
             chunk_strategy: semantic
             extract_metadata: true
-            extract_outline: true
-            preserve_equations: false
             extract_tables: true
         - type: PDFParser_PyPDF2
           file_include_patterns:

@@ -1,8 +1,8 @@
 import json
 import re
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Literal
-import uuid
 
 from config.datamodel import ToolCallStrategy
 from openai import NOT_GIVEN, AsyncOpenAI

@@ -116,7 +116,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
-        component: ["config", "rag", "server"]
+        component: ["config", "rag", "server", "runtimes/universal"]
         exclude:
           # Server requires Python 3.12+
           - component: server
@@ -208,38 +208,3 @@ jobs:
         if: steps.check-tests.outputs.has_tests == 'false'
         run: |
           echo "No tests found for ${{ matrix.component }}, skipping test execution"
-
-  # Build verification job
-  build-verification:
-    name: Build Verification
-    runs-on: ubuntu-latest
-    needs: [test-cli, test-python]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Verify all Python components can be built
-        run: |
-          for component in config rag server; do
-            echo "Building $component..."
-            cd $component
-            if [ -f "uv.lock" ]; then
-              uv sync
-            else
-              uv pip install -e .
-            fi
-            cd ..
-          done
-
-      - name: Integration test placeholder
-        run: |
-          echo "All components built successfully!"
-          echo "Future: Add integration tests here"

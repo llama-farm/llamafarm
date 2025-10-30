@@ -38,6 +38,7 @@ PDF_AVAILABLE = True  # Always available through fallback
 
 # Import embedders
 from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
+from components.embedders.universal_embedder.universal_embedder import UniversalEmbedder
 
 # Conditional imports for embedders with dependencies
 try:
@@ -210,6 +211,7 @@ class EmbedderFactory(ComponentFactory):
 
     _registry = {
         "OllamaEmbedder": OllamaEmbedder,
+        "UniversalEmbedder": UniversalEmbedder,
     }
 
     # Add embedders conditionally based on availability
