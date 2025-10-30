@@ -50,8 +50,8 @@ RUN cd runtimes/universal && uv sync --locked --verbose \
 # Copy universal runtime source code
 COPY runtimes/universal/ ./runtimes/universal/
 
-# Expose port
-EXPOSE 8000
+# Expose port (default is 11540, can be overridden with LF_RUNTIME_PORT env var)
+EXPOSE 11540
 
 # Change to /tmp so any runtime files are created in writable location
 WORKDIR /tmp
