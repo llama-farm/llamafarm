@@ -3,12 +3,12 @@ FastAPI router for event logs endpoints.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Path as FastAPIPath, Query
 
+from services.event_log_service import EventLogService
+
 from .models import EventDetail, ListEventsResponse
-from .service import EventLogService
 
 router = APIRouter(
     prefix="/projects/{namespace}/{project_id}/event_logs",
@@ -25,16 +25,16 @@ router = APIRouter(
 async def list_events(
     namespace: str = FastAPIPath(..., description="Project namespace"),
     project_id: str = FastAPIPath(..., description="Project ID"),
-    type: Optional[str] = Query(
+    type: str | None = Query(
         None,
         description="Filter by event type (e.g., 'inference', 'rag_processing')",
         alias="type",
     ),
-    start_time: Optional[datetime] = Query(
+    start_time: datetime | None = Query(
         None,
         description="Filter events after this timestamp (ISO 8601 format)",
     ),
-    end_time: Optional[datetime] = Query(
+    end_time: datetime | None = Query(
         None,
         description="Filter events before this timestamp (ISO 8601 format)",
     ),

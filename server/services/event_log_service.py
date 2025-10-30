@@ -6,9 +6,8 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from .models import EventDetail, EventSummary, SubEvent
+from api.routers.event_logs.models import EventDetail, EventSummary, SubEvent
 
 
 class EventLogService:
@@ -35,9 +34,9 @@ class EventLogService:
     def list_events(
         namespace: str,
         project: str,
-        event_type: Optional[str] = None,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
+        event_type: str | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
         limit: int = 10,
         offset: int = 0,
     ) -> tuple[list[EventSummary], int]:
@@ -121,7 +120,7 @@ class EventLogService:
         return paginated, total
 
     @staticmethod
-    def get_event(namespace: str, project: str, event_id: str) -> Optional[EventDetail]:
+    def get_event(namespace: str, project: str, event_id: str) -> EventDetail | None:
         """
         Get a single event by ID.
 

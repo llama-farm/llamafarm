@@ -302,8 +302,6 @@ class ProjectChatService:
         project_config: LlamaFarmConfig,
         chat_agent: ChatOrchestratorAgent,
         message: str,
-        namespace: Optional[str] = None,
-        project_id: Optional[str] = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -316,8 +314,6 @@ class ProjectChatService:
             project_config=project_config,
             chat_agent=chat_agent,
             message=message,
-            namespace=namespace,
-            project_id=project_id,
             rag_enabled=rag_enabled,
             database=database,
             rag_top_k=rag_top_k,
@@ -350,8 +346,6 @@ class ProjectChatService:
         project_config: LlamaFarmConfig,
         chat_agent: LFAgent,
         message: str,
-        namespace: Optional[str] = None,
-        project_id: Optional[str] = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -359,33 +353,30 @@ class ProjectChatService:
         rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[str, None]:
         """Yield assistant content chunks, using agent-native streaming if available."""
-        # Initialize event logger if namespace and project_id are provided
-        event_logger = None
-        if namespace and project_id:
-            try:
-                # Hash config and save snapshot
-                config_hash = hash_config(project_config)
-                save_config_snapshot(project_config, config_hash, namespace, project_id)
+        # Initialize event logger (always - namespace and project come from config)
+        namespace = project_config.namespace
+        project_name = project_config.name
 
-                # Create event logger
-                request_id = f"req_{uuid.uuid4().hex[:12]}"
-                event_logger = EventLogger(
-                    event_type="inference",
-                    request_id=request_id,
-                    namespace=namespace,
-                    project=project_id,
-                    config_hash=config_hash,
-                )
+        # Hash config and save snapshot
+        config_hash = hash_config(project_config)
+        save_config_snapshot(project_config, config_hash, namespace, project_name)
 
-                # Log request received
-                event_logger.log_event("request_received", {
-                    "message_length": len(message),
-                    "model": chat_agent.model_name,
-                    "rag_enabled": rag_enabled,
-                })
-            except Exception as e:
-                logger.warning(f"Failed to initialize event logger: {e}")
-                event_logger = None
+        # Create event logger
+        request_id = f"req_{uuid.uuid4().hex[:12]}"
+        event_logger = EventLogger(
+            event_type="inference",
+            request_id=request_id,
+            namespace=namespace,
+            project=project_name,
+            config_hash=config_hash,
+        )
+
+        # Log request received
+        event_logger.log_event("request_received", {
+            "message_length": len(message),
+            "model": chat_agent.model_name,
+            "rag_enabled": rag_enabled,
+        })
 
         try:
             self._clear_rag_context_provider(chat_agent)
@@ -405,13 +396,12 @@ class ProjectChatService:
             rag_results = []
             if rag_params.rag_enabled:
                 # Log RAG query start
-                if event_logger:
-                    event_logger.log_event("rag_query_start", {
-                        "database": rag_params.database,
-                        "query": message,
-                        "top_k": rag_params.rag_top_k,
-                        "retrieval_strategy": rag_params.retrieval_strategy,
-                    })
+                event_logger.log_event("rag_query_start", {
+                    "database": rag_params.database,
+                    "query": message,
+                    "top_k": rag_params.rag_top_k,
+                    "retrieval_strategy": rag_params.retrieval_strategy,
+                })
 
                 rag_results = self._perform_rag_search(
                     project_dir,
@@ -423,21 +413,20 @@ class ProjectChatService:
                 )
 
                 # Log RAG retrieval complete
-                if event_logger:
-                    avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
-                    event_logger.log_event("rag_retrieval_complete", {
-                        "chunks_retrieved": len(rag_results),
-                        "avg_score": round(avg_score, 3),
-                        "top_chunks": [
-                            {
-                                "rank": idx + 1,
-                                "content_preview": result.content[:100] if len(result.content) > 100 else result.content,
-                                "source": result.metadata.get("source", "unknown"),
-                                "score": round(getattr(result, "score", 0.0), 3),
-                            }
-                            for idx, result in enumerate(rag_results[:2])  # Top 2 chunks
-                        ]
-                    })
+                avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
+                event_logger.log_event("rag_retrieval_complete", {
+                    "chunks_retrieved": len(rag_results),
+                    "avg_score": round(avg_score, 3),
+                    "top_chunks": [
+                        {
+                            "rank": idx + 1,
+                            "content_preview": result.content[:100] if len(result.content) > 100 else result.content,
+                            "source": result.metadata.get("source", "unknown"),
+                            "score": round(getattr(result, "score", 0.0), 3),
+                        }
+                        for idx, result in enumerate(rag_results[:2])  # Top 2 chunks
+                    ]
+                })
 
             for idx, result in enumerate(rag_results):
                 chunk_item = ChunkItem(
@@ -455,11 +444,10 @@ class ProjectChatService:
             user_input = LFAgentChatMessage(role="user", content=message)
 
             # Log LLM inference start
-            if event_logger:
-                event_logger.log_event("llm_inference_start", {
-                    "model": chat_agent.model_name,
-                    "input_message_length": len(message),
-                })
+            event_logger.log_event("llm_inference_start", {
+                "model": chat_agent.model_name,
+                "input_message_length": len(message),
+            })
 
             logger.info("Running async stream")
             previous_response = ""
@@ -476,34 +464,32 @@ class ProjectChatService:
                 yield previous_response
 
             # Log LLM inference complete
-            if event_logger:
-                event_logger.log_event("llm_inference_complete", {
-                    "response_length": len(full_response),
-                    "finish_reason": "stop",
-                })
+            event_logger.log_event("llm_inference_complete", {
+                "response_length": len(full_response),
+                "finish_reason": "stop",
+            })
 
-                # Log response complete with summary rollup
-                summary_data = {
-                    "content_preview": full_response[:200] if len(full_response) > 200 else full_response,
-                    "content_length": len(full_response),
-                    "rag_enabled": rag_params.rag_enabled,
-                }
+            # Log response complete with summary rollup
+            summary_data = {
+                "content_preview": full_response[:200] if len(full_response) > 200 else full_response,
+                "content_length": len(full_response),
+                "rag_enabled": rag_params.rag_enabled,
+            }
 
-                # Add RAG metrics if RAG was used
-                if rag_params.rag_enabled and rag_results:
-                    avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
-                    summary_data["chunks_retrieved"] = len(rag_results)
-                    summary_data["avg_rag_score"] = round(avg_score, 3)
+            # Add RAG metrics if RAG was used
+            if rag_params.rag_enabled and rag_results:
+                avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
+                summary_data["chunks_retrieved"] = len(rag_results)
+                summary_data["avg_rag_score"] = round(avg_score, 3)
 
-                event_logger.log_event("response_complete", summary_data)
+            event_logger.log_event("response_complete", summary_data)
 
-                # Complete the event
-                event_logger.complete_event()
+            # Complete the event
+            event_logger.complete_event()
 
         except Exception as e:
-            # Log error if event logger exists
-            if event_logger:
-                event_logger.fail_event(str(e))
+            # Log error
+            event_logger.fail_event(str(e))
 
             logger.error(
                 "Model call failed",

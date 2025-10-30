@@ -3,7 +3,7 @@ Pydantic models for event logs API.
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +18,7 @@ class EventSummary(BaseModel):
     namespace: str = Field(..., description="Project namespace")
     project: str = Field(..., description="Project name")
     status: str = Field(..., description="Event status (completed, failed)")
-    duration_ms: Optional[float] = Field(None, description="Total event duration in milliseconds")
+    duration_ms: float | None = Field(None, description="Total event duration in milliseconds")
     config_hash: str = Field(..., description="Config hash at time of event")
 
 
@@ -43,7 +43,7 @@ class EventDetail(BaseModel):
     config_hash: str = Field(..., description="Config hash at time of event")
     events: list[SubEvent] = Field(..., description="List of sub-events")
     status: str = Field(..., description="Event status")
-    error: Optional[str] = Field(None, description="Error message if failed")
+    error: str | None = Field(None, description="Error message if failed")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
 
