@@ -175,7 +175,30 @@ test_cli_build() {
             set -e
 
             # Install dependencies
-            apk add --no-cache git
+            apk add --no-cache git python3 py3-pip bash curl
+
+            # Generate types first
+            echo 'Generating types...'
+            cd config
+
+            # Try to compile schema (optional - Go types only need schema.yaml)
+            if command -v uv >/dev/null 2>&1 || pip3 install uv 2>/dev/null; then
+                uv run python compile_schema.py 2>/dev/null || python3 compile_schema.py 2>/dev/null || echo 'Skipping schema compilation (not required for Go types)'
+            else
+                echo 'Skipping schema compilation (uv not available, not required for Go types)'
+            fi
+
+            # Copy schema and generate Go types
+            mkdir -p ../cli/cmd/config
+            cp schema.yaml ../cli/cmd/config/ || exit 1
+
+            # Install go-jsonschema
+            go install github.com/atombender/go-jsonschema@latest
+
+            # Generate Go types
+            cd ../cli/cmd/config
+            sh generate_types.sh || exit 1
+            cd ../../..
 
             cd cli
 

@@ -65,6 +65,16 @@ jobs:
           fi
           echo "✓ Datamodel validation passed"
 
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Generate Go types
+        run: |
+          # Generate Go types from schema
+          cd cli/cmd/config
+          sh generate_types.sh
+          echo "✓ Go types generation complete"
+
       - name: Build CLI
         working-directory: cli
         run: go build -v ./...
