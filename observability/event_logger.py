@@ -154,15 +154,14 @@ class EventLogger:
             "metadata": self._metadata,
         }
 
-        # Write to file (atomic) - Docker-compatible path resolution
-        # Use LF_DATA_DIR env var if set, otherwise default to ~/.llamafarm
-        data_dir = os.getenv("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
-        event_logs_dir = (
-            Path(data_dir) / "projects" / self.namespace / self.project / "event_logs"
-        )
-        event_logs_dir.mkdir(parents=True, exist_ok=True)
+        # Get project path with security validation (follows ProjectService pattern)
+        from .path_utils import get_project_path
 
-        event_file = event_logs_dir / f"{event_id}.json"
+        project_dir = get_project_path(self.namespace, self.project)
+        event_logs_dir = os.path.join(project_dir, "event_logs")
+        os.makedirs(event_logs_dir, exist_ok=True)
+
+        event_file = os.path.join(event_logs_dir, f"{event_id}.json")
 
         # Atomic write using tempfile + os.replace()
         with tempfile.NamedTemporaryFile(

@@ -26,8 +26,10 @@ class EventLogService:
         Returns:
             Path to event logs directory
         """
-        data_dir = os.getenv("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
-        return Path(data_dir) / "projects" / namespace / project / "event_logs"
+        from observability.path_utils import get_project_path
+
+        project_dir = get_project_path(namespace, project)
+        return Path(project_dir) / "event_logs"
 
     @staticmethod
     def list_events(

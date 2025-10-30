@@ -83,16 +83,17 @@ def save_config_snapshot(
         ... else:
         ...     print("Config already exists")
     """
-    # Docker-compatible path resolution
-    data_dir = os.getenv("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
-    project_dir = Path(data_dir) / "projects" / namespace / project
-    configs_dir = project_dir / "configs"
-    configs_dir.mkdir(parents=True, exist_ok=True)
+    # Get project path with security validation (follows ProjectService pattern)
+    from .path_utils import get_project_path
 
-    config_file = configs_dir / f"{config_hash}.json"
+    project_dir = get_project_path(namespace, project)
+    configs_dir = os.path.join(project_dir, "configs")
+    os.makedirs(configs_dir, exist_ok=True)
+
+    config_file = os.path.join(configs_dir, f"{config_hash}.json")
 
     # Check if already exists (deduplication)
-    if config_file.exists():
+    if os.path.exists(config_file):
         return False  # Already saved, no overhead
 
     # Save new config snapshot
@@ -141,12 +142,13 @@ def get_config_by_hash(
         ... else:
         ...     print("Config not found")
     """
-    # Docker-compatible path resolution
-    data_dir = os.getenv("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
-    project_dir = Path(data_dir) / "projects" / namespace / project
-    config_file = project_dir / "configs" / f"{config_hash}.json"
+    # Get project path with security validation (follows ProjectService pattern)
+    from .path_utils import get_project_path
 
-    if not config_file.exists():
+    project_dir = get_project_path(namespace, project)
+    config_file = os.path.join(project_dir, "configs", f"{config_hash}.json")
+
+    if not os.path.exists(config_file):
         return None
 
     try:
