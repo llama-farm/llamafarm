@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    Prompt,
-    Message,
+    PromptSet,
+    PromptMessage,
     Provider,
     Runtime,
     Version,
@@ -71,7 +71,11 @@ class TestDatasetsAPIExtraDetails:
             prompts=[
                 Prompt(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -149,7 +153,11 @@ class TestDatasetsAPIExtraDetails:
             prompts=[
                 Prompt(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -604,7 +612,11 @@ class TestDatasetsAPIExtraDetailsIntegration:
             prompts=[
                 Prompt(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={

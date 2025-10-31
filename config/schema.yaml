@@ -26,6 +26,7 @@ properties:
     type: array
     description: List of named prompt sets
     items:
+      title: PromptSet
       type: object
       required:
         - name
@@ -40,16 +41,20 @@ properties:
           description: List of messages in this prompt set
           items:
             type: object
+            title: PromptMessage
             required:
               - role
               - content
             properties:
               role:
                 type: string
-                description: 'Message role (e.g., "system", "user", "assistant")'
+                description: 'Message role (e.g., "system", "user", "assistant", "tool")'
               content:
                 type: string
                 description: Message content
+              tool_call_id:
+                type: string
+                description: Tool call ID
           default: []
     default: []
 

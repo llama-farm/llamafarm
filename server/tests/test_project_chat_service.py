@@ -18,9 +18,9 @@ from agents.base.history import LFChatCompletionMessageParam
 from config.datamodel import (
     Database,
     LlamaFarmConfig,
-    Message,
+    PromptMessage,
     Model,
-    Prompt,
+    PromptSet,
     Provider,
     Rag,
     RetrievalStrategy,
@@ -54,7 +54,7 @@ def base_config():
         prompts=[
             Prompt(
                 name="default",
-                messages=[Message(role="system", content="You are helpful")],
+                messages=[PromptMessage(role="system", content="You are helpful")],
             )
         ],
     )
@@ -81,7 +81,7 @@ def config_with_rag():
         prompts=[
             Prompt(
                 name="default",
-                messages=[Message(role="system", content="You are helpful")],
+                messages=[PromptMessage(role="system", content="You are helpful")],
             )
         ],
         rag=Rag(

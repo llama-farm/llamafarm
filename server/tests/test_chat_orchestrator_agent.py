@@ -25,9 +25,9 @@ from agents.base.types import StreamEvent, ToolCallRequest
 from config.datamodel import (
     LlamaFarmConfig,
     Mcp,
-    Message,
+    PromptMessage,
     Model,
-    Prompt,
+    PromptSet,
     Provider,
     Runtime,
     Server,
@@ -58,7 +58,7 @@ def base_config():
         prompts=[
             Prompt(
                 name="default",
-                messages=[Message(role="system", content="You are helpful")],
+                messages=[PromptMessage(role="system", content="You are helpful")],
             )
         ],
     )
@@ -86,7 +86,7 @@ def config_with_mcp():
         prompts=[
             Prompt(
                 name="default",
-                messages=[Message(role="system", content="You are helpful")],
+                messages=[PromptMessage(role="system", content="You are helpful")],
             )
         ],
         mcp=Mcp(

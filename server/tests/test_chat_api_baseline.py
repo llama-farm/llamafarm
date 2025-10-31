@@ -6,7 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import llama_farm_api
-from config.datamodel import LlamaFarmConfig, Prompt, Message, Provider, Runtime, Model
+from config.datamodel import (
+    LlamaFarmConfig,
+    PromptSet,
+    PromptMessage,
+    Provider,
+    Runtime,
+    Model,
+)
 from services.project_chat_service import FALLBACK_ECHO_RESPONSE
 
 
@@ -28,10 +35,10 @@ def app_client(mocker):
         name="llamafarm-1",
         namespace="default",
         prompts=[
-            Prompt(
+            PromptSet(
                 name="default",
                 messages=[
-                    Message(
+                    PromptMessage(
                         role="system", content="You are the default project assistant."
                     )
                 ],
@@ -52,10 +59,10 @@ def app_client(mocker):
         name="project_seed",
         namespace="llamafarm",
         prompts=[
-            Prompt(
+            PromptSet(
                 name="default",
                 messages=[
-                    Message(
+                    PromptMessage(
                         role="system", content="You are the seed project assistant."
                     )
                 ],

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias
 
-from config.datamodel import Message, Model, Prompt
+from config.datamodel import PromptMessage, Model, PromptSet
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from pydantic import BaseModel
 
@@ -10,6 +10,7 @@ from agents.base.history import (
     LFChatCompletionAssistantMessageParam,
     LFChatCompletionMessageParam,
     LFChatCompletionSystemMessageParam,
+    LFChatCompletionToolMessageParam,
     LFChatCompletionUserMessageParam,
 )
 from agents.base.types import ToolDefinition
@@ -51,20 +52,20 @@ class LFAgentClient(ABC):
         return self._model_name
 
     @staticmethod
-    def prompt_to_message(prompt: Prompt) -> list[LFChatCompletionMessageParam]:
+    def prompt_to_message(prompt_set: PromptSet) -> list[LFChatCompletionMessageParam]:
         """
-        Converts a llamafarm Prompt set into a list of LFAgentChatMessages.
+        Converts a llamafarm PromptSet into a list of LFAgentChatMessages.
         """
 
         messages = [
             LFAgentClient._prompt_message_to_chat_completion_message(message)
-            for message in prompt.messages
+            for message in prompt_set.messages
         ]
         return messages
 
     @staticmethod
     def _prompt_message_to_chat_completion_message(
-        message: Message,
+        message: PromptMessage,
     ) -> LFChatCompletionMessageParam:
         match message.role:
             case "system":
@@ -78,6 +79,12 @@ class LFAgentClient(ABC):
             case "assistant":
                 return LFChatCompletionAssistantMessageParam(
                     role="assistant", content=message.content
+                )
+            case "tool":
+                return LFChatCompletionToolMessageParam(
+                    role="tool",
+                    content=message.content,
+                    tool_call_id=message.tool_call_id or "",
                 )
             case _:
                 return LFChatCompletionUserMessageParam(

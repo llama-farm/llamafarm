@@ -5,9 +5,9 @@ import pytest
 
 from config.datamodel import (
     LlamaFarmConfig,
-    Message,
+    PromptMessage,
     Model,
-    Prompt,
+    PromptSet,
     PromptFormat,
     Provider,
     Runtime,
@@ -70,7 +70,7 @@ def make_config(
             Prompt(
                 name="default",
                 messages=[
-                    Message(role="system", content="You are a helpful assistant.")
+                    PromptMessage(role="system", content="You are a helpful assistant.")
                 ],
             )
         ],

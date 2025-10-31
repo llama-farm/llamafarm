@@ -7,22 +7,32 @@ from agents.base.clients.client import (
     LFChatCompletion,
     LFChatCompletionChunk,
 )
-from agents.base.types import StreamEvent, ToolDefinition
+from agents.base.types import ToolDefinition
 from core.logging import FastAPIStructLogger
 
 from .context_provider import LFAgentContextProvider
 from .history import (
-    LFChatCompletionAssistantMessageParam,
-    LFChatCompletionFunctionMessageParam,
-    LFChatCompletionMessageParam,
     LFAgentHistory,
+    LFChatCompletionMessageParam,
     LFChatCompletionSystemMessageParam,
-    LFChatCompletionToolMessageParam,
-    LFChatCompletionUserMessageParam,
 )
 from .system_prompt_generator import LFAgentSystemPromptGenerator
 
 logger = FastAPIStructLogger(__name__)
+
+TOOLS_SYSTEM_MESSAGE_PREFIX = """
+
+You may call one or more tools to assist with the user query.
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+"""
+
+TOOLS_SYSTEM_MESSAGE_SUFFIX = """
+</tools>
+For each tool call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call>.
+If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.
+"""
 
 
 class LFAgentConfig(BaseModel):

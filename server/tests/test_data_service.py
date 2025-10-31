@@ -13,8 +13,8 @@ from fastapi import UploadFile
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    Prompt,
-    Message,
+    PromptSet,
+    PromptMessage,
     Provider,
     Runtime,
     Version,
@@ -64,7 +64,11 @@ class TestDataService:
             prompts=[
                 Prompt(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -328,7 +332,11 @@ class TestDataService:
             prompts=[
                 Prompt(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -428,7 +436,11 @@ class TestDataService:
             prompts=[
                 Prompt(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -527,7 +539,11 @@ class TestDataService:
             prompts=[
                 Prompt(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={

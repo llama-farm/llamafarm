@@ -16,7 +16,7 @@ import pytest
 from agents.base.clients.openai import LFAgentClientOpenAI
 from agents.base.history import LFChatCompletionMessageParam
 from agents.base.types import LFFunction
-from config.datamodel import Model, Prompt, Provider
+from config.datamodel import Model, PromptSet, Provider
 
 
 @pytest.fixture
@@ -46,11 +46,12 @@ class TestLFAgentClientOpenAI:
         assert client._model_config == model_config
 
     def test_prompt_to_message(self):
-        """Test converting Prompt to list of LFAgentChatMessage."""
-        from config.datamodel import Message
+        """Test converting PromptSet to list of LFAgentChatMessage."""
+        from config.datamodel import PromptMessage
 
-        prompt = Prompt(
-            name="test", messages=[Message(role="system", content="You are helpful")]
+        prompt = PromptSet(
+            name="test",
+            messages=[PromptMessage(role="system", content="You are helpful")],
         )
         messages = LFAgentClientOpenAI.prompt_to_message(prompt)
 
