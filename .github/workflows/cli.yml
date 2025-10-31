@@ -153,6 +153,12 @@ jobs:
       - name: Install Nx CLI
         run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+          cache-dependency-path: cli/go.sum
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:

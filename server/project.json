@@ -10,7 +10,10 @@
       "options": {
         "cwd": "{workspaceRoot}/server",
         "command": "uv run python main.py",
-        "output": "inherit"
+        "output": "inherit",
+        "env": {
+          "DESIGNER_DIST_PATH": "{workspaceRoot}/designer/dist"
+        }
       }
     },
     "build": {

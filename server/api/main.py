@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 import fastapi
@@ -122,9 +123,12 @@ def llama_farm_api() -> fastapi.FastAPI:
                 # Resolve the path relative to designer_dist_path
                 file_path = (designer_dist_path / path).resolve()
                 # Ensure the resolved path is still within designer_dist_path
-                # by checking that it's a subpath
+                # by checking that it's a subpath using robust path containment check
                 designer_dist_path_resolved = designer_dist_path.resolve()
-                if not str(file_path).startswith(str(designer_dist_path_resolved)):
+                # Use os.path.commonpath for robust containment check (safe even with symlinks)
+                if os.path.commonpath(
+                    [str(designer_dist_path_resolved), str(file_path)]
+                ) != str(designer_dist_path_resolved):
                     raise fastapi.HTTPException(status_code=403, detail="Access denied")
             except (ValueError, RuntimeError):
                 # Path resolution failed (e.g., contains invalid components)
