@@ -6,8 +6,6 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
-import { useChatInference, useDeleteChatSession } from './useChat'
-import { createChatRequest, chatInferenceStreaming } from '../api/chatService'
 import { useProject } from './useProjects'
 import { useActiveProject } from './useActiveProject'
 import { parsePromptSets } from '../utils/promptSets'
@@ -15,21 +13,40 @@ import { useProjectSession } from './useProjectSession'
 import { ChatboxMessage } from '../types/chatbox'
 import { ChatStreamChunk, NetworkError, ChatMessage } from '../types/chat'
 import { generateMessageId } from '../utils/idGenerator'
+import {
+  useStreamingChatCompletionMessage,
+  useChatCompletionMessage,
+} from './useChatCompletions'
+import { createChatCompletionRequest } from '../api/chatCompletionsService'
+import { DEV_CHAT_NAMESPACE, DEV_CHAT_PROJECT_ID } from '../constants/chat'
+
+// Export for backward compatibility
+export const PROJECT_SEED_NAMESPACE = DEV_CHAT_NAMESPACE
+export const PROJECT_SEED_PROJECT = DEV_CHAT_PROJECT_ID
 
 /**
  * Convert project session message to chatbox message format
  */
 function projectSessionToChatboxMessage(msg: {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'tool'
   content: string
   timestamp: string
+  tool_call_id?: string
 }): ChatboxMessage {
+  let type: 'user' | 'assistant' | 'tool' | 'error' = 'assistant'
+  if (msg.role === 'user') {
+    type = 'user'
+  } else if (msg.role === 'tool') {
+    type = 'tool'
+  }
+
   return {
     id: msg.id,
-    type: msg.role === 'user' ? 'user' : 'assistant',
+    type,
     content: msg.content,
     timestamp: new Date(msg.timestamp),
+    tool_call_id: msg.tool_call_id,
   }
 }
 
@@ -63,10 +80,18 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
   const streamingAbortControllerRef = useRef<AbortController | null>(null)
   const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isMountedRef = useRef(true)
+  // Refs for accumulated streaming content and tool calls
+  const accumulatedContentRef = useRef<Record<string, string>>({})
+  const toolCallsRef = useRef<
+    Record<string, Array<{ name: string; arguments: string; id?: string }>>
+  >({})
+  // Track which tool calls have been saved to project session (to prevent duplicates)
+  const savedToolCallIdsRef = useRef<Set<string>>(new Set())
 
-  // API hooks
-  const chatMutation = useChatInference()
-  const deleteSessionMutation = useDeleteChatSession()
+  // API hooks - using unified chat completions interface
+  // Dev Chat uses hardcoded namespace/project for project_seed
+  const streamingChat = useStreamingChatCompletionMessage()
+  const nonStreamingChat = useChatCompletionMessage()
 
   // Get current state from project session system (always used)
   const currentSessionId = projectSession.sessionId
@@ -77,7 +102,11 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
 
   // Cleanup timeout and abort streaming on unmount
   useEffect(() => {
+    // Set mounted flag on mount
+    isMountedRef.current = true
+
     return () => {
+      // Only set to false on actual unmount, and abort any active streams
       isMountedRef.current = false
       if (fallbackTimeoutRef.current) {
         clearTimeout(fallbackTimeoutRef.current)
@@ -116,7 +145,10 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
     async (
       messageContent: string,
       currentSessionId: string,
-      onSuccess: (response: any) => void,
+      onSuccess: (response: {
+        data: { choices: Array<{ message: { content: string } }> }
+        sessionId: string
+      }) => void,
       onError: (error: Error) => void
     ) => {
       // Check if component is still mounted before proceeding
@@ -125,12 +157,15 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
       }
 
       try {
-        const chatRequest = createChatRequest(messageContent)
+        const chatRequest = createChatCompletionRequest(messageContent)
         // Prepend active prompt set once
         prependActiveSet(chatRequest)
-        const response = await chatMutation.mutateAsync({
-          chatRequest,
+        const result = await nonStreamingChat.mutateAsync({
+          namespace: DEV_CHAT_NAMESPACE,
+          projectId: DEV_CHAT_PROJECT_ID,
+          message: messageContent,
           sessionId: currentSessionId,
+          options: chatRequest,
         })
 
         // Check if component is still mounted before updating state
@@ -138,7 +173,11 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
           return
         }
 
-        onSuccess(response)
+        // Convert to expected format for compatibility
+        onSuccess({
+          data: result.response,
+          sessionId: result.sessionId,
+        })
       } catch (fallbackError) {
         // Check if component is still mounted before updating state
         if (!isMountedRef.current) {
@@ -153,7 +192,7 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
         )
       }
     },
-    [chatMutation, prependActiveSet]
+    [nonStreamingChat, prependActiveSet]
   )
 
   // Add message to both streaming state and project session
@@ -223,8 +262,8 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
   const currentMessages = useMemo(() => {
     const combined = [...projectSessionMessages, ...streamingMessages]
 
-    // Filter out "Thinking..." placeholder messages for UI display
-    return combined.filter(msg => {
+    // Filter out "Thinking..." placeholder messages for UI display (but keep streaming ones)
+    const filtered = combined.filter(msg => {
       const isThinkingPlaceholder =
         msg.type === 'assistant' &&
         msg.content === 'Thinking...' &&
@@ -232,6 +271,8 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
         !msg.isLoading
       return !isThinkingPlaceholder
     })
+
+    return filtered
   }, [projectSessionMessages, streamingMessages])
 
   // Handle sending message with streaming or non-streaming API integration
@@ -242,7 +283,11 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
         return false
       }
 
-      if (chatMutation.isPending || isStreaming) {
+      if (
+        streamingChat.isPending ||
+        nonStreamingChat.isPending ||
+        isStreaming
+      ) {
         return false
       }
 
@@ -267,19 +312,45 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
       })
 
       // Add loading/streaming assistant message
-      const assistantMessageId = addMessage({
-        type: 'assistant',
-        content: 'Thinking...',
-        timestamp: new Date(),
-        isLoading: !streamingEnabled,
-        isStreaming: streamingEnabled,
+      // For streaming, add directly to streamingMessages so we can update it in real-time
+      const assistantMessageId = generateMessageId()
+      console.log('Creating streaming message:', assistantMessageId, {
+        streamingEnabled,
       })
+      if (streamingEnabled) {
+        setStreamingMessages(prev => {
+          const newMessage = {
+            id: assistantMessageId,
+            type: 'assistant' as const,
+            content: 'Thinking...',
+            timestamp: new Date(),
+            isLoading: false,
+            isStreaming: true,
+          }
+          console.log('Adding to streamingMessages:', {
+            assistantMessageId,
+            currentCount: prev.length,
+            newMessage,
+          })
+          return [...prev, newMessage]
+        })
+      } else {
+        // For non-streaming, add to project session
+        addMessage({
+          type: 'assistant',
+          content: 'Thinking...',
+          timestamp: new Date(),
+          isLoading: true,
+          isStreaming: false,
+        })
+      }
 
       let timeoutId: NodeJS.Timeout | undefined
 
       try {
+        // Dev Chat uses hardcoded namespace/project
         // Create chat request
-        const chatRequest = createChatRequest(messageContent)
+        const chatRequest = createChatCompletionRequest(messageContent)
 
         // Prepend active prompt set once
         prependActiveSet(chatRequest)
@@ -298,25 +369,193 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
             abortController.abort()
           }, 60000)
 
-          let accumulatedContent = ''
-          let deferredSessionId: string | null = null
+          // Initialize refs for this message
+          const messageContentRef =
+            accumulatedContentRef.current[assistantMessageId] || ''
+          accumulatedContentRef.current[assistantMessageId] = messageContentRef
+          const deferredSessionIdRef: { current: string | null } = {
+            current: null,
+          }
+          if (!toolCallsRef.current[assistantMessageId]) {
+            toolCallsRef.current[assistantMessageId] = []
+          }
 
-          const responseSessionId = await chatInferenceStreaming(
-            chatRequest,
-            currentSessionId || undefined,
-            {
+          const responseSessionId = await streamingChat.mutateAsync({
+            namespace: DEV_CHAT_NAMESPACE,
+            projectId: DEV_CHAT_PROJECT_ID,
+            message: messageContent,
+            sessionId: currentSessionId || undefined,
+            requestOptions: {
+              ...chatRequest,
+              // Remove stream since it's handled by the streaming function
+              stream: undefined,
+            },
+            streamingOptions: {
+              signal: abortController.signal,
               onChunk: (chunk: ChatStreamChunk) => {
-                // Handle role assignment (first chunk)
-                if (chunk.choices?.[0]?.delta?.role && !accumulatedContent) {
+                console.log('🔥 onChunk CALLBACK INVOKED in hook:', {
+                  assistantMessageId,
+                  chunkId: chunk.id,
+                  hasChoices: !!chunk.choices,
+                  choicesLength: chunk.choices?.length || 0,
+                  isMounted: isMountedRef.current,
+                })
+
+                // Don't check isMounted - we want to process chunks even if component is unmounting
+                // The cleanup will handle aborting the stream if needed
+
+                const choice = chunk.choices?.[0]
+                if (!choice) {
+                  console.warn('⚠️ No choice in chunk, skipping')
                   return
                 }
 
+                const delta = choice.delta
+
+                // Handle tool calls
+                if (delta.tool_calls && delta.tool_calls.length > 0) {
+                  const messageToolCalls =
+                    toolCallsRef.current[assistantMessageId] || []
+                  for (const toolCall of delta.tool_calls) {
+                    const toolIndex = toolCall.index ?? 0
+
+                    if (toolCall.function?.name) {
+                      // Initialize or update tool call
+                      if (!messageToolCalls[toolIndex]) {
+                        messageToolCalls[toolIndex] = {
+                          name: toolCall.function.name,
+                          arguments: toolCall.function.arguments || '',
+                          id: toolCall.id,
+                        }
+                      } else {
+                        // Accumulate arguments for this tool call
+                        if (toolCall.function.arguments) {
+                          messageToolCalls[toolIndex].arguments +=
+                            toolCall.function.arguments
+                        }
+                      }
+
+                      // Display tool call as a simple message
+                      const toolCallMsg = messageToolCalls[toolIndex]
+                      const toolContent = `🔧 Calling tool: ${toolCallMsg.name}${toolCallMsg.arguments ? `\n\nArguments: ${toolCallMsg.arguments}` : ''}`
+                      const toolMessageId = `tool_${assistantMessageId}_${toolIndex}`
+                      const toolCallId = toolCallMsg.id || toolMessageId
+
+                      // Update or create tool message in streaming state (for display during streaming)
+                      setStreamingMessages(prev => {
+                        const existing = prev.find(
+                          msg => msg.id === toolMessageId
+                        )
+                        if (existing) {
+                          return prev.map(msg =>
+                            msg.id === toolMessageId
+                              ? { ...msg, content: toolContent }
+                              : msg
+                          )
+                        } else {
+                          return [
+                            ...prev,
+                            {
+                              id: toolMessageId,
+                              type: 'tool' as const,
+                              content: toolContent,
+                              timestamp: new Date(),
+                              tool_call_id: toolCallMsg.id,
+                            },
+                          ]
+                        }
+                      })
+
+                      // Save tool message to project session for persistence (only once per tool call)
+                      if (!savedToolCallIdsRef.current.has(toolCallId)) {
+                        savedToolCallIdsRef.current.add(toolCallId)
+                        try {
+                          projectSession.addMessage(
+                            toolContent,
+                            'tool',
+                            toolCallMsg.id
+                          )
+                        } catch (err) {
+                          console.warn(
+                            'Failed to save tool message to project session:',
+                            err
+                          )
+                          // Remove from saved set if save failed so we can retry
+                          savedToolCallIdsRef.current.delete(toolCallId)
+                        }
+                      }
+                    }
+                  }
+                  toolCallsRef.current[assistantMessageId] = messageToolCalls
+                  return
+                }
+
+                // Handle role assignment (first chunk) - just log it, don't skip
+                if (delta.role) {
+                  console.log('Role delta received:', delta.role)
+                  // Don't return - continue to process content if present
+                }
+
                 // Handle content chunks
-                if (chunk.choices?.[0]?.delta?.content) {
-                  accumulatedContent += chunk.choices[0].delta.content
-                  updateMessage(assistantMessageId, {
-                    content: accumulatedContent,
-                    isStreaming: true,
+                if (delta.content) {
+                  console.log('📝 Processing content chunk:', {
+                    assistantMessageId,
+                    deltaContent: delta.content,
+                    deltaContentLength: delta.content.length,
+                  })
+
+                  const currentContent =
+                    accumulatedContentRef.current[assistantMessageId] || ''
+                  const newContent = currentContent + delta.content
+                  accumulatedContentRef.current[assistantMessageId] = newContent
+
+                  console.log('📝 Updating message with content:', {
+                    assistantMessageId,
+                    currentLength: currentContent.length,
+                    deltaLength: delta.content.length,
+                    newLength: newContent.length,
+                    currentContent: currentContent.substring(0, 50),
+                    newContentPreview: newContent.substring(0, 100),
+                    refContent: accumulatedContentRef.current[
+                      assistantMessageId
+                    ]?.substring(0, 50),
+                  })
+
+                  // Update streaming message directly
+                  setStreamingMessages(prev => {
+                    const existing = prev.find(
+                      msg => msg.id === assistantMessageId
+                    )
+                    if (!existing) {
+                      console.warn(
+                        'Message not found in streamingMessages, adding:',
+                        assistantMessageId
+                      )
+                      return [
+                        ...prev,
+                        {
+                          id: assistantMessageId,
+                          type: 'assistant' as const,
+                          content: newContent,
+                          timestamp: new Date(),
+                          isStreaming: true,
+                        },
+                      ]
+                    }
+
+                    const updated = prev.map(msg =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: newContent, isStreaming: true }
+                        : msg
+                    )
+
+                    console.log('Message updated:', {
+                      before: existing.content?.substring(0, 50),
+                      after: newContent.substring(0, 50),
+                      updatedCount: updated.length,
+                    })
+
+                    return updated
                   })
                 }
               },
@@ -426,21 +665,61 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
                 setIsStreaming(false)
 
                 // If we got content, finalize the message
-                if (accumulatedContent && accumulatedContent.trim()) {
+                const finalContent =
+                  accumulatedContentRef.current[assistantMessageId] || ''
+                // Clean up refs for this message
+                delete accumulatedContentRef.current[assistantMessageId]
+                delete toolCallsRef.current[assistantMessageId]
+                // Clean up saved tool call tracking for this message
+                const toolCallPattern = `tool_${assistantMessageId}_`
+                for (const savedId of Array.from(savedToolCallIdsRef.current)) {
+                  if (
+                    savedId.startsWith(toolCallPattern) ||
+                    savedId === assistantMessageId
+                  ) {
+                    savedToolCallIdsRef.current.delete(savedId)
+                  }
+                }
+
+                console.log('onComplete called:', {
+                  assistantMessageId,
+                  finalContent: finalContent?.substring(0, 100),
+                  finalContentLength: finalContent?.length || 0,
+                })
+
+                if (finalContent && finalContent.trim()) {
                   // Save final message to project session and remove temporary streaming message
                   try {
-                    // Add final response to project session (will go to temp messages since streaming happens before session transfer)
-                    projectSession.addMessage(accumulatedContent, 'assistant')
-
-                    // Remove the temporary streaming message
-                    setStreamingMessages(prev =>
-                      prev.filter(msg => msg.id !== assistantMessageId)
+                    console.log(
+                      'Saving final message to project session:',
+                      finalContent.substring(0, 100)
                     )
+                    // Add final response to project session (will go to temp messages since streaming happens before session transfer)
+                    projectSession.addMessage(finalContent, 'assistant')
+
+                    // Remove the temporary streaming message AFTER a small delay to ensure project session has updated
+                    setTimeout(() => {
+                      console.log(
+                        'Removing streaming message:',
+                        assistantMessageId
+                      )
+                      setStreamingMessages(prev => {
+                        const filtered = prev.filter(
+                          msg => msg.id !== assistantMessageId
+                        )
+                        console.log('Streaming messages after removal:', {
+                          before: prev.length,
+                          after: filtered.length,
+                          removedId: assistantMessageId,
+                        })
+                        return filtered
+                      })
+                    }, 100)
 
                     // NOW handle session creation/reconciliation after all messages are added
                     // Use a small delay to ensure the addMessage state update has completed
                     setTimeout(() => {
-                      if (deferredSessionId) {
+                      if (deferredSessionIdRef.current) {
                         try {
                           // Check if we have any existing session
                           const existingSessionId =
@@ -448,17 +727,19 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
 
                           if (existingSessionId) {
                             // Check if reconciliation is actually needed
-                            if (existingSessionId !== deferredSessionId) {
+                            if (
+                              existingSessionId !== deferredSessionIdRef.current
+                            ) {
                               // Session IDs differ, reconciliation needed
                               projectSession.reconcileWithServer(
                                 existingSessionId,
-                                deferredSessionId
+                                deferredSessionIdRef.current
                               )
                             }
                           } else {
                             // Truly no existing session, create new one with all temp messages
                             projectSession.createSessionFromServer(
-                              deferredSessionId
+                              deferredSessionIdRef.current
                             )
                           }
                         } catch (sessionError) {
@@ -473,11 +754,18 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
                   } catch (err) {
                     console.warn('Failed to save to project session:', err)
                     // Keep the message in streaming state with final content
-                    updateMessage(assistantMessageId, {
-                      content: accumulatedContent,
-                      isStreaming: false,
-                      isLoading: false,
-                    })
+                    setStreamingMessages(prev =>
+                      prev.map(msg =>
+                        msg.id === assistantMessageId
+                          ? {
+                              ...msg,
+                              content: finalContent,
+                              isStreaming: false,
+                              isLoading: false,
+                            }
+                          : msg
+                      )
+                    )
                   }
                 } else {
                   // No content received, try non-streaming fallback
@@ -486,13 +774,13 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
                   )
 
                   // Handle deferred session even without content
-                  if (deferredSessionId) {
+                  if (deferredSessionIdRef.current) {
                     try {
                       const existingSessionId =
                         currentSessionId || projectSession.sessionId
                       if (!existingSessionId) {
                         projectSession.createSessionFromServer(
-                          deferredSessionId
+                          deferredSessionIdRef.current
                         )
                       }
                     } catch (sessionError) {
@@ -566,29 +854,29 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
                   }, 100)
                 }
               },
-              signal: abortController.signal,
-            }
-          )
+            },
+          })
 
           // Store session ID for deferred processing after all messages are added
           if (responseSessionId) {
-            deferredSessionId = responseSessionId
+            deferredSessionIdRef.current = responseSessionId
           }
 
           // For streaming, we return true immediately as the request is initiated
           // The actual success/failure will be handled by the streaming callbacks
           return true
         } else {
-          // Non-streaming path
-          // Prepend active prompt set once
-          prependActiveSet(chatRequest)
-          const response = await chatMutation.mutateAsync({
-            chatRequest,
+          // Non-streaming path - using unified interface
+          const result = await nonStreamingChat.mutateAsync({
+            namespace: DEV_CHAT_NAMESPACE,
+            projectId: DEV_CHAT_PROJECT_ID,
+            message: messageContent,
             sessionId: currentSessionId || undefined,
+            options: chatRequest,
           })
 
           // Handle session reconciliation if we got a session ID from server
-          if (response.sessionId) {
+          if (result.sessionId) {
             try {
               // Check if we have any existing session (even if currentSessionId is null)
               const existingSessionId =
@@ -596,16 +884,16 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
 
               if (existingSessionId) {
                 // Check if reconciliation is actually needed
-                if (existingSessionId !== response.sessionId) {
+                if (existingSessionId !== result.sessionId) {
                   // Session IDs differ, reconciliation needed
                   projectSession.reconcileWithServer(
                     existingSessionId,
-                    response.sessionId
+                    result.sessionId
                   )
                 }
               } else {
                 // Truly no existing session, create new one
-                projectSession.createSessionFromServer(response.sessionId)
+                projectSession.createSessionFromServer(result.sessionId)
               }
             } catch (sessionError) {
               console.error(
@@ -617,8 +905,8 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
           }
 
           // Update assistant message with response
-          if (response.data.choices && response.data.choices.length > 0) {
-            const assistantResponse = response.data.choices[0].message.content
+          if (result.response.choices && result.response.choices.length > 0) {
+            const assistantResponse = result.response.choices[0].message.content
 
             // Skip empty responses
             if (!assistantResponse || assistantResponse.trim() === '') {
@@ -683,7 +971,8 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
       }
     },
     [
-      chatMutation,
+      streamingChat,
+      nonStreamingChat,
       currentSessionId,
       addMessage,
       updateMessage,
@@ -691,13 +980,12 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
       isStreaming,
       projectSession,
       executeFallbackRequest,
+      activeProject,
     ]
   )
 
   // Handle clear chat
   const clearChat = useCallback(async () => {
-    if (deleteSessionMutation.isPending) return false
-
     try {
       // Use project session system
       projectSession.clearHistory()
@@ -769,9 +1057,10 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
     error: error || projectSession.error,
 
     // Loading states
-    isSending: chatMutation.isPending || isStreaming,
+    isSending:
+      streamingChat.isPending || nonStreamingChat.isPending || isStreaming,
     isStreaming,
-    isClearing: deleteSessionMutation.isPending,
+    isClearing: false,
     isLoadingSession,
 
     // Actions
@@ -787,7 +1076,10 @@ export function useChatboxWithProjectSession(enableStreaming: boolean = true) {
     // Computed values
     hasMessages: currentMessages.length > 0,
     canSend:
-      !chatMutation.isPending && !isStreaming && inputValue.trim().length > 0,
+      !streamingChat.isPending &&
+      !nonStreamingChat.isPending &&
+      !isStreaming &&
+      inputValue.trim().length > 0,
   }
 
   return result

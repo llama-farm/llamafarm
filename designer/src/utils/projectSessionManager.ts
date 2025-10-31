@@ -1,15 +1,16 @@
 /**
  * Project Session Manager - Phase 1: Simplified Storage
- * 
+ *
  * Simple single-bucket storage for project sessions with messages included.
  * Only server-provided session IDs are stored - no client session generation.
  */
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'tool'
   content: string
   timestamp: string
+  tool_call_id?: string
 }
 
 interface SessionData {
@@ -68,32 +69,44 @@ function findExistingSession(
   chatService: 'designer' | 'project'
 ): string | null {
   const sessions = getStoredSessions()
-  
+
   for (const [sessionId, session] of Object.entries(sessions)) {
-    if (session.namespace === namespace &&
-        session.project === project &&
-        session.chatService === chatService) {
+    if (
+      session.namespace === namespace &&
+      session.project === project &&
+      session.chatService === chatService
+    ) {
       return sessionId
     }
   }
-  
+
   return null
 }
 
 /**
  * Create a message object with generated ID and timestamp
  */
-function createMessage(role: 'user' | 'assistant', content: string): ChatMessage {
+function createMessage(
+  role: 'user' | 'assistant' | 'tool',
+  content: string,
+  tool_call_id?: string
+): ChatMessage {
   if (!content || content.trim() === '') {
-    throw new Error('Cannot create message with empty content');
+    throw new Error('Cannot create message with empty content')
   }
-  
-  return {
+
+  const message: ChatMessage = {
     id: generateMessageId(),
     role,
     content: content.trim(), // Ensure we trim whitespace
-    timestamp: new Date().toISOString()
-  };
+    timestamp: new Date().toISOString(),
+  }
+
+  if (tool_call_id) {
+    message.tool_call_id = tool_call_id
+  }
+
+  return message
 }
 
 /**
@@ -107,21 +120,25 @@ function createPersistentSession(
   initialMessages: ChatMessage[] = []
 ): void {
   // SAFEGUARD: Check if session already exists with messages
-  const existingSessions = getStoredSessions();
-  if (existingSessions[sessionId] && existingSessions[sessionId].messages.length > 0) {
+  const existingSessions = getStoredSessions()
+  if (
+    existingSessions[sessionId] &&
+    existingSessions[sessionId].messages.length > 0
+  ) {
     if (initialMessages.length === 0) {
-      return; // Don't overwrite existing session with empty array
+      return // Don't overwrite existing session with empty array
     }
   }
-  
+
   const sessions = getStoredSessions()
   sessions[sessionId] = {
     namespace,
     project,
     chatService,
-    createdAt: existingSessions[sessionId]?.createdAt || new Date().toISOString(),
+    createdAt:
+      existingSessions[sessionId]?.createdAt || new Date().toISOString(),
     lastUsed: new Date().toISOString(),
-    messages: initialMessages
+    messages: initialMessages,
   }
   saveStoredSessions(sessions)
 }
@@ -129,75 +146,90 @@ function createPersistentSession(
 /**
  * Add a message to an existing persistent session
  */
-function addMessageToPersistentSession(sessionId: string, message: ChatMessage): void {
-  const sessions = getStoredSessions();
+function addMessageToPersistentSession(
+  sessionId: string,
+  message: ChatMessage
+): void {
+  const sessions = getStoredSessions()
   if (sessions[sessionId]) {
-    sessions[sessionId].messages.push(message);
-    sessions[sessionId].lastUsed = new Date().toISOString();
-    saveStoredSessions(sessions);
+    sessions[sessionId].messages.push(message)
+    sessions[sessionId].lastUsed = new Date().toISOString()
+    saveStoredSessions(sessions)
   } else {
-    console.error('Session not found for message addition:', sessionId);
+    console.error('Session not found for message addition:', sessionId)
   }
 }
-
 
 // Make functions available globally for testing in browser console
 if (typeof window !== 'undefined') {
   // Individual functions
-  (window as any).getStoredSessions = getStoredSessions;
-  (window as any).saveStoredSessions = saveStoredSessions;
-  (window as any).findExistingSession = findExistingSession;
-  (window as any).generateMessageId = generateMessageId;
-  (window as any).createMessage = createMessage;
-  (window as any).createPersistentSession = createPersistentSession;
-  (window as any).addMessageToPersistentSession = addMessageToPersistentSession;
-  
+  ;(window as any).getStoredSessions = getStoredSessions
+  ;(window as any).saveStoredSessions = saveStoredSessions
+  ;(window as any).findExistingSession = findExistingSession
+  ;(window as any).generateMessageId = generateMessageId
+  ;(window as any).createMessage = createMessage
+  ;(window as any).createPersistentSession = createPersistentSession
+  ;(window as any).addMessageToPersistentSession = addMessageToPersistentSession
+
   // Debug helper for session restoration issues
-  (window as any).debugSessionRestore = () => {
-    console.log('=== SESSION RESTORE DEBUG ===');
-    const sessions = getStoredSessions();
-    console.log('All stored sessions:', sessions);
-    console.log('Session count:', Object.keys(sessions).length);
-    
+  ;(window as any).debugSessionRestore = () => {
+    console.log('=== SESSION RESTORE DEBUG ===')
+    const sessions = getStoredSessions()
+    console.log('All stored sessions:', sessions)
+    console.log('Session count:', Object.keys(sessions).length)
+
     Object.entries(sessions).forEach(([sessionId, session]) => {
       console.log(`Session ${sessionId}:`, {
         namespace: session.namespace,
         project: session.project,
         chatService: session.chatService,
         messageCount: session.messages?.length || 0,
-        lastUsed: session.lastUsed
-      });
-    });
-    
-    console.log('=== END DEBUG ===');
-  };
-  
+        lastUsed: session.lastUsed,
+      })
+    })
+
+    console.log('=== END DEBUG ===')
+  }
+
   // Phase 2: Add test helper for creating sessions with messages
-  (window as any).createTestSession = (sessionId: string, namespace: string = 'default', project: string = 'testproject') => {
+  ;(window as any).createTestSession = (
+    sessionId: string,
+    namespace: string = 'default',
+    project: string = 'testproject'
+  ) => {
     const testMessages = [
       createMessage('user', 'Hello, this is a test message'),
-      createMessage('assistant', 'Hello! This is a test response from the assistant.')
+      createMessage(
+        'assistant',
+        'Hello! This is a test response from the assistant.'
+      ),
     ]
-    createPersistentSession(sessionId, namespace, project, 'designer', testMessages)
+    createPersistentSession(
+      sessionId,
+      namespace,
+      project,
+      'designer',
+      testMessages
+    )
     return { sessionId, messages: testMessages }
   }
-  
+
   // Test empty message validation
-  (window as any).testEmptyMessage = () => {
+  ;(window as any).testEmptyMessage = () => {
     try {
-      createMessage('user', '');
+      createMessage('user', '')
     } catch (error) {
       // Empty message correctly rejected
     }
-    
+
     try {
-      createMessage('assistant', '   ');
+      createMessage('assistant', '   ')
     } catch (error) {
       // Whitespace-only message correctly rejected
     }
-    
+
     try {
-      createMessage('user', 'This is valid');
+      createMessage('user', 'This is valid')
       // Valid message created
     } catch (error) {
       // Valid message incorrectly rejected
@@ -214,5 +246,5 @@ export {
   findExistingSession,
   createMessage,
   createPersistentSession,
-  addMessageToPersistentSession
+  addMessageToPersistentSession,
 }

@@ -1,20 +1,28 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useChatInference, useDeleteChatSession, chatKeys } from './useChat'
-import { createChatRequest, chatInferenceStreaming } from '../api/chatService'
 import { generateMessageId } from '../utils/idGenerator'
 import { ChatboxMessage } from '../types/chatbox'
 import { ChatStreamChunk } from '../types/chat'
 import { useChatSession } from './useChatSession'
+import { DEV_CHAT_NAMESPACE, DEV_CHAT_PROJECT_ID } from '../constants/chat'
+import {
+  useStreamingChatCompletionMessage,
+  useChatCompletionMessage,
+} from './useChatCompletions'
+import { createChatCompletionRequest } from '../api/chatCompletionsService'
 
 /**
  * Custom hook for managing chatbox state and API interactions
  * Extracts chat logic from the Chatbox component for better reusability and testability
  * Now includes session persistence and restoration with streaming support
  */
-export function useChatbox(initialSessionId?: string, enableStreaming: boolean = true) {
-  const streamingEnabled = enableStreaming && !import.meta.env.VITE_DISABLE_STREAMING
-  
+export function useChatbox(
+  initialSessionId?: string,
+  enableStreaming: boolean = true
+) {
+  const streamingEnabled =
+    enableStreaming && !import.meta.env.VITE_DISABLE_STREAMING
+
   // Session management with persistence
   const {
     currentSessionId: sessionId,
@@ -38,10 +46,10 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
   const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isMountedRef = useRef(true)
 
-  // API hooks
+  // API hooks - using unified chat completions interface
   const queryClient = useQueryClient()
-  const chatMutation = useChatInference()
-  const deleteSessionMutation = useDeleteChatSession()
+  const streamingChat = useStreamingChatCompletionMessage()
+  const nonStreamingChat = useChatCompletionMessage()
 
   // Debounced save function to avoid blocking on every message change
   const debouncedSave = useCallback(
@@ -63,7 +71,7 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
   useEffect(() => {
     // Reset state when session changes (project switching)
     setHasInitialSync(false)
-    
+
     // Load messages from new session immediately
     if (persistedMessages.length > 0) {
       setMessages(persistedMessages)
@@ -81,8 +89,7 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
     if (sessionId && (hasInitialSync || messages.length > 0)) {
       debouncedSave(sessionId, messages)
 
-      // IMMEDIATELY update React Query cache for cross-component access
-      queryClient.setQueryData(chatKeys.session(sessionId), messages)
+      // Note: Session management is handled by useChatSession hook
     }
   }, [messages, sessionId, debouncedSave, hasInitialSync, queryClient])
 
@@ -128,24 +135,26 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
 
   // Helper function to execute fallback non-streaming request
   const executeFallbackRequest = useCallback(
-    async (chatRequest: any, assistantMessageId: string) => {
+    async (messageContent: string, assistantMessageId: string) => {
       console.log('Executing fallback non-streaming request')
-      const response = await chatMutation.mutateAsync({
-        chatRequest,
+      const result = await nonStreamingChat.mutateAsync({
+        namespace: DEV_CHAT_NAMESPACE,
+        projectId: DEV_CHAT_PROJECT_ID,
+        message: messageContent,
         sessionId: sessionId || undefined,
       })
 
       // Set session ID if received from server (for new sessions)
-      if (response.sessionId && response.sessionId !== sessionId) {
-        setSessionId(response.sessionId)
+      if (result.sessionId && result.sessionId !== sessionId) {
+        setSessionId(result.sessionId)
         if (!hasInitialSync) {
           setHasInitialSync(true)
         }
       }
 
       // Update assistant message with response
-      if (response.data.choices && response.data.choices.length > 0) {
-        const assistantResponse = response.data.choices[0].message.content
+      if (result.response.choices && result.response.choices.length > 0) {
+        const assistantResponse = result.response.choices[0].message.content
         updateMessage(assistantMessageId, {
           content: assistantResponse,
           isLoading: false,
@@ -159,13 +168,19 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
 
       return true
     },
-    [chatMutation, sessionId, setSessionId, updateMessage, hasInitialSync]
+    [nonStreamingChat, sessionId, setSessionId, updateMessage, hasInitialSync]
   )
 
   // Handle sending message with streaming or fallback
   const sendMessage = useCallback(
     async (messageContent: string) => {
-      if (!messageContent.trim() || chatMutation.isPending || isStreaming) return false
+      if (
+        !messageContent.trim() ||
+        streamingChat.isPending ||
+        nonStreamingChat.isPending ||
+        isStreaming
+      )
+        return false
 
       // Clear any previous errors
       setError(null)
@@ -189,8 +204,8 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
       let accumulatedContent = ''
 
       try {
-        // Create chat request
-        const chatRequest = createChatRequest(messageContent)
+        // Dev Chat uses hardcoded namespace/project
+        const chatRequest = createChatCompletionRequest(messageContent)
 
         if (streamingEnabled) {
           // Streaming path
@@ -206,10 +221,14 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
             abortController.abort()
           }, 60000)
 
-          const responseSessionId = await chatInferenceStreaming(
-            chatRequest,
-            sessionId || undefined,
-            {
+          const responseSessionId = await streamingChat.mutateAsync({
+            namespace: DEV_CHAT_NAMESPACE,
+            projectId: DEV_CHAT_PROJECT_ID,
+            message: messageContent,
+            sessionId: sessionId || undefined,
+            requestOptions: chatRequest,
+            streamingOptions: {
+              signal: abortController.signal,
               onChunk: (chunk: ChatStreamChunk) => {
                 if (!isMountedRef.current) return
 
@@ -235,10 +254,11 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
                   }
                 }
               },
-              onError: (error) => {
+              onError: error => {
                 console.error('Streaming error:', error)
                 if (!isMountedRef.current) return
-                // Will be handled in catch block
+                setIsStreaming(false)
+                if (timeoutId) clearTimeout(timeoutId)
               },
               onComplete: () => {
                 if (!isMountedRef.current) return
@@ -246,9 +266,8 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
                 setIsStreaming(false)
                 if (timeoutId) clearTimeout(timeoutId)
               },
-              signal: abortController.signal,
-            }
-          )
+            },
+          })
 
           // Set session ID if received from server
           if (responseSessionId && responseSessionId !== sessionId) {
@@ -261,12 +280,13 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
           setIsStreaming(false)
           if (timeoutId) clearTimeout(timeoutId)
           return true
-
         } else {
           // Non-streaming fallback
-          return await executeFallbackRequest(chatRequest, assistantMessageId)
+          return await executeFallbackRequest(
+            messageContent,
+            assistantMessageId
+          )
         }
-
       } catch (error) {
         console.error('Chat error:', error)
         setIsStreaming(false)
@@ -303,7 +323,8 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
       }
     },
     [
-      chatMutation,
+      streamingChat,
+      nonStreamingChat,
       sessionId,
       setSessionId,
       addMessage,
@@ -311,20 +332,13 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
       isStreaming,
       hasInitialSync,
       streamingEnabled,
-      executeFallbackRequest
+      executeFallbackRequest,
     ]
   )
 
   // Handle clear chat
   const clearChat = useCallback(async () => {
-    if (deleteSessionMutation.isPending) return false
-
     try {
-      // If we don't have a valid sessionId (e.g., mock/test mode), skip server deletion
-      if (sessionId && !sessionId.startsWith('local_')) {
-        await deleteSessionMutation.mutateAsync(sessionId)
-      }
-
       // Clear local messages and errors
       setMessages([])
       setError(null)
@@ -337,13 +351,13 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
 
       return true
     } catch (error) {
-      console.error('Delete session error:', error)
+      console.error('Clear chat error:', error)
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to clear chat'
       setError(errorMessage)
       return false
     }
-  }, [deleteSessionMutation, sessionId, createNewSession])
+  }, [createNewSession])
 
   // Handle input change
   const updateInput = useCallback((value: string) => {
@@ -360,13 +374,19 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
     if (streamingAbortControllerRef.current && isStreaming) {
       streamingAbortControllerRef.current.abort()
       setIsStreaming(false)
-      
+
       // Update any streaming messages to show they were cancelled
-      setMessages(prev => prev.map(msg => 
-        msg.isStreaming 
-          ? { ...msg, isStreaming: false, content: msg.content + ' [Cancelled]' }
-          : msg
-      ))
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.isStreaming
+            ? {
+                ...msg,
+                isStreaming: false,
+                content: msg.content + ' [Cancelled]',
+              }
+            : msg
+        )
+      )
     }
   }, [isStreaming])
 
@@ -376,7 +396,7 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
     if (isStreaming) {
       cancelStreaming()
     }
-    
+
     const newSessionId = createNewSession()
     setMessages([])
     setError(null)
@@ -396,9 +416,10 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
     error,
 
     // Loading states
-    isSending: chatMutation.isPending || isStreaming,
+    isSending:
+      streamingChat.isPending || nonStreamingChat.isPending || isStreaming,
     isStreaming,
-    isClearing: deleteSessionMutation.isPending,
+    isClearing: false,
     isLoadingSession,
 
     // Actions
@@ -413,7 +434,11 @@ export function useChatbox(initialSessionId?: string, enableStreaming: boolean =
 
     // Computed values
     hasMessages: messages.length > 0,
-    canSend: !chatMutation.isPending && !isStreaming && inputValue.trim().length > 0,
+    canSend:
+      !streamingChat.isPending &&
+      !nonStreamingChat.isPending &&
+      !isStreaming &&
+      inputValue.trim().length > 0,
   }
 }
 

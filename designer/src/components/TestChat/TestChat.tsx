@@ -3,14 +3,12 @@ import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import {
-  useProjectChatStreamingMessage,
-  useProjectChatParams,
-} from '../../hooks/useProjectChat'
+import { useProjectChatParams } from '../../hooks/useProjectChat'
+import { useStreamingChatCompletionMessage } from '../../hooks/useChatCompletions'
 import { useProjectChatStreamingSession } from '../../hooks/useProjectChatSession'
 import { useProjectSession } from '../../hooks/useProjectSession'
 import { useChatbox } from '../../hooks/useChatbox'
-import { ProjectChatStreamChunk } from '../../api/projectChatService'
+import { ChatStreamChunk } from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
@@ -93,8 +91,8 @@ export default function TestChat({
     chatParams?.projectId
   )
 
-  // Project chat streaming message sending
-  const projectChatStreamingMessage = useProjectChatStreamingMessage()
+  // Project chat streaming message sending - using unified interface
+  const projectChatStreamingMessage = useStreamingChatCompletionMessage()
 
   // Load available models for this project
   const { data: modelsData, isFetching: modelsLoading } = useProjectModels(
@@ -475,7 +473,7 @@ export default function TestChat({
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
           },
           streamingOptions: {
-            onChunk: (chunk: ProjectChatStreamChunk) => {
+            onChunk: (chunk: ChatStreamChunk) => {
               // Handle content chunks
               if (chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
@@ -693,7 +691,7 @@ export default function TestChat({
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
           },
           streamingOptions: {
-            onChunk: (chunk: ProjectChatStreamChunk) => {
+            onChunk: (chunk: ChatStreamChunk) => {
               if (chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({
