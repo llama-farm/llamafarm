@@ -26,7 +26,6 @@ from pydantic import BaseModel as PydanticBaseModel
 from typing import Optional, Literal, List, Union
 import os
 import base64
-import logging
 from datetime import datetime
 import json
 
@@ -38,10 +37,15 @@ from models import (
     EncoderModel,
 )
 from utils.device import get_optimal_device, get_device_info
+from core.logging import setup_logging, UniversalRuntimeLogger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure logging FIRST, before anything else
+log_file = os.getenv("LOG_FILE", "")
+log_level = os.getenv("LOG_LEVEL", "INFO")
+json_logs = os.getenv("LOG_JSON_FORMAT", "false").lower() in ("true", "1", "yes")
+setup_logging(json_logs=json_logs, log_level=log_level, log_file=log_file)
+
+logger = UniversalRuntimeLogger("universal-runtime")
 
 
 @asynccontextmanager
@@ -363,4 +367,10 @@ if __name__ == "__main__":
     logger.info(f"Starting LlamaFarm Universal Runtime on {host}:{port}")
     logger.info(f"Device: {get_device()}")
 
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_config=None,  # Disable uvicorn's log config (handled in setup_logging)
+        access_log=False,  # Disable uvicorn access logs (handled by structlog)
+    )

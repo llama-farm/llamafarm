@@ -327,6 +327,11 @@ func (no *NativeOrchestrator) getUniversalRuntimeEnv() []string {
 		env = append(env, fmt.Sprintf("HF_TOKEN=%s", val))
 	}
 
+	// Set up file logging for the universal runtime
+	logsDir := filepath.Join(llamafarmDir, "logs")
+	universalLogFile := filepath.Join(logsDir, "universal-runtime.log")
+	env = append(env, fmt.Sprintf("LOG_FILE=%s", universalLogFile))
+
 	// Add any other environment variables from current environment
 	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
 		if val := os.Getenv(key); val != "" {
