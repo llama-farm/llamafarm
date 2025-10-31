@@ -199,6 +199,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
+          sleep 2
           if ! ./lf --cwd /tmp/e2e-test --debug datasets process test_dataset; then
             echo "❌ Dataset processing failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
