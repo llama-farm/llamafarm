@@ -117,8 +117,12 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO", log_file: st
 
     root_logger.setLevel(_coerce_log_level(log_level))
 
-    # Always use info level for httpcore.xxx logs and celery.worker logs
-    for logger_name in ["httpcore.connection", "httpcore.http11", "celery.worker"]:
+    # Configure celery logger
+    celery_logger = logging.getLogger("celery.worker")
+    celery_logger.setLevel(settings.CELERY_LOG_LEVEL.upper() or "INFO")
+
+    # Always use info level for httpcore.xxx logs
+    for logger_name in ["httpcore.connection", "httpcore.http11"]:
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging.INFO)
 

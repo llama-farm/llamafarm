@@ -203,6 +203,7 @@ class ChatOrchestratorAgent(LFAgent):
                     # reasoning=final_response.choices[0].message.reasoning,
                 )
             )
+            self._persist_history_safe()
             return final_response
 
         # Max iterations reached
