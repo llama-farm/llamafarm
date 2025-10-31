@@ -1,6 +1,6 @@
 version: 1
-id: mixed-format-rag
-slug: mixed-format-rag
+id: mixed_format_rag
+slug: mixed_format_rag
 title: Mixed Format Rag
 description: Blend of PDF, Markdown, HTML, text, and code to test heterogeneous ingestion.
 tags:
@@ -9,13 +9,13 @@ tags:
   - demo
 primaryModel: llama3.1:8b
 config:
-  yaml_path: examples/mixed-format-rag/llamafarm.yaml
+  yaml_path: examples/mixed_format_rag/llamafarm.yaml
 datasets:
   - name: mixed_files
     strategy: universal_processor
     database: mixed_db
     ingest:
-      - examples/mixed-format-rag/files/*
+      - examples/mixed_format_rag/files/*
 process_after_ingest: true
 retrieval:
   database: mixed_db

@@ -40,10 +40,10 @@ The repository ships with interactive demos that highlight different retrieval s
 
 | Folder | Use Case | Highlights |
 |--------|----------|------------|
-| `large-complex-rag/` | Multi-megabyte Raleigh UDO ordinance PDF | Long-running ingestion, zoning-focused prompts, unique DB/dataset per run. |
-| `many-small-file-rag/` | FDA correspondence packet | Several shorter PDFs, quick iteration, letter-specific queries. |
-| `mixed-format-rag/` | Blend of PDF/Markdown/HTML/text/code | Hybrid retrieval, multiple parsers/extractors in one pipeline. |
-| `quick-rag/` | Two short engineering notes | Rapid smoke test for the environment and CLI. |
+| `large_complex_rag/` | Multi-megabyte Raleigh UDO ordinance PDF | Long-running ingestion, zoning-focused prompts, unique DB/dataset per run. |
+| `many_small_file_rag/` | FDA correspondence packet | Several shorter PDFs, quick iteration, letter-specific queries. |
+| `mixed_format_rag/` | Blend of PDF/Markdown/HTML/text/code | Hybrid retrieval, multiple parsers/extractors in one pipeline. |
+| `quick_rag/` | Two short engineering notes | Rapid smoke test for the environment and CLI. |
 
 ## How to Run an Example
 ```bash

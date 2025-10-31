@@ -1,11 +1,11 @@
 version: v1
-name: mixed-format-demo
+name: many_small_file_demo
 namespace: default
 
 runtime:
   models:
     - name: default
-      description: "Default Ollama model for mixed-format document analysis"
+      description: "Default Ollama model for small file analysis"
       provider: ollama
       model: llama3.1:8b
       base_url: http://localhost:11434
@@ -16,21 +16,22 @@ prompts:
   - name: default
     messages:
       - role: system
-        content: 'You are a technical analyst that reviews mixed-format project documentation.
+        content: 'You are a helpful assistant analyzing multiple small documents.
 
-          Cite file names and sections when summarizing information. If the context lacks
-          the answer, say so.
+          Always cite the specific file name when referencing information.
+
+          If a question cannot be answered using the provided context, state that clearly.
 
           '
 
 rag:
   databases:
-  - name: mixed_db
+  - name: small_pdfs_db
     type: ChromaStore
     config:
-      collection_name: mixed_format_docs
+      collection_name: small_pdfs
       distance_function: cosine
-      persist_directory: ./data/mixed_db
+      persist_directory: ./data/small_pdfs_db
       port: 8000
     embedding_strategies:
     - name: default_embeddings
@@ -43,56 +44,38 @@ rag:
         auto_pull: true
       priority: 0
     retrieval_strategies:
-    - name: blended_search
-      type: HybridUniversalStrategy
+    - name: targeted_letters
+      type: BasicSimilarityStrategy
       config:
-        strategies:
-          - type: BasicSimilarityStrategy
-            config:
-              distance_metric: cosine
-              top_k: 8
-            weight: 0.6
-        fusion_method: rrf
+        distance_metric: cosine
         top_k: 8
       default: true
     default_embedding_strategy: default_embeddings
-    default_retrieval_strategy: blended_search
+    default_retrieval_strategy: targeted_letters
   data_processing_strategies:
   - name: universal_processor
-    description: Handles PDFs, text, Markdown, HTML, and code snippets.
+    description: Parser tuned for small PDFs
     parsers:
     - type: PDFParser_LlamaIndex
       file_include_patterns:
       - '*.pdf'
       - '*.PDF'
-      priority: 120
+      priority: 100
+      config:
+        chunk_size: 1200
+        chunk_overlap: 150
+        chunk_strategy: semantic
+        extract_metadata: true
+    - type: PDFParser_PyPDF2
+      file_include_patterns:
+      - '*.pdf'
+      - '*.PDF'
+      priority: 50
       config:
         chunk_size: 1000
         chunk_overlap: 120
+        chunk_strategy: paragraphs
         extract_metadata: true
-    - type: MarkdownParser_LlamaIndex
-      file_include_patterns:
-      - '*.md'
-      - '*.markdown'
-      priority: 110
-      config:
-        chunk_size: 800
-        chunk_overlap: 80
-    - type: TextParser_LlamaIndex
-      file_include_patterns:
-      - '*.txt'
-      priority: 100
-      config:
-        chunk_size: 800
-        chunk_overlap: 80
-    - type: TextParser_Python
-      file_include_patterns:
-      - '*.html'
-      - '*.py'
-      priority: 90
-      config:
-        chunk_size: 600
-        chunk_overlap: 60
     extractors:
     - type: ContentStatisticsExtractor
       file_include_patterns:
@@ -108,13 +91,14 @@ rag:
       config:
         entity_types:
         - ORG
+        - DATE
         - PERSON
         - PRODUCT
-        - DATE
+        min_entity_length: 2
         use_fallback: true
 
 datasets:
-- name: mixed_files
+- name: small_pdfs
   data_processing_strategy: universal_processor
-  database: mixed_db
+  database: small_pdfs_db
   files: []

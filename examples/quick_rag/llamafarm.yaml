@@ -1,10 +1,10 @@
 version: v1
-name: quick-rag-demo
+name: quick_rag_demo
 namespace: default
 
 runtime:
   models:
-    - name: quick-rag
+    - name: quick_rag
       description: "Quick RAG demo model"
       provider: ollama
       model: llama3.1:8b

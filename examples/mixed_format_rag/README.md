@@ -16,10 +16,10 @@ Simulates analysing a project knowledge base that mixes PDFs, Markdown guides, H
 ## Quickstart
 ```bash
 # From the repo root (expects ./lf or export LF_BIN=/full/path/to/lf)
-./examples/mixed-format-rag/run_example.sh
+./examples/mixed_format_rag/run_example.sh
 
 # Optional: pass the directory containing the lf binary if you keep it elsewhere
-./examples/mixed-format-rag/run_example.sh /path/to/your/project
+./examples/mixed_format_rag/run_example.sh /path/to/your/project
 ```
 
 Set `NO_PAUSE=1` to skip prompts (useful for CI or batch runs).
@@ -27,27 +27,27 @@ Set `NO_PAUSE=1` to skip prompts (useful for CI or batch runs).
 ## Manual Workflow
 ```bash
 # Create dataset pointing at the mixed-format processing strategy and new database
-lf --cwd examples/mixed-format-rag datasets create -s mixed_content_processor -b mixed_format_db mixed_format_dataset
+lf --cwd examples/mixed_format_rag datasets create -s mixed_content_processor -b mixed_format_db mixed_format_dataset
 
 # Upload documents (PDF, Markdown, HTML, text, code)
-lf --cwd examples/mixed-format-rag datasets upload mixed_format_dataset examples/mixed-format-rag/files/*
+lf --cwd examples/mixed_format_rag datasets upload mixed_format_dataset examples/mixed_format_rag/files/*
 
 # Process and inspect
-lf --cwd examples/mixed-format-rag datasets process mixed_format_dataset
-lf --cwd examples/mixed-format-rag datasets list
-lf --cwd examples/mixed-format-rag rag query --database mixed_format_db --top-k 4 --include-metadata --include-score \
+lf --cwd examples/mixed_format_rag datasets process mixed_format_dataset
+lf --cwd examples/mixed_format_rag datasets list
+lf --cwd examples/mixed_format_rag rag query --database mixed_format_db --top-k 4 --include-metadata --include-score \
   "Summarize transformer architecture mentions across documents."
 
 # Ask questions with RAG context
-lf --cwd examples/mixed-format-rag chat --database mixed_format_db "Provide an overview of transformer architecture with citations."
-lf --cwd examples/mixed-format-rag chat --database mixed_format_db "List documented API endpoints with file references."
+lf --cwd examples/mixed_format_rag chat --database mixed_format_db "Provide an overview of transformer architecture with citations."
+lf --cwd examples/mixed_format_rag chat --database mixed_format_db "List documented API endpoints with file references."
 
 # Compare baseline
-lf --cwd examples/mixed-format-rag chat --no-rag "What is transformer architecture?"
+lf --cwd examples/mixed_format_rag chat --no-rag "What is transformer architecture?"
 ```
 
 ## Cleanup
 ```bash
-lf --cwd examples/mixed-format-rag datasets delete mixed_format_dataset
-rm -rf examples/mixed-format-rag/data/mixed_format_db
+lf --cwd examples/mixed_format_rag datasets delete mixed_format_dataset
+rm -rf examples/mixed_format_rag/data/mixed_format_db
 ```
