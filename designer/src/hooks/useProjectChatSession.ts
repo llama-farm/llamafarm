@@ -5,7 +5,7 @@
  * Actual chat API calls should use useChatCompletions hooks.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 /**
  * Project chat session state interface
@@ -24,6 +24,11 @@ export const useProjectChatStreamingSession = () => {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isSessionActive, setIsSessionActive] = useState(false)
   const [sessionError, setSessionError] = useState<Error | null>(null)
+
+  // Sync isSessionActive with sessionId changes
+  useEffect(() => {
+    setIsSessionActive(!!sessionId)
+  }, [sessionId])
 
   const clearSession = useCallback(() => {
     setSessionId(null)

@@ -17,6 +17,7 @@ import {
   StreamingChatOptions,
   NetworkError,
   ValidationError,
+  ChatApiError,
 } from '../types/chat'
 import { handleSSEResponse } from '../utils/sseUtils'
 
@@ -101,7 +102,11 @@ export async function sendChatCompletion(
       sessionId: responseSessionId,
     }
   } catch (error) {
-    if (error instanceof ValidationError || error instanceof NetworkError) {
+    if (
+      error instanceof ValidationError ||
+      error instanceof NetworkError ||
+      error instanceof ChatApiError
+    ) {
       throw error
     }
 
@@ -213,23 +218,14 @@ export async function streamChatCompletion(
     }
 
     // Handle the streaming response using SSE utility
-    console.log('Calling handleSSEResponse with onChunk callback:', {
-      hasOnChunk: !!onChunk,
-      hasOnComplete: !!onComplete,
-      hasOnError: !!onError,
-      hasSignal: !!signal,
-    })
-
     await handleSSEResponse<ChatStreamChunk>(
       response,
       chunk => {
-        console.log('onChunk callback invoked in streamChatCompletion:', chunk)
         onChunk?.(chunk)
       },
       {
         signal,
         onComplete: () => {
-          console.log('onComplete callback invoked in streamChatCompletion')
           onComplete?.()
         },
         onError: error => {
@@ -241,8 +237,6 @@ export async function streamChatCompletion(
         },
       }
     )
-
-    console.log('handleSSEResponse completed')
 
     return responseSessionId
   } catch (error) {

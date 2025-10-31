@@ -73,11 +73,8 @@ export async function parseSSEStream<T = any>(
 
         if (trimmedLine === '') continue
 
-        console.log('SSE line received:', trimmedLine.substring(0, 200))
-
         // Handle DONE signal
         if (trimmedLine === 'data: [DONE]') {
-          console.log('SSE stream complete: [DONE] received')
           onComplete?.()
           return
         }
@@ -86,10 +83,7 @@ export async function parseSSEStream<T = any>(
         if (trimmedLine.startsWith('data: ')) {
           try {
             const jsonData = trimmedLine.slice(6) // Remove 'data: ' prefix
-            console.log('Parsing SSE data:', jsonData.substring(0, 200))
             const parsedData = JSON.parse(jsonData)
-
-            console.log('SSE data parsed successfully, calling onEvent')
 
             const event: SSEEvent & { data: T } = {
               type: 'data',
@@ -98,7 +92,6 @@ export async function parseSSEStream<T = any>(
             }
 
             onEvent(event)
-            console.log('onEvent called successfully')
           } catch (parseError) {
             console.error(
               'Failed to parse SSE chunk:',
@@ -110,18 +103,12 @@ export async function parseSSEStream<T = any>(
         } else if (trimmedLine.startsWith('event: ')) {
           // Handle other event types if needed
           const eventType = trimmedLine.slice(7)
-          console.log('SSE event type received:', eventType)
           const event: SSEEvent = {
             type: eventType,
             data: null,
             rawLine: trimmedLine,
           }
           onEvent(event as SSEEvent & { data: T })
-        } else {
-          console.log(
-            'SSE line does not match expected format:',
-            trimmedLine.substring(0, 200)
-          )
         }
       }
     }
@@ -151,26 +138,11 @@ export async function parseChatSSEStream<ChunkType = any>(
   onChunk: (chunk: ChunkType) => void,
   options: SSEParseOptions = {}
 ): Promise<void> {
-  console.log('parseChatSSEStream called, starting SSE parsing')
   return parseSSEStream<ChunkType>(
     reader,
     event => {
-      console.log('SSE event received in parseChatSSEStream:', {
-        type: event.type,
-        hasData: !!event.data,
-        dataKeys: event.data ? Object.keys(event.data) : [],
-      })
       if (event.type === 'data' && event.data) {
-        console.log('Calling onChunk with data:', event.data)
         onChunk(event.data)
-        console.log('onChunk called successfully')
-      } else {
-        console.log(
-          'Skipping event - type:',
-          event.type,
-          'hasData:',
-          !!event.data
-        )
       }
     },
     options
@@ -209,13 +181,6 @@ export async function handleSSEResponse<ChunkType = any>(
   onChunk: (chunk: ChunkType) => void,
   options: SSEParseOptions = {}
 ): Promise<void> {
-  console.log('handleSSEResponse called:', {
-    ok: response.ok,
-    status: response.status,
-    contentType: response.headers.get('content-type'),
-    hasBody: !!response.body,
-  })
-
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error')
     throw new Error(
@@ -224,17 +189,15 @@ export async function handleSSEResponse<ChunkType = any>(
   }
 
   const reader = getSSEReader(response)
-  console.log('SSE reader created, starting parseChatSSEStream')
 
   try {
     await parseChatSSEStream<ChunkType>(reader, onChunk, options)
-    console.log('parseChatSSEStream completed successfully')
   } catch (error) {
     console.error('Error in parseChatSSEStream:', error)
     // Ensure reader is properly released on error
     try {
       reader.releaseLock()
-    } catch (releaseError) {
+    } catch {
       // Ignore release errors
     }
     throw error
