@@ -66,12 +66,48 @@ func StartConfigWatcher(namespace, project string) error {
 	homeConfigInfo, hiErr := os.Stat(homeConfigPath)
 	logDebug(fmt.Sprintf("cwdConfigInfo: %v, homeConfigInfo: %v", cwdConfigInfo, homeConfigInfo))
 	logDebug(fmt.Sprintf("ciErr: %v, hiErr: %v", ciErr, hiErr))
-	// logDebug(fmt.Sprintf("cwdConfigInfo.ModTime(): %v, homeConfigInfo.ModTime(): %v", cwdConfigInfo.ModTime(), homeConfigInfo.ModTime()))
-	if ciErr == nil && (hiErr != nil || cwdConfigInfo.ModTime().After(homeConfigInfo.ModTime())) {
+
+	// Sync config files with priority: prefer configs that have valid name/namespace fields
+	// This ensures that valid configs don't get overwritten by invalid ones
+	if ciErr == nil && hiErr == nil {
+		// Both exist - check which one has valid name/namespace fields
+		cwdCfg, cwdErr := config.LoadConfigFile(cwdConfigPath)
+		homeCfg, homeErr := config.LoadConfigFile(homeConfigPath)
+
+		cwdHasValid := cwdErr == nil && func() bool {
+			_, err := cwdCfg.GetProjectInfo()
+			return err == nil
+		}()
+
+		homeHasValid := homeErr == nil && func() bool {
+			_, err := homeCfg.GetProjectInfo()
+			return err == nil
+		}()
+
+		if cwdHasValid && !homeHasValid {
+			// CWD config is valid, home is not - sync CWD -> home
+			if err := syncConfigFiles(cwdConfigPath, homeConfigPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+			}
+		} else if homeHasValid && !cwdHasValid {
+			// Home config is valid, CWD is not - sync home -> CWD
+			if err := syncConfigFiles(homeConfigPath, cwdConfigPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+			}
+		} else if cwdHasValid && homeHasValid {
+			// Both valid - prefer CWD config (user's working directory)
+			if err := syncConfigFiles(cwdConfigPath, homeConfigPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+			}
+		}
+		// If neither has valid name/namespace, don't sync (will fail later anyway)
+	} else if ciErr == nil && hiErr != nil {
+		// Only CWD config exists - sync CWD -> home
 		if err := syncConfigFiles(cwdConfigPath, homeConfigPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
 		}
-	} else if hiErr == nil && (ciErr != nil || homeConfigInfo.ModTime().After(cwdConfigInfo.ModTime())) {
+	} else if hiErr == nil && ciErr != nil {
+		// Only home config exists - sync home -> CWD
 		if err := syncConfigFiles(homeConfigPath, cwdConfigPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
 		}

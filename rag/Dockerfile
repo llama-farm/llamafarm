@@ -32,7 +32,8 @@ RUN mkdir -p /tmp/uv-cache && chmod 777 /tmp/uv-cache \
 WORKDIR /app
 
 # Copy dependency files first for better Docker layer caching
-COPY config/pyproject.toml config/uv.lock config/schema.yaml config/README.md ./config/
+COPY config/ ./config/
+COPY common/ ./common/
 COPY rag/pyproject.toml rag/uv.lock rag/README.md ./rag/
 
 # Install dependencies in separate layers (cached unless lock files change)
@@ -41,7 +42,13 @@ RUN cd rag && uv sync --locked
 
 # Now copy the rest of the source code (changes won't invalidate dependency cache)
 COPY config/ ./config/
+COPY common/ ./common/
 COPY rag/ ./rag/
+
+# Install each package with its own dependencies
+RUN cd config && uv sync --locked --all-extras --verbose
+RUN cd common && uv sync --locked --all-extras --verbose
+RUN cd rag && uv sync --locked  --verbose
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh

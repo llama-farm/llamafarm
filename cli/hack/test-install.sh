@@ -36,6 +36,22 @@ test_help() {
 test_local_build() {
     info "Testing local CLI build..."
 
+    # Generate types first
+    info "Generating types..."
+    cd config
+    ./generate-types.sh || error "Failed to generate Python types"
+
+    # Install go-jsonschema if needed
+    if ! command -v go-jsonschema >/dev/null 2>&1; then
+        info "Installing go-jsonschema..."
+        go install github.com/atombender/go-jsonschema@latest || error "Failed to install go-jsonschema"
+    fi
+
+    # Generate Go types
+    cd ../cli/cmd/config
+    sh generate-types.sh || error "Failed to generate Go types"
+    cd ../../..
+
     # Navigate to CLI directory
     cd cli
 
@@ -58,6 +74,12 @@ test_local_build() {
 # Test cross-compilation
 test_cross_compile() {
     info "Testing cross-compilation..."
+
+    # Types should already be generated from test_local_build
+    # But ensure they exist
+    if [[ ! -f "cli/cmd/config/types.go" ]]; then
+        error "Go types not generated. Run test_local_build first."
+    fi
 
     cd cli
 

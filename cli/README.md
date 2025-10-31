@@ -91,11 +91,34 @@ Then run the CLI (installed binary or `go run main.go ...`) in another terminal.
 go test ./...
 ```
 
+## Environment Variables
+
+### `LF_VERSION_REF`
+Override the git ref (branch, tag, or commit SHA) used to download Python source code from the repository. Useful for CI/CD testing or development against specific branches.
+
+```bash
+# Test with a feature branch
+LF_VERSION_REF=feat-new-feature lf start
+
+# Test with a specific version tag
+LF_VERSION_REF=v1.2.3 lf start
+
+# Test with a specific commit
+LF_VERSION_REF=abc123def456... lf start
+```
+
+**Default behavior:**
+- Release builds (e.g., `v1.2.3`) download matching source code tags
+- Dev builds automatically use the `main` branch
+- Source code is cached in `~/.llamafarm/src` and only re-downloaded when versions change
+
+### Other Environment Variables
+- `LLAMAFARM_SESSION_ID` – reuse a session for `lf chat`
+- `OLLAMA_HOST` – point to a different Ollama endpoint (default: `http://localhost:11434`)
+- `LF_DATA_DIR` – override the data directory (default: `~/.llamafarm`)
+
 ## Development Notes
 - Commands live under `cmd/` as Cobra subcommands.
 - Shared helpers (HTTP clients, config resolution) live in `cmd/*` modules.
-- **After updating schemas (`config/schema.yaml` or `rag/schema.yaml`):**
-  1. Run `cd ../config && ./generate-types.sh` to regenerate both Python and Go types
-  2. The script validates that `cli/cmd/config/types.go` matches the schema
-  3. If validation fails, manually update `types.go` to match the generated reference
-  4. Rebuild CLI: `go build -o lf`
+- Regenerate Go config types after schema updates via `config/generate-types.sh`.
+- The CLI's `Version` variable is set via `-ldflags` during build: `-X 'llamafarm-cli/cmd.Version=v1.2.3'`

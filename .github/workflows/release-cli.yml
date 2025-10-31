@@ -45,10 +45,31 @@ jobs:
             echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Copy schema.yaml to CLI config
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Generate types (compile schema and generate Go types)
         run: |
-          mkdir -p cli/cmd/config
-          cp config/schema.yaml cli/cmd/config/
+          # Compile schema (this also copies dereferenced schema to cli/cmd/config/schema.json)
+          cd config
+          uv run python compile_schema.py
+
+          # Verify the dereferenced schema was copied
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
+
+          # Generate Go types
+          cd ../cli/cmd/config
+          sh generate-types.sh
 
       - name: Build binary
         id: build

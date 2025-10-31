@@ -37,7 +37,7 @@ class ChromaStore(VectorStore):
         # to connect to the chromadb-server service
         self.host = config.get("host") or os.getenv("CHROMADB_HOST")
         self.port = config.get("port") or (
-            int(os.getenv("CHROMADB_PORT")) if os.getenv("CHROMADB_PORT") else None
+            int(os.getenv("CHROMADB_PORT", "0")) if os.getenv("CHROMADB_PORT") else None
         )
         self.embedding_dimension = max(
             config.get("embedding_dimension", 768), 1

@@ -175,7 +175,36 @@ test_cli_build() {
             set -e
 
             # Install dependencies
-            apk add --no-cache git
+            apk add --no-cache git python3 py3-pip py3-yaml bash curl uv
+
+            # Generate types first
+            echo 'Generating types...'
+            cd config
+
+            # Tell uv to use the system Python (amd64) instead of downloading one
+            export UV_PYTHON=python3
+
+            # Compile schema (required to resolve $ref references like ../rag/schema.yaml)
+            echo 'Compiling schema...'
+            uv run python compile_schema.py || {
+                echo 'Schema compilation failed'
+                exit 1
+            }
+
+            # Verify that the dereferenced schema was created and copied to CLI directory
+            if [ ! -f "../cli/cmd/config/schema.json" ]; then
+                echo 'Error: schema.json not copied to cli/cmd/config by compile_schema.py'
+                exit 1
+            fi
+            echo 'Schema compiled and copied successfully'
+
+            # Install go-jsonschema
+            go install github.com/atombender/go-jsonschema@latest
+
+            # Generate Go types
+            cd ../cli/cmd/config
+            sh generate-types.sh || exit 1
+            cd ../../..
 
             cd cli
 

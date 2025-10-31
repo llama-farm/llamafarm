@@ -8,7 +8,7 @@ name: Build and Push Docker Images
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
@@ -31,19 +31,19 @@ jobs:
           - service: designer
             context: ./designer
             dockerfile: ./designer/Dockerfile
-            description: 'LlamaFarm Designer - React frontend with nginx'
+            description: "LlamaFarm Designer - React frontend with nginx"
           - service: server
             context: ./
             dockerfile: ./server/Dockerfile
-            description: 'LlamaFarm Server - FastAPI backend'
+            description: "LlamaFarm Server - FastAPI backend"
           - service: rag
             context: ./
             dockerfile: ./rag/Dockerfile
-            description: 'LlamaFarm RAG - Celery worker for RAG processing'
+            description: "LlamaFarm RAG - Celery worker for RAG processing"
           - service: runtime
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
-            description: 'LlamaFarm Universal Runtime - Universal Runtime for all models'
+            description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
 
     steps:
       - name: Checkout repository
@@ -134,19 +134,19 @@ jobs:
           - service: designer
             context: ./designer
             dockerfile: ./designer/Dockerfile
-            description: 'LlamaFarm Designer - React frontend with nginx'
+            description: "LlamaFarm Designer - React frontend with nginx"
           - service: server
             context: ./
             dockerfile: ./server/Dockerfile
-            description: 'LlamaFarm Server - FastAPI backend'
+            description: "LlamaFarm Server - FastAPI backend"
           - service: rag
             context: ./
             dockerfile: ./rag/Dockerfile
-            description: 'LlamaFarm RAG - Celery worker for RAG processing'
+            description: "LlamaFarm RAG - Celery worker for RAG processing"
           - service: runtime
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
-            description: 'LlamaFarm Universal Runtime - Universal Runtime for all models'
+            description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
 
     steps:
       - name: Checkout repository
@@ -355,7 +355,7 @@ jobs:
       - name: Download all image artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: '*-image'
+          pattern: "*-image"
           path: ${{ runner.temp }}/artifacts
           merge-multiple: true
 
@@ -415,43 +415,94 @@ jobs:
           mkdir -p "$HOME/.llamafarm"
           chmod 777 "$HOME/.llamafarm" || true
 
-          # ChromaDB now uses Docker-managed volumes, no directory creation needed
-
       - name: Test services startup
         working-directory: deployment/docker_compose
         env:
           IMAGE_TAG: pr-${{ github.event.number }}
         run: |
-          # Start services and check they come up healthy
-          docker compose -f docker-compose.yml up -d
+          set -e
 
-          # Wait for services to be ready (ChromaDB needs more time to initialize)
-          echo "Waiting for services to start..."
+          echo "=== Starting Docker Compose services ==="
+          # Start services and check they come up healthy
+          docker compose -f docker-compose.yml up -d || {
+            echo "❌ Failed to start services"
+            echo "=== Service logs after failed startup ==="
+            docker compose -f docker-compose.yml logs --tail=250 || true
+            exit 1
+          }
+
+          echo "=== Waiting for services to start (60 seconds) ==="
           sleep 60
 
-          # Check ChromaDB server specifically
-          echo "Checking ChromaDB server status..."
-          docker compose -f docker-compose.yml logs chromadb-server | tail -20
-
-          # Check if services are running
+          echo "=== Checking service status ==="
           docker compose -f docker-compose.yml ps
 
-          # Basic health checks
-          docker compose -f docker-compose.yml logs chromadb-server
-          docker compose -f docker-compose.yml logs server
-          docker compose -f docker-compose.yml logs designer
-          docker compose -f docker-compose.yml logs rag
+          echo "=== Checking for unhealthy services ==="
+          # Check for unhealthy services - look for lines containing "unhealthy" in status column
+          # docker compose ps format: NAME IMAGE COMMAND SERVICE CREATED STATUS PORTS
+          # We want to check the STATUS column for "unhealthy"
+          UNHEALTHY=$(docker compose -f docker-compose.yml ps --format "table {{.Name}}\t{{.Status}}" | grep -i "unhealthy" | awk '{print $1}' || echo "")
 
-          # Test ChromaDB server connectivity
-          echo "Testing ChromaDB server connectivity..."
-          echo "Trying heartbeat endpoint..."
-          curl -f http://localhost:8001/api/v2/heartbeat || echo "Heartbeat endpoint failed"
+          if [ -n "$UNHEALTHY" ]; then
+            echo "❌ Found unhealthy services:"
+            echo "$UNHEALTHY"
+            echo ""
+            echo "=== Logs for unhealthy services ==="
+            for service in $UNHEALTHY; do
+              echo "--- Logs for $service ---"
+              docker compose -f docker-compose.yml logs --tail=200 "$service" || true
+            done
+            echo ""
+            echo "=== All service logs ==="
+            docker compose -f docker-compose.yml logs --tail=100 || true
+            exit 1
+          fi
 
-          echo "Trying version endpoint..."
-          curl -f http://localhost:8001/api/v2/version || echo "Version endpoint failed"
+          echo "=== Checking for exited/failed containers ==="
+          # Check for exited/failed containers - exclude "Up" status
+          FAILED=$(docker compose -f docker-compose.yml ps --format "table {{.Name}}\t{{.Status}}" | grep -E "(Exited|Dead|Restarting)" | awk '{print $1}' || echo "")
 
-          echo "Trying collections endpoint..."
-          curl -f http://localhost:8001/api/v2/collections || echo "Collections endpoint failed"
+          if [ -n "$FAILED" ]; then
+            echo "❌ Found failed/exited containers:"
+            echo "$FAILED"
+            echo ""
+            echo "=== Logs for failed containers ==="
+            for service in $FAILED; do
+              echo "--- Logs for $service ---"
+              docker compose -f docker-compose.yml logs --tail=200 "$service" || true
+            done
+            echo ""
+            echo "=== All service logs ==="
+            docker compose -f docker-compose.yml logs --tail=100 || true
+            exit 1
+          fi
+
+          echo "✅ All services are healthy"
+          echo ""
+          echo "=== Service logs summary ==="
+          docker compose -f docker-compose.yml logs --tail=50 server
+          docker compose -f docker-compose.yml logs --tail=50 designer
+          docker compose -f docker-compose.yml logs --tail=50 rag
+          docker compose -f docker-compose.yml logs --tail=50 runtime
+
+      - name: Show logs on failure
+        if: failure()
+        working-directory: deployment/docker_compose
+        run: |
+          echo "=== FAILURE DETECTED: Showing detailed logs ==="
+          echo ""
+          echo "=== Service status ==="
+          docker compose -f docker-compose.yml ps || true
+          echo ""
+          echo "=== Full logs for all services (last 200 lines each) ==="
+          docker compose -f docker-compose.yml logs --tail=200 || true
+          echo ""
+          echo "=== Individual service logs ==="
+          for service in server designer rag runtime; do
+            echo "--- Logs for $service ---"
+            docker compose -f docker-compose.yml logs --tail=100 "$service" || true
+            echo ""
+          done
 
       - name: Cleanup
         if: always()
@@ -480,11 +531,11 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:latest
-          format: 'sarif'
-          output: 'trivy-results-${{ matrix.service }}.sarif'
+          format: "sarif"
+          output: "trivy-results-${{ matrix.service }}.sarif"
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: github.event_name != 'pull_request'
         with:
-          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+          sarif_file: "trivy-results-${{ matrix.service }}.sarif"
