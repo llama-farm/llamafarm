@@ -53,7 +53,7 @@ class TestLFAgentClientOpenAI:
             name="test",
             messages=[PromptMessage(role="system", content="You are helpful")],
         )
-        messages = LFAgentClientOpenAI.prompt_to_message(prompt)
+        messages = LFAgentClientOpenAI.prompt_set_to_chat_completion_messages(prompt)
 
         assert isinstance(messages, list)
         assert len(messages) == 1

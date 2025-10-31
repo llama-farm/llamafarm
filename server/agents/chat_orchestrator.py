@@ -7,7 +7,8 @@ from pathlib import Path
 
 from atomic_agents import BaseTool
 from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_message import ChatCompletionMessage  # type: ignore
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from services.prompt_service import PromptService  # type: ignore
 from config.datamodel import LlamaFarmConfig, Provider
 from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
 from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk, ChoiceDelta
@@ -85,7 +86,7 @@ class ChatOrchestratorAgent(LFAgent):
         client = provider.get_client()
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
-            prompts=self._get_prompts_for_model(model_config.name)
+            prompts=self._get_prompt_messages_for_model(model_config.name)
         )
         config = LFAgentConfig(
             history=history,
@@ -472,7 +473,7 @@ class ChatOrchestratorAgent(LFAgent):
     def _populate_history_with_non_system_prompts(
         self, history: LFAgentHistory, project_config: LlamaFarmConfig
     ):
-        prompts = self._get_prompts_for_model(self.model_name)
+        prompts = self._get_prompt_messages_for_model(self.model_name)
         for prompt in prompts:
             # Only add non-system prompts to the history
             if prompt.get("role") != "system":
@@ -483,26 +484,20 @@ class ChatOrchestratorAgent(LFAgent):
         self._populate_history_with_non_system_prompts(history, project_config)
         return history
 
-    def _get_prompts_for_model(
+    def _get_prompt_messages_for_model(
         self, model_name: str
     ) -> list[LFChatCompletionMessageParam]:
         model_config = ModelService.get_model(self._project_config, model_name)
         provider = RuntimeService.get_provider(model_config)
-        Client = provider.get_client().__class__
+        ClientClass = provider.get_client().__class__
 
-        if model_config.prompts:
-            prompts = [
-                prompt
-                for prompt in (self._project_config.prompts or [])
-                if getattr(prompt, "name", None) in (model_config.prompts or [])
-            ]
-        else:
-            prompts = self._project_config.prompts or []
+        messages = PromptService.resolve_prompts_for_model(
+            self._project_config, model_config
+        )
 
         return [
-            message
-            for prompt in prompts
-            for message in Client.prompt_to_message(prompt)
+            ClientClass.prompt_message_to_chat_completion_message(message)
+            for message in messages
         ]
 
     @property

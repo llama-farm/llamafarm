@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias
 
-from config.datamodel import PromptMessage, Model, PromptSet
+from config.datamodel import Model, PromptMessage, PromptSet
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from pydantic import BaseModel
 
@@ -52,19 +52,7 @@ class LFAgentClient(ABC):
         return self._model_name
 
     @staticmethod
-    def prompt_to_message(prompt_set: PromptSet) -> list[LFChatCompletionMessageParam]:
-        """
-        Converts a llamafarm PromptSet into a list of LFAgentChatMessages.
-        """
-
-        messages = [
-            LFAgentClient._prompt_message_to_chat_completion_message(message)
-            for message in prompt_set.messages
-        ]
-        return messages
-
-    @staticmethod
-    def _prompt_message_to_chat_completion_message(
+    def prompt_message_to_chat_completion_message(
         message: PromptMessage,
     ) -> LFChatCompletionMessageParam:
         match message.role:
