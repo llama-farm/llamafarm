@@ -124,13 +124,6 @@ var initCmd = &cobra.Command{
 		// Ensure name and namespace are explicitly set in the config
 		// (they should be in the server response, but we ensure they're there)
 		configMap := createResp.Project.Config
-		if configMap == nil {
-			configMap = make(map[string]interface{})
-		}
-
-		// Explicitly set name and namespace to ensure they're present
-		configMap["name"] = projectName
-		configMap["namespace"] = ns
 
 		yamlBytes, err := yaml.Marshal(configMap)
 		if err != nil {
