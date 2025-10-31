@@ -188,7 +188,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
   const projectSessionMessages = useMemo(() => {
     if (!useProjectSessionMode) return []
     return projectSession.messages.map(projectSessionToChatboxMessage)
-  }, [useProjectSessionMode, projectSession.messages, projectSession.sessionId])
+  }, [useProjectSessionMode, projectSession.messages])
 
   // Sync persisted messages with local state (simple session mode only)
   useEffect(() => {
@@ -582,27 +582,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                         }
                       })
 
-                      // Save/update tool message in project session
-                      // Always update with latest content to capture all streamed arguments
-                      const isFirstChunk =
-                        !savedToolCallIdsRef.current.has(toolCallId)
-                      if (isFirstChunk) {
+                      // Track tool call ID to save complete content later in onComplete
+                      // This prevents duplicate messages from being saved for each streaming chunk
+                      if (!savedToolCallIdsRef.current.has(toolCallId)) {
                         savedToolCallIdsRef.current.add(toolCallId)
-                      }
-
-                      try {
-                        // Always call addMessage to update the persisted content
-                        // The project session should handle deduplication/updates
-                        projectSession.addMessage(
-                          toolContent,
-                          'tool',
-                          toolCallMsg.id
-                        )
-                      } catch (err) {
-                        console.warn('Failed to save/update tool message:', err)
-                        if (isFirstChunk) {
-                          savedToolCallIdsRef.current.delete(toolCallId)
-                        }
                       }
                     }
                   }
@@ -764,10 +747,27 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                   const finalContent =
                     accumulatedContentRef.current[assistantMessageId] || ''
 
+                  // Save all tool call messages with complete content to project session
+                  const toolCallPattern = `tool_${assistantMessageId}_`
+                  const toolCallMessages = streamingMessages.filter(msg =>
+                    msg.id.startsWith(toolCallPattern)
+                  )
+
+                  for (const toolMsg of toolCallMessages) {
+                    try {
+                      projectSession.addMessage(
+                        toolMsg.content,
+                        'tool',
+                        toolMsg.tool_call_id
+                      )
+                    } catch (err) {
+                      console.warn('Failed to save complete tool message:', err)
+                    }
+                  }
+
                   // Clean up refs
                   delete accumulatedContentRef.current[assistantMessageId]
                   delete toolCallsRef.current[assistantMessageId]
-                  const toolCallPattern = `tool_${assistantMessageId}_`
                   for (const savedId of Array.from(
                     savedToolCallIdsRef.current
                   )) {
@@ -1040,6 +1040,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       useProjectSessionMode,
       projectSession,
       simpleSession,
+      streamingMessages,
     ]
   )
 
