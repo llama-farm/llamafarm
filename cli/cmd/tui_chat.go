@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -11,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -494,7 +492,8 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		printing:           false,
 		history:            initialHistory,
 		histIndex:          len(initialHistory),
-		designerStatus:     "starting…",
+		designerStatus:     "ready",
+		designerURL:        chatCtx.ServerURL,
 		textarea:           ta,
 		viewport:           vp,
 		width:              width,
@@ -781,27 +780,8 @@ func (m *chatModel) isValidStrategy(name string) bool {
 }
 
 func (m chatModel) Init() tea.Cmd {
-	// Kick off spinner and designer background start
-	startDesigner := func() tea.Msg {
-		// Determine preferred port and forced
-		pref := 7724
-		forced := false
-		if designerPreferredPort > 0 {
-			pref = designerPreferredPort
-			forced = designerForced
-		} else if v := strings.TrimSpace(os.Getenv("LF_DESIGNER_PORT")); v != "" {
-			if p, err := strconv.Atoi(v); err == nil && p > 0 {
-				pref = p
-				forced = true
-			}
-		}
-		url, err := StartDesignerInBackground(context.Background(), DesignerLaunchOptions{PreferredPort: pref, Forced: forced})
-		if err != nil {
-			return designerErrorMsg{err: err}
-		}
-		return designerReadyMsg{url: url}
-	}
-	return tea.Batch(m.spin.Tick, startDesigner, updateServerHealthCmd(m))
+	// Kick off spinner and server health check
+	return tea.Batch(m.spin.Tick, updateServerHealthCmd(m))
 }
 
 func updateServerHealthCmd(m chatModel) tea.Cmd {
@@ -1049,13 +1029,9 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.textarea.SetValue("")
 						break
 					}
-					if strings.TrimSpace(m.designerURL) == "" || m.designerStatus != "ready" {
-						m.messages = append(m.messages, Message{Role: "client", Content: "Designer is not running yet."})
-						m.textarea.SetValue("")
-						break
-					}
+					// Designer is served by the server at root URL
 					m.textarea.SetValue("")
-					return m, openURL(m.designerURL)
+					return m, openURL(chatCtx.ServerURL)
 				case "/exit", "/quit":
 					m.status = "👋 You have left the pasture. Safe travels, little llama!"
 					return m, tea.Quit
@@ -1132,7 +1108,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.quickMenu.SetUpToDate()
 						}
 					}
-					m.messages = append(m.messages, Message{Role: "client", Content: "Opening Quick Menu."})
+
 					m.textarea.SetValue("")
 					return m, nil
 				case "/database":
@@ -1357,13 +1333,6 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.printing = false
 		m.streamCh = nil
-
-	case designerReadyMsg:
-		m.designerStatus = "ready"
-		m.designerURL = msg.url
-
-	case designerErrorMsg:
-		m.designerStatus = fmt.Sprintf("error: %v", msg.err)
 
 	case serverHealthMsg:
 		// Delegate to controller to update state and emit a unified StateUpdateMsg
