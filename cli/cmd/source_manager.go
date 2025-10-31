@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,9 @@ import (
 //                    source code from. Useful for CI/CD to test specific branches.
 //                    Examples: "main", "feat-universal-runtime", "v1.2.3", "abc123..."
 //                    Default: "main" branch
+//   LF_GITHUB_TOKEN - GitHub token for downloading artifacts from GitHub Actions.
+//                    Also checks GITHUB_TOKEN if LF_GITHUB_TOKEN is not set.
+//                    Required for downloading branch artifacts (optional for releases).
 
 const (
 	// GitHub repository information
@@ -149,46 +153,218 @@ func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 	return cliVersion, nil
 }
 
+// getBranchArtifactURL attempts to find a GitHub Actions artifact for a branch
+// Returns the download URL if found, or empty string if not available
+// Requires LF_GITHUB_TOKEN environment variable to be set
+func (m *SourceManager) getBranchArtifactURL(branchName string) (string, error) {
+	// Check for GitHub token
+	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+	if token == "" {
+		return "", fmt.Errorf("no GitHub token available (set GITHUB_TOKEN)")
+	}
+
+	// Construct artifact name based on branch (matching CI workflow naming)
+	// The CI workflow creates artifacts named: source-archive-{branch}-{sha}
+	// We'll search for artifacts matching the branch pattern
+	artifactNamePattern := fmt.Sprintf("source-archive-%s-", branchName)
+
+	// Query GitHub Actions API for workflow runs
+	// We'll look for the latest successful run of the "pack" job
+	workflowRunsURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/workflows/cli.yml/runs?branch=%s&status=success&per_page=1",
+		githubOwner, githubRepo, branchName)
+
+	req, err := http.NewRequest("GET", workflowRunsURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to query workflow runs: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("workflow runs API returned status %d", resp.StatusCode)
+	}
+
+	var workflowRuns struct {
+		WorkflowRuns []struct {
+			ID         int64  `json:"id"`
+			HeadSHA    string `json:"head_sha"`
+			HeadBranch string `json:"head_branch"`
+		} `json:"workflow_runs"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&workflowRuns); err != nil {
+		return "", fmt.Errorf("failed to decode workflow runs response: %w", err)
+	}
+
+	if len(workflowRuns.WorkflowRuns) == 0 {
+		return "", fmt.Errorf("no successful workflow runs found for branch %s", branchName)
+	}
+
+	runID := workflowRuns.WorkflowRuns[0].ID
+
+	// Get artifacts for this run
+	artifactsURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/runs/%d/artifacts",
+		githubOwner, githubRepo, runID)
+
+	req, err = http.NewRequest("GET", artifactsURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create artifacts request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to query artifacts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("artifacts API returned status %d", resp.StatusCode)
+	}
+
+	var artifacts struct {
+		Artifacts []struct {
+			Name               string `json:"name"`
+			ArchiveDownloadURL string `json:"archive_download_url"`
+		} `json:"artifacts"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&artifacts); err != nil {
+		return "", fmt.Errorf("failed to decode artifacts response: %w", err)
+	}
+
+	// Find artifact matching our pattern
+	for _, artifact := range artifacts.Artifacts {
+		if strings.HasPrefix(artifact.Name, artifactNamePattern) {
+			// The archive_download_url is a zip containing both the tar.gz and sha256 files
+			// We need to download and extract it, then find the tar.gz file
+			// For now, return the URL - we'll handle extraction in DownloadSource
+			return artifact.ArchiveDownloadURL, nil
+		}
+	}
+
+	return "", fmt.Errorf("no matching artifact found for branch %s", branchName)
+}
+
 // DownloadSource downloads the source code for a specific version
-// Supports branches, tags, and commit SHAs via GitHub's archive API
+// For release tags (v*): Downloads from packaged source archive on GitHub releases
+// For branches: Tries to download from GitHub Actions artifacts if token is available, otherwise falls back to GitHub archive API
+// For commits: Uses GitHub's archive API (fallback, may not include built designer)
 func (m *SourceManager) DownloadSource(version string) error {
-	// Build download URL
-	// For branches: https://github.com/llama-farm/llamafarm/archive/refs/heads/{branch}.tar.gz
-	// For tags: https://github.com/llama-farm/llamafarm/archive/refs/tags/{tag}.tar.gz
-	// For commits/any ref: https://github.com/llama-farm/llamafarm/archive/{ref}.tar.gz
-
 	var downloadURL string
+	var usePackagedArchive bool
 
-	// Try to intelligently determine the ref type
-	if version == "main" || version == "dev" {
-		// Known branch names
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.tar.gz",
-			githubOwner, githubRepo)
-	} else if strings.HasPrefix(version, "v") && len(version) > 1 {
-		// Looks like a version tag (starts with 'v')
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
-			githubOwner, githubRepo, version)
-	} else if len(version) == 40 {
-		// Looks like a full commit SHA (40 hex characters)
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
-			githubOwner, githubRepo, version)
+	// For release tags (v*), use the packaged source archive which includes built designer
+	if strings.HasPrefix(version, "v") && len(version) > 1 {
+		// Use the packaged source archive from GitHub releases
+		downloadURL = fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/llamafarm-dist-%s.tar.gz",
+			githubOwner, githubRepo, version, version)
+		usePackagedArchive = true
 	} else {
-		// Assume it's a branch name or tag - try as branch first
-		// GitHub will return 404 if not found, and the generic ref format works for most cases
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
-			githubOwner, githubRepo, version)
+		// For branches, try to download from GitHub Actions artifacts first
+		// This requires a GitHub token and will fall back to archive API if not available
+		if !strings.HasPrefix(version, "v") && len(version) != 40 {
+			// This looks like a branch name (not a commit SHA)
+			if artifactURL, err := m.getBranchArtifactURL(version); err == nil && artifactURL != "" {
+				downloadURL = artifactURL
+				usePackagedArchive = true
+				if debug {
+					logDebug(fmt.Sprintf("Found artifact for branch %s: %s", version, artifactURL))
+				}
+			} else {
+				if debug && err != nil {
+					logDebug(fmt.Sprintf("Could not get artifact for branch %s: %v, falling back to archive", version, err))
+				}
+				// Fall back to GitHub archive API
+				if version == "main" || version == "dev" {
+					downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.tar.gz",
+						githubOwner, githubRepo)
+				} else {
+					downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
+						githubOwner, githubRepo, version)
+				}
+				usePackagedArchive = false
+			}
+		} else if len(version) == 40 {
+			// Looks like a full commit SHA (40 hex characters)
+			downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
+				githubOwner, githubRepo, version)
+			usePackagedArchive = false
+		} else {
+			// Assume it's a branch name or tag - try as branch first
+			downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
+				githubOwner, githubRepo, version)
+			usePackagedArchive = false
+		}
 	}
 
 	if debug {
-		logDebug(fmt.Sprintf("Downloading source from: %s", downloadURL))
+		logDebug(fmt.Sprintf("Downloading source from: %s (packaged: %v)", downloadURL, usePackagedArchive))
 	}
 
 	// Download the archive
-	resp, err := http.Get(downloadURL)
-	if err != nil {
-		return fmt.Errorf("failed to download: %w", err)
+	// For GitHub Actions artifacts, we need to use authentication
+	var resp *http.Response
+	var err error
+	if usePackagedArchive && strings.Contains(downloadURL, "api.github.com") {
+		// This is a GitHub Actions artifact, requires authentication
+		req, err := http.NewRequest("GET", downloadURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+
+		token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+		if token == "" {
+			return fmt.Errorf("GitHub token required for artifact download (set GITHUB_TOKEN)")
+		}
+
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+		client := &http.Client{Timeout: 5 * time.Minute}
+		resp, err = client.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to download artifact: %w", err)
+		}
+		defer resp.Body.Close()
+	} else {
+		// Regular download
+		resp, err = http.Get(downloadURL)
+		if err != nil {
+			return fmt.Errorf("failed to download: %w", err)
+		}
+		defer resp.Body.Close()
 	}
-	defer resp.Body.Close()
+
+	// For packaged archives, if we get 404, fall back to GitHub archive
+	if resp.StatusCode == http.StatusNotFound && usePackagedArchive && !strings.Contains(downloadURL, "api.github.com") {
+		if debug {
+			logDebug(fmt.Sprintf("Packaged archive not found for %s, falling back to GitHub archive", version))
+		}
+		// Fall back to GitHub archive API
+		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
+			githubOwner, githubRepo, version)
+		resp.Body.Close()
+		resp, err = http.Get(downloadURL)
+		if err != nil {
+			return fmt.Errorf("failed to download fallback archive: %w", err)
+		}
+		defer resp.Body.Close()
+		usePackagedArchive = false
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download: HTTP %d", resp.StatusCode)
@@ -201,17 +377,63 @@ func (m *SourceManager) DownloadSource(version string) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Download to temp file
-	archivePath := filepath.Join(tmpDir, "source.tar.gz")
-	tmpFile, err := os.Create(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
+	// Handle GitHub Actions artifact (ZIP) vs regular tar.gz
+	var archivePath string
+	if usePackagedArchive && strings.Contains(downloadURL, "api.github.com") {
+		// This is a GitHub Actions artifact ZIP, extract it first
+		zipPath := filepath.Join(tmpDir, "artifact.zip")
+		zipFile, err := os.Create(zipPath)
+		if err != nil {
+			return fmt.Errorf("failed to create zip file: %w", err)
+		}
 
-	_, err = io.Copy(tmpFile, resp.Body)
-	tmpFile.Close()
-	if err != nil {
-		return fmt.Errorf("failed to write archive: %w", err)
+		_, err = io.Copy(zipFile, resp.Body)
+		zipFile.Close()
+		if err != nil {
+			return fmt.Errorf("failed to write zip file: %w", err)
+		}
+
+		// Extract ZIP to find the tar.gz file
+		zipExtractDir := filepath.Join(tmpDir, "zip-extract")
+		if err := os.MkdirAll(zipExtractDir, 0755); err != nil {
+			return fmt.Errorf("failed to create zip extraction directory: %w", err)
+		}
+
+		if err := m.extractZip(zipPath, zipExtractDir); err != nil {
+			return fmt.Errorf("failed to extract artifact zip: %w", err)
+		}
+
+		// Find the tar.gz file in the extracted ZIP
+		entries, err := os.ReadDir(zipExtractDir)
+		if err != nil {
+			return fmt.Errorf("failed to read zip extraction directory: %w", err)
+		}
+
+		found := false
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".tar.gz") && !strings.HasSuffix(entry.Name(), ".sha256") {
+				archivePath = filepath.Join(zipExtractDir, entry.Name())
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("tar.gz file not found in artifact zip")
+		}
+	} else {
+		// Regular tar.gz download
+		archivePath = filepath.Join(tmpDir, "source.tar.gz")
+		tmpFile, err := os.Create(archivePath)
+		if err != nil {
+			return fmt.Errorf("failed to create temp file: %w", err)
+		}
+
+		_, err = io.Copy(tmpFile, resp.Body)
+		tmpFile.Close()
+		if err != nil {
+			return fmt.Errorf("failed to write archive: %w", err)
+		}
 	}
 
 	// Extract to temporary location
@@ -224,8 +446,9 @@ func (m *SourceManager) DownloadSource(version string) error {
 		return fmt.Errorf("failed to extract archive: %w", err)
 	}
 
-	// GitHub archives extract to a directory named "repo-branch" or "repo-version"
 	// Find the extracted directory
+	// Packaged archives: "llamafarm-{version}"
+	// GitHub archives: "llamafarm-{branch}" or "llamafarm-{version}"
 	entries, err := os.ReadDir(extractDir)
 	if err != nil {
 		return fmt.Errorf("failed to read extracted directory: %w", err)

@@ -201,6 +201,55 @@ jobs:
           release-tag: ${{ steps.version.outputs.release_tag }}
           token: ${{ secrets.WINGET_TOKEN }}
 
+  pack:
+    name: Package Distribution Archive
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Nx CLI
+        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+
+      - name: Build designer
+        run: |
+          cd designer
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          # Verify build output
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: Designer build failed - dist/index.html not found" >&2
+            exit 1
+          fi
+
+      - name: Package distribution archive
+        run: |
+          VERSION=${{ steps.version.outputs.version }} nx pack
+
+      - name: Upload source archive
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          files: |
+            dist/llamafarm-dist-${{ steps.version.outputs.version }}.tar.gz
+            dist/llamafarm-dist-${{ steps.version.outputs.version }}.tar.gz.sha256
+          fail_on_unmatched_files: true
+          append_body: true
+
   test-cli-install:
     name: Test Installation Script
     needs: build-cli
