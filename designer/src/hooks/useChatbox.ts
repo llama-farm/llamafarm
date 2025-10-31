@@ -166,7 +166,14 @@ export function useChatbox(options: UseChatboxOptions = {}) {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const streamingAbortControllerRef = useRef<AbortController | null>(null)
   const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const sessionReconciliationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isMountedRef = useRef(true)
+  const streamingMessagesRef = useRef<ChatboxMessage[]>([])
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    streamingMessagesRef.current = streamingMessages
+  }, [streamingMessages])
 
   // Refs for accumulated streaming content and tool calls (project session mode only)
   const accumulatedContentRef = useRef<Record<string, string>>({})
@@ -258,6 +265,9 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       }
       if (fallbackTimeoutRef.current) {
         clearTimeout(fallbackTimeoutRef.current)
+      }
+      if (sessionReconciliationTimeoutRef.current) {
+        clearTimeout(sessionReconciliationTimeoutRef.current)
       }
       if (streamingAbortControllerRef.current) {
         streamingAbortControllerRef.current.abort()
@@ -748,9 +758,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                     accumulatedContentRef.current[assistantMessageId] || ''
 
                   // Save all tool call messages with complete content to project session
+                  // Use ref to get current state (avoids stale closure)
                   const toolCallPattern = `tool_${assistantMessageId}_`
-                  const toolCallMessages = streamingMessages.filter(msg =>
-                    msg.id.startsWith(toolCallPattern)
+                  const toolCallMessages = streamingMessagesRef.current.filter(
+                    msg => msg.id.startsWith(toolCallPattern)
                   )
 
                   for (const toolMsg of toolCallMessages) {
@@ -784,36 +795,6 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                           prev.filter(msg => msg.id !== assistantMessageId)
                         )
                       }, 100)
-
-                      // Handle session reconciliation
-                      setTimeout(() => {
-                        if (deferredSessionIdRef.current) {
-                          try {
-                            const existingSessionId =
-                              currentSessionId || projectSession.sessionId
-                            if (existingSessionId) {
-                              if (
-                                existingSessionId !==
-                                deferredSessionIdRef.current
-                              ) {
-                                projectSession.reconcileWithServer(
-                                  existingSessionId,
-                                  deferredSessionIdRef.current
-                                )
-                              }
-                            } else {
-                              projectSession.createSessionFromServer(
-                                deferredSessionIdRef.current
-                              )
-                            }
-                          } catch (sessionError) {
-                            console.error(
-                              'Session management error:',
-                              sessionError
-                            )
-                          }
-                        }
-                      }, 10)
                     } catch (err) {
                       console.warn('Failed to save to project session:', err)
                       setStreamingMessages(prev =>
@@ -878,6 +859,40 @@ export function useChatbox(options: UseChatboxOptions = {}) {
           // Store session ID for deferred processing (project session mode)
           if (useProjectSessionMode && responseSessionId) {
             deferredSessionIdRef.current = responseSessionId
+
+            // Handle session reconciliation after streaming completes
+            // Clear any existing timeout first
+            if (sessionReconciliationTimeoutRef.current) {
+              clearTimeout(sessionReconciliationTimeoutRef.current)
+            }
+
+            // Schedule reconciliation with tracked timeout
+            sessionReconciliationTimeoutRef.current = setTimeout(() => {
+              if (!isMountedRef.current) return
+
+              sessionReconciliationTimeoutRef.current = null
+
+              if (deferredSessionIdRef.current) {
+                try {
+                  const existingSessionId =
+                    currentSessionId || projectSession.sessionId
+                  if (existingSessionId) {
+                    if (existingSessionId !== deferredSessionIdRef.current) {
+                      projectSession.reconcileWithServer(
+                        existingSessionId,
+                        deferredSessionIdRef.current
+                      )
+                    }
+                  } else {
+                    projectSession.createSessionFromServer(
+                      deferredSessionIdRef.current
+                    )
+                  }
+                } catch (sessionError) {
+                  console.error('Session management error:', sessionError)
+                }
+              }
+            }, 10)
           }
 
           // Update session ID (simple session mode)
