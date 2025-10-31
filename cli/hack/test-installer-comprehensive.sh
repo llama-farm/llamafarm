@@ -90,7 +90,7 @@ build_test_binaries() {
 
     # Generate Go types
     cd ../cli/cmd/config
-    sh generate_types.sh || error "Failed to generate Go types"
+    sh generate-types.sh || error "Failed to generate Go types"
     cd ../../..
 
     cd cli

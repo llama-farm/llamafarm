@@ -203,7 +203,7 @@ test_cli_build() {
 
             # Generate Go types
             cd ../cli/cmd/config
-            sh generate_types.sh || exit 1
+            sh generate-types.sh || exit 1
             cd ../../..
 
             cd cli
