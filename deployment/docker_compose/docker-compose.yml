@@ -1,32 +1,5 @@
 services:
-  # ChromaDB Vector Database Server
-  # Multi-process write conflicts by centralizing ChromaDB access
-  # All RAG workers connect to this server instead of using separate persistent clients
-  chromadb-server:
-    image: chromadb/chroma:1.0.20
-    ports:
-      - "8001:8000"  # Expose on 8001 to avoid conflict with server
-    environment:
-      - PERSIST_DIRECTORY=/chroma/data
-      - IS_PERSISTENT=TRUE
-      - CHROMA_SERVER_HOST=0.0.0.0
-      - CHROMA_SERVER_HTTP_PORT=8000
-    volumes:
-      - chromadb_data:/chroma/data
-    healthcheck:
-      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8000' || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: unless-stopped
-    networks:
-      - llamafarm
-    labels:
-      - "llamafarm.service=chromadb"
-      - "llamafarm.issue=279"
-
-  # FastAPI Backend Server (Lightweight - no RAG dependencies)
+  # FastAPI Backend Server
   server:
     image: ghcr.io/llama-farm/llamafarm/server:${IMAGE_TAG-latest}
     ports:
@@ -56,16 +29,12 @@ services:
       - PYTHONUNBUFFERED=1
       - LF_DATA_DIR=/var/lib/llamafarm
       - OLLAMA_HOST=http://host.docker.internal:11434
-      - CHROMADB_HOST=chromadb-server
-      - CHROMADB_PORT=8000
     volumes:
       - llamafarm_data:/var/lib/llamafarm
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       server:
-        condition: service_healthy
-      chromadb-server:
         condition: service_healthy
     healthcheck:
       test:
@@ -99,6 +68,30 @@ services:
     networks:
       - llamafarm
 
+  # Universal Runtime Service
+  runtime:
+    image: ghcr.io/llama-farm/llamafarm/runtime:${IMAGE_TAG-latest}
+    ports:
+      - "11540:11540"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LF_RUNTIME_HOST=0.0.0.0
+      - LF_RUNTIME_PORT=11540
+      - HF_HOME=/var/lib/llamafarm/.cache/huggingface
+    volumes:
+      - llamafarm_data:/var/lib/llamafarm
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11540/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - llamafarm
+    labels:
+      - "llamafarm.service=runtime"
+
 networks:
   llamafarm:
     driver: bridge
@@ -114,12 +107,3 @@ volumes:
       device: ${HOME}/.llamafarm
     labels:
       - "llamafarm.managed=true"
-  
-  # ChromaDB persistent data volume
-  # Stores vector embeddings and metadata to survive container restarts
-  # Uses Docker-managed volume for better portability across environments
-  chromadb_data:
-    driver: local
-    labels:
-      - "llamafarm.managed=true"
-      - "llamafarm.service=chromadb"

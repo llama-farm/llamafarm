@@ -413,7 +413,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	var availableModels []ModelInfo
 	var availableDatabases *DatabasesResponse
 	var availableDatasets []DatasetBrief
-	var availablePrompts []config.Prompt
+	var availablePrompts []config.LlamaFarmConfigPromptsElem
 	var currentModel string
 	var currentDatabase string
 	var currentStrategy string

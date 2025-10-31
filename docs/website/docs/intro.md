@@ -17,7 +17,7 @@ Get a fast introduction to LlamaFarm's core features and see it in action.
 
 - **Prototype locally** with Ollama or any OpenAI-compatible runtime (vLLM, Together, custom gateways).
 - **Ingest and query documents** using configurable RAG pipelines defined entirely in YAML.
-- **Automate workflows** with a single CLI (`lf`) that manages projects, datasets, and chat interactions.
+- **Choose your interface** – Use the powerful `lf` CLI for automation and scripting, or the Designer web UI for visual project management with drag-and-drop dataset uploads and interactive configuration.
 - **Extend everything** from model handlers to data processors by updating schemas and wiring your own implementations.
 
 ## Choose Your Own Adventure
@@ -25,14 +25,20 @@ Get a fast introduction to LlamaFarm's core features and see it in action.
 | Get Started | Go Deeper | Build Your Own |
 | ----------- | --------- | -------------- |
 | [Quickstart](./quickstart/index.md) – install, init, chat, ingest your first dataset. | [Core Concepts](./concepts/index.md) – architecture, sessions, and components. | [Extending LlamaFarm](./extending/index.md) – add runtimes, stores, parsers, and CLI commands. |
-| [CLI Reference](./cli/index.md) – command matrix and examples. | [Configuration Guide](./configuration/index.md) – schema-driven project settings. | [RAG Guide](./rag/index.md) – strategies, processing pipelines, and monitoring. |
+| [Designer Web UI](./designer/index.md) – visual interface for project management. | [Configuration Guide](./configuration/index.md) – schema-driven project settings. | [RAG Guide](./rag/index.md) – strategies, processing pipelines, and monitoring. |
+| [CLI Reference](./cli/index.md) – command matrix and examples. | [Models & Runtime](./models/index.md) – configure AI models and providers. | [Prompts](./prompts/index.md) – prompt engineering and management. |
 
 ## Philosophy
 
 - **Local-first, cloud-aware** – everything works offline, yet you can point at remote runtimes when needed.
 - **Configuration over code** – projects are reproducible because behaviour lives in `llamafarm.yaml`.
 - **Composable modules** – RAG, prompts, and runtime selection work independently but integrate cleanly.
+- **Flexible interfaces** – Use the CLI for automation, the Designer for visual management, or the REST API for custom integrations.
 - **Open for extension** – documentation includes patterns for registering new providers, stores, and utilities.
+
+:::tip Prefer Visual Tools?
+The **Designer Web UI** provides a browser-based interface for managing projects, uploading datasets, and testing your AI—all without touching the command line. It's automatically available at `http://localhost:7724` when you run `lf start` (or `http://localhost:3123` if using Docker Compose directly). [Learn more →](./designer/index.md)
+:::
 
 ## 🎥 In-Depth Tutorial
 

@@ -80,15 +80,16 @@ var datasetsListCmd = &cobra.Command{
 	Short:   "List all datasets on the server for the selected project",
 	Long:    `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
-		// Resolve server and routing
+		// Load config first to ensure it's valid before starting watcher
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		// Ensure server is up (auto-start locally if needed)
 		config := ServerOnlyConfig(serverCfg.URL)
@@ -150,14 +151,16 @@ Examples:
   lf datasets create -s text_processing -b main_database my-pdfs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
+		// Load config first to ensure it's valid before starting watcher
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		datasetName := args[0]
 		// 1) Validate required parameters
@@ -251,14 +254,16 @@ var datasetsDeleteCommand = &cobra.Command{
 	Long:    `Deletes a dataset from the LlamaFarm server for the selected project.`,
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
+		// Load config first to ensure it's valid before starting watcher
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
+
 		datasetName := args[0]
 		// Ensure server is up
 		config := ServerOnlyConfig(serverCfg.URL)
@@ -312,14 +317,16 @@ Examples:
   lf datasets upload my-docs ./docs/ *.pdf README.md   # Mixed sources`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
+		// Load config first to ensure it's valid before starting watcher
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		datasetName := args[0]
 		inPaths := args[1:]
@@ -396,14 +403,16 @@ var datasetsProcessCmd = &cobra.Command{
 	Long:  `Process all uploaded files in the dataset into the vector database using the configured data processing strategy and embeddings.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
+		// Load config first to ensure it's valid before starting watcher
 		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		datasetName := args[0]
 

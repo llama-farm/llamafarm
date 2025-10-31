@@ -799,6 +799,16 @@ wheels = [
 ]
 
 [[package]]
+name = "llamafarm-common"
+version = "0.1.0"
+source = { editable = "../common" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = []
+
+[[package]]
 name = "llamafarm-config"
 version = "0.1.0"
 source = { editable = "../config" }
@@ -1656,6 +1666,7 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "instructor" },
     { name = "jsonref" },
+    { name = "llamafarm-common" },
     { name = "llamafarm-config" },
     { name = "mcp" },
     { name = "ollama" },
@@ -1698,6 +1709,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=1.0.1" },
     { name = "instructor", specifier = ">=1.0.0" },
     { name = "jsonref", specifier = ">=1.1.0" },
+    { name = "llamafarm-common", editable = "../common" },
     { name = "llamafarm-config", editable = "../config" },
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "ollama", specifier = ">=0.6.0" },

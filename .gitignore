@@ -7,7 +7,9 @@ llamafarm-cli
 .python-version
 
 # Generated files
+cli/cmd/config/schema.json
 cli/cmd/config/schema.yaml
+cli/cmd/config/types.go
 # ==============================================================================
 # RAG System - Comprehensive .gitignore (No Negative Patterns)
 # ==============================================================================
@@ -760,5 +762,3 @@ llamafarm.yaml.backup*
 
 lf
 thoughts
-
-

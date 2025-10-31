@@ -1,6 +1,6 @@
 # LlamaFarm Server
 
-FastAPI application that powers project chat, dataset APIs, and health checks.
+FastAPI application that powers project chat, dataset APIs, and health checks. The server provides a REST API consumed by the `lf` CLI, the Designer web UI, and custom integrations.
 
 ## Running Locally
 The CLI (`lf start`) will launch the server and RAG worker for you, but you can run it manually while developing inside `server/`.
@@ -11,6 +11,13 @@ uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 To execute Celery ingestion jobs alongside it, start the worker from `rag/` (see that README) or run `lf datasets process …` which will auto-start the worker via Docker.
+
+### API Clients
+
+The server API is consumed by:
+- **CLI**: Command-line interface (`lf`) for automation and scripting
+- **Designer**: Web-based visual interface at `http://localhost:7724` (see [Designer docs](../docs/website/docs/designer/index.md))
+- **Custom integrations**: Any OpenAI-compatible client
 
 Interactive API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
 

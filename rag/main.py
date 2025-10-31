@@ -9,6 +9,8 @@ RAG-related tasks from the server.
 
 import sys
 
+from llamafarm_common.pidfile import write_pid
+
 from celery_app import app, run_worker
 from core.logging import RAGStructLogger, setup_logging
 from core.settings import settings
@@ -16,6 +18,9 @@ from core.settings import settings
 logger = RAGStructLogger("rag.main")
 
 setup_logging()
+
+# Write PID file for service discovery
+write_pid("rag")
 
 
 def main():

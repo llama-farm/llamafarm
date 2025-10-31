@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Environment Variables:
@@ -32,7 +33,8 @@ type SourceManager struct {
 	srcDir        string
 	versionFile   string
 	pythonEnvMgr  *PythonEnvManager
-	currentSource string // tracks what source version is currently installed
+	currentSource string     // tracks what source version is currently installed
+	mu            sync.Mutex // protects against parallel downloads
 }
 
 // NewSourceManager creates a new source code manager
@@ -55,7 +57,12 @@ func NewSourceManager(pythonEnvMgr *PythonEnvManager) (*SourceManager, error) {
 }
 
 // EnsureSource ensures source code is downloaded and dependencies are synced
+// This method is protected by a mutex to prevent parallel downloads
 func (m *SourceManager) EnsureSource() error {
+	// Lock to prevent parallel downloads from multiple service starts
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Determine what version we need
 	targetVersion, err := m.GetCurrentCLIVersion()
 	if err != nil {
@@ -98,7 +105,7 @@ func (m *SourceManager) EnsureSource() error {
 		OutputWarning("Warning: could not write version file: %v\n", err)
 	}
 
-	// Sync dependencies
+	// Sync dependencies (config and common sequentially, then server and rag in parallel)
 	if err := m.SyncDependencies(); err != nil {
 		return fmt.Errorf("failed to sync dependencies: %w", err)
 	}
@@ -113,7 +120,7 @@ func (m *SourceManager) EnsureSource() error {
 
 // GetCurrentCLIVersion determines the version of the currently running CLI
 // It first checks for the LF_VERSION_REF environment variable (useful for CI/CD),
-// then falls back to "main" branch by default.
+// then uses the CLI's Version variable (set at build time), falling back to "main" for dev builds.
 func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 	// Check for LF_VERSION_REF environment variable first (CI/CD override)
 	if versionRef := strings.TrimSpace(os.Getenv("LF_VERSION_REF")); versionRef != "" {
@@ -123,13 +130,23 @@ func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 		return versionRef, nil
 	}
 
-	// Check if we're in development mode
-	// In dev mode, we use "main" branch
-	// In release mode, we use the CLI version tag
+	// Use the CLI's actual version (set by build flags during release)
+	cliVersion := strings.TrimSpace(Version)
 
-	// For now, always use "main" - in production this would check the actual CLI version
-	// TODO: Implement proper version detection from build-time variables
-	return "main", nil
+	// Development builds (Version = "dev") should use "main" branch
+	if cliVersion == "" || cliVersion == "dev" {
+		if debug {
+			logDebug("CLI is dev build, using main branch for source")
+		}
+		return "main", nil
+	}
+
+	// For release builds, use the version tag directly
+	// The Version variable should already include the "v" prefix (e.g., "v1.2.3")
+	if debug {
+		logDebug(fmt.Sprintf("Using CLI version for source: %s", cliVersion))
+	}
+	return cliVersion, nil
 }
 
 // DownloadSource downloads the source code for a specific version
@@ -235,12 +252,20 @@ func (m *SourceManager) DownloadSource(version string) error {
 	return nil
 }
 
-// SyncDependencies runs `uv sync` on server and rag directories
+// SyncDependencies runs `uv sync` on config, common, server and rag directories
 func (m *SourceManager) SyncDependencies() error {
+	configDir := filepath.Join(m.srcDir, "config")
+	commonDir := filepath.Join(m.srcDir, "common")
 	serverDir := filepath.Join(m.srcDir, "server")
 	ragDir := filepath.Join(m.srcDir, "rag")
 
 	// Verify directories exist
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		return fmt.Errorf("config directory not found: %s", configDir)
+	}
+	if _, err := os.Stat(commonDir); os.IsNotExist(err) {
+		return fmt.Errorf("common directory not found: %s", commonDir)
+	}
 	if _, err := os.Stat(serverDir); os.IsNotExist(err) {
 		return fmt.Errorf("server directory not found: %s", serverDir)
 	}
@@ -248,7 +273,18 @@ func (m *SourceManager) SyncDependencies() error {
 		return fmt.Errorf("rag directory not found: %s", ragDir)
 	}
 
-	// Run uv sync on both directories in parallel for speed
+	// First, sync config and common (which are dependencies of server and rag)
+	OutputProgress("Syncing config dependencies...\n")
+	if err := m.syncDirectory(configDir, "config"); err != nil {
+		return fmt.Errorf("failed to sync config dependencies: %w", err)
+	}
+
+	OutputProgress("Syncing common dependencies...\n")
+	if err := m.syncDirectory(commonDir, "common"); err != nil {
+		return fmt.Errorf("failed to sync common dependencies: %w", err)
+	}
+
+	// Now sync server and rag in parallel
 	var wg sync.WaitGroup
 	var serverErr, ragErr error
 
@@ -329,13 +365,17 @@ func (m *SourceManager) isSourceInstalled() bool {
 // areDependenciesSynced checks if dependencies are already synced
 func (m *SourceManager) areDependenciesSynced() bool {
 	// Check for .venv directories as an indicator that uv sync has been run
+	configVenv := filepath.Join(m.srcDir, "config", ".venv")
+	commonVenv := filepath.Join(m.srcDir, "common", ".venv")
 	serverVenv := filepath.Join(m.srcDir, "server", ".venv")
 	ragVenv := filepath.Join(m.srcDir, "rag", ".venv")
 
+	_, configErr := os.Stat(configVenv)
+	_, commonErr := os.Stat(commonVenv)
 	_, serverErr := os.Stat(serverVenv)
 	_, ragErr := os.Stat(ragVenv)
 
-	return serverErr == nil && ragErr == nil
+	return configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil
 }
 
 // readVersionFile reads the current version from the version file
@@ -490,6 +530,7 @@ func (m *SourceManager) GetUniversalRuntimeDir() string {
 
 // GenerateDatamodel generates the config datamodel types
 // This must be run after source download and dependency sync, but before starting services
+// It checks if datamodel.py exists and is up-to-date to avoid unnecessary regeneration
 func (m *SourceManager) GenerateDatamodel() error {
 	configDir := m.GetConfigDir()
 
@@ -509,7 +550,64 @@ func (m *SourceManager) GenerateDatamodel() error {
 		}
 	}
 
-	OutputProgress("Generating config datamodel...\n")
+	// Check if datamodel.py already exists and is up-to-date
+	datamodelPath := filepath.Join(configDir, "datamodel.py")
+	schemaPath := filepath.Join(configDir, "schema.yaml")
+	ragSchemaPath := filepath.Join(m.srcDir, "rag", "schema.yaml")
+
+	datamodelExists := false
+	var datamodelModTime time.Time
+	if info, err := os.Stat(datamodelPath); err == nil {
+		datamodelExists = true
+		datamodelModTime = info.ModTime()
+	}
+
+	// Check if schema files are newer than datamodel.py
+	needsRegeneration := !datamodelExists
+
+	if datamodelExists {
+		// Check schema.yaml modification time
+		if schemaInfo, err := os.Stat(schemaPath); err == nil {
+			if schemaInfo.ModTime().After(datamodelModTime) {
+				needsRegeneration = true
+			}
+		}
+
+		// Check rag/schema.yaml modification time
+		if !needsRegeneration {
+			if ragSchemaInfo, err := os.Stat(ragSchemaPath); err == nil {
+				if ragSchemaInfo.ModTime().After(datamodelModTime) {
+					needsRegeneration = true
+				}
+			}
+		}
+
+		// Check compile_schema.py modification time (it's part of the generation process)
+		if !needsRegeneration {
+			compileScriptPath := filepath.Join(configDir, "compile_schema.py")
+			if compileInfo, err := os.Stat(compileScriptPath); err == nil {
+				if compileInfo.ModTime().After(datamodelModTime) {
+					needsRegeneration = true
+				}
+			}
+		}
+	}
+
+	// Skip generation if datamodel is up-to-date
+	if !needsRegeneration {
+		if debug {
+			logDebug("Datamodel is up-to-date, skipping generation")
+		}
+		return nil
+	}
+
+	// Generate datamodel (only show progress if not in silent mode)
+	if debug {
+		logDebug("Datamodel needs regeneration")
+	} else {
+		// Only show progress for actual regeneration, not for silent checks
+		OutputProgress("Generating config datamodel...\n")
+	}
 
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 

@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["config"]
-package-dir = { "" = ".." }
-py-modules = []
+# Package the current directory contents as the 'config' module
+packages = ["config", "config.helpers"]
+package-dir = { "config" = "." }
 
 [project]
 name = "llamafarm-config"

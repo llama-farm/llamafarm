@@ -51,11 +51,26 @@ class _FakeAsyncResult:
         self.result = result
         self.traceback = traceback
 
+    def ready(self):
+        """Return True if task has finished (SUCCESS or FAILURE)"""
+        return self.state in ("SUCCESS", "FAILURE")
+
+    def successful(self):
+        """Return True if task completed successfully"""
+        return self.state == "SUCCESS"
+
+    def failed(self):
+        """Return True if task failed"""
+        return self.state == "FAILURE"
+
 
 def test_get_task_pending_state(mocker):
     fake = _FakeAsyncResult(state="PENDING")
     mocked_app = mocker.patch("api.routers.projects.projects.app")
     mocked_app.AsyncResult.return_value = fake
+
+    # Mock GroupResult.restore to return None (not a group task)
+    mocker.patch("celery.result.GroupResult.restore", return_value=None)
 
     client = _client()
     resp = client.get("/v1/projects/ns1/proj1/tasks/tk-1")
@@ -76,6 +91,9 @@ def test_get_task_success_state(mocker):
     mocked_app = mocker.patch("api.routers.projects.projects.app")
     mocked_app.AsyncResult.return_value = fake
 
+    # Mock GroupResult.restore to return None (not a group task)
+    mocker.patch("celery.result.GroupResult.restore", return_value=None)
+
     client = _client()
     resp = client.get("/v1/projects/ns1/proj1/tasks/tk-2")
 
@@ -95,6 +113,9 @@ def test_get_task_failure_state(mocker):
     )
     mocked_app = mocker.patch("api.routers.projects.projects.app")
     mocked_app.AsyncResult.return_value = fake
+
+    # Mock GroupResult.restore to return None (not a group task)
+    mocker.patch("celery.result.GroupResult.restore", return_value=None)
 
     client = _client()
     resp = client.get("/v1/projects/ns1/proj1/tasks/tk-3")

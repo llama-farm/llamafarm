@@ -15,6 +15,7 @@ Key Features:
 """
 
 import asyncio
+from contextlib import asynccontextmanager
 from fastapi import (
     FastAPI,
     HTTPException,
@@ -42,10 +43,24 @@ from utils.device import get_optimal_device, get_device_info
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle (startup and shutdown)."""
+
+    # Startup
+    logger.info("Starting Universal Runtime")
+    yield
+    # Shutdown
+    logger.info("Shutting down Universal Runtime")
+    logger.info("Shutdown complete")
+
+
 app = FastAPI(
     title="Universal Runtime",
     description="OpenAI-compatible API for HuggingFace models (transformers & diffusers)",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # Global model cache
@@ -337,9 +352,13 @@ async def create_embeddings(request: EmbeddingRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    from llamafarm_common.pidfile import write_pid
 
-    port = int(os.getenv("PORT", "11540"))
-    host = os.getenv("HOST", "127.0.0.1")
+    # Write PID file for service discovery
+    write_pid("universal-runtime")
+
+    port = int(os.getenv("LF_RUNTIME_PORT", os.getenv("PORT", "11540")))
+    host = os.getenv("LF_RUNTIME_HOST", os.getenv("HOST", "127.0.0.1"))
 
     logger.info(f"Starting LlamaFarm Universal Runtime on {host}:{port}")
     logger.info(f"Device: {get_device()}")

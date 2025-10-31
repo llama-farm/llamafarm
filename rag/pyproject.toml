@@ -41,7 +41,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Topic :: Text Processing :: Linguistic",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   # External dependencies
   "chromadb>=1.0.0",
@@ -74,6 +74,7 @@ dependencies = [
   "psutil>=7.0.0",
   "pydantic-settings>=2.11.0",
   "llamafarm-config",
+  "llamafarm-common",
   "docx2txt>=0.9",
   "spacy>=3.8.7",
   "msg-parser[rtf]>=1.2.0",
@@ -332,6 +333,7 @@ dev-dependencies = [
 
 [tool.uv.sources]
 llamafarm-config = { path = "../config", editable = true }
+llamafarm-common = { path = "../common", editable = true }
 
 [tool.ruff]
 target-version = "py39"

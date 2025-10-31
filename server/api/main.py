@@ -23,6 +23,7 @@ API_PREFIX = "/v1"
 @asynccontextmanager
 async def lifespan(app: fastapi.FastAPI):
     """Manage application lifecycle (startup and shutdown)."""
+
     # Startup
     logger.info("Starting LlamaFarm API")
     yield

@@ -472,6 +472,16 @@ wheels = [
 ]
 
 [[package]]
+name = "llamafarm-common"
+version = "0.1.0"
+source = { editable = "../../common" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = []
+
+[[package]]
 name = "markupsafe"
 version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1340,6 +1350,7 @@ dependencies = [
     { name = "diffusers" },
     { name = "einops" },
     { name = "fastapi" },
+    { name = "llamafarm-common" },
     { name = "openai" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -1370,6 +1381,7 @@ requires-dist = [
     { name = "diffusers", specifier = ">=0.25.0" },
     { name = "einops", specifier = ">=0.8.1" },
     { name = "fastapi", specifier = ">=0.104.0" },
+    { name = "llamafarm-common", editable = "../../common" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
