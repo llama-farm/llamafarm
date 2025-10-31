@@ -162,6 +162,11 @@ func (no *NativeOrchestrator) StartRAGNative() error {
 	// Wait a moment for RAG to start
 	time.Sleep(2 * time.Second)
 
+	// Verify the process is still running (catches immediate failures)
+	if !no.processMgr.IsProcessHealthy("rag") {
+		return fmt.Errorf("RAG process failed to start or crashed during startup - check logs at %s", filepath.Join(ragDir, "logs"))
+	}
+
 	return nil
 }
 

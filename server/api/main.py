@@ -119,7 +119,21 @@ def llama_farm_api() -> fastapi.FastAPI:
             # This handler only runs if no API route matched
 
             # Try to serve static file first (favicon, etc.)
-            file_path = designer_dist_path / path
+            # Normalize path to prevent directory traversal attacks
+            try:
+                # Resolve the path relative to designer_dist_path
+                file_path = (designer_dist_path / path).resolve()
+                # Ensure the resolved path is still within designer_dist_path
+                # by checking that it's a subpath
+                designer_dist_path_resolved = designer_dist_path.resolve()
+                if not str(file_path).startswith(str(designer_dist_path_resolved)):
+                    raise fastapi.HTTPException(status_code=403, detail="Access denied")
+            except (ValueError, RuntimeError):
+                # Path resolution failed (e.g., contains invalid components)
+                raise fastapi.HTTPException(
+                    status_code=400, detail="Invalid path"
+                ) from None
+
             if (
                 file_path.exists()
                 and file_path.is_file()

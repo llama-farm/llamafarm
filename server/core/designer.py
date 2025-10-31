@@ -7,9 +7,9 @@ def get_designer_dist_path() -> Path | None:
     """Get the path to designer/dist directory.
 
     Checks multiple locations in order:
-    1. ~/.llamafarm/src/designer/dist (CLI-managed source)
-    2. ../designer/dist (relative to server directory when running from repo)
-    3. ./designer/dist (current directory)
+    1. ../designer/dist (relative to server directory when running from repo)
+    2. ./designer/dist (current directory)
+    3. ~/.llamafarm/src/designer/dist (CLI-managed source)
 
     Returns:
         Path to designer/dist directory if found, None otherwise.

@@ -746,8 +746,11 @@ func (m *SourceManager) VerifyDesignerBuild() error {
 	designerDir := m.GetDesignerDir()
 	indexPath := filepath.Join(designerDir, "dist", "index.html")
 
-	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-		return fmt.Errorf("designer build not found at %s - designer static files must be built before starting server", indexPath)
+	if _, err := os.Stat(indexPath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("designer build not found at %s - designer static files must be built before starting server", indexPath)
+		}
+		return fmt.Errorf("failed to check designer build at %s: %w", indexPath, err)
 	}
 
 	return nil
