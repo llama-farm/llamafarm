@@ -45,22 +45,21 @@ def _inject_env_vars(html_content: str) -> str:
     """Inject VITE_APP_* environment variables into index.html."""
     import json
     import os
-    import re
 
     # Collect VITE_APP_* environment variables
-    env_vars = {}
-    for key, value in os.environ.items():
-        if key.startswith("VITE_APP_"):
-            env_vars[key] = value
+    env_vars = {
+        key: value for key, value in os.environ.items() if key.startswith("VITE_APP_")
+    }
 
     # Create JSON string
     env_json = json.dumps(env_vars)
 
-    # Replace the placeholder
-    placeholder = r'<noscript id="env-insertion-point"></noscript>'
+    # Replace the placeholder using literal string replacement
+    # (the placeholder is a fixed literal, so no regex needed)
+    placeholder = '<noscript id="env-insertion-point"></noscript>'
     replacement = f"<script>var ENV={env_json}</script>"
 
-    return re.sub(placeholder, replacement, html_content)
+    return html_content.replace(placeholder, replacement)
 
 
 def llama_farm_api() -> fastapi.FastAPI:

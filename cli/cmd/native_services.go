@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type NativeOrchestrator struct {
 	sourceMgr    *SourceManager
 	processMgr   *ProcessManager
 	initialized  bool
+	initMu       sync.Mutex // protects initialized flag
 	serverURL    string
 }
 
@@ -54,6 +56,9 @@ func NewNativeOrchestrator(serverURL string) (*NativeOrchestrator, error) {
 
 // EnsureNativeEnvironment ensures the native environment is set up
 func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
+	no.initMu.Lock()
+	defer no.initMu.Unlock()
+
 	if no.initialized {
 		return nil
 	}
