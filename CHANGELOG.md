@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.11](https://github.com/llama-farm/llamafarm/compare/v0.0.10...v0.0.11) (2025-10-31)
+
+
+### Features
+
+* **designer:** run as part of server ([#389](https://github.com/llama-farm/llamafarm/issues/389)) ([72b7942](https://github.com/llama-farm/llamafarm/commit/72b7942711b8b8dfdfa7971a817d9295458d38b3))
+
+
+### Bug Fixes
+
+* **designer:** make the chats work ([#387](https://github.com/llama-farm/llamafarm/issues/387)) ([f4e3e0b](https://github.com/llama-farm/llamafarm/commit/f4e3e0b33e0adb15acc3ea5a7aac601a1cb99ffb))
+* **runtime:** docker tweak ([54ba31a](https://github.com/llama-farm/llamafarm/commit/54ba31a611c9334c2c4dbfee5541c878e87f8665))
+
+
+### Miscellaneous Chores
+
+* release 0.0.11 ([f624e6b](https://github.com/llama-farm/llamafarm/commit/f624e6bbb460588f8427b90bc24650f6bb12d54e))
+
 ## [0.0.10](https://github.com/llama-farm/llamafarm/compare/v0.0.9...v0.0.10) (2025-10-31)
 
 
