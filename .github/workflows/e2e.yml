@@ -168,8 +168,9 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "../examples/quick-rag/files"; then
-            echo "❌ Upload failed for ../examples/quick-rag/files, checking server health..."
+          if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "../examples/quick_rag/files"; then
+            echo "❌ Upload failed for ../examples/quick_rag/files, checking server health..."
+            echo "Current directory: $(pwd)"
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
