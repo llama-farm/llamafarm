@@ -86,10 +86,7 @@ export default function TestChat({
   const chatParams = useProjectChatParams(activeProject)
 
   // Project chat streaming session management
-  const projectChatStreamingSession = useProjectChatStreamingSession(
-    chatParams?.namespace,
-    chatParams?.projectId
-  )
+  const projectChatStreamingSession = useProjectChatStreamingSession()
 
   // Project chat streaming message sending - using unified interface
   const projectChatStreamingMessage = useStreamingChatCompletionMessage()
@@ -223,7 +220,8 @@ export default function TestChat({
 
   // Combined error state
   const projectChatError =
-    projectChatStreamingMessage.error || projectChatStreamingSession.error
+    projectChatStreamingMessage.error ||
+    projectChatStreamingSession.sessionError
   const combinedError =
     error || (projectChatError ? projectChatError.message : null)
 

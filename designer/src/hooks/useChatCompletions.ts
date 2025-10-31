@@ -16,11 +16,7 @@ import {
   createChatCompletionRequest,
   ChatCompletionResult,
 } from '../api/chatCompletionsService'
-import {
-  ChatRequest,
-  ChatStreamChunk,
-  StreamingChatOptions,
-} from '../types/chat'
+import { ChatRequest, StreamingChatOptions } from '../types/chat'
 
 /**
  * Query keys for chat completions

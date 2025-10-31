@@ -6,7 +6,6 @@
  */
 
 import { useState, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 
 /**
  * Project chat session state interface
@@ -21,11 +20,7 @@ export interface ProjectChatSessionState {
  * Simple hook for managing a streaming session ID state
  * Used by TestChat to track session IDs returned from the unified chat completions API
  */
-export const useProjectChatStreamingSession = (
-  namespace?: string,
-  projectId?: string
-) => {
-  const queryClient = useQueryClient()
+export const useProjectChatStreamingSession = () => {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isSessionActive, setIsSessionActive] = useState(false)
   const [sessionError, setSessionError] = useState<Error | null>(null)
