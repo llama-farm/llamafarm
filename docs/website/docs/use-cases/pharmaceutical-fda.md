@@ -290,7 +290,6 @@ Organizations using this workflow report:
 - [RAG Configuration Guide](../rag/index.md)
 - [Agent Development Guide](../extending/index.md)
 - [CLI Reference](../cli/index.md)
-- [Batch Processing Documentation](../examples/batch-processing.md)
 
 ## Questions?
 

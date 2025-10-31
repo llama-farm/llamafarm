@@ -4,7 +4,7 @@ LlamaFarm is designed to solve real-world problems across various industries. Th
 
 ## Featured Use Cases
 
-### [Pharmaceutical & Therapeutics: FDA Document Analysis](./pharmaceutical-fda)
+### [Pharmaceutical & Therapeutics: FDA Document Analysis](./pharmaceutical-fda.md)
 
 Learn how pharmaceutical and therapeutics companies use LlamaFarm to analyze FDA correspondence, track answered and unanswered regulatory questions, and ensure compliance during the approval process.
 
