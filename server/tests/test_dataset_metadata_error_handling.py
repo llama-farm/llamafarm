@@ -56,7 +56,7 @@ class TestDatasetMetadataErrorHandling:
             name="error_test_project",
             namespace="error_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -360,7 +360,7 @@ class TestDatasetMetadataErrorHandling:
             name="invalid_hash_project",
             namespace="error_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -510,7 +510,7 @@ class TestDatasetMetadataErrorHandling:
             name="mixed_errors_project",
             namespace="error_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -643,7 +643,7 @@ class TestDatasetMetadataErrorHandling:
             name="empty_files_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -772,7 +772,7 @@ class TestErrorHandlingIntegration:
             name="production_project",
             namespace="production_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(

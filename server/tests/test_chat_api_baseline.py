@@ -1,5 +1,7 @@
 """Baseline chat API behaviour highlighting current session issues."""
 
+import time
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -115,21 +117,73 @@ def app_client(mocker):
             self._persist_enabled = True
             self._session_id = session_id
 
-        async def run_async(self, input_schema):
-            self.history.append(input_schema.chat_message)
-            # Just return the message content
-            return SimpleNamespace(chat_message=input_schema.chat_message)
-
-        async def run_async_stream(self, *, user_input):
-            # Match the LFAgent signature with user_input keyword arg
-            self.history.append(user_input.content)
-            if user_input.content == "no-content":
-                # Simulate providers that stream no usable content
-                yield ""
+        async def run_async(
+            self,
+            *,
+            user_input: dict | None = None,
+            input_schema=None,
+            **_,
+        ):
+            if user_input is not None:
+                chat_message = user_input
+            elif input_schema is not None:
+                chat_message = input_schema.chat_message
             else:
-                # Echo back the user input to trigger fallback detection
-                # (simulates a model that just echoes without being helpful)
-                yield user_input.content
+                chat_message = {"role": "user", "content": ""}
+            self.history.append(chat_message)
+            return {
+                "id": f"chatcmpl-{uuid.uuid4().hex}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": self.model_name,
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": chat_message["content"],
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+            }
+
+        async def run_async_stream(self, *, user_input=None, **_):
+            # Match the LFAgent signature with user_input keyword arg
+            message_content = (user_input or {}).get("content")
+            self.history.append(message_content)
+
+            class FakeChunk:
+                def __init__(self, chunk_content: str | None):
+                    self._content = chunk_content
+
+                def model_dump(self, exclude_none: bool = True) -> dict:
+                    delta: dict[str, str] = {}
+                    if self._content is not None:
+                        delta["content"] = self._content
+                    if exclude_none:
+                        delta = {k: v for k, v in delta.items() if v is not None}
+                    return {
+                        "choices": [
+                            {
+                                "delta": delta,
+                                "finish_reason": "stop",
+                            }
+                        ]
+                    }
+
+            if message_content == "no-content":
+                # Simulate providers that stream no usable content
+                return
+
+            # Echo back the user input to trigger fallback detection
+            # (simulates a model that just echoes without being helpful)
+            yield FakeChunk(message_content)
 
     def make_agent(
         project_config: LlamaFarmConfig,

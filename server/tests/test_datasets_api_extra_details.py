@@ -69,7 +69,7 @@ class TestDatasetsAPIExtraDetails:
             name="api_test_project",
             namespace="api_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -151,7 +151,7 @@ class TestDatasetsAPIExtraDetails:
             name="api_empty_project",
             namespace="api_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -610,7 +610,7 @@ class TestDatasetsAPIExtraDetailsIntegration:
             name="complex_api_project",
             namespace="complex_api_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(

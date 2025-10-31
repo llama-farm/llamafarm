@@ -62,7 +62,7 @@ class TestDataService:
             name="test_project",
             namespace=self.test_namespace,
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -330,7 +330,7 @@ class TestDataService:
             name="test_project",
             namespace=self.test_namespace,
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -434,7 +434,7 @@ class TestDataService:
             name="test_project",
             namespace=self.test_namespace,
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -537,7 +537,7 @@ class TestDataService:
             name="test_project",
             namespace=self.test_namespace,
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(

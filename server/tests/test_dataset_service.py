@@ -34,7 +34,7 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -116,7 +116,7 @@ class TestDatasetService:
             name="empty_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -216,7 +216,7 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -449,7 +449,7 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -491,7 +491,7 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -596,10 +596,10 @@ class TestDatasetServiceIntegration:
                     name="test_project",
                     namespace=namespace,
                     prompts=[
-                        Prompt(
+                        PromptSet(
                             name="default",
                             messages=[
-                                Message(
+                                PromptMessage(
                                     role="system",
                                     content="You are a helpful assistant.",
                                 )

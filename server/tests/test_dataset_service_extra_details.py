@@ -78,7 +78,7 @@ class TestDatasetServiceExtraDetails:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -166,7 +166,7 @@ class TestDatasetServiceExtraDetails:
             name="empty_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
@@ -575,7 +575,7 @@ class TestDatasetServiceExtraDetailsIntegration:
             name="complex_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
                     messages=[
                         PromptMessage(
