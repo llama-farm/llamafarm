@@ -1,6 +1,6 @@
 version: 1
-id: large-complex-rag
-slug: large-complex-rag
+id: large_complex_rag
+slug: large_complex_rag
 title: Large Complex Rag
 description: Large, complex PDF to exercise semantic chunking and indexing.
 tags:
@@ -9,13 +9,13 @@ tags:
   - large
 primaryModel: llama3.1:8b
 config:
-  yaml_path: examples/large-complex-rag/llamafarm.yaml
+  yaml_path: examples/large_complex_rag/llamafarm.yaml
 datasets:
   - name: large_docs
     strategy: universal_processor
     database: large_docs_db
     ingest:
-      - examples/large-complex-rag/files/*.pdf
+      - examples/large_complex_rag/files/*.pdf
 process_after_ingest: true
 retrieval:
   database: large_docs_db

@@ -15,10 +15,10 @@ Demonstrates ingesting several short FDA correspondence PDFs to show a quick mul
 ## Quickstart
 ```bash
 # From the repo root (expects ./lf or export LF_BIN=/full/path/to/lf)
-./examples/many-small-file-rag/run_example.sh
+./examples/many_small_file_rag/run_example.sh
 
 # Optional: run against a different checkout/build directory that contains the lf binary
-./examples/many-small-file-rag/run_example.sh /path/to/your/project
+./examples/many_small_file_rag/run_example.sh /path/to/your/project
 ```
 Use `NO_PAUSE=1` to skip interactive prompts.
 
@@ -26,20 +26,20 @@ The script duplicates the FDA database definition with a unique name, creates a 
 
 ## Manual Workflow
 ```bash
-lf --cwd examples/many-small-file-rag datasets create -s fda_pdf_processor -b fda_letters_db fda_letters
-lf --cwd examples/many-small-file-rag datasets upload fda_letters examples/many-small-file-rag/files/*.pdf
-lf --cwd examples/many-small-file-rag datasets process fda_letters
+lf --cwd examples/many_small_file_rag datasets create -s fda_pdf_processor -b fda_letters_db fda_letters
+lf --cwd examples/many_small_file_rag datasets upload fda_letters examples/many_small_file_rag/files/*.pdf
+lf --cwd examples/many_small_file_rag datasets process fda_letters
 
-lf --cwd examples/many-small-file-rag rag query --database fda_letters_db --top-k 3 --include-metadata --include-score \
+lf --cwd examples/many_small_file_rag rag query --database fda_letters_db --top-k 3 --include-metadata --include-score \
   "Which FDA letters mention additional clinical trial data requirements?"
 
-lf --cwd examples/many-small-file-rag chat --database fda_letters_db "Summarize key deficiencies highlighted across the 2024 FDA letters with citations."
-lf --cwd examples/many-small-file-rag chat --database fda_letters_db "According to correspondence 761240, what follow-up actions were requested?"
-lf --cwd examples/many-small-file-rag chat --no-rag "According to correspondence 761240, what follow-up actions were requested?"
+lf --cwd examples/many_small_file_rag chat --database fda_letters_db "Summarize key deficiencies highlighted across the 2024 FDA letters with citations."
+lf --cwd examples/many_small_file_rag chat --database fda_letters_db "According to correspondence 761240, what follow-up actions were requested?"
+lf --cwd examples/many_small_file_rag chat --no-rag "According to correspondence 761240, what follow-up actions were requested?"
 ```
 
 ## Cleanup
 ```bash
-lf --cwd examples/many-small-file-rag datasets delete fda_letters
-rm -rf examples/many-small-file-rag/data/fda_letters_db
+lf --cwd examples/many_small_file_rag datasets delete fda_letters
+rm -rf examples/many_small_file_rag/data/fda_letters_db
 ```

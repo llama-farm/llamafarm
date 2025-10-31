@@ -1,10 +1,10 @@
 version: v1
-name: raleigh-udo-demo
+name: raleigh_udo_demo
 namespace: default
 
 runtime:
   models:
-    - name: udo-large
+    - name: udo_large
       description: "Large complex UDO document analysis"
       provider: ollama
       model: llama3.1:8b
