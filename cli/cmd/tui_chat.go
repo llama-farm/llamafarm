@@ -942,347 +942,18 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 
-			lower := strings.ToLower(msg)
-			// Slash commands
-			if strings.HasPrefix(lower, "/") {
-				fields := strings.Fields(lower)
-				cmd := fields[0]
-				switch cmd {
-				case "/help":
-					m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models"})
-					m.textarea.SetValue("")
-				case "/mode":
-					if len(fields) < 2 {
-						m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /mode [dev|project]"})
-						m.textarea.SetValue("")
-						return m, nil
-					}
-					modeArg := fields[1]
-					var newMode ChatMode
-					switch modeArg {
-					case "dev":
-						newMode = ModeDev
-					case "project":
-						newMode = ModeProject
-					default:
-						m.messages = append(m.messages, Message{Role: "client", Content: "Unknown mode. Use: /mode [dev|project]"})
-						m.textarea.SetValue("")
-						return m, nil
-					}
-					if newMode == m.currentMode {
-						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Already in %s mode", modeArg)})
-						m.textarea.SetValue("")
-						return m, nil
-					}
-					m.switchMode(newMode)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-				case "/model":
-					if m.currentMode != ModeProject {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: "Model switching only available in PROJECT mode. Use Ctrl+T to switch.",
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					if len(fields) < 2 {
-						// Show current model and available models
-						var msg strings.Builder
-						msg.WriteString(fmt.Sprintf("Current model: %s\n\nAvailable models:", m.currentModel))
-						for _, model := range m.availableModels {
-							marker := ""
-							if model.Name == m.currentModel {
-								marker = " (current)"
-							}
-							msg.WriteString(fmt.Sprintf("\n  • %s - %s%s", model.Name, model.Description, marker))
-						}
-						msg.WriteString("\n\nUsage: /model <name> or press Ctrl+K to cycle")
-						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
-						m.textarea.SetValue("")
-						break
-					}
-
-					modelName := fields[1]
-					if !m.isValidModel(modelName) {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: fmt.Sprintf("Unknown model '%s'. Type '/model' to see available models.", modelName),
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					m.switchModel(modelName)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-				case "/launch":
-					if len(fields) < 2 {
-						m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /launch <component>. Components: designer"})
-						m.textarea.SetValue("")
-						break
-					}
-					target := fields[1]
-					if target != "designer" {
-						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown component '%s'. Try: /launch designer", target)})
-						m.textarea.SetValue("")
-						break
-					}
-					// Designer is served by the server at root URL
-					m.textarea.SetValue("")
-					return m, openURL(chatCtx.ServerURL)
-				case "/exit", "/quit":
-					m.status = "👋 You have left the pasture. Safe travels, little llama!"
-					return m, tea.Quit
-				case "/clear":
-					// Get current mode context
-					ctx := m.getCurrentModeContext()
-
-					// Delete server-side session for current mode
-					if ctx.SessionID != "" {
-						// Determine namespace/project for current mode
-						var namespace, projectID string
-						if m.currentMode == ModeDev {
-							namespace = "llamafarm"
-							projectID = "project_seed"
-						} else if m.projectInfo != nil {
-							namespace = m.projectInfo.Namespace
-							projectID = m.projectInfo.Project
-						}
-
-						if namespace != "" && projectID != "" {
-							deleteURL := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s",
-								strings.TrimSuffix(chatCtx.ServerURL, "/"),
-								namespace,
-								projectID,
-								ctx.SessionID)
-							req, err := http.NewRequest("DELETE", deleteURL, nil)
-							if err == nil {
-								resp, err := chatCtx.HTTPClient.Do(req)
-								if err == nil {
-									resp.Body.Close()
-									logDebug(fmt.Sprintf("Deleted server session %s", ctx.SessionID))
-								}
-							}
-						}
-
-						// Generate new session ID for current mode
-						ctx.SessionID = uuid.New().String()
-
-						// Update global chatCtx session ID
-						chatCtx.SessionID = ctx.SessionID
-
-						// Save new session context
-						_ = writeSessionContext(chatCtx, ctx.SessionID)
-						logDebug(fmt.Sprintf("Created new dev mode session ID: %s", ctx.SessionID))
-					}
-
-					// Clear local state for current mode
-					ctx.Messages = []Message{{Role: "client", Content: "Session cleared. New session started."}}
-					ctx.History = []string{}
-
-					// Update model state
-					m.transcript = ""
-					m.messages = ctx.Messages
-					m.history = ctx.History
-					m.textarea.SetValue("")
-					m.setViewportContent()
-					m.thinking = false
-					m.printing = false
-				case "/menu":
-					// Back-compat: open the new overlay and hint about Tab
-					m.quickMenu.Open()
-					if m.termHeight > 0 {
-						var setSize tea.Cmd
-						m.quickMenu, setSize = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: m.termHeight})
-						if setSize != nil {
-							// ignore setSize here; the menu will render with size in View()
-						}
-					}
-					// Check for updates and reflect status in the menu
-					if info, err := maybeCheckForUpgrade(true); err == nil && info != nil {
-						if info.UpdateAvailable {
-							m.quickMenu.SetUpdateAvailable(info.LatestVersion)
-						} else {
-							m.quickMenu.SetUpToDate()
-						}
-					}
-
-					m.textarea.SetValue("")
-					return m, nil
-				case "/database":
-					if m.currentMode != ModeProject {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: "Database switching only available in PROJECT mode. Use Ctrl+T to switch.",
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					if len(fields) < 2 {
-						// Show available databases
-						var msg strings.Builder
-						msg.WriteString("Current database: ")
-						if m.currentDatabase != "" {
-							msg.WriteString(m.currentDatabase)
-						} else {
-							msg.WriteString("(none)")
-						}
-						msg.WriteString("\n\nAvailable databases:")
-
-						if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
-							for _, db := range m.availableDatabases.Databases {
-								marker := ""
-								if db.Name == m.currentDatabase {
-									marker = " (current)"
-								} else if db.IsDefault {
-									marker = " (default)"
-								}
-								msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", db.Name, db.Type, marker))
-							}
-							msg.WriteString("\n\nUsage: /database <name> or press Tab to open Quick Menu")
-						} else {
-							msg.WriteString("\n  No databases configured")
-						}
-
-						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
-						m.textarea.SetValue("")
-						break
-					}
-
-					dbName := fields[1]
-					if !m.isValidDatabase(dbName) {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: fmt.Sprintf("Unknown database '%s'. Type '/database' to see available databases.", dbName),
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					m.switchDatabase(dbName)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-
-				case "/strategy":
-					if m.currentMode != ModeProject {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: "Strategy switching only available in PROJECT mode. Use Ctrl+T to switch.",
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					if len(fields) < 2 {
-						// Show available strategies for current database
-						var msg strings.Builder
-						msg.WriteString("Current strategy: ")
-						if m.currentStrategy != "" {
-							msg.WriteString(m.currentStrategy)
-						} else {
-							msg.WriteString("(none)")
-						}
-						msg.WriteString(fmt.Sprintf("\nDatabase: %s", m.currentDatabase))
-						msg.WriteString("\n\nAvailable strategies:")
-
-						if m.availableDatabases != nil {
-							for _, db := range m.availableDatabases.Databases {
-								if db.Name == m.currentDatabase {
-									if len(db.RetrievalStrategies) > 0 {
-										for _, strategy := range db.RetrievalStrategies {
-											marker := ""
-											if strategy.Name == m.currentStrategy {
-												marker = " (current)"
-											} else if strategy.IsDefault {
-												marker = " (default)"
-											}
-											msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", strategy.Name, strategy.Type, marker))
-										}
-										msg.WriteString("\n\nUsage: /strategy <name> or press Tab to open Quick Menu")
-									} else {
-										msg.WriteString("\n  No strategies configured for this database")
-									}
-									break
-								}
-							}
-						}
-
-						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
-						m.textarea.SetValue("")
-						break
-					}
-
-					strategyName := fields[1]
-					if !m.isValidStrategy(strategyName) {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: fmt.Sprintf("Unknown strategy '%s' for database '%s'. Type '/strategy' to see available strategies.", strategyName, m.currentDatabase),
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					m.switchStrategy(strategyName)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-
-				default:
-					m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. All commands must start with '/'. Type '/help' for available commands.", cmd)})
-					m.textarea.SetValue("")
+			// Process command or message using shared handler
+			wasCommand, cmd := m.processCommandOrMessage(msg)
+			if wasCommand {
+				if cmd != nil {
+					return m, cmd
 				}
-				return m, nil
+				m.refreshViewportBottom()
+				break
 			}
 
-			m.history = append(m.history, msg)
-			m.histIndex = len(m.history)
-			m.messages = append(m.messages, Message{Role: "user", Content: msg})
-			m.textarea.SetValue("")
-			m.thinking = true
-			m.printing = true
-			// Update chatCtx with current selections (PROJECT mode)
-			if m.currentMode == ModeProject {
-				if m.currentModel != "" {
-					chatCtx.Model = m.currentModel
-				}
-				if m.currentDatabase != "" {
-					chatCtx.RAGDatabase = m.currentDatabase
-					chatCtx.RAGEnabled = true
-				}
-				if m.currentStrategy != "" {
-					chatCtx.RAGRetrievalStrategy = m.currentStrategy
-				}
-			}
-			// Start channel-based streaming - important for showing progress
-			chunks, errs, _ := startChatStream(m.messages, chatCtx)
-			ch := make(chan tea.Msg, 32)
-			m.streamCh = ch
-			go func() {
-				var builder strings.Builder
-				for {
-					select {
-					case s, ok := <-chunks:
-						logDebug(fmt.Sprintf("STREAM CHUNK: %v", s))
-						if !ok {
-							logDebug(fmt.Sprintf("CHANNEL CLOSED: %v", builder.String()))
-							ch <- responseMsg{content: builder.String()}
-							ch <- streamDone{}
-							close(ch)
-							return
-						}
-						builder.WriteString(s)
-						ch <- responseMsg{content: builder.String()}
-					case e, ok := <-errs:
-						if ok && e != nil {
-							logDebug(fmt.Sprintf("STREAM ERROR: %v", e))
-							ch <- errorMsg{err: e}
-						}
-					}
-				}
-			}()
-			cmds = append(cmds, listen(m.streamCh), thinkingCmd())
+			// Regular message - start chat stream
+			cmds = append(cmds, m.startChatStreamForMessage(msg))
 		}
 
 	case responseMsg:
@@ -1453,14 +1124,25 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.textarea.SetValue(msg.Text)
 		if msg.AutoSend {
-			// Emulate Enter key handling: add message, clear input, and trigger processing
+			// Directly process the command/message
 			m.err = nil
 			val := strings.TrimSpace(msg.Text)
-			if val != "" {
-				m.messages = append(m.messages, Message{Role: "client", Content: val})
-				m.textarea.SetValue("")
-				return m, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyEnter} }
+			if val == "" || m.thinking {
+				break
 			}
+
+			// Process command or message using shared logic
+			wasCommand, cmd := m.processCommandOrMessage(val)
+			if wasCommand {
+				if cmd != nil {
+					return m, cmd
+				}
+				m.refreshViewportBottom()
+				break
+			}
+
+			// Regular message - start chat stream
+			cmds = append(cmds, m.startChatStreamForMessage(val))
 		}
 
 	case TUIMessageMsg:
@@ -1824,6 +1506,348 @@ func (m chatModel) View() string {
 
 func thinkingCmd() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+// processCommandOrMessage processes a slash command or returns false for regular messages.
+// Returns (wasCommand bool, cmd tea.Cmd). If wasCommand is true, cmd may be nil or a tea.Cmd to execute.
+func (m *chatModel) processCommandOrMessage(msg string) (wasCommand bool, cmd tea.Cmd) {
+	lower := strings.ToLower(msg)
+	// Slash commands
+	if strings.HasPrefix(lower, "/") {
+		fields := strings.Fields(lower)
+		cmdName := fields[0]
+		switch cmdName {
+		case "/help":
+			m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models"})
+			m.textarea.SetValue("")
+		case "/mode":
+			if len(fields) < 2 {
+				m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /mode [dev|project]"})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			modeArg := fields[1]
+			var newMode ChatMode
+			switch modeArg {
+			case "dev":
+				newMode = ModeDev
+			case "project":
+				newMode = ModeProject
+			default:
+				m.messages = append(m.messages, Message{Role: "client", Content: "Unknown mode. Use: /mode [dev|project]"})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			if newMode == m.currentMode {
+				m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Already in %s mode", modeArg)})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			m.switchMode(newMode)
+			m.textarea.SetValue("")
+		case "/model":
+			if m.currentMode != ModeProject {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: "Model switching only available in PROJECT mode. Use Ctrl+T to switch.",
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			if len(fields) < 2 {
+				// Show current model and available models
+				var msg strings.Builder
+				msg.WriteString(fmt.Sprintf("Current model: %s\n\nAvailable models:", m.currentModel))
+				for _, model := range m.availableModels {
+					marker := ""
+					if model.Name == m.currentModel {
+						marker = " (current)"
+					}
+					msg.WriteString(fmt.Sprintf("\n  • %s - %s%s", model.Name, model.Description, marker))
+				}
+				msg.WriteString("\n\nUsage: /model <name> or press Ctrl+K to cycle")
+				m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			modelName := fields[1]
+			if !m.isValidModel(modelName) {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: fmt.Sprintf("Unknown model '%s'. Type '/model' to see available models.", modelName),
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			m.switchModel(modelName)
+			m.textarea.SetValue("")
+		case "/launch":
+			if len(fields) < 2 {
+				m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /launch <component>. Components: designer"})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			target := fields[1]
+			if target != "designer" {
+				m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown component '%s'. Try: /launch designer", target)})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			// Designer is served by the server at root URL
+			m.textarea.SetValue("")
+			return true, openURL(chatCtx.ServerURL)
+		case "/exit", "/quit":
+			m.status = "👋 You have left the pasture. Safe travels, little llama!"
+			return true, tea.Quit
+		case "/clear":
+			// Get current mode context
+			ctx := m.getCurrentModeContext()
+
+			// Delete server-side session for current mode
+			if ctx.SessionID != "" {
+				// Determine namespace/project for current mode
+				var namespace, projectID string
+				if m.currentMode == ModeDev {
+					namespace = "llamafarm"
+					projectID = "project_seed"
+				} else if m.projectInfo != nil {
+					namespace = m.projectInfo.Namespace
+					projectID = m.projectInfo.Project
+				}
+
+				if namespace != "" && projectID != "" {
+					deleteURL := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s",
+						strings.TrimSuffix(chatCtx.ServerURL, "/"),
+						namespace,
+						projectID,
+						ctx.SessionID)
+					req, err := http.NewRequest("DELETE", deleteURL, nil)
+					if err == nil {
+						resp, err := chatCtx.HTTPClient.Do(req)
+						if err == nil {
+							resp.Body.Close()
+							logDebug(fmt.Sprintf("Deleted server session %s", ctx.SessionID))
+						}
+					}
+				}
+
+				// Generate new session ID for current mode
+				ctx.SessionID = uuid.New().String()
+
+				// Update global chatCtx session ID
+				chatCtx.SessionID = ctx.SessionID
+
+				// Save new session context
+				_ = writeSessionContext(chatCtx, ctx.SessionID)
+				logDebug(fmt.Sprintf("Created new dev mode session ID: %s", ctx.SessionID))
+			}
+
+			// Clear local state for current mode
+			ctx.Messages = []Message{{Role: "client", Content: "Session cleared. New session started."}}
+			ctx.History = []string{}
+
+			// Update model state
+			m.transcript = ""
+			m.messages = ctx.Messages
+			m.history = ctx.History
+			m.textarea.SetValue("")
+			m.setViewportContent()
+			m.thinking = false
+			m.printing = false
+		case "/database":
+			if m.currentMode != ModeProject {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: "Database switching only available in PROJECT mode. Use Ctrl+T to switch.",
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			if len(fields) < 2 {
+				// Show available databases
+				var msg strings.Builder
+				msg.WriteString("Current database: ")
+				if m.currentDatabase != "" {
+					msg.WriteString(m.currentDatabase)
+				} else {
+					msg.WriteString("(none)")
+				}
+				msg.WriteString("\n\nAvailable databases:")
+
+				if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
+					for _, db := range m.availableDatabases.Databases {
+						marker := ""
+						if db.Name == m.currentDatabase {
+							marker = " (current)"
+						} else if db.IsDefault {
+							marker = " (default)"
+						}
+						msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", db.Name, db.Type, marker))
+					}
+					msg.WriteString("\n\nUsage: /database <name> or press Tab to open Quick Menu")
+				} else {
+					msg.WriteString("\n  No databases configured")
+				}
+
+				m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			dbName := fields[1]
+			if !m.isValidDatabase(dbName) {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: fmt.Sprintf("Unknown database '%s'. Type '/database' to see available databases.", dbName),
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			m.switchDatabase(dbName)
+			m.textarea.SetValue("")
+		case "/strategy":
+			if m.currentMode != ModeProject {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: "Strategy switching only available in PROJECT mode. Use Ctrl+T to switch.",
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			if len(fields) < 2 {
+				// Show available strategies for current database
+				var msg strings.Builder
+				msg.WriteString("Current strategy: ")
+				if m.currentStrategy != "" {
+					msg.WriteString(m.currentStrategy)
+				} else {
+					msg.WriteString("(none)")
+				}
+				msg.WriteString(fmt.Sprintf("\nDatabase: %s", m.currentDatabase))
+				msg.WriteString("\n\nAvailable strategies:")
+
+				if m.availableDatabases != nil {
+					for _, db := range m.availableDatabases.Databases {
+						if db.Name == m.currentDatabase {
+							if len(db.RetrievalStrategies) > 0 {
+								for _, strategy := range db.RetrievalStrategies {
+									marker := ""
+									if strategy.Name == m.currentStrategy {
+										marker = " (current)"
+									} else if strategy.IsDefault {
+										marker = " (default)"
+									}
+									msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", strategy.Name, strategy.Type, marker))
+								}
+								msg.WriteString("\n\nUsage: /strategy <name> or press Tab to open Quick Menu")
+							} else {
+								msg.WriteString("\n  No strategies configured for this database")
+							}
+							break
+						}
+					}
+				}
+
+				m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			strategyName := fields[1]
+			if !m.isValidStrategy(strategyName) {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: fmt.Sprintf("Unknown strategy '%s' for database '%s'. Type '/strategy' to see available strategies.", strategyName, m.currentDatabase),
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			m.switchStrategy(strategyName)
+			m.textarea.SetValue("")
+		case "/menu":
+			// Back-compat: open the new overlay and hint about Tab
+			m.quickMenu.Open()
+			if m.termHeight > 0 {
+				var setSize tea.Cmd
+				m.quickMenu, setSize = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: m.termHeight})
+				if setSize != nil {
+					// ignore setSize here; the menu will render with size in View()
+				}
+			}
+			// Check for updates and reflect status in the menu
+			if info, err := maybeCheckForUpgrade(true); err == nil && info != nil {
+				if info.UpdateAvailable {
+					m.quickMenu.SetUpdateAvailable(info.LatestVersion)
+				} else {
+					m.quickMenu.SetUpToDate()
+				}
+			}
+			m.textarea.SetValue("")
+		default:
+			m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. All commands must start with '/'. Type '/help' for available commands.", cmdName)})
+			m.textarea.SetValue("")
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// startChatStreamForMessage starts a chat stream for a regular (non-command) message.
+func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
+	m.history = append(m.history, msg)
+	m.histIndex = len(m.history)
+	m.messages = append(m.messages, Message{Role: "user", Content: msg})
+	m.textarea.SetValue("")
+	m.thinking = true
+	m.printing = true
+	// Update chatCtx with current selections (PROJECT mode)
+	if m.currentMode == ModeProject {
+		if m.currentModel != "" {
+			chatCtx.Model = m.currentModel
+		}
+		if m.currentDatabase != "" {
+			chatCtx.RAGDatabase = m.currentDatabase
+			chatCtx.RAGEnabled = true
+		}
+		if m.currentStrategy != "" {
+			chatCtx.RAGRetrievalStrategy = m.currentStrategy
+		}
+	}
+	// Start channel-based streaming - important for showing progress
+	chunks, errs, _ := startChatStream(m.messages, chatCtx)
+	ch := make(chan tea.Msg, 32)
+	m.streamCh = ch
+	go func() {
+		var builder strings.Builder
+		for {
+			select {
+			case s, ok := <-chunks:
+				logDebug(fmt.Sprintf("STREAM CHUNK: %v", s))
+				if !ok {
+					logDebug(fmt.Sprintf("CHANNEL CLOSED: %v", builder.String()))
+					ch <- responseMsg{content: builder.String()}
+					ch <- streamDone{}
+					close(ch)
+					return
+				}
+				builder.WriteString(s)
+				ch <- responseMsg{content: builder.String()}
+			case e, ok := <-errs:
+				if ok && e != nil {
+					logDebug(fmt.Sprintf("STREAM ERROR: %v", e))
+					ch <- errorMsg{err: e}
+				}
+			}
+		}
+	}()
+	return tea.Batch(listen(m.streamCh), thinkingCmd())
 }
 
 func openURL(url string) tea.Cmd {
