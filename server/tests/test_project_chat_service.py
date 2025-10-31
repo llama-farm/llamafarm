@@ -15,7 +15,7 @@ import pytest
 
 from agents.chat_orchestrator import ChatOrchestratorAgent
 from config.datamodel import (
-    DatabaseDefinition,
+    Database,
     LlamaFarmConfig,
     PromptMessage,
     Model,
@@ -86,7 +86,7 @@ def config_with_rag():
         rag=RAGStrategyConfigurationSchema(
             default_database="main_db",
             databases=[
-                DatabaseDefinition(
+                Database(
                     name="main_db",
                     type=Type.ChromaStore,
                     retrieval_strategies=[
@@ -202,7 +202,7 @@ class TestProjectChatService:
             prompts=[],
             rag=RAGStrategyConfigurationSchema(
                 databases=[
-                    DatabaseDefinition(
+                    Database(
                         name="db1",
                         type=Type.ChromaStore,
                         retrieval_strategies=[
@@ -211,7 +211,7 @@ class TestProjectChatService:
                             )
                         ],
                     ),
-                    DatabaseDefinition(
+                    Database(
                         name="db2",
                         type=Type.ChromaStore,
                         retrieval_strategies=[
@@ -252,9 +252,7 @@ class TestProjectChatService:
             prompts=[],
             rag=RAGStrategyConfigurationSchema(
                 databases=[
-                    DatabaseDefinition(
-                        name="db1", type=Type.ChromaStore, retrieval_strategies=[]
-                    )
+                    Database(name="db1", type=Type.ChromaStore, retrieval_strategies=[])
                 ]
             ),
         )
