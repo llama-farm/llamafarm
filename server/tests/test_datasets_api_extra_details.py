@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    Prompt,
-    Message,
+    PromptSet,
+    PromptMessage,
     Provider,
     Runtime,
     Version,
@@ -69,9 +69,13 @@ class TestDatasetsAPIExtraDetails:
             name="api_test_project",
             namespace="api_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -147,9 +151,13 @@ class TestDatasetsAPIExtraDetails:
             name="api_empty_project",
             namespace="api_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -602,9 +610,13 @@ class TestDatasetsAPIExtraDetailsIntegration:
             name="complex_api_project",
             namespace="complex_api_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={

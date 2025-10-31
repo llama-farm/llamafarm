@@ -57,3 +57,9 @@ prompts:
               - Configuration: editing `llamafarm.yaml`
 
               Ask me anything about LlamaFarm, or type `/help` for chat commands!
+
+mcp:
+  servers:
+    - name: llamafarm-server
+      transport: http
+      base_url: http://localhost:8000/mcp

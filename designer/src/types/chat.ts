@@ -24,7 +24,9 @@ export interface BaseMessage {
  */
 export interface ChatMessage extends BaseMessage {
   /** Message role for API - must match backend expectations */
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  /** Tool call ID for tool messages */
+  tool_call_id?: string
 }
 
 /**
@@ -46,6 +48,12 @@ export interface ChatRequest {
   frequency_penalty?: number | null
   presence_penalty?: number | null
   logit_bias?: Record<string, number>
+  // LlamaFarm-specific RAG parameters
+  rag_enabled?: boolean | null
+  database?: string | null
+  rag_retrieval_strategy?: string | null
+  rag_top_k?: number | null
+  rag_score_threshold?: number | null
 }
 
 /**
@@ -134,6 +142,15 @@ export interface ChatStreamChunk {
     delta: {
       role?: string
       content?: string
+      tool_calls?: Array<{
+        index?: number
+        id?: string
+        type?: string
+        function?: {
+          name?: string
+          arguments?: string
+        }
+      }>
     }
     finish_reason: string | null
   }>

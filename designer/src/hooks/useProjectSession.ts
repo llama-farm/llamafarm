@@ -30,7 +30,11 @@ export interface ProjectSessionState {
 }
 
 export interface ProjectSessionActions {
-  addMessage: (content: string, role: 'user' | 'assistant') => ChatMessage
+  addMessage: (
+    content: string,
+    role: 'user' | 'assistant' | 'tool',
+    tool_call_id?: string
+  ) => ChatMessage
   addTempMessage: (message: ChatMessage) => void
   addPersistentMessage: (message: ChatMessage) => void
   clearHistory: () => void
@@ -188,13 +192,17 @@ export function useProjectSession(
 
   // Main function to add messages (chooses temp vs persistent based on mode)
   const addMessage = useCallback(
-    (content: string, role: 'user' | 'assistant'): ChatMessage => {
+    (
+      content: string,
+      role: 'user' | 'assistant' | 'tool',
+      tool_call_id?: string
+    ): ChatMessage => {
       if (!content || content.trim() === '') {
         throw new Error('Cannot add empty message')
       }
 
       try {
-        const message = createMessage(role, content)
+        const message = createMessage(role, content, tool_call_id)
 
         if (isTemporaryMode) {
           addTempMessage(message)

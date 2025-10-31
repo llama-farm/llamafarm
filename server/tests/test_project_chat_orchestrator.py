@@ -1,13 +1,14 @@
 import tempfile
+from types import SimpleNamespace
 
-from agents.base.history import LFAgentChatMessage
+from agents.base.history import LFChatCompletionUserMessageParam
 import pytest
 
 from config.datamodel import (
     LlamaFarmConfig,
-    Message,
+    PromptMessage,
     Model,
-    Prompt,
+    PromptSet,
     PromptFormat,
     Provider,
     Runtime,
@@ -67,10 +68,10 @@ def make_config(
             ],
         ),
         prompts=[
-            Prompt(
+            PromptSet(
                 name="default",
                 messages=[
-                    Message(role="system", content="You are a helpful assistant.")
+                    PromptMessage(role="system", content="You are a helpful assistant.")
                 ],
             )
         ],
@@ -103,7 +104,7 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     # Intercept LFAgent.run_async to capture messages (no network calls)
     from agents.base.agent import LFAgent
 
-    async def fake_run_async(self, *, user_input=None):
+    async def fake_run_async(self, *, user_input=None, tools=None):
         # LFAgent.run_async adds user_input to history if provided
         if user_input:
             self.history.add_message(user_input)
@@ -111,7 +112,9 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
         messages = self._prepare_messages()
         captured["messages"] = messages
         # Return a simple string response (not a schema object)
-        return "ok"
+        message = SimpleNamespace(role="assistant", content="ok", tool_calls=None)
+        choice = SimpleNamespace(index=0, finish_reason="stop", message=message)
+        return SimpleNamespace(choices=[choice], model=self.model_name)
 
     monkeypatch.setattr(LFAgent, "run_async", fake_run_async)
 
@@ -130,7 +133,7 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     agent.register_context_provider("project_chat_context", provider)
 
     await agent.run_async(
-        user_input=LFAgentChatMessage(role="user", content="Hello there")
+        user_input=LFChatCompletionUserMessageParam(role="user", content="Hello there")
     )
 
     messages = captured.get("messages", [])
@@ -139,12 +142,14 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     # Messages are now LFAgentChatMessage objects
     assert len(messages) >= 2
     # First message should be system prompt
-    assert messages[0].role == "system"
-    assert "You are a helpful assistant." in messages[0].content
+    assert messages[0]["role"] == "system"
+    assert "You are a helpful assistant." in messages[0]["content"]
     # Check that RAG context was injected
     assert any(
-        "Important note" in msg.content for msg in messages if msg.role == "system"
+        "Important note" in msg["content"]
+        for msg in messages
+        if msg["role"] == "system"
     )
     # Last message should be the user input
-    assert messages[-1].role == "user"
-    assert messages[-1].content == "Hello there"
+    assert messages[-1]["role"] == "user"
+    assert messages[-1]["content"] == "Hello there"

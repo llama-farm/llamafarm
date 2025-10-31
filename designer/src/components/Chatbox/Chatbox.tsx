@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import Message from './Message'
 import FontIcon from '../../common/FontIcon'
-import useChatboxWithProjectSession from '../../hooks/useChatboxWithProjectSession'
+import { useChatbox } from '../../hooks/useChatbox'
 import { useActiveProject } from '../../hooks/useActiveProject'
 
 interface ChatboxProps {
@@ -19,7 +19,7 @@ function Chatbox({
   const [hasProcessedInitialMessage, setHasProcessedInitialMessage] =
     useState(false)
   const diagnosingInFlightRef = useRef<boolean>(false)
-  // Use the enhanced chatbox hook with project session management for Designer Chat
+  // Use the unified chatbox hook with project session management for Designer Chat
   const {
     messages,
     inputValue,
@@ -34,7 +34,7 @@ function Chatbox({
     hasMessages,
     canSend,
     sessionId,
-  } = useChatboxWithProjectSession()
+  } = useChatbox({ useProjectSession: true })
 
   const activeProject = useActiveProject()
   const activeProjectName = activeProject?.project || ''

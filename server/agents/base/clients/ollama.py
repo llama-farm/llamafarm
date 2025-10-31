@@ -1,14 +1,34 @@
+import datetime
 import json
+import uuid
 from collections.abc import AsyncGenerator
+from typing import Literal
 
-from config.datamodel import Prompt
 from ollama import AsyncClient, Message
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionMessage,
+)
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import (
+    Choice as ChoiceChunk,
+)
+from openai.types.chat.chat_completion_chunk import (
+    ChoiceDelta,
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
+)
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+    Function,
+)
+from openai.types.completion_usage import CompletionUsage
 
-from agents.base.history import LFAgentChatMessage
-from agents.base.types import StreamEvent, ToolCallRequest, ToolDefinition
+from agents.base.history import LFChatCompletionMessageParam
+from agents.base.types import ToolDefinition
 from core.logging import FastAPIStructLogger
 
-from .client import LFAgentClient
+from .client import LFAgentClient, LFChatCompletion, LFChatCompletionChunk
 
 logger = FastAPIStructLogger(__name__)
 
@@ -22,57 +42,98 @@ class LFAgentClientOllama(LFAgentClient):
     3. Yields StreamEvents in the same format as OpenAI client
     """
 
-    async def chat(self, *, messages: list[LFAgentChatMessage]) -> str:
-        """Simple chat without tool calling support."""
-        content = ""
-        async for event in self.stream_chat_with_tools(messages=messages, tools=[]):
-            if event.is_content():
-                content += event.content or ""
-        return content
-
-    async def stream_chat(
-        self, *, messages: list[LFAgentChatMessage]
-    ) -> AsyncGenerator[str, None]:
-        """Stream chat without tool calling support."""
-        async for event in self.stream_chat_with_tools(messages=messages, tools=[]):
-            if event.is_content() and event.content:
-                yield event.content
-
-    async def stream_chat_with_tools(
+    async def chat(
         self,
         *,
-        messages: list[LFAgentChatMessage],
-        tools: list[ToolDefinition],
-    ) -> AsyncGenerator[StreamEvent, None]:
-        """Stream chat with JSON-based tool calling."""
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
+    ) -> LFChatCompletion:
+        """Chat with tool calling support."""
+        client = AsyncClient(
+            host=(
+                self._model_config.base_url.rstrip("/v1")
+                if self._model_config.base_url
+                else ""
+            ),
+        )
+        # Convert tools to Ollama format
+        ollama_tools = (
+            [self._tool_to_ollama_format(t) for t in tools] if tools else None
+        )
 
-        # Inject tools into system message
-        if tools:
-            tool_instruction = self._create_tool_instruction(tools)
+        # Convert messages to Ollama format
+        ollama_messages = [self._message_to_ollama_message(m) for m in messages]
 
-            # Prepend tool instruction to first system message or create new one
-            modified_messages = []
-            system_injected = False
-            for msg in messages:
-                if msg.role == "system" and not system_injected:
-                    # Prepend to existing system message
-                    modified_msg = LFAgentChatMessage(
-                        role="system", content=f"{tool_instruction}\n\n{msg.content}"
-                    )
-                    modified_messages.append(modified_msg)
-                    system_injected = True
-                else:
-                    modified_messages.append(msg)
+        # Create non-streaming request
+        stream_param: Literal[False] = False
+        response = await client.chat(
+            model=self._model_config.model,
+            messages=ollama_messages,
+            stream=stream_param,
+            tools=ollama_tools,
+        )
 
-            # If no system message, create one
-            if not system_injected:
-                modified_messages.insert(
-                    0, LFAgentChatMessage(role="system", content=tool_instruction)
+        # Convert Ollama response to OpenAI ChatCompletion format
+
+        finish = (
+            response.done_reason
+            if response.done_reason
+            in ("stop", "length", "tool_calls", "content_filter")
+            else "stop"
+        )
+
+        # Build message with reasoning if available
+        message = ChatCompletionMessage(
+            role="assistant",
+            content=response.message.content or "",
+        )
+        if response.message.thinking:
+            message.reasoning = response.message.thinking  # type: ignore
+
+        if response.message.tool_calls:
+            message.tool_calls = [
+                ChatCompletionMessageFunctionToolCall(
+                    type="function",
+                    id=f"call_{uuid.uuid4()}",
+                    function=Function(
+                        name=tool_call.function.name,
+                        arguments=json.dumps(tool_call.function.arguments),
+                    ),
                 )
+                for tool_call in response.message.tool_calls
+            ]
 
-            messages = modified_messages
+        created_timestamp = self._ollama_created_at_datetime(response.created_at)
 
-        # Stream response
+        return ChatCompletion(
+            id=f"chatcmpl-{created_timestamp}",
+            model=response.model or "unknown",
+            object="chat.completion",
+            created=created_timestamp,
+            choices=[
+                Choice(
+                    index=0,
+                    message=message,
+                    finish_reason=finish,  # type: ignore
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=response.prompt_eval_count or 0,
+                completion_tokens=response.eval_count or 0,
+                total_tokens=(
+                    (response.prompt_eval_count or 0) + (response.eval_count or 0)
+                ),
+            ),
+        )
+
+    async def stream_chat(
+        self,
+        *,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
+    ) -> AsyncGenerator[LFChatCompletionChunk]:
+        """Stream chat, converting Ollama chunks to OpenAI format."""
+
         client = AsyncClient(
             host=(
                 self._model_config.base_url.rstrip("/v1")
@@ -81,91 +142,169 @@ class LFAgentClientOllama(LFAgentClient):
             ),
         )
 
+        ollama_tools = (
+            [self._tool_to_ollama_format(t) for t in tools] if tools else None
+        )
+
+        stream_param: Literal[True] = True
         response_stream = await client.chat(
             model=self._model_config.model,
             messages=[self._message_to_ollama_message(m) for m in messages],
-            stream=True,
-            think=False,
-            # **(self._model_config.model_api_parameters or {}),
+            stream=stream_param,
+            tools=ollama_tools,
         )
 
-        # Buffer for detecting JSON tool calls
-        buffer = ""
-        looks_like_json = False
+        finish_reason_set_to_tool_calls_once = False
 
         async for chunk in response_stream:
-            content = chunk.message.content
-            if not content:
-                continue
+            # Convert Ollama chunk to OpenAI format
+            created_timestamp = self._ollama_created_at_datetime(chunk.created_at)
 
-            buffer += content
-
-            # Detect if this looks like a JSON tool call
-            stripped = buffer.strip()
-            if not looks_like_json and stripped.startswith("{"):
-                looks_like_json = True
-
-            # If not JSON, stream content normally
-            if not looks_like_json:
-                yield StreamEvent(type="content", content=content)
-
-        # After stream ends, check if buffer contains tool call
-        if looks_like_json:
-            try:
-                data = json.loads(buffer.strip())
-
-                # Check if it matches tool call format
-                if "tool_name" in data and "tool_parameters" in data:
-                    yield StreamEvent(
-                        type="tool_call",
-                        tool_call=ToolCallRequest(
-                            id=f"call_{data['tool_name']}",
-                            name=data["tool_name"],
-                            arguments=data.get("tool_parameters", {}),
-                        ),
-                    )
-                else:
-                    # JSON but not a tool call, treat as content
-                    yield StreamEvent(type="content", content=buffer)
-            except json.JSONDecodeError:
-                # Not valid JSON, treat as content
-                yield StreamEvent(type="content", content=buffer)
-
-    def _create_tool_instruction(self, tools: list[ToolDefinition]) -> str:
-        """Create system prompt instructions for JSON-based tool calling."""
-        tool_schemas = []
-        for tool in tools:
-            tool_schemas.append(
-                {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters,
-                }
+            # Build delta with content and reasoning (if available)
+            delta = ChoiceDelta(
+                role="assistant" if chunk.message.role else None,
+                content=chunk.message.content or None,
             )
 
-        instruction = (
-            "You have access to the following tools. When you want to use a tool, "
-            "respond with ONLY a JSON object in this exact format:\n\n"
-            "{\n"
-            '  "tool_name": "<tool_name>",\n'
-            '  "tool_parameters": {<parameters>}\n'
-            "}\n\n"
-            "Do not include any other text or explanation when calling a tool.\n\n"
-            f"Available tools:\n{json.dumps(tool_schemas, indent=2)}"
-        )
-        return instruction
+            finish = (
+                chunk.done_reason
+                if chunk.done_reason
+                in ("stop", "length", "tool_calls", "content_filter")
+                else None
+            )
 
-    def _message_to_ollama_message(self, message: LFAgentChatMessage) -> Message:
+            # HACK: ollama is setting done and done_reason to "stop" when a tool call is present
+            # We are going to immitate openai behavior and set the finish_reason to "tool_calls"
+            if (
+                not chunk.message.content
+                and not chunk.message.thinking
+                and chunk.message.tool_calls
+                and not finish_reason_set_to_tool_calls_once
+            ):
+                finish_reason_set_to_tool_calls_once = True
+                finish = "tool_calls"
+
+            # Add reasoning from Ollama's thinking field
+            if chunk.message.thinking:
+                delta.reasoning = chunk.message.thinking  # type: ignore
+
+            if chunk.message.tool_calls:
+                # HACK: ollama is setting done and done_reason to "stop" when a tool call is present
+                # We are going to immitate openai behavior and set the finish_reason to "tool_calls"
+                if (
+                    not chunk.message.content
+                    and not chunk.message.thinking
+                    and chunk.message.tool_calls
+                    and not finish_reason_set_to_tool_calls_once
+                ):
+                    finish_reason_set_to_tool_calls_once = True
+                    finish = "tool_calls"
+
+                delta.tool_calls = [
+                    ChoiceDeltaToolCall(
+                        index=idx,
+                        type="function",
+                        id=f"call_{uuid.uuid4()}",
+                        function=ChoiceDeltaToolCallFunction(
+                            name=tool_call.function.name,
+                            arguments=json.dumps(tool_call.function.arguments),
+                        ),
+                    )
+                    for idx, tool_call in enumerate(chunk.message.tool_calls)
+                ]
+
+            # Build the chunk
+            completion_chunk = LFChatCompletionChunk(
+                id=f"chatcmpl-{created_timestamp}",
+                model=chunk.model or "unknown",
+                object="chat.completion.chunk",
+                created=created_timestamp,
+                choices=[
+                    ChoiceChunk(
+                        index=0,
+                        delta=delta,
+                        finish_reason=finish,  # type: ignore
+                    ),
+                ],
+            )
+
+            # Add usage info on final chunk (when done=True)
+            if chunk.done and (chunk.prompt_eval_count or chunk.eval_count):
+                from openai.types.completion_usage import CompletionUsage
+
+                completion_chunk.usage = CompletionUsage(  # type: ignore
+                    prompt_tokens=chunk.prompt_eval_count or 0,
+                    completion_tokens=chunk.eval_count or 0,
+                    total_tokens=(
+                        (chunk.prompt_eval_count or 0) + (chunk.eval_count or 0)
+                    ),
+                )
+
+            yield completion_chunk
+
+    def _ollama_created_at_datetime(self, created_at: str | None) -> int:
+        """Convert Ollama created_at string to datetime."""
+
+        if created_at:
+            # Parse RFC3339/ISO8601 with/without subsecond precision and Zulu
+            try:
+                created_dt = datetime.datetime.fromisoformat(
+                    created_at.replace("Z", "+00:00")
+                )
+                created_timestamp = int(created_dt.timestamp())
+            except Exception:
+                created_timestamp = 0
+        else:
+            created_timestamp = 0
+        return created_timestamp
+
+    def _tool_to_ollama_format(self, tool: ToolDefinition) -> dict:
+        """Convert ToolDefinition to Ollama format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters,
+            },
+        }
+
+    def _message_to_ollama_message(
+        self, message: LFChatCompletionMessageParam
+    ) -> Message:
         """Convert LFAgentChatMessage to Ollama Message format."""
-        match message.role:
+        role = message.get("role", "")
+        content = message.get("content", "")
+
+        content_str = str(content)
+        # Ensure content is always a string for the Ollama Message
+        if not isinstance(content, str):
+            if content is None:
+                content_str = ""
+            elif isinstance(content, list | tuple):
+                # Join parts if they're dicts with "text", else str()
+                parts = []
+                for part in content:
+                    if isinstance(part, dict) and "text" in part:
+                        parts.append(part["text"])
+                    elif isinstance(part, str):
+                        parts.append(part)
+                    else:
+                        parts.append(str(part))
+                content_str = "".join(parts)
+            else:
+                content_str = str(content)
+
+        match role:
             case "system":
-                return Message(role="system", content=message.content)
+                return Message(role="system", content=content_str)
             case "user":
-                return Message(role="user", content=message.content)
+                return Message(role="user", content=content_str)
             case "assistant":
-                return Message(role="assistant", content=message.content)
+                return Message(role="assistant", content=content_str)
             case "tool":
-                # Tool results as user messages
-                return Message(role="user", content=message.content)
+                tool_call_id: str = message.get("tool_call_id", "")  # type: ignore
+                return Message(role="tool", tool_name=tool_call_id, content=content_str)
             case _:
-                raise ValueError(f"Unknown message role: {message.role}")
+                err = f"Unknown message role: {role}"
+                raise ValueError(err)

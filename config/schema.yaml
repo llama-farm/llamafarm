@@ -26,6 +26,7 @@ properties:
     type: array
     description: List of named prompt sets
     items:
+      title: PromptSet
       type: object
       required:
         - name
@@ -40,16 +41,20 @@ properties:
           description: List of messages in this prompt set
           items:
             type: object
+            title: PromptMessage
             required:
               - role
               - content
             properties:
               role:
                 type: string
-                description: 'Message role (e.g., "system", "user", "assistant")'
+                description: 'Message role (e.g., "system", "user", "assistant", "tool")'
               content:
                 type: string
                 description: Message content
+              tool_call_id:
+                type: string
+                description: Tool call ID
           default: []
     default: []
 
@@ -132,17 +137,26 @@ properties:
               type: object
               description: Additional parameters passed to the API provider
               additionalProperties: true
-            provider_config:
-              type: object
-              description: "Provider-specific configuration (e.g., lemonade settings, ollama options)"
-              default: {}
-              additionalProperties: true
             prompts:
               type: array
               description: List of prompt set names to use for this model (merged in order)
               items:
                 type: string
               default: []
+            think:
+              type: boolean
+              description: Whether or not to enable thinking for this model if it supports it.
+              default: false
+            tool_call_strategy:
+              type: string
+              enum: [native_api, prompt_based]
+              description: |
+                Strategy to use for tool calls. `native_api` uses native tool calling through the client
+                library (e.g. setting the `tools` parameter on the chat completions OpenAI request);
+                `prompt_based` uses system prompting to inject tool definitions and instructions to guide
+                any model to use tools. This is universal, but may not be as effective as native tool calling.
+                Use `prompt_based` for models that do not support native tool calling.
+              default: native_api
 
   mcp:
     type: object

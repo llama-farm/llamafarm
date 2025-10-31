@@ -11,8 +11,8 @@ import pytest
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    Prompt,
-    Message,
+    PromptSet,
+    PromptMessage,
     Provider,
     Runtime,
     Version,
@@ -56,9 +56,13 @@ class TestDatasetMetadataErrorHandling:
             name="error_test_project",
             namespace="error_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -356,9 +360,13 @@ class TestDatasetMetadataErrorHandling:
             name="invalid_hash_project",
             namespace="error_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -502,9 +510,13 @@ class TestDatasetMetadataErrorHandling:
             name="mixed_errors_project",
             namespace="error_test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -631,9 +643,13 @@ class TestDatasetMetadataErrorHandling:
             name="empty_files_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -756,9 +772,13 @@ class TestErrorHandlingIntegration:
             name="production_project",
             namespace="production_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={

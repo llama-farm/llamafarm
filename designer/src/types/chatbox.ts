@@ -30,8 +30,8 @@ import { BaseMessage } from './chat'
 export interface ChatboxMessage extends BaseMessage {
   /** Unique identifier for UI tracking and updates */
   id: string
-  /** Message type - includes 'error' for UI-specific error display */
-  type: 'user' | 'assistant' | 'system' | 'error'
+  /** Message type - includes 'error' and 'tool' for UI-specific display */
+  type: 'user' | 'assistant' | 'system' | 'error' | 'tool'
   /** When the message was created/received */
   timestamp: Date
   /** Whether the message is currently being processed (UI state) */
@@ -44,6 +44,8 @@ export interface ChatboxMessage extends BaseMessage {
   sources?: any[]
   /** Extended metadata for UI purposes */
   metadata?: any
+  /** Tool call ID for tool messages */
+  tool_call_id?: string
 }
 
 /**

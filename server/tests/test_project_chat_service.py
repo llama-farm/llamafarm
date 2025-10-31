@@ -14,15 +14,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agents.chat_orchestrator import ChatOrchestratorAgent
-from agents.base.history import LFAgentChatMessage
 from config.datamodel import (
     Database,
     LlamaFarmConfig,
-    Message,
+    PromptMessage,
     Model,
-    Prompt,
+    PromptSet,
     Provider,
-    Rag,
+    RAGStrategyConfigurationSchema,
     RetrievalStrategy,
     Runtime,
     Type,
@@ -52,9 +51,9 @@ def base_config():
             ]
         ),
         prompts=[
-            Prompt(
+            PromptSet(
                 name="default",
-                messages=[Message(role="system", content="You are helpful")],
+                messages=[PromptMessage(role="system", content="You are helpful")],
             )
         ],
     )
@@ -79,12 +78,12 @@ def config_with_rag():
             ]
         ),
         prompts=[
-            Prompt(
+            PromptSet(
                 name="default",
-                messages=[Message(role="system", content="You are helpful")],
+                messages=[PromptMessage(role="system", content="You are helpful")],
             )
         ],
-        rag=Rag(
+        rag=RAGStrategyConfigurationSchema(
             default_database="main_db",
             databases=[
                 Database(
@@ -201,7 +200,7 @@ class TestProjectChatService:
                 ]
             ),
             prompts=[],
-            rag=Rag(
+            rag=RAGStrategyConfigurationSchema(
                 databases=[
                     Database(
                         name="db1",
@@ -251,7 +250,7 @@ class TestProjectChatService:
                 ]
             ),
             prompts=[],
-            rag=Rag(
+            rag=RAGStrategyConfigurationSchema(
                 databases=[
                     Database(name="db1", type=Type.ChromaStore, retrieval_strategies=[])
                 ]
@@ -362,29 +361,25 @@ class TestProjectChatService:
             mock_agent.remove_context_provider = MagicMock()
             mock_agent.model_name = "gpt-4"  # Add model_name attribute
 
-            # Mock run_async_stream as an async generator
-            async def mock_stream(*args, **kwargs):
-                yield "Response"
-                yield " text"
+            mock_completion = MagicMock()
+            mock_choice = MagicMock()
+            mock_choice.message.content = "Response text"
+            mock_completion.choices = [mock_choice]
 
-            mock_agent.run_async_stream = mock_stream
+            mock_agent.run_async = AsyncMock(return_value=mock_completion)
 
             service = ProjectChatService()
 
-            # Use patch to intercept stream_chat
-            with patch.object(service, "stream_chat", wraps=service.stream_chat):
-                response = await service.chat(
-                    project_dir=project_dir,
-                    project_config=config_with_rag,
-                    chat_agent=mock_agent,
-                    message="Test",
-                    rag_enabled=False,
-                )
+            response = await service.chat(
+                project_dir=project_dir,
+                project_config=config_with_rag,
+                chat_agent=mock_agent,
+                message="Test",
+                rag_enabled=False,
+            )
 
-                # Should have called stream_chat
-                service.stream_chat.assert_called_once()
-                # Should return concatenated response
-                assert "Response text" in response.choices[0].message.content
+            mock_agent.run_async.assert_awaited_once()
+            assert "Response text" in response.choices[0].message.content
 
     def test_clear_rag_context_provider(self, base_config):
         """Test clearing RAG context provider."""

@@ -418,8 +418,16 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 			var chunk struct {
 				Choices []struct {
 					Delta struct {
-						Role    string `json:"role,omitempty"`
-						Content string `json:"content,omitempty"`
+						Role      string `json:"role,omitempty"`
+						Content   string `json:"content,omitempty"`
+						ToolCalls []struct {
+							ID       string `json:"id"`
+							Type     string `json:"type"`
+							Function struct {
+								Name      string `json:"name"`
+								Arguments string `json:"arguments"`
+							} `json:"function"`
+						} `json:"tool_calls,omitempty"`
 					} `json:"delta"`
 				} `json:"choices"`
 			}
@@ -430,6 +438,21 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 				continue
 			}
 			delta := chunk.Choices[0].Delta
+
+			// Check for tool calls first
+			if len(delta.ToolCalls) > 0 {
+				// Format tool call notification with special marker for TUI styling
+				for _, tc := range delta.ToolCalls {
+					if tc.Function.Name != "" {
+						// Use special marker [TOOL_CALL] so TUI can style it
+						toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+						logDebug(fmt.Sprintf("Tool call detected: %s", tc.Function.Name))
+						outCh <- toolMsg
+					}
+				}
+			}
+
+			// Send content if present
 			if delta.Content != "" {
 				logDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
 				outCh <- delta.Content
@@ -540,15 +563,20 @@ type SessionHistory struct {
 }
 
 type SessionHistoryMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	ToolCalls []struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	} `json:"tool_calls,omitempty"`
 }
 
 type SessionHistoryResponse struct {
-	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
+	Messages []SessionHistoryMessage `json:"messages"`
 }
 
 // fetchSessionHistory retrieves the chat history for a session from the server.
@@ -587,10 +615,9 @@ func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) Sess
 		logDebug(fmt.Sprintf("fetchSessionHistory: failed to decode history: %v, %s", err, string(body)))
 		return SessionHistory{}
 	}
-	var messages []SessionHistoryMessage
-	for _, msg := range result.Messages {
-		messages = append(messages, SessionHistoryMessage{Role: msg.Role, Content: msg.Content})
-	}
 
-	return SessionHistory{Messages: messages}
+	// Return the messages directly - they already have all fields including tool_calls
+	return SessionHistory{
+		Messages: result.Messages,
+	}
 }

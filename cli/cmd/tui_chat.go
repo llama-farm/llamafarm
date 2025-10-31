@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -44,6 +45,73 @@ func renderMarkdown(content string, width int) string {
 	// TODO: Implement proper markdown rendering for TUI
 	// For now, just return the content as-is
 	return content
+}
+
+// renderToolCall renders a tool call as a styled bordered block
+func renderToolCall(content string, width int) string {
+	// Parse tool call: [TOOL_CALL]name|id|arguments
+	parts := strings.SplitN(strings.TrimPrefix(content, "[TOOL_CALL]"), "|", 3)
+	if len(parts) < 3 {
+		return content // Fallback if format is wrong
+	}
+
+	toolName := parts[0]
+	toolID := parts[1]
+	toolArgs := parts[2]
+
+	// Parse arguments JSON for pretty display
+	var args map[string]any
+	if err := json.Unmarshal([]byte(toolArgs), &args); err != nil {
+		// If not valid JSON, show raw
+		args = map[string]any{"raw": toolArgs}
+	}
+
+	// Build content
+	var contentLines []string
+	contentLines = append(contentLines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Render("🔧 Tool Call"))
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Tool: ")+toolName)
+	// Truncate long IDs
+	displayID := toolID
+	if len(displayID) > 12 {
+		displayID = displayID[:12] + "..."
+	}
+	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("ID: ")+displayID)
+
+	if len(args) > 0 {
+		contentLines = append(contentLines, "")
+		contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Arguments:"))
+		for k, v := range args {
+			// Truncate long values
+			valStr := fmt.Sprintf("%v", v)
+			if len(valStr) > 60 {
+				valStr = valStr[:60] + "..."
+			}
+			contentLines = append(contentLines, fmt.Sprintf("  %s: %v",
+				lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render(k),
+				valStr))
+		}
+	}
+
+	blockContent := strings.Join(contentLines, "\n")
+
+	// Calculate box width (limit to terminal width)
+	boxWidth := width - 10
+	if boxWidth < 40 {
+		boxWidth = 40
+	}
+	if boxWidth > 80 {
+		boxWidth = 80
+	}
+
+	// Create styled box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("86")).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	return "\n" + boxStyle.Render(blockContent) + "\n"
 }
 
 const gap = "\n\n"
@@ -100,7 +168,7 @@ func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, server
 	}
 
 	m := newChatModel(projectInfo, serverHealth)
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.program = p
 
 	// Enable TUI mode for output routing
@@ -170,6 +238,10 @@ type chatModel struct {
 	menuActive bool
 	// Controller decouples data/state updates from the UI model
 	controller *Controller
+	// Track first render to ensure initial scroll to bottom
+	isFirstRender bool
+	// Track if we just started a new response (should auto-scroll)
+	justStartedResponse bool
 }
 
 // removed: old bottom menu state
@@ -179,6 +251,7 @@ type (
 )
 
 type responseMsg struct{ content string }
+type toolCallMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
 
@@ -237,7 +310,20 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 				if msg.Role == "user" {
 					devUserChatMessages = append(devUserChatMessages, msg.Content)
 				}
-				devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content})
+
+				// Handle messages with content and/or tool calls
+				if msg.Content != "" {
+					devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content})
+				}
+				if len(msg.ToolCalls) > 0 {
+					for _, tc := range msg.ToolCalls {
+						if tc.Function.Name != "" {
+							// Format as tool call marker for proper rendering
+							toolCallContent := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+							devMessages = append(devMessages, Message{Role: "assistant", Content: toolCallContent})
+						}
+					}
+				}
 			}
 			logDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
 		}
@@ -295,7 +381,20 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 			if msg.Role == "user" {
 				projectHistory = append(projectHistory, msg.Content)
 			}
-			projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content})
+
+			// Handle messages with content and/or tool calls
+			if msg.Content != "" {
+				projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content})
+			}
+			if len(msg.ToolCalls) > 0 {
+				for _, tc := range msg.ToolCalls {
+					if tc.Function.Name != "" {
+						// Format as tool call marker for proper rendering
+						toolCallContent := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+						projectMessages = append(projectMessages, Message{Role: "assistant", Content: toolCallContent})
+					}
+				}
+			}
 		}
 	} else {
 		// No project info, still create a session ID for future use
@@ -386,8 +485,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		initialHistory = projectHistory
 	}
 
-	// Initialize viewport content with initial mode messages
+	// Initialize viewport content with initial mode messages and scroll to bottom
 	vp.SetContent(renderChatContent(chatModel{messages: initialMessages}))
+	vp.GotoBottom()
 
 	// Initialize overlay Quick Menu and toast
 	menuCfg := &uitk.Config{}
@@ -508,6 +608,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		quickMenu:          qm,
 		toast:              toast,
 		controller:         ctrl,
+		isFirstRender:      true,
 	}
 }
 
@@ -820,7 +921,27 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea, tiCmd = m.textarea.Update(msg)
 	}
 
-	m.viewport, vpCmd = m.viewport.Update(msg)
+	// Only pass non-keyboard events to viewport to prevent interference with textarea
+	// Viewport should handle mouse events and window size, but not keyboard input
+	shouldUpdateViewport := true
+	if _, ok := msg.(tea.KeyMsg); ok {
+		// Don't pass keyboard events to viewport - they're for textarea input
+		// This prevents spacebar triggering page-down, etc.
+		shouldUpdateViewport = false
+	}
+
+	// Track viewport position before update to detect user scrolling
+	wasAtBottomBeforeUpdate := m.viewport.AtBottom()
+
+	if shouldUpdateViewport {
+		m.viewport, vpCmd = m.viewport.Update(msg)
+	}
+
+	// If viewport was at bottom but user scrolled up (via mouse), stop auto-scrolling
+	// This allows breaking free from following streaming responses
+	if wasAtBottomBeforeUpdate && !m.viewport.AtBottom() && m.printing {
+		m.justStartedResponse = false
+	}
 
 	// Route all messages to toast
 	m.toast, cmd = m.toast.Update(msg)
@@ -861,6 +982,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(newWidth)
 		m.width = msg.Width
 		m.termHeight = msg.Height
+
+		// On first render, ensure content is fully loaded before scrolling to bottom
+		if m.isFirstRender {
+			m.isFirstRender = false
+			// Compute transcript and set viewport content first
+			m.transcript = computeTranscript(m)
+			m.setViewportContent()
+			// Now scroll to bottom with fully loaded content
+			m.viewport.GotoBottom()
+		}
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -956,6 +1087,22 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.startChatStreamForMessage(msg))
 		}
 
+	case toolCallMsg:
+		// Tool calls are added as separate assistant messages
+		logDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
+		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
+
+		// Auto-scroll to show tool call
+		if m.justStartedResponse || m.viewport.AtBottom() {
+			m.refreshViewportBottom()
+		} else {
+			m.setViewportContent()
+		}
+
+		if m.streamCh != nil {
+			cmds = append(cmds, listen(m.streamCh))
+		}
+
 	case responseMsg:
 		if m.err != nil {
 			m.err = nil
@@ -965,10 +1112,27 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		logDebug(fmt.Sprintf("RESPONSE MSG: %v", msg.content))
 		m.thinking = false
 		m.printing = true
-		if len(m.messages) == 0 || (len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") {
+
+		// Check if viewport is at bottom before updating content
+		wasAtBottom := m.viewport.AtBottom()
+
+		// Check if last message is a tool call (don't update it, create new message)
+		lastIsToolCall := false
+		if len(m.messages) > 0 {
+			lastMsg := m.messages[len(m.messages)-1]
+			lastIsToolCall = lastMsg.Role == "assistant" && strings.HasPrefix(lastMsg.Content, "[TOOL_CALL]")
+		}
+
+		if len(m.messages) == 0 ||
+			(len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") ||
+			lastIsToolCall {
+			// Create new message if:
+			// - No messages yet
+			// - Last message is not assistant (it's user/client/error)
+			// - Last message is a tool call (don't overwrite it)
 			m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
 		} else {
-			// Update last assistant line
+			// Update last assistant message (it's regular streaming content)
 			if len(m.messages) > 0 {
 				m.messages[len(m.messages)-1] = Message{Role: "assistant", Content: msg.content}
 			} else {
@@ -976,7 +1140,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m.setViewportContent()
+		// Auto-scroll during streaming if:
+		// 1. This is a fresh response (just sent a message), OR
+		// 2. Viewport was already at bottom (following along)
+		// This allows users to scroll up to read previous messages, but ensures
+		// new responses are visible when you just sent a message
+		if m.justStartedResponse || wasAtBottom {
+			m.refreshViewportBottom()
+		} else {
+			m.setViewportContent()
+		}
 
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
@@ -986,6 +1159,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.thinking = false
 		m.err = msg.err
 		m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
+		m.justStartedResponse = false // Reset flag on error
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
 		}
@@ -1004,6 +1178,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.printing = false
 		m.streamCh = nil
+		m.justStartedResponse = false // Reset flag after streaming is complete
 
 	case serverHealthMsg:
 		// Delegate to controller to update state and emit a unified StateUpdateMsg
@@ -1174,10 +1349,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// For non-progress messages, add normally
 			m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
 		}
+		m.transcript = computeTranscript(m)
+		m.refreshViewportBottom()
+		return m, tea.Batch(cmds...)
 	}
 
 	m.transcript = computeTranscript(m)
-	m.refreshViewportBottom()
+	m.setViewportContent()
 
 	return m, tea.Batch(cmds...)
 }
@@ -1218,11 +1396,16 @@ func computeTranscript(m chatModel) string {
 			var line string
 			switch message.Role {
 			case "assistant":
-				// Render Markdown content with ANSI styling
-				renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
-				// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
-				labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
-				line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
+				// Check if this contains a tool call marker
+				if strings.HasPrefix(message.Content, "[TOOL_CALL]") {
+					line = renderToolCall(message.Content, m.width)
+				} else {
+					// Render Markdown content with ANSI styling
+					renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
+					// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
+					labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
+					line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
+				}
 			case "user":
 				style := baseStyle.Foreground(lipgloss.Color("#ccc"))
 				line = style.Bold(true).Render("> ") + style.Render(message.Content)
@@ -1807,6 +1990,9 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 	m.textarea.SetValue("")
 	m.thinking = true
 	m.printing = true
+	m.justStartedResponse = true // Mark that we're starting a new response
+	// Scroll to bottom when user sends a message - ensures they see the response
+	m.refreshViewportBottom()
 	// Update chatCtx with current selections (PROJECT mode)
 	if m.currentMode == ModeProject {
 		if m.currentModel != "" {
@@ -1837,8 +2023,21 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 					close(ch)
 					return
 				}
-				builder.WriteString(s)
-				ch <- responseMsg{content: builder.String()}
+				// Check if this chunk is a tool call
+				if strings.HasPrefix(s, "[TOOL_CALL]") {
+					// Send any accumulated content first
+					if builder.Len() > 0 {
+						ch <- responseMsg{content: builder.String()}
+					}
+					// Send tool call as separate message
+					ch <- toolCallMsg{content: s}
+					// Reset builder for subsequent content
+					builder.Reset()
+				} else {
+					// Regular content - accumulate and send
+					builder.WriteString(s)
+					ch <- responseMsg{content: builder.String()}
+				}
 			case e, ok := <-errs:
 				if ok && e != nil {
 					logDebug(fmt.Sprintf("STREAM ERROR: %v", e))

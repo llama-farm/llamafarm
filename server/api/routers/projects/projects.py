@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union
 
+from agents.base.history import LFChatCompletionMessageParam
 import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 from fastapi import APIRouter, Header, HTTPException, Path as FastAPIPath, Response
@@ -17,7 +18,6 @@ from pydantic import BaseModel, Field
 
 from agents.chat_orchestrator import ChatOrchestratorAgent, ChatOrchestratorAgentFactory
 from api.errors import ErrorResponse
-from api.routers.inference.models import ChatRequest
 
 # RAG imports moved to function level to avoid circular imports
 from api.routers.shared.response_utils import (
@@ -283,6 +283,38 @@ def _delete_all_sessions(namespace: str, project_id: str) -> int:
     return len(to_delete)
 
 
+class ChatRequest(BaseModel):
+    messages: list[dict]
+    model: str | None = None
+    frequency_penalty: float | None = None
+    logit_bias: dict[str, int] | None = None
+    logprobs: bool | None = None
+    max_completion_tokens: int | None = None
+    max_tokens: int | None = None
+    metadata: dict | None = None
+    n: int | None = None
+    parallel_tool_calls: bool | None = None
+    presence_penalty: float | None = None
+    response_format: dict | None = None
+    seed: int | None = None
+    stop: str | list[str] | None = None
+    stream: bool = False  # Enable Server-Sent Events streaming
+    stream_options: dict | None = None
+    temperature: float | None = None
+    tool_choice: str | dict | None = None
+    tools: list[dict] | None = None
+    top_logprobs: int | None = None
+    top_p: float | None = None
+    user: str | None = None
+
+    # LlamaFarm-specific extensions (not part of OpenAI API)
+    rag_enabled: bool | None = None
+    database: str | None = None
+    rag_retrieval_strategy: str | None = None
+    rag_top_k: int | None = None
+    rag_score_threshold: float | None = None
+
+
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
 )
@@ -350,8 +382,8 @@ async def chat(
     # Extract the latest user message
     latest_user_message = None
     for msg in reversed(request.messages):
-        if msg.role == "user" and msg.content:
-            latest_user_message = msg.content
+        if msg.get("role", None) == "user" and msg.get("content", None):
+            latest_user_message = str(msg.get("content", ""))
             break
 
     # If no user message, check if this is a greeting request (new session)

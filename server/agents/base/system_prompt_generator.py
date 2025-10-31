@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from agents.base.context_provider import LFAgentContextProvider
-from agents.base.history import LFAgentChatMessage
+from agents.base.history import LFChatCompletionMessageParam
 
 
 class LFAgentPrompt(BaseModel):
@@ -15,13 +15,13 @@ class LFAgentSystemPromptGenerator:
 
     def __init__(
         self,
-        prompts: list[LFAgentChatMessage],
+        prompts: list[LFChatCompletionMessageParam],
         context_providers: dict[str, LFAgentContextProvider] | None = None,
     ):
         self.system_prompts = [
-            LFAgentPrompt(role="system", content=prompt.content)
+            LFAgentPrompt(role="system", content=str(prompt.get("content", "")))
             for prompt in (prompts or [])
-            if prompt.role == "system"
+            if prompt.get("role", None) == "system"
         ]
 
         self.context_providers = context_providers if context_providers else {}
