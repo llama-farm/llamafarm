@@ -66,6 +66,22 @@ test_cli_build() {
         error "CLI directory not found"
     fi
 
+    # Generate types first
+    info "Generating types..."
+    cd config
+    ./generate-types.sh || error "Failed to generate Python types"
+
+    # Install go-jsonschema if needed
+    if ! command -v go-jsonschema >/dev/null 2>&1; then
+        info "Installing go-jsonschema..."
+        go install github.com/atombender/go-jsonschema@latest || error "Failed to install go-jsonschema"
+    fi
+
+    # Generate Go types
+    cd ../cli/cmd/config
+    sh generate-types.sh || error "Failed to generate Go types"
+    cd ../../..
+
     cd cli
 
     # Test go mod tidy
@@ -76,6 +92,7 @@ test_cli_build() {
     fi
 
     # Test basic build
+    go generate -v ./...
     if go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-quick-1.0.0'" -o ../dist/lf-test .; then
         success "CLI build successful"
     else

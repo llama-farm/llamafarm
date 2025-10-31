@@ -52,11 +52,6 @@ jobs:
       # ============================================================
       # Build Phase
       # ============================================================
-      - name: Copy schema.yaml to CLI config
-        run: |
-          mkdir -p cli/cmd/config
-          cp config/schema.yaml cli/cmd/config/
-
       - name: Generate Python datamodels
         working-directory: config
         run: |
@@ -72,6 +67,22 @@ jobs:
             exit 1
           fi
           echo "✓ Datamodel validation passed"
+          # Verify that compile_schema.py copied the dereferenced schema to cli/cmd/config
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
+
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Generate Go types
+        run: |
+          # Generate Go types from schema
+          cd cli/cmd/config
+          sh generate-types.sh
+          echo "✓ Go types generation complete"
 
       - name: Build CLI binary
         working-directory: cli

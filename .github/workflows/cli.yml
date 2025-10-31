@@ -2,13 +2,13 @@ name: Build CLI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths:
-      - 'cli/**'
-      - 'config/schema.yaml'
-      - '.github/workflows/cli**'
+      - "cli/**"
+      - "config/schema.yaml"
+      - ".github/workflows/cli**"
 
 jobs:
   build-cli:
@@ -43,7 +43,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.4'
+          go-version: "1.24.4"
           cache-dependency-path: cli/go.sum
 
       - name: Cache Go modules
@@ -56,36 +56,29 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Copy schema.yaml to CLI config
-        run: |
-          mkdir -p cli/cmd/config
-          cp config/schema.yaml cli/cmd/config/
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
 
-      - name: Generate Python datamodels
-        working-directory: config
-        run: |
-          echo "Generating datamodels from schema..."
-          ./generate-types.sh
-          echo "✓ Datamodel generation complete"
-
-      - name: Validate datamodel generation
-        working-directory: config
-        run: |
-          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
-            echo "❌ Error: datamodel.py not generated or is empty"
-            exit 1
-          fi
-          echo "✓ Datamodel validation passed"
+      - name: Install Node.js (for Nx)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Install dependencies
         working-directory: cli
         run: go mod download
+
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Install Nx CLI
+        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+
+      - name: Run generate-types (compiles schema and generates Go types)
+        run: nx generate-types cli
 
       - name: Create dist directory
         run: mkdir -p dist
@@ -104,7 +97,7 @@ jobs:
             VERSION=${GITHUB_SHA::8}
           fi
 
-          # Build with version info
+          # Build with version info (schema compilation and type generation already done by generate-types)
           go build -ldflags "-s -w -X llamafarm-cli/cmd.Version=${VERSION}" -o ../dist/${{ matrix.output }} .
 
       - name: Upload CLI artifact

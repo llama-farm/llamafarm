@@ -16,6 +16,3 @@ uv run datamodel-codegen \
 echo "✅ Python types generated"
 echo ""
 echo "✅ Done!"
-echo ""
-echo "NOTE: To validate Go types during development, run:"
-echo "  ./generate-go-types.sh && ./validate-go-types.sh"

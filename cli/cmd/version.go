@@ -20,7 +20,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of LlamaFarm CLI",
 	Long:  "Print the version number of LlamaFarm CLI",
 	Run: func(cmd *cobra.Command, args []string) {
-		OutputInfo("LlamaFarm CLI %s", formatVersionForDisplay(Version))
+		OutputInfoPlain("LlamaFarm CLI %s\n", formatVersionForDisplay(Version))
 	},
 }
 

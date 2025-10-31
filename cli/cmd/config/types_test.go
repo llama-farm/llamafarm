@@ -149,8 +149,37 @@ func TestLoadJSONConfig(t *testing.T) {
 	// Test loading a JSON config file from directory
 	jsonContent := `{
 		"version": "v1",
-		"name": "test-project-json",
-		"namespace": "test-org-json"
+		"name": "test_project_json",
+		"namespace": "test-org-json",
+		"datasets": [
+			{
+				"name": "test_dataset",
+				"database": "main_database",
+				"data_processing_strategy": "universal_processor",
+				"files": []
+			}
+		],
+		"prompts": [
+			{
+				"name": "test_prompt",
+				"messages": [
+					{
+						"role": "system",
+						"content": "You are a helpful AI assistant."
+					}
+				]
+			}
+		],
+		"runtime": {
+			"models": [
+				{
+					"name": "default",
+					"description": "Default model",
+					"provider": "ollama",
+					"model": "llama3.2"
+				}
+			]
+		}
 	}`
 	dir := writeTempJSONConfigDir(t, jsonContent)
 
@@ -164,8 +193,8 @@ func TestLoadJSONConfig(t *testing.T) {
 	if config.Version != "v1" {
 		t.Errorf("expected version 'v1', got '%s'", config.Version)
 	}
-	if config.Name != "test-project-json" {
-		t.Errorf("expected name 'test-project-json', got '%s'", config.Name)
+	if config.Name != "test_project_json" {
+		t.Errorf("expected name 'test_project_json', got '%s'", config.Name)
 	}
 	if config.Namespace != "test-org-json" {
 		t.Errorf("expected namespace 'test-org-json', got '%s'", config.Namespace)
