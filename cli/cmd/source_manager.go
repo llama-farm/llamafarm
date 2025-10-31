@@ -518,6 +518,18 @@ func (m *SourceManager) GetDesignerDir() string {
 	return filepath.Join(m.srcDir, "designer")
 }
 
+// VerifyDesignerBuild checks if designer/dist/index.html exists
+func (m *SourceManager) VerifyDesignerBuild() error {
+	designerDir := m.GetDesignerDir()
+	indexPath := filepath.Join(designerDir, "dist", "index.html")
+
+	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		return fmt.Errorf("designer build not found at %s - designer static files must be built before starting server", indexPath)
+	}
+
+	return nil
+}
+
 // GetConfigDir returns the path to the config source directory
 func (m *SourceManager) GetConfigDir() string {
 	return filepath.Join(m.srcDir, "config")

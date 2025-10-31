@@ -13,6 +13,19 @@ type DesignerLaunchOptions struct {
 }
 
 func StartDesignerInBackground(ctx context.Context, opts DesignerLaunchOptions) (string, error) {
+	// Check orchestration mode - if native, designer is served by server
+	orchestrationMode := determineOrchestrationMode()
+	if orchestrationMode == OrchestrationNative {
+		// Designer is served by server at root URL
+		serverURLToUse := serverURL
+		if serverURLToUse == "" {
+			serverURLToUse = "http://localhost:8000"
+		}
+		// Return server URL (designer is at root)
+		return serverURLToUse, nil
+	}
+
+	// Docker mode - use existing Docker container logic
 	if err := ensureDockerAvailable(); err != nil {
 		return "", err
 	}

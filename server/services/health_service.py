@@ -6,6 +6,7 @@ from typing import Any
 
 from config.datamodel import Model, Provider
 
+from core.designer import get_designer_dist_path
 from core.settings import settings
 from services import runtime_service
 from services.model_service import ModelService
@@ -181,6 +182,34 @@ def _check_seed_project() -> dict:
         }
 
 
+def _check_designer() -> dict:
+    """Check if designer static files are available."""
+    start = _now_ms()
+    try:
+        designer_dist_path = get_designer_dist_path()
+        if designer_dist_path is not None:
+            return {
+                "name": "designer",
+                "status": "healthy",
+                "message": "Static files available",
+                "latency_ms": _now_ms() - start,
+            }
+
+        return {
+            "name": "designer",
+            "status": "degraded",
+            "message": "Designer static files not found",
+            "latency_ms": _now_ms() - start,
+        }
+    except Exception as e:
+        return {
+            "name": "designer",
+            "status": "degraded",
+            "message": f"Designer check failed: {e}",
+            "latency_ms": _now_ms() - start,
+        }
+
+
 def _check_rag_service() -> dict:
     """Check RAG service health using cached status with background updates."""
     start = _now_ms()
@@ -260,6 +289,7 @@ def health_summary() -> dict[str, Any]:
 
     components.append(_check_server())
     components.append(_check_storage())
+    components.append(_check_designer())
     components.append(_check_ollama_runtime())
     components.append(_check_universal_runtime())
     components.append(_check_rag_service())
