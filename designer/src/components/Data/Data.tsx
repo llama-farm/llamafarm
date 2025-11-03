@@ -335,9 +335,10 @@ const Data = () => {
         multiple
         onChange={handleFileSelect}
       />
-      <div className="w-full flex flex-col flex-1 min-h-0">
-        {mode === 'designer' && (
-          <>
+      <div className="w-full flex-1 min-h-0 overflow-auto">
+        <div className="flex flex-col min-h-full">
+          {mode === 'designer' && (
+            <>
             {/* Processing strategies section */}
             <div className="flex items-center justify-between mt-0 mb-3">
               <div>
@@ -646,14 +647,14 @@ const Data = () => {
                 </Dialog>
               </div>
             </div>
-          </>
-        )}
-        {mode !== 'designer' ? (
-          <div className="flex-1 min-h-0 overflow-hidden pb-6">
-            <ConfigEditor className="h-full" />
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-auto pb-6">
+            </>
+          )}
+          {mode !== 'designer' ? (
+            <div className="flex-1 min-h-0 overflow-hidden pb-6">
+              <ConfigEditor className="h-full" />
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 pb-6">
             {isDragging ? (
               <div
                 className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
@@ -778,8 +779,9 @@ const Data = () => {
                 {/* Project-level raw files UI removed: files now only exist within datasets. */}
               </div>
             )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Edit dataset dialog */}

@@ -25,7 +25,7 @@ import { projectKeys } from '../hooks/useProjects'
 import { Button } from './ui/button'
 import { useMobileView } from '../contexts/MobileViewContext'
 
-type HeaderProps = { currentVersion?: string }
+type HeaderProps = { currentVersion?: string | null }
 
 function Header({ currentVersion }: HeaderProps) {
   const [isBuilding, setIsBuilding] = useState(false)
@@ -329,7 +329,7 @@ function Header({ currentVersion }: HeaderProps) {
               onClick={() => setVersionDialogOpen(true)}
               title="Version details"
             >
-              <span className="font-mono">v{currentVersion || '0.0.0'}</span>
+              <span className="font-mono">{currentVersion ? `v${currentVersion}` : '—'}</span>
             </button>
           ) : null}
           <div className="flex rounded-lg overflow-hidden border border-border">
