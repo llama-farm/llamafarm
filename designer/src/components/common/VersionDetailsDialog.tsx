@@ -43,7 +43,7 @@ export function VersionDetailsDialog({
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Current</span>
             <span className="font-mono text-foreground">
-              v{currentVersion}
+              {currentVersion ? `v${currentVersion}` : '—'}
             </span>
           </div>
           <div className="pt-1">

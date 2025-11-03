@@ -31,13 +31,10 @@ export function UpgradeModal({ open, onOpenChange }: Props) {
 
   const commands = useMemo(() => {
     const os = detectOS()
-    const tag = (() => {
-      if (latestVersion && latestVersion.trim() !== '')
-        return `v${latestVersion}`
-      return currentVersion && currentVersion.trim() !== ''
-        ? `v${currentVersion}`
-        : 'v0.0.0'
-    })()
+    if (!latestVersion || latestVersion.trim() === '') {
+      return { os, cli: [] }
+    }
+    const tag = `v${latestVersion}`
 
     const cli: { label: string; cmd: string }[] = []
     if (os === 'mac_linux') {
@@ -52,7 +49,7 @@ export function UpgradeModal({ open, onOpenChange }: Props) {
       })
     }
     return { os, cli }
-  }, [latestVersion, currentVersion])
+  }, [latestVersion])
 
   const copy = async (text: string, idx: number) => {
     try {
@@ -82,7 +79,9 @@ export function UpgradeModal({ open, onOpenChange }: Props) {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Current</span>
-              <span className="font-mono">v{currentVersion}</span>
+              <span className="font-mono">
+                {currentVersion ? `v${currentVersion}` : '—'}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Latest</span>

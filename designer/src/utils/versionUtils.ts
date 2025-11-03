@@ -7,6 +7,7 @@ export type ReleaseInfo = {
 const STORAGE_KEYS = {
   latest: 'lf_latest_release',
   checkedAt: 'lf_latest_release_checked_at',
+  currentVersion: 'lf_current_version',
 }
 
 
@@ -53,6 +54,20 @@ export function getStoredLatestRelease(): {
     return { info, checkedAt }
   } catch {
     return { info: null, checkedAt: null }
+  }
+}
+
+export function storeCurrentVersion(version: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.currentVersion, version)
+  } catch {}
+}
+
+export function getStoredCurrentVersion(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.currentVersion) || '0.0.0'
+  } catch {
+    return '0.0.0'
   }
 }
 

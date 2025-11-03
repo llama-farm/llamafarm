@@ -9,13 +9,18 @@ import {
   setDismissed,
   type DismissContext,
   getGithubReleasesUrl,
+  storeCurrentVersion,
+  getStoredCurrentVersion,
 } from '@/utils/versionUtils'
 import { getVersionCheck } from '@/api/systemService'
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
 
 export function useUpgradeAvailability() {
-  const [currentVersion, setCurrentVersion] = useState<string>('0.0.0')
+  const [currentVersion, setCurrentVersion] = useState<string | null>(() => {
+    const stored = getStoredCurrentVersion()
+    return stored === '0.0.0' ? null : stored
+  })
   const [{ info, checkedAt }, setCache] = useState(() =>
     getStoredLatestRelease()
   )
@@ -35,6 +40,7 @@ export function useUpgradeAvailability() {
         const serverCurrentVersion = res?.current_version
         if (serverCurrentVersion) {
           setCurrentVersion(serverCurrentVersion)
+          storeCurrentVersion(serverCurrentVersion)
         }
         if (latestVersion) {
           const mapped = { latestVersion, htmlUrl, publishedAt }
@@ -50,13 +56,13 @@ export function useUpgradeAvailability() {
     return () => abort.abort()
   }, [checkedAt])
 
-  const normalizedCurrent = normalizeVersion(currentVersion)
+  const normalizedCurrent = currentVersion ? normalizeVersion(currentVersion) : null
   const latestVersion = useMemo(
     () => normalizeVersion(info?.latestVersion),
     [info?.latestVersion]
   )
   const upgradeAvailable = useMemo(() => {
-    if (!latestVersion) return false
+    if (!latestVersion || !normalizedCurrent) return false
     return compareSemver(latestVersion, normalizedCurrent) > 0
   }, [latestVersion, normalizedCurrent])
 
@@ -84,6 +90,7 @@ export function useUpgradeAvailability() {
       const serverCurrentVersion = res?.current_version
       if (serverCurrentVersion) {
         setCurrentVersion(serverCurrentVersion)
+        storeCurrentVersion(serverCurrentVersion)
       }
       if (latestVersion) {
         const mapped = { latestVersion, htmlUrl, publishedAt }
