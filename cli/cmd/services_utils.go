@@ -48,6 +48,38 @@ func isPortInUse(port string) bool {
 	return true
 }
 
+// checkPortAndServer checks if a port is in use and whether it's our server
+// If it's our server but the PID file doesn't match, updates the PID file
+// Returns: (isInUse, isOurServer, error)
+func checkPortAndServer(port int, serverURL string, serviceName string) (bool, bool, error) {
+	portStr := fmt.Sprintf("%d", port)
+	if !isPortInUse(portStr) {
+		return false, false, nil
+	}
+
+	// Port is in use, check if it's our server
+	testURL := fmt.Sprintf("http://localhost:%d", port)
+	if _, err := checkServerHealth(testURL); err == nil {
+		// Successfully got health response - it's our server
+		return true, true, nil
+	}
+
+	// Port is in use but not our server
+	return true, false, nil
+}
+
+// findAvailablePort finds an available port starting from the given port
+func findAvailablePort(startPort int, maxAttempts int) (int, error) {
+	for i := 0; i < maxAttempts; i++ {
+		port := startPort + i
+		portStr := fmt.Sprintf("%d", port)
+		if !isPortInUse(portStr) {
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("no available port found in range %d-%d", startPort, startPort+maxAttempts-1)
+}
+
 // formatDuration formats a duration in a human-readable format
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {

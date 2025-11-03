@@ -28,7 +28,7 @@ type OutputMessage struct {
 	Type    MessageType
 	Content string
 	Writer  io.Writer // fallback writer when not in TUI mode
-	NoEmoji bool      // if true, don't add emoji prefix
+	InjectEmoji bool      // if false, don't add emoji prefix
 }
 
 // TUIMessageMsg is a Bubble Tea message for routing output to the TUI
@@ -94,7 +94,7 @@ func sendMessage(msgType MessageType, format string, args ...interface{}) {
 }
 
 // sendMessageWithOptions routes a message with optional emoji control
-func sendMessageWithOptions(msgType MessageType, noEmoji bool, format string, args ...interface{}) {
+func sendMessageWithOptions(msgType MessageType, injectEmoji bool, format string, args ...interface{}) {
 	content := fmt.Sprintf(format, args...)
 
 	outputManager.mu.RLock()
@@ -105,7 +105,7 @@ func sendMessageWithOptions(msgType MessageType, noEmoji bool, format string, ar
 		Type:    msgType,
 		Content: content,
 		Writer:  getDefaultWriter(msgType),
-		NoEmoji: noEmoji || disableEmojis,
+		InjectEmoji: injectEmoji && !disableEmojis,
 	}
 
 	outputManager.mu.RLock()
@@ -238,7 +238,7 @@ func OutputDebug(format string, args ...interface{}) {
 
 // FormatMessageForTUI formats a message for display in the TUI
 func FormatMessage(msg OutputMessage) string {
-	if msg.NoEmoji {
+	if !msg.InjectEmoji {
 		return msg.Content
 	}
 

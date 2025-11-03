@@ -85,7 +85,7 @@ func (m *PythonEnvManager) EnsurePython() (string, error) {
 
 // findPython finds the Python executable managed by UV
 func (m *PythonEnvManager) findPython(uvPath string) (string, error) {
-	cmd := exec.Command(uvPath, "python", "find", pythonVersion)
+	cmd := exec.Command(uvPath, "python", "--managed-python", "find", pythonVersion)
 	cmd.Dir = m.pythonDir // Run from Python directory context
 	cmd.Env = m.getEnv()
 	output, err := cmd.Output()

@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sync"
 	"time"
+	"syscall"
 )
 
 // ProcessInfo holds information about a managed process
@@ -120,6 +121,16 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 
 	// Start goroutine to monitor process
 	go pm.monitorProcess(name, cmd, logF)
+
+	// After launching, check that the process is still running.
+	time.Sleep(2 * time.Second)
+	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		// Clean up state if process failed to start
+		logF.Close()
+		// Note: pm.mu is already locked from line 55, no need to lock again
+		delete(pm.processes, name)
+		return fmt.Errorf("%s process failed to start or crashed immediately: %v (see logs at %s)", name, err, logFile)
+	}
 
 	if debug {
 		OutputProgress("%s process started (PID: %d)\n", name, cmd.Process.Pid)

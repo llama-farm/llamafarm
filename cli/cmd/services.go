@@ -242,19 +242,29 @@ func runServicesStart(cmd *cobra.Command, args []string) {
 	servicesToStart := getServicesToManage(args)
 
 	// Start services based on orchestration mode
+	var failedServices []string
 	if orchestrationMode == OrchestrationDocker {
-		startServicesDocker(servicesToStart, serverURLToUse)
+		failedServices = startServicesDocker(servicesToStart, serverURLToUse)
 	} else {
-		startServicesNative(servicesToStart, serverURLToUse)
+		failedServices = startServicesNative(servicesToStart, serverURLToUse)
 	}
 
-	// Show final status
-	fmt.Println()
-	OutputSuccess("Service start complete. Checking status...\n")
-	fmt.Println()
+	// Only show status if more than one service was requested
+	if len(servicesToStart) > 1 {
+		fmt.Println()
+		OutputSuccess("Service start complete. Checking status...\n")
+		fmt.Println()
 
-	// Re-run status check to show final state
-	runServicesStatus(cmd, []string{})
+		// Re-run status check to show final state
+		runServicesStatus(cmd, []string{})
+	}
+
+	// If any services failed, exit with error code
+	if len(failedServices) > 0 {
+		fmt.Println()
+		OutputError("Failed to start the following services: %v\n", failedServices)
+		os.Exit(1)
+	}
 }
 
 // runServicesStop is the main entry point for the services stop command

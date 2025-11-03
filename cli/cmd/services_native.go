@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -255,9 +256,12 @@ func stopServiceBySystem(serviceName string) error {
 }
 
 // startServicesNative starts multiple services using native processes
-func startServicesNative(serviceNames []string, serverURL string) {
+// Returns a list of service names that failed to start
+func startServicesNative(serviceNames []string, serverURL string) []string {
+	var failedServices []string
+
 	if debug {
-		OutputProgress("Starting services with native orchestration...\n")
+		OutputDebug("Starting services with native orchestration...\n")
 	}
 
 	// Ensure native environment is set up
@@ -288,27 +292,25 @@ func startServicesNative(serviceNames []string, serverURL string) {
 			startErr = orchestrator.StartUniversalRuntimeNative()
 		default:
 			OutputError("Unknown service: %s\n", serviceName)
+			failedServices = append(failedServices, serviceName)
 			continue
 		}
 
 		if startErr != nil {
-			OutputError("Failed to start %s: %v\n", serviceName, startErr)
-
-			// Provide helpful guidance for RAG failures
-			if serviceName == "rag" {
-				homeDir, _ := os.UserHomeDir()
-				logFile := filepath.Join(homeDir, ".llamafarm", "logs", "rag.log")
-				fmt.Fprintf(os.Stderr, "\n💡 Tips for troubleshooting RAG startup:\n")
-				fmt.Fprintf(os.Stderr, "  • Check the log file: %s\n", logFile)
-				fmt.Fprintf(os.Stderr, "  • Ensure the server is running: lf services start server\n")
-				fmt.Fprintf(os.Stderr, "  • Verify dependencies are synced: check ~/.llamafarm/src/rag/.venv\n")
-				fmt.Fprintf(os.Stderr, "  • Check for Python import errors in the log file\n")
+			// Check if the error indicates the service is already running
+			if errors.Is(startErr, ErrServiceAlreadyRunning) {
+				OutputProgress("%s is already running\n", serviceName)
+				continue
 			}
+			OutputError("Failed to start %s: %v\n", serviceName, startErr)
+			failedServices = append(failedServices, serviceName)
 			continue
 		}
 
 		OutputSuccess("%s started successfully\n", serviceName)
 	}
+
+	return failedServices
 }
 
 // stopServicesNative stops multiple services using native processes

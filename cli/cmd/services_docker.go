@@ -235,8 +235,11 @@ func getContainerDetails(containerName string) (containerID, image, uptime strin
 }
 
 // startServicesDocker starts multiple services using Docker
-func startServicesDocker(serviceNames []string, serverURL string) {
-	OutputProgress("Starting services with Docker orchestration...\n")
+// Returns a list of service names that failed to start
+func startServicesDocker(serviceNames []string, serverURL string) []string {
+	var failedServices []string
+
+	OutputDebug("Starting services with Docker orchestration...\n")
 
 	manager := NewDockerServiceManager(serverURL)
 
@@ -263,11 +266,14 @@ func startServicesDocker(serviceNames []string, serverURL string) {
 		// Start the service
 		if err := manager.StartService(serviceName); err != nil {
 			OutputError("Failed to start %s: %v\n", serviceName, err)
+			failedServices = append(failedServices, serviceName)
 			continue
 		}
 
 		OutputSuccess("%s started successfully\n", serviceName)
 	}
+
+	return failedServices
 }
 
 // stopServicesDocker stops multiple services using Docker

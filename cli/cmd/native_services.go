@@ -1,12 +1,17 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 )
+
+// ErrServiceAlreadyRunning indicates that a service is already running
+var ErrServiceAlreadyRunning = errors.New("service is already running")
 
 // NativeOrchestrator manages native process-based service orchestration
 type NativeOrchestrator struct {
@@ -63,7 +68,7 @@ func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
 		return nil
 	}
 
-	OutputProgress("Setting up native environment...\n")
+	OutputDebug("Setting up native environment...\n")
 
 	// Step 1: Ensure UV is installed
 	if _, err := no.uvManager.EnsureUV(); err != nil {
@@ -81,7 +86,7 @@ func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
 	}
 
 	no.initialized = true
-	OutputProgress("Native environment ready\n")
+	OutputDebug("Native environment ready\n")
 	return nil
 }
 
@@ -97,7 +102,44 @@ func (no *NativeOrchestrator) StartServerNative() error {
 		if debug {
 			logDebug("Server process already running")
 		}
-		return nil
+		return fmt.Errorf("server is already running: %w", ErrServiceAlreadyRunning)
+	}
+
+	// Get port from serverURL
+	port := resolvePort(no.serverURL, 8000)
+
+	// Check if port is in use and whether it's our server
+	isInUse, isOurServer, err := checkPortAndServer(port, no.serverURL, "server")
+	if err != nil {
+		return fmt.Errorf("failed to check port status: %w", err)
+	}
+
+	if isInUse {
+		if isOurServer {
+			// Our server is already running on this port
+			return fmt.Errorf("server is already running on port %d: %w", port, ErrServiceAlreadyRunning)
+		}
+
+		// Port is in use by something else
+		// Try to find an available port nearby
+		altPort, err := findAvailablePort(port+1, 10)
+		if err != nil {
+			return fmt.Errorf("port %d is already in use by another process and no alternative port found. Please stop the process using port %d or specify a different port with --server-url", port, port)
+		}
+
+		// Update serverURL to use the alternative port
+		u, err := url.Parse(no.serverURL)
+		if err != nil {
+			// If URL parsing fails, construct a simple URL
+			no.serverURL = fmt.Sprintf("http://localhost:%d", altPort)
+		} else {
+			u.Host = fmt.Sprintf("%s:%d", u.Hostname(), altPort)
+			no.serverURL = u.String()
+		}
+
+		OutputWarning("Port %d is already in use by another process. Using alternative port %d instead.\n", port, altPort)
+		OutputWarning("Server will be accessible at %s\n", no.serverURL)
+		port = altPort
 	}
 
 	// Verify designer build exists before starting server
@@ -109,7 +151,7 @@ func (no *NativeOrchestrator) StartServerNative() error {
 		// Designer will show as degraded in health check
 	}
 
-	OutputProgress("Starting server via native process...\n")
+	OutputDebug("Starting server via native process...\n")
 
 	// Prepare server environment
 	env := no.getServerEnv()
@@ -119,7 +161,7 @@ func (no *NativeOrchestrator) StartServerNative() error {
 
 	// Build command: uv run python main.py
 	uvPath := no.uvManager.GetUVPath()
-	args := []string{uvPath, "run", "python", "main.py"}
+	args := []string{uvPath, "--managed-python", "run", "python", "main.py"}
 
 	// Start the process
 	if err := no.processMgr.StartProcess("server", serverDir, env, args...); err != nil {
@@ -144,10 +186,10 @@ func (no *NativeOrchestrator) StartRAGNative() error {
 		if debug {
 			logDebug("RAG process already running")
 		}
-		return nil
+		return fmt.Errorf("RAG is already running: %w", ErrServiceAlreadyRunning)
 	}
 
-	OutputProgress("Starting RAG worker via native process...\n")
+	OutputDebug("Starting RAG worker via native process...\n")
 
 	// Prepare RAG environment
 	env := no.getRAGEnv()
@@ -157,7 +199,7 @@ func (no *NativeOrchestrator) StartRAGNative() error {
 
 	// Build command: uv run python main.py
 	uvPath := no.uvManager.GetUVPath()
-	args := []string{uvPath, "run", "python", "main.py"}
+	args := []string{uvPath, "--managed-python", "run", "python", "main.py"}
 
 	// Start the process
 	if err := no.processMgr.StartProcess("rag", ragDir, env, args...); err != nil {
@@ -187,10 +229,10 @@ func (no *NativeOrchestrator) StartUniversalRuntimeNative() error {
 		if debug {
 			logDebug("Universal runtime process already running")
 		}
-		return nil
+		return fmt.Errorf("universal-runtime is already running: %w", ErrServiceAlreadyRunning)
 	}
 
-	OutputProgress("Starting universal runtime via native process...\n")
+	OutputDebug("Starting universal runtime via native process...\n")
 
 	// Prepare universal runtime environment
 	env := no.getUniversalRuntimeEnv()
@@ -200,7 +242,7 @@ func (no *NativeOrchestrator) StartUniversalRuntimeNative() error {
 
 	// Build command: uv run python server.py
 	uvPath := no.uvManager.GetUVPath()
-	args := []string{uvPath, "run", "python", "server.py"}
+	args := []string{uvPath, "--managed-python", "run", "python", "server.py"}
 
 	// Start the process
 	if err := no.processMgr.StartProcess("universal-runtime", runtimeDir, env, args...); err != nil {
@@ -326,11 +368,6 @@ func (no *NativeOrchestrator) getUniversalRuntimeEnv() []string {
 	if val := os.Getenv("HF_TOKEN"); val != "" {
 		env = append(env, fmt.Sprintf("HF_TOKEN=%s", val))
 	}
-
-	// Set up file logging for the universal runtime
-	logsDir := filepath.Join(llamafarmDir, "logs")
-	universalLogFile := filepath.Join(logsDir, "universal-runtime.log")
-	env = append(env, fmt.Sprintf("LOG_FILE=%s", universalLogFile))
 
 	// Add any other environment variables from current environment
 	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
