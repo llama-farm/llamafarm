@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   compareSemver,
-  getCurrentVersion,
   getStoredLatestRelease,
   normalizeVersion,
   shouldCheck,
@@ -16,7 +15,7 @@ import { getVersionCheck } from '@/api/systemService'
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
 
 export function useUpgradeAvailability() {
-  const [currentVersion] = useState<string>(() => getCurrentVersion())
+  const [currentVersion, setCurrentVersion] = useState<string>('0.0.0')
   const [{ info, checkedAt }, setCache] = useState(() =>
     getStoredLatestRelease()
   )
@@ -33,6 +32,10 @@ export function useUpgradeAvailability() {
         const latestVersion = res?.latest_version || ''
         const htmlUrl = res?.release_url || getGithubReleasesUrl()
         const publishedAt = res?.published_at
+        const serverCurrentVersion = res?.current_version
+        if (serverCurrentVersion) {
+          setCurrentVersion(serverCurrentVersion)
+        }
         if (latestVersion) {
           const mapped = { latestVersion, htmlUrl, publishedAt }
           storeLatestRelease(mapped)
@@ -78,6 +81,10 @@ export function useUpgradeAvailability() {
       const latestVersion = res?.latest_version || ''
       const htmlUrl = res?.release_url || getGithubReleasesUrl()
       const publishedAt = res?.published_at
+      const serverCurrentVersion = res?.current_version
+      if (serverCurrentVersion) {
+        setCurrentVersion(serverCurrentVersion)
+      }
       if (latestVersion) {
         const mapped = { latestVersion, htmlUrl, publishedAt }
         storeLatestRelease(mapped)

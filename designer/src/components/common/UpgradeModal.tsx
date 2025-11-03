@@ -7,7 +7,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useUpgradeAvailability } from '@/hooks/useUpgradeAvailability'
-import { getInjectedImageTag } from '@/utils/versionUtils'
 
 type Props = {
   open: boolean
@@ -29,25 +28,12 @@ export function UpgradeModal({ open, onOpenChange }: Props) {
     releasesUrl,
   } = useUpgradeAvailability()
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
-  const [imageTag, setImageTag] = useState<string | null>(null)
-
-  // Prefer injected image tag if available (checks both import.meta.env and window.ENV)
-  useEffect(() => {
-    let alive = true
-    const tag = getInjectedImageTag()
-    if (alive) setImageTag(tag)
-    return () => {
-      alive = false
-    }
-  }, [])
 
   const commands = useMemo(() => {
     const os = detectOS()
     const tag = (() => {
       if (latestVersion && latestVersion.trim() !== '')
         return `v${latestVersion}`
-      if (imageTag && imageTag.trim() !== '')
-        return imageTag.startsWith('v') ? imageTag : `v${imageTag}`
       return currentVersion && currentVersion.trim() !== ''
         ? `v${currentVersion}`
         : 'v0.0.0'
@@ -66,7 +52,7 @@ export function UpgradeModal({ open, onOpenChange }: Props) {
       })
     }
     return { os, cli }
-  }, [latestVersion, imageTag, currentVersion])
+  }, [latestVersion, currentVersion])
 
   const copy = async (text: string, idx: number) => {
     try {
@@ -96,7 +82,7 @@ export function UpgradeModal({ open, onOpenChange }: Props) {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Current</span>
-              <span className="font-mono">v{imageTag || currentVersion}</span>
+              <span className="font-mono">v{currentVersion}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Latest</span>
