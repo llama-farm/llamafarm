@@ -2,9 +2,14 @@
 Language model wrapper for text generation or embedding.
 """
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    PreTrainedTokenizerBase,
+    TextIteratorStreamer,
+)
 import torch
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, cast
 import logging
 from threading import Thread
 
@@ -21,14 +26,14 @@ class LanguageModel(BaseModel):
         self.model_type = "language"
         self.supports_streaming = True
 
-    async def load(self):
+    async def load(self) -> None:
         """Load the causal language model."""
         logger.info(f"Loading causal LM: {self.model_id}")
 
         dtype = self.get_dtype()
 
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
             self.model_id,
             trust_remote_code=True,
             token=self.token,
@@ -43,19 +48,22 @@ class LanguageModel(BaseModel):
             token=self.token,
         )
 
-        if self.device != "cuda":
-            self.model = self.model.to(self.device)
+        if self.device != "cuda" and self.model is not None:
+            self.model = self.model.to(self.device)  # type: ignore[arg-type]
 
         logger.info(f"Causal LM loaded on {self.device}")
 
     def format_messages(self, messages: List[dict]) -> str:
         """Format chat messages into a prompt."""
         # Try to use tokenizer's chat template if available
-        if hasattr(self.tokenizer, "apply_chat_template"):
+        if self.tokenizer and hasattr(self.tokenizer, "apply_chat_template"):
             try:
-                return self.tokenizer.apply_chat_template(
+                result = self.tokenizer.apply_chat_template(
                     messages, tokenize=False, add_generation_prompt=True
                 )
+                # apply_chat_template with tokenize=False returns str
+                if isinstance(result, str):
+                    return result
             except Exception:
                 pass
 
@@ -78,6 +86,8 @@ class LanguageModel(BaseModel):
         stop: Optional[List[str]] = None,
     ) -> str:
         """Generate text completion."""
+        assert self.model is not None, "Model not loaded"
+        assert self.tokenizer is not None, "Tokenizer not loaded"
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
@@ -109,13 +119,18 @@ class LanguageModel(BaseModel):
         stop: Optional[List[str]] = None,
     ) -> AsyncGenerator[str, None]:
         """Generate text completion with streaming (yields tokens as they're generated)."""
+        assert self.model is not None, "Model not loaded"
+        assert self.tokenizer is not None, "Tokenizer not loaded"
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
         max_new_tokens = max_tokens or 512
 
         # Create a streamer that will yield tokens as they're generated
+        # TextIteratorStreamer type hints expect AutoTokenizer but works with base class
         streamer = TextIteratorStreamer(
-            self.tokenizer, skip_prompt=True, skip_special_tokens=True
+            cast(AutoTokenizer, self.tokenizer),
+            skip_prompt=True,
+            skip_special_tokens=True,
         )
 
         # Generation kwargs
@@ -130,7 +145,7 @@ class LanguageModel(BaseModel):
         }
 
         # Run generation in a separate thread so we can stream the results
-        thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+        thread = Thread(target=self.model.generate, kwargs=generation_kwargs)  # type: ignore[arg-type]
         thread.start()
 
         # Yield tokens as they become available
