@@ -897,6 +897,8 @@ Contributions are welcome! Please follow the [LlamaFarm contribution guidelines]
 4. **Test**: Run `uv run pytest tests/ -v`
 5. **Document**: Update README and relevant docs
 
+**Note:** Pre-commit hooks are configured to automatically format code with ruff when committing changes in any Python component (`server/`, `rag/`, `config/`, `runtimes/universal/`). The hooks are installed at the repository root and will run `ruff check --fix` and `ruff format` on all staged Python files in these directories.
+
 ### Adding New Model Types
 
 1. Create model class in `models/` inheriting from `BaseModel`

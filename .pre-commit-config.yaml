@@ -1,0 +1,22 @@
+# Pre-commit hooks for LlamaFarm monorepo
+# NOTE: Hooks only run on STAGED files by default (not all files in the repo)
+repos:
+  # Ruff for all Python components
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.7
+    hooks:
+      # Run ruff linter with auto-fix on staged Python files
+      - id: ruff
+        name: ruff check (Python components)
+        args: [--fix]
+        files: ^(server|rag|config|runtimes/universal)/.*\.py$
+        stages: [commit]  # Explicit: run during git commit
+        pass_filenames: true  # Explicit: pass staged filenames to ruff
+        
+      # Run ruff formatter on staged Python files
+      - id: ruff-format
+        name: ruff format (Python components)
+        files: ^(server|rag|config|runtimes/universal)/.*\.py$
+        stages: [commit]  # Explicit: run during git commit
+        pass_filenames: true  # Explicit: pass staged filenames to ruff
+

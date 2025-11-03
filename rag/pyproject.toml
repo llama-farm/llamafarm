@@ -336,49 +336,30 @@ llamafarm-config = { path = "../config", editable = true }
 llamafarm-common = { path = "../common", editable = true }
 
 [tool.ruff]
-target-version = "py39"
-line-length = 88
-select = [
-  "E",  # pycodestyle errors
-  "W",  # pycodestyle warnings
-  "F",  # pyflakes
-  "I",  # isort
-  "B",  # flake8-bugbear
-  "C4", # flake8-comprehensions
-  "UP", # pyupgrade
-]
-ignore = [
-  "E501", # line too long, handled by black
-  "B008", # do not perform function calls in argument defaults
-  "C901", # too complex
-]
+line-length = 88         # Match Black's default
+target-version = "py311"
+
+# Enable auto-fixes
+fix = true
+
+# Select rulesets
+lint.select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# Ignore line-too-long errors (they require manual refactoring)
+lint.ignore = ["E501"]
+
+# Exclude some files
 exclude = [
-  ".bzr",
-  ".direnv",
-  ".eggs",
-  ".git",
-  ".hg",
-  ".mypy_cache",
-  ".nox",
-  ".pants.d",
-  ".ruff_cache",
-  ".svn",
-  ".tox",
+  "migrations",
   ".venv",
-  "__pypackages__",
-  "_build",
-  "buck-out",
+  "venv",
   "build",
   "dist",
-  "node_modules",
-  "venv",
-  "rag_env",
-  "chroma_db",
+  "__pycache__",
+  "*.egg-info",
+  "rag_env",     # Component-specific: RAG virtual environment
+  "chroma_db",   # Component-specific: ChromaDB data directory
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"test_*.py" = ["D100", "D101", "D102", "D103", "D104"]
-
-[tool.ruff.mccabe]
-max-complexity = 10

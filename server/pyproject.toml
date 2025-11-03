@@ -69,11 +69,25 @@ target-version = "py311"
 # Enable auto-fixes
 fix = true
 
-# Select rulesets (examples: E for pycodestyle, F for pyflakes, I for isort, B for bugbear)
+# Select rulesets
 lint.select = ["E", "F", "I", "B", "UP", "SIM"]
 
+# Ignore line-too-long errors (they require manual refactoring)
+lint.ignore = ["E501"]
+
 # Exclude some files
-exclude = ["migrations", ".venv", "venv", "build", "dist"]
+exclude = [
+  "migrations",
+  ".venv",
+  "venv",
+  "build",
+  "dist",
+  "__pycache__",
+  "*.egg-info",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
 
 [tool.uv.sources]
 llamafarm-config = { path = "../config", editable = true }

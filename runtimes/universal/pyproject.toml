@@ -20,6 +20,9 @@ dependencies = [
   "structlog>=24.0.0",
 ]
 
+[dependency-groups]
+dev = ["ruff>=0.14.3"]
+
 [project.optional-dependencies]
 xformers = ["xformers>=0.0.22"]
 
@@ -43,3 +46,30 @@ dev-dependencies = [
 
 [tool.uv.sources]
 llamafarm-common = { path = "../../common", editable = true }
+
+[tool.ruff]
+line-length = 88         # Match Black's default
+target-version = "py311"
+
+# Enable auto-fixes
+fix = true
+
+# Select rulesets
+lint.select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# Ignore line-too-long errors (they require manual refactoring)
+lint.ignore = ["E501"]
+
+# Exclude some files
+exclude = [
+  "migrations",
+  ".venv",
+  "venv",
+  "build",
+  "dist",
+  "__pycache__",
+  "*.egg-info",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

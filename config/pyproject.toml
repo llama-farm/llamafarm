@@ -35,17 +35,32 @@ dev = [
 generate-types = "config.generate_types:main"
 
 [tool.ruff]
-line-length = 100
+line-length = 88         # Match Black's default
 target-version = "py311"
 
 # Enable auto-fixes
 fix = true
 
-# Select rulesets (examples: E for pycodestyle, F for pyflakes, I for isort, B for bugbear)
+# Select rulesets
 lint.select = ["E", "F", "I", "B", "UP", "SIM"]
 
+# Ignore line-too-long errors (they require manual refactoring)
+lint.ignore = ["E501"]
+
 # Exclude some files
-exclude = ["migrations", ".venv", "venv", "build", "dist", "datamodel.py"]
+exclude = [
+  "migrations",
+  ".venv",
+  "venv",
+  "build",
+  "dist",
+  "__pycache__",
+  "*.egg-info",
+  "datamodel.py", # Component-specific: generated file
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
