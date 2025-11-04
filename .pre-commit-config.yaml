@@ -2,21 +2,14 @@
 # NOTE: Hooks only run on STAGED files by default (not all files in the repo)
 repos:
   # Ruff for all Python components
+  # Version synced with dev-dependencies in pyproject.toml files
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.7
+    rev: v0.14.3
     hooks:
-      # Run ruff linter with auto-fix on staged Python files
+      # Run ruff check with auto-fix (includes formatting)
+      # Note: --fix applies both linting fixes AND formatting
       - id: ruff
-        name: ruff check (Python components)
+        name: ruff check + format (Python components)
         args: [--fix]
         files: ^(server|rag|config|runtimes/universal)/.*\.py$
-        stages: [commit]  # Explicit: run during git commit
-        pass_filenames: true  # Explicit: pass staged filenames to ruff
-        
-      # Run ruff formatter on staged Python files
-      - id: ruff-format
-        name: ruff format (Python components)
-        files: ^(server|rag|config|runtimes/universal)/.*\.py$
-        stages: [commit]  # Explicit: run during git commit
-        pass_filenames: true  # Explicit: pass staged filenames to ruff
 

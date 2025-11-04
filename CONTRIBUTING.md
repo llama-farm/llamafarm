@@ -134,7 +134,7 @@ Both issue lists are sorted by total number of comments. While not perfect, numb
 ### Code Formatting
 
 #### Pre-commit Hooks
-This repository uses pre-commit hooks to automatically format code before commits. The hooks are configured to run ruff formatting on all Python components: `server/`, `rag/`, `config/`, and `runtimes/universal/`.
+This repository uses pre-commit hooks to automatically format code before commits. Ruff configuration is shared across all Python components via `ruff.toml` at the repository root.
 
 **Installation:**
 ```bash
@@ -175,6 +175,12 @@ git commit -m "feat(runtime): add new model feature"
 ```
 
 **Tip:** You can also run `uvx pre-commit run` before committing to catch and fix issues early.
+
+#### Shared Ruff Configuration
+
+All Python components use a shared ruff configuration located at `ruff.toml` in the repository root. This eliminates duplication and ensures consistency across all Python code.
+
+Component-specific exclusions (like `datamodel.py` for config or `chroma_db/` for rag) are defined using `extend-exclude` in each component's `pyproject.toml`.
 
 ### Commit Messages
 We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) to keep things structured and make changelog management easy.
