@@ -73,7 +73,7 @@ class MCPService:
         """List all configured MCP server names."""
         return [s.name for s in self._servers]
 
-    def get_server(self, server_name: str) -> Server:
+    def get_server(self, server_name: str) -> Server | None:
         """Get the MCP server configuration by name."""
         return next((s for s in self._servers if s.name == server_name), None)
 
