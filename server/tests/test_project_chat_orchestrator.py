@@ -9,7 +9,6 @@ from config.datamodel import (
     PromptMessage,
     Model,
     PromptSet,
-    PromptFormat,
     Provider,
     Runtime,
     Version,
@@ -42,9 +41,7 @@ def dummy_client():
     return DummyClient()
 
 
-def make_config(
-    prompt_format: PromptFormat, model: str = "tinyllama:latest"
-) -> LlamaFarmConfig:
+def make_config(model: str = "tinyllama:latest") -> LlamaFarmConfig:
     return LlamaFarmConfig(
         version=Version.v1,
         name="demo",
@@ -60,7 +57,6 @@ def make_config(
                     provider=Provider.ollama,
                     model=model,
                     base_url="http://localhost:11434/v1",
-                    prompt_format=prompt_format,
                     api_key="ollama",
                     instructor_mode="tools",
                     model_api_parameters={},
@@ -83,7 +79,7 @@ def make_config(
 
 @pytest.mark.asyncio
 async def test_factory_returns_unstructured_agent(monkeypatch, dummy_client):
-    config = make_config(PromptFormat.unstructured)
+    config = make_config()
 
     with tempfile.TemporaryDirectory() as project_dir:
         agent = await ChatOrchestratorAgentFactory.create_agent(
@@ -99,7 +95,7 @@ async def test_factory_returns_unstructured_agent(monkeypatch, dummy_client):
 async def test_simple_rag_agent_injects_context(monkeypatch):
     captured = {}
 
-    config = make_config(PromptFormat.unstructured, model="tinyllama:latest")
+    config = make_config(model="tinyllama:latest")
 
     # Intercept LFAgent.run_async to capture messages (no network calls)
     from agents.base.agent import LFAgent

@@ -5,7 +5,16 @@ Unit tests for MCPToolFactory
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from config.datamodel import LlamaFarmConfig, Mcp, Server, Transport
+from config.datamodel import (
+    LlamaFarmConfig,
+    Mcp,
+    Model,
+    Provider,
+    Runtime,
+    Server,
+    Transport,
+    Version,
+)
 
 from services.mcp_service import MCPService
 from tools.mcp_tool.tool.mcp_tool_factory import (
@@ -17,13 +26,19 @@ from tools.mcp_tool.tool.mcp_tool_factory import (
 def mock_config():
     """Create a mock config with MCP servers."""
     return LlamaFarmConfig(
-        version="v1",
+        version=Version.v1,
         name="test-project",
         namespace="test",
-        runtime={
-            "provider": "ollama",
-            "model": "llama3.2:latest",
-        },
+        runtime=Runtime(
+            default_model="default",
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.ollama,
+                    model="llama3.2:latest",
+                )
+            ],
+        ),
         prompts=[],
         mcp=Mcp(
             servers=[

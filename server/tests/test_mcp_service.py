@@ -6,7 +6,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from config.datamodel import LlamaFarmConfig, Mcp, Server, Transport
+from config.datamodel import (
+    LlamaFarmConfig,
+    Mcp,
+    Model,
+    Provider,
+    Runtime,
+    Server,
+    Transport,
+    Version,
+)
 from services.mcp_service import MCPService, ToolSchema
 
 
@@ -14,13 +23,19 @@ from services.mcp_service import MCPService, ToolSchema
 def mock_stdio_config():
     """Create a mock config with a stdio MCP server."""
     return LlamaFarmConfig(
-        version="v1",
+        version=Version.v1,
         name="test-project",
         namespace="test",
-        runtime={
-            "provider": "ollama",
-            "model": "llama3.2:latest",
-        },
+        runtime=Runtime(
+            default_model="default",
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.ollama,
+                    model="llama3.2:latest",
+                )
+            ],
+        ),
         prompts=[],
         mcp=Mcp(
             servers=[
@@ -40,13 +55,19 @@ def mock_stdio_config():
 def mock_http_config():
     """Create a mock config with an HTTP MCP server."""
     return LlamaFarmConfig(
-        version="v1",
+        version=Version.v1,
         name="test-project",
         namespace="test",
-        runtime={
-            "provider": "ollama",
-            "model": "llama3.2:latest",
-        },
+        runtime=Runtime(
+            default_model="default",
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.ollama,
+                    model="llama3.2:latest",
+                )
+            ],
+        ),
         prompts=[],
         mcp=Mcp(
             servers=[
@@ -67,13 +88,19 @@ class TestMCPService:
     def test_init_with_no_mcp_config(self):
         """Test initialization with no MCP config."""
         config = LlamaFarmConfig(
-            version="v1",
+            version=Version.v1,
             name="test-project",
             namespace="test",
-            runtime={
-                "provider": "ollama",
-                "model": "llama3.2:latest",
-            },
+            runtime=Runtime(
+                default_model="default",
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.ollama,
+                        model="llama3.2:latest",
+                    )
+                ],
+            ),
             prompts=[],
         )
         service = MCPService(config)
@@ -87,13 +114,19 @@ class TestMCPService:
     def test_list_servers(self, mock_stdio_config, mock_http_config):
         """Test listing configured servers."""
         config = LlamaFarmConfig(
-            version="v1",
+            version=Version.v1,
             name="test-project",
             namespace="test",
-            runtime={
-                "provider": "ollama",
-                "model": "llama3.2:latest",
-            },
+            runtime=Runtime(
+                default_model="default",
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.ollama,
+                        model="llama3.2:latest",
+                    )
+                ],
+            ),
             prompts=[],
             mcp=Mcp(
                 servers=mock_stdio_config.mcp.servers + mock_http_config.mcp.servers
@@ -442,13 +475,19 @@ class TestMCPServicePersistentSessions:
     async def test_stdio_server_without_command(self):
         """Test STDIO server without command configured."""
         config = LlamaFarmConfig(
-            version="v1",
+            version=Version.v1,
             name="test-project",
             namespace="test",
-            runtime={
-                "provider": "ollama",
-                "model": "llama3.2:latest",
-            },
+            runtime=Runtime(
+                default_model="default",
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.ollama,
+                        model="llama3.2:latest",
+                    )
+                ],
+            ),
             prompts=[],
             mcp=Mcp(
                 servers=[
@@ -470,13 +509,19 @@ class TestMCPServicePersistentSessions:
     async def test_http_server_without_base_url(self):
         """Test HTTP server without base_url configured."""
         config = LlamaFarmConfig(
-            version="v1",
+            version=Version.v1,
             name="test-project",
             namespace="test",
-            runtime={
-                "provider": "ollama",
-                "model": "llama3.2:latest",
-            },
+            runtime=Runtime(
+                default_model="default",
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.ollama,
+                        model="llama3.2:latest",
+                    )
+                ],
+            ),
             prompts=[],
             mcp=Mcp(
                 servers=[
@@ -493,3 +538,278 @@ class TestMCPServicePersistentSessions:
 
         with pytest.raises(ValueError, match="has no base_url"):
             await service.get_or_create_persistent_session("invalid-http")
+
+
+class TestMCPServiceServerSelection:
+    """Test suite for model-specific MCP server subset selection."""
+
+    def test_model_with_mcp_servers_subset(self):
+        """Test that model can specify a subset of MCP servers."""
+        from config.datamodel import Model, Provider, Runtime, Version
+
+        config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test-project",
+            namespace="test",
+            runtime=Runtime(
+                default_model="model-with-subset",
+                models=[
+                    Model(
+                        name="model-with-subset",
+                        provider=Provider.openai,
+                        model="gpt-4",
+                        mcp_servers=["filesystem", "weather"],  # Only these two
+                    )
+                ],
+            ),
+            prompts=[],
+            mcp=Mcp(
+                servers=[
+                    Server(
+                        name="filesystem",
+                        transport=Transport.http,
+                        base_url="http://localhost:8080",
+                    ),
+                    Server(
+                        name="weather",
+                        transport=Transport.http,
+                        base_url="http://localhost:8081",
+                    ),
+                    Server(
+                        name="database",
+                        transport=Transport.http,
+                        base_url="http://localhost:8082",
+                    ),
+                    Server(
+                        name="calendar",
+                        transport=Transport.http,
+                        base_url="http://localhost:8083",
+                    ),
+                ]
+            ),
+        )
+
+        # Create service with model that specifies subset
+        service = MCPService(config, model_name="model-with-subset")
+
+        # Should only have the specified servers
+        servers = service.list_servers()
+        assert set(servers) == {"filesystem", "weather"}
+        assert "database" not in servers
+        assert "calendar" not in servers
+
+    def test_model_without_mcp_servers_uses_all(self):
+        """Test that model without mcp_servers uses all available servers."""
+        from config.datamodel import Model, Provider, Runtime, Version
+
+        config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test-project",
+            namespace="test",
+            runtime=Runtime(
+                default_model="default",
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.openai,
+                        model="gpt-4",
+                        # No mcp_servers specified
+                    )
+                ],
+            ),
+            prompts=[],
+            mcp=Mcp(
+                servers=[
+                    Server(
+                        name="filesystem",
+                        transport=Transport.http,
+                        base_url="http://localhost:8080",
+                    ),
+                    Server(
+                        name="weather",
+                        transport=Transport.http,
+                        base_url="http://localhost:8081",
+                    ),
+                    Server(
+                        name="database",
+                        transport=Transport.http,
+                        base_url="http://localhost:8082",
+                    ),
+                ]
+            ),
+        )
+
+        # Create service with model that doesn't specify servers
+        service = MCPService(config, model_name="default")
+
+        # Should have all servers
+        servers = service.list_servers()
+        assert set(servers) == {"filesystem", "weather", "database"}
+
+    def test_model_with_empty_mcp_servers(self):
+        """Test that model with empty mcp_servers list has no servers."""
+        from config.datamodel import Model, Provider, Runtime, Version
+
+        config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test-project",
+            namespace="test",
+            runtime=Runtime(
+                default_model="no-mcp",
+                models=[
+                    Model(
+                        name="no-mcp",
+                        provider=Provider.openai,
+                        model="gpt-4",
+                        mcp_servers=[],  # Explicitly empty
+                    )
+                ],
+            ),
+            prompts=[],
+            mcp=Mcp(
+                servers=[
+                    Server(
+                        name="filesystem",
+                        transport=Transport.http,
+                        base_url="http://localhost:8080",
+                    ),
+                ]
+            ),
+        )
+
+        # Create service with model that has empty server list
+        service = MCPService(config, model_name="no-mcp")
+
+        # Should have no servers
+        servers = service.list_servers()
+        assert servers == []
+
+    def test_model_with_nonexistent_server_names(self):
+        """Test that non-existent server names are silently filtered out."""
+        from config.datamodel import Model, Provider, Runtime, Version
+
+        config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test-project",
+            namespace="test",
+            runtime=Runtime(
+                default_model="model-with-invalid",
+                models=[
+                    Model(
+                        name="model-with-invalid",
+                        provider=Provider.openai,
+                        model="gpt-4",
+                        mcp_servers=["filesystem", "nonexistent", "weather"],
+                    )
+                ],
+            ),
+            prompts=[],
+            mcp=Mcp(
+                servers=[
+                    Server(
+                        name="filesystem",
+                        transport=Transport.http,
+                        base_url="http://localhost:8080",
+                    ),
+                    Server(
+                        name="weather",
+                        transport=Transport.http,
+                        base_url="http://localhost:8081",
+                    ),
+                ]
+            ),
+        )
+
+        # Create service with model that references non-existent server
+        service = MCPService(config, model_name="model-with-invalid")
+
+        # Should only have the valid servers
+        servers = service.list_servers()
+        assert set(servers) == {"filesystem", "weather"}
+        assert "nonexistent" not in servers
+
+    def test_model_with_single_server(self):
+        """Test that model can specify a single MCP server."""
+        from config.datamodel import Model, Provider, Runtime, Version
+
+        config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test-project",
+            namespace="test",
+            runtime=Runtime(
+                default_model="single-server-model",
+                models=[
+                    Model(
+                        name="single-server-model",
+                        provider=Provider.openai,
+                        model="gpt-4",
+                        mcp_servers=["database"],
+                    )
+                ],
+            ),
+            prompts=[],
+            mcp=Mcp(
+                servers=[
+                    Server(
+                        name="filesystem",
+                        transport=Transport.http,
+                        base_url="http://localhost:8080",
+                    ),
+                    Server(
+                        name="database",
+                        transport=Transport.http,
+                        base_url="http://localhost:8082",
+                    ),
+                ]
+            ),
+        )
+
+        # Create service with model that specifies one server
+        service = MCPService(config, model_name="single-server-model")
+
+        # Should only have the database server
+        servers = service.list_servers()
+        assert servers == ["database"]
+
+    def test_default_model_name_none_uses_all_servers(self):
+        """Test that passing model_name=None uses default model settings."""
+        from config.datamodel import Model, Provider, Runtime, Version
+
+        config = LlamaFarmConfig(
+            version=Version.v1,
+            name="test-project",
+            namespace="test",
+            runtime=Runtime(
+                default_model="default",
+                models=[
+                    Model(
+                        name="default",
+                        provider=Provider.openai,
+                        model="gpt-4",
+                        # No mcp_servers specified - should use all
+                    )
+                ],
+            ),
+            prompts=[],
+            mcp=Mcp(
+                servers=[
+                    Server(
+                        name="filesystem",
+                        transport=Transport.http,
+                        base_url="http://localhost:8080",
+                    ),
+                    Server(
+                        name="weather",
+                        transport=Transport.http,
+                        base_url="http://localhost:8081",
+                    ),
+                ]
+            ),
+        )
+
+        # Create service with model_name=None (uses default)
+        service = MCPService(config, model_name=None)
+
+        # Should have all servers
+        servers = service.list_servers()
+        assert set(servers) == {"filesystem", "weather"}
