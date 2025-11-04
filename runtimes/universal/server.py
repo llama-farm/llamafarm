@@ -19,17 +19,13 @@ from contextlib import asynccontextmanager
 from fastapi import (
     FastAPI,
     HTTPException,
-    Request,
 )
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel as PydanticBaseModel
 from typing import Optional, Literal, List, Union
 import os
 import base64
 from datetime import datetime
-import json
-
-from openai.types.chat import ChatCompletionMessageParam
+from routers.chat_completions import router as chat_completions_router
 
 from models import (
     BaseModel,
@@ -66,6 +62,7 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+app.include_router(chat_completions_router)
 
 # Global model cache
 _models: dict[str, BaseModel] = {}
@@ -118,27 +115,6 @@ async def load_encoder(model_id: str, task: str = "embedding"):
 
 
 # ============================================================================
-# Request/Response Models (using OpenAI types)
-# ============================================================================
-
-
-class ChatCompletionRequest(PydanticBaseModel):
-    """OpenAI-compatible chat completion request."""
-
-    model: str
-    messages: List[ChatCompletionMessageParam]
-    temperature: Optional[float] = 1.0
-    top_p: Optional[float] = 1.0
-    max_tokens: Optional[int] = None
-    stream: Optional[bool] = False
-    stop: Optional[Union[str, List[str]]] = None
-    presence_penalty: Optional[float] = 0.0
-    frequency_penalty: Optional[float] = 0.0
-    user: Optional[str] = None
-    extra_body: Optional[dict] = None
-
-
-# ============================================================================
 # API Endpoints
 # ============================================================================
 
@@ -171,122 +147,6 @@ async def list_models():
         )
 
     return {"object": "list", "data": models_list}
-
-
-@app.post("/v1/chat/completions")
-async def chat_completions(chat_request: ChatCompletionRequest, request: Request):
-    """
-    OpenAI-compatible chat completions endpoint.
-
-    Supports any HuggingFace causal language model.
-    """
-    try:
-        model = await load_language(chat_request.model)
-
-        # Convert messages to prompt
-        # ChatCompletionMessageParam is already dict-compatible
-        messages_dict = [dict(msg) for msg in chat_request.messages]
-        prompt = model.format_messages(messages_dict)
-
-        # Handle streaming if requested
-        if chat_request.stream:
-            logger.info(f"Streaming chat completions for model: {chat_request.model}")
-
-            # Return SSE stream
-            async def generate_sse():
-                completion_id = f"chatcmpl-{os.urandom(16).hex()}"
-                created_time = int(datetime.now().timestamp())
-
-                # Send initial chunk
-                yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created_time, 'model': chat_request.model, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n".encode()
-
-                # Stream tokens
-                async for token in model.generate_stream(
-                    prompt=prompt,
-                    max_tokens=chat_request.max_tokens,
-                    temperature=chat_request.temperature,
-                    top_p=chat_request.top_p,
-                    stop=chat_request.stop,
-                ):
-                    chunk = {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created_time,
-                        "model": chat_request.model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"content": token},
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                    yield f"data: {json.dumps(chunk)}\n\n".encode()
-                    # CRITICAL: This asyncio.sleep(0) forces the event loop to yield,
-                    # ensuring the stream flushes immediately for token-by-token delivery.
-                    # Without this, tokens would buffer and arrive in large chunks.
-                    # See test_streaming_server.py for verification tests.
-                    await asyncio.sleep(0)
-
-                # Send final chunk
-                final_chunk = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created_time,
-                    "model": chat_request.model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {},
-                            "finish_reason": "stop",
-                        }
-                    ],
-                }
-                yield f"data: {json.dumps(final_chunk)}\n\n".encode()
-                await asyncio.sleep(0)
-                yield b"data: [DONE]\n\n"
-
-            return StreamingResponse(
-                generate_sse(),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",
-                },
-            )
-
-        # Non-streaming response
-        response_text = await model.generate(
-            prompt=prompt,
-            max_tokens=chat_request.max_tokens,
-            temperature=chat_request.temperature,
-            top_p=chat_request.top_p,
-            stop=chat_request.stop,
-        )
-
-        return {
-            "id": f"chatcmpl-{os.urandom(16).hex()}",
-            "object": "chat.completion",
-            "created": int(datetime.now().timestamp()),
-            "model": chat_request.model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": response_text},
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 0,  # TODO: Implement token counting
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            },
-        }
-
-    except Exception as e:
-        logger.error(f"Error in chat_completions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

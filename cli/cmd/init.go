@@ -111,8 +111,8 @@ var initCmd = &cobra.Command{
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, prettyServerError(resp, respBody))
-			os.Exit(1)
-		}
+		os.Exit(1)
+	}
 
 		// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
 		var createResp CreateProjectResponse
@@ -121,11 +121,7 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Ensure name and namespace are explicitly set in the config
-		// (they should be in the server response, but we ensure they're there)
-		configMap := createResp.Project.Config
-
-		yamlBytes, err := yaml.Marshal(configMap)
+		yamlBytes, err := yaml.Marshal(createResp.Project.Config)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
 			os.Exit(1)

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   compareSemver,
-  getCurrentVersion,
   getStoredLatestRelease,
   normalizeVersion,
   shouldCheck,
@@ -10,13 +9,18 @@ import {
   setDismissed,
   type DismissContext,
   getGithubReleasesUrl,
+  storeCurrentVersion,
+  getStoredCurrentVersion,
 } from '@/utils/versionUtils'
 import { getVersionCheck } from '@/api/systemService'
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
 
 export function useUpgradeAvailability() {
-  const [currentVersion] = useState<string>(() => getCurrentVersion())
+  const [currentVersion, setCurrentVersion] = useState<string | null>(() => {
+    const stored = getStoredCurrentVersion()
+    return stored === '0.0.0' ? null : stored
+  })
   const [{ info, checkedAt }, setCache] = useState(() =>
     getStoredLatestRelease()
   )
@@ -33,6 +37,11 @@ export function useUpgradeAvailability() {
         const latestVersion = res?.latest_version || ''
         const htmlUrl = res?.release_url || getGithubReleasesUrl()
         const publishedAt = res?.published_at
+        const serverCurrentVersion = res?.current_version
+        if (serverCurrentVersion) {
+          setCurrentVersion(serverCurrentVersion)
+          storeCurrentVersion(serverCurrentVersion)
+        }
         if (latestVersion) {
           const mapped = { latestVersion, htmlUrl, publishedAt }
           storeLatestRelease(mapped)
@@ -47,13 +56,13 @@ export function useUpgradeAvailability() {
     return () => abort.abort()
   }, [checkedAt])
 
-  const normalizedCurrent = normalizeVersion(currentVersion)
+  const normalizedCurrent = currentVersion ? normalizeVersion(currentVersion) : null
   const latestVersion = useMemo(
     () => normalizeVersion(info?.latestVersion),
     [info?.latestVersion]
   )
   const upgradeAvailable = useMemo(() => {
-    if (!latestVersion) return false
+    if (!latestVersion || !normalizedCurrent) return false
     return compareSemver(latestVersion, normalizedCurrent) > 0
   }, [latestVersion, normalizedCurrent])
 
@@ -78,6 +87,11 @@ export function useUpgradeAvailability() {
       const latestVersion = res?.latest_version || ''
       const htmlUrl = res?.release_url || getGithubReleasesUrl()
       const publishedAt = res?.published_at
+      const serverCurrentVersion = res?.current_version
+      if (serverCurrentVersion) {
+        setCurrentVersion(serverCurrentVersion)
+        storeCurrentVersion(serverCurrentVersion)
+      }
       if (latestVersion) {
         const mapped = { latestVersion, htmlUrl, publishedAt }
         storeLatestRelease(mapped)

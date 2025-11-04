@@ -3,6 +3,7 @@ from datetime import UTC
 import httpx
 from fastapi import APIRouter, HTTPException
 
+from core.version import version
 from services.upgrade_service import get_latest_cli_release
 
 router = APIRouter(prefix="/system", tags=["system"])
@@ -24,6 +25,7 @@ async def cli_upgrade():
         published_at = release.published_at.astimezone(UTC).isoformat()
 
     return {
+        "current_version": version,
         "latest_version": release.tag_name,
         "name": release.name,
         "release_notes": release.body,

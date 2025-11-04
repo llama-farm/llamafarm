@@ -21,12 +21,11 @@ import { getProjectsList } from '../utils/projectConstants'
 import { useQueryClient } from '@tanstack/react-query'
 import { VersionDetailsDialog } from './common/VersionDetailsDialog'
 import UpgradeModal from './common/UpgradeModal'
-import { getInjectedImageTag } from '../utils/versionUtils'
 import { projectKeys } from '../hooks/useProjects'
 import { Button } from './ui/button'
 import { useMobileView } from '../contexts/MobileViewContext'
 
-type HeaderProps = { currentVersion?: string }
+type HeaderProps = { currentVersion?: string | null }
 
 function Header({ currentVersion }: HeaderProps) {
   const [isBuilding, setIsBuilding] = useState(false)
@@ -37,7 +36,6 @@ function Header({ currentVersion }: HeaderProps) {
   const { triggerReset } = useModeReset()
   const [versionDialogOpen, setVersionDialogOpen] = useState(false)
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
-  const [effectiveVersion, setEffectiveVersion] = useState<string>('0.0.0')
   const { isMobile, mobileView, markUserChoice } = useMobileView()
 
   // Project dropdown state
@@ -96,21 +94,6 @@ function Header({ currentVersion }: HeaderProps) {
     models: { label: 'Models', icon: 'model', path: '/chat/models' },
     test: { label: 'Test', icon: 'test', path: '/chat/test' },
   }
-  // Resolve effective version: prefer injected image tag, then prop
-  useEffect(() => {
-    let alive = true
-    const tag = getInjectedImageTag()
-    const normalized =
-      tag && typeof tag === 'string' && tag.trim() !== ''
-        ? tag.startsWith('v')
-          ? tag.slice(1)
-          : tag
-        : (currentVersion || '0.0.0').replace(/^v/, '')
-    if (alive) setEffectiveVersion(normalized)
-    return () => {
-      alive = false
-    }
-  }, [currentVersion])
 
   // Keep activeProject in sync with localStorage when route changes (e.g., from Projects click)
   useEffect(() => {
@@ -285,7 +268,7 @@ function Header({ currentVersion }: HeaderProps) {
                       projectModal.openCreateModal()
                     }}
                   >
-                    <div className="w-full flex items-center justify-center gap-2 rounded-md border border-input text-primary hover:bg-primary hover:text-primary-foreground transition-colors px-3 py-2">
+                    <div className="w-full flex items-center justify-center gap-2 rounded-md border border-input text-primary hover:bg-primary hover:text-primary-foreground transition-colors px-3 py-2 cursor-pointer">
                       <FontIcon type="add" className="w-4 h-4" />
                       <span>Create new project</span>
                     </div>
@@ -301,7 +284,7 @@ function Header({ currentVersion }: HeaderProps) {
                       }, 0)
                     }}
                   >
-                    <div className="w-full flex items-center justify-center gap-2 rounded-md text-primary hover:bg-accent/20 px-3 py-2">
+                    <div className="w-full flex items-center justify-center gap-2 rounded-md text-primary hover:bg-accent/20 px-3 py-2 cursor-pointer">
                       All projects
                     </div>
                   </DropdownMenuItem>
@@ -346,7 +329,7 @@ function Header({ currentVersion }: HeaderProps) {
               onClick={() => setVersionDialogOpen(true)}
               title="Version details"
             >
-              <span className="font-mono">v{effectiveVersion}</span>
+              <span className="font-mono">{currentVersion ? `v${currentVersion}` : '—'}</span>
             </button>
           ) : null}
           <div className="flex rounded-lg overflow-hidden border border-border">

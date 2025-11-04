@@ -2,7 +2,12 @@
 Encoder model wrapper for embeddings and classification.
 """
 
-from transformers import AutoModel, AutoTokenizer, AutoModelForSequenceClassification
+from transformers import (
+    AutoModel,
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
+    PreTrainedTokenizerBase,
+)
 import torch
 import torch.nn.functional as F
 from typing import List, Optional, Dict, Any
@@ -37,14 +42,14 @@ class EncoderModel(BaseModel):
         self.model_type = f"encoder_{task}"
         self.supports_streaming = False
 
-    async def load(self):
+    async def load(self) -> None:
         """Load the encoder model."""
         logger.info(f"Loading encoder model ({self.task}): {self.model_id}")
 
         dtype = self.get_dtype()
 
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
             self.model_id, trust_remote_code=True, token=self.token
         )
 
@@ -64,8 +69,9 @@ class EncoderModel(BaseModel):
                 token=self.token,
             )
 
-        self.model = self.model.to(self.device)
-        self.model.eval()
+        if self.model is not None:
+            self.model = self.model.to(self.device)  # type: ignore[arg-type]
+            self.model.eval()
 
         logger.info(f"Encoder model loaded on {self.device}")
 
@@ -94,6 +100,9 @@ class EncoderModel(BaseModel):
         """
         if self.task != "embedding":
             raise ValueError(f"Model task is '{self.task}', not 'embedding'")
+
+        assert self.model is not None, "Model not loaded"
+        assert self.tokenizer is not None, "Tokenizer not loaded"
 
         # Tokenize
         encoded = self.tokenizer(
@@ -131,6 +140,9 @@ class EncoderModel(BaseModel):
         if self.task != "classification":
             raise ValueError(f"Model task is '{self.task}', not 'classification'")
 
+        assert self.model is not None, "Model not loaded"
+        assert self.tokenizer is not None, "Tokenizer not loaded"
+
         # Tokenize
         encoded = self.tokenizer(
             texts,
@@ -143,7 +155,7 @@ class EncoderModel(BaseModel):
 
         # Classify
         with torch.no_grad():
-            outputs = self.model(**encoded)
+            outputs = self.model(**encoded)  # type: ignore[misc]
             predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
 
         # Format results
@@ -154,10 +166,10 @@ class EncoderModel(BaseModel):
             max_idx = pred.argmax().item()
 
             result = {
-                "label": self.model.config.id2label.get(max_idx, str(max_idx)),
+                "label": self.model.config.id2label.get(max_idx, str(max_idx)),  # type: ignore[union-attr]
                 "score": scores[max_idx],
                 "all_scores": {
-                    self.model.config.id2label.get(i, str(i)): score
+                    self.model.config.id2label.get(i, str(i)): score  # type: ignore[union-attr]
                     for i, score in enumerate(scores)
                 },
             }

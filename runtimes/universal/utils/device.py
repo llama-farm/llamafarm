@@ -19,7 +19,11 @@ def get_optimal_device() -> str:
     import os
 
     # Allow forcing CPU via environment variable
-    force_cpu = os.environ.get("TRANSFORMERS_FORCE_CPU", "").lower() in ("1", "true", "yes")
+    force_cpu = os.environ.get("TRANSFORMERS_FORCE_CPU", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     if force_cpu:
         logger.info("Forcing CPU device (TRANSFORMERS_FORCE_CPU=1)")
         return "cpu"
@@ -33,12 +37,18 @@ def get_optimal_device() -> str:
     # Note: MPS has a 4GB temporary buffer limit which can cause issues with some models
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         # Check if user wants to skip MPS due to known limitations
-        skip_mps = os.environ.get("TRANSFORMERS_SKIP_MPS", "").lower() in ("1", "true", "yes")
+        skip_mps = os.environ.get("TRANSFORMERS_SKIP_MPS", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
         if skip_mps:
             logger.info("Skipping MPS (TRANSFORMERS_SKIP_MPS=1), using CPU")
             return "cpu"
         logger.info("MPS (Apple Silicon) available")
-        logger.warning("MPS has a 4GB temporary buffer limit. Set TRANSFORMERS_SKIP_MPS=1 to use CPU if you encounter errors.")
+        logger.warning(
+            "MPS has a 4GB temporary buffer limit. Set TRANSFORMERS_SKIP_MPS=1 to use CPU if you encounter errors."
+        )
         return "mps"
 
     # Fallback to CPU
@@ -63,15 +73,19 @@ def get_device_info() -> dict:
     }
 
     if device == "cuda":
-        info.update({
-            "gpu_name": torch.cuda.get_device_name(0),
-            "gpu_memory_total": torch.cuda.get_device_properties(0).total_memory,
-            "gpu_memory_allocated": torch.cuda.memory_allocated(0),
-        })
+        info.update(
+            {
+                "gpu_name": torch.cuda.get_device_name(0),
+                "gpu_memory_total": torch.cuda.get_device_properties(0).total_memory,
+                "gpu_memory_allocated": torch.cuda.memory_allocated(0),
+            }
+        )
     elif device == "mps":
-        info.update({
-            "gpu_name": "Apple Silicon (MPS)",
-            "architecture": platform.machine(),
-        })
+        info.update(
+            {
+                "gpu_name": "Apple Silicon (MPS)",
+                "architecture": platform.machine(),
+            }
+        )
 
     return info

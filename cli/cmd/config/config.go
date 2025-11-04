@@ -210,13 +210,15 @@ func GetServerConfig(configPath string, serverURL string, namespace string, proj
 	// Extract from config if not provided via flags
 	if config != nil && (finalNamespace == "" || finalProject == "") {
 		projectInfo, err := config.GetProjectInfo()
-		if err == nil {
-			if finalNamespace == "" {
-				finalNamespace = projectInfo.Namespace
-			}
-			if finalProject == "" {
-				finalProject = projectInfo.Project
-			}
+		if err != nil {
+			// Don't silently ignore config errors - return them so users know what's wrong
+			return nil, fmt.Errorf("failed to extract project info from config: %w", err)
+		}
+		if finalNamespace == "" {
+			finalNamespace = projectInfo.Namespace
+		}
+		if finalProject == "" {
+			finalProject = projectInfo.Project
 		}
 	}
 

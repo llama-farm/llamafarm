@@ -13,11 +13,11 @@ interface ProjectModalProps {
   isOpen: boolean
   mode: ProjectModalMode
   initialName?: string
-  initialBrief?: { what: string; goals: string; audience: string }
+  initialBrief?: { what?: string }
   onClose: () => void
   onSave: (
     name: string,
-    details: { brief: { what: string; goals: string; audience: string } }
+    details?: { brief?: { what?: string } }
   ) => void
   onDelete?: () => void
   isLoading?: boolean
@@ -29,7 +29,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   isOpen,
   mode,
   initialName = '',
-  initialBrief = { what: '', goals: '', audience: '' },
+  initialBrief = {},
   onClose,
   onSave,
   onDelete,
@@ -39,24 +39,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
 }) => {
   const [name, setName] = useState(initialName)
   const [what, setWhat] = useState(initialBrief.what || '')
-  const [goals, setGoals] = useState(initialBrief.goals || '')
-  const [audience, setAudience] = useState(initialBrief.audience || '')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       setName(initialName)
       setWhat(initialBrief.what || '')
-      setGoals(initialBrief.goals || '')
-      setAudience(initialBrief.audience || '')
       setConfirmingDelete(false)
     }
   }, [
     isOpen,
     initialName,
     initialBrief?.what,
-    initialBrief?.goals,
-    initialBrief?.audience,
   ])
 
   // Handle Escape key to close modal
@@ -146,7 +140,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           <div className="flex flex-col gap-3">
             <div>
               <label className="text-xs text-muted-foreground">
-                What are you building?
+                What are you building? (optional)
               </label>
               <textarea
                 rows={4}
@@ -154,29 +148,6 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                 placeholder="What are you building?"
                 value={what}
                 onChange={e => setWhat(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">
-                What do you hope to achieve?
-              </label>
-              <textarea
-                rows={4}
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground min-h-[44px]"
-                placeholder="What do you hope to achieve?"
-                value={goals}
-                onChange={e => setGoals(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">
-                Who will use this?
-              </label>
-              <input
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                placeholder="Who will use this?"
-                value={audience}
-                onChange={e => setAudience(e.target.value)}
               />
             </div>
           </div>
@@ -235,7 +206,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               onClick={e => {
                 e.preventDefault()
                 if (isValid) {
-                  onSave(name.trim(), { brief: { what, goals, audience } })
+                  const details = { brief: { what: what.trim() } }
+                  onSave(name.trim(), details)
                 }
               }}
               disabled={!isValid}

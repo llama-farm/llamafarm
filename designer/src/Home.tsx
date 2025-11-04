@@ -16,12 +16,12 @@ import {
   parseTimestamp
 } from './utils/projectHelpers'
 import { getCurrentNamespace } from './utils/namespaceUtils'
-import { encodeMessageForUrl } from './utils/homePageUtils'
 import projectService from './api/projectService'
 import { mergeProjectConfig } from './utils/projectConfigUtils'
 import {
   sanitizeProjectName,
   checkForDuplicateName,
+  validateProjectName,
 } from './utils/projectValidation'
 import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
@@ -29,12 +29,13 @@ import { Textarea } from './components/ui/textarea'
 
 function Home() {
   // Form state
+  const [projectName, setProjectName] = useState('')
   const [what, setWhat] = useState('')
-  const [goals, setGoals] = useState('')
-  const [audience, setAudience] = useState('')
   const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>(
     'local'
   )
+  const [projectNameError, setProjectNameError] = useState<string | null>(null)
+  const [generalError, setGeneralError] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'a-z' | 'z-a' | 'model'>('newest')
@@ -153,172 +154,66 @@ function Home() {
     }
   }, [isCreatingProject])
 
-  const summarizeWhatToSlug = (text: string): string => {
-    const stopwords = new Set([
-      'the',
-      'a',
-      'an',
-      'and',
-      'or',
-      'for',
-      'to',
-      'with',
-      'of',
-      'on',
-      'in',
-      'into',
-      'by',
-      'from',
-      'about',
-      'this',
-      'that',
-      'these',
-      'those',
-      'is',
-      'am',
-      'are',
-      'be',
-      'being',
-      'been',
-      'it',
-      'its',
-      'my',
-      'our',
-      'your',
-      'their',
-      'his',
-      'her',
-      'as',
-      'at',
-      'we',
-      'i',
-      'you',
-      'they',
-      'what',
-      'which',
-      'who',
-      'whom',
-      'will',
-      'can',
-      'could',
-      'should',
-      'would',
-      'may',
-      'might',
-      'just',
-      'like',
-      'make',
-      'makes',
-      'made',
-      'build',
-      'building',
-      'create',
-      'creating',
-      'new',
-      'project',
-    ])
-    const tokens = text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean)
-      .filter(t => t.length > 2 && !stopwords.has(t))
-    const unique: string[] = []
-    for (const t of tokens) {
-      if (!unique.includes(t)) unique.push(t)
-    }
-    const picked = unique.slice(0, 3)
-    return picked.join('-') || 'project'
-  }
-
-  const composeInitialMessage = (): string => {
-    const parts: string[] = []
-    if (what.trim()) parts.push(`What: ${what.trim()}`)
-    if (goals.trim()) parts.push(`Goals: ${goals.trim()}`)
-    if (audience.trim()) parts.push(`Users: ${audience.trim()}`)
-    if (deployment)
-      parts.push(
-        `Deployment: ${deployment === 'local' ? 'Local machine' : deployment === 'cloud' ? 'Cloud' : 'Not sure'}`
-      )
-    return parts.join('\n')
-  }
-
-  const hasAnyInput =
-    what.trim().length > 0 ||
-    goals.trim().length > 0 ||
-    audience.trim().length > 0
+  const hasAnyInput = projectName.trim().length > 0
 
   const handleCreateProject = async () => {
     const MIN_LOADING_MS = 3000
-    // Autogenerate project name from "what" or generic fallback
-    const baseFromWhat = summarizeWhatToSlug(what || goals || audience || '')
-    let desiredName = sanitizeProjectName(baseFromWhat).replace(/\s+/g, '-')
-
-    // Ensure uniqueness optimistically against current list
-    let finalName = desiredName
-    const allNames = projectsList
-    if (checkForDuplicateName(finalName, allNames)) {
-      const suffix = Date.now().toString().slice(-3)
-      finalName = `${finalName}-${suffix}`
+    
+    // Validate and sanitize project name
+    const sanitizedName = sanitizeProjectName(projectName)
+    const validation = validateProjectName(sanitizedName)
+    
+    if (!validation.isValid) {
+      setProjectNameError(validation.error || 'Invalid project name')
+      return
     }
 
+    // Check for duplicate name
+    if (checkForDuplicateName(sanitizedName, projectsList)) {
+      setProjectNameError('A project with this name already exists')
+      return
+    }
+
+    setProjectNameError(null)
+    setGeneralError(null)
     setIsCreatingProject(true)
     const startedAt = performance.now()
+    
     try {
       // 1) Create the project
       const created = await projectService.createProject(namespace, {
-        name: finalName,
+        name: sanitizedName,
         config_template: 'default',
       })
 
-      // 2) Save brief answers into config
-      const brief = {
-        what: what || undefined,
-        goals: goals || undefined,
-        audience: audience || undefined,
-        deployment,
-      }
-      const mergedConfig = mergeProjectConfig(created.project.config || {}, {
-        project_brief: brief,
-      })
-      try {
-        await projectService.updateProject(namespace, created.project.name, {
-          config: mergedConfig,
+      // 2) Save optional "what" description and deployment into config if provided
+      if (what.trim() || deployment) {
+        const brief: { what?: string; deployment?: string } = {}
+        if (what.trim()) brief.what = what.trim()
+        if (deployment) brief.deployment = deployment
+        
+        const mergedConfig = mergeProjectConfig(created.project.config || {}, {
+          project_brief: brief,
         })
-      } catch (e) {
-        // Notify the user that config update failed, but project was created
         try {
-          window.alert(
-            'Project was created, but saving project details failed. Some information may not be saved.'
-          )
-        } catch {}
-        console.error('Failed to update project config:', e)
+          await projectService.updateProject(namespace, created.project.name, {
+            config: mergedConfig,
+          })
+        } catch (e) {
+          console.error('Failed to update project config:', e)
+          // Non-critical, continue anyway
+        }
       }
 
-      // Also persist brief locally for resilience against schema mismatches or offline use
-      try {
-        const briefKey = `lf_project_brief_${namespace}_${created.project.name}`
-        localStorage.setItem(briefKey, JSON.stringify(brief))
-      } catch {}
-
-      // 3) Activate and navigate with initial message
+      // 3) Activate and navigate to dashboard
       localStorage.setItem('activeProject', created.project.name)
-      // Optimistically update caches so it appears in dropdowns/lists immediately
+      
+      // Optimistically update caches
       try {
-        queryClient.setQueryData(
-          projectKeys.detail(namespace, created.project.name),
-          {
-            project: {
-              namespace,
-              name: created.project.name,
-              config: mergedConfig,
-            },
-          }
-        )
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
       } catch {}
 
-      // Also persist in local fallback list used elsewhere
+      // Persist in local fallback list
       try {
         const raw = localStorage.getItem('lf_custom_projects')
         const arr: string[] = raw ? JSON.parse(raw) : []
@@ -329,7 +224,8 @@ function Home() {
           )
         }
       } catch {}
-      // Ensure the fun loading overlay is visible for at least MIN_LOADING_MS
+      
+      // Ensure the loading overlay is visible for at least MIN_LOADING_MS
       const elapsed = performance.now() - startedAt
       if (elapsed < MIN_LOADING_MS) {
         await new Promise(resolve =>
@@ -337,14 +233,11 @@ function Home() {
         )
       }
 
-      const initialMessage = composeInitialMessage()
-      const encoded = encodeMessageForUrl(initialMessage)
-      navigate(`/chat/dashboard?initialMessage=${encoded}`)
+      navigate('/chat/dashboard')
     } catch (error) {
       console.error('❌ Failed to create project:', error)
-      alert(
-        `Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      setGeneralError(`Failed to create project: ${errorMessage}`)
     } finally {
       setIsCreatingProject(false)
     }
@@ -411,43 +304,47 @@ function Home() {
           </p>
 
           <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-foreground">
-            Tell us about your new project
+            Create a new project
           </h1>
         </div>
         <div id="home-create-form" className="max-w-3xl mx-auto">
+          {generalError && (
+            <div className="mb-4 text-red-600 bg-red-100 border border-red-300 rounded p-3 text-sm">
+              {generalError}
+            </div>
+          )}
           <div className="rounded-lg border p-4 sm:p-5 bg-card border-input shadow-sm relative">
             <div className="grid gap-4 text-left">
               <div className="grid gap-2.5">
-                <Label htmlFor="what">What are you building?</Label>
+                <Label htmlFor="projectName">Project name</Label>
+                <Input
+                  id="projectName"
+                  value={projectName}
+                  onChange={e => {
+                    setProjectName(e.target.value)
+                    if (projectNameError) setProjectNameError(null)
+                    if (generalError) setGeneralError(null)
+                  }}
+                  placeholder="my-project"
+                  disabled={isCreatingProject}
+                  className={projectNameError ? 'border-destructive' : ''}
+                />
+                {projectNameError && (
+                  <p className="text-xs text-destructive">{projectNameError}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
+                </p>
+              </div>
+
+              <div className="grid gap-2.5">
+                <Label htmlFor="what">What are you building? (optional)</Label>
                 <Textarea
                   id="what"
                   value={what}
                   onChange={e => setWhat(e.target.value)}
                   placeholder="A customer support chatbot, inventory system, data dashboard..."
                   className="min-h-[72px]"
-                  disabled={isCreatingProject}
-                />
-              </div>
-
-              <div className="grid gap-2.5">
-                <Label htmlFor="goals">What do you hope to achieve?</Label>
-                <Textarea
-                  id="goals"
-                  value={goals}
-                  onChange={e => setGoals(e.target.value)}
-                  placeholder="Reduce response times, automate tasks, improve satisfaction..."
-                  className="min-h-[72px]"
-                  disabled={isCreatingProject}
-                />
-              </div>
-
-              <div className="grid gap-2.5">
-                <Label htmlFor="audience">Who will use this?</Label>
-                <Input
-                  id="audience"
-                  value={audience}
-                  onChange={e => setAudience(e.target.value)}
-                  placeholder="Support team, end customers, internal employees..."
                   disabled={isCreatingProject}
                 />
               </div>
@@ -501,10 +398,10 @@ function Home() {
                       ? 'Creating project...'
                       : hasAnyInput
                         ? 'Create new project'
-                        : 'Fill at least one field to create a project'
+                        : 'Enter a project name to create'
                   }
                 >
-                  {isCreatingProject ? 'Creating…' : 'Create new project'}
+                  {isCreatingProject ? 'Creating…' : 'Create project'}
                 </button>
               </div>
             </div>
@@ -540,11 +437,11 @@ function Home() {
           </div>
         </div>
 
-        <p className="max-w-2xl mx-auto text-xs sm:text-sm leading-relaxed text-foreground/80">
-          {isCreatingProject
-            ? 'Creating your project and setting up the chat environment...'
-            : 'Provide at least one detail above (what, goals, or users) to create your project.'}
-        </p>
+        {isCreatingProject && (
+          <p className="max-w-2xl mx-auto text-xs sm:text-sm leading-relaxed text-foreground/80">
+            Creating your project and setting up the dashboard...
+          </p>
+        )}
         {/* Your projects removed here to place outside the narrow container */}
       </div>
 
