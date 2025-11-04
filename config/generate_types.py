@@ -15,7 +15,9 @@ from pathlib import Path
 def run_command(cmd: list[str], cwd: Path) -> None:
     """Run a command and handle errors."""
     try:
-        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, check=True
+        )
         if result.stdout:
             print(result.stdout, end="")
         if result.stderr:

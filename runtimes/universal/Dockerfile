@@ -29,6 +29,7 @@ WORKDIR /app
 COPY config/ ./config/
 COPY common/ ./common/
 COPY rag/schema.yaml ./rag/schema.yaml
+COPY ruff.toml ./ruff.toml
 
 # Install config dependencies including dev dependencies for datamodel generation
 RUN cd config && uv sync --locked --all-extras --verbose

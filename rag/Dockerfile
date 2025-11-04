@@ -35,6 +35,7 @@ WORKDIR /app
 COPY config/ ./config/
 COPY common/ ./common/
 COPY rag/pyproject.toml rag/uv.lock rag/README.md ./rag/
+COPY ruff.toml ./ruff.toml
 
 # Install dependencies in separate layers (cached unless lock files change)
 RUN cd config && uv sync --locked --all-extras
