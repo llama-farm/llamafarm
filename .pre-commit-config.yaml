@@ -6,10 +6,14 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.3
     hooks:
-      # Run ruff check with auto-fix (includes formatting)
-      # Note: --fix applies both linting fixes AND formatting
+      # Run ruff linter with auto-fix on staged Python files
       - id: ruff
-        name: ruff check + format (Python components)
+        name: ruff check (Python components)
         args: [--fix]
+        files: ^(server|rag|config|runtimes/universal)/.*\.py$
+        
+      # Run ruff formatter on staged Python files
+      - id: ruff-format
+        name: ruff format (Python components)
         files: ^(server|rag|config|runtimes/universal)/.*\.py$
 

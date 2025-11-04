@@ -339,8 +339,11 @@ llamafarm-common = { path = "../common", editable = true }
 # See ../ruff.toml for the actual configuration
 
 [tool.ruff]
+# Import shared configuration
+extend = "../ruff.toml"
+
 # Component-specific exclusions (in addition to shared config)
 extend-exclude = [
-  "rag_env",     # RAG virtual environment
-  "chroma_db",   # ChromaDB data directory
+  "rag_env",   # RAG virtual environment
+  "chroma_db", # ChromaDB data directory
 ]

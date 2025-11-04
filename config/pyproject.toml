@@ -38,8 +38,11 @@ generate-types = "config.generate_types:main"
 # See ../ruff.toml for the actual configuration
 
 [tool.ruff]
+# Import shared configuration
+extend = "../ruff.toml"
+
 # Component-specific exclusions (in addition to shared config)
-extend-exclude = ["datamodel.py"]  # Generated file
+extend-exclude = ["datamodel.py"] # Generated file
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

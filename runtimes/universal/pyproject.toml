@@ -49,3 +49,7 @@ llamafarm-common = { path = "../../common", editable = true }
 
 # Ruff configuration is shared across all Python components
 # See ../../ruff.toml for the actual configuration
+
+[tool.ruff]
+# Import shared configuration
+extend = "../../ruff.toml"
