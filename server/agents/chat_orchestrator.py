@@ -6,12 +6,12 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from atomic_agents import BaseTool
-from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from services.prompt_service import PromptService  # type: ignore
 from config.datamodel import LlamaFarmConfig, Provider
 from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
-from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk, ChoiceDelta
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+from openai.types.chat.chat_completion_chunk import ChoiceDelta
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from openai.types.chat.chat_completion_message_tool_call_param import (
     Function,
 )
@@ -28,10 +28,12 @@ from agents.base.history import (
 )
 from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.base.types import ToolDefinition
+from context_providers.project_context_provider import ProjectContextProvider
 from core.logging import FastAPIStructLogger
 from core.mcp_registry import register_mcp_service
 from services.mcp_service import MCPService
 from services.model_service import ModelService
+from services.prompt_service import PromptService  # type: ignore
 from services.runtime_service.runtime_service import RuntimeService
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
@@ -573,6 +575,13 @@ class ChatOrchestratorAgentFactory:
         )
         if session_id:
             agent.enable_persistence(session_id=session_id)
+
+        project_context_provider = ProjectContextProvider(
+            title="Project Context",
+            namespace=project_config.namespace,
+            name=project_config.name,
+        )
+        agent.register_context_provider("project_context", project_context_provider)
 
         if project_config.mcp and project_config.mcp.servers:
             await agent.enable_mcp()
