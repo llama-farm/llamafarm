@@ -7,17 +7,16 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Union
 
-from agents.base.history import LFChatCompletionMessageParam
 import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
-from fastapi import APIRouter, Header, HTTPException, Path as FastAPIPath, Response
+from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import Path as FastAPIPath
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
 from agents.chat_orchestrator import ChatOrchestratorAgent, ChatOrchestratorAgentFactory
-from api.errors import ErrorResponse
+from api.errors import ErrorResponse, ProjectNotFoundError
 
 # RAG imports moved to function level to avoid circular imports
 from api.routers.shared.response_utils import (
@@ -37,7 +36,7 @@ from services.project_service import ProjectService
 class Project(BaseModel):
     namespace: str = Field(..., description="The namespace of the project")
     name: str = Field(..., description="The name of the project")
-    config: Union[LlamaFarmConfig, dict] = Field(..., description="The configuration of the project")
+    config: LlamaFarmConfig | dict = Field(..., description="The configuration of the project")
     validation_error: str | None = Field(None, description="Validation error message if config has issues")
     last_modified: datetime | None = Field(None, description="Last modified timestamp of the project config")
 
@@ -213,18 +212,79 @@ async def update_project(
     tags=["projects", "mcp"],
     responses={
         200: {"model": DeleteProjectResponse},
+        404: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
     },
 )
 async def delete_project(namespace: str, project_id: str):
-    # TODO: Implement actual delete in ProjectService; placeholder response for now
-    project = Project(
-        namespace=namespace,
-        name=project_id,
-        config=ProjectService.load_config(namespace, project_id),
-    )
-    return DeleteProjectResponse(
-        project=project,
-    )
+    """
+    Delete a project and all its associated resources.
+    
+    This endpoint performs a complete cleanup including:
+    - All datasets associated with the project
+    - All chat sessions
+    - All data files (raw, metadata, and indexes)
+    - The entire project directory
+    
+    Warning: This operation is irreversible.
+    """
+    try:
+        # Call the delete_project method in ProjectService
+        deleted_project = ProjectService.delete_project(namespace, project_id)
+        
+        # Clean up in-memory chat sessions to prevent memory leak
+        with _agent_sessions_lock:
+            session_count = _delete_all_sessions(namespace, project_id)
+            if session_count > 0:
+                from core.logging import FastAPIStructLogger
+                logger = FastAPIStructLogger()
+                logger.info(
+                    "Cleared in-memory chat sessions during project deletion",
+                    namespace=namespace,
+                    project_id=project_id,
+                    session_count=session_count,
+                )
+        
+        # Convert the Project object to the API response format
+        project = Project(
+            namespace=deleted_project.namespace,
+            name=deleted_project.name,
+            config=deleted_project.config,
+            validation_error=deleted_project.validation_error,
+            last_modified=deleted_project.last_modified,
+        )
+        
+        return DeleteProjectResponse(project=project)
+        
+    except ProjectNotFoundError as e:
+        # Return 404 if project doesn't exist
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project {namespace}/{project_id} not found"
+        ) from e
+    except PermissionError as e:
+        # Return 403 for permission issues
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permission denied: {str(e)}"
+        ) from e
+    except Exception as e:
+        # Log the full error for debugging
+        from core.logging import FastAPIStructLogger
+        logger = FastAPIStructLogger()
+        logger.error(
+            "Failed to delete project",
+            namespace=namespace,
+            project_id=project_id,
+            error=str(e),
+            exc_info=True,
+        )
+        # Return 500 for other failures
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete project: {str(e)}"
+        ) from e
 
 
 SESSION_TTL_SECONDS = 30 * 60
@@ -548,6 +608,7 @@ def _process_group_children(children: list, file_hashes: list, task_id: str, log
 async def get_task(namespace: str, project_id: str, task_id: str):
     """Return state, progress meta, and result/error if available."""
     from celery.result import GroupResult
+
     from core.logging import FastAPIStructLogger
 
     logger = FastAPIStructLogger(__name__)
