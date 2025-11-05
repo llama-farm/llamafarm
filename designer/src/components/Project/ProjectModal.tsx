@@ -172,7 +172,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
                   disabled={isLoading}
                   type="button"
                 >
-                  Confirm delete
+                  {isLoading ? 'Deleting...' : 'Confirm delete'}
                 </button>
               </div>
             ) : (

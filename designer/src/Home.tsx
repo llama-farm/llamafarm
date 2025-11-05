@@ -286,14 +286,26 @@ function Home() {
 
   // React to project deletions fired from the modal to update UI immediately
   useEffect(() => {
-    const onDeleted = () => {
-      // Invalidate local derived list by forcing a refilter
-      setSearch(s => s + '')
+    const onDeleted = (event: Event) => {
+      const deletedProjectName = (event as CustomEvent<string>).detail
+      // Force refetch of projects list to ensure UI is updated
+      queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
+      
+      // Clear active project if it was the one deleted
+      try {
+        const active = localStorage.getItem('activeProject')
+        if (active === deletedProjectName) {
+          localStorage.removeItem('activeProject')
+          window.dispatchEvent(
+            new CustomEvent<string>('lf-active-project', { detail: '' })
+          )
+        }
+      } catch {}
     }
     window.addEventListener('lf-project-deleted' as any, onDeleted as any)
     return () =>
       window.removeEventListener('lf-project-deleted' as any, onDeleted as any)
-  }, [])
+  }, [namespace, queryClient])
 
   return (
     <div className="min-h-screen flex flex-col items-stretch px-4 sm:px-6 lg:px-8 pt-24 md:pt-28 pb-8 bg-background">
