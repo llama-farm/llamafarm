@@ -8,9 +8,8 @@ runtime:
   models:
     - name: default
       description: "Default Universal model for LlamaFarm"
-      provider: openai
-      base_url: http://localhost:11434/v1
-      model: qwen3:1.7b
+      provider: universal
+      model: Qwen/Qwen3-1.7B
 
 prompts:
   - name: default
