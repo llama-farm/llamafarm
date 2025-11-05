@@ -13,6 +13,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from pydantic import BaseModel
 
 from core.logging import FastAPIStructLogger
+from services.model_service import ModelService
 
 logger = FastAPIStructLogger(__name__)
 
@@ -32,11 +33,11 @@ class MCPService:
     Maintains persistent sessions for each server to avoid connection overhead.
     """
 
-    def __init__(self, config: LlamaFarmConfig) -> None:
+    def __init__(self, config: LlamaFarmConfig, model_name: str | None = None) -> None:
         self._config = config
-        self._servers = (
-            {s.name: s for s in (config.mcp.servers or [])} if config.mcp else {}
-        )
+        model_service = ModelService()
+        self._model_config = model_service.get_model(config, model_name)
+        self._servers = self._resolve_servers()
         self._tool_cache: dict[str, list[ToolSchema]] = {}
         self._cache_ttl = 300  # 5 minutes
         self._last_cache_update: dict[str, float] = {}
@@ -51,17 +52,37 @@ class MCPService:
 
         logger.info("MCPService initialized", server_count=len(self._servers))
 
+    def _resolve_servers(self) -> list[Server]:
+        """Resolve the list of MCP servers to use for the model."""
+        servers_to_use: list[Server] = []
+        if self._model_config.mcp_servers is not None:
+            servers_to_use.extend(
+                [
+                    s
+                    for s in self._config.mcp.servers
+                    if s.name in self._model_config.mcp_servers
+                ]
+            )
+        else:
+            servers_to_use.extend(
+                self._config.mcp.servers if self._config.mcp is not None else []
+            )
+        return servers_to_use
+
     def list_servers(self) -> list[str]:
         """List all configured MCP server names."""
-        return list(self._servers.keys())
+        return [s.name for s in self._servers]
+
+    def get_server(self, server_name: str) -> Server | None:
+        """Get the MCP server configuration by name."""
+        return next((s for s in self._servers if s.name == server_name), None)
 
     async def list_tools(self, server_name: str) -> list[dict[str, Any]]:
         """List tools available from the specified MCP server."""
-        if server_name not in self._servers:
+        server_config = self.get_server(server_name)
+        if server_config is None:
             logger.warning("MCP server not found", server_name=server_name)
             return []
-
-        server_config = self._servers[server_name]
 
         # Check cache first
         if self._is_cache_valid(server_name):
@@ -107,14 +128,13 @@ class MCPService:
         Raises:
             ValueError: If server not found or misconfigured
         """
-        if server_name not in self._servers:
+        server_config = self.get_server(server_name)
+        if server_config is None:
             raise ValueError(f"Server '{server_name}' not found")
 
         # Return existing session if available
         if server_name in self._persistent_sessions:
             return self._persistent_sessions[server_name]
-
-        server_config = self._servers[server_name]
 
         logger.info(
             "Creating persistent MCP session in background task",

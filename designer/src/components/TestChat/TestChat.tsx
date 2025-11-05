@@ -34,6 +34,7 @@ export interface TestChatProps {
   ragEnabled?: boolean
   ragTopK?: number
   ragScoreThreshold?: number
+  focusInput?: boolean
 }
 
 const containerClasses =
@@ -78,6 +79,7 @@ export default function TestChat({
   ragEnabled = true,
   ragTopK = 10,
   ragScoreThreshold = 0.7,
+  focusInput = false,
 }: TestChatProps) {
   // Determine mock mode as early as possible
   const MOCK_MODE = Boolean(useTestData)
@@ -578,6 +580,17 @@ export default function TestChat({
       )
     }
   }, [messages, updateInput, handleSend])
+
+  // Auto-focus input when navigated from Build assistant
+  useEffect(() => {
+    if (focusInput && inputRef.current) {
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [focusInput])
 
   // Lightweight evaluator and mock generator for test runs
   const evaluateTest = useCallback(

@@ -18,13 +18,11 @@ from openai.types.chat.chat_completion_message_tool_call_param import (
 
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
-from agents.base.clients.openai import LFAgentClientOpenAI
 from agents.base.history import (
     LFAgentHistory,
     LFChatCompletionAssistantMessageParam,
     LFChatCompletionMessageParam,
     LFChatCompletionToolMessageParam,
-    LFChatCompletionUserMessageParam,
 )
 from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.base.types import ToolDefinition
@@ -38,12 +36,6 @@ from services.runtime_service.runtime_service import RuntimeService
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
 logger = FastAPIStructLogger(__name__)
-
-CLIENT_CLASSES = {
-    Provider.openai: LFAgentClientOpenAI,
-    Provider.ollama: LFAgentClientOpenAI,
-    Provider.lemonade: LFAgentClientOpenAI,
-}
 
 # Constants for orchestration loop
 MAX_TOOL_ITERATIONS = 10
@@ -383,11 +375,21 @@ class ChatOrchestratorAgent(LFAgent):
         except Exception:
             logger.warning("Failed to enable persistence", exc_info=True)
 
+    async def setup_tools(self):
+        """
+        Setup tools that the agent can use.
+
+        For now, this only pertains to tools associated with MCP servers.
+        In the future, we may support custom tool definitions through the
+        project config.
+        """
+        await self.enable_mcp()
+
     async def enable_mcp(self):
         """Enable MCP tool calling support."""
         if self._mcp_enabled:
             return
-        self._mcp_service = MCPService(self._project_config)
+        self._mcp_service = MCPService(self._project_config, self.model_name)
         self._mcp_tool_factory = MCPToolFactory(self._mcp_service)
         # Register for cleanup on shutdown
         register_mcp_service(self._mcp_service)
@@ -583,7 +585,7 @@ class ChatOrchestratorAgentFactory:
         )
         agent.register_context_provider("project_context", project_context_provider)
 
-        if project_config.mcp and project_config.mcp.servers:
-            await agent.enable_mcp()
+        await agent.setup_tools()
+
 
         return agent

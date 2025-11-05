@@ -30,16 +30,23 @@ def yaml_json_loader(uri: str):
     return json.loads(text)
 
 
-def jsonref_to_dict(obj):
+def jsonref_to_dict(obj, is_root=False):
     """Recursively convert jsonref proxy objects to plain Python dicts/lists."""
     if isinstance(obj, dict):
         # Check if this is a jsonref proxy object
         if hasattr(obj, "__subject__"):
             # It's a jsonref proxy, get the underlying dict
             obj = dict(obj)
-        return {k: jsonref_to_dict(v) for k, v in obj.items()}
+
+        # Strip schema metadata fields when nested (not at root level)
+        # These fields should only exist at the root of the schema
+        if not is_root:
+            schema_metadata_fields = {"$schema", "$id"}
+            obj = {k: v for k, v in obj.items() if k not in schema_metadata_fields}
+
+        return {k: jsonref_to_dict(v, is_root=False) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [jsonref_to_dict(item) for item in obj]
+        return [jsonref_to_dict(item, is_root=False) for item in obj]
     else:
         return obj
 
@@ -57,7 +64,7 @@ def load_and_deref_schema(path: Path):
         loader=yaml_json_loader,
     )
 
-    return jsonref_to_dict(deref)
+    return jsonref_to_dict(deref, is_root=True)
 
 
 def get_dereferenced_schema() -> dict:

@@ -129,10 +129,6 @@ properties:
             instructor_mode:
               type: string
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
-            prompt_format:
-              type: string
-              enum: [structured, unstructured]
-              description: Prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)
             model_api_parameters:
               type: object
               description: Additional parameters passed to the API provider
@@ -143,10 +139,11 @@ properties:
               items:
                 type: string
               default: []
-            think:
-              type: boolean
-              description: Whether or not to enable thinking for this model if it supports it.
-              default: false
+            mcp_servers:
+              type: array
+              description: List of MCP server names to use for this model (omit to use all servers, empty list for none)
+              items:
+                type: string
             tool_call_strategy:
               type: string
               enum: [native_api, prompt_based]

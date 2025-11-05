@@ -20,7 +20,7 @@ dependencies = [
   "fastapi>=0.116.1",
   "pre-commit>=4.2.0",
   "pydantic-settings>=2.10.1",
-  "ruff>=0.12.7",
+  "ruff>=0.14.3",
   "uvicorn>=0.35.0",
   "openai>=1.0.0",
   "instructor>=1.0.0",
@@ -62,18 +62,12 @@ addopts = "-v --tb=short"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
+# Ruff configuration is shared across all Python components
+# See ../ruff.toml for the actual configuration
+
 [tool.ruff]
-line-length = 88         # Match Black's default
-target-version = "py311"
-
-# Enable auto-fixes
-fix = true
-
-# Select rulesets (examples: E for pycodestyle, F for pyflakes, I for isort, B for bugbear)
-lint.select = ["E", "F", "I", "B", "UP", "SIM"]
-
-# Exclude some files
-exclude = ["migrations", ".venv", "venv", "build", "dist"]
+# Import shared configuration
+extend = "../ruff.toml"
 
 [tool.uv.sources]
 llamafarm-config = { path = "../config", editable = true }

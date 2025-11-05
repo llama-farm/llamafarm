@@ -13,16 +13,24 @@ All types of contributions are encouraged and valued. See the [Table of Contents
 
 ## Table of Contents
 
-- [Code of Conduct](#code-of-conduct)
-- [I Have a Question](#i-have-a-question)
-- [I Want To Contribute](#i-want-to-contribute)
-- [Reporting Bugs](#reporting-bugs)
-- [Suggesting Enhancements](#suggesting-enhancements)
-- [Your First Code Contribution](#your-first-code-contribution)
-- [Improving The Documentation](#improving-the-documentation)
-- [Styleguides](#styleguides)
-- [Commit Messages](#commit-messages)
-- [Join The Project Team](#join-the-project-team)
+- [Contributing to LlamaFarm](#contributing-to-llamafarm)
+  - [Table of Contents](#table-of-contents)
+  - [Code of Conduct](#code-of-conduct)
+  - [I have a question (and I don't want to read all of this!!)](#i-have-a-question-and-i-dont-want-to-read-all-of-this)
+  - [I want To contribute](#i-want-to-contribute)
+    - [Reporting bugs](#reporting-bugs)
+      - [Before submitting a bug report](#before-submitting-a-bug-report)
+      - [How do I submit a good bug report?](#how-do-i-submit-a-good-bug-report)
+    - [Suggesting enhancements](#suggesting-enhancements)
+      - [Before submitting an enhancement](#before-submitting-an-enhancement)
+      - [How do I submit a good enhancement suggestion?](#how-do-i-submit-a-good-enhancement-suggestion)
+    - [Your first code contribution](#your-first-code-contribution)
+  - [Styleguides](#styleguides)
+    - [Code Formatting](#code-formatting)
+      - [Pre-commit Hooks](#pre-commit-hooks)
+      - [What Happens When Pre-commit Fixes Errors?](#what-happens-when-pre-commit-fixes-errors)
+    - [Commit Messages](#commit-messages)
+  - [Join the LlamaFarm project team](#join-the-llamafarm-project-team)
 
 
 ## Code of Conduct
@@ -122,6 +130,58 @@ Both issue lists are sorted by total number of comments. While not perfect, numb
 
 
 ## Styleguides
+
+### Code Formatting
+
+#### Pre-commit Hooks
+This repository uses pre-commit hooks to automatically format code before commits. Ruff configuration is shared across all Python components via `ruff.toml` at the repository root.
+
+**Installation:**
+```bash
+# From the repository root
+uvx pre-commit install
+```
+
+The hooks will automatically run when you commit changes. To manually run the hooks on staged files:
+```bash
+uvx pre-commit run
+```
+
+To run on all files:
+```bash
+uvx pre-commit run --all-files
+```
+
+#### What Happens When Pre-commit Fixes Errors?
+
+When the pre-commit hooks automatically fix formatting issues, the commit will be **blocked** and you'll need to re-stage the fixed files:
+
+```bash
+# 1. Try to commit
+git add runtimes/universal/models/base.py
+git commit -m "feat(runtime): add new model feature"
+
+# Output: "Files were modified by this hook..."
+# The commit is blocked because hooks fixed issues
+
+# 2. Review the automatic fixes
+git diff runtimes/universal/models/base.py
+
+# 3. Re-stage the fixed files and commit again
+git add runtimes/universal/models/base.py
+git commit -m "feat(runtime): add new model feature"
+
+# This time it succeeds! ✅
+```
+
+**Tip:** You can also run `uvx pre-commit run` before committing to catch and fix issues early.
+
+#### Shared Ruff Configuration
+
+All Python components use a shared ruff configuration located at `ruff.toml` in the repository root. This eliminates duplication and ensures consistency across all Python code.
+
+Component-specific exclusions (like `datamodel.py` for config or `chroma_db/` for rag) are defined using `extend-exclude` in each component's `pyproject.toml`.
+
 ### Commit Messages
 We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) to keep things structured and make changelog management easy.
 

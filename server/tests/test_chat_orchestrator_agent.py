@@ -133,6 +133,83 @@ def config_with_mcp():
     )
 
 
+@pytest.fixture
+def config_with_multiple_mcp_servers():
+    """Create config with multiple MCP servers and models with server subsets."""
+    return LlamaFarmConfig(
+        version=Version.v1,
+        name="test-project",
+        namespace="test",
+        runtime=Runtime(
+            default_model="default",
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.openai,
+                    model="gpt-4",
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    # No mcp_servers specified - should use all servers
+                ),
+                Model(
+                    name="model-with-subset",
+                    provider=Provider.openai,
+                    model="gpt-4",
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    mcp_servers=["filesystem", "weather"],  # Only these two
+                ),
+                Model(
+                    name="model-with-one-server",
+                    provider=Provider.openai,
+                    model="gpt-3.5-turbo",
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    mcp_servers=["database"],  # Only database
+                ),
+                Model(
+                    name="model-with-empty-list",
+                    provider=Provider.openai,
+                    model="gpt-3.5-turbo",
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    mcp_servers=[],  # Explicitly empty
+                ),
+            ],
+        ),
+        prompts=[
+            PromptSet(
+                name="default",
+                messages=[PromptMessage(role="system", content="You are helpful")],
+            )
+        ],
+        mcp=Mcp(
+            servers=[
+                Server(
+                    name="filesystem",
+                    transport=Transport.http,
+                    base_url="http://localhost:8080",
+                ),
+                Server(
+                    name="weather",
+                    transport=Transport.http,
+                    base_url="http://localhost:8081",
+                ),
+                Server(
+                    name="database",
+                    transport=Transport.http,
+                    base_url="http://localhost:8082",
+                ),
+                Server(
+                    name="calendar",
+                    transport=Transport.http,
+                    base_url="http://localhost:8083",
+                ),
+            ]
+        ),
+    )
+
+
 class TestChatOrchestratorAgent:
     """Test suite for ChatOrchestratorAgent."""
 
@@ -533,7 +610,7 @@ class TestChatOrchestratorAgent:
                 assert not path.exists()
 
     @pytest.mark.asyncio
-    async def test_enable_mcp(self, config_with_mcp):
+    async def test_setup_tools(self, config_with_mcp):
         """Test enabling MCP."""
         with tempfile.TemporaryDirectory() as project_dir:
             agent = ChatOrchestratorAgent(
@@ -547,7 +624,7 @@ class TestChatOrchestratorAgent:
                 mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
                 mock_factory.return_value = mock_factory_instance
 
-                await agent.enable_mcp()
+                await agent.setup_tools()
 
                 assert agent._mcp_enabled
                 assert agent._mcp_service is not None
@@ -583,13 +660,162 @@ class TestChatOrchestratorAgent:
                 assert agent._mcp_tools[0].mcp_tool_name == "tool1"
                 assert agent._mcp_tools[1].mcp_tool_name == "tool2"
 
+    @pytest.mark.asyncio
+    async def test_mcp_servers_subset_selection(self, config_with_multiple_mcp_servers):
+        """Test that model can specify subset of MCP servers."""
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Test model with subset specified
+            agent = ChatOrchestratorAgent(
+                project_config=config_with_multiple_mcp_servers,
+                project_dir=project_dir,
+                model_name="model-with-subset",
+            )
+
+            with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
+                mock_factory_instance = AsyncMock()
+                mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
+                mock_factory.return_value = mock_factory_instance
+
+                await agent.enable_mcp()
+
+                # MCPService should be initialized
+                assert agent._mcp_service is not None
+
+                # Check that only the specified servers are available
+                available_servers = agent._mcp_service.list_servers()
+                assert set(available_servers) == {"filesystem", "weather"}
+                assert "database" not in available_servers
+                assert "calendar" not in available_servers
+
+    @pytest.mark.asyncio
+    async def test_mcp_servers_all_when_not_specified(
+        self, config_with_multiple_mcp_servers
+    ):
+        """Test that model uses all MCP servers when mcp_servers is not specified."""
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Test default model (no mcp_servers specified)
+            agent = ChatOrchestratorAgent(
+                project_config=config_with_multiple_mcp_servers,
+                project_dir=project_dir,
+                model_name="default",
+            )
+
+            with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
+                mock_factory_instance = AsyncMock()
+                mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
+                mock_factory.return_value = mock_factory_instance
+
+                await agent.enable_mcp()
+
+                # MCPService should be initialized
+                assert agent._mcp_service is not None
+
+                # Check that all servers are available
+                available_servers = agent._mcp_service.list_servers()
+                assert set(available_servers) == {
+                    "filesystem",
+                    "weather",
+                    "database",
+                    "calendar",
+                }
+
+    @pytest.mark.asyncio
+    async def test_mcp_servers_single_server(self, config_with_multiple_mcp_servers):
+        """Test that model can specify a single MCP server."""
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Test model with single server
+            agent = ChatOrchestratorAgent(
+                project_config=config_with_multiple_mcp_servers,
+                project_dir=project_dir,
+                model_name="model-with-one-server",
+            )
+
+            with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
+                mock_factory_instance = AsyncMock()
+                mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
+                mock_factory.return_value = mock_factory_instance
+
+                await agent.enable_mcp()
+
+                # MCPService should be initialized
+                assert agent._mcp_service is not None
+
+                # Check that only the database server is available
+                available_servers = agent._mcp_service.list_servers()
+                assert available_servers == ["database"]
+
+    @pytest.mark.asyncio
+    async def test_mcp_servers_empty_list(self, config_with_multiple_mcp_servers):
+        """Test that model with empty mcp_servers list has no servers."""
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Test model with empty list
+            agent = ChatOrchestratorAgent(
+                project_config=config_with_multiple_mcp_servers,
+                project_dir=project_dir,
+                model_name="model-with-empty-list",
+            )
+
+            with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
+                mock_factory_instance = AsyncMock()
+                mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
+                mock_factory.return_value = mock_factory_instance
+
+                await agent.enable_mcp()
+
+                # MCPService should be initialized
+                assert agent._mcp_service is not None
+
+                # Check that no servers are available
+                available_servers = agent._mcp_service.list_servers()
+                assert available_servers == []
+
+    @pytest.mark.asyncio
+    async def test_mcp_servers_invalid_server_name(
+        self, config_with_multiple_mcp_servers
+    ):
+        """Test that non-existent server names are silently filtered out."""
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Modify config to include a non-existent server name
+            config = config_with_multiple_mcp_servers
+            config.runtime.models.append(
+                Model(
+                    name="model-with-invalid-server",
+                    provider=Provider.openai,
+                    model="gpt-3.5-turbo",
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    mcp_servers=["filesystem", "nonexistent-server", "weather"],
+                )
+            )
+
+            agent = ChatOrchestratorAgent(
+                project_config=config,
+                project_dir=project_dir,
+                model_name="model-with-invalid-server",
+            )
+
+            with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
+                mock_factory_instance = AsyncMock()
+                mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
+                mock_factory.return_value = mock_factory_instance
+
+                await agent.enable_mcp()
+
+                # MCPService should be initialized
+                assert agent._mcp_service is not None
+
+                # Check that only valid servers are available (nonexistent-server filtered out)
+                available_servers = agent._mcp_service.list_servers()
+                assert set(available_servers) == {"filesystem", "weather"}
+                assert "nonexistent-server" not in available_servers
+
 
 class TestChatOrchestratorAgentFactory:
     """Test suite for ChatOrchestratorAgentFactory."""
 
     @pytest.mark.asyncio
     async def test_create_agent_without_mcp(self, base_config):
-        """Test creating agent without MCP."""
+        """Test creating agent without MCP configuration."""
         with tempfile.TemporaryDirectory() as project_dir:
             agent = await ChatOrchestratorAgentFactory.create_agent(
                 project_config=base_config,
@@ -597,7 +823,9 @@ class TestChatOrchestratorAgentFactory:
             )
 
             assert isinstance(agent, ChatOrchestratorAgent)
-            assert not agent._mcp_enabled
+            # MCP is enabled but has no servers/tools when no MCP config
+            assert agent._mcp_enabled
+            assert len(agent._mcp_tools) == 0
 
     @pytest.mark.asyncio
     async def test_create_agent_with_session_id(self, base_config):
