@@ -101,6 +101,20 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
 
     config = make_config(PromptFormat.unstructured, model="tinyllama:latest")
 
+    # Mock ProjectService.get_project to avoid file system dependency
+    from services.project_service import Project, ProjectService
+
+    def mock_get_project(namespace: str, project_id: str):
+        return Project(
+            namespace=namespace,
+            name=project_id,
+            config=config,
+            validation_error=None,
+            last_modified=None,
+        )
+
+    monkeypatch.setattr(ProjectService, "get_project", mock_get_project)
+
     # Intercept LFAgent.run_async to capture messages (no network calls)
     from agents.base.agent import LFAgent
 

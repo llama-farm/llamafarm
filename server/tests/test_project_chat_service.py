@@ -12,13 +12,11 @@ import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from agents.chat_orchestrator import ChatOrchestratorAgent
 from config.datamodel import (
     Database,
     LlamaFarmConfig,
-    PromptMessage,
     Model,
+    PromptMessage,
     PromptSet,
     Provider,
     RAGStrategyConfigurationSchema,
@@ -28,8 +26,10 @@ from config.datamodel import (
     Type2,
     Version,
 )
-from context_providers.rag_context_provider import ChunkItem, RAGContextProvider
+
+from agents.chat_orchestrator import ChatOrchestratorAgent
 from services.project_chat_service import ProjectChatService, RAGParameters
+from services.project_service import ProjectService
 
 
 @pytest.fixture
@@ -383,25 +383,24 @@ class TestProjectChatService:
 
     def test_clear_rag_context_provider(self, base_config):
         """Test clearing RAG context provider."""
-        with tempfile.TemporaryDirectory() as project_dir:
-            mock_agent = MagicMock(spec=ChatOrchestratorAgent)
-            mock_agent.remove_context_provider = MagicMock()
+        mock_agent = MagicMock(spec=ChatOrchestratorAgent)
+        mock_agent.remove_context_provider = MagicMock()
 
-            service = ProjectChatService()
-            service._clear_rag_context_provider(mock_agent)
+        service = ProjectChatService()
+        service._clear_rag_context_provider(mock_agent)
 
-            mock_agent.remove_context_provider.assert_called_once_with(
-                "project_chat_context"
-            )
+        mock_agent.remove_context_provider.assert_called_once_with("rag_context")
 
     def test_clear_rag_context_provider_handles_error(self, base_config):
         """Test that clearing context provider handles errors gracefully."""
         mock_agent = MagicMock(spec=ChatOrchestratorAgent)
         mock_agent.remove_context_provider = MagicMock(side_effect=Exception("Error"))
-
-        service = ProjectChatService()
-        # Should not raise
-        service._clear_rag_context_provider(mock_agent)
+        mock_project_service = MagicMock(spec=ProjectService)
+        mock_project_service.get_project.return_value = base_config
+        with patch("services.project_service.ProjectService", mock_project_service):
+            service = ProjectChatService()
+            # Should not raise
+            service._clear_rag_context_provider(mock_agent)
 
     def test_extract_config_value_from_dict(self):
         """Test extracting value from dict config."""
