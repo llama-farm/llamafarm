@@ -117,9 +117,92 @@ var projectsListCmd = &cobra.Command{
 	},
 }
 
+// projectsDeleteCmd represents the projects delete command
+var projectsDeleteCmd = &cobra.Command{
+	Use:     "delete [project-id]",
+	Aliases: []string{"rm", "remove", "del"},
+	Short:   "Delete a project and all its associated resources",
+	Long: `Delete a project and all its associated resources from the LlamaFarm server.
+
+This operation is irreversible and will delete all project data.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		projectToDelete := args[0]
+
+		// Reuse existing config resolution pattern
+		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectToDelete)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		ns := strings.TrimSpace(serverCfg.Namespace)
+		if ns == "" {
+			fmt.Fprintln(os.Stderr, "Error: namespace is required. Provide --namespace or set it in llamafarm.yaml")
+			os.Exit(1)
+		}
+
+		// Ensure server is running
+		config := ServerOnlyConfig(serverCfg.URL)
+		EnsureServicesWithConfig(config)
+
+		// Handle confirmation (follow rag_manage.go pattern)
+		force, _ := cmd.Flags().GetBool("force")
+		if !force {
+			fmt.Printf("⚠️  WARNING: This will permanently delete project '%s/%s' and all associated data\n", ns, projectToDelete)
+			fmt.Print("Are you sure? Type 'yes' to confirm: ")
+
+			var response string
+			fmt.Scanln(&response)
+			if response != "yes" {
+				fmt.Println("Operation cancelled")
+				return
+			}
+		}
+
+		// Execute delete (follow datasets.go delete pattern)
+		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s", ns, projectToDelete))
+		req, err := http.NewRequest("DELETE", url, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+			os.Exit(1)
+		}
+
+		resp, err := getHTTPClient().Do(req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		body, readErr := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			if readErr != nil {
+				fmt.Fprintf(os.Stderr, "Failed to delete project '%s/%s' (%d), and body read failed: %v\n",
+					ns, projectToDelete, resp.StatusCode, readErr)
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stderr, "Failed to delete project '%s/%s' (%d): %s\n",
+				ns, projectToDelete, resp.StatusCode, prettyServerError(resp, body))
+			os.Exit(1)
+		}
+
+		fmt.Printf("✅ Successfully deleted project '%s/%s'\n", ns, projectToDelete)
+	},
+}
+
 func init() {
-	// Add list subcommand to projects
+	// Server routing flags (align with datasets)
+	projectsCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
+	projectsCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Project namespace (default: from llamafarm.yaml)")
+	projectsCmd.PersistentFlags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
+
+	// Add delete subcommand with force flag
+	projectsDeleteCmd.Flags().BoolP("force", "f", false, "Skip confirmation prompt")
+
+	// Register commands
 	projectsCmd.AddCommand(projectsListCmd)
+	projectsCmd.AddCommand(projectsDeleteCmd)
 
 	// Add the projects command to root
 	rootCmd.AddCommand(projectsCmd)
