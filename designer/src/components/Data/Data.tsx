@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
   DialogTrigger,
   DialogClose,
@@ -33,6 +34,7 @@ import {
   useCreateDataset,
   useDeleteDataset,
   useAvailableStrategies,
+  useUploadFileToDataset,
 } from '../../hooks/useDatasets'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
@@ -41,6 +43,13 @@ const Data = () => {
   const [isDropped, setIsDropped] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useModeWithReset('designer')
+
+  // File drag-and-drop state management
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [isSelectDatasetModalOpen, setIsSelectDatasetModalOpen] = useState(false)
+  const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
+  const previousDatasetCountRef = useRef<number>(0)
+  const [isUploading, setIsUploading] = useState(false)
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -89,6 +98,7 @@ const Data = () => {
   const createDatasetMutation = useCreateDataset()
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
+  const uploadMutation = useUploadFileToDataset()
 
   // Fetch available strategies and databases from API
   const { data: availableOptions } = useAvailableStrategies(
@@ -286,6 +296,9 @@ const Data = () => {
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    e.stopPropagation()
+    // Set the drop effect to allow dropping
+    e.dataTransfer.dropEffect = 'copy'
     setIsDragging(true)
   }, [])
 
@@ -295,14 +308,104 @@ const Data = () => {
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
-    setIsDropped(true)
+    e.stopPropagation()
+    setIsDragging(false)
 
-    setTimeout(() => {
-      setIsDragging(false)
-      setIsDropped(false)
-    }, 1000)
+    const files = Array.from(e.dataTransfer.files)
 
-    // File drop handling removed - files are now uploaded directly to datasets
+    if (files.length === 0) {
+      return
+    }
+
+    // Filter out directories and invalid files
+    const validFiles = files.filter(file => file.size > 0 && file.type !== '')
+
+    if (validFiles.length === 0) {
+      toast({
+        message: 'No valid files to upload',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (validFiles.length < files.length) {
+      toast({
+        message: `${files.length - validFiles.length} invalid file(s) were skipped`,
+        variant: 'default',
+      })
+    }
+
+    setPendingFiles(validFiles)
+    setIsSelectDatasetModalOpen(true)
+  }, [toast])
+
+  // Handle file upload to selected dataset
+  const handleDatasetSelect = useCallback(async (datasetId: string, datasetName: string) => {
+    if (!activeProject || pendingFiles.length === 0) return
+
+    setIsUploading(true)
+    setIsSelectDatasetModalOpen(false)
+
+    const namespace = activeProject.namespace
+    const project = activeProject.project
+
+    try {
+      // Upload all files to the selected dataset
+      await Promise.all(
+        pendingFiles.map(async (file) => {
+          await uploadMutation.mutateAsync({
+            namespace,
+            project,
+            dataset: datasetId,
+            file,
+          })
+        })
+      )
+
+      toast({
+        message: `${pendingFiles.length} file(s) uploaded to ${datasetName}`,
+        variant: 'default',
+      })
+
+      // Navigate to the dataset view to see uploaded files
+      navigate(`/chat/data/${datasetId}`)
+    } catch (error) {
+      console.error('Upload failed:', error)
+      toast({
+        message: error instanceof Error ? error.message : 'Failed to upload files',
+        variant: 'destructive',
+      })
+    } finally {
+      setPendingFiles([])
+      setIsUploading(false)
+    }
+  }, [activeProject, pendingFiles, uploadMutation, toast, navigate])
+
+  // Auto-upload pending files when a new dataset is created
+  useEffect(() => {
+    if (!shouldUploadAfterCreate || pendingFiles.length === 0 || !datasets) {
+      return
+    }
+
+    // Check if dataset count increased (new dataset was created)
+    const currentCount = datasets.length
+    const previousCount = previousDatasetCountRef.current
+
+    if (currentCount > previousCount) {
+      // A new dataset was added - find it (should be the last one)
+      const newestDataset = datasets[datasets.length - 1]
+
+      setShouldUploadAfterCreate(false)
+      previousDatasetCountRef.current = currentCount
+      handleDatasetSelect(newestDataset.id, newestDataset.name)
+    }
+  }, [datasets, shouldUploadAfterCreate, pendingFiles, handleDatasetSelect])
+
+  // Cancel file upload and reset state
+  const handleCancelUpload = useCallback(() => {
+    setPendingFiles([])
+    setIsSelectDatasetModalOpen(false)
+    setShouldUploadAfterCreate(false)
   }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,6 +417,87 @@ const Data = () => {
 
     // console.log('Selected files:', files)
   }
+
+  // Render modal for selecting destination dataset for dropped files
+  const renderSelectDatasetModal = () => (
+    <Dialog open={isSelectDatasetModalOpen} onOpenChange={setIsSelectDatasetModalOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Files to Dataset</DialogTitle>
+          <DialogDescription>
+            {pendingFiles.length === 1 
+              ? `Where would you like to add "${pendingFiles[0].name}"?`
+              : `Where would you like to add ${pendingFiles.length} files?`
+            }
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          {/* Create new dataset with dropped files */}
+          <button
+            onClick={() => {
+              previousDatasetCountRef.current = datasets.length
+              setShouldUploadAfterCreate(true)
+              setIsSelectDatasetModalOpen(false)
+              setIsCreateOpen(true)
+            }}
+            className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/5 transition-colors"
+          >
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+            <div className="text-left">
+              <div className="font-medium">Create New Dataset</div>
+              <div className="text-sm text-muted-foreground">
+                Start a new dataset with {pendingFiles.length === 1 ? 'this file' : 'these files'}
+              </div>
+            </div>
+          </button>
+
+          {/* Select from existing datasets */}
+          {datasets && datasets.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground px-1">
+                Or add to existing dataset:
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {datasets.map((dataset) => (
+                  <button
+                    key={dataset.id}
+                    onClick={() => handleDatasetSelect(dataset.id, dataset.name)}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-accent hover:border-accent-foreground/20 transition-colors text-left"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 rounded bg-accent flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{dataset.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {dataset.files?.length || 0} files
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button 
+            variant="outline" 
+            onClick={handleCancelUpload}
+          >
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 
   return (
     <div
@@ -658,6 +842,9 @@ const Data = () => {
             {isDragging ? (
               <div
                 className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
               >
                 <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
                   {isDropped ? (
@@ -1288,6 +1475,24 @@ const Data = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* File drop dataset selection modal */}
+      {renderSelectDatasetModal()}
+
+      {/* Upload progress overlay */}
+      {isUploading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border rounded-lg p-6 shadow-lg flex flex-col items-center gap-4 max-w-sm">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <div className="text-center">
+              <div className="font-medium">Uploading Files...</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                {pendingFiles.length} {pendingFiles.length === 1 ? 'file' : 'files'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
