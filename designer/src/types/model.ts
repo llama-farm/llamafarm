@@ -50,11 +50,32 @@ export interface DownloadModelRequest {
 
 /**
  * Events from the model download stream
+ * These events are emitted by the server during model download via SSE
  */
 export type DownloadEvent =
-  | { event: 'progress'; file?: string; downloaded: number; total: number }
+  | { event: 'start'; desc: string; total: number | null; n: number }
+  | { event: 'progress'; desc: string; total: number | null; n: number }
+  | { event: 'end'; desc: string; total: number | null; n: number }
   | { event: 'done'; local_dir: string }
   | { event: 'error'; message: string }
+
+/**
+ * Aggregated download progress for UI display
+ */
+export interface DownloadProgress {
+  currentFile: string
+  currentFileProgress: number // 0-100
+  currentFileDownloaded: number // bytes
+  currentFileTotal: number // bytes
+  filesCompleted: number
+  totalFiles: number
+  overallDownloaded: number // bytes
+  overallTotal: number // bytes
+  overallProgress: number // 0-100
+  downloadSpeed: number // bytes/second
+  estimatedTimeRemaining: number // seconds
+  elapsedTime: number // seconds
+}
 
 /**
  * Response from the delete model endpoint

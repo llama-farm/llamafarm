@@ -6,6 +6,7 @@ from config.datamodel import Provider
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from server.api.errors import NotFoundError
 from server.services.model_service import ModelService
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,17 @@ def list_models(provider: Provider = Provider.universal):
 
 @router.post("/download")
 async def download_model(request: DownloadModelRequest):
-    """Download/cache a model for the given provider and model name."""
+    """Download/cache a model for the given provider and model name.
+
+    Returns a Server-Sent Events (SSE) stream with download progress.
+
+    Events:
+    - start: File download begins
+    - progress: Download progress update
+    - end: File download completes
+    - done: All files downloaded successfully
+    - error: Download failed
+    """
 
     async def event_stream():
         try:
@@ -48,6 +59,25 @@ async def download_model(request: DownloadModelRequest):
                 request.provider, request.model_name
             ):
                 yield f"data: {json.dumps(evt)}\n\n"
+        except NotFoundError as e:
+            logger.warning(
+                f"Model '{request.model_name}' not found on HuggingFace: {e}"
+            )
+            error_event = {
+                "event": "error",
+                "message": str(e),
+            }
+            yield f"data: {json.dumps(error_event)}\n\n"
+        except ValueError as e:
+            logger.error(
+                f"Invalid download request for provider '{request.provider}', "
+                f"model '{request.model_name}': {e}"
+            )
+            error_event = {
+                "event": "error",
+                "message": f"Invalid request: {str(e)}",
+            }
+            yield f"data: {json.dumps(error_event)}\n\n"
         except Exception as e:
             logger.error(
                 f"Error during model download for provider '{request.provider}', "
@@ -56,7 +86,7 @@ async def download_model(request: DownloadModelRequest):
             )
             error_event = {
                 "event": "error",
-                "message": "An internal error occurred while downloading the model.",
+                "message": f"Download failed: {str(e)}",
             }
             yield f"data: {json.dumps(error_event)}\n\n"
 

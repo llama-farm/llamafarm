@@ -1,0 +1,217 @@
+family_id: qwen3
+family_name: Qwen3
+organization: Alibaba Cloud
+description: Latest Qwen generation with thinking mode, 119 language support, and 36T training tokens
+website: https://qwenlm.github.io/blog/qwen3/
+license: Apache 2.0
+tags: [multilingual, coding, chat, reasoning]
+strengths:
+  - "Dual-mode: Thinking Mode for complex reasoning, Non-Thinking Mode for quick responses"
+  - "Supports 119 languages and dialects"
+  - "Trained on 36 trillion tokens (2x Qwen2.5)"
+  - "Excellent tool integration and agent capabilities"
+
+# Recommended models for this family
+recommended:
+  - category: "Small & Fast"
+    description: "Efficient models for quick responses and resource-constrained environments"
+    models:
+      - variant_id: "qwen3:0.6b"
+        priority: 1
+      - variant_id: "qwen3:1.7b"
+        priority: 2
+
+  - category: "Balanced"
+    description: "Best balance of performance and resource usage"
+    models:
+      - variant_id: "qwen3:4b"
+        priority: 1
+
+  - category: "Powerful"
+    description: "Maximum capability for complex tasks"
+    models:
+      - variant_id: "qwen3:8b"
+        priority: 1
+
+variants:
+  - id: qwen3:0.6b
+    display_name: "Qwen3 0.6B"
+    description: "Ultra-compact multilingual model with thinking mode"
+    parameters: "0.6b"
+    download_size: "1.2 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "4 GB"
+      min_vram: "2 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA GTX 1660", "CPU-only"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen3-0.6B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Supports thinking mode. Set HF_TOKEN for gated models."
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "qwen3:0.6b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull qwen3:0.6b"
+        notes: "GGUF quantized for efficient local inference"
+      lemonade:
+        provider: lemonade
+        runtime: lemonade
+        format: gguf
+        backend: llamacpp
+        model_id: "user.Qwen3-0.6B"
+        checkpoint: "unsloth/Qwen3-0.6B-GGUF"
+        recipe: "llamacpp"
+        download_command: "uv run lemonade-server-dev pull user.Qwen3-0.6B --checkpoint unsloth/Qwen3-0.6B-GGUF --recipe llamacpp"
+        notes: "Hardware-optimized (NPU/GPU). Start with: LEMONADE_MODEL=user.Qwen3-0.6B nx start lemonade"
+    use_cases: [chat, lightweight-inference, multilingual]
+
+  - id: qwen3:1.7b
+    display_name: "Qwen3 1.7B"
+    description: "Small but capable multilingual model"
+    parameters: "1.7b"
+    download_size: "3.5 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "8 GB"
+      min_vram: "4 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen3-1.7B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Supports thinking mode"
+      lemonade:
+        provider: lemonade
+        runtime: lemonade
+        format: gguf
+        backend: llamacpp
+        model_id: "user.Qwen3-1.7B"
+        checkpoint: "unsloth/Qwen3-1.7B-GGUF:Q4_K_M"
+        recipe: "llamacpp"
+        download_command: "uv run lemonade-server-dev pull user.Qwen3-1.7B --checkpoint unsloth/Qwen3-1.7B-GGUF:Q4_K_M --recipe llamacpp"
+        notes: "Q4_K_M quantization for optimal quality/size"
+    use_cases: [chat, coding, multilingual]
+
+  - id: qwen3:4b
+    display_name: "Qwen3 4B"
+    description: "Balanced multilingual model with strong capabilities (Recommended)"
+    parameters: "4b"
+    download_size: "8 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "12 GB"
+      min_vram: "6 GB"
+      recommended_gpu: ["Apple M1 Pro", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen3-4B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Best balance of performance and resource usage"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "qwen3:4b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull qwen3:4b"
+        notes: "Optimized GGUF version"
+      lemonade:
+        provider: lemonade
+        runtime: lemonade
+        format: gguf
+        backend: llamacpp
+        model_id: "user.Qwen3-4B"
+        checkpoint: "unsloth/Qwen3-4B-GGUF:Q4_K_M"
+        recipe: "llamacpp"
+        download_command: "uv run lemonade-server-dev pull user.Qwen3-4B --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M --recipe llamacpp"
+        notes: "Recommended for most use cases. Excellent NPU performance."
+    use_cases: [chat, coding, reasoning, multilingual]
+
+  - id: qwen3:8b
+    display_name: "Qwen3 8B"
+    description: "Mid-size multilingual powerhouse"
+    parameters: "8b"
+    download_size: "16 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "24 GB"
+      min_vram: "12 GB"
+      recommended_gpu: ["Apple M1 Max", "NVIDIA RTX 4070"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen3-8B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "High-quality responses with thinking mode"
+      lemonade:
+        provider: lemonade
+        runtime: lemonade
+        format: gguf
+        backend: llamacpp
+        model_id: "user.Qwen3-8B"
+        checkpoint: "unsloth/Qwen3-8B-GGUF:Q4_K_M"
+        recipe: "llamacpp"
+        download_command: "uv run lemonade-server-dev pull user.Qwen3-8B --checkpoint unsloth/Qwen3-8B-GGUF:Q4_K_M --recipe llamacpp"
+        notes: "Q4_K_M quantization recommended for 16GB+ systems"
+    use_cases: [chat, coding, reasoning, multilingual]
+
+  - id: qwen3:14b
+    display_name: "Qwen3 14B"
+    description: "Large multilingual model for complex tasks"
+    parameters: "14b"
+    download_size: "28 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "32 GB"
+      min_vram: "18 GB"
+      recommended_gpu: ["NVIDIA RTX 4080", "Apple M2 Ultra"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen3-14B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "High-end model for complex reasoning"
+    use_cases: [chat, coding, reasoning, multilingual]
+
+  - id: qwen3:32b
+    display_name: "Qwen3 32B"
+    description: "Very large multilingual model with exceptional capabilities"
+    parameters: "32b"
+    download_size: "64 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "64 GB"
+      min_vram: "24 GB"
+      recommended_gpu: ["NVIDIA RTX 4090", "NVIDIA A6000"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen3-32B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Requires significant hardware resources"
+    use_cases: [chat, coding, reasoning, multilingual]

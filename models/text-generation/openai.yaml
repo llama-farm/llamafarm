@@ -1,0 +1,214 @@
+family_id: openai
+family_name: OpenAI
+organization: OpenAI
+description: OpenAI's GPT models via API
+website: https://platform.openai.com/
+license: Proprietary
+tags: [chat, coding, reasoning, general-purpose]
+strengths:
+  - "Industry-leading language understanding"
+  - "Strong reasoning and coding capabilities"
+  - "Well-documented API and extensive tooling"
+  - "Regular model updates and improvements"
+
+variants:
+  # GPT-5 Series (August 2025)
+  - id: gpt-5
+    display_name: "GPT-5"
+    description: "OpenAI's most advanced model for logic and multi-step tasks"
+    parameters: "large"
+    download_size: "N/A (API)"
+    context_window: 272000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "gpt-5"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Supports 4 reasoning levels (minimal, low, medium, high). Context: 272k input / 128k output."
+    use_cases: [chat, coding, reasoning, creative-writing, general-purpose]
+
+  - id: gpt-5-mini
+    display_name: "GPT-5 Mini"
+    description: "Lightweight GPT-5 for cost-sensitive applications"
+    parameters: "mini"
+    download_size: "N/A (API)"
+    context_window: 272000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "gpt-5-mini"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Cost-effective: $0.25/1M input, $2/1M output tokens"
+    use_cases: [chat, coding, lightweight-inference, general-purpose]
+
+  - id: gpt-5-nano
+    display_name: "GPT-5 Nano"
+    description: "Fastest GPT-5 variant optimized for low latency"
+    parameters: "nano"
+    download_size: "N/A (API)"
+    context_window: 272000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "gpt-5-nano"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Optimized for speed. $0.05/1M input, $0.40/1M output tokens"
+    use_cases: [chat, lightweight-inference, general-purpose]
+
+  - id: gpt-5-chat
+    display_name: "GPT-5 Chat"
+    description: "Advanced conversational model for enterprise applications"
+    parameters: "large"
+    download_size: "N/A (API)"
+    context_window: 272000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "gpt-5-chat"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Natural, multimodal, context-aware conversations"
+    use_cases: [chat, creative-writing, general-purpose]
+
+  # GPT-4.1 Series (April 2025)
+  - id: gpt-4.1
+    display_name: "GPT-4.1"
+    description: "Previous generation flagship model"
+    parameters: "large"
+    download_size: "N/A (API)"
+    context_window: 128000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "gpt-4.1"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Released April 2025"
+    use_cases: [chat, coding, reasoning, general-purpose]
+
+  - id: gpt-4.1-mini
+    display_name: "GPT-4.1 Mini"
+    description: "Cost-effective GPT-4.1 variant"
+    parameters: "mini"
+    download_size: "N/A (API)"
+    context_window: 128000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "gpt-4.1-mini"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Balanced performance and cost"
+    use_cases: [chat, coding, general-purpose]
+
+  - id: gpt-4.1-nano
+    display_name: "GPT-4.1 Nano"
+    description: "Fastest GPT-4.1 variant"
+    parameters: "nano"
+    download_size: "N/A (API)"
+    context_window: 128000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "gpt-4.1-nano"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Low latency option"
+    use_cases: [chat, lightweight-inference, general-purpose]
+
+  # o-Series (Reasoning Models)
+  - id: o3
+    display_name: "o3"
+    description: "Advanced reasoning model for complex problem-solving"
+    parameters: "large"
+    download_size: "N/A (API)"
+    context_window: 200000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "o3"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Optimized for deep reasoning tasks"
+    use_cases: [reasoning, coding, general-purpose]
+
+  - id: o4-mini
+    display_name: "o4-mini"
+    description: "Efficient reasoning model for coding and math"
+    parameters: "mini"
+    download_size: "N/A (API)"
+    context_window: 128000
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "o4-mini"
+        base_url: "https://api.openai.com/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Cost-effective reasoning model"
+    use_cases: [reasoning, coding, general-purpose]

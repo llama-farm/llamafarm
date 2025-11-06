@@ -1,0 +1,128 @@
+family_id: deepseek
+family_name: DeepSeek
+organization: DeepSeek AI
+description: DeepSeek-R1 series with advanced reasoning capabilities through reinforcement learning
+website: https://www.deepseek.com/
+license: MIT
+tags: [reasoning, chat, general-purpose]
+strengths:
+  - "Strong reasoning capabilities through RL training"
+  - "Competitive performance with leading models"
+  - "Open weights and permissive license"
+
+variants:
+  - id: deepseek-r1:1.5b
+    display_name: "DeepSeek-R1 1.5B"
+    description: "Lightweight reasoning model distilled from DeepSeek-R1 (Qwen-based)"
+    parameters: "1.5b"
+    download_size: "3 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "8 GB"
+      min_vram: "4 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA GTX 1660"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Distilled from DeepSeek-R1 using Qwen2.5-1.5B as base"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "deepseek-r1:1.5b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull deepseek-r1:1.5b"
+        notes: "GGUF quantized for efficient local inference"
+    use_cases: [reasoning, chat, lightweight-inference]
+
+  - id: deepseek-r1:7b
+    display_name: "DeepSeek-R1 7B"
+    description: "Mid-size reasoning model distilled from DeepSeek-R1 (Qwen-based)"
+    parameters: "7b"
+    download_size: "14 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "16 GB"
+      min_vram: "8 GB"
+      recommended_gpu: ["Apple M1 Pro", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Distilled from DeepSeek-R1 using Qwen2.5-7B as base"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "deepseek-r1:7b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull deepseek-r1:7b"
+        notes: "GGUF quantized for efficient local inference"
+    use_cases: [reasoning, chat, general-purpose]
+
+  - id: deepseek-r1:8b
+    display_name: "DeepSeek-R1 8B"
+    description: "Mid-size reasoning model distilled from DeepSeek-R1 (Llama-based)"
+    parameters: "8b"
+    download_size: "16 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "16 GB"
+      min_vram: "10 GB"
+      recommended_gpu: ["Apple M1 Pro", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Distilled from DeepSeek-R1 using Llama-3.1-8B as base"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "deepseek-r1:8b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull deepseek-r1:8b"
+        notes: "GGUF quantized for efficient local inference"
+    use_cases: [reasoning, chat, general-purpose]
+
+  - id: deepseek-r1:32b
+    display_name: "DeepSeek-R1 32B"
+    description: "Large reasoning model distilled from DeepSeek-R1 (Qwen-based)"
+    parameters: "32b"
+    download_size: "64 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "64 GB"
+      min_vram: "24 GB"
+      recommended_gpu: ["NVIDIA A6000", "NVIDIA RTX 4090"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+        base_url: "http://127.0.0.1:11540"
+        download_command: "Auto-downloads from HuggingFace on first use"
+        notes: "Distilled from DeepSeek-R1 using Qwen2.5-32B as base. Outperforms o1-mini on benchmarks."
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "deepseek-r1:32b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull deepseek-r1:32b"
+        notes: "GGUF quantized for efficient local inference"
+    use_cases: [reasoning, general-purpose]

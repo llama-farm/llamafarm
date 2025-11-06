@@ -1,0 +1,246 @@
+# yaml-language-server: $schema=http://json-schema.org/draft-07/schema#
+
+$schema: http://json-schema.org/draft-07/schema#
+title: LlamaFarm Model Catalog Schema
+description: Schema for the Model Farm catalog - defines model families and variants organized by capability
+
+# Capability categories (directory structure):
+# - text-generation/    Language models for chat, coding, reasoning
+# - image-generation/   Text-to-image and image-to-image models (future)
+# - image-recognition/  Vision models for classification, detection (future)
+# - audio/             Speech-to-text, text-to-speech (future)
+# - embedding/         Models for vector embeddings (future)
+
+# Model Formats and Runtime Compatibility:
+# - gguf: GGUF quantized models (Ollama, Lemonade-llamacpp)
+# - transformers: HuggingFace transformers (Universal, Lemonade-transformers)
+# - onnx: ONNX format (Lemonade-onnx)
+
+definitions:
+  recommended_model:
+    type: object
+    description: A recommended model variant
+    required:
+      - variant_id
+      - priority
+    properties:
+      variant_id:
+        type: string
+        description: Reference to a model variant ID
+        example: "qwen3:0.6b"
+      priority:
+        type: integer
+        description: Display priority (1 = highest)
+        minimum: 1
+
+  recommended_category:
+    type: object
+    description: Category of recommended models
+    required:
+      - category
+      - models
+    properties:
+      category:
+        type: string
+        description: Category name
+        example: "Small & Fast"
+      description:
+        type: string
+        description: Category description
+      models:
+        type: array
+        description: List of recommended models in this category
+        items:
+          $ref: "#/definitions/recommended_model"
+        minItems: 1
+
+  provider_config:
+    type: object
+    description: Provider-specific configuration for a model variant
+    required:
+      - provider
+      - model_id
+      - runtime
+      - format
+    properties:
+      provider:
+        type: string
+        enum: [ollama, lemonade, universal, openai]
+        description: Model provider type
+      model_id:
+        type: string
+        description: Provider-specific model identifier
+      runtime:
+        type: string
+        enum: [ollama, lemonade, universal, openai]
+        description: Runtime that runs this provider
+      format:
+        type: string
+        enum: [gguf, transformers, onnx, api]
+        description: Model format type
+      base_url:
+        type: string
+        description: Default base URL for this provider
+      download_command:
+        type: string
+        description: Complete command to download/pull the model
+      requires_token:
+        type: boolean
+        description: Whether this model requires authentication
+      checkpoint:
+        type: string
+        description: Checkpoint path (for Lemonade GGUF models)
+      recipe:
+        type: string
+        enum: [llamacpp, transformers, onnx]
+        description: Backend recipe for Lemonade
+      backend:
+        type: string
+        enum: [llamacpp, transformers, onnx]
+        description: Lemonade backend type (same as recipe)
+      notes:
+        type: string
+        description: Additional setup notes or requirements
+
+  model_variant:
+    type: object
+    description: A specific variant of a model (e.g., 7B, 70B)
+    required:
+      - id
+      - display_name
+      - parameters
+      - download_size
+      - providers
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z0-9._:-]+$"
+        description: Unique identifier for this variant
+        example: "llama3.2:1b"
+      display_name:
+        type: string
+        description: Human-readable name
+        example: "Llama 3.2 1B"
+      description:
+        type: string
+        description: Brief description of this variant
+      parameters:
+        type: string
+        description: Parameter count (e.g., "1b", "7b", "70b")
+        pattern: "^[0-9.]+[bBmMkK]?$"
+      quantization:
+        type: string
+        description: Quantization type if applicable
+        example: "Q4_K_M"
+      context_window:
+        type: integer
+        description: Maximum context window in tokens
+        minimum: 512
+      download_size:
+        type: string
+        description: Approximate download size
+        pattern: "^[0-9.]+ [KMGT]B$"
+        example: "4.5 GB"
+      hardware_requirements:
+        type: object
+        description: Minimum hardware requirements
+        properties:
+          min_ram:
+            type: string
+            description: Minimum system RAM
+            example: "8 GB"
+          min_vram:
+            type: string
+            description: Minimum GPU VRAM
+            example: "4 GB"
+          recommended_gpu:
+            type: array
+            description: Recommended GPUs or hardware
+            items:
+              type: string
+            example: ["Apple M1", "NVIDIA RTX 3060"]
+      providers:
+        type: object
+        description: Provider-specific configurations
+        additionalProperties:
+          $ref: "#/definitions/provider_config"
+        minProperties: 1
+      use_cases:
+        type: array
+        description: Recommended use cases
+        items:
+          type: string
+          enum: [chat, coding, reasoning, lightweight-inference, creative-writing, general-purpose]
+      benchmark_scores:
+        type: object
+        description: Performance benchmarks
+        properties:
+          mmlu:
+            type: number
+            description: MMLU score (0-100)
+          humaneval:
+            type: number
+            description: HumanEval score (0-100)
+          gsm8k:
+            type: number
+            description: GSM8K math reasoning score (0-100)
+
+  model_family:
+    type: object
+    description: A family of related models (e.g., Llama 3.x)
+    required:
+      - family_id
+      - family_name
+      - organization
+      - variants
+    properties:
+      family_id:
+        type: string
+        pattern: "^[a-z0-9_-]+$"
+        description: Unique identifier for this family
+        example: "llama"
+      family_name:
+        type: string
+        description: Human-readable family name
+        example: "Llama"
+      organization:
+        type: string
+        description: Organization that created this model family
+        example: "Meta"
+      description:
+        type: string
+        description: Overview of the model family
+      website:
+        type: string
+        format: uri
+        description: Official website or repository
+      recommended:
+        type: array
+        description: Recommended model categories for this family
+        items:
+          $ref: "#/definitions/recommended_category"
+      license:
+        type: string
+        description: License type
+        example: "Apache 2.0"
+      tags:
+        type: array
+        description: Tags for categorization
+        items:
+          type: string
+          enum: [chat, coding, reasoning, multilingual, vision, general-purpose, lightweight, research]
+      strengths:
+        type: array
+        description: Key strengths of this model family
+        items:
+          type: string
+      variants:
+        type: array
+        description: Available model variants
+        items:
+          $ref: "#/definitions/model_variant"
+        minItems: 1
+
+type: object
+oneOf:
+  - $ref: "#/definitions/model_family"

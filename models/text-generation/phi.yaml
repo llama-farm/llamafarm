@@ -1,0 +1,73 @@
+family_id: phi
+family_name: Phi
+organization: Microsoft
+description: Microsoft's compact but capable models optimized for reasoning
+website: https://azure.microsoft.com/en-us/products/phi-3
+license: MIT
+tags: [reasoning, chat, lightweight]
+strengths:
+  - "Excellent performance for compact size"
+  - "Strong reasoning capabilities"
+  - "Efficient training approach"
+  - "Good for resource-constrained environments"
+
+variants:
+  - id: phi-3:3.8b
+    display_name: "Phi-3 3.8B"
+    description: "Compact reasoning model with strong performance"
+    parameters: "3.8b"
+    download_size: "2.8 GB"
+    context_window: 128000
+    hardware_requirements:
+      min_ram: "8 GB"
+      min_vram: "4 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "microsoft/Phi-3-mini-128k-instruct"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "phi-3:3.8b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull phi-3:3.8b"
+    use_cases: [reasoning, chat, lightweight-inference]
+    benchmark_scores:
+      mmlu: 69.0
+
+  - id: phi-3:14b
+    display_name: "Phi-3 14B"
+    description: "Larger Phi model with enhanced capabilities"
+    parameters: "14b"
+    download_size: "10 GB"
+    context_window: 128000
+    hardware_requirements:
+      min_ram: "24 GB"
+      min_vram: "12 GB"
+      recommended_gpu: ["Apple M1 Max", "NVIDIA RTX 4070"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "microsoft/Phi-3-medium-128k-instruct"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "phi-3:14b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull phi-3:14b"
+    use_cases: [reasoning, chat, general-purpose]
+    benchmark_scores:
+      mmlu: 78.0

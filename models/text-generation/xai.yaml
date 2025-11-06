@@ -1,0 +1,57 @@
+family_id: xai
+family_name: xAI (Grok)
+organization: xAI
+description: xAI's Grok models with real-time knowledge and reasoning
+website: https://x.ai/
+license: Proprietary
+tags: [chat, reasoning, general-purpose]
+strengths:
+  - "Real-time information access"
+  - "Strong reasoning capabilities"
+  - "Competitive with leading models"
+  - "OpenAI-compatible API"
+
+variants:
+  - id: grok-beta
+    display_name: "Grok Beta"
+    description: "xAI's flagship model with real-time knowledge"
+    parameters: "large"
+    download_size: "N/A (API)"
+    context_window: 131072
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "grok-beta"
+        base_url: "https://api.x.ai/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires XAI_API_KEY environment variable or api_key in config. OpenAI-compatible endpoint."
+    use_cases: [chat, reasoning, general-purpose]
+
+  - id: grok-vision-beta
+    display_name: "Grok Vision Beta"
+    description: "Grok with vision capabilities for image understanding"
+    parameters: "large"
+    download_size: "N/A (API)"
+    context_window: 8192
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "grok-vision-beta"
+        base_url: "https://api.x.ai/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires XAI_API_KEY environment variable or api_key in config. Supports image inputs."
+    use_cases: [chat, reasoning, general-purpose]

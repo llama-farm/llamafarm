@@ -1,0 +1,122 @@
+family_id: qwen
+family_name: Qwen
+organization: Alibaba Cloud
+description: Multilingual models with strong coding and reasoning capabilities
+website: https://github.com/QwenLM/Qwen
+license: Apache 2.0
+tags: [multilingual, coding, chat, reasoning]
+strengths:
+  - "Excellent multilingual support (English, Chinese, etc.)"
+  - "Strong coding capabilities"
+  - "Competitive reasoning performance"
+  - "Wide range of model sizes"
+
+variants:
+  - id: qwen2.5:1.5b
+    display_name: "Qwen 2.5 1.5B"
+    description: "Lightweight multilingual model"
+    parameters: "1.5b"
+    download_size: "3.4 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "8 GB"
+      min_vram: "4 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA GTX 1660"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen2.5-1.5B-Instruct"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "qwen2.5:1.5b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull qwen2.5:1.5b"
+      lemonade:
+        provider: lemonade
+        runtime: lemonade
+        format: gguf
+        model_id: "user.Qwen2.5-1.5B-Instruct-GGUF"
+        checkpoint: "Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M"
+        recipe: "llamacpp"
+    use_cases: [chat, coding, multilingual, lightweight-inference]
+
+  - id: qwen2.5:7b
+    display_name: "Qwen 2.5 7B"
+    description: "Mid-size multilingual model with strong capabilities"
+    parameters: "7b"
+    download_size: "7 GB"
+    context_window: 131072
+    hardware_requirements:
+      min_ram: "16 GB"
+      min_vram: "8 GB"
+      recommended_gpu: ["Apple M1 Pro", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "Qwen/Qwen2.5-7B-Instruct"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "qwen2.5:7b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull qwen2.5:7b"
+    use_cases: [chat, coding, reasoning, multilingual]
+    benchmark_scores:
+      mmlu: 70.3
+      humaneval: 61.6
+
+  - id: qwen2.5:32b
+    display_name: "Qwen 2.5 32B"
+    description: "Large multilingual model for complex tasks"
+    parameters: "32b"
+    download_size: "14 GB"
+    context_window: 131072
+    hardware_requirements:
+      min_ram: "48 GB"
+      min_vram: "20 GB"
+      recommended_gpu: ["NVIDIA RTX 4090", "Apple M2 Ultra"]
+    providers:
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "qwen2.5:32b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull qwen2.5:32b"
+    use_cases: [chat, coding, reasoning, multilingual]
+
+  - id: qwen2.5:72b
+    display_name: "Qwen 2.5 72B"
+    description: "Flagship multilingual model with state-of-the-art performance"
+    parameters: "72b"
+    download_size: "20 GB"
+    context_window: 131072
+    hardware_requirements:
+      min_ram: "64 GB"
+      min_vram: "40 GB"
+      recommended_gpu: ["NVIDIA A6000", "NVIDIA A100"]
+    providers:
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "qwen2.5:72b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull qwen2.5:72b"
+    use_cases: [chat, coding, reasoning, multilingual]
+    benchmark_scores:
+      mmlu: 85.3
+      humaneval: 86.2

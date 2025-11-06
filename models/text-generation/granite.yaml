@@ -1,0 +1,123 @@
+family_id: granite
+family_name: IBM Granite 4.0
+organization: IBM
+description: Enterprise-grade models with ISO 42001 certification, multilingual support, and tool calling
+website: https://huggingface.co/ibm-granite
+license: Apache 2.0
+tags: [general-purpose, coding, lightweight, research]
+strengths:
+  - "ISO 42001 certified for responsible AI development"
+  - "Native support for 12 languages"
+  - "Fill-in-the-middle code completion"
+  - "Optimized for on-device deployment"
+  - "Hybrid-SSM architecture for efficiency"
+
+variants:
+  - id: granite-4.0-h-350m
+    display_name: "Granite 4.0 Hybrid 350M"
+    description: "Ultra-lightweight model with Hybrid-SSM architecture"
+    parameters: "0.3b"
+    download_size: "700 MB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "2 GB"
+      min_vram: "1 GB"
+      recommended_gpu: ["Apple M1", "Any GPU", "CPU-only"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "ibm-granite/granite-4.0-h-350m"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace. Hybrid-SSM architecture with 4 attention + 28 Mamba2 layers."
+        download_command: "Auto-downloads from HuggingFace on first use"
+    use_cases: [lightweight-inference, chat, coding]
+    benchmark_scores:
+      mmlu: 36.2
+      humaneval: 38.0
+      gsm8k: 39.3
+
+  - id: granite-4.0-h-1b
+    display_name: "Granite 4.0 Hybrid 1B"
+    description: "Compact model with Hybrid-SSM architecture for efficient inference"
+    parameters: "1b"
+    download_size: "2 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "4 GB"
+      min_vram: "2 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA GTX 1660"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "ibm-granite/granite-4.0-h-1b"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace. Hybrid-SSM architecture optimized for edge devices."
+        download_command: "Auto-downloads from HuggingFace on first use"
+    use_cases: [lightweight-inference, chat, coding]
+
+  - id: granite-4.0-micro
+    display_name: "Granite 4.0 Micro"
+    description: "Micro-sized model for resource-constrained environments"
+    parameters: "1.5b"
+    download_size: "3 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "4 GB"
+      min_vram: "2 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA GTX 1660"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "ibm-granite/granite-4.0-micro"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace. Dense transformer architecture."
+        download_command: "Auto-downloads from HuggingFace on first use"
+    use_cases: [lightweight-inference, chat, coding]
+
+  - id: granite-4.0-tiny
+    display_name: "Granite 4.0 Tiny"
+    description: "Tiny model balancing size and capability"
+    parameters: "3b"
+    download_size: "6 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "8 GB"
+      min_vram: "4 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "ibm-granite/granite-4.0-tiny-preview"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace."
+        download_command: "Auto-downloads from HuggingFace on first use"
+    use_cases: [chat, coding, general-purpose]
+
+  - id: granite-4.0-small
+    display_name: "Granite 4.0 Small"
+    description: "Small enterprise model with strong capabilities"
+    parameters: "7b"
+    download_size: "14 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "16 GB"
+      min_vram: "8 GB"
+      recommended_gpu: ["Apple M1 Pro", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "ibm-granite/granite-4.0-h-small"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace. Hybrid architecture."
+        download_command: "Auto-downloads from HuggingFace on first use"
+    use_cases: [chat, coding, general-purpose]

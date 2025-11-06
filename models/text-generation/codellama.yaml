@@ -1,0 +1,103 @@
+family_id: codellama
+family_name: Code Llama
+organization: Meta
+description: Specialized code generation models based on Llama 2
+website: https://ai.meta.com/research/publications/code-llama-open-foundation-models-for-code/
+license: Llama 2 License
+tags: [coding, general-purpose]
+strengths:
+  - "State-of-the-art code generation"
+  - "Supports many programming languages"
+  - "Can handle long context for codebases"
+  - "Available in multiple sizes"
+
+variants:
+  - id: codellama:7b
+    display_name: "Code Llama 7B"
+    description: "Compact code generation model"
+    parameters: "7b"
+    download_size: "7 GB"
+    context_window: 16384
+    hardware_requirements:
+      min_ram: "16 GB"
+      min_vram: "8 GB"
+      recommended_gpu: ["Apple M1 Pro", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "codellama/CodeLlama-7b-Instruct-hf"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "codellama:7b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull codellama:7b"
+    use_cases: [coding]
+    benchmark_scores:
+      humaneval: 45.6
+
+  - id: codellama:13b
+    display_name: "Code Llama 13B"
+    description: "Mid-size code generation model with better accuracy"
+    parameters: "13b"
+    download_size: "13 GB"
+    context_window: 16384
+    hardware_requirements:
+      min_ram: "24 GB"
+      min_vram: "12 GB"
+      recommended_gpu: ["Apple M1 Max", "NVIDIA RTX 4070"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "codellama/CodeLlama-13b-Instruct-hf"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "codellama:13b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull codellama:13b"
+    use_cases: [coding]
+    benchmark_scores:
+      humaneval: 50.6
+
+  - id: codellama:34b
+    display_name: "Code Llama 34B"
+    description: "Large code generation model for complex tasks"
+    parameters: "34b"
+    download_size: "24 GB"
+    context_window: 16384
+    hardware_requirements:
+      min_ram: "48 GB"
+      min_vram: "24 GB"
+      recommended_gpu: ["NVIDIA RTX 4090", "NVIDIA A6000"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "codellama/CodeLlama-34b-Instruct-hf"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "codellama:34b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull codellama:34b"
+    use_cases: [coding]
+    benchmark_scores:
+      humaneval: 53.7

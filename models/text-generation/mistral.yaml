@@ -1,0 +1,82 @@
+family_id: mistral
+family_name: Mistral
+organization: Mistral AI
+description: High-performance open models with strong capabilities across tasks
+website: https://mistral.ai/
+license: Apache 2.0
+tags: [chat, coding, general-purpose]
+strengths:
+  - "Excellent performance-to-size ratio"
+  - "Strong multilingual capabilities"
+  - "Efficient architecture"
+
+variants:
+  - id: mistral:7b
+    display_name: "Mistral 7B"
+    description: "Efficient 7B model with strong general capabilities"
+    parameters: "7b"
+    download_size: "2.5 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "12 GB"
+      min_vram: "6 GB"
+      recommended_gpu: ["Apple M1", "NVIDIA RTX 3060"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "mistralai/Mistral-7B-Instruct-v0.3"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "mistral:7b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull mistral:7b"
+    use_cases: [chat, coding, general-purpose]
+    benchmark_scores:
+      mmlu: 62.5
+
+  - id: mistral:8x7b
+    display_name: "Mistral 8x7B (Mixtral)"
+    description: "Mixture of Experts model with 8 specialists"
+    parameters: "8x7b"
+    download_size: "8.0 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "32 GB"
+      min_vram: "16 GB"
+      recommended_gpu: ["NVIDIA RTX 4070", "Apple M2 Ultra"]
+    providers:
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "mistral:8x7b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull mistral:8x7b"
+    use_cases: [chat, coding, reasoning, general-purpose]
+
+  - id: mistral:22b
+    display_name: "Mistral 22B"
+    description: "Large-scale model for advanced tasks"
+    parameters: "22b"
+    download_size: "12 GB"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "32 GB"
+      min_vram: "12 GB"
+      recommended_gpu: ["NVIDIA RTX 4080", "Apple M2 Max"]
+    providers:
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "mistral:22b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull mistral:22b"
+    use_cases: [chat, coding, general-purpose]

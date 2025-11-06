@@ -1,0 +1,145 @@
+family_id: togetherai
+family_name: Together AI
+organization: Together AI
+description: Access to various open-source models via Together AI's fast inference platform
+website: https://www.together.ai/
+license: Various (per model)
+tags: [chat, coding, reasoning, general-purpose]
+strengths:
+  - "Fast inference for open-source models"
+  - "Wide selection of models (Llama, Qwen, Mistral, etc.)"
+  - "OpenAI-compatible API"
+  - "Cost-effective pricing"
+
+variants:
+  - id: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+    display_name: "Llama 3.1 8B Instruct Turbo"
+    description: "Meta's Llama 3.1 8B with fast inference"
+    parameters: "8b"
+    download_size: "N/A (API)"
+    context_window: 131072
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+        base_url: "https://api.together.xyz/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires TOGETHER_API_KEY environment variable or api_key in config"
+    use_cases: [chat, coding, reasoning, general-purpose]
+
+  - id: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+    display_name: "Llama 3.1 70B Instruct Turbo"
+    description: "Meta's powerful Llama 3.1 70B with fast inference"
+    parameters: "70b"
+    download_size: "N/A (API)"
+    context_window: 131072
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+        base_url: "https://api.together.xyz/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires TOGETHER_API_KEY environment variable or api_key in config"
+    use_cases: [chat, coding, reasoning, general-purpose]
+
+  - id: meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+    display_name: "Llama 3.1 405B Instruct Turbo"
+    description: "Meta's largest Llama model with exceptional capabilities"
+    parameters: "405b"
+    download_size: "N/A (API)"
+    context_window: 130815
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"
+        base_url: "https://api.together.xyz/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires TOGETHER_API_KEY environment variable or api_key in config. Most powerful Llama model."
+    use_cases: [chat, coding, reasoning, general-purpose]
+
+  - id: Qwen/Qwen2.5-72B-Instruct-Turbo
+    display_name: "Qwen 2.5 72B Instruct Turbo"
+    description: "Alibaba's powerful Qwen model with multilingual support"
+    parameters: "72b"
+    download_size: "N/A (API)"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "Qwen/Qwen2.5-72B-Instruct-Turbo"
+        base_url: "https://api.together.xyz/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires TOGETHER_API_KEY environment variable or api_key in config. Strong multilingual support."
+    use_cases: [chat, coding, reasoning, general-purpose]
+
+  - id: deepseek-ai/DeepSeek-V3
+    display_name: "DeepSeek-V3"
+    description: "DeepSeek's latest model with strong reasoning"
+    parameters: "671b"
+    download_size: "N/A (API)"
+    context_window: 65536
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "deepseek-ai/DeepSeek-V3"
+        base_url: "https://api.together.xyz/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires TOGETHER_API_KEY environment variable or api_key in config. Advanced reasoning model."
+    use_cases: [reasoning, coding, general-purpose]
+
+  - id: mistralai/Mixtral-8x7B-Instruct-v0.1
+    display_name: "Mixtral 8x7B Instruct"
+    description: "Mistral's mixture-of-experts model"
+    parameters: "47b"
+    download_size: "N/A (API)"
+    context_window: 32768
+    hardware_requirements:
+      min_ram: "N/A (cloud)"
+      min_vram: "N/A (cloud)"
+      recommended_gpu: ["N/A (cloud)"]
+    providers:
+      openai:
+        provider: openai
+        runtime: openai
+        format: api
+        model_id: "mistralai/Mixtral-8x7B-Instruct-v0.1"
+        base_url: "https://api.together.xyz/v1"
+        requires_token: true
+        download_command: "N/A - API access only"
+        notes: "Requires TOGETHER_API_KEY environment variable or api_key in config"
+    use_cases: [chat, coding, general-purpose]

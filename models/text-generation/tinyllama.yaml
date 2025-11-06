@@ -1,0 +1,40 @@
+family_id: tinyllama
+family_name: TinyLlama
+organization: TinyLlama Team
+description: Compact 1.1B model for lightweight inference and edge deployment
+website: https://github.com/jzhang38/TinyLlama
+license: Apache 2.0
+tags: [lightweight, chat, general-purpose]
+strengths:
+  - "Extremely small footprint for edge deployment"
+  - "Fast inference on CPU"
+  - "Good performance for size"
+
+variants:
+  - id: tinyllama:1.1b
+    display_name: "TinyLlama 1.1B"
+    description: "Compact model for lightweight chat and inference"
+    parameters: "1.1b"
+    download_size: "1.6 GB"
+    context_window: 2048
+    hardware_requirements:
+      min_ram: "4 GB"
+      min_vram: "2 GB"
+      recommended_gpu: ["Apple M1", "Any modern GPU", "CPU-only"]
+    providers:
+      universal:
+        provider: universal
+        runtime: universal
+        format: transformers
+        model_id: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        base_url: "http://127.0.0.1:11540"
+        notes: "Auto-downloads from HuggingFace on first use"
+        download_command: "Auto-downloads from HuggingFace on first use"
+      ollama:
+        provider: ollama
+        runtime: ollama
+        format: gguf
+        model_id: "tinyllama:1.1b"
+        base_url: "http://localhost:11434"
+        download_command: "ollama pull tinyllama:1.1b"
+    use_cases: [lightweight-inference, chat]

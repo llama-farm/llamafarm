@@ -29,6 +29,22 @@ import { PromptSetSelector } from './PromptSetSelector'
 import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
 import { CustomDownloadDialog } from './CustomDownloadDialog'
 import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
+import {
+  transformCatalogToLocalGroups,
+  searchModelGroups,
+  getRecommendedByCategory,
+  filterGroupsByRuntime,
+  filterCloudModels,
+  filterLocalModels,
+  getVariantProviders,
+  type LocalModelVariant,
+  type Runtime,
+  type ProviderInfo,
+} from '../../utils/modelCatalog'
+import { ProviderSelectionDialog } from './ProviderSelectionDialog'
+import { ModelDownloadDialog } from './ModelDownloadDialog'
+import { CloudModelConfigDialog } from './CloudModelConfigDialog'
+import { useModelDownload } from '../../hooks/useModelDownload'
 
 interface TabBarProps {
   activeTab: string
@@ -200,240 +216,6 @@ function ProjectInferenceModels({
   )
 }
 
-function CloudModelsForm({
-  onAddModel,
-  onGoToProject,
-  promptSetNames: _promptSetNames,
-}: {
-  onAddModel: (m: InferenceModel, promptSets?: string[]) => void
-  onGoToProject: () => void
-  promptSetNames: string[]
-}) {
-  const providerOptions = [
-    'OpenAI',
-    'Anthropic',
-    'Google',
-    'Cohere',
-    'Mistral',
-    'Azure OpenAI',
-    'Groq',
-    'Together',
-    'AWS Bedrock',
-    'Ollama (remote)',
-  ] as const
-  type Provider = (typeof providerOptions)[number]
-  const modelMap: Record<Provider, string[]> = {
-    OpenAI: ['GPT-4.1', 'GPT-4.1-mini', 'o3-mini', 'GPT-4o'],
-    Anthropic: ['Claude 3.5 Sonnet', 'Claude 3 Haiku'],
-    Google: ['Gemini 2.0 Flash', 'Gemini 1.5 Pro'],
-    Cohere: ['Command R', 'Command R+'],
-    Mistral: ['Mistral Large', 'Mixtral 8x7B'],
-    'Azure OpenAI': ['GPT-4.1', 'GPT-4o'],
-    Groq: ['Llama 3 70B', 'Mixtral 8x7B'],
-    Together: ['Llama 3 8B', 'Qwen2-72B'],
-    'AWS Bedrock': ['Claude 3 Sonnet', 'Llama 3 8B Instruct'],
-    'Ollama (remote)': ['llama3.1:8b', 'qwen2.5:7b'],
-  }
-
-  const [provider, setProvider] = useState<Provider>('OpenAI')
-  const [model, setModel] = useState<string>(modelMap['OpenAI'][0])
-  const [customModel, setCustomModel] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [showApiKey, setShowApiKey] = useState(false)
-  const [maxTokens, setMaxTokens] = useState<number | null>(null)
-  const [baseUrl, setBaseUrl] = useState('')
-  const [submitState, setSubmitState] = useState<
-    'idle' | 'loading' | 'success'
-  >('idle')
-
-  const modelsForProvider = [...modelMap[provider], 'Custom']
-  const canAdd =
-    model === 'Custom'
-      ? apiKey.trim().length > 0 || baseUrl.trim().length > 0
-      : apiKey.trim().length > 0
-
-  const handleAddCloud = () => {
-    if (!canAdd || submitState === 'loading') return
-    const name = model === 'Custom' ? customModel || 'Custom model' : `${model}`
-    const providerLabel = provider
-    setSubmitState('loading')
-    onAddModel({
-      id: `cloud-${provider}-${name}`.toLowerCase().replace(/\s+/g, '-'),
-      name,
-      meta: `Added on ${new Date().toLocaleDateString()}`,
-      badges: ['Cloud', providerLabel],
-      status: 'ready',
-    })
-    setTimeout(() => {
-      setSubmitState('success')
-      setTimeout(() => {
-        setSubmitState('idle')
-        onGoToProject()
-      }, 500)
-    }, 800)
-  }
-
-  return (
-    <div className="w-full rounded-lg border border-border p-4 md:p-6 flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">
-          Select cloud provider
-        </Label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
-              <span>{provider}</span>
-              <FontIcon type="chevron-down" className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64">
-            {providerOptions.map(p => (
-              <DropdownMenuItem
-                key={p}
-                className="w-full justify-start text-left"
-                onClick={() => {
-                  setProvider(p)
-                  setModel(modelMap[p][0])
-                }}
-              >
-                {p}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">Select model</Label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
-              <span>{model}</span>
-              <FontIcon type="chevron-down" className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-            {modelsForProvider.map(m => (
-              <DropdownMenuItem
-                key={m}
-                className="w-full justify-start text-left"
-                onClick={() => setModel(m)}
-              >
-                {m}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {model === 'Custom' && (
-          <Input
-            placeholder="Enter model name/id"
-            value={customModel}
-            onChange={e => setCustomModel(e.target.value)}
-            className="h-9"
-          />
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">API Key</Label>
-        <div className="relative">
-          <Input
-            type={showApiKey ? 'text' : 'password'}
-            placeholder="enter here"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            className="h-9 pr-9"
-          />
-          <button
-            type="button"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            onClick={() => setShowApiKey(v => !v)}
-            aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
-          >
-            <FontIcon
-              type={showApiKey ? 'eye-off' : 'eye'}
-              className="w-4 h-4"
-            />
-          </button>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Your API key can be found in your {provider} account settings
-        </div>
-      </div>
-
-      {model === 'Custom' && (
-        <div className="flex flex-col gap-2">
-          <Label className="text-xs text-muted-foreground">
-            Base URL override (optional)
-          </Label>
-          <Input
-            placeholder="https://api.example.com"
-            value={baseUrl}
-            onChange={e => setBaseUrl(e.target.value)}
-            className="h-9"
-          />
-          <div className="text-xs text-muted-foreground">
-            Use to point to a proxy or self-hosted endpoint.
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">
-          Max tokens (optional)
-        </Label>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 text-sm px-3 py-2 rounded-md border border-border bg-background">
-            {maxTokens === null ? 'n / a' : maxTokens}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 w-8"
-              onClick={() =>
-                setMaxTokens(prev => (prev ? Math.max(prev - 500, 0) : null))
-              }
-            >
-              –
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 w-8"
-              onClick={() => setMaxTokens(prev => (prev ? prev + 500 : 500))}
-            >
-              +
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <Button
-          onClick={handleAddCloud}
-          disabled={!canAdd || submitState === 'loading'}
-        >
-          {submitState === 'loading' && (
-            <span className="mr-2 inline-flex">
-              <Loader
-                size={14}
-                className="border-blue-400 dark:border-blue-100"
-              />
-            </span>
-          )}
-          {submitState === 'success' && (
-            <span className="mr-2 inline-flex">
-              <FontIcon type="checkmark-filled" className="w-4 h-4" />
-            </span>
-          )}
-          Add new Cloud model to project
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
@@ -475,6 +257,9 @@ function AddOrChangeModels({
   setTotalBytes,
   estimatedTimeRemaining,
   setEstimatedTimeRemaining,
+  selectedProviderInfo,
+  setSelectedProviderInfo,
+  setCloudConfig,
 }: {
   onAddModel: (m: InferenceModel, promptSets?: string[]) => void
   onGoToProject: () => void
@@ -496,17 +281,29 @@ function AddOrChangeModels({
   setTotalBytes: (n: number) => void
   estimatedTimeRemaining: string
   setEstimatedTimeRemaining: (s: string) => void
+  selectedProviderInfo: ProviderInfo | null
+  setSelectedProviderInfo: (info: ProviderInfo | null) => void
+  setCloudConfig: (config: { apiKey: string; baseUrl: string } | null) => void
 }) {
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
   const [query, setQuery] = useState('')
+  const [runtimeFilter, setRuntimeFilter] = useState<Runtime>('all')
   const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [pendingVariant, setPendingVariant] = useState<ModelVariant | null>(
+  const [pendingVariant, setPendingVariant] = useState<LocalModelVariant | null>(
     null
   )
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const [pendingVariantForProvider, setPendingVariantForProvider] =
+    useState<LocalModelVariant | null>(null)
+  const [cloudConfigDialogOpen, setCloudConfigDialogOpen] = useState(false)
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false)
   const [submitState, setSubmitState] = useState<
     'idle' | 'loading' | 'success'
   >('idle')
+
+  // Model download hook
+  const modelDownload = useModelDownload()
   const [modelName, setModelName] = useState('')
   const [modelDescription, setModelDescription] = useState('')
   const [selectedPromptSets, setSelectedPromptSets] = useState<string[]>([])
@@ -544,225 +341,22 @@ function AddOrChangeModels({
   >([])
   const [customDownloadError, setCustomDownloadError] = useState('')
 
-  interface ModelVariant {
-    id: number
-    label: string
-    parameterSize: string
-    downloadSize: string
-  }
+  // Load model groups from catalog
+  const localGroups = transformCatalogToLocalGroups()
 
-  interface LocalModelGroup {
-    id: number
-    name: string
-    parameterSummary: string
-    downloadSummary: string
-    variants: ModelVariant[]
-  }
+  // Get recommended models
+  const recommendedByCategory = getRecommendedByCategory()
 
-  const localGroups: LocalModelGroup[] = [
-    {
-      id: 1,
-      name: 'deepseek-r1',
-      parameterSummary: '1b, 7b, 70b, 100b',
-      downloadSummary: '4.5–45 GB',
-      variants: [
-        {
-          id: 11,
-          label: 'deepseek-r1,1b',
-          parameterSize: '1b',
-          downloadSize: '4.5 GB',
-        },
-        {
-          id: 12,
-          label: 'deepseek-r1,7b',
-          parameterSize: '7b',
-          downloadSize: '13 GB',
-        },
-        {
-          id: 13,
-          label: 'deepseek-r1,70b',
-          parameterSize: '70b',
-          downloadSize: '25 GB',
-        },
-        {
-          id: 14,
-          label: 'deepseek-r1,100b',
-          parameterSize: '100b',
-          downloadSize: '45 GB',
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'tinyllama',
-      parameterSummary: '1.1b',
-      downloadSummary: '1–2 GB',
-      variants: [
-        {
-          id: 21,
-          label: 'tinyllama,1.1b',
-          parameterSize: '1.1b',
-          downloadSize: '1.6 GB',
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: 'mistral',
-      parameterSummary: '7b, 8x7b, 22b',
-      downloadSummary: '2.5–12 GB',
-      variants: [
-        {
-          id: 31,
-          label: 'mistral,7b',
-          parameterSize: '7b',
-          downloadSize: '2.5 GB',
-        },
-        {
-          id: 32,
-          label: 'mistral,8x7b',
-          parameterSize: '8x7b',
-          downloadSize: '8.0 GB',
-        },
-        {
-          id: 33,
-          label: 'mistral,22b',
-          parameterSize: '22b',
-          downloadSize: '12 GB',
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'qwen2.5',
-      parameterSummary: '1.5b, 7b, 32b, 72b',
-      downloadSummary: '3.4–20 GB',
-      variants: [
-        {
-          id: 41,
-          label: 'qwen2.5,1.5b',
-          parameterSize: '1.5b',
-          downloadSize: '3.4 GB',
-        },
-        {
-          id: 42,
-          label: 'qwen2.5,7b',
-          parameterSize: '7b',
-          downloadSize: '7 GB',
-        },
-        {
-          id: 43,
-          label: 'qwen2.5,32b',
-          parameterSize: '32b',
-          downloadSize: '14 GB',
-        },
-        {
-          id: 44,
-          label: 'qwen2.5,72b',
-          parameterSize: '72b',
-          downloadSize: '20 GB',
-        },
-      ],
-    },
-    {
-      id: 5,
-      name: 'llama3.2',
-      parameterSummary: '1b, 3b, 11b',
-      downloadSummary: '2–8 GB',
-      variants: [
-        {
-          id: 51,
-          label: 'llama3.2,1b',
-          parameterSize: '1b',
-          downloadSize: '2 GB',
-        },
-        {
-          id: 52,
-          label: 'llama3.2,3b',
-          parameterSize: '3b',
-          downloadSize: '3.5 GB',
-        },
-        {
-          id: 53,
-          label: 'llama3.2,11b',
-          parameterSize: '11b',
-          downloadSize: '8 GB',
-        },
-      ],
-    },
-    {
-      id: 6,
-      name: 'llama3.1',
-      parameterSummary: '8b, 70b',
-      downloadSummary: '4–42 GB',
-      variants: [
-        {
-          id: 61,
-          label: 'llama3.1,8b',
-          parameterSize: '8b',
-          downloadSize: '4.1 GB',
-        },
-        {
-          id: 62,
-          label: 'llama3.1,70b',
-          parameterSize: '70b',
-          downloadSize: '42 GB',
-        },
-      ],
-    },
-    {
-      id: 7,
-      name: 'phi-3',
-      parameterSummary: '3.8b, 14b',
-      downloadSummary: '2.8–10 GB',
-      variants: [
-        {
-          id: 71,
-          label: 'phi-3,3.8b',
-          parameterSize: '3.8b',
-          downloadSize: '2.8 GB',
-        },
-        {
-          id: 72,
-          label: 'phi-3,14b',
-          parameterSize: '14b',
-          downloadSize: '10 GB',
-        },
-      ],
-    },
-    {
-      id: 8,
-      name: 'codellama',
-      parameterSummary: '7b, 13b, 34b',
-      downloadSummary: '7–24 GB',
-      variants: [
-        {
-          id: 81,
-          label: 'codellama,7b',
-          parameterSize: '7b',
-          downloadSize: '7 GB',
-        },
-        {
-          id: 82,
-          label: 'codellama,13b',
-          parameterSize: '13b',
-          downloadSize: '13 GB',
-        },
-        {
-          id: 83,
-          label: 'codellama,34b',
-          parameterSize: '34b',
-          downloadSize: '24 GB',
-        },
-      ],
-    },
-  ]
+  // Filter groups based on source tab (local vs cloud)
+  const sourceFilteredGroups =
+    sourceTab === 'cloud' ? filterCloudModels(localGroups) : filterLocalModels(localGroups)
 
-  const filteredGroups = localGroups.filter(g =>
-    [g.name, g.parameterSummary].some(v =>
-      v.toLowerCase().includes(query.toLowerCase())
-    )
-  )
+  // Filter groups based on runtime and search query (only for local tab)
+  const runtimeFilteredGroups =
+    sourceTab === 'local'
+      ? filterGroupsByRuntime(sourceFilteredGroups, runtimeFilter)
+      : sourceFilteredGroups
+  const filteredGroups = searchModelGroups(runtimeFilteredGroups, query)
 
   // Fetch cached models from backend
   const {
@@ -824,6 +418,78 @@ function AddOrChangeModels({
     return projectModels.some(pm => pm.modelIdentifier === modelId)
   }
 
+  // Handle variant selection - show provider dialog
+  const handleVariantSelect = (variant: LocalModelVariant) => {
+    setPendingVariantForProvider(variant)
+    setProviderDialogOpen(true)
+  }
+
+  // Handle provider selection from dialog
+  const handleProviderSelect = async (provider: ProviderInfo) => {
+    if (!pendingVariantForProvider) return
+
+    setSelectedProviderInfo(provider)
+    setProviderDialogOpen(false)
+
+    // Check if this is a cloud provider (OpenAI-compatible API)
+    if (provider.runtime === 'openai') {
+      // Show cloud configuration dialog to get API key
+      setCloudConfigDialogOpen(true)
+      return
+    }
+
+    // Check if this is a universal provider that needs downloading
+    if (provider.runtime === 'universal' && provider.modelId) {
+      // Check if model is already in cache
+      const isInCache = deviceModels.some(
+        m => m.modelIdentifier === provider.modelId
+      )
+
+      if (!isInCache) {
+        // Model needs to be downloaded - show download dialog
+        setDownloadDialogOpen(true)
+        const success = await modelDownload.downloadModel(
+          provider.modelId,
+          'universal'
+        )
+
+        if (success) {
+          // Download successful, refresh cached models
+          await refetchCachedModels()
+          // Now show the model configuration dialog
+          setPendingVariant(pendingVariantForProvider)
+          setConfirmOpen(true)
+        }
+
+        setDownloadDialogOpen(false)
+        setPendingVariantForProvider(null)
+      } else {
+        // Model already downloaded, go straight to configuration
+        setPendingVariant(pendingVariantForProvider)
+        setConfirmOpen(true)
+        setPendingVariantForProvider(null)
+      }
+    } else {
+      // Non-universal/non-cloud provider, go straight to configuration
+      setPendingVariant(pendingVariantForProvider)
+      setConfirmOpen(true)
+      setPendingVariantForProvider(null)
+    }
+  }
+
+  // Handle cloud model configuration (after API key is entered)
+  const handleCloudModelConfigure = (config: {
+    apiKey: string
+    baseUrl: string
+  }) => {
+    setCloudConfig(config)
+    setCloudConfigDialogOpen(false)
+    // Now show the model configuration dialog
+    setPendingVariant(pendingVariantForProvider)
+    setConfirmOpen(true)
+    setPendingVariantForProvider(null)
+  }
+
   // Handle custom model download
   const handleCustomModelDownload = async () => {
     setCustomDownloadState('downloading')
@@ -842,7 +508,7 @@ function AddOrChangeModels({
           provider: 'universal',
         })) {
           if (event.event === 'progress') {
-            const d = Number(event.downloaded || 0)
+            const d = Number(event.n || 0)
             const t = Number(event.total || 0)
             setDownloadedBytes(d)
             setTotalBytes(t)
@@ -970,38 +636,145 @@ function AddOrChangeModels({
             </div>
           </div>
 
-          {/* Search - only show for local models */}
+          {/* Runtime filter and search - only show for local models */}
           {sourceTab === 'local' && (
-            <div className="flex items-center gap-2 w-full">
-              <div className="relative flex-1">
-                <FontIcon
-                  type="search"
-                  className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
-                />
-                <Input
-                  placeholder="Search local options"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  className="pl-9 h-10"
-                />
+            <div className="flex flex-col gap-3 w-full">
+              <div className="flex items-center gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                    Filter by runtime:
+                  </Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="h-9 rounded-md border border-border bg-background px-3 text-sm flex items-center gap-2 hover:bg-accent/50">
+                        <span className="capitalize">{runtimeFilter}</span>
+                        <FontIcon type="chevron-down" className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem onClick={() => setRuntimeFilter('all')}>
+                        All runtimes
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setRuntimeFilter('universal')}
+                      >
+                        Universal (Transformers)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setRuntimeFilter('ollama')}>
+                        Ollama (GGUF)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setRuntimeFilter('lemonade')}
+                      >
+                        Lemonade (All formats)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setRuntimeFilter('openai')}>
+                        OpenAI (API)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                <div className="relative flex-1">
+                  <FontIcon
+                    type="search"
+                    className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
+                  />
+                  <Input
+                    placeholder="Search local options"
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCustomModelOpen(true)
+                    setCustomModelInput('')
+                    setCustomModelName('')
+                    setCustomModelDescription('')
+                    setCustomSelectedPromptSets([])
+                    setCustomDownloadState('idle')
+                    setCustomDownloadError('')
+                  }}
+                  className="h-9 whitespace-nowrap"
+                >
+                  Add HuggingFace model
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setCustomModelOpen(true)
-                  setCustomModelInput('')
-                  setCustomModelName('')
-                  setCustomModelDescription('')
-                  setCustomSelectedPromptSets([])
-                  setCustomDownloadState('idle')
-                  setCustomDownloadError('')
-                }}
-                className="h-10 whitespace-nowrap"
-              >
-                Add HuggingFace model
-              </Button>
             </div>
           )}
+
+          {/* Recommended models section */}
+          {sourceTab === 'local' &&
+            Object.keys(recommendedByCategory).length > 0 &&
+            !query.trim() && (
+              <div className="w-full">
+                <div className="flex items-center gap-2 mb-3">
+                  <FontIcon
+                    type="checkmark-filled"
+                    className="w-4 h-4 text-primary"
+                  />
+                  <h3 className="font-medium text-sm">Recommended models</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                  {Object.entries(recommendedByCategory).map(
+                    ([category, models]) => (
+                      <div
+                        key={category}
+                        className="rounded-lg border border-border bg-card/50 p-4"
+                      >
+                        <div className="text-sm font-medium mb-1">
+                          {category}
+                        </div>
+                        {models[0]?.categoryDescription && (
+                          <div className="text-xs text-muted-foreground mb-3">
+                            {models[0].categoryDescription}
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          {models.slice(0, 2).map(model => (
+                            <div
+                              key={model.variantId}
+                              className="flex items-center justify-between gap-2 text-xs"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">
+                                  {model.displayName}
+                                </div>
+                                <div className="text-muted-foreground">
+                                  {model.parameters} • {model.downloadSize}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                className="h-7 px-2 text-xs flex-shrink-0"
+                                onClick={() => {
+                                  // Find the variant in localGroups
+                                  const variant = localGroups
+                                    .flatMap(g => g.variants)
+                                    .find(
+                                      v =>
+                                        v.label ===
+                                        model.variantId.replace(':', ',')
+                                    )
+                                  if (variant) {
+                                    handleVariantSelect(variant)
+                                  }
+                                }}
+                              >
+                                Add
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
 
           {/* Table */}
           {sourceTab === 'local' && (
@@ -1090,10 +863,7 @@ function AddOrChangeModels({
                                 <Button
                                   size="sm"
                                   className="h-8 px-3"
-                                  onClick={() => {
-                                    setPendingVariant(variant)
-                                    setConfirmOpen(true)
-                                  }}
+                                  onClick={() => handleVariantSelect(variant)}
                                 >
                                   Add
                                 </Button>
@@ -1117,26 +887,107 @@ function AddOrChangeModels({
             </div>
           )}
           {sourceTab === 'cloud' && (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start gap-3 p-3 rounded-md bg-secondary/40 border border-border">
-                <p className="text-xs text-muted-foreground">
-                  Cloud model options coming soon!
-                </p>
-              </div>
-              <div className="relative">
-                <div className="opacity-40 pointer-events-none">
-                  <CloudModelsForm
-                    onAddModel={onAddModel}
-                    onGoToProject={onGoToProject}
-                    promptSetNames={promptSetNames}
+            <div className="flex flex-col gap-2">
+              {/* Cloud models search */}
+              <div className="flex items-center gap-2 w-full mb-2">
+                <div className="relative flex-1">
+                  <FontIcon
+                    type="search"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none"
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Search cloud models..."
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    className="pl-9 bg-background"
                   />
                 </div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="bg-background/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-border shadow-lg">
-                    <div className="text-sm font-medium">Coming soon</div>
-                  </div>
-                </div>
               </div>
+
+              {/* Cloud model groups */}
+              {filteredGroups.length === 0 ? (
+                <div className="text-sm text-muted-foreground p-6 text-center">
+                  No cloud models found
+                </div>
+              ) : (
+                filteredGroups.map(group => {
+                  const isExpanded = expandedGroupId === group.id
+
+                  return (
+                    <div
+                      key={group.id}
+                      className="border border-border rounded-lg bg-card overflow-hidden"
+                    >
+                      {/* Group header */}
+                      <div
+                        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-secondary/50 transition-colors"
+                        onClick={() =>
+                          setExpandedGroupId(isExpanded ? null : group.id)
+                        }
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium text-foreground capitalize">
+                            {group.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {group.parameterSummary}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-xs text-muted-foreground">
+                            API-based
+                          </div>
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 text-muted-foreground transition-transform ${
+                              isExpanded ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Expanded variants */}
+                      {isExpanded && (
+                        <div className="border-t border-border bg-secondary/20">
+                          {group.variants.map(variant => (
+                            <div
+                              key={variant.id}
+                              className="grid grid-cols-[1fr_auto_auto] gap-3 items-center px-4 py-3 hover:bg-secondary/40 transition-colors border-b border-border last:border-b-0"
+                            >
+                              <div className="col-span-1">
+                                <div className="font-medium text-sm text-foreground">
+                                  {variant.label}
+                                </div>
+                              </div>
+                              <div className="col-span-1 text-xs text-muted-foreground">
+                                {variant.downloadSize}
+                              </div>
+                              <div className="col-span-1 flex items-center justify-end pr-2">
+                                <Button
+                                  size="sm"
+                                  className="h-8 px-3"
+                                  onClick={() => handleVariantSelect(variant)}
+                                >
+                                  Add
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                          <div className="flex justify-end pr-3 py-2">
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setExpandedGroupId(null)}
+                            >
+                              Hide
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </div>
           )}
         </div>
@@ -1343,6 +1194,53 @@ function AddOrChangeModels({
         onConfirmDelete={confirmDeleteDeviceModel}
       />
 
+      {/* Model download dialog */}
+      <ModelDownloadDialog
+        open={downloadDialogOpen}
+        onOpenChange={setDownloadDialogOpen}
+        modelName={selectedProviderInfo?.modelId || ''}
+        progress={modelDownload.progress}
+        error={modelDownload.error}
+        isDownloading={modelDownload.isDownloading}
+        onCancel={() => {
+          modelDownload.reset()
+          setDownloadDialogOpen(false)
+          setPendingVariantForProvider(null)
+        }}
+        onComplete={() => {
+          modelDownload.reset()
+        }}
+      />
+
+      {/* Cloud model configuration dialog */}
+      <CloudModelConfigDialog
+        open={cloudConfigDialogOpen}
+        onOpenChange={setCloudConfigDialogOpen}
+        modelName={selectedProviderInfo?.modelId || ''}
+        provider={selectedProviderInfo?.runtime || ''}
+        defaultBaseUrl={selectedProviderInfo?.baseUrl || ''}
+        onConfigure={handleCloudModelConfigure}
+        onCancel={() => {
+          setCloudConfigDialogOpen(false)
+          setPendingVariantForProvider(null)
+        }}
+      />
+
+      {/* Provider selection dialog */}
+      {pendingVariantForProvider && (
+        <ProviderSelectionDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          variantName={pendingVariantForProvider.label}
+          parameters={pendingVariantForProvider.parameterSize}
+          downloadSize={pendingVariantForProvider.downloadSize}
+          providers={getVariantProviders(
+            pendingVariantForProvider.label.replace(',', ':')
+          )}
+          onSelectProvider={handleProviderSelect}
+        />
+      )}
+
       {/* Download model confirmation dialog */}
       <Dialog
         open={confirmOpen}
@@ -1351,6 +1249,7 @@ function AddOrChangeModels({
           if (!open) {
             setSubmitState('idle')
             setPendingVariant(null)
+            setSelectedProviderInfo(null)
             setModelName('')
             setModelDescription('')
             setSelectedPromptSets([])
@@ -1358,12 +1257,18 @@ function AddOrChangeModels({
         }}
       >
         <DialogContent>
-          <DialogTitle>Download and add this model?</DialogTitle>
+          <DialogTitle>
+            {selectedProviderInfo?.runtime === 'openai'
+              ? 'Configure and add this model?'
+              : 'Download and add this model?'}
+          </DialogTitle>
           <DialogDescription>
             {pendingVariant ? (
               <div className="mt-2 flex flex-col gap-3">
                 <p className="text-sm">
-                  You are about to download and add
+                  {selectedProviderInfo?.runtime === 'openai'
+                    ? 'You are about to configure and add'
+                    : 'You are about to download and add'}
                   <span className="mx-1 font-medium text-foreground">
                     {pendingVariant.label}
                   </span>
@@ -1423,7 +1328,14 @@ function AddOrChangeModels({
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="text-muted-foreground">Provider</div>
-                  <div>Ollama</div>
+                  <div className="capitalize">
+                    {selectedProviderInfo?.runtime || 'Universal'}
+                    {selectedProviderInfo?.format && (
+                      <span className="ml-1 text-muted-foreground">
+                        ({selectedProviderInfo.format.toUpperCase()})
+                      </span>
+                    )}
+                  </div>
                   <div className="text-muted-foreground">Parameter size</div>
                   <div>{pendingVariant.parameterSize}</div>
                   <div className="text-muted-foreground">Download size</div>
@@ -1446,9 +1358,17 @@ function AddOrChangeModels({
                     id: `dl-${pendingVariant.id}`,
                     name: modelName.trim(),
                     modelIdentifier: pendingVariant.label,
-                    meta: modelDescription.trim() || 'Downloading…',
-                    badges: ['Local', 'Ollama'],
-                    status: 'downloading',
+                    meta:
+                      modelDescription.trim() ||
+                      (selectedProviderInfo?.runtime === 'openai'
+                        ? 'Cloud API model'
+                        : 'Downloading…'),
+                    badges:
+                      selectedProviderInfo?.runtime === 'openai'
+                        ? ['Cloud', 'OpenAI']
+                        : ['Local', 'Ollama'],
+                    status:
+                      selectedProviderInfo?.runtime === 'openai' ? 'ready' : 'downloading',
                   },
                   selectedPromptSets.length > 0 ? selectedPromptSets : undefined
                 )
@@ -1476,7 +1396,7 @@ function AddOrChangeModels({
                   <FontIcon type="checkmark-filled" className="w-4 h-4" />
                 </span>
               )}
-              Download and add
+              {selectedProviderInfo?.runtime === 'openai' ? 'Add to project' : 'Download and add'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1521,6 +1441,14 @@ const Models = () => {
   const [totalBytes, setTotalBytes] = useState(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
 
+  // Cloud model configuration state
+  const [selectedProviderInfo, setSelectedProviderInfo] =
+    useState<ProviderInfo | null>(null)
+  const [cloudConfig, setCloudConfig] = useState<{
+    apiKey: string
+    baseUrl: string
+  } | null>(null)
+
   // Load models from config
   useEffect(() => {
     if (!projectResponse?.project?.config?.runtime?.models) {
@@ -1541,7 +1469,9 @@ const Models = () => {
         ? provider.charAt(0).toUpperCase() + provider.slice(1)
         : 'Unknown'
       const localityBadge = provider
-        ? provider === 'ollama'
+        ? provider === 'ollama' ||
+          provider === 'lemonade' ||
+          provider === 'universal'
           ? 'Local'
           : 'Cloud'
         : 'Unknown'
@@ -1578,15 +1508,31 @@ const Models = () => {
     const currentConfig = projectResponse.project.config
     const runtimeModels = currentConfig.runtime?.models || []
 
-    const newModel = {
+    // Determine provider, base_url, and api_key from selected provider info or defaults
+    const provider = selectedProviderInfo?.runtime || 'ollama'
+    const baseUrl =
+      cloudConfig?.baseUrl ||
+      selectedProviderInfo?.baseUrl ||
+      (provider === 'ollama' ? 'http://localhost:11434' : undefined)
+    const apiKey = cloudConfig?.apiKey
+
+    const newModel: any = {
       name: m.name,
       description: m.meta === 'Downloading…' ? '' : m.meta,
-      provider: 'ollama',
+      provider: provider,
       model: m.modelIdentifier || m.name,
-      base_url: 'http://localhost:11434',
       prompt_format: 'unstructured',
-      provider_config: {},
       prompts: promptSets || [],
+    }
+
+    // Add base_url if present
+    if (baseUrl) {
+      newModel.base_url = baseUrl
+    }
+
+    // Add api_key if present (for cloud providers)
+    if (apiKey) {
+      newModel.api_key = apiKey
     }
 
     const updatedModels = [...runtimeModels, newModel]
@@ -1605,6 +1551,10 @@ const Models = () => {
         projectId: activeProject.project,
         request: { config: nextConfig },
       })
+
+      // Clear cloud config and provider info after successful save
+      setCloudConfig(null)
+      setSelectedProviderInfo(null)
     } catch (error) {
       console.error('Failed to add model to config:', error)
       // Rollback local optimistic update
@@ -1949,6 +1899,9 @@ const Models = () => {
               setTotalBytes={setTotalBytes}
               estimatedTimeRemaining={estimatedTimeRemaining}
               setEstimatedTimeRemaining={setEstimatedTimeRemaining}
+              selectedProviderInfo={selectedProviderInfo}
+              setSelectedProviderInfo={setSelectedProviderInfo}
+              setCloudConfig={setCloudConfig}
             />
           )}
           {activeTab === 'training' && <TrainingData />}
