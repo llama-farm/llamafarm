@@ -8,8 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"llamafarm-cli/cmd/config"
-
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +57,7 @@ var projectsListCmd = &cobra.Command{
 	Long:    "List projects available in the specified namespace on the LlamaFarm server.",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Resolve server URL and namespace (project is not required for list)
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -70,8 +71,15 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		config := ServerOnlyConfig(serverURL)
-		EnsureServicesWithConfig(config)
+		sm, err := orchestrator.NewServiceManager(serverURL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
+			os.Exit(1)
+		}
+		if err := sm.EnsureService("server"); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Build request
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
@@ -82,7 +90,7 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Execute
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error requesting server: %v\n", err)
 			os.Exit(1)

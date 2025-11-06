@@ -1,0 +1,600 @@
+package orchestrator
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/llamafarm/cli/cmd/utils"
+)
+
+// Service Orchestration Types
+
+type ServiceRequirement int
+
+const (
+	ServiceIgnored  ServiceRequirement = iota // Don't start, don't check
+	ServiceOptional                           // Start async, don't wait, don't fail if unhealthy
+	ServiceRequired                           // Start and wait, fail if can't become healthy
+)
+
+type ServiceStatus int
+
+const (
+	StatusUnknown ServiceStatus = iota
+	StatusStarting
+	StatusHealthy
+	StatusDegraded
+	StatusUnhealthy
+	StatusFailed
+)
+
+type ServiceState struct {
+	Name    string
+	Status  ServiceStatus
+	Message string
+	Error   error
+	Health  *ComponentHealth // From health payload
+}
+
+type ServiceOrchestrationConfig struct {
+	ServerURL       string
+	PrintStatus     bool
+	ServiceNeeds    map[string]ServiceRequirement
+	DefaultTimeout  time.Duration
+	ServiceTimeouts map[string]time.Duration
+}
+
+type OrchestrationResult struct {
+	ServerHealth *HealthPayload
+	Services     map[string]*ServiceState
+
+	// Channels for async monitoring
+	ServerReady chan *ServiceState
+	RAGReady    chan *ServiceState
+	Done        chan struct{}
+}
+
+// ServiceDefinition defines a service in a declarative way.
+// Services only need to specify their configuration; the framework handles starting/stopping.
+type ServiceDefinition struct {
+	Name            string
+	Dependencies    []string
+	CanStartLocally bool
+	DefaultTimeout  time.Duration
+
+	// Declarative start configuration
+	WorkDir         string                             // Working directory for the process
+	Command         string                             // Command to execute (e.g., "uv", "python")
+	Args            []string                           // Command arguments
+	EnvBuilder      func(*NativeOrchestrator) []string // Function to build environment variables
+	HealthComponent string                             // Component name in /health endpoint (e.g., "server", "rag")
+
+	// Runtime info
+	State *ServiceState
+}
+
+// Removed: ServiceOrchestrator type - replaced entirely by ServiceManager
+// ServiceManager provides a cleaner, declarative approach to service management
+
+type ComponentHealth struct {
+	Name      string                 `json:"name"`
+	Status    string                 `json:"status"`
+	Message   string                 `json:"message"`
+	LatencyMs int                    `json:"latency_ms"`
+	Details   map[string]interface{} `json:"details,omitempty"`
+	Runtime   map[string]interface{} `json:"runtime,omitempty"`
+}
+type HealthPayload struct {
+	Status     string            `json:"status"`
+	Summary    string            `json:"summary"`
+	Components []ComponentHealth `json:"components"`
+	Seeds      []ComponentHealth `json:"seeds"`
+	Timestamp  int64             `json:"timestamp"`
+}
+
+// HealthError wraps a non-healthy /health response.
+type HealthError struct {
+	Status     string
+	HealthResp HealthPayload
+}
+
+func (e *HealthError) Error() string {
+	return fmt.Sprintf("server unhealthy: %s", e.Status)
+}
+
+// Service Graph Definition
+// Services are defined declaratively - just specify config, the framework handles the rest
+
+var ServiceGraph = map[string]*ServiceDefinition{
+	"universal-runtime": {
+		Name:            "universal-runtime",
+		Dependencies:    []string{}, // No dependencies
+		CanStartLocally: true,
+		DefaultTimeout:  30 * time.Second,
+		WorkDir:         "runtimes/universal",
+		Command:         "uv",
+		Args:            []string{"run", "python", "server.py"},
+		EnvBuilder:      (*NativeOrchestrator).getUniversalRuntimeEnv,
+		HealthComponent: "universal-runtime",
+	},
+	"server": {
+		Name:            "server",
+		Dependencies:    []string{}, // No dependencies
+		CanStartLocally: true,
+		DefaultTimeout:  45 * time.Second,
+		WorkDir:         "server",
+		Command:         "uv",
+		Args:            []string{"run", "uvicorn", "server.main:app", "--host", "0.0.0.0"},
+		EnvBuilder:      (*NativeOrchestrator).getServerEnv,
+		HealthComponent: "server",
+	},
+	"rag": {
+		Name:            "rag",
+		Dependencies:    []string{"server", "universal-runtime"}, // Depends on both
+		CanStartLocally: true,
+		DefaultTimeout:  30 * time.Second,
+		WorkDir:         "rag",
+		Command:         "uv",
+		Args:            []string{"run", "celery", "-A", "celery_app", "worker", "--loglevel=info"},
+		EnvBuilder:      (*NativeOrchestrator).getRAGEnv,
+		HealthComponent: "rag-service",
+	},
+}
+
+// ServiceManager handles service operations: start, stop, check health, and aggregate status.
+
+type ServiceManager struct {
+	serverURL    string
+	services     map[string]*ServiceDefinition
+	orchestrator *NativeOrchestrator
+	mu           sync.Mutex
+}
+
+// NewServiceManager returns a new ServiceManager.
+func NewServiceManager(serverURL string) (*ServiceManager, error) {
+	orchestrator, err := NewOrchestrator(serverURL)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
+	}
+
+	return &ServiceManager{
+		serverURL:    serverURL,
+		services:     ServiceGraph,
+		orchestrator: orchestrator,
+	}, nil
+}
+
+// EnsureService starts a service and all of its dependencies in the correct order.
+// It performs a topological sort of the dependency graph to determine the start order,
+// ensures circular dependencies are detected, and verifies each service becomes healthy
+// before proceeding to its dependents.
+//
+// Example: If "rag" depends on ["server", "universal-runtime"], calling
+// EnsureService("rag") will start "server" and "universal-runtime" first (in any order
+// since they have no dependencies), wait for them to become healthy, then start "rag".
+func (sm *ServiceManager) EnsureService(serviceName string) error {
+	if _, exists := ServiceGraph[serviceName]; !exists {
+		return fmt.Errorf("unknown service: %s", serviceName)
+	}
+
+	// Build dependency resolution order using topological sort
+	resolvedOrder, err := sm.resolveDependencies(serviceName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve dependencies for %s: %w", serviceName, err)
+	}
+
+	// Ensure each service in dependency order (dependencies before dependents)
+	for _, svcName := range resolvedOrder {
+		if err := sm.ensureSingleService(svcName); err != nil {
+			return fmt.Errorf("failed to ensure dependency %s: %w", svcName, err)
+		}
+	}
+
+	return nil
+}
+
+// EnsureServices starts multiple services and all their dependencies in the correct order.
+// This is a convenience method that ensures multiple services, resolving all dependencies
+// across all requested services and starting them in the correct topological order.
+//
+// Example: EnsureServices("server", "universal-runtime") will start both services
+func (sm *ServiceManager) EnsureServices(serviceNames ...string) error {
+	if len(serviceNames) == 0 {
+		return nil
+	}
+
+	// Collect all services and their dependencies
+	allServices := make(map[string]bool)
+	for _, serviceName := range serviceNames {
+		if _, exists := ServiceGraph[serviceName]; !exists {
+			return fmt.Errorf("unknown service: %s", serviceName)
+		}
+
+		// Resolve dependencies for this service
+		resolvedOrder, err := sm.resolveDependencies(serviceName)
+		if err != nil {
+			return fmt.Errorf("failed to resolve dependencies for %s: %w", serviceName, err)
+		}
+
+		// Add all resolved services to the set
+		for _, svc := range resolvedOrder {
+			allServices[svc] = true
+		}
+	}
+
+	// Convert set to slice and ensure each service once
+	for svcName := range allServices {
+		if err := sm.ensureSingleService(svcName); err != nil {
+			return fmt.Errorf("failed to ensure service %s: %w", svcName, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureSingleService ensures a single service is running without checking dependencies.
+// Uses the declarative service configuration to start the process via the framework.
+func (sm *ServiceManager) ensureSingleService(serviceName string) error {
+	serviceDef, exists := ServiceGraph[serviceName]
+	if !exists {
+		return fmt.Errorf("unknown service: %s", serviceName)
+	}
+
+	// Check if service is already healthy
+	if sm.isServiceHealthy(serviceDef) {
+		utils.LogDebug(fmt.Sprintf("Service %s is already healthy", serviceName))
+		return nil
+	}
+
+	// Service not healthy, start it using the declarative configuration
+	utils.LogDebug(fmt.Sprintf("Starting service %s", serviceName))
+	if err := sm.startService(serviceDef); err != nil {
+		return fmt.Errorf("failed to start service %s: %w", serviceName, err)
+	}
+
+	// Wait for service to become ready by polling health endpoint
+	if err := sm.waitForServiceReady(serviceDef); err != nil {
+		return fmt.Errorf("service %s did not become ready: %w", serviceName, err)
+	}
+
+	return nil
+}
+
+// startService starts a service using its declarative configuration
+func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
+	// Build environment variables
+	env := serviceDef.EnvBuilder(sm.orchestrator)
+
+	// Get source directory
+	homeDir, _ := os.UserHomeDir()
+	sourceDir := filepath.Join(homeDir, ".llamafarm", "src")
+	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
+
+	// Combine command and args for StartProcess
+	cmdArgs := append([]string{serviceDef.Command}, serviceDef.Args...)
+
+	// Start the process
+	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
+}
+
+// isServiceHealthy checks if a service is healthy by querying its health component
+func (sm *ServiceManager) isServiceHealthy(serviceDef *ServiceDefinition) bool {
+	hr, err := sm.getServerHealth()
+	if err != nil {
+		return false
+	}
+
+	component := findComponent(hr, serviceDef.HealthComponent)
+	if component == nil {
+		return false
+	}
+
+	return strings.EqualFold(component.Status, "healthy")
+}
+
+// waitForServiceReady waits for a service to become healthy by polling its health endpoint
+func (sm *ServiceManager) waitForServiceReady(serviceDef *ServiceDefinition) error {
+	deadline := time.Now().Add(serviceDef.DefaultTimeout)
+	pollInterval := 500 * time.Millisecond
+
+	for time.Now().Before(deadline) {
+		if sm.isServiceHealthy(serviceDef) {
+			return nil
+		}
+		time.Sleep(pollInterval)
+	}
+
+	// Final check after timeout
+	if sm.isServiceHealthy(serviceDef) {
+		return nil
+	}
+
+	return fmt.Errorf("service did not become healthy within %v", serviceDef.DefaultTimeout)
+}
+
+// resolveDependencies performs a topological sort to determine the order in which services should be started
+func (sm *ServiceManager) resolveDependencies(serviceName string) ([]string, error) {
+	visited := make(map[string]bool)
+	recursionStack := make(map[string]bool)
+	result := []string{}
+
+	var visit func(string) error
+	visit = func(name string) error {
+		// Check for cycles
+		if recursionStack[name] {
+			return fmt.Errorf("circular dependency detected involving service: %s", name)
+		}
+
+		// Already processed
+		if visited[name] {
+			return nil
+		}
+
+		// Get service definition
+		svcDef, exists := ServiceGraph[name]
+		if !exists {
+			return fmt.Errorf("unknown service in dependency graph: %s", name)
+		}
+
+		// Mark as being processed (for cycle detection)
+		recursionStack[name] = true
+
+		// Visit all dependencies first
+		for _, dep := range svcDef.Dependencies {
+			if err := visit(dep); err != nil {
+				return err
+			}
+		}
+
+		// Mark as visited and remove from recursion stack
+		recursionStack[name] = false
+		visited[name] = true
+
+		// Add to result (dependencies before dependents)
+		result = append(result, name)
+		return nil
+	}
+
+	// Start traversal from requested service
+	if err := visit(serviceName); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// Removed: checkServiceHealth - replaced by isServiceHealthy which uses the declarative HealthComponent field
+
+// StopService stops a service and all services that depend on it.
+// Services are stopped in reverse dependency order (dependents before dependencies).
+//
+// Example: If "rag" depends on "server", calling StopService("server") will:
+// 1. First stop "rag" (dependent)
+// 2. Then stop "server"
+func (sm *ServiceManager) StopService(serviceName string) error {
+	if _, exists := ServiceGraph[serviceName]; !exists {
+		return fmt.Errorf("unknown service: %s", serviceName)
+	}
+
+	// Find all services that need to be stopped (service + anything that depends on it)
+	servicesToStop := sm.findDependents(serviceName)
+
+	// Stop each service in reverse order (dependents first)
+	for i := len(servicesToStop) - 1; i >= 0; i-- {
+		svcName := servicesToStop[i]
+		if err := sm.stopSingleService(svcName); err != nil {
+			// Log error but continue stopping other services
+			utils.LogDebug(fmt.Sprintf("Error stopping %s: %v", svcName, err))
+		}
+	}
+
+	return nil
+}
+
+// StopServices stops multiple services and all services that depend on them.
+// Services are stopped in reverse dependency order (dependents before dependencies).
+//
+// Example: StopServices("server", "universal-runtime") will stop all services
+// that depend on either of them first, then stop the specified services.
+func (sm *ServiceManager) StopServices(serviceNames ...string) error {
+	if len(serviceNames) == 0 {
+		return nil
+	}
+
+	// Collect all services that need to be stopped
+	allServicesToStop := make(map[string]bool)
+	for _, serviceName := range serviceNames {
+		if _, exists := ServiceGraph[serviceName]; !exists {
+			return fmt.Errorf("unknown service: %s", serviceName)
+		}
+
+		// Find all dependents for this service
+		dependents := sm.findDependents(serviceName)
+		for _, svc := range dependents {
+			allServicesToStop[svc] = true
+		}
+	}
+
+	// Convert to slice and stop in reverse dependency order
+	// Build dependency order first, then reverse it
+	orderedServices := []string{}
+	for svc := range allServicesToStop {
+		// Get the full dependency chain for proper ordering
+		resolved, err := sm.resolveDependencies(svc)
+		if err != nil {
+			continue // Skip if we can't resolve
+		}
+		for _, s := range resolved {
+			if allServicesToStop[s] {
+				// Add to ordered list if not already present
+				found := false
+				for _, existing := range orderedServices {
+					if existing == s {
+						found = true
+						break
+					}
+				}
+				if !found {
+					orderedServices = append(orderedServices, s)
+				}
+			}
+		}
+	}
+
+	// Stop in reverse order (dependents before dependencies)
+	for i := len(orderedServices) - 1; i >= 0; i-- {
+		svcName := orderedServices[i]
+		if err := sm.stopSingleService(svcName); err != nil {
+			utils.LogDebug(fmt.Sprintf("Error stopping %s: %v", svcName, err))
+		}
+	}
+
+	return nil
+}
+
+// stopSingleService stops a single service without checking dependents
+func (sm *ServiceManager) stopSingleService(serviceName string) error {
+	serviceDef, exists := ServiceGraph[serviceName]
+	if !exists {
+		return fmt.Errorf("unknown service: %s", serviceName)
+	}
+
+	utils.LogDebug(fmt.Sprintf("Stopping service %s", serviceName))
+	return sm.orchestrator.processMgr.StopProcess(serviceDef.Name)
+}
+
+// findDependents finds all services that directly or indirectly depend on the given service
+func (sm *ServiceManager) findDependents(serviceName string) []string {
+	dependents := []string{serviceName}
+	dependentsMap := make(map[string]bool)
+	dependentsMap[serviceName] = true
+
+	// Keep searching for new dependents until we find no more
+	changed := true
+	for changed {
+		changed = false
+		for svcName, svcDef := range ServiceGraph {
+			if dependentsMap[svcName] {
+				continue // Already in the list
+			}
+			// Check if this service depends on any service in our list
+			for _, dep := range svcDef.Dependencies {
+				if dependentsMap[dep] {
+					dependentsMap[svcName] = true
+					dependents = append(dependents, svcName)
+					changed = true
+					break
+				}
+			}
+		}
+	}
+
+	return dependents
+}
+
+// StartAll starts all services in the service graph, respecting dependencies.
+// Uses EnsureService which handles dependency resolution and health checking.
+func (sm *ServiceManager) StartAll() error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Start each service (EnsureService handles dependencies automatically)
+	for svcName := range sm.services {
+		if err := sm.EnsureService(svcName); err != nil {
+			return fmt.Errorf("failed to start service %q: %w", svcName, err)
+		}
+	}
+	return nil
+}
+
+// StopAll stops all services in the service graph, respecting reverse dependencies.
+// Services are stopped in reverse dependency order (dependents before dependencies).
+func (sm *ServiceManager) StopAll() error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Collect all service names
+	serviceNames := make([]string, 0, len(sm.services))
+	for svcName := range sm.services {
+		serviceNames = append(serviceNames, svcName)
+	}
+
+	// Use StopServices to handle proper ordering
+	return sm.StopServices(serviceNames...)
+}
+
+func (sm *ServiceManager) getComponentHealth(componentName string) (*ComponentHealth, error) {
+	hr, err := sm.getServerHealth()
+	if err != nil {
+		return nil, err
+	}
+	component := findComponent(hr, componentName)
+	if component == nil {
+		return nil, fmt.Errorf("component not found in health response")
+	}
+	return component, nil
+}
+
+// getServerHealth requires /health to be healthy.
+func (sm *ServiceManager) getServerHealth() (*HealthPayload, error) {
+	base := strings.TrimRight(sm.serverURL, "/")
+	healthURL := base + "/health"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		var payload HealthPayload
+		if err := json.Unmarshal(body, &payload); err != nil {
+			utils.LogDebug(fmt.Sprintf("Invalid health payload: %v", err))
+			return nil, fmt.Errorf("invalid health payload: %v", err)
+		}
+		if strings.EqualFold(payload.Status, "healthy") {
+			return &payload, nil
+		}
+		utils.LogDebug(fmt.Sprintf("Server is %s", payload.Status))
+		return &payload, &HealthError{Status: payload.Status, HealthResp: payload}
+	}
+	return nil, fmt.Errorf("unexpected health status %d", resp.StatusCode)
+}
+
+// Removed: Service-specific health check functions (checkServerHealthForService, checkRAGHealthForService, checkUniversalRuntimeHealthForService)
+// These are replaced by the generic isServiceHealthy method which uses the HealthComponent field from ServiceDefinition
+
+// findComponent finds a component in the health response by name
+func findComponent(hr *HealthPayload, componentName string) *ComponentHealth {
+	if hr == nil {
+		return nil
+	}
+
+	// Check components first
+	for _, component := range hr.Components {
+		name := strings.ToLower(component.Name)
+		if name == strings.ToLower(componentName) {
+			return &component
+		}
+	}
+
+	return nil
+}
+
+// Removed: waitForCondition and old waitForServiceReady - replaced by ServiceManager.waitForServiceReady method

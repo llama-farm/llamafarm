@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"llamafarm-cli/cmd/config"
 	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
+
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
@@ -31,7 +34,7 @@ var initCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Print("Initializing a new LlamaFarm project")
 		// Determine target directory
-		cwd := getEffectiveCWD()
+		cwd := utils.GetEffectiveCWD()
 		projectDir := cwd
 		if len(args) > 0 {
 			projectDir = args[0]
@@ -61,15 +64,11 @@ var initCmd = &cobra.Command{
 		}
 
 		// Ensure server is available (auto-start locally if needed)
-		base := serverURL
-		if base == "" {
-			base = "http://localhost:8000"
-		}
-		config := ServerOnlyConfig(base)
-		EnsureServicesWithConfig(config)
+		sm, _ := orchestrator.NewServiceManager(serverURL)
+		sm.EnsureService("server")
 
 		// Build URL
-		url := buildServerURL(base, fmt.Sprintf("/v1/projects/%s", ns))
+		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
 
 		// Prepare payload
 		type createProjectRequest struct {
@@ -102,7 +101,7 @@ var initCmd = &cobra.Command{
 		req.Header.Set("Content-Type", "application/json")
 
 		// Execute
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error contacting server: %v\n", err)
 			os.Exit(1)
@@ -110,9 +109,9 @@ var initCmd = &cobra.Command{
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, prettyServerError(resp, respBody))
-		os.Exit(1)
-	}
+			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, utils.PrettyServerError(resp, respBody))
+			os.Exit(1)
+		}
 
 		// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
 		var createResp CreateProjectResponse

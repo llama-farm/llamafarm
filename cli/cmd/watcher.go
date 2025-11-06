@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/llamafarm/cli/cmd/utils"
 )
 
 type ConfigPaths struct {
@@ -61,11 +62,11 @@ func StartConfigWatcher(namespace, project string) error {
 		return fmt.Errorf("failed to watch current directory: %w", err)
 	}
 
-	logDebug(fmt.Sprintf("cwdConfigPath: %s, homeConfigPath: %s", cwdConfigPath, homeConfigPath))
+	utils.LogDebug(fmt.Sprintf("cwdConfigPath: %s, homeConfigPath: %s", cwdConfigPath, homeConfigPath))
 	cwdConfigInfo, ciErr := os.Stat(cwdConfigPath)
 	homeConfigInfo, hiErr := os.Stat(homeConfigPath)
-	logDebug(fmt.Sprintf("cwdConfigInfo: %v, homeConfigInfo: %v", cwdConfigInfo, homeConfigInfo))
-	logDebug(fmt.Sprintf("ciErr: %v, hiErr: %v", ciErr, hiErr))
+	utils.LogDebug(fmt.Sprintf("cwdConfigInfo: %v, homeConfigInfo: %v", cwdConfigInfo, homeConfigInfo))
+	utils.LogDebug(fmt.Sprintf("ciErr: %v, hiErr: %v", ciErr, hiErr))
 
 	// Sync config files with priority: prefer configs that have valid name/namespace fields
 	// This ensures that valid configs don't get overwritten by invalid ones
@@ -193,7 +194,7 @@ func StartConfigWatcher(namespace, project string) error {
 					// Update last modification time
 					lastModTimes[targetPath] = time.Now()
 
-					logDebug(fmt.Sprintf("Synced %s -> %s\n", sourcePath, targetPath))
+					utils.LogDebug(fmt.Sprintf("Synced %s -> %s\n", sourcePath, targetPath))
 				}
 
 			case err, ok := <-watcher.Errors:
@@ -208,8 +209,8 @@ func StartConfigWatcher(namespace, project string) error {
 	if debug {
 		fmt.Fprintf(os.Stderr, "Watching project: %s\n", cwd)
 	}
-	logDebug(fmt.Sprintf("Watching target directory: %s\n", cwdConfigPath))
-	logDebug(fmt.Sprintf("Watching home directory: %s\n", homeConfigDir))
+	utils.LogDebug(fmt.Sprintf("Watching target directory: %s\n", cwdConfigPath))
+	utils.LogDebug(fmt.Sprintf("Watching home directory: %s\n", homeConfigDir))
 
 	return nil
 }
@@ -220,7 +221,7 @@ func resolveConfigPaths(namespace, project string) (*ConfigPaths, error) {
 	}
 
 	// Get the effective current working directory
-	cwd := getEffectiveCWD()
+	cwd := utils.GetEffectiveCWD()
 
 	// Find config files in both locations
 	cwdConfigPath, err := config.FindConfigFile(cwd)
@@ -311,7 +312,7 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 // the watcher if both namespace and project can be determined.
 func StartConfigWatcherForCommand() {
 	// Load config to get namespace and project for watcher
-	cwd := getEffectiveCWD()
+	cwd := utils.GetEffectiveCWD()
 	cfg, err := config.LoadConfig(cwd)
 	if err != nil {
 		// If no config file found, don't start watcher (not an error)

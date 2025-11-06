@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/llamafarm/cli/cmd/utils"
+	"github.com/llamafarm/cli/cmd/version"
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +15,6 @@ var debug bool
 var serverURL string = "http://localhost:8000"
 var ollamaHost string = "http://localhost:11434"
 var serverStartTimeout time.Duration
-var overrideCwd string
 
 var rootCmd = &cobra.Command{
 	Use:   "lf",
@@ -39,9 +39,9 @@ Getting started:
 		cmd.Help()
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Flags are parsed at this point; honor --debug
+		// Flags are parsed at this point; honor --Debug
 		if debug {
-			InitDebugLogger("")
+			utils.InitDebugLogger("", true)
 		}
 		return nil
 	},
@@ -51,9 +51,9 @@ Getting started:
 			return nil
 		}
 
-		info, err := maybeCheckForUpgrade(false)
+		info, err := version.MaybeCheckForUpgrade(false)
 		if err != nil {
-			logDebug(fmt.Sprintf("skipping upgrade notification: %v", err))
+			utils.LogDebug(fmt.Sprintf("skipping upgrade notification: %v", err))
 			return nil
 		}
 		if info != nil && info.UpdateAvailable && info.CurrentVersionIsSemver {
@@ -74,14 +74,12 @@ func Execute() {
 
 func init() {
 	// Global persistent flags
-	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug output")
+	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable Debug output")
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "", "LlamaFarm server URL (default: http://localhost:8000)")
 	rootCmd.PersistentFlags().DurationVar(&serverStartTimeout, "server-start-timeout", 45*time.Second, "How long to wait for local server to become ready when auto-starting (e.g. 45s, 1m)")
-	rootCmd.PersistentFlags().StringVar(&overrideCwd, "cwd", "", "Override the current working directory for CLI operations")
+	rootCmd.PersistentFlags().StringVar(&utils.OverrideCwd, "cwd", "", "Override the current working directory for CLI operations")
 
-	if debug {
-		InitDebugLogger("")
-	}
+	utils.InitDebugLogger("", debug)
 }
 
 // getLFDataDir returns the directory to store LlamaFarm data.
@@ -95,26 +93,4 @@ var getLFDataDir = func() (string, error) {
 	} else {
 		return "", fmt.Errorf("getLFDataDir: could not determine home directory: %w", err)
 	}
-}
-
-// getEffectiveCWD returns the directory to treat as the working directory.
-// If the global --cwd flag is provided, it returns its absolute path; otherwise os.Getwd().
-func getEffectiveCWD() string {
-	if strings.TrimSpace(overrideCwd) != "" {
-		if filepath.IsAbs(overrideCwd) {
-			return overrideCwd
-		}
-		abs, err := filepath.Abs(overrideCwd)
-		if err != nil {
-			return "."
-		}
-		return abs
-	}
-
-	wd, _ := os.Getwd()
-	if wd == "" {
-		return "."
-	}
-
-	return wd
 }

@@ -5,8 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"llamafarm-cli/cmd/config"
-
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -117,7 +118,8 @@ Examples:
 
 		// Start an interactive chat session if no input is provided
 		if input == "" {
-			start(SessionModeProject)
+			// FIXME: ADD THIS BACK WHEN CLI COMPILES
+			// start(SessionModeProject)
 			return
 		}
 
@@ -128,7 +130,7 @@ Examples:
 			proj = strings.TrimSpace(parts[1])
 		}
 
-		cwd := getEffectiveCWD()
+		cwd := utils.GetEffectiveCWD()
 
 		StartConfigWatcherForCommand()
 
@@ -152,7 +154,7 @@ Examples:
 			SessionProject:   proj,
 			Temperature:      temperature,
 			MaxTokens:        maxTokens,
-			HTTPClient:       getHTTPClient(),
+			HTTPClient:       utils.GetHTTPClient(),
 			Model:            runModel,
 			// RAG settings - RAG is enabled by default unless --no-rag is used
 			RAGEnabled:           !runNoRAG,
@@ -172,15 +174,26 @@ Examples:
 			return
 		}
 
-		// Ensure server is up (auto-start locally if needed)
-		var config *ServiceOrchestrationConfig
-		if runNoRAG {
-			config = ChatNoRAGConfig(serverURL) // Server only, completely ignore RAG
-		} else {
-			config = RAGCommandConfig(serverURL) // Wait for both server and RAG
+		// Ensure required services are running
+		sm, err := orchestrator.NewServiceManager(serverURL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
+			os.Exit(1)
 		}
-		// Ensure health checks reflect project context before contacting server
-		EnsureServicesWithConfig(config)
+
+		if runNoRAG {
+			// Only need server for non-RAG requests
+			if err := sm.EnsureService("server"); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			// RAG enabled - explicitly ensure all three services
+			if err := sm.EnsureServices("server", "rag", "universal-runtime"); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to start RAG services: %v\n", err)
+				os.Exit(1)
+			}
+		}
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

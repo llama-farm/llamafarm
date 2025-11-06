@@ -1,4 +1,4 @@
-module llamafarm-cli
+module github.com/llamafarm/cli
 
 go 1.24.4
 

@@ -121,7 +121,7 @@ class UniversalProvider(RuntimeProvider):
                     f"{len(model_ids)} model(s) loaded"
                 )
                 return HealthCheckResult(
-                    name="universal",
+                    name="universal-runtime",
                     status="healthy",
                     message=message,
                     latency_ms=latency,
@@ -224,11 +224,13 @@ class UniversalProvider(RuntimeProvider):
                         if task.done():
                             # Task finished but no "done" event - likely an error
                             try:
-                                await task  # This will raise the exception if there was one
+                                await (
+                                    task
+                                )  # This will raise the exception if there was one
                             except Exception as task_error:
                                 yield {
                                     "event": "error",
-                                    "message": f"Download failed: {str(task_error)}"
+                                    "message": f"Download failed: {str(task_error)}",
                                 }
                                 raise
                         # If task still running, continue waiting
