@@ -118,7 +118,7 @@ func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 		return "", fmt.Errorf("session context is nil")
 	}
 
-	lfDataDir, err := getLFDataDir()
+	lfDataDir, err := utils.GetLFDataDir()
 	if err != nil {
 		return "", err
 	}

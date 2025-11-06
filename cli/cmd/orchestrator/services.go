@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -74,7 +73,7 @@ type ServiceDefinition struct {
 	WorkDir         string                             // Working directory for the process
 	Command         string                             // Command to execute (e.g., "uv", "python")
 	Args            []string                           // Command arguments
-	EnvBuilder      func(*NativeOrchestrator) []string // Function to build environment variables
+	Env             map[string]string                  // Environment variables
 	HealthComponent string                             // Component name in /health endpoint (e.g., "server", "rag")
 
 	// Runtime info
@@ -116,14 +115,24 @@ func (e *HealthError) Error() string {
 var ServiceGraph = map[string]*ServiceDefinition{
 	"universal-runtime": {
 		Name:            "universal-runtime",
-		Dependencies:    []string{}, // No dependencies
+		Dependencies:    []string{"server"},
 		CanStartLocally: true,
 		DefaultTimeout:  30 * time.Second,
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
 		Args:            []string{"run", "python", "server.py"},
-		EnvBuilder:      (*NativeOrchestrator).getUniversalRuntimeEnv,
+		Env: map[string]string{
+			"TRANSFORMERS_PORT":        "11540",
+			"TRANSFORMERS_HOST":        "127.0.0.1",
+			"TRANSFORMERS_OUTPUT_DIR":  filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
+			"TRANSFORMERS_CACHE_DIR":   filepath.Join("${HOME}", ".cache", "huggingface"),
+			"TRANSFORMERS_SKIP_MPS":    "",
+			"TRANSFORMERS_FORCE_CPU":   "",
+			"PYTORCH_MPS_HIGH_WATERMARK_RATIO": "0.9",
+			"HF_TOKEN": "",
+		},
 		HealthComponent: "universal-runtime",
+
 	},
 	"server": {
 		Name:            "server",
@@ -132,8 +141,10 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  45 * time.Second,
 		WorkDir:         "server",
 		Command:         "uv",
-		Args:            []string{"run", "uvicorn", "server.main:app", "--host", "0.0.0.0"},
-		EnvBuilder:      (*NativeOrchestrator).getServerEnv,
+		Args:            []string{"run", "uvicorn", "main:app", "--host", "0.0.0.0"},
+		Env: map[string]string{
+			"OLLAMA_HOST": "http://localhost:11434",
+		},
 		HealthComponent: "server",
 	},
 	"rag": {
@@ -143,8 +154,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  30 * time.Second,
 		WorkDir:         "rag",
 		Command:         "uv",
-		Args:            []string{"run", "celery", "-A", "celery_app", "worker", "--loglevel=info"},
-		EnvBuilder:      (*NativeOrchestrator).getRAGEnv,
+		Args:            []string{"run", "python", "main.py"},
 		HealthComponent: "rag-service",
 	},
 }
@@ -212,27 +222,32 @@ func (sm *ServiceManager) EnsureServices(serviceNames ...string) error {
 		return nil
 	}
 
-	// Collect all services and their dependencies
-	allServices := make(map[string]bool)
+	// Collect all services and their dependencies in proper order
+	allServicesMap := make(map[string]bool)
+	var orderedServices []string
+
 	for _, serviceName := range serviceNames {
 		if _, exists := ServiceGraph[serviceName]; !exists {
 			return fmt.Errorf("unknown service: %s", serviceName)
 		}
 
-		// Resolve dependencies for this service
+		// Resolve dependencies for this service (returns topologically sorted order)
 		resolvedOrder, err := sm.resolveDependencies(serviceName)
 		if err != nil {
 			return fmt.Errorf("failed to resolve dependencies for %s: %w", serviceName, err)
 		}
 
-		// Add all resolved services to the set
+		// Add services to both map (for deduplication) and ordered list
 		for _, svc := range resolvedOrder {
-			allServices[svc] = true
+			if !allServicesMap[svc] {
+				allServicesMap[svc] = true
+				orderedServices = append(orderedServices, svc)
+			}
 		}
 	}
 
-	// Convert set to slice and ensure each service once
-	for svcName := range allServices {
+	// Start services in dependency order (server will always be first)
+	for _, svcName := range orderedServices {
 		if err := sm.ensureSingleService(svcName); err != nil {
 			return fmt.Errorf("failed to ensure service %s: %w", svcName, err)
 		}
@@ -272,17 +287,14 @@ func (sm *ServiceManager) ensureSingleService(serviceName string) error {
 // startService starts a service using its declarative configuration
 func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	// Build environment variables
-	env := serviceDef.EnvBuilder(sm.orchestrator)
-
-	// Get source directory
-	homeDir, _ := os.UserHomeDir()
-	sourceDir := filepath.Join(homeDir, ".llamafarm", "src")
-	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
-
-	// Combine command and args for StartProcess
+	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
 	cmdArgs := append([]string{serviceDef.Command}, serviceDef.Args...)
 
-	// Start the process
+	 // Get source directory
+	lfDir, _ := utils.GetLFDataDir()
+	sourceDir := filepath.Join(lfDir, "src")
+	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
+
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
 }
 

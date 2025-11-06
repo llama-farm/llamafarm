@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/llamafarm/cli/cmd/utils"
@@ -80,17 +79,4 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&utils.OverrideCwd, "cwd", "", "Override the current working directory for CLI operations")
 
 	utils.InitDebugLogger("", debug)
-}
-
-// getLFDataDir returns the directory to store LlamaFarm data.
-var getLFDataDir = func() (string, error) {
-	dataDir := os.Getenv("LF_DATA_DIR")
-	if dataDir != "" {
-		return dataDir, nil
-	}
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(homeDir, ".llamafarm"), nil
-	} else {
-		return "", fmt.Errorf("getLFDataDir: could not determine home directory: %w", err)
-	}
 }

@@ -170,5 +170,10 @@ func (m *PythonEnvManager) getEnv() []string {
 
 // GetEnvForProcess returns environment variables that should be used when running processes
 func (m *PythonEnvManager) GetEnvForProcess() []string {
-	return m.getEnv()
+	env := m.getEnv()
+	lfDataDir, err := utils.GetLFDataDir()
+	if err == nil {
+		env = append(env, fmt.Sprintf("LF_DATA_DIR=%s", lfDataDir))
+	}
+	return env
 }

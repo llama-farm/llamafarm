@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/llamafarm/cli/cmd/utils"
@@ -81,10 +80,6 @@ func NewOrchestrator(serverURL string) (*NativeOrchestrator, error) {
 	return orchestrator, nil
 }
 
-// Removed: StartService, StopService, RestartService
-// These are now handled by ServiceManager which provides better dependency management
-// and health checking. Use ServiceManager.EnsureService() instead.
-
 // EnsureNativeEnvironment ensures the native environment is set up
 func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
 	no.initMu.Lock()
@@ -116,125 +111,23 @@ func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
 	return nil
 }
 
-// getServerEnv returns environment variables for the server process
-func (no *NativeOrchestrator) getServerEnv() []string {
+func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[string]string) []string {
 	env := no.pythonEnvMgr.GetEnvForProcess()
 
-	// Add server-specific environment variables
-	homeDir, _ := os.UserHomeDir()
-	llamafarmDir := filepath.Join(homeDir, ".llamafarm")
-
-	// Get Ollama host
-	ollamaHostVar := os.Getenv("OLLAMA_HOST")
-	if ollamaHostVar == "" {
-		ollamaHostVar = "http://localhost:11434"
-	}
-
-	// Add required environment variables
-	env = append(env, fmt.Sprintf("OLLAMA_HOST=%s", ollamaHostVar))
-	env = append(env, fmt.Sprintf("LLAMAFARM_HOME=%s", llamafarmDir))
-
-	// Get port from serverURL
-	port := resolvePort(no.serverURL, 8000)
-	env = append(env, fmt.Sprintf("PORT=%d", port))
-
-	// Set up file logging for the server
-	logsDir := filepath.Join(llamafarmDir, "logs")
-	serverLogFile := filepath.Join(logsDir, "server.log")
-	env = append(env, fmt.Sprintf("LOG_FILE=%s", serverLogFile))
-
-	// Add any other environment variables from current environment
-	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
+	// Always include core environment keys from the current environment
+	extraEnv := []string{}
+	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR", "LF_DATA_DIR"} {
 		if val := os.Getenv(key); val != "" {
-			env = append(env, fmt.Sprintf("%s=%s", key, val))
+			extraEnv = append(extraEnv, fmt.Sprintf("%s=%s", key, val))
 		}
 	}
 
-	return env
-}
-
-// getRAGEnv returns environment variables for the RAG process
-func (no *NativeOrchestrator) getRAGEnv() []string {
-	env := no.pythonEnvMgr.GetEnvForProcess()
-
-	// Add RAG-specific environment variables
-	homeDir, _ := os.UserHomeDir()
-	llamafarmDir := filepath.Join(homeDir, ".llamafarm")
-
-	// Add required environment variables
-	env = append(env, fmt.Sprintf("LLAMAFARM_HOME=%s", llamafarmDir))
-	env = append(env, fmt.Sprintf("SERVER_URL=%s", no.serverURL))
-
-	// Add any other environment variables from current environment
-	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
-		if val := os.Getenv(key); val != "" {
+	for key, val := range envKeysWithDefaults {
+		if val != "" {
 			env = append(env, fmt.Sprintf("%s=%s", key, val))
 		}
 	}
-
-	return env
-}
-
-// getUniversalRuntimeEnv returns environment variables for the universal runtime process
-func (no *NativeOrchestrator) getUniversalRuntimeEnv() []string {
-	env := no.pythonEnvMgr.GetEnvForProcess()
-
-	// Add universal runtime-specific environment variables
-	homeDir, _ := os.UserHomeDir()
-	llamafarmDir := filepath.Join(homeDir, ".llamafarm")
-
-	// Get environment variables with defaults
-	port := os.Getenv("TRANSFORMERS_PORT")
-	if port == "" {
-		port = "11540"
-	}
-
-	host := os.Getenv("TRANSFORMERS_HOST")
-	if host == "" {
-		host = "127.0.0.1"
-	}
-
-	outputDir := os.Getenv("TRANSFORMERS_OUTPUT_DIR")
-	if outputDir == "" {
-		outputDir = filepath.Join(llamafarmDir, "outputs", "images")
-	}
-
-	cacheDir := os.Getenv("TRANSFORMERS_CACHE_DIR")
-	if cacheDir == "" {
-		cacheDir = filepath.Join(homeDir, ".cache", "huggingface")
-	}
-
-	// Add runtime-specific environment variables
-	env = append(env, fmt.Sprintf("TRANSFORMERS_PORT=%s", port))
-	env = append(env, fmt.Sprintf("TRANSFORMERS_HOST=%s", host))
-	env = append(env, fmt.Sprintf("TRANSFORMERS_OUTPUT_DIR=%s", outputDir))
-	env = append(env, fmt.Sprintf("HF_HOME=%s", cacheDir))
-
-	// Pass through device override variables if set
-	if val := os.Getenv("TRANSFORMERS_SKIP_MPS"); val != "" {
-		env = append(env, fmt.Sprintf("TRANSFORMERS_SKIP_MPS=%s", val))
-	}
-	if val := os.Getenv("TRANSFORMERS_FORCE_CPU"); val != "" {
-		env = append(env, fmt.Sprintf("TRANSFORMERS_FORCE_CPU=%s", val))
-	}
-	// Pass through MPS memory limit configuration
-	if val := os.Getenv("PYTORCH_MPS_HIGH_WATERMARK_RATIO"); val != "" {
-		env = append(env, fmt.Sprintf("PYTORCH_MPS_HIGH_WATERMARK_RATIO=%s", val))
-	}
-
-	// Pass through HuggingFace token if set
-	if val := os.Getenv("HF_TOKEN"); val != "" {
-		env = append(env, fmt.Sprintf("HF_TOKEN=%s", val))
-	}
-
-	// Add any other environment variables from current environment
-	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {
-		if val := os.Getenv(key); val != "" {
-			env = append(env, fmt.Sprintf("%s=%s", key, val))
-		}
-	}
-
-	return env
+	return append(env, extraEnv...)
 }
 
 // StopAllProcesses stops all native processes
@@ -248,13 +141,3 @@ func (no *NativeOrchestrator) StopAllProcesses() {
 func (no *NativeOrchestrator) GetProcessManager() *ProcessManager {
 	return no.processMgr
 }
-
-// Removed: Old ServiceOrchestrator implementation (300+ lines)
-// This has been completely replaced by the cleaner ServiceManager in services.go
-// which provides:
-// - Declarative service definitions
-// - Proper dependency resolution via topological sort
-// - Generic framework methods (no per-service functions needed)
-// - Better separation of concerns
-//
-// Use ServiceManager.EnsureService() or ServiceManager.StartAll() instead.
