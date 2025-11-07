@@ -16,6 +16,9 @@ on:
       - "scripts/package-source.sh"
       - ".github/workflows/cli**"
 
+env:
+  NX_VERSION: 22.0.1
+
 jobs:
   build-cli:
     name: Build CLI Binaries
@@ -82,10 +85,10 @@ jobs:
 
       - name: Install Nx CLI
         run: |
-          npx nx init --useDotNxInstallation --interactive=false --verbose
+          npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
 
       - name: Run generate-types (compiles schema and generates Go types)
-        run: npx nx generate-types cli
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli
 
       - name: Create dist directory
         run: mkdir -p dist
@@ -151,11 +154,11 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Nx CLI
         run: |
-          npx nx@latest init --useDotNxInstallation --interactive=false --verbose
+          npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -174,7 +177,7 @@ jobs:
         run: go install github.com/atombender/go-jsonschema@latest
 
       - name: Generate types
-        run: npx nx generate-types cli
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli
 
       - name: Build designer
         run: |
@@ -208,7 +211,7 @@ jobs:
 
       - name: Package distribution archive
         run: |
-          VERSION=${{ steps.version.outputs.version }} npx nx pack
+          VERSION=${{ steps.version.outputs.version }} npx nx@${{ env.NX_VERSION }} pack
 
       - name: Upload distribution archive artifact
         uses: actions/upload-artifact@v4
