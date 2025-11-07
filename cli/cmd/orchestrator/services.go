@@ -118,7 +118,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Name:            "universal-runtime",
 		Dependencies:    []string{"server"},
 		CanStartLocally: true,
-		DefaultTimeout:  30 * time.Second,
+		DefaultTimeout:  60 * time.Second,
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "server.py"},
@@ -131,6 +131,8 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			"TRANSFORMERS_FORCE_CPU":           "",
 			"PYTORCH_MPS_HIGH_WATERMARK_RATIO": "0.9",
 			"HF_TOKEN":                         "",
+			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
+			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
 		},
 		HealthComponent: "universal-runtime",
 	},
