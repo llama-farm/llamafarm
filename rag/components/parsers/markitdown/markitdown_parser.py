@@ -14,13 +14,37 @@ logger = RAGStructLogger("rag.components.parsers.markitdown.parser")
 class MarkItDownParser(BaseParser):
     """Universal document parser using Microsoft MarkItDown."""
 
+    # Centralized list of supported file extensions
+    SUPPORTED_EXTENSIONS = {
+        ".pdf",
+        ".docx",
+        ".pptx",
+        ".xlsx",
+        ".xls",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".wav",
+        ".mp3",
+        ".html",
+        ".htm",
+        ".csv",
+        ".json",
+        ".xml",
+        ".zip",
+        ".epub",
+    }
+
     def __init__(
         self,
         name: str = "MarkItDownParser",
         config: Optional[Dict[str, Any]] = None,
     ):
+        # Call parent constructor to initialize base state
+        super().__init__(config)
+
         self.name = name
-        self.config = config or {}
 
         # Configuration
         self.preserve_structure = self.config.get("preserve_structure", True)
@@ -103,29 +127,10 @@ class MarkItDownParser(BaseParser):
     def _load_metadata(self) -> ParserConfig:
         """Load parser metadata."""
         return ParserConfig(
-            name="MarkItDownConverter",
-            display_name="MarkItDown Universal Converter",
+            name="MarkItDownParser",
+            display_name="MarkItDown Universal Parser",
             version="1.0.0",
-            supported_extensions=[
-                ".pdf",
-                ".docx",
-                ".pptx",
-                ".xlsx",
-                ".xls",
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".gif",
-                ".wav",
-                ".mp3",
-                ".html",
-                ".htm",
-                ".csv",
-                ".json",
-                ".xml",
-                ".zip",
-                ".epub",
-            ],
+            supported_extensions=sorted(list(self.SUPPORTED_EXTENSIONS)),
             mime_types=[
                 "application/pdf",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -147,38 +152,25 @@ class MarkItDownParser(BaseParser):
         )
 
     def can_parse(self, file_path: str) -> bool:
-        """Check if this converter can handle the file."""
+        """Check if this parser can handle the file."""
         path = Path(file_path)
-        supported = {
-            ".pdf",
-            ".docx",
-            ".pptx",
-            ".xlsx",
-            ".xls",
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".gif",
-            ".wav",
-            ".mp3",
-            ".html",
-            ".htm",
-            ".csv",
-            ".json",
-            ".xml",
-            ".zip",
-            ".epub",
-        }
-        return path.suffix.lower() in supported
+        return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
 
     def parse(self, source: str, **kwargs) -> ProcessingResult:
         """Convert file to Markdown and optionally chain to Markdown parser."""
         path = Path(source)
 
-        if not path.exists():
-            logger.error(f"File not found: {source}")
+        # Validate that source is a file (not a directory)
+        if not path.is_file():
+            error_msg = f"Not a valid file: {source}"
+            if path.is_dir():
+                error_msg = f"Source is a directory, not a file: {source}"
+            elif not path.exists():
+                error_msg = f"File not found: {source}"
+
+            logger.error(error_msg)
             return ProcessingResult(
-                documents=[], errors=[{"error": f"File not found: {source}", "source": source}]
+                documents=[], errors=[{"error": error_msg, "source": source}]
             )
 
         try:

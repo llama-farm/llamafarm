@@ -4,6 +4,7 @@ import pytest
 from pathlib import Path
 from components.parsers.parser_factory import ToolAwareParserFactory
 from components.parsers.markitdown.markitdown_parser import MarkItDownParser
+from core.base import ProcessingResult
 
 
 # Sample files directory
@@ -261,6 +262,68 @@ class TestParserComparison:
         assert len(md_result.documents[0].content) > 500
         assert len(pandas_result.documents[0].content) > 500
         assert len(llamaindex_result.documents[0].content) > 500
+
+
+class TestMarkItDownParserErrorHandling:
+    """Test MarkItDown parser error handling."""
+
+    def test_unsupported_file_format(self):
+        """Test parser correctly identifies unsupported formats."""
+        parser = MarkItDownParser(config={"chain_to_markdown_parser": False})
+
+        # Test unsupported extension
+        assert parser.can_parse("test.xyz") is False, "Should not support .xyz files"
+        assert parser.can_parse("test.exe") is False, "Should not support .exe files"
+        assert parser.can_parse("test.dll") is False, "Should not support .dll files"
+
+    def test_supported_file_format(self):
+        """Test parser correctly identifies supported formats."""
+        parser = MarkItDownParser(config={"chain_to_markdown_parser": False})
+
+        # Test supported extensions
+        assert parser.can_parse("test.pdf") is True, "Should support .pdf files"
+        assert parser.can_parse("test.docx") is True, "Should support .docx files"
+        assert parser.can_parse("test.xlsx") is True, "Should support .xlsx files"
+        assert parser.can_parse("test.html") is True, "Should support .html files"
+
+    def test_nonexistent_file(self):
+        """Test parser handles non-existent files gracefully."""
+        parser = MarkItDownParser(config={"chain_to_markdown_parser": False})
+
+        result = parser.parse("/nonexistent/path/to/file.pdf")
+
+        assert len(result.documents) == 0, "Should return no documents for missing file"
+        assert len(result.errors) > 0, "Should report error for missing file"
+        assert "not found" in result.errors[0]["error"].lower()
+
+    def test_directory_instead_of_file(self, tmp_path):
+        """Test parser rejects directories."""
+        parser = MarkItDownParser(config={"chain_to_markdown_parser": False})
+
+        # Create a temporary directory
+        test_dir = tmp_path / "test_directory"
+        test_dir.mkdir()
+
+        result = parser.parse(str(test_dir))
+
+        assert len(result.documents) == 0, "Should return no documents for directory"
+        assert len(result.errors) > 0, "Should report error for directory"
+        assert "directory" in result.errors[0]["error"].lower()
+
+    def test_empty_file(self, tmp_path):
+        """Test parser handles empty files gracefully."""
+        parser = MarkItDownParser(config={"chain_to_markdown_parser": False})
+
+        # Create empty PDF-like file (will fail conversion but shouldn't crash)
+        empty_file = tmp_path / "empty.pdf"
+        empty_file.write_bytes(b"")
+
+        result = parser.parse(str(empty_file))
+
+        # Parser should handle this gracefully (either empty docs or error)
+        assert isinstance(result, ProcessingResult), "Should return ProcessingResult"
+        # Either no documents or error reported
+        assert len(result.documents) == 0 or len(result.errors) > 0
 
 
 class TestMarkItDownParserConfig:
