@@ -263,6 +263,46 @@ class TestParserComparison:
         assert len(llamaindex_result.documents[0].content) > 500
 
 
+class TestMarkItDownParserConfig:
+    """Test MarkItDown parser configuration and validation."""
+
+    def test_azure_config_validation_missing_endpoint(self):
+        """Test validation fails when Azure is enabled but endpoint is missing."""
+        config = {
+            "use_azure_doc_intelligence": True,
+            "azure_doc_intelligence_key": "test-key",
+            # Missing endpoint
+        }
+        parser = MarkItDownParser(config=config)
+        assert parser.validate_config() is False, "Should fail validation without endpoint"
+
+    def test_azure_config_validation_missing_key(self):
+        """Test validation fails when Azure is enabled but key is missing."""
+        config = {
+            "use_azure_doc_intelligence": True,
+            "azure_doc_intelligence_endpoint": "https://test.cognitiveservices.azure.com/",
+            # Missing key
+        }
+        parser = MarkItDownParser(config=config)
+        assert parser.validate_config() is False, "Should fail validation without key"
+
+    def test_azure_config_validation_success(self):
+        """Test validation passes when Azure config is complete."""
+        config = {
+            "use_azure_doc_intelligence": True,
+            "azure_doc_intelligence_endpoint": "https://test.cognitiveservices.azure.com/",
+            "azure_doc_intelligence_key": "test-key",
+        }
+        parser = MarkItDownParser(config=config)
+        assert parser.validate_config() is True, "Should pass validation with complete config"
+
+    def test_config_validation_without_azure(self):
+        """Test validation passes when Azure is not enabled."""
+        config = {"use_azure_doc_intelligence": False}
+        parser = MarkItDownParser(config=config)
+        assert parser.validate_config() is True, "Should pass validation without Azure"
+
+
 class TestParserRegistry:
     """Test parser discovery and registration."""
 

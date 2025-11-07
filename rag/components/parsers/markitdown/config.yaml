@@ -80,12 +80,16 @@ parsers:
       chunk_strategy: sections
       chunk_overlap: 100
 
-      # Optional features
-      enable_ocr: false
-      enable_audio_transcription: false
-      enable_llm_descriptions: false
+      # Optional features (note: MarkItDown auto-detects these based on installed dependencies)
+      # OCR: Auto-enabled if pytesseract is installed (uv pip install pytesseract)
+      # Audio: Auto-enabled if speech_recognition is installed
+      # LLM descriptions: Requires OpenAI client configuration (not yet implemented)
+      enable_ocr: false  # Placeholder for documentation
+      enable_audio_transcription: false  # Placeholder for documentation
+      enable_llm_descriptions: false  # Requires LLM client setup
 
-      # Azure Document Intelligence (optional)
+      # Azure Document Intelligence (optional, requires azure-ai-formrecognizer)
+      # Provides enhanced PDF/image OCR and layout analysis
       use_azure_doc_intelligence: false
-      azure_doc_intelligence_endpoint: null
-      azure_doc_intelligence_key: null
+      azure_doc_intelligence_endpoint: null  # e.g., https://your-resource.cognitiveservices.azure.com/
+      azure_doc_intelligence_key: null  # Your Azure API key

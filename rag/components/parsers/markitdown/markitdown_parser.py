@@ -43,7 +43,34 @@ class MarkItDownParser(BaseParser):
         try:
             from markitdown import MarkItDown
 
-            self.markitdown = MarkItDown()
+            # Initialize MarkItDown with configured options
+            # Note: MarkItDown accepts these parameters at initialization time
+            markitdown_kwargs = {}
+
+            # Azure Document Intelligence support
+            if self.use_azure and self.azure_endpoint and self.azure_key:
+                try:
+                    from azure.ai.formrecognizer import DocumentAnalysisClient
+                    from azure.core.credentials import AzureKeyCredential
+
+                    markitdown_kwargs["azure_di_client"] = DocumentAnalysisClient(
+                        endpoint=self.azure_endpoint,
+                        credential=AzureKeyCredential(self.azure_key)
+                    )
+                    logger.info("Azure Document Intelligence client configured")
+                except ImportError:
+                    logger.warning(
+                        "Azure Document Intelligence requested but azure-ai-formrecognizer not installed"
+                    )
+
+            # LLM client for image descriptions (if enabled)
+            if self.enable_llm_desc:
+                logger.info("LLM descriptions enabled but not yet implemented in this parser")
+                # TODO: Add OpenAI/other LLM client configuration when needed
+                # markitdown_kwargs["llm_client"] = ...
+                # markitdown_kwargs["llm_model"] = ...
+
+            self.markitdown = MarkItDown(**markitdown_kwargs)
             logger.info("MarkItDown initialized successfully")
         except ImportError as e:
             logger.error(
@@ -53,6 +80,24 @@ class MarkItDownParser(BaseParser):
 
     def validate_config(self) -> bool:
         """Validate configuration."""
+        # Validate Azure Document Intelligence configuration
+        if self.use_azure:
+            if not self.azure_endpoint or not self.azure_key:
+                logger.error(
+                    "Azure Document Intelligence is enabled, but endpoint or key is missing. "
+                    "Please provide both 'azure_doc_intelligence_endpoint' and "
+                    "'azure_doc_intelligence_key' in the parser configuration."
+                )
+                return False
+            logger.info("Azure Document Intelligence configuration validated")
+
+        # Validate LLM descriptions configuration
+        if self.enable_llm_desc:
+            logger.warning(
+                "LLM descriptions are enabled but not yet fully implemented. "
+                "This feature requires additional configuration (OpenAI API key, etc.)"
+            )
+
         return True
 
     def _load_metadata(self) -> ParserConfig:
