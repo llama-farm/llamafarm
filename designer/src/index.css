@@ -132,3 +132,68 @@ body,
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* CodeMirror TOC highlight effect */
+.cm-toc-highlight {
+  background-color: rgba(34, 211, 238, 0.4); /* Turquoise/cyan highlight - bright start */
+  animation: toc-highlight-fade 2.5s ease-out forwards;
+}
+
+.dark .cm-toc-highlight {
+  background-color: rgba(94, 234, 212, 0.3);
+  animation: toc-highlight-fade-dark 2.5s ease-out forwards;
+}
+
+.cm-search-highlight {
+  background-color: rgba(59, 130, 246, 0.28);
+  border-radius: 4px;
+}
+
+.dark .cm-search-highlight {
+  background-color: rgba(96, 165, 250, 0.25);
+}
+
+.cm-search-highlight-active {
+  background-color: rgba(37, 99, 235, 0.45);
+  border-radius: 4px;
+}
+
+.dark .cm-search-highlight-active {
+  background-color: rgba(59, 130, 246, 0.4);
+}
+
+@keyframes toc-highlight-fade {
+  0% {
+    background-color: rgba(34, 211, 238, 0.45);
+  }
+  30% {
+    background-color: rgba(34, 211, 238, 0.35);
+  }
+  60% {
+    background-color: rgba(34, 211, 238, 0.2);
+  }
+  85% {
+    background-color: rgba(34, 211, 238, 0.08);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes toc-highlight-fade-dark {
+  0% {
+    background-color: rgba(94, 234, 212, 0.35);
+  }
+  30% {
+    background-color: rgba(94, 234, 212, 0.25);
+  }
+  60% {
+    background-color: rgba(94, 234, 212, 0.15);
+  }
+  85% {
+    background-color: rgba(94, 234, 212, 0.06);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
