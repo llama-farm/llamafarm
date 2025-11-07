@@ -34,6 +34,7 @@ WORKDIR /app
 # Copy dependency files first for better Docker layer caching
 COPY config/ ./config/
 COPY common/ ./common/
+COPY observability/ ./observability/
 COPY rag/pyproject.toml rag/uv.lock rag/README.md ./rag/
 COPY ruff.toml ./ruff.toml
 
@@ -44,6 +45,7 @@ RUN cd rag && uv sync --locked
 # Now copy the rest of the source code (changes won't invalidate dependency cache)
 COPY config/ ./config/
 COPY common/ ./common/
+COPY observability/ ./observability/
 COPY rag/ ./rag/
 
 # Install each package with its own dependencies
