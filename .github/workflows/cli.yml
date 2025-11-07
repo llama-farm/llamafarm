@@ -17,7 +17,7 @@ on:
       - ".github/workflows/cli**"
 
 env:
-  NX_VERSION: 22.0.1
+  NX_VERSION: 21
 
 jobs:
   build-cli:
