@@ -33,7 +33,7 @@ definitions:
       type:
         type: string
         pattern: "^auto$|^[A-Za-z][A-Za-z0-9_]*Parser[A-Za-z0-9_]*$"
-        description: Parser type identifier - 'auto' for auto-detection or specific parser name (e.g., PDFParser_PyPDF2)
+        description: Parser type identifier - 'auto' for auto-detection, specific parser name (e.g., PDFParser_PyPDF2)
       config:
         type: object
         oneOf:
@@ -55,6 +55,7 @@ definitions:
           - $ref: "#/definitions/parsers/textParserPythonConfig"
           - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/msgParserExtractMsgConfig"
+          - $ref: "#/definitions/parsers/markitdownParserConfig"
   parsers:
     # Auto-detection parser configuration
     autoParserConfig:
@@ -710,6 +711,81 @@ definitions:
           type: string
           default: utf-8
           description: Encoding
+    markitdownParserConfig:
+      type: object
+      description: Microsoft MarkItDown universal document parser
+      defaultExtensions: [".pdf", ".docx", ".pptx", ".xlsx", ".html", ".jpg", ".png"]
+      additionalProperties: false
+      properties:
+        # Output & Chaining
+        preserve_structure:
+          type: boolean
+          default: true
+          description: Preserve document structure in Markdown output
+
+        chain_to_markdown_parser:
+          type: boolean
+          default: true
+          description: Chain converted Markdown to a Markdown parser for chunking
+
+        markdown_parser:
+          type: string
+          enum: [MarkdownParser_Python, MarkdownParser_LlamaIndex]
+          default: MarkdownParser_Python
+          description: Which Markdown parser to chain to
+
+        # Chunking Config (passed to chained parser)
+        chunk_size:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 50000
+          description: Chunk size for downstream Markdown parser
+
+        chunk_strategy:
+          type: string
+          enum: [sections, paragraphs, sentences, headings, semantic]
+          default: sections
+          description: Chunking strategy for downstream parser
+
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Chunk overlap for downstream parser
+
+        # Optional Features
+        enable_ocr:
+          type: boolean
+          default: false
+          description: Enable OCR for images (requires pytesseract)
+
+        enable_audio_transcription:
+          type: boolean
+          default: false
+          description: Enable audio transcription (requires whisper/speech API)
+
+        enable_llm_descriptions:
+          type: boolean
+          default: false
+          description: Enable LLM-powered image descriptions (requires OpenAI)
+
+        # Azure Document Intelligence
+        use_azure_doc_intelligence:
+          type: boolean
+          default: false
+          description: Use Azure Document Intelligence for enhanced extraction
+
+        azure_doc_intelligence_endpoint:
+          type: [string, "null"]
+          default: null
+          description: Azure Document Intelligence endpoint URL
+
+        azure_doc_intelligence_key:
+          type: [string, "null"]
+          default: null
+          description: Azure Document Intelligence API key
   extractorConfig:
     type: object
     additionalProperties: false

@@ -157,8 +157,23 @@ llamaindex = [
   "scipy>=1.10.0",                        # Scientific computing
 ]
 
+# Microsoft MarkItDown universal document converter
+markitdown = [
+  "markitdown[pdf,docx,xlsx,pptx]>=0.0.1a2",  # Universal document converter with format support
+  "pillow>=10.0.0",                       # Image processing
+]
+
+# MarkItDown with full features (OCR, LLM descriptions, Azure)
+markitdown-full = [
+  "markitdown[all]>=0.0.1a2",             # All MarkItDown features
+  "pillow>=10.0.0",
+  "pytesseract>=0.3.10",                  # OCR for images
+  "openai>=1.0.0",                         # LLM-powered image descriptions
+  "azure-ai-formrecognizer>=3.3.0",       # Azure Document Intelligence
+]
+
 # All optional dependencies
-all = ["llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex]"]
+all = ["llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex,markitdown]"]
 
 [project.urls]
 Homepage = "https://github.com/llama-farm/llamafarm"

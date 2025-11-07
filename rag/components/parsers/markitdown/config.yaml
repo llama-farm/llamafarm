@@ -1,0 +1,91 @@
+parsers:
+  - name: MarkItDownParser
+    display_name: MarkItDown Universal Parser
+    tool: MarkItDown
+    version: 1.0.0
+    description: Microsoft MarkItDown parser for diverse file formats to Markdown
+
+    supported_extensions:
+      # Documents
+      - .pdf
+      - .docx
+      - .pptx
+      - .xlsx
+      - .xls
+      # Media
+      - .jpg
+      - .jpeg
+      - .png
+      - .gif
+      - .wav
+      - .mp3
+      # Web
+      - .html
+      - .htm
+      # Data
+      - .csv
+      - .json
+      - .xml
+      # Archives
+      - .zip
+      # E-books
+      - .epub
+
+    mime_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+      - image/jpeg
+      - image/png
+      - image/gif
+      - audio/wav
+      - audio/mpeg
+      - text/html
+      - text/csv
+      - application/json
+      - application/xml
+      - application/zip
+      - application/epub+zip
+
+    capabilities:
+      - universal_conversion
+      - markdown_output
+      - metadata_extraction
+      - structure_preservation
+      - image_ocr
+      - audio_transcription
+      - llm_image_desc
+
+    dependencies:
+      required:
+        - markitdown
+      optional:
+        - pillow
+        - pytesseract
+        - openai
+        - azure-ai-formrecognizer
+
+    default_config:
+      # Output control
+      preserve_structure: true
+
+      # Chain to markdown parser
+      chain_to_markdown_parser: true
+      markdown_parser: MarkdownParser_Python
+
+      # Chunking config (passed to chained parser)
+      chunk_size: 1000
+      chunk_strategy: sections
+      chunk_overlap: 100
+
+      # Optional features
+      enable_ocr: false
+      enable_audio_transcription: false
+      enable_llm_descriptions: false
+
+      # Azure Document Intelligence (optional)
+      use_azure_doc_intelligence: false
+      azure_doc_intelligence_endpoint: null
+      azure_doc_intelligence_key: null

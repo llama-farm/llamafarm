@@ -101,7 +101,7 @@ parsers:
     dependencies:
       required:
         - llama-index
-        - llama-index-readers-file
+        - llama_index.readers.file  # llama-index-readers-file package
         - pandas
         - openpyxl
       optional:
