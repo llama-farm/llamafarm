@@ -32,6 +32,7 @@ import { CustomDownloadDialog } from './CustomDownloadDialog'
 import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import { useToast } from '../ui/toast'
 
 interface TabBarProps {
   activeTab: string
@@ -276,9 +277,9 @@ function ProjectInferenceModels({
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6">
-      {models.map(m => (
+      {models.map((m, index) => (
         <ModelCard
-          key={m.id}
+          key={`${m.modelIdentifier}-${index}`}
           model={m}
           onMakeDefault={() => onMakeDefault(m.id)}
           onDelete={() => onDelete(m.id)}
@@ -1599,6 +1600,7 @@ const Models = () => {
     !!activeProject?.namespace && !!activeProject?.project
   )
   const updateProject = useUpdateProject()
+  const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('project')
   const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
@@ -2025,8 +2027,16 @@ const Models = () => {
         projectId: activeProject.project,
         request: { config: nextConfig },
       })
+      toast({
+        message: 'Model updated successfully',
+        variant: 'default',
+      })
     } catch (error) {
       console.error('Failed to update model identifier:', error)
+      toast({
+        message: 'Failed to update model. Please try again.',
+        variant: 'destructive',
+      })
       // Rollback on failure
       setProjectModels(prevModels)
     }
@@ -2040,6 +2050,36 @@ const Models = () => {
     )
       return
 
+    // Validate input
+    const trimmedName = newName.trim()
+    
+    // Check for empty name
+    if (!trimmedName) {
+      toast({
+        message: 'Model name cannot be empty',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    // Check for duplicate name
+    if (projectModels.some(m => m.id === trimmedName && m.id !== modelId)) {
+      toast({
+        message: 'A model with this name already exists',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    // Check for length (reasonable limit)
+    if (trimmedName.length > 100) {
+      toast({
+        message: 'Model name must be 100 characters or less',
+        variant: 'destructive',
+      })
+      return
+    }
+
     // Optimistically update local state
     const prevModels = [...projectModels]
     const prevModelSetMap = { ...modelSetMap }
@@ -2047,7 +2087,7 @@ const Models = () => {
     setProjectModels(prev =>
       prev.map(m =>
         m.id === modelId
-          ? { ...m, name: newName, id: newName }
+          ? { ...m, name: trimmedName, id: trimmedName }
           : m
       )
     )
@@ -2055,7 +2095,7 @@ const Models = () => {
     // Update modelSetMap to use new name as key
     if (modelSetMap[modelId]) {
       const newMap = { ...modelSetMap }
-      newMap[newName] = newMap[modelId]
+      newMap[trimmedName] = newMap[modelId]
       delete newMap[modelId]
       setModelSetMap(newMap)
     }
@@ -2068,7 +2108,7 @@ const Models = () => {
       if (model.name === modelId) {
         return {
           ...model,
-          name: newName,
+          name: trimmedName,
         }
       }
       return model
@@ -2080,7 +2120,7 @@ const Models = () => {
         ...currentConfig.runtime,
         models: updatedModels,
         // Update default_model if this was the default
-        default_model: wasDefault ? newName : currentConfig.runtime?.default_model,
+        default_model: wasDefault ? trimmedName : currentConfig.runtime?.default_model,
       },
     }
 
@@ -2090,8 +2130,16 @@ const Models = () => {
         projectId: activeProject.project,
         request: { config: nextConfig },
       })
+      toast({
+        message: 'Model renamed successfully',
+        variant: 'default',
+      })
     } catch (error) {
       console.error('Failed to rename model:', error)
+      toast({
+        message: 'Failed to rename model. Please try again.',
+        variant: 'destructive',
+      })
       // Rollback on failure
       setProjectModels(prevModels)
       setModelSetMap(prevModelSetMap)

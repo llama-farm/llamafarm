@@ -29,13 +29,16 @@ export function ModelSelector({
   disabled = false,
   label = 'Model',
 }: ModelSelectorProps) {
-  // Filter out the current model from project models
+  // Filter out the current model from project and device models
   const filteredProjectModels = availableProjectModels.filter(
+    m => m.identifier !== currentModelIdentifier
+  )
+  const filteredDeviceModels = availableDeviceModels.filter(
     m => m.identifier !== currentModelIdentifier
   )
 
   const hasProjectModels = filteredProjectModels.length > 0
-  const hasDeviceModels = availableDeviceModels.length > 0
+  const hasDeviceModels = filteredDeviceModels.length > 0
 
   return (
     <div>
@@ -47,6 +50,7 @@ export function ModelSelector({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
+            type="button"
             disabled={disabled}
             className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -90,7 +94,7 @@ export function ModelSelector({
               <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
                 From disk
               </div>
-              {availableDeviceModels.map(model => (
+              {filteredDeviceModels.map(model => (
                 <DropdownMenuItem
                   key={`disk-${model.identifier}`}
                   className="w-full justify-start text-left"
