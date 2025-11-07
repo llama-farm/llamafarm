@@ -175,24 +175,12 @@ Examples:
 		}
 
 		// Ensure required services are running
-		sm, err := orchestrator.NewServiceManager(serverURL)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
-			os.Exit(1)
-		}
-
 		if runNoRAG {
 			// Only need server for non-RAG requests
-			if err := sm.EnsureService("server"); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
-				os.Exit(1)
-			}
+			orchestrator.EnsureServicesOrExit(serverURL, "server", "universal-runtime")
 		} else {
 			// RAG enabled - explicitly ensure all three services
-			if err := sm.EnsureServices("server", "rag", "universal-runtime"); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to start RAG services: %v\n", err)
-				os.Exit(1)
-			}
+			orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 		}
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {

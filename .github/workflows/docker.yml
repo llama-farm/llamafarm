@@ -6,11 +6,7 @@ name: Build and Push Docker Images
 # - PR artifacts are used by create-manifest and test-compose jobs for validation
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: {}
 
 env:
   REGISTRY: ghcr.io

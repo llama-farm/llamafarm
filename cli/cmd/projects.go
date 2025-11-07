@@ -71,15 +71,7 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		sm, err := orchestrator.NewServiceManager(serverURL)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
-			os.Exit(1)
-		}
-		if err := sm.EnsureService("server"); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to start server: %v\n", err)
-			os.Exit(1)
-		}
+		orchestrator.EnsureServicesOrExit(serverURL, "server")
 
 		// Build request
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))

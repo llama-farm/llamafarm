@@ -142,7 +142,7 @@ var chatCtx = &ChatSessionContext{
 // fetchAvailableModels is now defined in models_shared.go
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
-func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, serverHealth *orchestrator.HealthPayload) {
+func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo) {
 	// Update session context with project info first
 	if projectInfo != nil {
 		chatCtx.SessionNamespace = projectInfo.Namespace
@@ -171,7 +171,7 @@ func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, server
 		}
 	}
 
-	m := newChatModel(projectInfo, serverHealth)
+	m := newChatModel(projectInfo)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.program = p
 
@@ -264,7 +264,7 @@ type designerErrorMsg struct{ err error }
 type serverHealthMsg struct{ health *orchestrator.HealthPayload }
 type modeSwitchMsg struct{ mode ChatMode }
 
-func newChatModel(projectInfo *config.ProjectInfo, serverHealth *orchestrator.HealthPayload) chatModel {
+func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	var devMessages []Message
 
 	ta := textarea.New()
@@ -335,6 +335,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *orchestrator.He
 			devMessages = append(devMessages, Message{Role: "client", Content: "Send a message or type '/help' for commands."})
 		}
 	}
+
+	sm, _ := orchestrator.NewServiceManager(chatCtx.ServerURL)
+	serverHealth, _ := sm.GetServerHealth()
 
 	// Fetch initial greeting for project_seed (disabled)
 	// if greeting := fetchInitialGreeting(chatCtx); greeting != "" {

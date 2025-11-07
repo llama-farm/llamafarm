@@ -64,8 +64,7 @@ var initCmd = &cobra.Command{
 		}
 
 		// Ensure server is available (auto-start locally if needed)
-		sm, _ := orchestrator.NewServiceManager(serverURL)
-		sm.EnsureService("server")
+		orchestrator.EnsureServicesOrExit(serverURL, "server")
 
 		// Build URL
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))

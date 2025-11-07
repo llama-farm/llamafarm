@@ -108,8 +108,6 @@ func init() {
 // runServicesStatus is the main entry point for the services status command
 func runServicesStatus(cmd *cobra.Command, args []string) {
 	var statuses []ServiceInfo
-	var orchestrationType string
-	dockerAvailable := false
 
 	// Get server URL for health checks
 	serverURLToUse := serverURL
@@ -119,21 +117,42 @@ func runServicesStatus(cmd *cobra.Command, args []string) {
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
-	_, err := orchestrator.NewServiceManager(serverURLToUse)
+	sm, err := orchestrator.NewServiceManager(serverURLToUse)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Check each service using native status checker
-	// statuses = sm.GetServicesStatus()
+	statusInfos, err := sm.GetServicesStatus()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get services status: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Convert orchestrator.ServiceStatusInfo to cmd.ServiceInfo
+	statuses = make([]ServiceInfo, 0, len(statusInfos))
+	for _, info := range statusInfos {
+		serviceInfo := ServiceInfo{
+			Name:    info.Name,
+			State:   info.State,
+			PID:     info.PID,
+			LogFile: info.LogFile,
+			Health:  info.Health,
+		}
+
+		// Format uptime as a string if the service is running
+		if info.Uptime > 0 {
+			serviceInfo.Uptime = formatUptime(info.Uptime)
+		}
+
+		statuses = append(statuses, serviceInfo)
+	}
 
 	// Build output structure
 	output := ServicesStatusOutput{
-		Services:      statuses,
-		DockerRunning: dockerAvailable,
-		Orchestration: orchestrationType,
-		Timestamp:     time.Now().Unix(),
+		Services:  statuses,
+		Timestamp: time.Now().Unix(),
 	}
 
 	// Format output based on --json flag
@@ -216,6 +235,23 @@ func runServicesStop(cmd *cobra.Command, args []string) {
 
 	// Re-run status check to show final state
 	runServicesStatus(cmd, []string{})
+}
+
+// formatUptime formats a duration into a human-readable uptime string
+func formatUptime(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	} else if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	} else if d < 24*time.Hour {
+		hours := int(d.Hours())
+		minutes := int(d.Minutes()) % 60
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	} else {
+		days := int(d.Hours()) / 24
+		hours := int(d.Hours()) % 24
+		return fmt.Sprintf("%dd%dh", days, hours)
+	}
 }
 
 // getServicesToManage determines which services to manage based on command arguments

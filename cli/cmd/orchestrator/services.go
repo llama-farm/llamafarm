@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -70,11 +71,11 @@ type ServiceDefinition struct {
 	DefaultTimeout  time.Duration
 
 	// Declarative start configuration
-	WorkDir         string                             // Working directory for the process
-	Command         string                             // Command to execute (e.g., "uv", "python")
-	Args            []string                           // Command arguments
-	Env             map[string]string                  // Environment variables
-	HealthComponent string                             // Component name in /health endpoint (e.g., "server", "rag")
+	WorkDir         string            // Working directory for the process
+	Command         string            // Command to execute (e.g., "uv", "python")
+	Args            []string          // Command arguments
+	Env             map[string]string // Environment variables
+	HealthComponent string            // Component name in /health endpoint (e.g., "server", "rag")
 
 	// Runtime info
 	State *ServiceState
@@ -122,17 +123,16 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Command:         "uv",
 		Args:            []string{"run", "python", "server.py"},
 		Env: map[string]string{
-			"TRANSFORMERS_PORT":        "11540",
-			"TRANSFORMERS_HOST":        "127.0.0.1",
-			"TRANSFORMERS_OUTPUT_DIR":  filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
-			"TRANSFORMERS_CACHE_DIR":   filepath.Join("${HOME}", ".cache", "huggingface"),
-			"TRANSFORMERS_SKIP_MPS":    "",
-			"TRANSFORMERS_FORCE_CPU":   "",
+			"TRANSFORMERS_PORT":                "11540",
+			"TRANSFORMERS_HOST":                "127.0.0.1",
+			"TRANSFORMERS_OUTPUT_DIR":          filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
+			"TRANSFORMERS_CACHE_DIR":           filepath.Join("${HOME}", ".cache", "huggingface"),
+			"TRANSFORMERS_SKIP_MPS":            "",
+			"TRANSFORMERS_FORCE_CPU":           "",
 			"PYTORCH_MPS_HIGH_WATERMARK_RATIO": "0.9",
-			"HF_TOKEN": "",
+			"HF_TOKEN":                         "",
 		},
 		HealthComponent: "universal-runtime",
-
 	},
 	"server": {
 		Name:            "server",
@@ -256,6 +256,28 @@ func (sm *ServiceManager) EnsureServices(serviceNames ...string) error {
 	return nil
 }
 
+// EnsureServicesOrExit is a convenience function that creates a ServiceManager and ensures
+// the specified services are running. If any error occurs (initialization or service start),
+// it prints to stderr and exits with code 1. This is the standard pattern for CLI commands
+// that need to ensure services are available.
+//
+// Example usage:
+//
+//	orchestrator.EnsureServicesOrExit(serverURL, "server")
+//	orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+func EnsureServicesOrExit(serverURL string, serviceNames ...string) {
+	sm, err := NewServiceManager(serverURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := sm.EnsureServices(serviceNames...); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start services: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 // ensureSingleService ensures a single service is running without checking dependencies.
 // Uses the declarative service configuration to start the process via the framework.
 func (sm *ServiceManager) ensureSingleService(serviceName string) error {
@@ -290,7 +312,7 @@ func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
 	cmdArgs := append([]string{serviceDef.Command}, serviceDef.Args...)
 
-	 // Get source directory
+	// Get source directory
 	lfDir, _ := utils.GetLFDataDir()
 	sourceDir := filepath.Join(lfDir, "src")
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
@@ -300,7 +322,7 @@ func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 
 // isServiceHealthy checks if a service is healthy by querying its health component
 func (sm *ServiceManager) isServiceHealthy(serviceDef *ServiceDefinition) bool {
-	hr, err := sm.getServerHealth()
+	hr, err := sm.GetServerHealth()
 	if err != nil {
 		return false
 	}
@@ -545,7 +567,7 @@ func (sm *ServiceManager) StopAll() error {
 }
 
 func (sm *ServiceManager) getComponentHealth(componentName string) (*ComponentHealth, error) {
-	hr, err := sm.getServerHealth()
+	hr, err := sm.GetServerHealth()
 	if err != nil {
 		return nil, err
 	}
@@ -556,8 +578,8 @@ func (sm *ServiceManager) getComponentHealth(componentName string) (*ComponentHe
 	return component, nil
 }
 
-// getServerHealth requires /health to be healthy.
-func (sm *ServiceManager) getServerHealth() (*HealthPayload, error) {
+// GetServerHealth requires /health to be healthy.
+func (sm *ServiceManager) GetServerHealth() (*HealthPayload, error) {
 	base := strings.TrimRight(sm.serverURL, "/")
 	healthURL := base + "/health"
 
@@ -607,6 +629,76 @@ func findComponent(hr *HealthPayload, componentName string) *ComponentHealth {
 	}
 
 	return nil
+}
+
+// ServiceStatusInfo represents status information for a single service
+// This is a simple struct used by the orchestrator layer; the CLI layer
+// will convert this to its own ServiceInfo type to avoid circular dependencies
+type ServiceStatusInfo struct {
+	Name    string
+	State   string // "running", "stopped", "not_found"
+	PID     int
+	LogFile string
+	Uptime  time.Duration
+	Health  *ComponentHealth
+}
+
+// GetServicesStatus returns the current status of all services
+// It combines process state information with health data from the server
+func (sm *ServiceManager) GetServicesStatus() ([]ServiceStatusInfo, error) {
+	// Try to get server health (may fail if server is down)
+	healthPayload, serverHealthErr := sm.GetServerHealth()
+
+	var statuses []ServiceStatusInfo
+
+	// Iterate through all services in the service graph
+	for serviceName, serviceDef := range ServiceGraph {
+		statusInfo := ServiceStatusInfo{
+			Name:  serviceName,
+			State: "stopped",
+		}
+
+		// Try to get process info from the process manager
+		procInfo, err := sm.orchestrator.processMgr.GetProcessInfo(serviceName, healthPayload)
+		if err == nil {
+			// Process is tracked, check if it's running
+			if sm.orchestrator.processMgr.isProcessRunning(procInfo) {
+				statusInfo.State = "running"
+				statusInfo.PID = procInfo.PID
+				statusInfo.LogFile = procInfo.LogFile
+				statusInfo.Uptime = time.Since(procInfo.StartTime)
+			} else {
+				statusInfo.State = "stopped"
+				statusInfo.LogFile = procInfo.LogFile
+			}
+		}
+
+		// If server health is available and process is running, get health info
+		if serverHealthErr == nil && healthPayload != nil {
+			component := findComponent(healthPayload, serviceDef.HealthComponent)
+			if component != nil {
+				statusInfo.State = "running"
+				statusInfo.Health = component
+
+				// Make PID optional: only set if "pid" is present and can be cast to int
+				if pidVal, ok := component.Details["pid"]; ok {
+					statusInfo.PID = int(pidVal.(float64))
+				}
+
+				if uptimeVal, ok := component.Details["uptime"]; ok {
+					statusInfo.Uptime = uptimeVal.(time.Duration)
+				}
+
+				if logFileVal, ok := component.Details["log_file"]; ok {
+					statusInfo.LogFile = logFileVal.(string)
+				}
+			}
+		}
+
+		statuses = append(statuses, statusInfo)
+	}
+
+	return statuses, nil
 }
 
 // Removed: waitForCondition and old waitForServiceReady - replaced by ServiceManager.waitForServiceReady method

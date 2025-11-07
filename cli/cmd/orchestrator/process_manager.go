@@ -192,13 +192,10 @@ func (pm *ProcessManager) StopProcess(name string) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	proc, exists := pm.processes[name]
-	if !exists {
-		return fmt.Errorf("process %s not found", name)
-	}
-
-	if !pm.isProcessRunning(proc) {
-		return fmt.Errorf("process %s is not running", name)
+	// Look for process in memory or via PID file
+	proc, found := pm.findProcess(name)
+	if !found {
+		return fmt.Errorf("process %s not found (no tracked process or PID file)", name)
 	}
 
 	// Try graceful shutdown first
@@ -268,26 +265,26 @@ func (pm *ProcessManager) GetProcessStatus(name string) (string, error) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	proc, exists := pm.processes[name]
-	if !exists {
+	// Look for process in memory or via PID file
+	proc, found := pm.findProcess(name)
+	if !found {
 		return "", fmt.Errorf("process %s not found", name)
 	}
 
 	proc.mu.RLock()
 	defer proc.mu.RUnlock()
 
-	if pm.isProcessRunning(proc) {
-		return "running", nil
-	}
-
 	return proc.Status, nil
 }
 
 // GetProcessLogs returns recent logs for a process
 func (pm *ProcessManager) GetProcessLogs(name string, lines int) ([]string, error) {
-	proc, exists := pm.processes[name] // no need to lock here, we're not modifying the map
+	pm.mu.RLock()
+	// Look for process in memory or via PID file
+	proc, found := pm.findProcess(name)
+	pm.mu.RUnlock()
 
-	if !exists {
+	if !found {
 		return nil, fmt.Errorf("process %s not found", name)
 	}
 
@@ -329,10 +326,10 @@ func (pm *ProcessManager) IsProcessHealthy(name string) bool {
 // WaitForProcess waits for a process to exit
 func (pm *ProcessManager) WaitForProcess(name string) error {
 	pm.mu.RLock()
-	proc, exists := pm.processes[name]
+	proc, found := pm.findProcess(name)
 	pm.mu.RUnlock()
 
-	if !exists {
+	if !found {
 		return fmt.Errorf("process %s not found", name)
 	}
 
@@ -343,65 +340,17 @@ func (pm *ProcessManager) WaitForProcess(name string) error {
 	return proc.Cmd.Wait()
 }
 
-// AttachToProcess attaches to an existing process by PID and manages it
-func (pm *ProcessManager) AttachToProcess(name string, pid int, startTime time.Time) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
+// GetProcessInfo returns information about a process
+func (pm *ProcessManager) GetProcessInfo(name string, healthPayload *HealthPayload) (*ProcessInfo, error) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
 
-	// Check if process is already tracked
-	if proc, exists := pm.processes[name]; exists {
-		if pm.isProcessRunning(proc) {
-			return fmt.Errorf("process %s is already being managed", name)
-		}
-		// Clean up old process info
-		delete(pm.processes, name)
+	proc, exists := pm.processes[name]
+	if !exists {
+		return nil, fmt.Errorf("process %s not found", name)
 	}
 
-	// Verify the process exists and is running
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("failed to find process %d: %w", pid, err)
-	}
-
-	// Check if process is actually running
-	if err := process.Signal(syscall.Signal(0)); err != nil {
-		return fmt.Errorf("process %d is not running: %w", pid, err)
-	}
-
-	// Create a dummy exec.Cmd to represent the existing process
-	// We can't get the original command, but we can still manage the process
-	cmd := &exec.Cmd{
-		Process: process,
-	}
-
-	// Use existing log file if it exists, otherwise create new one
-	logFile := filepath.Join(pm.logsDir, fmt.Sprintf("%s.log", name))
-	if _, err := os.Stat(logFile); os.IsNotExist(err) {
-		// Create log file if it doesn't exist
-		logF, err := os.Create(logFile)
-		if err != nil {
-			return fmt.Errorf("failed to create log file: %w", err)
-		}
-		logF.Close()
-	}
-
-	// Store process info
-	procInfo := &ProcessInfo{
-		Name:      name,
-		Cmd:       cmd,
-		LogFile:   logFile,
-		StartTime: startTime,
-		Status:    "running",
-		PID:       pid, // Store PID explicitly for attached processes
-	}
-	pm.processes[name] = procInfo
-
-	// Start goroutine to monitor process
-	go pm.monitorProcess(name, cmd, nil)
-
-	utils.LogDebug(fmt.Sprintf("Attached to existing %s process (PID: %d)\n", name, pid))
-
-	return nil
+	return proc, nil
 }
 
 func (pm *ProcessManager) ReadPIDFile(serviceName string) (int, bool) {
@@ -423,4 +372,44 @@ func (pm *ProcessManager) ReadPIDFile(serviceName string) (int, bool) {
 	}
 
 	return pid, true
+}
+
+// findProcess looks for a process by name, checking both in-memory tracking and PID files.
+// It returns the ProcessInfo and a boolean indicating if the process was found.
+// For PID file-based processes, it verifies the process is actually running before returning.
+func (pm *ProcessManager) findProcess(name string) (*ProcessInfo, bool) {
+	// First check in-memory tracking
+	if proc, exists := pm.processes[name]; exists {
+		return proc, true
+	}
+
+	// Check for PID file
+	pid, found := pm.ReadPIDFile(name)
+	if !found {
+		return nil, false
+	}
+
+	// Try to find the process by PID
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return nil, false
+	}
+
+	// Verify the process is actually running
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		return nil, false
+	}
+
+	// Infer the log file path
+	logFile := filepath.Join(pm.logsDir, fmt.Sprintf("%s.log", name))
+
+	// Return a temporary ProcessInfo for this PID
+	// Note: This is not added to pm.processes
+	return &ProcessInfo{
+		Name:    name,
+		Cmd:     &exec.Cmd{Process: process},
+		PID:     pid,
+		Status:  "running",
+		LogFile: logFile,
+	}, true
 }
