@@ -1,6 +1,6 @@
 {
   "installation": {
-    "version": "21.3.11",
+    "version": "22.0.2",
     "plugins": {
       "@nx/eslint": "22.0.2",
       "@nx/vite": "22.0.2",
