@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
@@ -36,6 +36,8 @@ import {
   useDatabaseManager,
   type Database as DatabaseType,
 } from '../../hooks/useDatabaseManager'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 
 type Database = {
   name: string
@@ -122,6 +124,23 @@ function Databases() {
     } catch {
       return 'main_database'
     }
+  })
+
+  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const getDatabaseLocation = useCallback(() => {
+    if (activeDatabase) {
+      return {
+        type: 'rag.database' as const,
+        databaseName: activeDatabase,
+      }
+    }
+    return { type: 'rag.databases' as const }
+  }, [activeDatabase])
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getDatabaseLocation,
   })
 
   // Persist active database selection
@@ -691,9 +710,7 @@ function Databases() {
 
   return (
     <>
-      <div
-        className={`w-full h-full flex flex-col ${mode === 'designer' ? 'gap-4 pb-32' : ''}`}
-      >
+      <div className="w-full h-full flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl">
@@ -719,7 +736,7 @@ function Databases() {
               </TooltipProvider>
             )}
           </div>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
         {mode === 'designer' && databases.length > 0 && (
           <div className="mb-2 border-b border-border">
@@ -756,10 +773,13 @@ function Databases() {
         )}
         {mode !== 'designer' ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-6">
-            <ConfigEditor className="h-full" />
+            <ConfigEditor
+              className="h-full"
+              initialPointer={configPointer}
+            />
           </div>
         ) : (
-          <>
+          <div className="flex-1 min-h-0 overflow-auto pb-20">
             {/* Database name header */}
             <div className="flex items-center gap-2 mb-4 mt-2">
               <div className="text-xl font-semibold">{activeDatabase}</div>
@@ -1192,10 +1212,9 @@ function Databases() {
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
 
-        <div className="h-24 shrink-0" aria-hidden />
       </div>
 
       {/* Re-embed confirmation modal (after setting default embedding) */}
