@@ -376,7 +376,7 @@ function Header({ currentVersion }: HeaderProps) {
               onClick={() => emitSetMobileView('chat')}
               aria-pressed={mobileView === 'chat'}
             >
-              Chat
+              Build chat
             </Button>
             <Button
               variant={mobileView === 'project' ? 'secondary' : 'ghost'}

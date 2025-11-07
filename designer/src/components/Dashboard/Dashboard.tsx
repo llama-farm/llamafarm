@@ -100,6 +100,26 @@ const Dashboard = () => {
       window.removeEventListener('lf-active-project', handler as EventListener)
   }, [])
 
+  // Listen for project deletions and redirect to home if current project was deleted
+  useEffect(() => {
+    const handleProjectDeleted = (event: Event) => {
+      const deletedProjectName = (event as CustomEvent<string>).detail
+      if (deletedProjectName === projectName) {
+        // Current project was deleted, redirect to home
+        navigate('/')
+      }
+    }
+    window.addEventListener(
+      'lf-project-deleted',
+      handleProjectDeleted as EventListener
+    )
+    return () =>
+      window.removeEventListener(
+        'lf-project-deleted',
+        handleProjectDeleted as EventListener
+      )
+  }, [projectName, navigate])
+
   // Get default model name from config
   const defaultModelName = useMemo(() => {
     const config = projectDetail?.project?.config

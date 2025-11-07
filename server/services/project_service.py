@@ -1,8 +1,16 @@
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Union
 
+from config import (  # noqa: E402
+    ConfigError,
+    generate_base_config,
+    load_config,
+    load_config_dict,
+    save_config,
+)
+from config.datamodel import LlamaFarmConfig  # noqa: E402
 from pydantic import BaseModel, ValidationError
 
 from api.errors import (
@@ -15,15 +23,6 @@ from api.errors import (
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-from config import (  # noqa: E402
-    ConfigError,
-    generate_base_config,
-    load_config,
-    load_config_dict,
-    save_config,
-)
-from config.datamodel import LlamaFarmConfig  # noqa: E402
-
 logger = FastAPIStructLogger()
 
 RESERVED_NAMESPACES = ["llamafarm"]
@@ -32,7 +31,7 @@ RESERVED_NAMESPACES = ["llamafarm"]
 class Project(BaseModel):
     namespace: str
     name: str
-    config: Union[LlamaFarmConfig, dict]
+    config: LlamaFarmConfig | dict
     validation_error: str | None = None
     last_modified: datetime | None = None
 
@@ -505,3 +504,107 @@ class ProjectService:
         cfg_model = LlamaFarmConfig(**config_dict)
 
         return cls.save_config(namespace, project_id, cfg_model)
+
+    @classmethod
+    def delete_project(cls, namespace: str, project_id: str) -> Project:
+        """
+        Delete a project and all its associated resources.
+
+        This removes the entire project directory including:
+        - Configuration files (llamafarm.yaml)
+        - All datasets and data files
+        - Vector stores (Chroma DBs, etc.)
+        - Chat sessions
+        - All other project-specific data
+
+        Args:
+            namespace: The namespace of the project
+            project_id: The ID of the project to delete
+
+        Returns:
+            Project: The deleted project information
+
+        Raises:
+            ProjectNotFoundError: If the project doesn't exist
+            PermissionError: If there are permission issues deleting the directory
+            OSError: If there are filesystem errors during deletion
+        """
+        # Step 1: Validate project exists and get its configuration
+        logger.info(
+            "Starting project deletion",
+            namespace=namespace,
+            project_id=project_id,
+        )
+
+        # This will raise ProjectNotFoundError if project doesn't exist
+        # Use get_project_safe to allow deleting projects with invalid configs
+        safe_project = cls.get_project_safe(namespace, project_id)
+
+        # Step 2: Store project info for response (before deletion)
+        # Create a copy to return after deletion
+        # Use validated config if available, otherwise use raw dict
+        project_copy = Project(
+            namespace=safe_project.namespace,
+            name=safe_project.name,
+            config=safe_project.config if safe_project.config is not None else safe_project.config_dict,
+            validation_error=safe_project.validation_error,
+            last_modified=safe_project.last_modified,
+        )
+
+        # Step 3: Delete the entire project directory
+        project_path = Path(cls.get_project_dir(namespace, project_id))
+
+        if project_path.exists():
+            try:
+                # Use shutil.rmtree to recursively delete the entire directory
+                shutil.rmtree(project_path, ignore_errors=False)
+
+                logger.info(
+                    "Successfully deleted project directory",
+                    namespace=namespace,
+                    project_id=project_id,
+                    project_dir=str(project_path),
+                )
+
+            except PermissionError as e:
+                logger.error(
+                    "Permission denied when deleting project directory",
+                    namespace=namespace,
+                    project_id=project_id,
+                    project_dir=str(project_path),
+                    error=str(e),
+                )
+                raise PermissionError(
+                    f"Permission denied when deleting project "
+                    f"{namespace}/{project_id}: {str(e)}"
+                ) from e
+
+            except OSError as e:
+                logger.error(
+                    "Filesystem error when deleting project directory",
+                    namespace=namespace,
+                    project_id=project_id,
+                    project_dir=str(project_path),
+                    error=str(e),
+                )
+                raise OSError(
+                    f"Failed to delete project directory "
+                    f"{namespace}/{project_id}: {str(e)}"
+                ) from e
+        else:
+            # Log warning but don't fail - project exists in config but dir is gone
+            logger.warning(
+                "Project directory does not exist",
+                namespace=namespace,
+                project_id=project_id,
+                project_dir=str(project_path),
+            )
+
+        # Step 4: Return deleted project info
+        logger.info(
+            "Project deletion completed successfully",
+            namespace=namespace,
+            project_id=project_id,
+        )
+
+        return project_copy

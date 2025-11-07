@@ -1,20 +1,14 @@
-import time
-import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
-
 from config.datamodel import LlamaFarmConfig  # noqa: E402
-from openai.types.chat import ChatCompletion, ChatCompletionMessage
-from openai.types.chat.chat_completion import Choice
 
-from agents.chat_orchestrator import ChatOrchestratorAgent
 from agents.base.agent import LFAgent
+from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
 from agents.base.history import (
-    LFChatCompletionMessageParam,
     LFChatCompletionUserMessageParam,
 )
+from agents.chat_orchestrator import ChatOrchestratorAgent
 from context_providers.rag_context_provider import (
     ChunkItem,
     RAGContextProvider,
@@ -86,6 +80,7 @@ class ProjectChatService:
         )
 
         user_input = LFChatCompletionUserMessageParam(role="user", content=message)
+
         return await chat_agent.run_async(user_input=user_input)
 
     async def stream_chat(
@@ -358,7 +353,7 @@ class ProjectChatService:
 
     def _clear_rag_context_provider(self, chat_agent: LFAgent) -> None:
         try:
-            chat_agent.remove_context_provider("project_chat_context")
+            chat_agent.remove_context_provider("rag_context")
         except Exception:
             logger.warning("Failed to clear RAG context provider", exc_info=True)
 
@@ -376,7 +371,7 @@ class ProjectChatService:
     ) -> None:
         self._clear_rag_context_provider(chat_agent)
         context_provider = RAGContextProvider(title="Project Chat Context")
-        chat_agent.register_context_provider("project_chat_context", context_provider)
+        chat_agent.register_context_provider("rag_context", context_provider)
 
         # Resolve RAG parameters using shared helper
         rag_params = self._resolve_rag_parameters(

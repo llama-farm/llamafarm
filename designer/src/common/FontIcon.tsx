@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback } from 'react'
 const Add = lazy(() => import('../assets/icons/Add'))
 const ArrowFilled = lazy(() => import('../assets/icons/ArrowFilled'))
 const ArrowRight = lazy(() => import('../assets/icons/ArrowRight'))
+const BuildAssistant = lazy(() => import('../assets/icons/BuildAssistant'))
 const ChevronDown = lazy(() => import('../assets/icons/ChevronDown'))
 const CheckmarkFilled = lazy(() => import('../assets/icons/CheckmarkFilled'))
 const CheckmarkOutline = lazy(() => import('../assets/icons/CheckmarkOutline'))
@@ -42,6 +43,7 @@ type FontIconTypes =
   | 'alert-triangle'
   | 'arrow-filled'
   | 'arrow-right'
+  | 'build-assistant'
   | 'chevron-down'
   | 'chevron-up'
   | 'checkmark-filled'
@@ -104,10 +106,16 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <ArrowFilled />
       case 'arrow-right':
         return <ArrowRight />
+      case 'build-assistant':
+        return <BuildAssistant />
       case 'chevron-down':
         return <ChevronDown />
       case 'chevron-up':
-        return <div style={{ transform: 'rotate(180deg)' }}><ChevronDown /></div> // Rotate chevron-down for chevron-up
+        return (
+          <div style={{ transform: 'rotate(180deg)' }}>
+            <ChevronDown />
+          </div>
+        ) // Rotate chevron-down for chevron-up
       case 'checkmark-filled':
         return <CheckmarkFilled />
       case 'checkmark-outline':

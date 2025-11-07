@@ -9,8 +9,7 @@ runtime:
     - name: default
       description: "Default Universal model for LlamaFarm"
       provider: universal
-      model: google/gemma-3-1b-it
-      prompt_format: unstructured
+      model: Qwen/Qwen3-1.7B
 
 prompts:
   - name: default
@@ -63,3 +62,7 @@ mcp:
     - name: llamafarm-server
       transport: http
       base_url: http://localhost:8000/mcp
+    - name: hackernews
+      transport: stdio
+      command: uvx
+      args: [mcp-hn]

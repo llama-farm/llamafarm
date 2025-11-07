@@ -6,42 +6,36 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from atomic_agents import BaseTool
-from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from services.prompt_service import PromptService  # type: ignore
 from config.datamodel import LlamaFarmConfig, Provider
 from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
-from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk, ChoiceDelta
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+from openai.types.chat.chat_completion_chunk import ChoiceDelta
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from openai.types.chat.chat_completion_message_tool_call_param import (
     Function,
 )
 
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
-from agents.base.clients.openai import LFAgentClientOpenAI
 from agents.base.history import (
     LFAgentHistory,
     LFChatCompletionAssistantMessageParam,
     LFChatCompletionMessageParam,
     LFChatCompletionToolMessageParam,
-    LFChatCompletionUserMessageParam,
 )
 from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.base.types import ToolDefinition
+from context_providers.project_context_provider import ProjectContextProvider
 from core.logging import FastAPIStructLogger
 from core.mcp_registry import register_mcp_service
 from services.mcp_service import MCPService
 from services.model_service import ModelService
+from services.prompt_service import PromptService  # type: ignore
 from services.runtime_service.runtime_service import RuntimeService
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
 logger = FastAPIStructLogger(__name__)
-
-CLIENT_CLASSES = {
-    Provider.openai: LFAgentClientOpenAI,
-    Provider.ollama: LFAgentClientOpenAI,
-    Provider.lemonade: LFAgentClientOpenAI,
-}
 
 # Constants for orchestration loop
 MAX_TOOL_ITERATIONS = 10
@@ -381,11 +375,21 @@ class ChatOrchestratorAgent(LFAgent):
         except Exception:
             logger.warning("Failed to enable persistence", exc_info=True)
 
+    async def setup_tools(self):
+        """
+        Setup tools that the agent can use.
+
+        For now, this only pertains to tools associated with MCP servers.
+        In the future, we may support custom tool definitions through the
+        project config.
+        """
+        await self.enable_mcp()
+
     async def enable_mcp(self):
         """Enable MCP tool calling support."""
         if self._mcp_enabled:
             return
-        self._mcp_service = MCPService(self._project_config)
+        self._mcp_service = MCPService(self._project_config, self.model_name)
         self._mcp_tool_factory = MCPToolFactory(self._mcp_service)
         # Register for cleanup on shutdown
         register_mcp_service(self._mcp_service)
@@ -574,7 +578,14 @@ class ChatOrchestratorAgentFactory:
         if session_id:
             agent.enable_persistence(session_id=session_id)
 
-        if project_config.mcp and project_config.mcp.servers:
-            await agent.enable_mcp()
+        project_context_provider = ProjectContextProvider(
+            title="Project Context",
+            namespace=project_config.namespace,
+            name=project_config.name,
+        )
+        agent.register_context_provider("project_context", project_context_provider)
+
+        await agent.setup_tools()
+
 
         return agent

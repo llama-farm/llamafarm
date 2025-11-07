@@ -20,6 +20,9 @@ dependencies = [
   "structlog>=24.0.0",
 ]
 
+[dependency-groups]
+dev = ["ruff>=0.14.3"]
+
 [project.optional-dependencies]
 xformers = ["xformers>=0.0.22"]
 
@@ -43,3 +46,10 @@ dev-dependencies = [
 
 [tool.uv.sources]
 llamafarm-common = { path = "../../common", editable = true }
+
+# Ruff configuration is shared across all Python components
+# See ../../ruff.toml for the actual configuration
+
+[tool.ruff]
+# Import shared configuration
+extend = "../../ruff.toml"
