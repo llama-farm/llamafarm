@@ -288,7 +288,7 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
             return []
 
         try:
-            result = self.table_engine(image_path)
+            result = self.table_engine.predict(image_path)
             tables = []
 
             for region in result:
