@@ -30,16 +30,23 @@ def yaml_json_loader(uri: str):
     return json.loads(text)
 
 
-def jsonref_to_dict(obj):
+def jsonref_to_dict(obj, is_root=False):
     """Recursively convert jsonref proxy objects to plain Python dicts/lists."""
     if isinstance(obj, dict):
         # Check if this is a jsonref proxy object
         if hasattr(obj, "__subject__"):
             # It's a jsonref proxy, get the underlying dict
             obj = dict(obj)
-        return {k: jsonref_to_dict(v) for k, v in obj.items()}
+
+        # Strip schema metadata fields when nested (not at root level)
+        # These fields should only exist at the root of the schema
+        if not is_root:
+            schema_metadata_fields = {"$schema", "$id"}
+            obj = {k: v for k, v in obj.items() if k not in schema_metadata_fields}
+
+        return {k: jsonref_to_dict(v, is_root=False) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [jsonref_to_dict(item) for item in obj]
+        return [jsonref_to_dict(item, is_root=False) for item in obj]
     else:
         return obj
 
@@ -57,7 +64,7 @@ def load_and_deref_schema(path: Path):
         loader=yaml_json_loader,
     )
 
-    return jsonref_to_dict(deref)
+    return jsonref_to_dict(deref, is_root=True)
 
 
 def get_dereferenced_schema() -> dict:
@@ -88,9 +95,17 @@ if __name__ == "__main__":
         # Copy the dereferenced schema to cli/cmd/config directory
         dest_dir = Path(__file__).parent.parent / "cli" / "cmd" / "config"
         dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_file = dest_dir / "schema.yaml"
-        dest_file.write_text(compiled, encoding="utf-8")
-        print(f"Schema also copied to {dest_file}")
+        dest_file = dest_dir / "schema.json"
+
+        # Add $id to the schema for go-jsonschema if not present
+        if "$id" not in deref:
+            deref["$id"] = "https://llamafarm.dev/schema.json"
+
+        # Write the schema with $id to CLI config directory
+        # Write schema as JSON to CLI config directory (schema.json)
+        with dest_file.open("w", encoding="utf-8") as json_out:
+            json.dump(deref, json_out, indent=2, ensure_ascii=False)
+        print(f"Schema also written in JSON format to {dest_file}")
 
     except Exception as e:
         print(f"Error during schema compilation: {e}")

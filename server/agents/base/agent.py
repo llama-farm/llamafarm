@@ -2,12 +2,20 @@ from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agents.base.clients.client import LFAgentClient
-from agents.base.types import StreamEvent, ToolDefinition
+from agents.base.clients.client import (
+    LFAgentClient,
+    LFChatCompletion,
+    LFChatCompletionChunk,
+)
+from agents.base.types import ToolDefinition
 from core.logging import FastAPIStructLogger
 
 from .context_provider import LFAgentContextProvider
-from .history import LFAgentChatMessage, LFAgentHistory
+from .history import (
+    LFAgentHistory,
+    LFChatCompletionMessageParam,
+    LFChatCompletionSystemMessageParam,
+)
 from .system_prompt_generator import LFAgentSystemPromptGenerator
 
 logger = FastAPIStructLogger(__name__)
@@ -35,58 +43,27 @@ class LFAgent:
     async def run_async(
         self,
         *,
-        user_input: LFAgentChatMessage | None = None,
-    ) -> str:
+        user_input: LFChatCompletionMessageParam | None = None,
+        tools: list[ToolDefinition] | None = None,
+    ) -> LFChatCompletion:
         if user_input:
             self.history.add_message(user_input)
 
         messages = self._prepare_messages()
-        return await self._client.chat(messages=messages)  # type: ignore[attr-defined]
+        return await self._client.chat(messages=messages, tools=tools)
 
     async def run_async_stream(
         self,
         *,
-        user_input: LFAgentChatMessage | None = None,
-    ) -> AsyncGenerator[str, None]:
+        user_input: LFChatCompletionMessageParam | None = None,
+        tools: list[ToolDefinition] | None = None,
+    ) -> AsyncGenerator[LFChatCompletionChunk]:
         if user_input:
             self.history.add_message(user_input)
         messages = self._prepare_messages()
 
-        async for chunk in self._client.stream_chat(  # type: ignore[attr-defined]
-            messages=messages
-        ):
+        async for chunk in self._client.stream_chat(messages=messages, tools=tools):
             yield chunk
-
-    async def stream_chat_with_tools(
-        self,
-        *,
-        user_input: LFAgentChatMessage | None = None,
-        tools: list[ToolDefinition],
-    ) -> AsyncGenerator[StreamEvent, None]:
-        """Stream chat with tool calling support.
-
-        This method is provider-agnostic. The client handles:
-        - How tools are injected (API param vs system prompt)
-        - How tool calls are detected (native vs JSON)
-
-        Args:
-            user_input: Optional user message to add to history
-            tools: Available tools for the LLM to use
-
-        Yields:
-            StreamEvent: Content chunks or tool call requests
-        """
-        if user_input:
-            self.history.add_message(user_input)
-
-        # Prepare messages (system prompt + history)
-        messages = self._prepare_messages()
-
-        # Delegate to client - it handles provider-specific logic
-        async for event in self._client.stream_chat_with_tools(
-            messages=messages, tools=tools
-        ):
-            yield event
 
     def register_context_provider(
         self, title: str, context_provider: LFAgentContextProvider
@@ -105,15 +82,15 @@ class LFAgent:
         """Reset the agent's conversation history."""
         self.history.history.clear()
 
-    def _prepare_messages(self) -> list[LFAgentChatMessage]:
-        messages: list[LFAgentChatMessage] = []
+    def _prepare_messages(self) -> list[LFChatCompletionMessageParam]:
+        messages: list[LFChatCompletionMessageParam] = []
         system_prompt = self._system_prompt_generator.generate_prompt()
         if system_prompt:
-            messages.append(LFAgentChatMessage(role="system", content=system_prompt))
+            messages.append(
+                LFChatCompletionSystemMessageParam(role="system", content=system_prompt)
+            )
 
         for message in self.history.history:
-            messages.append(
-                LFAgentChatMessage(role=message.role, content=message.content)
-            )
+            messages.append(message)
 
         return messages

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type NativeOrchestrator struct {
 	sourceMgr    *SourceManager
 	processMgr   *ProcessManager
 	initialized  bool
+	initMu       sync.Mutex // protects initialized flag
 	serverURL    string
 }
 
@@ -54,6 +56,9 @@ func NewNativeOrchestrator(serverURL string) (*NativeOrchestrator, error) {
 
 // EnsureNativeEnvironment ensures the native environment is set up
 func (no *NativeOrchestrator) EnsureNativeEnvironment() error {
+	no.initMu.Lock()
+	defer no.initMu.Unlock()
+
 	if no.initialized {
 		return nil
 	}
@@ -93,6 +98,15 @@ func (no *NativeOrchestrator) StartServerNative() error {
 			logDebug("Server process already running")
 		}
 		return nil
+	}
+
+	// Verify designer build exists before starting server
+	if err := no.sourceMgr.VerifyDesignerBuild(); err != nil {
+		if debug {
+			logDebug(fmt.Sprintf("Designer build not found: %v", err))
+		}
+		// Don't fail server startup if designer is missing - server can run without it
+		// Designer will show as degraded in health check
 	}
 
 	OutputProgress("Starting server via native process...\n")
@@ -152,6 +166,11 @@ func (no *NativeOrchestrator) StartRAGNative() error {
 
 	// Wait a moment for RAG to start
 	time.Sleep(2 * time.Second)
+
+	// Verify the process is still running (catches immediate failures)
+	if !no.processMgr.IsProcessHealthy("rag") {
+		return fmt.Errorf("RAG process failed to start or crashed during startup - check logs at %s", filepath.Join(ragDir, "logs"))
+	}
 
 	return nil
 }
@@ -298,11 +317,20 @@ func (no *NativeOrchestrator) getUniversalRuntimeEnv() []string {
 	if val := os.Getenv("TRANSFORMERS_FORCE_CPU"); val != "" {
 		env = append(env, fmt.Sprintf("TRANSFORMERS_FORCE_CPU=%s", val))
 	}
+	// Pass through MPS memory limit configuration
+	if val := os.Getenv("PYTORCH_MPS_HIGH_WATERMARK_RATIO"); val != "" {
+		env = append(env, fmt.Sprintf("PYTORCH_MPS_HIGH_WATERMARK_RATIO=%s", val))
+	}
 
 	// Pass through HuggingFace token if set
 	if val := os.Getenv("HF_TOKEN"); val != "" {
 		env = append(env, fmt.Sprintf("HF_TOKEN=%s", val))
 	}
+
+	// Set up file logging for the universal runtime
+	logsDir := filepath.Join(llamafarmDir, "logs")
+	universalLogFile := filepath.Join(logsDir, "universal-runtime.log")
+	env = append(env, fmt.Sprintf("LOG_FILE=%s", universalLogFile))
 
 	// Add any other environment variables from current environment
 	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR"} {

@@ -1,16 +1,56 @@
 import json
+import re
+import uuid
 from collections.abc import AsyncGenerator
+from typing import Literal, cast
 
-from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletionMessageParam
+from config.datamodel import ToolCallStrategy
+from openai import NOT_GIVEN, AsyncOpenAI
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionMessage,
+    ChatCompletionToolParam,
+)
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import (
+    ChatCompletionChunk,
+    ChoiceDelta,
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
+)
+from openai.types.chat.chat_completion_chunk import (
+    Choice as ChoiceChunk,
+)
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+    Function,
+)
 
-from agents.base.history import LFAgentChatMessage
-from agents.base.types import StreamEvent, ToolCallRequest, ToolDefinition
+from agents.base.history import LFChatCompletionMessageParam
+from agents.base.types import ToolDefinition
 from core.logging import FastAPIStructLogger
 
-from .client import LFAgentClient
+from .client import (
+    LFAgentClient,
+    LFChatCompletion,
+    LFChatCompletionChunk,
+)
 
 logger = FastAPIStructLogger(__name__)
+
+TOOLS_SYSTEM_MESSAGE_PREFIX = """
+
+You may call one or more tools to assist with the user query.
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+"""
+
+TOOLS_SYSTEM_MESSAGE_SUFFIX = """
+</tools>
+For each tool call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call>.
+If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.
+"""
 
 
 class LFAgentClientOpenAI(LFAgentClient):
@@ -22,28 +62,59 @@ class LFAgentClientOpenAI(LFAgentClient):
     3. Streams both content and tool calls as StreamEvents
     """
 
-    async def chat(self, *, messages: list[LFAgentChatMessage]) -> str:
-        """Simple chat without tool calling support."""
-        content = ""
-        async for event in self.stream_chat_with_tools(messages=messages, tools=[]):
-            if event.is_content():
-                content += event.content or ""
-        return content
-
-    async def stream_chat(
-        self, *, messages: list[LFAgentChatMessage]
-    ) -> AsyncGenerator[str, None]:
-        """Stream chat without tool calling support."""
-        async for event in self.stream_chat_with_tools(messages=messages, tools=[]):
-            if event.is_content() and event.content:
-                yield event.content
-
-    async def stream_chat_with_tools(
+    async def chat(
         self,
         *,
-        messages: list[LFAgentChatMessage],
-        tools: list[ToolDefinition],
-    ) -> AsyncGenerator[StreamEvent, None]:
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
+    ) -> LFChatCompletion:
+        """Chat with tool calling support."""
+        client = AsyncOpenAI(
+            api_key=self._model_config.api_key or "",
+            base_url=self._model_config.base_url or "",
+        )
+
+        # Convert tools to OpenAI format
+        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+            openai_tools = (
+                [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
+            )
+        else:
+            openai_tools = NOT_GIVEN
+            self._update_system_message_with_tools(messages, tools)
+
+        # Create non-streaming request
+        stream_param: Literal[False] = False
+        # Filter out None values from messages to avoid OpenAI validation errors
+        cleaned_messages = [
+            cast(
+                LFChatCompletionMessageParam,
+                {k: v for k, v in msg.items() if v is not None},
+            )
+            for msg in messages
+        ]
+        completion = await client.chat.completions.create(
+            messages=cleaned_messages,
+            model=self._model_config.model,
+            tools=openai_tools,
+            **(self._model_config.model_api_parameters or {}),
+            stream=stream_param,
+        )
+
+        if (
+            self._model_config.tool_call_strategy == ToolCallStrategy.prompt_based
+            and self._contains_tool_call(completion)
+        ):
+            return self._create_synthetic_tool_call(completion)
+
+        return completion
+
+    async def stream_chat(
+        self,
+        *,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
+    ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with native OpenAI function calling."""
 
         client = AsyncOpenAI(
@@ -52,102 +123,219 @@ class LFAgentClientOpenAI(LFAgentClient):
         )
 
         # Convert tools to OpenAI format
-        openai_tools = (
-            [self._tool_to_openai_format(t) for t in tools] if tools else None
+        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+            openai_tools = (
+                [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
+            )
+        else:
+            openai_tools = NOT_GIVEN
+            self._update_system_message_with_tools(messages, tools)
+
+        stream_param: Literal[True] = True
+        # Filter out None values from messages to avoid OpenAI validation errors
+        cleaned_messages = [
+            cast(
+                LFChatCompletionMessageParam,
+                {k: v for k, v in msg.items() if v is not None},
+            )
+            for msg in messages
+        ]
+        response_stream = await client.chat.completions.create(
+            messages=cleaned_messages,
+            model=self._model_config.model,
+            tools=openai_tools,
+            **(self._model_config.model_api_parameters or {}),
+            stream=stream_param,
         )
 
-        # Create streaming request
-        params = {
-            "model": self._model_config.model,
-            "messages": [self._message_to_openai_message(m) for m in messages],
-            "stream": True,
-            **(self._model_config.model_api_parameters or {}),
-        }
-        if openai_tools:
-            params["tools"] = openai_tools
-            params["tool_choice"] = "auto"
+        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+            async for chunk in response_stream:
+                yield chunk
+            return
 
-        response_stream = await client.chat.completions.create(**params)  # type: ignore
-
-        # Track partial tool calls as they stream in
-        current_tool_calls: dict[int, dict] = {}
+        # For prompt-based strategy, we need to buffer content to detect tool calls
+        accumulated_content = ""
+        last_chunk_metadata = None
 
         async for chunk in response_stream:
-            if not chunk.choices:
+            # For native tool calls, pass through immediately
+            if chunk.choices and chunk.choices[0].delta.tool_calls:
+                yield chunk
                 continue
 
-            choice = chunk.choices[0]
-            delta = choice.delta
+            # Accumulate content
+            delta_content = chunk.choices[0].delta.content if chunk.choices else None
+            if delta_content:
+                last_chunk_metadata = chunk
+                accumulated_content += delta_content
 
-            # Yield content chunks
-            if delta.content:
-                yield StreamEvent(type="content", content=delta.content)
+            # Check if we have a complete tool call pattern
+            tool_call_info = self._detect_tool_call_in_content(accumulated_content)
 
-            # Handle tool call deltas
-            if delta.tool_calls:
-                for tc_delta in delta.tool_calls:
-                    idx = tc_delta.index
+            if tool_call_info and last_chunk_metadata is not None:
+                # We found a complete tool call, create synthetic chunk
+                tool_name, tool_arguments = tool_call_info
+                tool_chunk = self._create_synthetic_tool_call_chunk(
+                    last_chunk_metadata, tool_name, tool_arguments
+                )
+                yield tool_chunk
+                # Don't yield more content chunks after tool call
+                break
+            else:
+                # No complete tool call yet, yield the chunk normally
+                yield chunk
 
-                    # Initialize tool call if new
-                    if idx not in current_tool_calls:
-                        current_tool_calls[idx] = {
-                            "id": tc_delta.id or f"call_{idx}",
-                            "name": "",
-                            "arguments": "",
-                        }
+    def _detect_tool_call_in_content(self, content: str) -> tuple[str, str] | None:
+        """Detect and extract tool call from accumulated content.
 
-                    # Accumulate name
-                    if tc_delta.function and tc_delta.function.name:
-                        current_tool_calls[idx]["name"] = tc_delta.function.name
+        Returns:
+            Tuple of (tool_name, tool_arguments_json) if found, None otherwise.
+        """
+        tool_call_match = re.search(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL)
+        if not tool_call_match:
+            return None
 
-                    # Accumulate arguments
-                    if tc_delta.function and tc_delta.function.arguments:
-                        current_tool_calls[idx]["arguments"] += (
-                            tc_delta.function.arguments
-                        )
+        try:
+            tool_call_json = json.loads(tool_call_match.group(1))
+            tool_call_name = tool_call_json["name"]
+            tool_call_arguments = json.dumps(tool_call_json["arguments"])
+            return (tool_call_name, tool_call_arguments)
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(
+                "Failed to parse tool call from content",
+                error=str(e),
+                content=content[:200],
+            )
+            return None
 
-            # When stream finishes with tool calls, yield them
-            if choice.finish_reason == "tool_calls":
-                for tc_data in current_tool_calls.values():
-                    try:
-                        args = json.loads(tc_data["arguments"])
-                        yield StreamEvent(
-                            type="tool_call",
-                            tool_call=ToolCallRequest(
-                                id=tc_data["id"], name=tc_data["name"], arguments=args
-                            ),
-                        )
-                    except json.JSONDecodeError as e:
-                        logger.error(
-                            "Failed to parse tool call arguments",
-                            arguments=tc_data["arguments"],
-                            error=str(e),
-                        )
+    def _create_synthetic_tool_call_chunk(
+        self,
+        base_chunk: ChatCompletionChunk,
+        tool_name: str,
+        tool_arguments: str,
+    ) -> ChatCompletionChunk:
+        """Create a synthetic tool call chunk from a content chunk.
 
-    def _tool_to_openai_format(self, tool: ToolDefinition) -> dict:
+        Args:
+            base_chunk: The chunk to use for metadata (id, timestamp, etc.)
+            tool_name: Name of the tool being called
+            tool_arguments: JSON string of tool arguments
+
+        Returns:
+            A new ChatCompletionChunk with tool call information
+        """
+        return ChatCompletionChunk(
+            id=base_chunk.id,
+            object="chat.completion.chunk",
+            created=base_chunk.created,
+            model=base_chunk.model,
+            system_fingerprint=base_chunk.system_fingerprint,
+            service_tier=base_chunk.service_tier,
+            choices=[
+                ChoiceChunk(
+                    index=0,
+                    delta=ChoiceDelta(
+                        role="assistant",
+                        tool_calls=[
+                            ChoiceDeltaToolCall(
+                                index=0,
+                                id=f"call_{uuid.uuid4()}",
+                                type="function",
+                                function=ChoiceDeltaToolCallFunction(
+                                    name=tool_name,
+                                    arguments=tool_arguments,
+                                ),
+                            )
+                        ],
+                    ),
+                    finish_reason="tool_calls",
+                ),
+            ],
+            usage=base_chunk.usage,
+        )
+
+    def _update_system_message_with_tools(
+        self,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
+    ):
+        """Update system message to add a special TOOLS section."""
+        if not tools:
+            return
+
+        for msg in messages:
+            msg_content = msg.get("content")
+            if msg.get("role") == "system" and isinstance(msg_content, str):
+                new_content = msg_content + TOOLS_SYSTEM_MESSAGE_PREFIX
+                for tool in tools:
+                    openai_tool = self._tool_to_openai_format(tool)
+                    new_content += f"<tool>{json.dumps(openai_tool)}</tool>\n"
+                new_content += TOOLS_SYSTEM_MESSAGE_SUFFIX
+                msg.update({"content": new_content})
+                break
+
+    def _contains_tool_call(self, completion: ChatCompletion) -> bool:
+        """Check if the completion contains a tool call."""
+        if completion.choices[0].message.tool_calls:
+            return True
+
+        content = completion.choices[0].message.content
+        return (
+            re.search(r"<tool_call>.*?</tool_call>", str(content), re.DOTALL)
+            is not None
+        )
+
+    def _create_synthetic_tool_call(self, completion: ChatCompletion) -> ChatCompletion:
+        if completion.choices[0].message.tool_calls:
+            return completion
+
+        """Create a completion with a tool call."""
+        tool_call = re.search(
+            r"<tool_call>(.*?)</tool_call>",
+            str(completion.choices[0].message.content),
+            re.DOTALL,
+        )
+        if not tool_call:
+            return completion
+
+        tool_call_json = json.loads(tool_call.group(1))
+        tool_call_name = tool_call_json["name"]
+        tool_call_arguments = json.dumps(tool_call_json["arguments"])
+
+        return ChatCompletion(
+            id=completion.id,
+            object="chat.completion",
+            created=completion.created,
+            model=completion.model,
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        tool_calls=[
+                            ChatCompletionMessageFunctionToolCall(
+                                type="function",
+                                id=f"call_{uuid.uuid4()}",
+                                function=Function(
+                                    name=tool_call_name,
+                                    arguments=tool_call_arguments,
+                                ),
+                            )
+                        ],
+                    ),
+                    finish_reason="tool_calls",
+                ),
+            ],
+            usage=completion.usage,
+        )
+
+    def _tool_to_openai_format(self, tool: ToolDefinition) -> ChatCompletionToolParam:
         """Convert ToolDefinition to OpenAI function calling format."""
-        return {
-            "type": "function",
-            "function": {
+        return ChatCompletionToolParam(
+            type="function",
+            function={
                 "name": tool.name,
                 "description": tool.description,
                 "parameters": tool.parameters,
             },
-        }
-
-    def _message_to_openai_message(
-        self, message: LFAgentChatMessage
-    ) -> ChatCompletionMessageParam:
-        """Convert LFAgentChatMessage to OpenAI format."""
-        match message.role:
-            case "system":
-                return {"role": "system", "content": message.content}
-            case "user":
-                return {"role": "user", "content": message.content}
-            case "assistant":
-                return {"role": "assistant", "content": message.content}
-            case "tool":
-                # For tool results, format as user message with result
-                return {"role": "user", "content": message.content}
-            case _:
-                raise ValueError(f"Unknown message role: {message.role}")
+        )

@@ -1,6 +1,6 @@
 # LlamaFarm CLI (lf)
 
-Go-based CLI for creating projects, managing datasets, and chatting with your runtime.
+Go-based CLI for creating projects, managing datasets, and chatting with your runtime. The CLI also launches the Designer web UI for users who prefer a visual interface.
 
 ## Install
 The recommended install flow is the top-level script:
@@ -56,13 +56,15 @@ See the [CLI reference](../docs/website/docs/cli/index.md) for an exhaustive lis
 
 ```bash
 lf init my-project
-lf start
+lf start                                              # Starts server, RAG worker, and Designer web UI
 lf datasets create -s pdf_ingest -b main_db research
 lf datasets upload research ./docs/*.pdf
 lf datasets process research
 lf rag query --database main_db "summarize"
 lf chat "hello"
 ```
+
+**Designer Web UI**: When you run `lf start`, the Designer is automatically launched at `http://localhost:7724`. This provides a visual interface for managing projects, uploading datasets via drag-and-drop, and testing your AI—all without additional commands. See the [Designer documentation](../docs/website/docs/designer/index.md) for details.
 
 ### Running Backend Services Manually
 When developing locally without Docker orchestration, start the server and RAG worker via Nx from the repository root:
@@ -89,7 +91,34 @@ Then run the CLI (installed binary or `go run main.go ...`) in another terminal.
 go test ./...
 ```
 
+## Environment Variables
+
+### `LF_VERSION_REF`
+Override the git ref (branch, tag, or commit SHA) used to download Python source code from the repository. Useful for CI/CD testing or development against specific branches.
+
+```bash
+# Test with a feature branch
+LF_VERSION_REF=feat-new-feature lf start
+
+# Test with a specific version tag
+LF_VERSION_REF=v1.2.3 lf start
+
+# Test with a specific commit
+LF_VERSION_REF=abc123def456... lf start
+```
+
+**Default behavior:**
+- Release builds (e.g., `v1.2.3`) download matching source code tags
+- Dev builds automatically use the `main` branch
+- Source code is cached in `~/.llamafarm/src` and only re-downloaded when versions change
+
+### Other Environment Variables
+- `LLAMAFARM_SESSION_ID` – reuse a session for `lf chat`
+- `OLLAMA_HOST` – point to a different Ollama endpoint (default: `http://localhost:11434`)
+- `LF_DATA_DIR` – override the data directory (default: `~/.llamafarm`)
+
 ## Development Notes
 - Commands live under `cmd/` as Cobra subcommands.
 - Shared helpers (HTTP clients, config resolution) live in `cmd/*` modules.
 - Regenerate Go config types after schema updates via `config/generate-types.sh`.
+- The CLI's `Version` variable is set via `-ldflags` during build: `-X 'llamafarm-cli/cmd.Version=v1.2.3'`

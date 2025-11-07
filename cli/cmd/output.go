@@ -28,6 +28,7 @@ type OutputMessage struct {
 	Type    MessageType
 	Content string
 	Writer  io.Writer // fallback writer when not in TUI mode
+	NoEmoji bool      // if true, don't add emoji prefix
 }
 
 // TUIMessageMsg is a Bubble Tea message for routing output to the TUI
@@ -43,6 +44,7 @@ type OutputManager struct {
 	messageQueue        []OutputMessage
 	lastProgressMessage string
 	progressMessageSent bool
+	disableEmojis       bool // global flag to disable emojis
 }
 
 var outputManager = &OutputManager{}
@@ -63,6 +65,20 @@ func SetTUIMode(program *tea.Program) {
 	outputManager.messageQueue = nil
 }
 
+// SetEmojiEnabled controls whether emojis are added to output messages globally
+func SetEmojiEnabled(enabled bool) {
+	outputManager.mu.Lock()
+	defer outputManager.mu.Unlock()
+	outputManager.disableEmojis = !enabled
+}
+
+// EmojiEnabled returns whether emojis are currently enabled
+func EmojiEnabled() bool {
+	outputManager.mu.RLock()
+	defer outputManager.mu.RUnlock()
+	return !outputManager.disableEmojis
+}
+
 // ClearTUIMode disables TUI mode
 func ClearTUIMode() {
 	outputManager.mu.Lock()
@@ -74,12 +90,22 @@ func ClearTUIMode() {
 
 // sendMessage routes a message to the appropriate output destination
 func sendMessage(msgType MessageType, format string, args ...interface{}) {
+	sendMessageWithOptions(msgType, false, format, args...)
+}
+
+// sendMessageWithOptions routes a message with optional emoji control
+func sendMessageWithOptions(msgType MessageType, noEmoji bool, format string, args ...interface{}) {
 	content := fmt.Sprintf(format, args...)
+
+	outputManager.mu.RLock()
+	disableEmojis := outputManager.disableEmojis
+	outputManager.mu.RUnlock()
 
 	msg := OutputMessage{
 		Type:    msgType,
 		Content: content,
 		Writer:  getDefaultWriter(msgType),
+		NoEmoji: noEmoji || disableEmojis,
 	}
 
 	outputManager.mu.RLock()
@@ -116,6 +142,11 @@ func getDefaultWriter(msgType MessageType) io.Writer {
 // OutputInfo sends an informational message
 func OutputInfo(format string, args ...interface{}) {
 	sendMessage(InfoMessage, format, args...)
+}
+
+// OutputInfoPlain sends an informational message without emoji
+func OutputInfoPlain(format string, args ...interface{}) {
+	sendMessageWithOptions(InfoMessage, true, format, args...)
 }
 
 // OutputWarning sends a warning message
@@ -207,6 +238,10 @@ func OutputDebug(format string, args ...interface{}) {
 
 // FormatMessageForTUI formats a message for display in the TUI
 func FormatMessage(msg OutputMessage) string {
+	if msg.NoEmoji {
+		return msg.Content
+	}
+
 	var prefix string
 	switch msg.Type {
 	case InfoMessage:

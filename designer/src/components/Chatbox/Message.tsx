@@ -33,6 +33,8 @@ const Message: React.FC<MessageProps> = ({ message }) => {
         return `${baseBubble} bg-secondary text-foreground text-base leading-relaxed`
       case 'assistant':
         return 'text-[15px] md:text-base leading-relaxed text-foreground/90'
+      case 'tool':
+        return `${baseBubble} bg-blue-500/10 border border-blue-500/20 rounded-lg`
       case 'system':
         return `${baseBubble} bg-green-500 text-white rounded-2xl border-green-500 italic`
       case 'error':
@@ -40,6 +42,20 @@ const Message: React.FC<MessageProps> = ({ message }) => {
       default:
         return `${baseBubble} bg-muted text-foreground`
     }
+  }
+
+  // Parse tool call content for better display
+  const parseToolContent = (content: string) => {
+    const toolMatch = content.match(
+      /🔧 Calling tool: (.+?)(?:\n\nArguments: (.+))?$/s
+    )
+    if (toolMatch) {
+      return {
+        toolName: toolMatch[1],
+        arguments: toolMatch[2] || null,
+      }
+    }
+    return null
   }
 
   return (
@@ -54,6 +70,53 @@ const Message: React.FC<MessageProps> = ({ message }) => {
               content={content}
             />
           )
+        ) : type === 'tool' ? (
+          (() => {
+            const parsed = parseToolContent(content)
+            if (parsed) {
+              let parsedArgs = null
+              try {
+                if (parsed.arguments) {
+                  parsedArgs = JSON.parse(parsed.arguments)
+                }
+              } catch {
+                // If JSON parsing fails, use raw string
+                parsedArgs = parsed.arguments
+              }
+
+              return (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-400">🔧</span>
+                    <span className="font-semibold text-blue-300">
+                      Calling tool:
+                    </span>
+                    <code className="px-2 py-0.5 bg-blue-500/20 rounded text-blue-200 font-mono text-sm">
+                      {parsed.toolName}
+                    </code>
+                  </div>
+                  {parsed.arguments && (
+                    <div className="ml-6 mt-1">
+                      <div className="text-xs text-blue-300/80 mb-1">
+                        Arguments:
+                      </div>
+                      <pre className="text-xs bg-blue-500/10 border border-blue-500/20 rounded p-2 overflow-x-auto text-blue-200/90 font-mono">
+                        {typeof parsedArgs === 'object' && parsedArgs !== null
+                          ? JSON.stringify(parsedArgs, null, 2)
+                          : parsed.arguments}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            // Fallback to plain text if parsing fails
+            return (
+              <span className="whitespace-pre-wrap text-sm text-blue-300">
+                {content}
+              </span>
+            )
+          })()
         ) : (
           <span className="whitespace-pre-wrap">{content}</span>
         )}

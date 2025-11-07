@@ -15,7 +15,9 @@ from pathlib import Path
 def run_command(cmd: list[str], cwd: Path) -> None:
     """Run a command and handle errors."""
     try:
-        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, check=True
+        )
         if result.stdout:
             print(result.stdout, end="")
         if result.stderr:
@@ -51,6 +53,7 @@ def main() -> int:
             "--output-model-type=pydantic_v2.BaseModel",
             "--target-python-version=3.12",
             "--use-standard-collections",
+            "--use-title-as-name",
             "--formatters=ruff-format",
             "--class-name=LlamaFarmConfig",
         ],

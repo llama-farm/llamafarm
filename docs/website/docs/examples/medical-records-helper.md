@@ -218,8 +218,8 @@ unzip textbooks.zip
 # Create dataset
 lf datasets create medical_texts -s medical_processor -b medical_knowledge
 
-# Ingest the textbooks
-lf datasets ingest medical_texts textbooks/*.pdf
+# Upload the textbooks
+lf datasets upload medical_texts textbooks/*.pdf
 
 # Process into vector database (this may take a while)
 lf datasets process medical_texts

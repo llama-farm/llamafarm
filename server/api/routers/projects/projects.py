@@ -7,17 +7,16 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Union
 
 import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
-from fastapi import APIRouter, Header, HTTPException, Path as FastAPIPath, Response
+from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import Path as FastAPIPath
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
 from agents.chat_orchestrator import ChatOrchestratorAgent, ChatOrchestratorAgentFactory
-from api.errors import ErrorResponse
-from api.routers.inference.models import ChatRequest
+from api.errors import ErrorResponse, ProjectNotFoundError
 
 # RAG imports moved to function level to avoid circular imports
 from api.routers.shared.response_utils import (
@@ -37,7 +36,7 @@ from services.project_service import ProjectService
 class Project(BaseModel):
     namespace: str = Field(..., description="The namespace of the project")
     name: str = Field(..., description="The name of the project")
-    config: Union[LlamaFarmConfig, dict] = Field(..., description="The configuration of the project")
+    config: LlamaFarmConfig | dict = Field(..., description="The configuration of the project")
     validation_error: str | None = Field(None, description="Validation error message if config has issues")
     last_modified: datetime | None = Field(None, description="Last modified timestamp of the project config")
 
@@ -213,18 +212,79 @@ async def update_project(
     tags=["projects", "mcp"],
     responses={
         200: {"model": DeleteProjectResponse},
+        404: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
     },
 )
 async def delete_project(namespace: str, project_id: str):
-    # TODO: Implement actual delete in ProjectService; placeholder response for now
-    project = Project(
-        namespace=namespace,
-        name=project_id,
-        config=ProjectService.load_config(namespace, project_id),
-    )
-    return DeleteProjectResponse(
-        project=project,
-    )
+    """
+    Delete a project and all its associated resources.
+    
+    This endpoint performs a complete cleanup including:
+    - All datasets associated with the project
+    - All chat sessions
+    - All data files (raw, metadata, and indexes)
+    - The entire project directory
+    
+    Warning: This operation is irreversible.
+    """
+    try:
+        # Call the delete_project method in ProjectService
+        deleted_project = ProjectService.delete_project(namespace, project_id)
+        
+        # Clean up in-memory chat sessions to prevent memory leak
+        with _agent_sessions_lock:
+            session_count = _delete_all_sessions(namespace, project_id)
+            if session_count > 0:
+                from core.logging import FastAPIStructLogger
+                logger = FastAPIStructLogger()
+                logger.info(
+                    "Cleared in-memory chat sessions during project deletion",
+                    namespace=namespace,
+                    project_id=project_id,
+                    session_count=session_count,
+                )
+        
+        # Convert the Project object to the API response format
+        project = Project(
+            namespace=deleted_project.namespace,
+            name=deleted_project.name,
+            config=deleted_project.config,
+            validation_error=deleted_project.validation_error,
+            last_modified=deleted_project.last_modified,
+        )
+        
+        return DeleteProjectResponse(project=project)
+        
+    except ProjectNotFoundError as e:
+        # Return 404 if project doesn't exist
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project {namespace}/{project_id} not found"
+        ) from e
+    except PermissionError as e:
+        # Return 403 for permission issues
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permission denied: {str(e)}"
+        ) from e
+    except Exception as e:
+        # Log the full error for debugging
+        from core.logging import FastAPIStructLogger
+        logger = FastAPIStructLogger()
+        logger.error(
+            "Failed to delete project",
+            namespace=namespace,
+            project_id=project_id,
+            error=str(e),
+            exc_info=True,
+        )
+        # Return 500 for other failures
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete project: {str(e)}"
+        ) from e
 
 
 SESSION_TTL_SECONDS = 30 * 60
@@ -281,6 +341,38 @@ def _delete_all_sessions(namespace: str, project_id: str) -> int:
             with contextlib.suppress(Exception):
                 record.agent.reset_history()
     return len(to_delete)
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict]
+    model: str | None = None
+    frequency_penalty: float | None = None
+    logit_bias: dict[str, int] | None = None
+    logprobs: bool | None = None
+    max_completion_tokens: int | None = None
+    max_tokens: int | None = None
+    metadata: dict | None = None
+    n: int | None = None
+    parallel_tool_calls: bool | None = None
+    presence_penalty: float | None = None
+    response_format: dict | None = None
+    seed: int | None = None
+    stop: str | list[str] | None = None
+    stream: bool = False  # Enable Server-Sent Events streaming
+    stream_options: dict | None = None
+    temperature: float | None = None
+    tool_choice: str | dict | None = None
+    tools: list[dict] | None = None
+    top_logprobs: int | None = None
+    top_p: float | None = None
+    user: str | None = None
+
+    # LlamaFarm-specific extensions (not part of OpenAI API)
+    rag_enabled: bool | None = None
+    database: str | None = None
+    rag_retrieval_strategy: str | None = None
+    rag_top_k: int | None = None
+    rag_score_threshold: float | None = None
 
 
 @router.post(
@@ -350,8 +442,8 @@ async def chat(
     # Extract the latest user message
     latest_user_message = None
     for msg in reversed(request.messages):
-        if msg.role == "user" and msg.content:
-            latest_user_message = msg.content
+        if msg.get("role", None) == "user" and msg.get("content", None):
+            latest_user_message = str(msg.get("content", ""))
             break
 
     # If no user message, check if this is a greeting request (new session)
@@ -427,6 +519,84 @@ class GetTaskResponse(BaseModel):
     )
 
 
+def _process_group_children(children: list, file_hashes: list, task_id: str, logger) -> dict:
+    """
+    Process a list of Celery child tasks and return aggregated progress information.
+
+    Args:
+        children: List of AsyncResult objects
+        file_hashes: List of file hashes corresponding to children
+        task_id: Parent task ID for logging
+        logger: Logger instance
+
+    Returns:
+        Dict with keys: total, completed, failed, successful, file_statuses
+    """
+    total = len(children)
+    completed = sum(child.ready() for child in children)
+    failed = sum(child.failed() for child in children)
+    successful = sum(child.successful() for child in children)
+
+    logger.info("Group progress", task_id=task_id, total=total, completed=completed, failed=failed, successful=successful)
+
+    # Build per-file status details
+    file_statuses = []
+
+    # Validate file_hashes and children lengths match
+    if len(file_hashes) != len(children):
+        logger.warning(
+            "Mismatch between file_hashes and children lengths",
+            file_hashes_len=len(file_hashes),
+            children_len=len(children),
+            task_id=task_id,
+        )
+
+    for i, child in enumerate(children):
+        # Use clear fallback filename if hash is not available
+        if i < len(file_hashes) and file_hashes[i]:
+            filename = file_hashes[i]
+        else:
+            filename = f"unknown_filename_{i}"
+
+        file_status = {
+            "index": i,
+            "task_id": child.id,
+            "state": "pending",
+            "filename": filename,
+            "error": None,
+        }
+
+        if child.successful():
+            file_status["state"] = "success"
+            try:
+                result_data = child.result
+                if isinstance(result_data, dict):
+                    file_status["filename"] = result_data.get("file_hash", filename)
+                    file_status["chunks"] = result_data.get("chunks_created")
+            except Exception:
+                pass
+        elif child.failed():
+            file_status["state"] = "failure"
+            try:
+                file_status["error"] = str(child.result)
+            except Exception:
+                file_status["error"] = "Unknown error"
+        elif child.state == "STARTED":
+            file_status["state"] = "processing"
+        else:
+            file_status["state"] = "pending"
+
+        file_statuses.append(file_status)
+
+    return {
+        "total": total,
+        "completed": completed,
+        "failed": failed,
+        "successful": successful,
+        "file_statuses": file_statuses,
+    }
+
+
 @router.get(
     "/{namespace}/{project_id}/tasks/{task_id}",
     operation_id="task_get",
@@ -437,7 +607,16 @@ class GetTaskResponse(BaseModel):
 )
 async def get_task(namespace: str, project_id: str, task_id: str):
     """Return state, progress meta, and result/error if available."""
+    from celery.result import GroupResult
+
+    from core.logging import FastAPIStructLogger
+
+    logger = FastAPIStructLogger(__name__)
+    logger.info("Checking task status", task_id=task_id)
+
     res: celery.result.AsyncResult = app.AsyncResult(task_id)
+
+    logger.info("Task status", task_id=task_id, state=res.state, ready=res.ready())
 
     response = GetTaskResponse(
         task_id=task_id,
@@ -447,6 +626,111 @@ async def get_task(namespace: str, project_id: str, task_id: str):
         error=None,
         traceback=None,
     )
+
+    # Check if this is a group result (parallel tasks)
+    try:
+        # First check if we stored group metadata manually
+        # This is needed because GroupResult.restore() doesn't work well with filesystem backend
+        group_info = res.result if res.state == "PENDING" and isinstance(res.result, dict) and res.result.get("type") == "group" else None
+
+        if group_info and "children" in group_info:
+            # We have stored group metadata - query child tasks directly
+            logger.info("Found stored group metadata", task_id=task_id, child_count=len(group_info["children"]))
+
+            children = [app.AsyncResult(child_id) for child_id in group_info["children"]]
+            file_hashes = group_info.get("file_hashes", [])
+
+            # Process children using helper function
+            progress = _process_group_children(children, file_hashes, task_id, logger)
+            total = progress["total"]
+            completed = progress["completed"]
+            failed = progress["failed"]
+            successful = progress["successful"]
+            file_statuses = progress["file_statuses"]
+
+            # Determine overall state
+            if failed > 0 and completed == total:
+                response.state = "FAILURE"
+                response.error = f"{failed} of {total} tasks failed"
+            elif completed == total:
+                response.state = "SUCCESS"
+                # Aggregate results from successful tasks
+                results = []
+                for child in children:
+                    if child.successful():
+                        try:
+                            results.append(child.result)
+                        except Exception:
+                            pass
+                response.result = {
+                    "processed_files": successful,
+                    "failed_files": failed,
+                    "skipped_files": 0,
+                    "details": results,
+                }
+            else:
+                response.state = "PROGRESS"
+                response.meta = {
+                    "current": completed,
+                    "total": total,
+                    "progress": int((completed / total) * 100) if total > 0 else 0,
+                    "message": f"Processing {completed}/{total} files",
+                    "files": file_statuses,  # Include per-file details
+                }
+            return response
+
+        # Fallback: Try to restore the group from the result backend
+        group_res = GroupResult.restore(task_id, app=app)
+        logger.info("GroupResult.restore attempt", task_id=task_id, found=group_res is not None)
+
+        if group_res is not None:
+            # This is a group - aggregate children's states and track per-file progress
+            children = list(group_res.results)
+            logger.info("Group children found", task_id=task_id, child_count=len(children))
+
+            # Process children using helper function (no file_hashes available from GroupResult)
+            progress = _process_group_children(children, [], task_id, logger)
+            total = progress["total"]
+            completed = progress["completed"]
+            failed = progress["failed"]
+            successful = progress["successful"]
+            file_statuses = progress["file_statuses"]
+
+            # Determine overall state
+            if failed > 0 and completed == total:
+                response.state = "FAILURE"
+                response.error = f"{failed} of {total} tasks failed"
+            elif completed == total:
+                response.state = "SUCCESS"
+                # Aggregate results from successful tasks
+                results = []
+                for child in children:
+                    if child.successful():
+                        try:
+                            results.append(child.result)
+                        except Exception:
+                            pass
+                response.result = {
+                    "processed_files": successful,
+                    "failed_files": failed,
+                    "skipped_files": 0,
+                    "details": results,
+                }
+            else:
+                response.state = "PROGRESS"
+                response.meta = {
+                    "current": completed,
+                    "total": total,
+                    "progress": int((completed / total) * 100) if total > 0 else 0,
+                    "message": f"Processing {completed}/{total} files",
+                    "files": file_statuses,  # Include per-file details
+                }
+            return response
+        else:
+            logger.info("No group found via GroupResult.restore", task_id=task_id)
+    except Exception as e:
+        # Not a group, handle as normal task
+        logger.warning("Error checking for group task", task_id=task_id, error=str(e), exc_info=True)
 
     if res.info:
         response.meta = res.info

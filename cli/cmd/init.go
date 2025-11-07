@@ -18,7 +18,7 @@ import (
 // It contains the created project and its configuration under project.config.
 type CreateProjectResponse struct {
 	Project struct {
-		Config map[string]interface{} `json:"config"`
+		Config config.LlamaFarmConfig `json:"config"`
 	} `json:"project"`
 }
 
@@ -111,27 +111,27 @@ var initCmd = &cobra.Command{
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, prettyServerError(resp, respBody))
+		os.Exit(1)
+	}
+
+		// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
+		var createResp CreateProjectResponse
+		if err := json.Unmarshal(respBody, &createResp); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
 			os.Exit(1)
 		}
 
-	// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
-	var createResp CreateProjectResponse
-	if err := json.Unmarshal(respBody, &createResp); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
-		os.Exit(1)
-	}
+		yamlBytes, err := yaml.Marshal(createResp.Project.Config)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
+			os.Exit(1)
+		}
 
-	yamlBytes, err := yaml.Marshal(createResp.Project.Config)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
-		os.Exit(1)
-	}
-
-	yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
-	if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
-		os.Exit(1)
-	}
+		yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
+		if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
+			os.Exit(1)
+		}
 
 		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absProjectDir)
 	},

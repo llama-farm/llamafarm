@@ -55,7 +55,7 @@ export interface UseProjectModalReturn {
   // CRUD operations
   saveProject: (
     name: string,
-    details?: { brief: { what: string; goals: string; audience: string } }
+    details?: { brief?: { what?: string } }
   ) => Promise<void>
   deleteProject: () => Promise<void>
 
@@ -141,7 +141,7 @@ export const useProjectModal = ({
   // Save project (create or update)
   const saveProject = async (
     name: string,
-    details?: { brief: { what: string; goals: string; audience: string } }
+    details?: { brief?: { what?: string } }
   ): Promise<void> => {
     const sanitizedName = sanitizeProjectName(name)
 
@@ -208,11 +208,10 @@ export const useProjectModal = ({
           // Update details on same project (no rename)
           try {
             const updates: Record<string, any> = {}
-            if (details && details.brief) {
+            if (details?.brief?.what !== undefined) {
               updates.project_brief = {
-                what: details.brief.what || '',
-                goals: details.brief.goals || '',
-                audience: details.brief.audience || '',
+                ...(currentProject.config?.project_brief || {}),
+                what: details.brief.what,
               }
             }
             if (Object.keys(updates).length > 0) {
@@ -225,14 +224,6 @@ export const useProjectModal = ({
                 projectId: newName,
                 request: { config: mergedConfig },
               })
-              // Cache locally as well for resilience
-              try {
-                const briefKey = `lf_project_brief_${namespace}_${newName}`
-                localStorage.setItem(
-                  briefKey,
-                  JSON.stringify(updates.project_brief)
-                )
-              } catch {}
             }
             closeModal()
             onSuccess?.(newName, 'edit')
@@ -255,11 +246,9 @@ export const useProjectModal = ({
           name: newName,
           namespace,
         }
-        if (details && details.brief) {
+        if (details?.brief?.what) {
           updatesAfterRename.project_brief = {
-            what: details.brief.what || '',
-            goals: details.brief.goals || '',
-            audience: details.brief.audience || '',
+            what: details.brief.what,
           }
         }
         const copiedConfig = mergeProjectConfig(

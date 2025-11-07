@@ -1,5 +1,7 @@
 {
-  "root": "config/",
+  "$schema": "https://json.schemastore.org/nx-project",
+  "name": "config",
+  "root": "config",
   "targets": {
     "test": {
       "executor": "nx:run-commands",
@@ -44,7 +46,7 @@
       "outputs": [
         "{projectRoot}/datamodel.py",
         "{projectRoot}/schema.deref.yaml",
-        "{workspaceRoot}/cli/cmd/config/schema.yaml"
+        "{workspaceRoot}/cli/cmd/config/schema.json"
       ]
     }
   }

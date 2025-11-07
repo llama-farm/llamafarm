@@ -11,8 +11,8 @@ import pytest
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    Prompt,
-    Message,
+    PromptSet,
+    PromptMessage,
     Provider,
     Runtime,
     Version,
@@ -34,9 +34,13 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -112,9 +116,13 @@ class TestDatasetService:
             name="empty_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -208,9 +216,13 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -437,9 +449,13 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag=None,
@@ -475,9 +491,13 @@ class TestDatasetService:
             name="test_project",
             namespace="test_namespace",
             prompts=[
-                Prompt(
+                PromptSet(
                     name="default",
-                    messages=[Message(role="system", content="You are a helpful assistant.")]
+                    messages=[
+                        PromptMessage(
+                            role="system", content="You are a helpful assistant."
+                        )
+                    ],
                 )
             ],
             rag={
@@ -576,10 +596,10 @@ class TestDatasetServiceIntegration:
                     name="test_project",
                     namespace=namespace,
                     prompts=[
-                        Prompt(
+                        PromptSet(
                             name="default",
                             messages=[
-                                Message(
+                                PromptMessage(
                                     role="system",
                                     content="You are a helpful assistant.",
                                 )

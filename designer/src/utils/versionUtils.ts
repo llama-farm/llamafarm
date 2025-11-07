@@ -1,5 +1,3 @@
-import pkg from '../../package.json'
-
 export type ReleaseInfo = {
   latestVersion: string
   htmlUrl: string
@@ -9,56 +7,9 @@ export type ReleaseInfo = {
 const STORAGE_KEYS = {
   latest: 'lf_latest_release',
   checkedAt: 'lf_latest_release_checked_at',
+  currentVersion: 'lf_current_version',
 }
 
-export function getCurrentVersion(): string {
-  // Prefer runtime-provided image tag (dev/prod)
-  try {
-    const viteEnv = (import.meta as any)?.env?.VITE_APP_IMAGE_TAG as
-      | string
-      | undefined
-    if (viteEnv && typeof viteEnv === 'string' && viteEnv.trim() !== '') {
-      return viteEnv
-    }
-  } catch {}
-  try {
-    const winEnv = (window as any)?.ENV?.VITE_APP_IMAGE_TAG as
-      | string
-      | undefined
-    if (winEnv && typeof winEnv === 'string' && winEnv.trim() !== '') {
-      return winEnv
-    }
-  } catch {}
-
-  // Fallback to package version (source build)
-  const raw = (pkg as any)?.version as string | undefined
-  return raw || '0.0.0'
-}
-
-/**
- * Returns the injected image tag if provided by the runtime via either
- * import.meta.env.VITE_APP_IMAGE_TAG (Vite) or window.ENV.VITE_APP_IMAGE_TAG (injected at runtime).
- * Returns null if not present.
- */
-export function getInjectedImageTag(): string | null {
-  try {
-    const viteEnv = (import.meta as any)?.env?.VITE_APP_IMAGE_TAG as
-      | string
-      | undefined
-    if (viteEnv && typeof viteEnv === 'string' && viteEnv.trim() !== '') {
-      return viteEnv
-    }
-  } catch {}
-  try {
-    const winEnv = (window as any)?.ENV?.VITE_APP_IMAGE_TAG as
-      | string
-      | undefined
-    if (winEnv && typeof winEnv === 'string' && winEnv.trim() !== '') {
-      return winEnv
-    }
-  } catch {}
-  return null
-}
 
 export function normalizeVersion(version: string | null | undefined): string {
   if (!version) return '0.0.0'
@@ -106,49 +57,20 @@ export function getStoredLatestRelease(): {
   }
 }
 
-export async function fetchLatestReleaseFromGithub(
-  signal?: AbortSignal
-): Promise<ReleaseInfo | null> {
-  // Primary: releases/latest
+export function storeCurrentVersion(version: string): void {
   try {
-    const res = await fetch(
-      'https://api.github.com/repos/llama-farm/llamafarm/releases/latest',
-      { signal }
-    )
-    if (res.ok) {
-      const data = await res.json()
-      const latestVersion = (data?.tag_name as string) || ''
-      const htmlUrl =
-        (data?.html_url as string) ||
-        'https://github.com/llama-farm/llamafarm/releases'
-      const publishedAt = (data?.published_at as string) || undefined
-      if (latestVersion) {
-        return { latestVersion, htmlUrl, publishedAt }
-      }
-    }
+    localStorage.setItem(STORAGE_KEYS.currentVersion, version)
   } catch {}
-  // Fallback: first non-draft from releases list
-  try {
-    const res = await fetch(
-      'https://api.github.com/repos/llama-farm/llamafarm/releases',
-      { signal }
-    )
-    if (res.ok) {
-      const arr = (await res.json()) as any[]
-      const item = arr?.find(x => !x?.draft)
-      if (item) {
-        return {
-          latestVersion: (item.tag_name as string) || '',
-          htmlUrl:
-            (item.html_url as string) ||
-            'https://github.com/llama-farm/llamafarm/releases',
-          publishedAt: (item.published_at as string) || undefined,
-        }
-      }
-    }
-  } catch {}
-  return null
 }
+
+export function getStoredCurrentVersion(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.currentVersion) || '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+
 
 export function shouldCheck(
   lastCheckedAtMs: number | null,

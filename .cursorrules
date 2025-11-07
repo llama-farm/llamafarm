@@ -149,7 +149,7 @@ Whenever `config/schema.yaml` or `rag/schema.yaml` changes (in upstream or your 
 cd config
 ./generate-types.sh
 ```
-- Updates Pydantic models (`datamodel.py`) and Go types (`config_types.go`).
+- Updates Pydantic models (`datamodel.py`) and Go types (`types.go`).
 - After regenerating, adjust server/CLI logic and documentation to use new fields.
 
 ---

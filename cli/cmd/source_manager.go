@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Environment Variables:
@@ -19,6 +21,9 @@ import (
 //                    source code from. Useful for CI/CD to test specific branches.
 //                    Examples: "main", "feat-universal-runtime", "v1.2.3", "abc123..."
 //                    Default: "main" branch
+//   LF_GITHUB_TOKEN - GitHub token for downloading artifacts from GitHub Actions.
+//                    Also checks GITHUB_TOKEN if LF_GITHUB_TOKEN is not set.
+//                    Required for downloading branch artifacts (optional for releases).
 
 const (
 	// GitHub repository information
@@ -32,7 +37,8 @@ type SourceManager struct {
 	srcDir        string
 	versionFile   string
 	pythonEnvMgr  *PythonEnvManager
-	currentSource string // tracks what source version is currently installed
+	currentSource string     // tracks what source version is currently installed
+	mu            sync.Mutex // protects against parallel downloads
 }
 
 // NewSourceManager creates a new source code manager
@@ -55,7 +61,12 @@ func NewSourceManager(pythonEnvMgr *PythonEnvManager) (*SourceManager, error) {
 }
 
 // EnsureSource ensures source code is downloaded and dependencies are synced
+// This method is protected by a mutex to prevent parallel downloads
 func (m *SourceManager) EnsureSource() error {
+	// Lock to prevent parallel downloads from multiple service starts
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Determine what version we need
 	targetVersion, err := m.GetCurrentCLIVersion()
 	if err != nil {
@@ -98,7 +109,7 @@ func (m *SourceManager) EnsureSource() error {
 		OutputWarning("Warning: could not write version file: %v\n", err)
 	}
 
-	// Sync dependencies
+	// Sync dependencies (config and common sequentially, then server and rag in parallel)
 	if err := m.SyncDependencies(); err != nil {
 		return fmt.Errorf("failed to sync dependencies: %w", err)
 	}
@@ -113,7 +124,7 @@ func (m *SourceManager) EnsureSource() error {
 
 // GetCurrentCLIVersion determines the version of the currently running CLI
 // It first checks for the LF_VERSION_REF environment variable (useful for CI/CD),
-// then falls back to "main" branch by default.
+// then uses the CLI's Version variable (set at build time), falling back to "main" for dev builds.
 func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 	// Check for LF_VERSION_REF environment variable first (CI/CD override)
 	if versionRef := strings.TrimSpace(os.Getenv("LF_VERSION_REF")); versionRef != "" {
@@ -123,55 +134,237 @@ func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 		return versionRef, nil
 	}
 
-	// Check if we're in development mode
-	// In dev mode, we use "main" branch
-	// In release mode, we use the CLI version tag
+	// Use the CLI's actual version (set by build flags during release)
+	cliVersion := strings.TrimSpace(Version)
 
-	// For now, always use "main" - in production this would check the actual CLI version
-	// TODO: Implement proper version detection from build-time variables
-	return "main", nil
+	// Development builds (Version = "dev") should use "main" branch
+	if cliVersion == "" || cliVersion == "dev" {
+		if debug {
+			logDebug("CLI is dev build, using main branch for source")
+		}
+		return "main", nil
+	}
+
+	// For release builds, use the version tag directly
+	// The Version variable should already include the "v" prefix (e.g., "v1.2.3")
+	if debug {
+		logDebug(fmt.Sprintf("Using CLI version for source: %s", cliVersion))
+	}
+	return cliVersion, nil
+}
+
+// getBranchArtifactURL attempts to find a GitHub Actions artifact for a branch
+// Returns the download URL if found, or empty string if not available
+// Requires LF_GITHUB_TOKEN environment variable to be set
+func (m *SourceManager) getBranchArtifactURL(branchName string) (string, error) {
+	// Check for GitHub token
+	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+	if token == "" {
+		return "", fmt.Errorf("no GitHub token available (set GITHUB_TOKEN)")
+	}
+
+	// Construct artifact name based on branch (matching CI workflow naming)
+	// The CI workflow creates artifacts named: source-archive-{branch}-{sha}
+	// We'll search for artifacts matching the branch pattern
+	artifactNamePattern := fmt.Sprintf("source-archive-%s-", branchName)
+
+	// Query GitHub Actions API for workflow runs
+	// We'll look for the latest successful run of the "pack" job
+	workflowRunsURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/workflows/cli.yml/runs?branch=%s&status=success&per_page=1",
+		githubOwner, githubRepo, branchName)
+
+	req, err := http.NewRequest("GET", workflowRunsURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to query workflow runs: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("workflow runs API returned status %d", resp.StatusCode)
+	}
+
+	var workflowRuns struct {
+		WorkflowRuns []struct {
+			ID         int64  `json:"id"`
+			HeadSHA    string `json:"head_sha"`
+			HeadBranch string `json:"head_branch"`
+		} `json:"workflow_runs"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&workflowRuns); err != nil {
+		return "", fmt.Errorf("failed to decode workflow runs response: %w", err)
+	}
+
+	if len(workflowRuns.WorkflowRuns) == 0 {
+		return "", fmt.Errorf("no successful workflow runs found for branch %s", branchName)
+	}
+
+	runID := workflowRuns.WorkflowRuns[0].ID
+
+	// Get artifacts for this run
+	artifactsURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/runs/%d/artifacts",
+		githubOwner, githubRepo, runID)
+
+	req, err = http.NewRequest("GET", artifactsURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create artifacts request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err = client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to query artifacts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("artifacts API returned status %d", resp.StatusCode)
+	}
+
+	var artifacts struct {
+		Artifacts []struct {
+			Name               string `json:"name"`
+			ArchiveDownloadURL string `json:"archive_download_url"`
+		} `json:"artifacts"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&artifacts); err != nil {
+		return "", fmt.Errorf("failed to decode artifacts response: %w", err)
+	}
+
+	// Find artifact matching our pattern
+	for _, artifact := range artifacts.Artifacts {
+		if strings.HasPrefix(artifact.Name, artifactNamePattern) {
+			// The archive_download_url is a zip containing both the tar.gz and sha256 files
+			// We need to download and extract it, then find the tar.gz file
+			// For now, return the URL - we'll handle extraction in DownloadSource
+			return artifact.ArchiveDownloadURL, nil
+		}
+	}
+
+	return "", fmt.Errorf("no matching artifact found for branch %s", branchName)
 }
 
 // DownloadSource downloads the source code for a specific version
-// Supports branches, tags, and commit SHAs via GitHub's archive API
+// For release tags (v*): Downloads from packaged source archive on GitHub releases
+// For branches: Tries to download from GitHub Actions artifacts if token is available, otherwise falls back to GitHub archive API
+// For commits: Uses GitHub's archive API (fallback, may not include built designer)
 func (m *SourceManager) DownloadSource(version string) error {
-	// Build download URL
-	// For branches: https://github.com/llama-farm/llamafarm/archive/refs/heads/{branch}.tar.gz
-	// For tags: https://github.com/llama-farm/llamafarm/archive/refs/tags/{tag}.tar.gz
-	// For commits/any ref: https://github.com/llama-farm/llamafarm/archive/{ref}.tar.gz
-
 	var downloadURL string
+	var usePackagedArchive bool
 
-	// Try to intelligently determine the ref type
-	if version == "main" || version == "dev" {
-		// Known branch names
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.tar.gz",
-			githubOwner, githubRepo)
-	} else if strings.HasPrefix(version, "v") && len(version) > 1 {
-		// Looks like a version tag (starts with 'v')
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
-			githubOwner, githubRepo, version)
-	} else if len(version) == 40 {
-		// Looks like a full commit SHA (40 hex characters)
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
-			githubOwner, githubRepo, version)
+	// For release tags (v*), use the packaged source archive which includes built designer
+	if strings.HasPrefix(version, "v") && len(version) > 1 {
+		// Use the packaged source archive from GitHub releases
+		downloadURL = fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/llamafarm-dist-%s.tar.gz",
+			githubOwner, githubRepo, version, version)
+		usePackagedArchive = true
 	} else {
-		// Assume it's a branch name or tag - try as branch first
-		// GitHub will return 404 if not found, and the generic ref format works for most cases
-		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
-			githubOwner, githubRepo, version)
+		// For branches, try to download from GitHub Actions artifacts first
+		// This requires a GitHub token and will fall back to archive API if not available
+		if !strings.HasPrefix(version, "v") && len(version) != 40 {
+			// This looks like a branch name (not a commit SHA)
+			if artifactURL, err := m.getBranchArtifactURL(version); err == nil && artifactURL != "" {
+				downloadURL = artifactURL
+				usePackagedArchive = true
+				if debug {
+					logDebug(fmt.Sprintf("Found artifact for branch %s: %s", version, artifactURL))
+				}
+			} else {
+				if debug && err != nil {
+					logDebug(fmt.Sprintf("Could not get artifact for branch %s: %v, falling back to archive", version, err))
+				}
+				// Fall back to GitHub archive API
+				if version == "main" || version == "dev" {
+					downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.tar.gz",
+						githubOwner, githubRepo)
+				} else {
+					downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
+						githubOwner, githubRepo, version)
+				}
+				usePackagedArchive = false
+			}
+		} else if len(version) == 40 {
+			// Looks like a full commit SHA (40 hex characters)
+			downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
+				githubOwner, githubRepo, version)
+			usePackagedArchive = false
+		} else {
+			// Assume it's a branch name or tag - try as branch first
+			downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
+				githubOwner, githubRepo, version)
+			usePackagedArchive = false
+		}
 	}
 
 	if debug {
-		logDebug(fmt.Sprintf("Downloading source from: %s", downloadURL))
+		logDebug(fmt.Sprintf("Downloading source from: %s (packaged: %v)", downloadURL, usePackagedArchive))
 	}
 
 	// Download the archive
-	resp, err := http.Get(downloadURL)
-	if err != nil {
-		return fmt.Errorf("failed to download: %w", err)
+	// For GitHub Actions artifacts, we need to use authentication
+	var resp *http.Response
+	var err error
+	if usePackagedArchive && strings.Contains(downloadURL, "api.github.com") {
+		// This is a GitHub Actions artifact, requires authentication
+		req, err := http.NewRequest("GET", downloadURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+
+		token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+		if token == "" {
+			return fmt.Errorf("GitHub token required for artifact download (set GITHUB_TOKEN)")
+		}
+
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+		client := &http.Client{Timeout: 5 * time.Minute}
+		resp, err = client.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to download artifact: %w", err)
+		}
+		defer resp.Body.Close()
+	} else {
+		// Regular download
+		resp, err = http.Get(downloadURL)
+		if err != nil {
+			return fmt.Errorf("failed to download: %w", err)
+		}
+		defer resp.Body.Close()
 	}
-	defer resp.Body.Close()
+
+	// For packaged archives, if we get 404, fall back to GitHub archive
+	if resp.StatusCode == http.StatusNotFound && usePackagedArchive && !strings.Contains(downloadURL, "api.github.com") {
+		if debug {
+			logDebug(fmt.Sprintf("Packaged archive not found for %s, falling back to GitHub archive", version))
+		}
+		// Fall back to GitHub archive API
+		downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
+			githubOwner, githubRepo, version)
+		resp.Body.Close()
+		resp, err = http.Get(downloadURL)
+		if err != nil {
+			return fmt.Errorf("failed to download fallback archive: %w", err)
+		}
+		defer resp.Body.Close()
+		usePackagedArchive = false
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download: HTTP %d", resp.StatusCode)
@@ -184,17 +377,63 @@ func (m *SourceManager) DownloadSource(version string) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Download to temp file
-	archivePath := filepath.Join(tmpDir, "source.tar.gz")
-	tmpFile, err := os.Create(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
+	// Handle GitHub Actions artifact (ZIP) vs regular tar.gz
+	var archivePath string
+	if usePackagedArchive && strings.Contains(downloadURL, "api.github.com") {
+		// This is a GitHub Actions artifact ZIP, extract it first
+		zipPath := filepath.Join(tmpDir, "artifact.zip")
+		zipFile, err := os.Create(zipPath)
+		if err != nil {
+			return fmt.Errorf("failed to create zip file: %w", err)
+		}
 
-	_, err = io.Copy(tmpFile, resp.Body)
-	tmpFile.Close()
-	if err != nil {
-		return fmt.Errorf("failed to write archive: %w", err)
+		_, err = io.Copy(zipFile, resp.Body)
+		zipFile.Close()
+		if err != nil {
+			return fmt.Errorf("failed to write zip file: %w", err)
+		}
+
+		// Extract ZIP to find the tar.gz file
+		zipExtractDir := filepath.Join(tmpDir, "zip-extract")
+		if err := os.MkdirAll(zipExtractDir, 0755); err != nil {
+			return fmt.Errorf("failed to create zip extraction directory: %w", err)
+		}
+
+		if err := m.extractZip(zipPath, zipExtractDir); err != nil {
+			return fmt.Errorf("failed to extract artifact zip: %w", err)
+		}
+
+		// Find the tar.gz file in the extracted ZIP
+		entries, err := os.ReadDir(zipExtractDir)
+		if err != nil {
+			return fmt.Errorf("failed to read zip extraction directory: %w", err)
+		}
+
+		found := false
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".tar.gz") && !strings.HasSuffix(entry.Name(), ".sha256") {
+				archivePath = filepath.Join(zipExtractDir, entry.Name())
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("tar.gz file not found in artifact zip")
+		}
+	} else {
+		// Regular tar.gz download
+		archivePath = filepath.Join(tmpDir, "source.tar.gz")
+		tmpFile, err := os.Create(archivePath)
+		if err != nil {
+			return fmt.Errorf("failed to create temp file: %w", err)
+		}
+
+		_, err = io.Copy(tmpFile, resp.Body)
+		tmpFile.Close()
+		if err != nil {
+			return fmt.Errorf("failed to write archive: %w", err)
+		}
 	}
 
 	// Extract to temporary location
@@ -207,8 +446,9 @@ func (m *SourceManager) DownloadSource(version string) error {
 		return fmt.Errorf("failed to extract archive: %w", err)
 	}
 
-	// GitHub archives extract to a directory named "repo-branch" or "repo-version"
 	// Find the extracted directory
+	// Packaged archives: "llamafarm-{version}"
+	// GitHub archives: "llamafarm-{branch}" or "llamafarm-{version}"
 	entries, err := os.ReadDir(extractDir)
 	if err != nil {
 		return fmt.Errorf("failed to read extracted directory: %w", err)
@@ -235,12 +475,20 @@ func (m *SourceManager) DownloadSource(version string) error {
 	return nil
 }
 
-// SyncDependencies runs `uv sync` on server and rag directories
+// SyncDependencies runs `uv sync` on config, common, server and rag directories
 func (m *SourceManager) SyncDependencies() error {
+	configDir := filepath.Join(m.srcDir, "config")
+	commonDir := filepath.Join(m.srcDir, "common")
 	serverDir := filepath.Join(m.srcDir, "server")
 	ragDir := filepath.Join(m.srcDir, "rag")
 
 	// Verify directories exist
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		return fmt.Errorf("config directory not found: %s", configDir)
+	}
+	if _, err := os.Stat(commonDir); os.IsNotExist(err) {
+		return fmt.Errorf("common directory not found: %s", commonDir)
+	}
 	if _, err := os.Stat(serverDir); os.IsNotExist(err) {
 		return fmt.Errorf("server directory not found: %s", serverDir)
 	}
@@ -248,7 +496,18 @@ func (m *SourceManager) SyncDependencies() error {
 		return fmt.Errorf("rag directory not found: %s", ragDir)
 	}
 
-	// Run uv sync on both directories in parallel for speed
+	// First, sync config and common (which are dependencies of server and rag)
+	OutputProgress("Syncing config dependencies...\n")
+	if err := m.syncDirectory(configDir, "config"); err != nil {
+		return fmt.Errorf("failed to sync config dependencies: %w", err)
+	}
+
+	OutputProgress("Syncing common dependencies...\n")
+	if err := m.syncDirectory(commonDir, "common"); err != nil {
+		return fmt.Errorf("failed to sync common dependencies: %w", err)
+	}
+
+	// Now sync server and rag in parallel
 	var wg sync.WaitGroup
 	var serverErr, ragErr error
 
@@ -329,13 +588,17 @@ func (m *SourceManager) isSourceInstalled() bool {
 // areDependenciesSynced checks if dependencies are already synced
 func (m *SourceManager) areDependenciesSynced() bool {
 	// Check for .venv directories as an indicator that uv sync has been run
+	configVenv := filepath.Join(m.srcDir, "config", ".venv")
+	commonVenv := filepath.Join(m.srcDir, "common", ".venv")
 	serverVenv := filepath.Join(m.srcDir, "server", ".venv")
 	ragVenv := filepath.Join(m.srcDir, "rag", ".venv")
 
+	_, configErr := os.Stat(configVenv)
+	_, commonErr := os.Stat(commonVenv)
 	_, serverErr := os.Stat(serverVenv)
 	_, ragErr := os.Stat(ragVenv)
 
-	return serverErr == nil && ragErr == nil
+	return configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil
 }
 
 // readVersionFile reads the current version from the version file
@@ -478,6 +741,21 @@ func (m *SourceManager) GetDesignerDir() string {
 	return filepath.Join(m.srcDir, "designer")
 }
 
+// VerifyDesignerBuild checks if designer/dist/index.html exists
+func (m *SourceManager) VerifyDesignerBuild() error {
+	designerDir := m.GetDesignerDir()
+	indexPath := filepath.Join(designerDir, "dist", "index.html")
+
+	if _, err := os.Stat(indexPath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("designer build not found at %s - designer static files must be built before starting server", indexPath)
+		}
+		return fmt.Errorf("failed to check designer build at %s: %w", indexPath, err)
+	}
+
+	return nil
+}
+
 // GetConfigDir returns the path to the config source directory
 func (m *SourceManager) GetConfigDir() string {
 	return filepath.Join(m.srcDir, "config")
@@ -490,6 +768,7 @@ func (m *SourceManager) GetUniversalRuntimeDir() string {
 
 // GenerateDatamodel generates the config datamodel types
 // This must be run after source download and dependency sync, but before starting services
+// It checks if datamodel.py exists and is up-to-date to avoid unnecessary regeneration
 func (m *SourceManager) GenerateDatamodel() error {
 	configDir := m.GetConfigDir()
 
@@ -509,7 +788,64 @@ func (m *SourceManager) GenerateDatamodel() error {
 		}
 	}
 
-	OutputProgress("Generating config datamodel...\n")
+	// Check if datamodel.py already exists and is up-to-date
+	datamodelPath := filepath.Join(configDir, "datamodel.py")
+	schemaPath := filepath.Join(configDir, "schema.yaml")
+	ragSchemaPath := filepath.Join(m.srcDir, "rag", "schema.yaml")
+
+	datamodelExists := false
+	var datamodelModTime time.Time
+	if info, err := os.Stat(datamodelPath); err == nil {
+		datamodelExists = true
+		datamodelModTime = info.ModTime()
+	}
+
+	// Check if schema files are newer than datamodel.py
+	needsRegeneration := !datamodelExists
+
+	if datamodelExists {
+		// Check schema.yaml modification time
+		if schemaInfo, err := os.Stat(schemaPath); err == nil {
+			if schemaInfo.ModTime().After(datamodelModTime) {
+				needsRegeneration = true
+			}
+		}
+
+		// Check rag/schema.yaml modification time
+		if !needsRegeneration {
+			if ragSchemaInfo, err := os.Stat(ragSchemaPath); err == nil {
+				if ragSchemaInfo.ModTime().After(datamodelModTime) {
+					needsRegeneration = true
+				}
+			}
+		}
+
+		// Check compile_schema.py modification time (it's part of the generation process)
+		if !needsRegeneration {
+			compileScriptPath := filepath.Join(configDir, "compile_schema.py")
+			if compileInfo, err := os.Stat(compileScriptPath); err == nil {
+				if compileInfo.ModTime().After(datamodelModTime) {
+					needsRegeneration = true
+				}
+			}
+		}
+	}
+
+	// Skip generation if datamodel is up-to-date
+	if !needsRegeneration {
+		if debug {
+			logDebug("Datamodel is up-to-date, skipping generation")
+		}
+		return nil
+	}
+
+	// Generate datamodel (only show progress if not in silent mode)
+	if debug {
+		logDebug("Datamodel needs regeneration")
+	} else {
+		// Only show progress for actual regeneration, not for silent checks
+		OutputProgress("Generating config datamodel...\n")
+	}
 
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 

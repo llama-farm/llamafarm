@@ -53,8 +53,6 @@ function ProjectModalRoot() {
   const projectBrief = (cfg?.project_brief || {}) as Record<string, any>
   const initialBrief = {
     what: projectBrief?.what || '',
-    goals: projectBrief?.goals || '',
-    audience: projectBrief?.audience || '',
   }
   return (
     <ProjectModal
@@ -66,6 +64,8 @@ function ProjectModalRoot() {
       onSave={modal.saveProject}
       onDelete={modal.modalMode === 'edit' ? modal.deleteProject : undefined}
       isLoading={modal.isLoading}
+      projectError={modal.projectError}
+      onNameChange={modal.validateName}
     />
   )
 }

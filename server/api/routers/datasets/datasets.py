@@ -349,6 +349,33 @@ async def process_dataset(
         # Execute the chain asynchronously
         result = task_chain.apply_async()
 
+        # Save the group result so it can be queried later
+        result.save()
+
+        # Store child task IDs in the backend for tracking
+        # This is needed because GroupResult.restore() doesn't always work with filesystem backend
+        child_task_ids = [child.id for child in result.results]
+
+        # Store metadata about this group task
+        from core.celery import app as celery_app
+        celery_app.backend.store_result(
+            result.id,
+            {
+                "type": "group",
+                "children": child_task_ids,
+                "total_files": len(child_task_ids),
+                "file_hashes": dataset_config.files or [],
+            },
+            "PENDING",  # Initial state
+        )
+
+        logger.info(
+            "Started async dataset processing",
+            task_id=result.id,
+            file_count=len(dataset_config.files or []),
+            child_task_ids=child_task_ids[:3],  # Log first 3 for debugging
+        )
+
         # Return immediately with task information
         return ProcessDatasetResponse(
             message="Dataset processing started asynchronously",

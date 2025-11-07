@@ -3,14 +3,12 @@ import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import {
-  useProjectChatStreamingMessage,
-  useProjectChatParams,
-} from '../../hooks/useProjectChat'
+import { useProjectChatParams } from '../../hooks/useProjectChat'
+import { useStreamingChatCompletionMessage } from '../../hooks/useChatCompletions'
 import { useProjectChatStreamingSession } from '../../hooks/useProjectChatSession'
 import { useProjectSession } from '../../hooks/useProjectSession'
 import { useChatbox } from '../../hooks/useChatbox'
-import { ProjectChatStreamChunk } from '../../api/projectChatService'
+import { ChatStreamChunk } from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
@@ -36,6 +34,7 @@ export interface TestChatProps {
   ragEnabled?: boolean
   ragTopK?: number
   ragScoreThreshold?: number
+  focusInput?: boolean
 }
 
 const containerClasses =
@@ -80,6 +79,7 @@ export default function TestChat({
   ragEnabled = true,
   ragTopK = 10,
   ragScoreThreshold = 0.7,
+  focusInput = false,
 }: TestChatProps) {
   // Determine mock mode as early as possible
   const MOCK_MODE = Boolean(useTestData)
@@ -88,13 +88,10 @@ export default function TestChat({
   const chatParams = useProjectChatParams(activeProject)
 
   // Project chat streaming session management
-  const projectChatStreamingSession = useProjectChatStreamingSession(
-    chatParams?.namespace,
-    chatParams?.projectId
-  )
+  const projectChatStreamingSession = useProjectChatStreamingSession()
 
-  // Project chat streaming message sending
-  const projectChatStreamingMessage = useProjectChatStreamingMessage()
+  // Project chat streaming message sending - using unified interface
+  const projectChatStreamingMessage = useStreamingChatCompletionMessage()
 
   // Load available models for this project
   const { data: modelsData, isFetching: modelsLoading } = useProjectModels(
@@ -225,7 +222,8 @@ export default function TestChat({
 
   // Combined error state
   const projectChatError =
-    projectChatStreamingMessage.error || projectChatStreamingSession.error
+    projectChatStreamingMessage.error ||
+    projectChatStreamingSession.sessionError
   const combinedError =
     error || (projectChatError ? projectChatError.message : null)
 
@@ -475,7 +473,7 @@ export default function TestChat({
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
           },
           streamingOptions: {
-            onChunk: (chunk: ProjectChatStreamChunk) => {
+            onChunk: (chunk: ChatStreamChunk) => {
               // Handle content chunks
               if (chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
@@ -582,6 +580,17 @@ export default function TestChat({
       )
     }
   }, [messages, updateInput, handleSend])
+
+  // Auto-focus input when navigated from Build assistant
+  useEffect(() => {
+    if (focusInput && inputRef.current) {
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [focusInput])
 
   // Lightweight evaluator and mock generator for test runs
   const evaluateTest = useCallback(
@@ -693,7 +702,7 @@ export default function TestChat({
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
           },
           streamingOptions: {
-            onChunk: (chunk: ProjectChatStreamChunk) => {
+            onChunk: (chunk: ChatStreamChunk) => {
               if (chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({

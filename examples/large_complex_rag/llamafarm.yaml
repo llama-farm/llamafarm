@@ -1,0 +1,99 @@
+version: v1
+name: raleigh_udo_demo
+namespace: default
+
+runtime:
+  models:
+    - name: udo_large
+      description: "Large complex UDO document analysis"
+      provider: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434
+      default: true
+      prompt_format: unstructured
+      model_api_parameters:
+        temperature: 0.2
+
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a municipal planning specialist assisting with Raleigh's Unified Development Ordinance.
+          Use the retrieved ordinance text only and answer in plain language.
+          Cite relevant ordinance section identifiers (e.g., "UDO Sec. X.X.X") and PDF page numbers when available.
+          If the answer cannot be derived from the context, respond with "Unable to locate in UDO".
+
+rag:
+  databases:
+    - name: large_docs_db
+      type: ChromaStore
+      config:
+        collection_name: large_docs
+        distance_function: cosine
+        persist_directory: ./data/large_docs_db
+        port: 8000
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v2-moe
+            dimension: 768
+            batch_size: 12
+            timeout: 60
+            auto_pull: true
+          priority: 0
+      retrieval_strategies:
+        - name: ordinance_focus
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 6
+          default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: ordinance_focus
+  data_processing_strategies:
+    - name: universal_processor
+      description: Parser tuned for municipal ordinance PDFs with heading extraction.
+      parsers:
+        - type: PDFParser_LlamaIndex
+          file_include_patterns: ['*.pdf', '*.PDF']
+          priority: 100
+          config:
+            chunk_size: 1100
+            chunk_overlap: 160
+            chunk_strategy: semantic
+            extract_metadata: true
+            extract_tables: true
+        - type: PDFParser_PyPDF2
+          file_include_patterns: ['*.pdf', '*.PDF']
+          priority: 50
+          config:
+            chunk_size: 900
+            chunk_overlap: 140
+            chunk_strategy: paragraphs
+            extract_metadata: true
+      extractors:
+        - type: HeadingExtractor
+          priority: 100
+          config:
+            max_level: 4
+            include_hierarchy: true
+            extract_outline: true
+        - type: ContentStatisticsExtractor
+          priority: 90
+          config:
+            include_structure: true
+            include_readability: true
+        - type: EntityExtractor
+          priority: 80
+          config:
+            entity_types: [ORG, DATE, LOCATION, FAC, GPE]
+            use_fallback: true
+            min_entity_length: 2
+
+datasets:
+  - name: large_docs
+    database: large_docs_db
+    data_processing_strategy: universal_processor
+    files: []

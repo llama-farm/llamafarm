@@ -8,22 +8,22 @@ name: Test CLI Installer
 on:
   pull_request:
     paths:
-      - 'install.sh'
-      - 'cli/**'
-      - 'cli/hack/**'
-      - '.github/workflows/release-cli.yml'
-      - '.github/workflows/cli-installer.yml'
+      - "install.sh"
+      - "cli/**"
+      - "cli/hack/**"
+      - ".github/workflows/release-cli.yml"
+      - ".github/workflows/cli-installer.yml"
   push:
     branches: [main]
     paths:
-      - 'install.sh'
-      - 'cli/**'
-      - 'cli/hack/**'
-      - '.github/workflows/release-cli.yml'
-      - '.github/workflows/test-installer.yml'
+      - "install.sh"
+      - "cli/**"
+      - "cli/hack/**"
+      - ".github/workflows/release-cli.yml"
+      - ".github/workflows/test-installer.yml"
   workflow_dispatch:
 
-# Ensure cli/config directory exists and copy config/schema.yaml before any job
+# Ensure cli/config directory exists and copy config/schema.json before any job
 # This step runs before all jobs using the workflow_call 'pre' trick
 jobs:
   quick-test:
@@ -38,13 +38,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Copy config/schema.yaml to cli/config/schema.yaml
-        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+      - name: Install uv (for schema compilation)
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+          python-version: "3.12"
+
+      - name: Compile schema (dereference $refs)
+        working-directory: config
+        run: |
+          uv run python compile_schema.py
+          # Verify the dereferenced schema was copied to cli/cmd/config
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache-dependency-path: cli/go.sum
 
       - name: Install dependencies
@@ -67,13 +82,27 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Copy config/schema.yaml to cli/cmd/config/schema.yaml
-        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+      - name: Install uv (for schema compilation)
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Compile schema (dereference $refs)
+        working-directory: config
+        run: |
+          uv run python compile_schema.py
+          # Verify the dereferenced schema was copied to cli/cmd/config
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache-dependency-path: cli/go.sum
 
       - name: Run Docker environment tests
@@ -88,13 +117,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Copy config/schema.yaml to cli/cmd/config/schema.yaml
-        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+      - name: Install uv (for schema compilation)
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Compile schema (dereference $refs)
+        working-directory: config
+        run: |
+          uv run python compile_schema.py
+          # Verify the dereferenced schema was copied to cli/cmd/config
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache-dependency-path: cli/go.sum
 
       - name: Run comprehensive installer tests
@@ -109,13 +152,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Copy config/schema.yaml to cli/cmd/config/schema.yaml
-        run: cp config/schema.yaml cli/cmd/config/schema.yaml
+      - name: Install uv (for schema compilation)
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Compile schema (dereference $refs)
+        working-directory: config
+        run: |
+          uv run python compile_schema.py
+          # Verify the dereferenced schema was copied to cli/cmd/config
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache-dependency-path: cli/go.sum
 
       - name: Run local installer simulation

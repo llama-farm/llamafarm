@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import FontIcon from '../common/FontIcon'
 import ModeToggle from './ModeToggle'
 import { Button } from './ui/button'
@@ -28,6 +29,7 @@ const scorePillClasses = (score: number) => {
 }
 
 const Test = () => {
+  const location = useLocation()
   const { openPackageModal } = usePackageModal()
   const [running, setRunning] = useState<Record<number, boolean>>({})
 
@@ -764,6 +766,7 @@ const Test = () => {
                   ragEnabled: ragEnabledUI,
                   ragTopK: ragTopKUI,
                   ragScoreThreshold: ragThresholdUI,
+                  focusInput: (location.state as any)?.focusInput,
                 } as any)}
               />
             </div>

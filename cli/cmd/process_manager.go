@@ -121,7 +121,9 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 	// Start goroutine to monitor process
 	go pm.monitorProcess(name, cmd, logF)
 
-	OutputProgress("%s process started (PID: %d)\n", name, cmd.Process.Pid)
+	if debug {
+		OutputProgress("%s process started (PID: %d)\n", name, cmd.Process.Pid)
+	}
 	return nil
 }
 

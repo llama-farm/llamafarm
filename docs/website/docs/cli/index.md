@@ -23,6 +23,8 @@ lf [command] [flags]
 Environment helpers:
 - `LLAMAFARM_SESSION_ID` – reuse a session for `lf chat`.
 - `OLLAMA_HOST` – point `lf start` to a different Ollama endpoint.
+- `LF_VERSION_REF` – override the source code version/ref downloaded by the CLI (useful for testing feature branches or specific versions).
+- `LF_DATA_DIR` – override the data directory (default: `~/.llamafarm`).
 
 ## Command Matrix
 

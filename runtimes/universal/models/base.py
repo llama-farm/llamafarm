@@ -7,6 +7,8 @@ from typing import Optional, Any, Dict
 import torch
 import logging
 
+from transformers import PreTrainedTokenizerBase
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,16 +19,16 @@ class BaseModel(ABC):
         self.model_id = model_id
         self.device = device
         self.token = token  # HuggingFace authentication token
-        self.model = None
-        self.tokenizer = None
-        self.processor = None  # For vision/audio models
-        self.feature_extractor = None  # For audio models
-        self.pipe = None  # For diffusion models
+        self.model: Optional[Any] = None
+        self.tokenizer: Optional["PreTrainedTokenizerBase"] = None
+        self.processor: Optional[Any] = None  # For vision/audio models
+        self.feature_extractor: Optional[Any] = None  # For audio models
+        self.pipe: Optional[Any] = None  # For diffusion models
         self.model_type = "unknown"
         self.supports_streaming = False
 
     @abstractmethod
-    async def load(self):
+    async def load(self) -> None:
         """Load the model and associated components."""
         pass
 

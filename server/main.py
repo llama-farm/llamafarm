@@ -4,6 +4,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi_mcp import FastApiMCP
+from llamafarm_common.pidfile import write_pid
 
 from api.main import llama_farm_api
 from core.logging import setup_logging
@@ -11,6 +12,9 @@ from core.settings import settings
 
 # Configure logging FIRST, before anything else
 setup_logging(settings.LOG_JSON_FORMAT, settings.LOG_LEVEL, settings.LOG_FILE)
+
+# Write PID file for service discovery
+write_pid("server")
 
 # Create the data directory if it doesn't exist
 os.makedirs(settings.lf_data_dir, exist_ok=True)
@@ -26,8 +30,6 @@ app = llama_farm_api()
 mcp = FastApiMCP(
     app,
     include_tags=["mcp"],
-    # describe_all_responses=True,
-    # describe_full_response_schema=True,
 )
 
 mcp.mount_http(

@@ -2,7 +2,8 @@
 set -e
 echo "Compiling schema..."
 uv run python compile_schema.py
-echo "Generating types..."
+echo ""
+echo "Generating Python types..."
 uv run datamodel-codegen \
     --input schema.deref.yaml \
     --output datamodel.py \
@@ -10,6 +11,9 @@ uv run datamodel-codegen \
     --output-model-type=pydantic_v2.BaseModel \
     --target-python-version=3.12 \
     --use-standard-collections \
+    --use-title-as-name \
     --formatters=ruff-format \
     --class-name=LlamaFarmConfig
-echo "Done!"
+echo "✅ Python types generated"
+echo ""
+echo "✅ Done!"

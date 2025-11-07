@@ -5,6 +5,7 @@ import Loader from '../../common/Loader'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import SearchInput from '../ui/search-input'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
@@ -395,20 +396,23 @@ function DatasetView() {
       }
 
       toast({
-        message: 'Dataset processing completed successfully',
+        message: taskStatus.result?.processed_files
+          ? `✅ Processing complete! ${taskStatus.result.processed_files} file(s) processed`
+          : 'Dataset processing completed successfully',
         variant: 'default',
       })
     } else if (taskStatus.state === 'FAILURE') {
       // Task failed
+      console.error('Task failed:', taskStatus.error, taskStatus.traceback)
       setCurrentTaskId(null)
       setProcessingResult(null)
       const errorMessage = taskStatus.error || 'Unknown error occurred'
       toast({
-        message: `Dataset processing failed: ${errorMessage}`,
+        message: `❌ Processing failed: ${errorMessage}`,
         variant: 'destructive',
       })
     }
-  }, [taskStatus?.state, taskStatus?.error, taskStatus?.result, toast])
+  }, [taskStatus?.state, taskStatus?.error, taskStatus?.result, toast, currentTaskId])
 
   const openEdit = () => {
     setEditName(dataset?.name ?? '')
@@ -592,13 +596,26 @@ function DatasetView() {
                     <Badge
                       variant="secondary"
                       size="sm"
-                      className="rounded-xl w-max"
+                      className="rounded-xl w-max flex items-center gap-1.5"
                     >
-                      {taskStatus.state === 'PENDING' && 'Queued...'}
+                      {taskStatus.state === 'PENDING' && (
+                        <>
+                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
+                          Queued...
+                        </>
+                      )}
                       {taskStatus.state !== 'PENDING' &&
                         taskStatus.state !== 'SUCCESS' &&
-                        taskStatus.state !== 'FAILURE' &&
-                        'Processing...'}
+                        taskStatus.state !== 'FAILURE' && (
+                          <>
+                            <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
+                            {taskStatus.meta?.progress
+                              ? `${taskStatus.meta.progress}%`
+                              : taskStatus.meta?.current && taskStatus.meta?.total
+                                ? `${taskStatus.meta.current}/${taskStatus.meta.total}`
+                                : 'Processing...'}
+                          </>
+                        )}
                     </Badge>
                   </div>
                 )}
@@ -611,17 +628,37 @@ function DatasetView() {
               <div className="flex items-center gap-2">
                 {/* Processing status badge */}
                 {currentTaskId && taskStatus && (
-                  <Badge
-                    variant="secondary"
-                    size="sm"
-                    className="rounded-xl w-max"
-                  >
-                    {taskStatus.state === 'PENDING' && 'Queued...'}
-                    {taskStatus.state !== 'PENDING' &&
-                      taskStatus.state !== 'SUCCESS' &&
-                      taskStatus.state !== 'FAILURE' &&
-                      'Processing...'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-xl w-max flex items-center gap-1.5"
+                    >
+                      {taskStatus.state === 'PENDING' && (
+                        <>
+                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
+                          Queued...
+                        </>
+                      )}
+                      {taskStatus.state !== 'PENDING' &&
+                        taskStatus.state !== 'SUCCESS' &&
+                        taskStatus.state !== 'FAILURE' && (
+                        <>
+                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
+                          {taskStatus.meta?.progress
+                            ? `Processing ${taskStatus.meta.progress}%`
+                            : taskStatus.meta?.current && taskStatus.meta?.total
+                              ? `Processing ${taskStatus.meta.current}/${taskStatus.meta.total}`
+                              : 'Processing...'}
+                        </>
+                      )}
+                    </Badge>
+                    {taskStatus.meta?.message && (
+                      <span className="text-xs text-muted-foreground max-w-[200px] truncate hidden sm:inline">
+                        {taskStatus.meta.message}
+                      </span>
+                    )}
+                  </div>
                 )}
                 <Button
                   size="sm"
@@ -779,37 +816,214 @@ function DatasetView() {
                 processingResult.details.length > 0 && (
                   <div className="mt-3">
                     <div className="text-xs font-medium text-muted-foreground mb-2">
-                      Processing Details
+                      File Processing Details
                     </div>
-                    <div className="rounded-md border border-border max-h-60 overflow-auto">
+                    <div className="rounded-md border border-border max-h-96 overflow-auto">
                       {processingResult.details.map(
-                        (detail: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className="p-2 border-b last:border-b-0 text-xs font-mono"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-foreground">
-                                {detail.file}
-                              </span>
-                              <Badge
-                                variant={
-                                  detail.status === 'processed'
-                                    ? 'default'
-                                    : 'secondary'
-                                }
-                                size="sm"
-                              >
-                                {detail.status}
-                              </Badge>
-                            </div>
-                            {detail.chunks_created && (
-                              <div className="text-muted-foreground mt-1">
-                                {detail.chunks_created} chunks created
+                        (fileResult: any, idx: number) => {
+                          const details = fileResult.details || {}
+                          const result = details.result || {}
+                          const isSkipped = result.status === 'skipped' || details.status === 'skipped'
+                          const isFailed = !fileResult.success
+                          const isSuccess = fileResult.success && !isSkipped
+
+                          // Get filename from result (actual name) or fall back to hash
+                          const displayFilename = result.filename || details.filename || fileResult.file_hash
+                          const isHashFilename = displayFilename === fileResult.file_hash || !result.filename
+
+                          // Get file extension for icon
+                          const getFileExtension = (filename: string) => {
+                            const parts = filename.split('.')
+                            return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
+                          }
+                          const fileExt = getFileExtension(displayFilename)
+                          const fileIcon = ['pdf', 'doc', 'docx', 'txt', 'md'].includes(fileExt) ? '📄' : '📁'
+
+                          // Calculate total chunks if available
+                          const totalChunks = result.document_count || details.chunks || 0
+                          const storedChunks = result.stored_count || 0
+                          const skippedChunks = result.skipped_count || 0
+
+                          return (
+                            <div
+                              key={idx}
+                              className="p-4 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                            >
+                              {/* File header with status */}
+                              <div className="flex items-start justify-between gap-3 mb-2">
+                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                  {/* File type icon */}
+                                  <span className="text-xl flex-shrink-0">{fileIcon}</span>
+
+                                  {/* Status icon */}
+                                  {isSuccess && (
+                                    <FontIcon
+                                      type="checkmark-filled"
+                                      className="w-5 h-5 text-green-600 flex-shrink-0"
+                                    />
+                                  )}
+                                  {isSkipped && (
+                                    <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-white text-xs font-bold">!</span>
+                                    </div>
+                                  )}
+                                  {isFailed && (
+                                    <FontIcon
+                                      type="close"
+                                      className="w-5 h-5 text-red-600 flex-shrink-0"
+                                    />
+                                  )}
+
+                                  {/* Filename */}
+                                  <div className="flex flex-col flex-1 min-w-0">
+                                    <span className="text-sm font-medium truncate">
+                                      {displayFilename}
+                                    </span>
+                                    {isHashFilename && fileResult.file_hash && (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="text-xs text-muted-foreground font-mono cursor-pointer">
+                                              Hash: {fileResult.file_hash.substring(0, 12)}...
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p className="font-mono text-xs">{fileResult.file_hash}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Status badge */}
+                                <Badge
+                                  variant={
+                                    isSuccess
+                                      ? 'default'
+                                      : isSkipped
+                                        ? 'secondary'
+                                        : 'outline'
+                                  }
+                                  size="sm"
+                                  className="rounded-xl flex-shrink-0 font-medium"
+                                >
+                                  {isSuccess && '✓ SUCCESS'}
+                                  {isSkipped && `⚠️ SKIPPED${result.reason ? ` (${result.reason})` : ''}`}
+                                  {isFailed && '✗ FAILED'}
+                                </Badge>
                               </div>
-                            )}
-                          </div>
-                        )
+
+                              {/* Processing stats */}
+                              <div className="ml-9 space-y-2 text-xs">
+                                {/* Chunks info - enhanced display */}
+                                {totalChunks > 0 && (
+                                  <div className="flex items-center gap-3 bg-muted/40 rounded px-3 py-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-base">📦</span>
+                                      <span className="font-semibold text-foreground">
+                                        {totalChunks}
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        chunk{totalChunks !== 1 ? 's' : ''} created
+                                      </span>
+                                    </div>
+                                    {storedChunks > 0 && (
+                                      <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
+                                        <span className="font-semibold">✓ {storedChunks}</span>
+                                        <span>stored</span>
+                                      </div>
+                                    )}
+                                    {skippedChunks > 0 && (
+                                      <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-500">
+                                        <span className="font-semibold">⊘ {skippedChunks}</span>
+                                        <span>skipped</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Processing details grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                                  {/* Parser info */}
+                                  {(details.parser || result.parsers_used?.length > 0) && (
+                                    <div className="text-muted-foreground">
+                                      <span className="font-medium text-foreground">Parser:</span>{' '}
+                                      <span className="font-mono text-xs">
+                                        {result.parsers_used?.join(', ') || details.parser}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* Embedder */}
+                                  {(details.embedder || result.embedder) && (
+                                    <div className="text-muted-foreground">
+                                      <span className="font-medium text-foreground">Embedder:</span>{' '}
+                                      <span className="font-mono text-xs">
+                                        {result.embedder || details.embedder}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Extractors - full width */}
+                                {(details.extractors?.length > 0 || result.extractors_applied?.length > 0) && (
+                                  <div className="text-muted-foreground">
+                                    <span className="font-medium text-foreground">Extractors:</span>{' '}
+                                    <div className="inline-flex flex-wrap gap-1 mt-1">
+                                      {(result.extractors_applied || details.extractors || []).map((ext: string, i: number) => (
+                                        <Badge
+                                          key={i}
+                                          variant="outline"
+                                          size="sm"
+                                          className="rounded font-mono text-xs"
+                                        >
+                                          {ext}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Document IDs if stored */}
+                                {result.document_ids && result.document_ids.length > 0 && (
+                                  <div className="text-muted-foreground pt-1">
+                                    <span className="font-medium text-foreground">Document IDs:</span>{' '}
+                                    <span className="font-mono text-xs">
+                                      {result.document_ids.length} stored in vector database
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Reason for skip/failure - highlighted */}
+                                {(result.reason || details.reason) && (
+                                  <div className={`mt-2 p-2 rounded ${
+                                    isSkipped
+                                      ? 'bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800'
+                                      : 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
+                                  }`}>
+                                    <span className={`font-medium ${isSkipped ? 'text-yellow-800 dark:text-yellow-300' : 'text-red-800 dark:text-red-300'}`}>
+                                      Reason:
+                                    </span>{' '}
+                                    <span className={isSkipped ? 'text-yellow-700 dark:text-yellow-400' : 'text-red-700 dark:text-red-400'}>
+                                      {result.reason || details.reason}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Error message for failures */}
+                                {isFailed && (fileResult.error || details.error) && (
+                                  <div className="mt-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                                    <span className="font-medium text-red-800 dark:text-red-300">Error:</span>{' '}
+                                    <span className="text-red-700 dark:text-red-400">
+                                      {fileResult.error || details.error}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        }
                       )}
                     </div>
                   </div>
@@ -956,6 +1170,85 @@ function DatasetView() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Live Processing Progress - shown while task is running */}
+          {currentTaskId && taskStatus && taskStatus.meta?.files && (
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium">Processing Progress</h3>
+                <Badge variant="secondary" size="sm" className="rounded-xl">
+                  {taskStatus.meta.current || 0} / {taskStatus.meta.total || 0} files
+                </Badge>
+              </div>
+              <div className="rounded-md border border-border max-h-80 overflow-auto">
+                {taskStatus.meta.files.map((file: any, idx: number) => (
+                  <div
+                    key={file.task_id || idx}
+                    className="p-3 border-b last:border-b-0 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {/* Status icon */}
+                        {file.state === 'pending' && (
+                          <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
+                        )}
+                        {file.state === 'processing' && (
+                          <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex-shrink-0" />
+                        )}
+                        {file.state === 'success' && (
+                          <FontIcon
+                            type="checkmark-filled"
+                            className="w-4 h-4 text-green-600 flex-shrink-0"
+                          />
+                        )}
+                        {file.state === 'failure' && (
+                          <FontIcon
+                            type="close"
+                            className="w-4 h-4 text-red-600 flex-shrink-0"
+                          />
+                        )}
+
+                        {/* Filename */}
+                        <span className="font-mono text-muted-foreground truncate">
+                          {file.filename || `File ${idx + 1}`}
+                        </span>
+                      </div>
+
+                      {/* Status badge */}
+                      <Badge
+                        variant={
+                          file.state === 'success'
+                            ? 'default'
+                            : file.state === 'failure'
+                              ? 'outline'
+                              : 'secondary'
+                        }
+                        size="sm"
+                        className="rounded-xl flex-shrink-0"
+                      >
+                        {file.state === 'pending' && 'Queued'}
+                        {file.state === 'processing' && 'Processing'}
+                        {file.state === 'success' && 'Complete'}
+                        {file.state === 'failure' && 'Failed'}
+                      </Badge>
+                    </div>
+
+                    {/* Additional info */}
+                    {file.chunks && (
+                      <div className="text-muted-foreground mt-1 ml-6">
+                        {file.chunks} chunks created
+                      </div>
+                    )}
+                    {file.error && (
+                      <div className="text-red-600 mt-1 ml-6 text-xs">
+                        Error: {file.error}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           {/* Processing strategy and Embedding model sections removed per request */}
@@ -1165,17 +1458,6 @@ function DatasetView() {
               {files.length === 0 ? (
                 <div className="p-3 text-muted-foreground">
                   No files assigned yet.
-                  {/* Debug info */}
-                  {process.env.NODE_ENV === 'development' && (
-                    <div className="mt-2 text-xs">
-                      <div>
-                        API Dataset: {currentApiDataset ? 'Found' : 'Not found'}
-                      </div>
-                      <div>
-                        API Files: {currentApiDataset?.files?.length || 0}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div>

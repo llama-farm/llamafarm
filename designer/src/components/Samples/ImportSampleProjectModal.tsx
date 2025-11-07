@@ -28,7 +28,7 @@ function ImportSampleProjectModal({
 
   useEffect(() => {
     if (!sample) return
-    setName(`${sample.title} (sample project)`)
+    setName(`${sample.slug}-sample`)
     setDescription(sample.description)
   }, [sample])
 

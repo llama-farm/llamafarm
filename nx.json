@@ -1,12 +1,20 @@
 {
   "installation": {
-    "version": "21.3.11"
+    "version": "21.3.11",
+    "plugins": {
+      "@nx/eslint": "22.0.2",
+      "@nx/vite": "22.0.2",
+      "@nx/jest": "22.0.2",
+      "@nx/docker": "22.0.2"
+    }
   },
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "nxCloudId": "6890fca1e55dc20a336b5529",
   "release": {
     "projectsRelationship": "fixed",
-    "projects": ["*"],
+    "projects": [
+      "*"
+    ],
     "version": {
       "conventionalCommits": true
     },
@@ -15,6 +23,18 @@
       "projectChangelogs": false
     }
   },
-  "targets": {
-  }
+  "targets": {},
+  "plugins": [
+    {
+      "plugin": "@nx/docker",
+      "options": {
+        "buildTarget": {
+          "name": "docker:build"
+        },
+        "runTarget": {
+          "name": "docker:run"
+        }
+      }
+    }
+  ]
 }

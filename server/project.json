@@ -1,5 +1,8 @@
 {
-  "root": "server/",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "server",
+  "projectType": "application",
+  "sourceRoot": "server",
   "targets": {
     "start": {
       "executor": "nx:run-commands",
@@ -7,12 +10,18 @@
       "options": {
         "cwd": "{workspaceRoot}/server",
         "command": "uv run python main.py",
-        "output": "inherit"
+        "output": "inherit",
+        "env": {
+          "DESIGNER_DIST_PATH": "{workspaceRoot}/designer/dist"
+        }
       }
     },
     "build": {
-      "cwd": "..",
-      "command": "docker build -t llamafarm-api -f server/Dockerfile ."
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "command": "docker build -t llamafarm-api -f server/Dockerfile ."
+      }
     },
     "test": {
       "executor": "nx:run-commands",

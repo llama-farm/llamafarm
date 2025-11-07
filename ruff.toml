@@ -1,0 +1,30 @@
+# Shared Ruff configuration for all Python components in the monorepo
+# This file is referenced by each component's pyproject.toml
+
+line-length = 88         # Match Black's default
+target-version = "py311"
+
+# Enable auto-fixes
+fix = true
+
+# Exclude patterns (common across all components)
+exclude = [
+  "migrations",
+  ".venv",
+  "venv",
+  "build",
+  "dist",
+  "__pycache__",
+  "*.egg-info",
+]
+
+# Linting configuration
+[lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# Ignore line-too-long errors (they require manual refactoring)
+ignore = ["E501"]
+
+# Per-file ignores
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
