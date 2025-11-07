@@ -56,11 +56,12 @@ providers:
 
 ### 3. Runtime Compatibility Logic
 
-| Format       | Universal | Ollama | Lemonade (llamacpp) | Lemonade (transformers) | Lemonade (onnx) |
-|--------------|-----------|--------|---------------------|-------------------------|-----------------|
-| transformers | ✅         | ❌      | ❌                   | ✅                       | ❌               |
-| gguf         | ❌         | ✅      | ✅                   | ❌                       | ❌               |
-| onnx         | ❌         | ❌      | ❌                   | ❌                       | ✅               |
+| Format       | Universal | Ollama | Lemonade (llamacpp) | Lemonade (transformers) | Lemonade (onnx) | OpenAI |
+|--------------|-----------|--------|---------------------|-------------------------|-----------------|--------|
+| transformers | ✅         | ❌      | ❌                   | ✅                       | ❌               | ❌      |
+| gguf         | ❌         | ✅      | ✅                   | ❌                       | ❌               | ❌      |
+| onnx         | ❌         | ❌      | ❌                   | ❌                       | ✅               | ❌      |
+| api          | ❌         | ❌      | ❌                   | ❌                       | ❌               | ✅      |
 
 **Key Points**:
 - **Universal**: Only transformers (HuggingFace models)
@@ -69,6 +70,7 @@ providers:
   - `llamacpp` backend: GGUF models
   - `transformers` backend: HuggingFace models
   - `onnx` backend: ONNX models
+- **OpenAI**: Only API format (cloud models via OpenAI-compatible endpoints)
 
 ## Schema Changes
 

@@ -61,7 +61,7 @@ variants:
     description: "Meta's largest Llama model with exceptional capabilities"
     parameters: "405b"
     download_size: "N/A (API)"
-    context_window: 130815
+    context_window: 131072
     hardware_requirements:
       min_ram: "N/A (cloud)"
       min_vram: "N/A (cloud)"

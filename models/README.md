@@ -16,7 +16,10 @@ models/
 │   ├── granite.yaml              # IBM Granite 4.0 family
 │   ├── phi.yaml                  # Microsoft Phi family
 │   ├── codellama.yaml            # Meta Code Llama family
-│   └── tinyllama.yaml            # TinyLlama compact model
+│   ├── tinyllama.yaml            # TinyLlama compact model
+│   ├── openai.yaml               # OpenAI cloud models (GPT-5, GPT-4.1, o-series)
+│   ├── xai.yaml                  # xAI Grok cloud models
+│   └── togetherai.yaml           # Together AI cloud models
 ├── image-generation/             # Future: SD, FLUX, etc.
 ├── image-recognition/            # Future: CLIP, ViT, etc.
 ├── audio/                        # Future: Whisper, etc.

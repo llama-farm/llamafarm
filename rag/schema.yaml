@@ -59,6 +59,7 @@ definitions:
     # Auto-detection parser configuration
     autoParserConfig:
       type: object
+      title: Auto Parser Configuration
       additionalProperties: false
       properties:
         chunk_size:

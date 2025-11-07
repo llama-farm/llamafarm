@@ -44,7 +44,7 @@ function generateDownloadSummary(variants: CatalogVariant[]): string {
     const match = v.download_size.match(/^([\d.]+)\s*([KMGT]?B)$/i)
     if (!match) return 0
     const [, num, unit] = match
-    const multiplier = { KB: 0.001, MB: 0.001, GB: 1, TB: 1000 }[
+    const multiplier = { KB: 1e-6, MB: 0.001, GB: 1, TB: 1000 }[
       unit.toUpperCase()
     ] || 1
     return parseFloat(num) * multiplier

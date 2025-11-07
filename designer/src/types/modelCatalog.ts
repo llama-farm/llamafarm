@@ -76,7 +76,7 @@ export interface ModelVariant {
    */
   description?: string;
   /**
-   * Parameter count (e.g., "1b", "7b", "70b")
+   * Parameter count (e.g., "1b", "7b", "70b") or tier (e.g., "large", "mini", "nano")
    */
   parameters: string;
   /**
@@ -88,7 +88,7 @@ export interface ModelVariant {
    */
   context_window?: number;
   /**
-   * Approximate download size
+   * Approximate download size or "N/A (API)" for cloud models
    */
   download_size: string;
   /**
@@ -292,7 +292,7 @@ export interface ModelVariant {
    */
   description?: string;
   /**
-   * Parameter count (e.g., "1b", "7b", "70b")
+   * Parameter count (e.g., "1b", "7b", "70b") or tier (e.g., "large", "mini", "nano")
    */
   parameters: string;
   /**
@@ -304,7 +304,7 @@ export interface ModelVariant {
    */
   context_window?: number;
   /**
-   * Approximate download size
+   * Approximate download size or "N/A (API)" for cloud models
    */
   download_size: string;
   /**
@@ -453,7 +453,8 @@ export const MODEL_CATALOG = {
             "format": "transformers",
             "model_id": "codellama/CodeLlama-7b-Instruct-hf",
             "base_url": "http://127.0.0.1:11540",
-            "notes": "Auto-downloads from HuggingFace on first use",
+            "requires_token": true,
+            "notes": "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model).",
             "download_command": "Auto-downloads from HuggingFace on first use"
           },
           "ollama": {
@@ -494,7 +495,8 @@ export const MODEL_CATALOG = {
             "format": "transformers",
             "model_id": "codellama/CodeLlama-13b-Instruct-hf",
             "base_url": "http://127.0.0.1:11540",
-            "notes": "Auto-downloads from HuggingFace on first use",
+            "requires_token": true,
+            "notes": "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model).",
             "download_command": "Auto-downloads from HuggingFace on first use"
           },
           "ollama": {
@@ -535,7 +537,8 @@ export const MODEL_CATALOG = {
             "format": "transformers",
             "model_id": "codellama/CodeLlama-34b-Instruct-hf",
             "base_url": "http://127.0.0.1:11540",
-            "notes": "Auto-downloads from HuggingFace on first use",
+            "requires_token": true,
+            "notes": "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model).",
             "download_command": "Auto-downloads from HuggingFace on first use"
           },
           "ollama": {
@@ -1273,9 +1276,9 @@ export const MODEL_CATALOG = {
             "provider": "ollama",
             "runtime": "ollama",
             "format": "gguf",
-            "model_id": "mistral:8x7b",
+            "model_id": "mixtral:8x7b",
             "base_url": "http://localhost:11434",
-            "download_command": "ollama pull mistral:8x7b"
+            "download_command": "ollama pull mixtral:8x7b"
           }
         },
         "use_cases": [
@@ -1680,9 +1683,9 @@ export const MODEL_CATALOG = {
             "provider": "ollama",
             "runtime": "ollama",
             "format": "gguf",
-            "model_id": "phi-3:3.8b",
+            "model_id": "phi3:mini",
             "base_url": "http://localhost:11434",
-            "download_command": "ollama pull phi-3:3.8b"
+            "download_command": "ollama pull phi3:mini"
           }
         },
         "use_cases": [
@@ -1723,9 +1726,9 @@ export const MODEL_CATALOG = {
             "provider": "ollama",
             "runtime": "ollama",
             "format": "gguf",
-            "model_id": "phi-3:14b",
+            "model_id": "phi3:medium",
             "base_url": "http://localhost:11434",
-            "download_command": "ollama pull phi-3:14b"
+            "download_command": "ollama pull phi3:medium"
           }
         },
         "use_cases": [
@@ -2392,7 +2395,7 @@ export const MODEL_CATALOG = {
         "description": "Meta's largest Llama model with exceptional capabilities",
         "parameters": "405b",
         "download_size": "N/A (API)",
-        "context_window": 130815,
+        "context_window": 131072,
         "hardware_requirements": {
           "min_ram": "N/A (cloud)",
           "min_vram": "N/A (cloud)",
@@ -2634,7 +2637,8 @@ export const ALL_MODEL_VARIANTS = [
         "format": "transformers",
         "model_id": "codellama/CodeLlama-7b-Instruct-hf",
         "base_url": "http://127.0.0.1:11540",
-        "notes": "Auto-downloads from HuggingFace on first use",
+        "requires_token": true,
+        "notes": "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model).",
         "download_command": "Auto-downloads from HuggingFace on first use"
       },
       "ollama": {
@@ -2677,7 +2681,8 @@ export const ALL_MODEL_VARIANTS = [
         "format": "transformers",
         "model_id": "codellama/CodeLlama-13b-Instruct-hf",
         "base_url": "http://127.0.0.1:11540",
-        "notes": "Auto-downloads from HuggingFace on first use",
+        "requires_token": true,
+        "notes": "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model).",
         "download_command": "Auto-downloads from HuggingFace on first use"
       },
       "ollama": {
@@ -2720,7 +2725,8 @@ export const ALL_MODEL_VARIANTS = [
         "format": "transformers",
         "model_id": "codellama/CodeLlama-34b-Instruct-hf",
         "base_url": "http://127.0.0.1:11540",
-        "notes": "Auto-downloads from HuggingFace on first use",
+        "requires_token": true,
+        "notes": "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model).",
         "download_command": "Auto-downloads from HuggingFace on first use"
       },
       "ollama": {
@@ -3406,9 +3412,9 @@ export const ALL_MODEL_VARIANTS = [
         "provider": "ollama",
         "runtime": "ollama",
         "format": "gguf",
-        "model_id": "mistral:8x7b",
+        "model_id": "mixtral:8x7b",
         "base_url": "http://localhost:11434",
-        "download_command": "ollama pull mistral:8x7b"
+        "download_command": "ollama pull mixtral:8x7b"
       }
     },
     "use_cases": [
@@ -3792,9 +3798,9 @@ export const ALL_MODEL_VARIANTS = [
         "provider": "ollama",
         "runtime": "ollama",
         "format": "gguf",
-        "model_id": "phi-3:3.8b",
+        "model_id": "phi3:mini",
         "base_url": "http://localhost:11434",
-        "download_command": "ollama pull phi-3:3.8b"
+        "download_command": "ollama pull phi3:mini"
       }
     },
     "use_cases": [
@@ -3837,9 +3843,9 @@ export const ALL_MODEL_VARIANTS = [
         "provider": "ollama",
         "runtime": "ollama",
         "format": "gguf",
-        "model_id": "phi-3:14b",
+        "model_id": "phi3:medium",
         "base_url": "http://localhost:11434",
-        "download_command": "ollama pull phi-3:14b"
+        "download_command": "ollama pull phi3:medium"
       }
     },
     "use_cases": [
@@ -4412,7 +4418,7 @@ export const ALL_MODEL_VARIANTS = [
     "description": "Meta's largest Llama model with exceptional capabilities",
     "parameters": "405b",
     "download_size": "N/A (API)",
-    "context_window": 130815,
+    "context_window": 131072,
     "hardware_requirements": {
       "min_ram": "N/A (cloud)",
       "min_vram": "N/A (cloud)",

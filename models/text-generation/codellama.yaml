@@ -29,7 +29,8 @@ variants:
         format: transformers
         model_id: "codellama/CodeLlama-7b-Instruct-hf"
         base_url: "http://127.0.0.1:11540"
-        notes: "Auto-downloads from HuggingFace on first use"
+        requires_token: true
+        notes: "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model)."
         download_command: "Auto-downloads from HuggingFace on first use"
       ollama:
         provider: ollama
@@ -59,7 +60,8 @@ variants:
         format: transformers
         model_id: "codellama/CodeLlama-13b-Instruct-hf"
         base_url: "http://127.0.0.1:11540"
-        notes: "Auto-downloads from HuggingFace on first use"
+        requires_token: true
+        notes: "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model)."
         download_command: "Auto-downloads from HuggingFace on first use"
       ollama:
         provider: ollama
@@ -89,7 +91,8 @@ variants:
         format: transformers
         model_id: "codellama/CodeLlama-34b-Instruct-hf"
         base_url: "http://127.0.0.1:11540"
-        notes: "Auto-downloads from HuggingFace on first use"
+        requires_token: true
+        notes: "Auto-downloads from HuggingFace on first use. Requires HuggingFace token (gated model)."
         download_command: "Auto-downloads from HuggingFace on first use"
       ollama:
         provider: ollama

@@ -56,9 +56,9 @@ variants:
         provider: ollama
         runtime: ollama
         format: gguf
-        model_id: "mistral:8x7b"
+        model_id: "mixtral:8x7b"
         base_url: "http://localhost:11434"
-        download_command: "ollama pull mistral:8x7b"
+        download_command: "ollama pull mixtral:8x7b"
     use_cases: [chat, coding, reasoning, general-purpose]
 
   - id: mistral:22b

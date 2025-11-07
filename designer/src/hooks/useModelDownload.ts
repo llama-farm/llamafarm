@@ -19,6 +19,7 @@ export function useModelDownload() {
   const lastUpdateTimeRef = useRef<number>(0)
   const lastBytesRef = useRef<number>(0)
   const speedSamplesRef = useRef<number[]>([])
+  const hasErrorRef = useRef<boolean>(false)
 
   const calculateSpeed = (currentBytes: number, _elapsedSeconds: number): number => {
     const now = Date.now()
@@ -69,7 +70,7 @@ export function useModelDownload() {
     const elapsedTime = (Date.now() - startTimeRef.current) / 1000
     const downloadSpeed = calculateSpeed(overallDownloaded, elapsedTime)
 
-    const remainingBytes = overallTotal - overallDownloaded
+    const remainingBytes = Math.max(0, overallTotal - overallDownloaded)
     const estimatedTimeRemaining =
       downloadSpeed > 0 ? remainingBytes / downloadSpeed : 0
 
@@ -96,6 +97,7 @@ export function useModelDownload() {
       setProgress(null)
       filesRef.current.clear()
       speedSamplesRef.current = []
+      hasErrorRef.current = false
       startTimeRef.current = Date.now()
       lastUpdateTimeRef.current = Date.now()
       lastBytesRef.current = 0
@@ -109,7 +111,7 @@ export function useModelDownload() {
         }
 
         setIsDownloading(false)
-        return true
+        return !hasErrorRef.current
       } catch (err: any) {
         setError(err.message || 'Download failed')
         setIsDownloading(false)
@@ -167,6 +169,7 @@ export function useModelDownload() {
       case 'error': {
         setError(event.message)
         setIsDownloading(false)
+        hasErrorRef.current = true
         break
       }
     }

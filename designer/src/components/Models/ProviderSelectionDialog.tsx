@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '../ui/button'
 import {
   Dialog,
@@ -34,6 +34,13 @@ export function ProviderSelectionDialog({
     null
   )
   const [copiedProvider, setCopiedProvider] = useState<string | null>(null)
+
+  // Reset selected provider when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setSelectedProvider(null)
+    }
+  }, [open])
 
   const handleCopyCommand = (provider: ProviderInfo) => {
     if (provider.downloadCommand) {

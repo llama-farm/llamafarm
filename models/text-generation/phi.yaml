@@ -35,9 +35,9 @@ variants:
         provider: ollama
         runtime: ollama
         format: gguf
-        model_id: "phi-3:3.8b"
+        model_id: "phi3:mini"
         base_url: "http://localhost:11434"
-        download_command: "ollama pull phi-3:3.8b"
+        download_command: "ollama pull phi3:mini"
     use_cases: [reasoning, chat, lightweight-inference]
     benchmark_scores:
       mmlu: 69.0
@@ -65,9 +65,9 @@ variants:
         provider: ollama
         runtime: ollama
         format: gguf
-        model_id: "phi-3:14b"
+        model_id: "phi3:medium"
         base_url: "http://localhost:11434"
-        download_command: "ollama pull phi-3:14b"
+        download_command: "ollama pull phi3:medium"
     use_cases: [reasoning, chat, general-purpose]
     benchmark_scores:
       mmlu: 78.0

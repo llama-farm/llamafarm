@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,13 @@ export function CloudModelConfigDialog({
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl)
   const [showApiKey, setShowApiKey] = useState(false)
+
+  // Sync baseUrl when dialog opens or defaultBaseUrl changes
+  useEffect(() => {
+    if (open) {
+      setBaseUrl(defaultBaseUrl)
+    }
+  }, [open, defaultBaseUrl])
 
   const handleConfigure = () => {
     if (!apiKey.trim()) {

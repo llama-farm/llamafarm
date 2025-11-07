@@ -126,8 +126,8 @@ definitions:
         description: Brief description of this variant
       parameters:
         type: string
-        description: Parameter count (e.g., "1b", "7b", "70b")
-        pattern: "^[0-9.]+[bBmMkK]?$"
+        description: Parameter count (e.g., "1b", "7b", "70b") or tier (e.g., "large", "mini", "nano")
+        pattern: "^([0-9.]+[bBmMkK]?|large|mini|nano|small|medium)$"
       quantization:
         type: string
         description: Quantization type if applicable
@@ -138,8 +138,8 @@ definitions:
         minimum: 512
       download_size:
         type: string
-        description: Approximate download size
-        pattern: "^[0-9.]+ [KMGT]B$"
+        description: Approximate download size or "N/A (API)" for cloud models
+        pattern: "^([0-9.]+ [KMGT]B|N/A \\(API\\))$"
         example: "4.5 GB"
       hardware_requirements:
         type: object
