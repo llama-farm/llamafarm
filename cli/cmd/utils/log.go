@@ -93,6 +93,6 @@ func LogDebug(msg string) {
 			return
 		}
 		// Also route through the output system for TUI compatibility
-		sendMessage(DebugMessage, msg)
+		sendMessage(DebugMessage, "%s", msg)
 	}
 }

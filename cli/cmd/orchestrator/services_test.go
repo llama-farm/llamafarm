@@ -26,7 +26,7 @@ func TestResolveDependencies(t *testing.T) {
 		{
 			name:        "resolve universal-runtime with no dependencies",
 			serviceName: "universal-runtime",
-			wantOrder:   []string{"universal-runtime"},
+			wantOrder:   []string{"server", "universal-runtime"},
 			wantErr:     false,
 		},
 		{

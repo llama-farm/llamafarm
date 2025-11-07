@@ -74,8 +74,9 @@ func TestFormatMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			msg := OutputMessage{
-				Type:    tt.msgType,
-				Content: tt.content,
+				Type:        tt.msgType,
+				Content:     tt.content,
+				InjectEmoji: true, // Enable emoji injection for the test
 			}
 
 			result := FormatMessage(msg)

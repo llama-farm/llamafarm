@@ -114,7 +114,15 @@ func TestMaybeCheckForUpgrade_SkipsWithinInterval(t *testing.T) {
 		t.Fatalf("expected no upgrade info when within interval")
 	}
 
-	fakeClient := utils.GetHTTPClient().(*fakeHTTPClient)
+	// GetHTTPClient() wraps the client in VerboseHTTPClient, so we need to unwrap it
+	verboseClient, ok := utils.GetHTTPClient().(*utils.VerboseHTTPClient)
+	if !ok {
+		t.Fatalf("expected VerboseHTTPClient wrapper")
+	}
+	fakeClient, ok := verboseClient.Inner.(*fakeHTTPClient)
+	if !ok {
+		t.Fatalf("expected fakeHTTPClient inside VerboseHTTPClient")
+	}
 	if fakeClient.callCount != 0 {
 		t.Fatalf("expected no HTTP calls, got %d", fakeClient.callCount)
 	}
