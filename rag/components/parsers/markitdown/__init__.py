@@ -1,5 +1,5 @@
-"""MarkItDown universal document converter."""
+"""MarkItDown universal document parser."""
 
-from .markitdown_converter import MarkItDownConverter
+from .markitdown_parser import MarkItDownParser
 
-__all__ = ["MarkItDownConverter"]
+__all__ = ["MarkItDownParser"]
