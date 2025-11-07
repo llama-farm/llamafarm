@@ -8,7 +8,11 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "{workspaceRoot}/rag",
-        "command": "uv run python main.py",
+        "commands": [
+          "uv sync --extra llamaindex --extra markitdown",
+          "uv run python main.py"
+        ],
+        "parallel": false,
         "output": "inherit"
       }
     },

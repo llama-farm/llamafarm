@@ -39,7 +39,7 @@ COPY ruff.toml ./ruff.toml
 
 # Install dependencies in separate layers (cached unless lock files change)
 RUN cd config && uv sync --locked --all-extras
-RUN cd rag && uv sync --locked
+RUN cd rag && uv sync --locked --extra llamaindex --extra markitdown
 
 # Now copy the rest of the source code (changes won't invalidate dependency cache)
 COPY config/ ./config/
@@ -49,7 +49,7 @@ COPY rag/ ./rag/
 # Install each package with its own dependencies
 RUN cd config && uv sync --locked --all-extras --verbose
 RUN cd common && uv sync --locked --all-extras --verbose
-RUN cd rag && uv sync --locked  --verbose
+RUN cd rag && uv sync --locked --extra llamaindex --extra markitdown --verbose
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh

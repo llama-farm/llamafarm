@@ -123,6 +123,10 @@ class BlobProcessor:
 
         Returns:
             Parser class
+
+        Raises:
+            ImportError: If parser requires missing dependencies
+            ValueError: If parser not found in registry
         """
         from components.parsers.parser_factory import ToolAwareParserFactory
 
@@ -130,11 +134,21 @@ class BlobProcessor:
         if parser_class := ToolAwareParserFactory.load_parser_class(parser_type):
             return parser_class
 
-        logger.error(f"Parser {parser_type} not found - falling back to mock parser")
-        logger.warning(
-            f"Mock parser fallback may cause silent processing failures for {parser_type}"
+        # Parser not found or dependencies missing - raise clear error
+        parser_info = ToolAwareParserFactory.get_parser_info(parser_type)
+        if parser_info:
+            deps = parser_info.get("dependencies", {})
+            required_deps = deps.get("required", [])
+            if required_deps:
+                raise ImportError(
+                    f"Parser '{parser_type}' requires missing dependencies: {required_deps}\n"
+                    f"Install with: uv pip install {' '.join(required_deps)}"
+                )
+
+        raise ValueError(
+            f"Parser '{parser_type}' not found. "
+            f"Available parsers: {list(ToolAwareParserFactory.list_parsers())}"
         )
-        return ToolAwareParserFactory.create_mock_parser(parser_type)
 
     def _get_extractor_class(self, extractor_type: str) -> type:
         """
