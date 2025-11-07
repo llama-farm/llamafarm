@@ -81,10 +81,11 @@ jobs:
         run: go install github.com/atombender/go-jsonschema@latest
 
       - name: Install Nx CLI
-        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+        run: |
+          npx nx init --useDotNxInstallation --interactive=false --verbose
 
       - name: Run generate-types (compiles schema and generates Go types)
-        run: nx generate-types cli
+        run: npx nx generate-types cli
 
       - name: Create dist directory
         run: mkdir -p dist
@@ -153,7 +154,8 @@ jobs:
           node-version: "20"
 
       - name: Install Nx CLI
-        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+        run: |
+          npx nx@latest init --useDotNxInstallation --interactive=false --verbose
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -172,7 +174,7 @@ jobs:
         run: go install github.com/atombender/go-jsonschema@latest
 
       - name: Generate types
-        run: nx generate-types cli
+        run: npx nx generate-types cli
 
       - name: Build designer
         run: |
@@ -206,7 +208,7 @@ jobs:
 
       - name: Package distribution archive
         run: |
-          VERSION=${{ steps.version.outputs.version }} nx pack
+          VERSION=${{ steps.version.outputs.version }} npx nx pack
 
       - name: Upload distribution archive artifact
         uses: actions/upload-artifact@v4
