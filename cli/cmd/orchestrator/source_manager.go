@@ -40,12 +40,13 @@ type SourceManager struct {
 	srcDir        string
 	versionFile   string
 	pythonEnvMgr  *PythonEnvManager
-	currentSource string     // tracks what source version is currently installed
-	mu            sync.Mutex // protects against parallel downloads
+	processMgr    *ProcessManager // for stopping services during upgrades
+	currentSource string          // tracks what source version is currently installed
+	mu            sync.Mutex      // protects against parallel downloads
 }
 
 // NewSourceManager creates a new source code manager
-func NewSourceManager(pythonEnvMgr *PythonEnvManager) (*SourceManager, error) {
+func NewSourceManager(pythonEnvMgr *PythonEnvManager, processMgr *ProcessManager) (*SourceManager, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
@@ -60,6 +61,7 @@ func NewSourceManager(pythonEnvMgr *PythonEnvManager) (*SourceManager, error) {
 		srcDir:       srcDir,
 		versionFile:  versionFile,
 		pythonEnvMgr: pythonEnvMgr,
+		processMgr:   processMgr,
 	}, nil
 }
 
@@ -101,6 +103,13 @@ func (m *SourceManager) EnsureSource() error {
 		}
 
 		return nil
+	}
+
+	// Source is out of sync - stop all running services before upgrading
+	utils.LogDebug(fmt.Sprintf("Source version mismatch (current: %s, target: %s) - stopping all services before upgrade", currentVersion, targetVersion))
+	if m.processMgr != nil {
+		m.processMgr.StopAllProcesses()
+		utils.LogDebug("All services stopped successfully")
 	}
 
 	// Need to download new source

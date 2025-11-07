@@ -52,16 +52,16 @@ func NewOrchestrator(serverURL string) (*NativeOrchestrator, error) {
 		return nil, fmt.Errorf("failed to create Python environment manager: %w", err)
 	}
 
-	// Create source manager
-	srcMgr, err := NewSourceManager(pythonMgr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create source manager: %w", err)
-	}
-
-	// Create process manager
+	// Create process manager (needed before source manager for service shutdown during upgrades)
 	procMgr, err := NewProcessManager()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create process manager: %w", err)
+	}
+
+	// Create source manager (with process manager for stopping services during upgrades)
+	srcMgr, err := NewSourceManager(pythonMgr, procMgr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create source manager: %w", err)
 	}
 
 	orchestrator := &NativeOrchestrator{
