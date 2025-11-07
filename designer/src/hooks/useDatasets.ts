@@ -5,6 +5,7 @@ import {
   DatasetActionRequest,
   FileDeleteParams,
 } from '../types/datasets'
+import { projectKeys } from './useProjects'
 
 export const DEFAULT_DATASET_LIST_STALE_TIME = 600_000 // 10 minutes
 
@@ -91,6 +92,10 @@ export function useCreateDataset() {
       queryClient.invalidateQueries({
         queryKey: datasetKeys.list(variables.namespace, variables.project),
       })
+      // Also invalidate the project config so ConfigEditor shows the new dataset
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.detail(variables.namespace, variables.project),
+      })
     },
   })
 }
@@ -113,6 +118,10 @@ export function useDeleteDataset() {
       // Invalidate and refetch the datasets list
       queryClient.invalidateQueries({
         queryKey: datasetKeys.list(variables.namespace, variables.project),
+      })
+      // Also invalidate the project config so ConfigEditor shows the new dataset
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.detail(variables.namespace, variables.project),
       })
     },
   })

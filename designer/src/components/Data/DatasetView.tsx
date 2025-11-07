@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
@@ -19,6 +19,7 @@ import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectSwitchNavigation } from '../../hooks/useProjectSwitchNavigation'
+import { useProject } from '../../hooks/useProjects'
 import {
   useUploadFileToDataset,
   useProcessDataset,
@@ -30,6 +31,8 @@ import {
 import { DatasetFile } from '../../types/datasets'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 
 type Dataset = {
   id: string
@@ -51,6 +54,11 @@ function DatasetView() {
 
   // Get current active project for API calls
   const activeProject = useActiveProject()
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
 
   // Handle automatic navigation when project changes
   useProjectSwitchNavigation()
@@ -81,6 +89,21 @@ function DatasetView() {
     () => dataset?.name || datasetId || 'dataset',
     [dataset?.name, datasetId]
   )
+
+  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const getDatasetLocation = useCallback(() => {
+    const targetName = dataset?.name || datasetId
+    if (targetName) {
+      return { type: 'dataset' as const, datasetName: targetName }
+    }
+    return { type: 'datasets' as const }
+  }, [dataset?.name, datasetId])
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getDatasetLocation,
+  })
 
   // Get current dataset from API response
   const currentApiDataset = useMemo(() => {
@@ -558,18 +581,18 @@ function DatasetView() {
             <span className="text-muted-foreground px-1">\</span>
             <span className="text-foreground">{datasetName}</span>
           </nav>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
       ) : (
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl">Config editor</h2>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
       )}
 
       {mode !== 'designer' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <ConfigEditor className="h-full" />
+          <ConfigEditor className="h-full" initialPointer={configPointer} />
         </div>
       ) : (
         <>
