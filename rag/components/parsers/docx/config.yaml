@@ -24,7 +24,7 @@ parsers:
 
     dependencies:
       required:
-        - docx  # python-docx package, imports as 'docx'
+        - python-docx  # Pip package name (imports as 'docx')
       optional: []
 
     default_config:

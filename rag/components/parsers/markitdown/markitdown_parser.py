@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Dict, Any, Optional
 import tempfile
+import yaml
 
 from components.parsers.base.base_parser import BaseParser, ParserConfig
 from core.base import Document, ProcessingResult
@@ -14,33 +15,20 @@ logger = RAGStructLogger("rag.components.parsers.markitdown.parser")
 class MarkItDownParser(BaseParser):
     """Universal document parser using Microsoft MarkItDown."""
 
-    # Centralized list of supported file extensions
-    SUPPORTED_EXTENSIONS = {
-        ".pdf",
-        ".docx",
-        ".pptx",
-        ".xlsx",
-        ".xls",
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".gif",
-        ".wav",
-        ".mp3",
-        ".html",
-        ".htm",
-        ".csv",
-        ".json",
-        ".xml",
-        ".zip",
-        ".epub",
-    }
-
     def __init__(
         self,
         name: str = "MarkItDownParser",
         config: Optional[Dict[str, Any]] = None,
     ):
+        # Load supported extensions from config.yaml (single source of truth)
+        config_path = Path(__file__).parent / "config.yaml"
+        with open(config_path, 'r') as f:
+            parser_config = yaml.safe_load(f)
+            # Extract supported extensions from first parser definition
+            self.supported_extensions = set(
+                parser_config['parsers'][0]['supported_extensions']
+            )
+
         # Call parent constructor to initialize base state
         super().__init__(config)
 
@@ -130,7 +118,7 @@ class MarkItDownParser(BaseParser):
             name="MarkItDownParser",
             display_name="MarkItDown Universal Parser",
             version="1.0.0",
-            supported_extensions=sorted(list(self.SUPPORTED_EXTENSIONS)),
+            supported_extensions=sorted(list(self.supported_extensions)),
             mime_types=[
                 "application/pdf",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -154,7 +142,7 @@ class MarkItDownParser(BaseParser):
     def can_parse(self, file_path: str) -> bool:
         """Check if this parser can handle the file."""
         path = Path(file_path)
-        return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
+        return path.suffix.lower() in self.supported_extensions
 
     def parse(self, source: str, **kwargs) -> ProcessingResult:
         """Convert file to Markdown and optionally chain to Markdown parser."""
@@ -281,6 +269,8 @@ class MarkItDownParser(BaseParser):
                     # Update chunk numbering to be relative to original file
                     doc.metadata["chunk_index"] = i
                     doc.metadata["total_chunks"] = len(result.documents)
+                    # Fix source to point to original file, not temp file
+                    doc.source = str(original_path)
 
                 result.metrics = result.metrics or {}
                 result.metrics["preprocessing"] = "markitdown"

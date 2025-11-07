@@ -2250,12 +2250,14 @@ dependencies = [
     { name = "rich" },
     { name = "spacy" },
     { name = "structlog" },
+    { name = "tabulate" },
     { name = "tqdm" },
     { name = "xlrd" },
 ]
 
 [package.optional-dependencies]
 all = [
+    { name = "azure-ai-formrecognizer" },
     { name = "black" },
     { name = "camelot-py", version = "0.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "camelot-py", version = "1.0.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -2269,7 +2271,7 @@ all = [
     { name = "llama-index-embeddings-openai" },
     { name = "llama-index-llms-openai" },
     { name = "llama-index-readers-file" },
-    { name = "markitdown", extra = ["docx", "pdf", "pptx", "xlsx"] },
+    { name = "markitdown", extra = ["all", "docx", "pdf", "pptx", "xlsx"] },
     { name = "memory-profiler" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
@@ -2417,7 +2419,7 @@ requires-dist = [
     { name = "llama-index-embeddings-openai", marker = "extra == 'llamaindex'", specifier = ">=0.1.0" },
     { name = "llama-index-llms-openai", marker = "extra == 'llamaindex'", specifier = ">=0.1.0" },
     { name = "llama-index-readers-file", marker = "extra == 'llamaindex'", specifier = ">=0.1.0" },
-    { name = "llama-rag", extras = ["dev", "test", "docs", "monitoring", "vector-dbs", "embeddings", "llamaindex", "markitdown"], marker = "extra == 'all'" },
+    { name = "llama-rag", extras = ["dev", "test", "docs", "monitoring", "vector-dbs", "embeddings", "llamaindex", "markitdown", "markitdown-full"], marker = "extra == 'all'" },
     { name = "llamafarm-common", editable = "../common" },
     { name = "llamafarm-config", editable = "../config" },
     { name = "lxml", specifier = ">=4.9.0" },
@@ -2478,6 +2480,7 @@ requires-dist = [
     { name = "spacy", specifier = ">=3.8.7" },
     { name = "structlog", specifier = ">=25.4.0" },
     { name = "tabula-py", marker = "extra == 'llamaindex'", specifier = ">=2.8.0" },
+    { name = "tabulate", specifier = ">=0.9.0" },
     { name = "torch", marker = "extra == 'embeddings'", specifier = ">=2.0.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
     { name = "transformers", marker = "extra == 'embeddings'", specifier = ">=4.53.0" },

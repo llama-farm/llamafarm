@@ -119,10 +119,23 @@ class ToolAwareParserFactory:
         required_deps = deps.get("required", [])
         missing_deps: list[str] = []
 
+        # Package name to import name mapping for special cases
+        PACKAGE_TO_IMPORT = {
+            "python-docx": "docx",
+            "llama-index-readers-file": "llama_index.readers.file",
+            "beautifulsoup4": "bs4",
+            "opencv-python": "cv2",
+            "pillow": "PIL",
+            "scikit-learn": "sklearn",
+        }
+
         for dep in required_deps:
+            # Get the import name (may differ from package name)
+            import_name = PACKAGE_TO_IMPORT.get(dep, dep.replace("-", "_"))
+
             try:
                 # Try to import the dependency
-                __import__(dep.replace("-", "_"))
+                __import__(import_name)
             except ImportError:
                 missing_deps.append(dep)
 
@@ -223,10 +236,19 @@ class ToolAwareParserFactory:
             if parser_class:
                 return parser_class(name=parser_name, config=config)
             else:
-                # Create mock parser as fallback
-                logger.warning(f"Parser {parser_name} not found, creating mock parser")
-                mock_class = cls.create_mock_parser(parser_name)
-                return mock_class(name=parser_name, config=config)
+                # Parser not found - FAIL with clear error message
+                parser_info = cls.get_parser_info(parser_name)
+                if parser_info:
+                    deps = parser_info.get("dependencies", {})
+                    required_deps = deps.get("required", [])
+                    if required_deps:
+                        raise ImportError(
+                            f"Parser '{parser_name}' requires missing dependencies: {required_deps}\n"
+                            f"Install with: uv pip install {' '.join(required_deps)}"
+                        )
+                raise ValueError(
+                    f"Parser '{parser_name}' not found. Available parsers: {list(cls.list_parsers())}"
+                )
 
         # If file_type and/or tool provided, find matching parser
         if file_type:
@@ -465,56 +487,6 @@ class ToolAwareParserFactory:
             logger.debug(f"Could not load from {module_path}: {e}")
 
         return None
-
-    @classmethod
-    def create_mock_parser(cls, parser_type: str) -> type:
-        """Create a mock parser for testing or fallback purposes."""
-        logger.warning(
-            f"Creating mock parser for {parser_type} - this indicates a missing parser implementation"
-        )
-
-        from components.parsers.base.base_parser import BaseParser, ParserConfig
-        from core.base import Document, ProcessingResult
-
-        class MockParser(BaseParser):
-            def __init__(self, name: str | None = None, config: dict | None = None):
-                self.name = name or parser_type
-                self.config = config or {}
-
-            def _load_metadata(self):
-                return ParserConfig(
-                    name=parser_type,
-                    display_name=parser_type,
-                    version="1.0",
-                    supported_extensions=[],
-                    mime_types=[],
-                    capabilities=[],
-                    dependencies={},
-                    default_config={},
-                )
-
-            def parse(self, source):
-                # Mock implementation
-                return ProcessingResult(documents=[], errors=[])
-
-            def can_parse(self, file_path):
-                return True
-
-            def parse_blob(self, blob_data, metadata):
-                # Simple text extraction for testing
-                try:
-                    content = blob_data.decode("utf-8", errors="ignore")
-                except Exception:
-                    content = str(blob_data)[:1000]
-
-                return [
-                    Document(
-                        content=content[:1000],  # Limit for testing
-                        metadata={**metadata, "parser": parser_type},
-                    )
-                ]
-
-        return MockParser
 
 
 # Backward compatibility wrapper
