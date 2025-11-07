@@ -1,0 +1,118 @@
+preprocessors:
+  - name: PaddleOCRPreprocessor
+    display_name: PaddleOCR Text & Table Extraction
+    tool: PaddleOCR
+    version: 3.3.1
+    description: High-accuracy OCR with layout analysis and table extraction (80+ languages)
+
+    # Model Pre-Download (Recommended)
+    # Models are downloaded automatically on first use (~5-10 minutes, 1-2GB)
+    # To pre-download: uv run python scripts/warmup_ocr_models.py
+    # Models cached in: ~/.paddlex/official_models/
+
+    supported_extensions:
+      - .pdf  # Scanned PDFs
+      - .png
+      - .jpg
+      - .jpeg
+      - .tiff
+      - .bmp
+      - .gif
+
+    mime_types:
+      - application/pdf
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - image/bmp
+      - image/gif
+
+    capabilities:
+      - text_extraction
+      - layout_analysis
+      - table_detection
+      - table_extraction
+      - multi_language
+      - orientation_detection
+      - markdown_output
+
+    dependencies:
+      required:
+        - paddleocr>=2.7.0
+        - paddlepaddle>=2.5.0  # CPU version
+        - pymupdf>=1.23.0      # PDF to image conversion
+        - pillow>=10.0.0
+      optional:
+        - paddlepaddle-gpu>=2.5.0  # GPU acceleration
+        - markitdown  # For HTML to Markdown table conversion
+        - html2text>=2024.2.26  # Fallback for table conversion
+
+    default_config:
+      # Language settings
+      language: en  # en, ch, fr, german, korean, japan, etc.
+      use_gpu: false
+
+      # OCR settings
+      use_angle_cls: true  # Detect text rotation
+      detect_layout: true
+      min_confidence: 0.6
+
+      # Table extraction (MVP critical)
+      extract_tables: true
+      table_confidence_threshold: 0.7
+      merge_tables_inline: false  # Append tables at end vs. inline positioning
+
+      # Detection threshold for scanned PDFs
+      scanned_threshold: 50  # chars/page threshold
+
+      # Output format (markdown recommended for RAG)
+      output_format: markdown  # markdown (default, best for RAG), text
+
+    performance:
+      speed: fast  # ~0.5s per page on CPU
+      accuracy: excellent  # >95% for printed text
+      memory: 500MB  # Model size
+
+  - name: TesseractPreprocessor
+    display_name: Tesseract OCR (Fallback)
+    tool: Tesseract
+    version: 5.3.0
+    description: Classic OCR engine (100+ languages, lower accuracy)
+
+    supported_extensions:
+      - .pdf
+      - .png
+      - .jpg
+      - .jpeg
+      - .tiff
+      - .bmp
+
+    mime_types:
+      - application/pdf
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - image/bmp
+
+    capabilities:
+      - text_extraction
+      - multi_language
+
+    dependencies:
+      required:
+        - pytesseract>=0.3.10
+        - tesseract-ocr  # System package
+        - pillow>=10.0.0
+        - pymupdf>=1.23.0
+
+    default_config:
+      language: eng
+      psm: 3  # Page segmentation mode
+      oem: 3  # OCR Engine mode
+      min_confidence: 0.5
+      scanned_threshold: 50
+
+    performance:
+      speed: medium  # ~1-2s per page
+      accuracy: good  # ~85% for printed text
+      memory: 200MB

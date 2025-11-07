@@ -2014,7 +2014,7 @@ definitions:
 
   dataProcessingStrategyDefinition:
     type: object
-    description: Processing pipeline configuration for parsers and extractors
+    description: Processing pipeline configuration for preprocessors, parsers and extractors
     required: [name, parsers]
     additionalProperties: false
     properties:
@@ -2029,6 +2029,35 @@ definitions:
         minLength: 10
         maxLength: 500
         description: Strategy description
+      preprocessors:
+        type: array
+        description: Document preprocessors for OCR, format conversion, etc. (run before parsers)
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              pattern: "^[A-Za-z][A-Za-z0-9_]*Preprocessor[A-Za-z0-9_]*$"
+              description: Preprocessor type identifier (e.g., PaddleOCRPreprocessor, MarkItDownPreprocessor)
+            config:
+              type: object
+              description: Preprocessor configuration
+              additionalProperties: true
+            file_include_patterns:
+              type: array
+              items:
+                type: string
+              description: Glob patterns for files to preprocess (e.g., ["*.pdf", "*.png"])
+              examples:
+                - ["*.pdf", "*.png", "*.jpg"] # OCR preprocessor
+                - ["*.docx", "*.pptx"] # MarkItDown preprocessor
+            priority:
+              type: integer
+              description: Preprocessor priority (lower = run first)
+              default: 50
+              minimum: 0
+              maximum: 1000
       parsers:
         type: array
         description: Document parsers in processing order

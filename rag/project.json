@@ -9,11 +9,10 @@
       "options": {
         "cwd": "{workspaceRoot}/rag",
         "commands": [
-          "uv sync --extra llamaindex --extra markitdown",
+          "uv sync --extra llamaindex --extra markitdown --extra ocr",
           "uv run python main.py"
         ],
-        "parallel": false,
-        "output": "inherit"
+        "parallel": false
       }
     },
     "build": {

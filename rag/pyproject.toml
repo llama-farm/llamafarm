@@ -173,8 +173,37 @@ markitdown-full = [
   "azure-ai-formrecognizer>=3.3.0",       # Azure Document Intelligence
 ]
 
+# OCR (Optical Character Recognition) for scanned documents
+ocr = [
+  # Core OCR engine
+  "paddleocr>=2.7.0",
+  "paddlepaddle>=2.5.0",         # CPU version (no GPU initially)
+
+  # PP-StructureV3 for complex document parsing (tables, formulas, charts)
+  "paddlex[ocr]>=3.0.0",         # Required for PPStructureV3
+
+  # PDF handling
+  "pymupdf>=1.23.0",              # PDF to image conversion
+
+  # Image processing
+  "pillow>=10.0.0",
+
+  # HTML to Markdown conversion (for tables)
+  "html2text>=2024.2.26",         # Fallback if markitdown unavailable
+]
+
+# OCR with GPU support (advanced)
+ocr-gpu = [
+  "paddleocr>=2.7.0",
+  "paddlepaddle-gpu>=2.5.0",      # GPU version
+  "paddlex[ocr]>=3.0.0",          # Required for PPStructureV3
+  "pymupdf>=1.23.0",
+  "pillow>=10.0.0",
+  "html2text>=2024.2.26",
+]
+
 # All optional dependencies
-all = ["llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex,markitdown,markitdown-full]"]
+all = ["llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex,markitdown,markitdown-full,ocr]"]
 
 [project.urls]
 Homepage = "https://github.com/llama-farm/llamafarm"

@@ -1,0 +1,86 @@
+preprocessors:
+  - name: MarkItDownPreprocessor
+    display_name: MarkItDown Format Converter
+    tool: MarkItDown
+    version: 1.0.0
+    description: Microsoft MarkItDown preprocessor for converting diverse file formats to Markdown
+
+    supported_extensions:
+      # Documents
+      - .pdf  # Digital PDFs (not scanned - OCR preprocessor handles those)
+      - .docx
+      - .pptx
+      - .xlsx
+      - .xls
+      # Media
+      - .jpg
+      - .jpeg
+      - .png
+      - .gif
+      - .wav
+      - .mp3
+      # Web
+      - .html
+      - .htm
+      # Data
+      - .csv
+      - .json
+      - .xml
+      # Archives
+      - .zip
+      # E-books
+      - .epub
+
+    mime_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+      - image/jpeg
+      - image/png
+      - image/gif
+      - audio/wav
+      - audio/mpeg
+      - text/html
+      - text/csv
+      - application/json
+      - application/xml
+      - application/zip
+      - application/epub+zip
+
+    capabilities:
+      - format_conversion
+      - markdown_output
+      - metadata_extraction
+      - structure_preservation
+      - image_ocr
+      - audio_transcription
+      - llm_image_desc
+
+    dependencies:
+      required:
+        - markitdown
+      optional:
+        - pillow
+        - pytesseract
+        - openai
+        - azure-ai-formrecognizer
+
+    default_config:
+      # Output control
+      preserve_structure: true
+
+      # Optional features (note: MarkItDown auto-detects these based on installed dependencies)
+      # OCR: Auto-enabled if pytesseract is installed (uv pip install pytesseract)
+      # Audio: Auto-enabled if speech_recognition is installed
+      # LLM descriptions: Requires OpenAI client configuration (not yet implemented)
+      enable_ocr: false  # Placeholder for documentation
+      enable_audio_transcription: false  # Placeholder for documentation
+      enable_llm_descriptions: false  # Requires LLM client setup
+
+      # Azure Document Intelligence (optional, requires azure-ai-formrecognizer)
+      # Provides enhanced PDF/image OCR and layout analysis
+      use_azure_doc_intelligence: false
+      azure_doc_intelligence_endpoint: null  # e.g., https://your-resource.cognitiveservices.azure.com/
+      azure_doc_intelligence_key: null  # Your Azure API key

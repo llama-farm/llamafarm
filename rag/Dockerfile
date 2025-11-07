@@ -39,7 +39,7 @@ COPY ruff.toml ./ruff.toml
 
 # Install dependencies in separate layers (cached unless lock files change)
 RUN cd config && uv sync --locked --all-extras
-RUN cd rag && uv sync --locked --extra llamaindex --extra markitdown
+RUN cd rag && uv sync --locked --extra llamaindex --extra markitdown --extra ocr
 
 # Now copy the rest of the source code (changes won't invalidate dependency cache)
 COPY config/ ./config/
@@ -49,13 +49,26 @@ COPY rag/ ./rag/
 # Install each package with its own dependencies
 RUN cd config && uv sync --locked --all-extras --verbose
 RUN cd common && uv sync --locked --all-extras --verbose
-RUN cd rag && uv sync --locked --extra llamaindex --extra markitdown --verbose
+RUN cd rag && uv sync --locked --extra llamaindex --extra markitdown --extra ocr --verbose
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh
 
+# Optional: Pre-download OCR models during build (controlled by build arg)
+# Set WARMUP_OCR_MODELS=1 to enable: docker build --build-arg WARMUP_OCR_MODELS=1
+ARG WARMUP_OCR_MODELS=0
+RUN if [ "$WARMUP_OCR_MODELS" = "1" ]; then \
+        echo "=== Pre-downloading OCR models (this may take 5-10 minutes) ===" && \
+        cd rag && uv run python scripts/warmup_ocr_models.py || echo "Warning: Model warmup failed"; \
+    else \
+        echo "=== Skipping OCR model pre-download (models will download on first use) ==="; \
+    fi
+
 # Fix ownership and permissions of UV directories after they've been populated
 RUN chmod -R 777 /tmp/uv-cache /tmp/uv-venv
+
+# Create model cache directory with proper permissions (PaddleX caches models in ~/.paddlex)
+RUN mkdir -p /root/.paddlex && chmod -R 777 /root/.paddlex
 
 # Change to /tmp so Celery control files are created in writable location
 WORKDIR /tmp

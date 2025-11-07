@@ -48,11 +48,46 @@ class BlobProcessor:
         Initialize the blob processor with a strategy configuration.
 
         Args:
-            strategy_config: Dictionary containing parsers and extractors config
+            strategy_config: Dictionary containing preprocessors, parsers and extractors config
         """
         self.strategy_config = strategy_config
+        self.preprocessors = self._initialize_preprocessors(
+            strategy_config.preprocessors or []
+        )
         self.parsers = self._initialize_parsers(strategy_config.parsers or [])
         self.extractors = self._initialize_extractors(strategy_config.extractors or [])
+
+    def _initialize_preprocessors(
+        self, preprocessor_configs: list[Any]
+    ) -> list[tuple[Any, Any]]:
+        """
+        Initialize preprocessors from configuration and sort by priority.
+
+        Args:
+            preprocessor_configs: List of preprocessor configurations
+
+        Returns:
+            List of tuples containing (config, preprocessor_instance) sorted by priority
+        """
+        preprocessors: list[tuple[Any, Any]] = []
+        for config in preprocessor_configs:
+            if not config.type:
+                continue
+
+            preprocessor_type = config.type
+            try:
+                preprocessor_class = self._get_preprocessor_class(preprocessor_type)
+                # Pass the config
+                preprocessor_instance = preprocessor_class(config=config.config or {})
+                preprocessors.append((config, preprocessor_instance))
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize preprocessor {preprocessor_type}: {e}"
+                )
+
+        # Sort by priority (lower numbers are higher priority)
+        preprocessors.sort(key=lambda x: x[0].priority or 0)
+        return preprocessors
 
     def _initialize_parsers(
         self, parser_configs: list[Parser]
@@ -148,6 +183,44 @@ class BlobProcessor:
         raise ValueError(
             f"Parser '{parser_type}' not found. "
             f"Available parsers: {list(ToolAwareParserFactory.list_parsers())}"
+        )
+
+    def _get_preprocessor_class(self, preprocessor_type: str) -> type:
+        """
+        Get preprocessor class using the PreprocessorFactory.
+
+        Args:
+            preprocessor_type: Name of the preprocessor type (e.g., "PaddleOCRPreprocessor")
+
+        Returns:
+            Preprocessor class
+
+        Raises:
+            ImportError: If preprocessor requires missing dependencies
+            ValueError: If preprocessor not found in registry
+        """
+        from components.preprocessors.factory import PreprocessorFactory
+
+        # Use the factory to load the preprocessor class
+        if preprocessor_class := PreprocessorFactory.load_preprocessor_class(
+            preprocessor_type
+        ):
+            return preprocessor_class
+
+        # Preprocessor not found or dependencies missing - raise clear error
+        preprocessor_info = PreprocessorFactory.get_preprocessor_info(preprocessor_type)
+        if preprocessor_info:
+            deps = preprocessor_info.get("dependencies", {})
+            required_deps = deps.get("required", [])
+            if required_deps:
+                raise ImportError(
+                    f"Preprocessor '{preprocessor_type}' requires missing dependencies: {required_deps}\n"
+                    f"Install with: uv pip install {' '.join(required_deps)}"
+                )
+
+        raise ValueError(
+            f"Preprocessor '{preprocessor_type}' not found. "
+            f"Available preprocessors: {list(PreprocessorFactory.list_preprocessors())}"
         )
 
     def _get_extractor_class(self, extractor_type: str) -> type:
@@ -284,7 +357,9 @@ class BlobProcessor:
         self, blob_data: bytes, metadata: dict[str, Any]
     ) -> list[Document]:
         """
-        Process a blob of data with automatic parser selection based on file patterns.
+        Process a blob of data with optional preprocessing, then parser selection.
+
+        Pipeline: Preprocessors → Parsers → Extractors
 
         Args:
             blob_data: Raw bytes of the document
@@ -293,6 +368,8 @@ class BlobProcessor:
         Returns:
             List of processed Document objects
         """
+        import tempfile
+
         filename = metadata.get("filename", "unknown")
         logger.info(f"Processing blob: {filename}")
         logger.debug(f"Blob metadata: {metadata}")
@@ -300,6 +377,60 @@ class BlobProcessor:
             f"First 20 bytes of blob: {blob_data[:20].decode(errors='replace') if blob_data else 'empty'}"
         )
 
+        # Phase 1: Preprocessing (OCR, format conversion, etc.)
+        preprocessed = False
+        for config, preprocessor in self.preprocessors:
+            if not config.type:
+                continue
+
+            # Save blob to temp file for preprocessing
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=Path(filename).suffix
+            ) as tmp:
+                tmp.write(blob_data)
+                tmp.flush()
+                tmp_path = tmp.name
+
+            try:
+                # Check if preprocessor can handle this file
+                if preprocessor.can_process(tmp_path, metadata):
+                    preprocessor_type = config.type
+                    logger.info(f"Preprocessing {filename} with {preprocessor_type}")
+
+                    # Run preprocessor
+                    result = preprocessor.preprocess(tmp_path, metadata)
+
+                    if result.success:
+                        # Update blob_data with preprocessed content
+                        blob_data = result.content.encode("utf-8")
+                        metadata.update(result.metadata)
+                        metadata["preprocessed"] = True
+                        metadata["preprocessor"] = preprocessor_type
+
+                        logger.info(
+                            f"Preprocessing successful: {len(result.content)} chars extracted"
+                        )
+                        preprocessed = True
+
+                        # If preprocessor created an output file (e.g., searchable PDF),
+                        # update the filename to point to it
+                        if result.output_file:
+                            filename = result.output_file
+                            metadata["output_file"] = result.output_file
+
+                        break  # Only run first matching preprocessor
+                    else:
+                        logger.warning(
+                            f"Preprocessing failed with {preprocessor_type}: {result.errors}"
+                        )
+            finally:
+                # Clean up temp file
+                Path(tmp_path).unlink(missing_ok=True)
+
+        if preprocessed:
+            logger.debug(f"Blob preprocessed, continuing to parser phase")
+
+        # Phase 2: Parsing (chunking)
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
         logger.debug(
