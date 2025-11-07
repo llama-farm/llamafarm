@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from observability.config_versioning import hash_config, save_config_snapshot
+
 
 class EventLogger:
     """
@@ -33,7 +35,7 @@ class EventLogger:
         request_id: str,
         namespace: str,
         project: str,
-        config_hash: str,
+        config: Any,
     ):
         """
         Initialize a new event logger.
@@ -43,13 +45,16 @@ class EventLogger:
             request_id: Unique request identifier
             namespace: Project namespace
             project: Project name
-            config_hash: Hash of project config at time of event
+            config: LlamaFarmConfig object (hash will be computed internally)
         """
         self.event_type = event_type
         self.request_id = request_id
         self.namespace = namespace
         self.project = project
-        self.config_hash = config_hash
+
+        # Compute config hash and save snapshot
+        self.config_hash = hash_config(config)
+        save_config_snapshot(config, self.config_hash, namespace, project)
 
         # Event storage (internal buffer)
         self._events: list[dict[str, Any]] = []

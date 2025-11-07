@@ -16,10 +16,7 @@ from context_providers.rag_context_provider import (
 )
 from core.logging import FastAPIStructLogger
 from services.rag_service import search_with_rag
-
-# Observability imports
 from observability.event_logger import EventLogger
-from observability.config_versioning import hash_config, save_config_snapshot
 
 logger = FastAPIStructLogger()
 
@@ -357,18 +354,14 @@ class ProjectChatService:
         namespace = project_config.namespace
         project_name = project_config.name
 
-        # Hash config and save snapshot
-        config_hash = hash_config(project_config)
-        save_config_snapshot(project_config, config_hash, namespace, project_name)
-
-        # Create event logger
+        # Create event logger (config hash computed internally)
         request_id = f"req_{uuid.uuid4().hex[:12]}"
         event_logger = EventLogger(
             event_type="inference",
             request_id=request_id,
             namespace=namespace,
             project=project_name,
-            config_hash=config_hash,
+            config=project_config,
         )
 
         # Log request received

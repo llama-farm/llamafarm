@@ -8,7 +8,6 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Optional
 
-from .config_versioning import hash_config, save_config_snapshot
 from .event_logger import EventLogger
 
 
@@ -24,8 +23,7 @@ def event_logging_context(
     Context manager for event logging lifecycle.
 
     Automatically handles:
-    - Config hashing and snapshot saving
-    - EventLogger initialization
+    - EventLogger initialization (config hashing and snapshot saving done internally)
     - Ensures complete_event() or fail_event() is called
 
     Args:
@@ -44,21 +42,17 @@ def event_logging_context(
             # Automatically calls complete_event() on success
             # Automatically calls fail_event() on exception
     """
-    # Hash config and save snapshot
-    config_hash = hash_config(config)
-    save_config_snapshot(config, config_hash, namespace, project)
-
     # Generate request ID if not provided
     if request_id is None:
         request_id = f"req_{uuid.uuid4().hex[:12]}"
 
-    # Create event logger
+    # Create event logger (config hashing and snapshot saving done internally)
     logger = EventLogger(
         event_type=event_type,
         request_id=request_id,
         namespace=namespace,
         project=project,
-        config_hash=config_hash,
+        config=config,
     )
 
     try:

@@ -26,17 +26,7 @@ except ImportError as e:
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
     ) from e
 
-# Observability imports
-try:
-    from observability.event_logger import EventLogger
-    from observability.config_versioning import hash_config, save_config_snapshot
-except ImportError as e:
-    # Gracefully handle if observability module is not available
-    EventLogger = None
-    hash_config = None
-    save_config_snapshot = None
-    logger = RAGStructLogger("rag.core.ingest_handler")
-    logger.warning(f"Observability module not available: {e}")
+from observability.event_logger import EventLogger
 
 logger = RAGStructLogger("rag.core.ingest_handler")
 
@@ -68,23 +58,10 @@ class IngestHandler:
         self.database = database
         self.dataset_name = dataset_name
 
-        # Extract namespace and project from config path for event logging
-        # Path format: ~/.llamafarm/projects/{namespace}/{project}/llamafarm.yaml
-        # Use LAST occurrence of "projects" to avoid false matches in parent dirs
-        try:
-            path_parts = self.config_path.parts
-            # Find last occurrence of "projects" in path
-            projects_indices = [i for i, part in enumerate(path_parts) if part == "projects"]
-            if projects_indices:
-                projects_idx = projects_indices[-1]  # Use LAST occurrence
-                self.namespace = path_parts[projects_idx + 1] if len(path_parts) > projects_idx + 1 else "default"
-                self.project = path_parts[projects_idx + 2] if len(path_parts) > projects_idx + 2 else "unknown"
-            else:
-                self.namespace = "default"
-                self.project = "unknown"
-        except Exception:
-            self.namespace = "default"
-            self.project = "unknown"
+        # Load config to extract namespace and project
+        self.config = load_config(str(self.config_path))
+        self.namespace = self.config.namespace
+        self.project = self.config.name
 
         # Initialize schema handler
         self.schema_handler = SchemaHandler(config_path)
@@ -228,37 +205,25 @@ class IngestHandler:
         file_size = len(file_data)
         logger.info(f"Ingesting file: {filename}")
 
-        # Initialize event logger if observability is available
-        event_logger = None
-        if EventLogger and hash_config and save_config_snapshot:
-            try:
-                # Load config and hash it
-                config = load_config(str(self.config_path))
-                config_hash = hash_config(config)
-                save_config_snapshot(config, config_hash, self.namespace, self.project)
+        # Create event logger (config hash computed internally)
+        request_id = f"proc_{uuid.uuid4().hex[:12]}"
+        event_logger = EventLogger(
+            event_type="rag_processing",
+            request_id=request_id,
+            namespace=self.namespace,
+            project=self.project,
+            config=self.config,
+        )
 
-                # Create event logger
-                request_id = f"proc_{uuid.uuid4().hex[:12]}"
-                event_logger = EventLogger(
-                    event_type="rag_processing",
-                    request_id=request_id,
-                    namespace=self.namespace,
-                    project=self.project,
-                    config_hash=config_hash,
-                )
-
-                # Log processing start
-                event_logger.log_event("file_ingestion_start", {
-                    "filename": filename,
-                    "size_bytes": file_size,
-                    "content_type": metadata.get("content_type", "unknown"),
-                    "dataset_name": self.dataset_name,
-                    "database": self.database,
-                    "strategy": self.data_processing_strategy,
-                })
-            except Exception as e:
-                logger.warning(f"Failed to initialize event logger: {e}")
-                event_logger = None
+        # Log processing start
+        event_logger.log_event("file_ingestion_start", {
+            "filename": filename,
+            "size_bytes": file_size,
+            "content_type": metadata.get("content_type", "unknown"),
+            "dataset_name": self.dataset_name,
+            "database": self.database,
+            "strategy": self.data_processing_strategy,
+        })
 
         # Print file info
         logger.info(
@@ -274,8 +239,7 @@ class IngestHandler:
             documents = self.blob_processor.process_blob(file_data, metadata)
 
             if not documents:
-                if event_logger:
-                    event_logger.fail_event(f"No documents extracted from {filename}")
+                event_logger.fail_event(f"No documents extracted from {filename}")
                 return {
                     "status": "error",
                     "message": f"No documents extracted from {filename}",
@@ -284,17 +248,16 @@ class IngestHandler:
                 }
 
             # Log file parsed
-            if event_logger:
-                # Extract parser names
-                parser_names = list(set(
-                    doc.metadata.get("parser", "unknown")
-                    for doc in documents
-                ))
-                event_logger.log_event("file_parsed", {
-                    "filename": filename,
-                    "parsers": parser_names,
-                    "mime_type": metadata.get("content_type", "unknown"),
-                })
+            # Extract parser names
+            parser_names = list(set(
+                doc.metadata.get("parser", "unknown")
+                for doc in documents
+            ))
+            event_logger.log_event("file_parsed", {
+                "filename": filename,
+                "parsers": parser_names,
+                "mime_type": metadata.get("content_type", "unknown"),
+            })
 
             # Generate file hash for deduplication
             import hashlib
@@ -302,13 +265,12 @@ class IngestHandler:
             file_hash = hashlib.sha256(file_data).hexdigest()
 
             # Log chunks created
-            if event_logger:
-                avg_chunk_size = sum(len(doc.content) for doc in documents) / len(documents) if documents else 0
-                event_logger.log_event("chunks_created", {
-                    "chunk_count": len(documents),
-                    "avg_chunk_size": int(avg_chunk_size),
-                    "file_hash": file_hash[:16],
-                })
+            avg_chunk_size = sum(len(doc.content) for doc in documents) / len(documents) if documents else 0
+            event_logger.log_event("chunks_created", {
+                "chunk_count": len(documents),
+                "avg_chunk_size": int(avg_chunk_size),
+                "file_hash": file_hash[:16],
+            })
 
             # Generate embeddings for each document
             embedded_documents = []
@@ -336,13 +298,12 @@ class IngestHandler:
                 embedded_documents.append(doc)
 
             # Log embeddings generated
-            if event_logger:
-                embedding_dim = len(embedded_documents[0].embeddings) if embedded_documents and hasattr(embedded_documents[0], 'embeddings') else 0
-                event_logger.log_event("embeddings_generated", {
-                    "embedding_count": len(embedded_documents),
-                    "embedder": self.embedder.__class__.__name__,
-                    "embedding_dimension": embedding_dim,
-                })
+            embedding_dim = len(embedded_documents[0].embeddings) if embedded_documents and hasattr(embedded_documents[0], 'embeddings') else 0
+            event_logger.log_event("embeddings_generated", {
+                "embedding_count": len(embedded_documents),
+                "embedder": self.embedder.__class__.__name__,
+                "embedding_dimension": embedding_dim,
+            })
 
             # Store documents in vector store with duplicate detection
             # Try batch add first (more efficient)
@@ -444,13 +405,12 @@ class IngestHandler:
                         raise
 
             # Log chunks stored
-            if event_logger:
-                event_logger.log_event("chunks_stored", {
-                    "database": self.database,
-                    "stored_count": stored_count,
-                    "skipped_count": skipped_count,
-                    "storage_type": self.vector_store.__class__.__name__,
-                })
+            event_logger.log_event("chunks_stored", {
+                "database": self.database,
+                "stored_count": stored_count,
+                "skipped_count": skipped_count,
+                "storage_type": self.vector_store.__class__.__name__,
+            })
 
             # Calculate processing time
             elapsed_time = time.time() - start_time
@@ -508,15 +468,14 @@ class IngestHandler:
                 reason = None
 
             # Complete event logging
-            if event_logger:
-                event_logger.log_event("processing_complete", {
-                    "status": status,
-                    "total_chunks": len(documents),
-                    "stored_chunks": stored_count,
-                    "skipped_chunks": skipped_count,
-                    # Note: total_elapsed_time_ms is automatically added by EventLogger
-                })
-                event_logger.complete_event()
+            event_logger.log_event("processing_complete", {
+                "status": status,
+                "total_chunks": len(documents),
+                "stored_chunks": stored_count,
+                "skipped_chunks": skipped_count,
+                # Note: total_elapsed_time_ms is automatically added by EventLogger
+            })
+            event_logger.complete_event()
 
             return {
                 "status": status,
@@ -540,8 +499,7 @@ class IngestHandler:
             logger.error(f"Error ingesting file {filename}: {e}")
 
             # Fail event logging
-            if event_logger:
-                event_logger.fail_event(str(e))
+            event_logger.fail_event(str(e))
 
             return {
                 "status": "error",

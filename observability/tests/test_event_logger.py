@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -35,14 +36,28 @@ def temp_data_dir(tmp_path):
         del os.environ["LF_DATA_DIR"]
 
 
-def test_event_logger_basic(temp_data_dir):
+@pytest.fixture
+def mock_config():
+    """Create a mock config object for testing."""
+    config = MagicMock()
+    config.namespace = "default"
+    config.name = "test-project"
+    config.model_dump.return_value = {
+        "name": "test-project",
+        "namespace": "default",
+        "version": "v1",
+    }
+    return config
+
+
+def test_event_logger_basic(temp_data_dir, mock_config):
     """Test basic event logging."""
     logger = EventLogger(
         event_type="inference",
         request_id="req_test123",
         namespace="default",
         project="test-project",
-        config_hash="sha256_abc123",
+        config=mock_config,
     )
 
     logger.log_event("step1", {"data": "value1"})
@@ -65,7 +80,7 @@ def test_event_logger_basic(temp_data_dir):
     assert event["request_id"] == "req_test123"
     assert event["namespace"] == "default"
     assert event["project"] == "test-project"
-    assert event["config_hash"] == "sha256_abc123"
+    assert event["config_hash"].startswith("sha256_")  # Hash is computed internally
     assert event["status"] == "completed"
     assert event["error"] is None
     assert len(event["events"]) == 2
@@ -77,14 +92,14 @@ def test_event_logger_basic(temp_data_dir):
     assert event["events"][1]["data"]["count"] == 42
 
 
-def test_event_logger_fail(temp_data_dir):
+def test_event_logger_fail(temp_data_dir, mock_config):
     """Test failed event logging."""
     logger = EventLogger(
         event_type="rag_processing",
         request_id="req_fail",
         namespace="default",
         project="test-project",
-        config_hash="sha256_abc123",
+        config=mock_config,
     )
 
     logger.log_event("parse_start", {"file": "test.pdf"})
@@ -103,14 +118,14 @@ def test_event_logger_fail(temp_data_dir):
     assert event["error"] == "Parse error: invalid format"
 
 
-def test_event_logger_metadata(temp_data_dir):
+def test_event_logger_metadata(temp_data_dir, mock_config):
     """Test metadata addition."""
     logger = EventLogger(
         event_type="inference",
         request_id="req_metadata",
         namespace="default",
         project="test-project",
-        config_hash="sha256_abc123",
+        config=mock_config,
     )
 
     logger.add_metadata("client_ip", "127.0.0.1")
@@ -129,14 +144,14 @@ def test_event_logger_metadata(temp_data_dir):
     assert event["metadata"]["user_agent"] == "TestClient/1.0"
 
 
-def test_event_logger_thread_safety(temp_data_dir):
+def test_event_logger_thread_safety(temp_data_dir, mock_config):
     """Test thread-safe logging with parallel operations."""
     logger = EventLogger(
         event_type="inference",
         request_id="req_parallel",
         namespace="default",
         project="test-project",
-        config_hash="sha256_abc123",
+        config=mock_config,
     )
 
     # Log events from multiple threads
@@ -174,7 +189,7 @@ def test_event_logger_thread_safety(temp_data_dir):
     assert timestamps == sorted(timestamps)
 
 
-def test_event_logger_multiple_events(temp_data_dir):
+def test_event_logger_multiple_events(temp_data_dir, mock_config):
     """Test multiple separate events."""
     # Create first event
     logger1 = EventLogger(
@@ -182,7 +197,7 @@ def test_event_logger_multiple_events(temp_data_dir):
         request_id="req_1",
         namespace="default",
         project="test-project",
-        config_hash="sha256_abc123",
+        config=mock_config,
     )
     logger1.log_event("step1", {"data": 1})
     logger1.complete_event()
@@ -193,7 +208,7 @@ def test_event_logger_multiple_events(temp_data_dir):
         request_id="req_2",
         namespace="default",
         project="test-project",
-        config_hash="sha256_abc123",
+        config=mock_config,
     )
     logger2.log_event("step1", {"data": 2})
     logger2.complete_event()
@@ -204,14 +219,14 @@ def test_event_logger_multiple_events(temp_data_dir):
     assert len(event_files) == 2
 
 
-def test_event_logger_timestamps(temp_data_dir):
+def test_event_logger_timestamps(temp_data_dir, mock_config):
     """Test that timestamps and durations are calculated correctly."""
     logger = EventLogger(
         event_type="inference",
         request_id="req_time",
         namespace="default",
         project="test-project",
-        config_hash="sha256_abc123",
+        config=mock_config,
     )
 
     logger.log_event("start", {"data": "begin"})
