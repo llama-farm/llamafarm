@@ -126,12 +126,24 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 
 	// After launching, check that the process is still running.
 	time.Sleep(2 * time.Second)
-	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
+
+	// Check if process is still running using platform-appropriate method
+	processStillRunning := true
+	if runtime.GOOS == "windows" {
+		// On Windows, check if the process has exited
+		processStillRunning = cmd.ProcessState == nil || !cmd.ProcessState.Exited()
+	} else {
+		// On Unix, use signal 0 to check if process exists
+		err := cmd.Process.Signal(syscall.Signal(0))
+		processStillRunning = err == nil
+	}
+
+	if !processStillRunning {
 		// Clean up state if process failed to start
 		logF.Close()
 		// Note: pm.mu is already locked from line 55, no need to lock again
 		delete(pm.processes, name)
-		return fmt.Errorf("%s process failed to start or crashed immediately: %v (see logs at %s)", name, err, logFile)
+		return fmt.Errorf("%s process failed to start or crashed immediately (see logs at %s)", name, logFile)
 	}
 
 	utils.LogDebug(fmt.Sprintf("%s process started (PID: %d)\n", name, cmd.Process.Pid))

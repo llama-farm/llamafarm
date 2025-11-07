@@ -150,7 +150,7 @@ func OutputInfo(format string, args ...interface{}) {
 
 // OutputInfoPlain sends an informational message without emoji
 func OutputInfoPlain(format string, args ...interface{}) {
-	sendMessageWithOptions(InfoMessage, true, format, args...)
+	sendMessageWithOptions(InfoMessage, false, format, args...)
 }
 
 // OutputWarning sends a warning message
