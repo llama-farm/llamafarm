@@ -141,8 +141,8 @@ func (m *PythonEnvManager) ValidatePythonInstallation() error {
 func (m *PythonEnvManager) RunWithUV(workDir string, args ...string) *exec.Cmd {
 	uvPath := m.uvManager.GetUVPath()
 
-	// Build the command: uv run python <args>
-	fullArgs := append([]string{"run", "python"}, args...)
+	// Build the command: uv run --managed-python python <args>
+	fullArgs := append([]string{"run", "--managed-python", "python"}, args...)
 
 	cmd := exec.Command(uvPath, fullArgs...)
 	cmd.Dir = workDir
@@ -164,6 +164,24 @@ func (m *PythonEnvManager) getEnv() []string {
 
 	// Set UV_PYTHON_INSTALL_DIR for Python installations
 	env = append(env, fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", m.pythonDir))
+
+	// Ensure UV bin directory is first in PATH
+	uvBinDir := m.uvManager.binDir
+	currentPath := os.Getenv("PATH")
+	newPath := uvBinDir + string(os.PathListSeparator) + currentPath
+
+	// Update or add PATH in environment
+	pathUpdated := false
+	for i, e := range env {
+		if strings.HasPrefix(e, "PATH=") {
+			env[i] = "PATH=" + newPath
+			pathUpdated = true
+			break
+		}
+	}
+	if !pathUpdated {
+		env = append(env, "PATH="+newPath)
+	}
 
 	return env
 }

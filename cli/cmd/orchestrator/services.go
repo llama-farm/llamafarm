@@ -121,7 +121,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  30 * time.Second,
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
-		Args:            []string{"run", "python", "server.py"},
+		Args:            []string{"run", "--managed-python", "python", "server.py"},
 		Env: map[string]string{
 			"TRANSFORMERS_PORT":                "11540",
 			"TRANSFORMERS_HOST":                "127.0.0.1",
@@ -141,7 +141,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  45 * time.Second,
 		WorkDir:         "server",
 		Command:         "uv",
-		Args:            []string{"run", "uvicorn", "main:app", "--host", "0.0.0.0"},
+		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
 		Env: map[string]string{
 			"OLLAMA_HOST": "http://localhost:11434",
 		},
@@ -154,7 +154,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  30 * time.Second,
 		WorkDir:         "rag",
 		Command:         "uv",
-		Args:            []string{"run", "python", "main.py"},
+		Args:            []string{"run", "--managed-python", "python", "main.py"},
 		HealthComponent: "rag-service",
 	},
 }
@@ -310,7 +310,14 @@ func (sm *ServiceManager) ensureSingleService(serviceName string) error {
 func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	// Build environment variables
 	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
-	cmdArgs := append([]string{serviceDef.Command}, serviceDef.Args...)
+
+	// Build command args - replace "uv" with full path if needed
+	command := serviceDef.Command
+	if command == "uv" {
+		// Use the full path to uv to avoid PATH issues
+		command = sm.orchestrator.pythonEnvMgr.uvManager.GetUVPath()
+	}
+	cmdArgs := append([]string{command}, serviceDef.Args...)
 
 	// Get source directory
 	lfDir, _ := utils.GetLFDataDir()
@@ -324,15 +331,19 @@ func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 func (sm *ServiceManager) isServiceHealthy(serviceDef *ServiceDefinition) bool {
 	hr, err := sm.GetServerHealth()
 	if err != nil {
+		utils.LogDebug(fmt.Sprintf("isServiceHealthy(%s): GetServerHealth failed: %v", serviceDef.Name, err))
 		return false
 	}
 
 	component := findComponent(hr, serviceDef.HealthComponent)
 	if component == nil {
+		utils.LogDebug(fmt.Sprintf("isServiceHealthy(%s): component '%s' not found in health response", serviceDef.Name, serviceDef.HealthComponent))
 		return false
 	}
 
-	return strings.EqualFold(component.Status, "healthy")
+	isHealthy := strings.EqualFold(component.Status, "healthy")
+	utils.LogDebug(fmt.Sprintf("isServiceHealthy(%s): component '%s' status='%s', healthy=%v", serviceDef.Name, serviceDef.HealthComponent, component.Status, isHealthy))
+	return isHealthy
 }
 
 // waitForServiceReady waits for a service to become healthy by polling its health endpoint
@@ -566,32 +577,24 @@ func (sm *ServiceManager) StopAll() error {
 	return sm.StopServices(serviceNames...)
 }
 
-func (sm *ServiceManager) getComponentHealth(componentName string) (*ComponentHealth, error) {
-	hr, err := sm.GetServerHealth()
-	if err != nil {
-		return nil, err
-	}
-	component := findComponent(hr, componentName)
-	if component == nil {
-		return nil, fmt.Errorf("component not found in health response")
-	}
-	return component, nil
-}
-
 // GetServerHealth requires /health to be healthy.
 func (sm *ServiceManager) GetServerHealth() (*HealthPayload, error) {
 	base := strings.TrimRight(sm.serverURL, "/")
 	healthURL := base + "/health"
+
+	utils.LogDebug(fmt.Sprintf("GetServerHealth: checking %s", healthURL))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
+		utils.LogDebug(fmt.Sprintf("GetServerHealth: failed to create request: %v", err))
 		return nil, err
 	}
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
 	if err != nil {
+		utils.LogDebug(fmt.Sprintf("GetServerHealth: request failed: %v", err))
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -602,12 +605,14 @@ func (sm *ServiceManager) GetServerHealth() (*HealthPayload, error) {
 			utils.LogDebug(fmt.Sprintf("Invalid health payload: %v", err))
 			return nil, fmt.Errorf("invalid health payload: %v", err)
 		}
+		utils.LogDebug(fmt.Sprintf("GetServerHealth: status=%s, components=%d", payload.Status, len(payload.Components)))
 		if strings.EqualFold(payload.Status, "healthy") {
 			return &payload, nil
 		}
-		utils.LogDebug(fmt.Sprintf("Server is %s", payload.Status))
+		utils.LogDebug(fmt.Sprintf("Server is %s (returning HealthError)", payload.Status))
 		return &payload, &HealthError{Status: payload.Status, HealthResp: payload}
 	}
+	utils.LogDebug(fmt.Sprintf("GetServerHealth: unexpected status code %d", resp.StatusCode))
 	return nil, fmt.Errorf("unexpected health status %d", resp.StatusCode)
 }
 

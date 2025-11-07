@@ -85,14 +85,14 @@ func LogDebug(msg string) {
 	}
 
 	if debugLogger != nil {
-		// Write to both stderr and the file to meet the project's requirement
-		// that debug messages go to stderr while also persisting to disk.
+		// Always write to file (debugLogger writes to file only, not stderr)
 		debugLogger.Println(msg)
 
-		if !enableDebug {
-			return
+		// Only write to stderr when debug mode is enabled
+		if enableDebug {
+			// Route through the output system for TUI compatibility
+			// This writes to stderr as per the project's requirement
+			sendMessage(DebugMessage, "%s", msg)
 		}
-		// Also route through the output system for TUI compatibility
-		sendMessage(DebugMessage, "%s", msg)
 	}
 }

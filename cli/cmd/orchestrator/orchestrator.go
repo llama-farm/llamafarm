@@ -115,8 +115,9 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 	env := no.pythonEnvMgr.GetEnvForProcess()
 
 	// Always include core environment keys from the current environment
+	// Note: PATH is already set by GetEnvForProcess() with UV bin directory, so we don't override it
 	extraEnv := []string{}
-	for _, key := range []string{"PATH", "HOME", "USER", "TMPDIR", "LF_DATA_DIR"} {
+	for _, key := range []string{"HOME", "USER", "TMPDIR", "LF_DATA_DIR"} {
 		if val := os.Getenv(key); val != "" {
 			extraEnv = append(extraEnv, fmt.Sprintf("%s=%s", key, val))
 		}

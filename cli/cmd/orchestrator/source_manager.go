@@ -547,7 +547,7 @@ func (m *SourceManager) syncDirectory(dir string, name string) error {
 
 	// Run UV sync command in the specific project directory
 	// This ensures .venv is created in the correct location
-	cmd := exec.Command(uvPath, "sync")
+	cmd := exec.Command(uvPath, "sync", "--managed-python")
 	cmd.Dir = dir // Critical: run from project directory so .venv is created there
 	cmd.Env = m.pythonEnvMgr.GetEnvForProcess()
 
@@ -767,15 +767,10 @@ func (m *SourceManager) GenerateDatamodel() error {
 		return fmt.Errorf("config directory not found: %s", configDir)
 	}
 
-	// Check if generate_types.py exists
-	generateScript := filepath.Join(configDir, "generate_types.py")
+	generateScript := filepath.Join(configDir, "generate-types.sh")
 	if _, err := os.Stat(generateScript); os.IsNotExist(err) {
-		// Fallback to shell script if Python version doesn't exist yet
-		generateScript = filepath.Join(configDir, "generate-types.sh")
-		if _, err := os.Stat(generateScript); os.IsNotExist(err) {
-			utils.OutputWarning("Warning: generate script not found, skipping datamodel generation\n")
-			return nil
-		}
+		utils.OutputWarning("Warning: generate-types.sh not found, skipping datamodel generation\n")
+		return nil
 	}
 
 	// Check if datamodel.py already exists and is up-to-date
@@ -830,7 +825,7 @@ func (m *SourceManager) GenerateDatamodel() error {
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 
 	// Run the generation script
-	cmd := exec.Command(uvPath, "run", "python", "generate_types.py")
+	cmd := exec.Command(uvPath, "run", "--managed-python", "python", "generate_types.py")
 	cmd.Dir = configDir
 	cmd.Env = m.pythonEnvMgr.GetEnvForProcess()
 

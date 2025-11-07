@@ -122,8 +122,12 @@ func sendMessageWithOptions(msgType MessageType, injectEmoji bool, format string
 		outputManager.messageQueue = append(outputManager.messageQueue, msg)
 		outputManager.mu.Unlock()
 	} else {
-		// Direct output mode
-		fmt.Fprint(msg.Writer, FormatMessage(msg))
+		// Direct output mode - add newline if not already present
+		formattedMsg := FormatMessage(msg)
+		if len(formattedMsg) > 0 && formattedMsg[len(formattedMsg)-1] != '\n' {
+			formattedMsg += "\n"
+		}
+		fmt.Fprint(msg.Writer, formattedMsg)
 	}
 }
 
