@@ -14,17 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ANSI color helpers (disabled if NO_COLOR is set)
-const (
-	ansiReset   = "\x1b[0m"
-	ansiBold    = "\x1b[1m"
-	ansiDim     = "\x1b[2m"
-	ansiGreen   = "\x1b[32m"
-	ansiYellow  = "\x1b[33m"
-	ansiMagenta = "\x1b[35m"
-	ansiCyan    = "\x1b[36m"
-)
-
 // Chat CLI state variables
 var (
 	namespace   string
