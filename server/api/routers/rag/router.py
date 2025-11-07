@@ -156,12 +156,15 @@ def _build_embedding_strategies(
             )
         )
     
-    # Warn if configured default was not found
+    # Warn if configured default was not found and mark first strategy as default
     if default_embedding_name and not found_default:
         logger.warning(
             f"Configured default embedding strategy '{default_embedding_name}' "
             f"not found in database '{db_name}'. Using first strategy as default."
         )
+        # Actually mark the first strategy as default
+        if embedding_strategies:
+            embedding_strategies[0].is_default = True
     
     return embedding_strategies
 
@@ -239,12 +242,15 @@ def _build_retrieval_strategies(
             )
         )
     
-    # Warn if configured default was not found
+    # Warn if configured default was not found and mark first strategy as default
     if default_retrieval_name and not found_default:
         logger.warning(
             f"Configured default retrieval strategy '{default_retrieval_name}' "
             f"not found in database '{db_name}'. Using first strategy as default."
         )
+        # Actually mark the first strategy as default
+        if retrieval_strategies:
+            retrieval_strategies[0].is_default = True
     
     return retrieval_strategies
 
