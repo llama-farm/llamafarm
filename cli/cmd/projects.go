@@ -119,7 +119,7 @@ This operation is irreversible and will delete all project data.`,
 		projectToDelete := args[0]
 
 		// Reuse existing config resolution pattern
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectToDelete)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectToDelete)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -132,8 +132,7 @@ This operation is irreversible and will delete all project data.`,
 		}
 
 		// Ensure server is running
-		config := ServerOnlyConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server")
 
 		// Handle confirmation (follow rag_manage.go pattern)
 		force, _ := cmd.Flags().GetBool("force")
@@ -157,7 +156,7 @@ This operation is irreversible and will delete all project data.`,
 			os.Exit(1)
 		}
 
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
 			os.Exit(1)
@@ -172,7 +171,7 @@ This operation is irreversible and will delete all project data.`,
 				os.Exit(1)
 			}
 			fmt.Fprintf(os.Stderr, "Failed to delete project '%s/%s' (%d): %s\n",
-				ns, projectToDelete, resp.StatusCode, prettyServerError(resp, body))
+				ns, projectToDelete, resp.StatusCode, utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 
