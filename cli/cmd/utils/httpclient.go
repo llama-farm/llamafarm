@@ -105,12 +105,28 @@ func LogHeaders(kind string, hdr http.Header) {
 		return
 	}
 	// List of sensitive headers to redact, lower-case for comparison
+	// Comprehensive list of headers that may contain credentials, tokens, or sensitive data
 	sensitiveHeaders := map[string]struct{}{
-		"authorization": {},
-		"cookie":        {},
-		"x-session-id":  {},
-		"set-cookie":    {},
-		// Add others as needed
+		"authorization":       {},
+		"cookie":              {},
+		"set-cookie":          {},
+		"x-session-id":        {},
+		"session-id":          {},
+		"x-api-key":           {},
+		"api-key":             {},
+		"apikey":              {},
+		"x-auth-token":        {},
+		"x-access-token":      {},
+		"x-refresh-token":     {},
+		"x-csrf-token":        {},
+		"x-xsrf-token":        {},
+		"proxy-authorization": {},
+		"www-authenticate":    {},
+		"authentication":      {},
+		"token":               {},
+		"bearer":              {},
+		"x-forwarded-for":     {},
+		"x-real-ip":           {},
 	}
 	keys := make([]string, 0, len(hdr))
 	for k := range hdr {
