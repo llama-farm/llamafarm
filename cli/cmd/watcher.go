@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,8 +130,10 @@ func StartConfigWatcher(namespace, project string) error {
 	go func() {
 		defer watcher.Close()
 
-		// Track last modification times to avoid infinite loops
+		// Track last modification times to avoid infinite loops and debounce rapid changes
 		lastModTimes := make(map[string]time.Time)
+		// Debounce duration to wait for file changes to settle
+		const debounceDuration = 500 * time.Millisecond
 
 		for {
 			select {
@@ -159,9 +160,9 @@ func StartConfigWatcher(namespace, project string) error {
 						}
 					}
 
-					// Skip if we just modified this file (to prevent infinite loops)
+					// Skip if we recently synced this file (debounce to prevent rapid successive syncs)
 					if lastMod, exists := lastModTimes[sourcePath]; exists {
-						if time.Since(lastMod) < time.Second {
+						if time.Since(lastMod) < debounceDuration {
 							continue
 						}
 					}
@@ -185,14 +186,26 @@ func StartConfigWatcher(namespace, project string) error {
 						continue
 					}
 
+					// Also check if we recently synced to the target path (prevents ping-pong)
+					if lastMod, exists := lastModTimes[targetPath]; exists {
+						if time.Since(lastMod) < debounceDuration {
+							continue
+						}
+					}
+
+					// Wait a bit to let the file write complete
+					time.Sleep(50 * time.Millisecond)
+
 					// Sync the files
 					if err := syncConfigFiles(sourcePath, targetPath); err != nil {
 						fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
 						continue
 					}
 
-					// Update last modification time
-					lastModTimes[targetPath] = time.Now()
+					// Update last modification times for both source and target
+					now := time.Now()
+					lastModTimes[sourcePath] = now
+					lastModTimes[targetPath] = now
 
 					utils.LogDebug(fmt.Sprintf("Synced %s -> %s\n", sourcePath, targetPath))
 				}
@@ -271,7 +284,7 @@ func resolveConfigPaths(namespace, project string) (*ConfigPaths, error) {
 	}, nil
 }
 
-// syncConfigFiles copies the source config file to the target location
+// syncConfigFiles copies the source config file to the target location using atomic writes
 func syncConfigFiles(sourcePath, targetPath string) error {
 	// Ensure target directory exists
 	targetDir := filepath.Dir(targetPath)
@@ -279,29 +292,57 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 		return fmt.Errorf("failed to create target directory %s: %w", targetDir, err)
 	}
 
-	// Open source file
-	sourceFile, err := os.Open(sourcePath)
+	// Read source file contents
+	sourceData, err := os.ReadFile(sourcePath)
 	if err != nil {
-		return fmt.Errorf("failed to open source file %s: %w", sourcePath, err)
-	}
-	defer sourceFile.Close()
-
-	// Create target file
-	targetFile, err := os.Create(targetPath)
-	if err != nil {
-		return fmt.Errorf("failed to create target file %s: %w", targetPath, err)
-	}
-	defer targetFile.Close()
-
-	// Copy contents
-	_, err = io.Copy(targetFile, sourceFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file contents: %w", err)
+		return fmt.Errorf("failed to read source file %s: %w", sourcePath, err)
 	}
 
-	// Ensure data is written
-	if err := targetFile.Sync(); err != nil {
-		return fmt.Errorf("failed to sync target file: %w", err)
+	// Get source file info for permissions
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat source file %s: %w", sourcePath, err)
+	}
+
+	// Write to target atomically using temp file + rename
+	tmpFile, err := os.CreateTemp(targetDir, ".llamafarm-sync-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file in %s: %w", targetDir, err)
+	}
+	tmpPath := tmpFile.Name()
+
+	// Clean up temp file on error
+	defer func() {
+		if tmpFile != nil {
+			tmpFile.Close()
+			os.Remove(tmpPath)
+		}
+	}()
+
+	// Write source data to temp file
+	if _, err := tmpFile.Write(sourceData); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+
+	// Sync to ensure data is written to disk
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp file: %w", err)
+	}
+
+	// Close the temp file
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+	tmpFile = nil // Mark as closed so defer doesn't try to close again
+
+	// Set permissions to match source file
+	if err := os.Chmod(tmpPath, sourceInfo.Mode()); err != nil {
+		return fmt.Errorf("failed to set permissions on temp file: %w", err)
+	}
+
+	// Atomically rename temp file to target file
+	if err := os.Rename(tmpPath, targetPath); err != nil {
+		return fmt.Errorf("failed to rename temp file to target: %w", err)
 	}
 
 	return nil

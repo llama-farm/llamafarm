@@ -14,7 +14,6 @@ import (
 
 	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 )
 
 // CreateProjectResponse represents the server response when creating a project.
@@ -119,14 +118,8 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		yamlBytes, err := yaml.Marshal(createResp.Project.Config)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
-			os.Exit(1)
-		}
-
 		yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
-		if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
+		if err := config.SaveConfig(&createResp.Project.Config, yamlPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
 			os.Exit(1)
 		}
