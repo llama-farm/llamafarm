@@ -157,16 +157,18 @@ func TestLogHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset logger state for clean test
 			ResetDebugLoggerForTesting()
-			defer ResetDebugLoggerForTesting()
 
-			// Initialize debug logger to capture output
-			testLogPath := "test_headers_" + strings.ReplaceAll(tt.name, " ", "_") + ".log"
-			err := InitDebugLogger(testLogPath, false)
-			if err != nil {
-				t.Fatalf("Failed to initialize debug logger: %v", err)
-			}
+		// Initialize debug logger to capture output
+		testLogPath := "test_headers_" + strings.ReplaceAll(tt.name, " ", "_") + ".log"
+		err := InitDebugLogger(testLogPath, false)
+		if err != nil {
+			t.Fatalf("Failed to initialize debug logger: %v", err)
+		}
+		// Clean up in correct order: close logger before removing file
+		defer os.Remove(testLogPath)
+		defer ResetDebugLoggerForTesting()
 
-			// Log the headers
+		// Log the headers
 			LogHeaders("test", tt.headers)
 
 			// Sync to ensure all data is written
@@ -177,17 +179,14 @@ func TestLogHeaders(t *testing.T) {
 				}
 			}
 
-			// Read the debug log to verify redaction
-			logContent, err := os.ReadFile(testLogPath)
-			if err != nil {
-				t.Fatalf("Failed to read debug log: %v", err)
-			}
-			logStr := string(logContent)
+		// Read the debug log to verify redaction
+		logContent, err := os.ReadFile(testLogPath)
+		if err != nil {
+			t.Fatalf("Failed to read debug log: %v", err)
+		}
+		logStr := string(logContent)
 
-			// Clean up test log file
-			defer os.Remove(testLogPath)
-
-			// Verify sensitive headers are redacted
+		// Verify sensitive headers are redacted
 			for _, header := range tt.expectRedacted {
 				// Get the canonical form that Go uses for this header
 				canonicalHeader := http.CanonicalHeaderKey(header)

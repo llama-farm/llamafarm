@@ -151,7 +151,7 @@ jobs:
           echo "✓ Dataset created"
 
       - name: Wait for config sync after dataset create
-        run: sleep 0.5
+        run: sleep 2.5
 
       - name: Debug config after dataset create
         run: |
@@ -179,7 +179,7 @@ jobs:
           echo "✓ All sample files uploaded"
 
       - name: Wait for config sync after dataset upload
-        run: sleep 0.5
+        run: sleep 2.5
 
       - name: Debug config before dataset process
         run: |
