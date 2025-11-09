@@ -144,9 +144,13 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	tmpPath := tmpFile.Name()
 
 	// Clean up temp file on error
+	var renamed bool
 	defer func() {
 		if tmpFile != nil {
 			tmpFile.Close()
+		}
+		// Always remove temp file if rename didn't succeed
+		if !renamed {
 			os.Remove(tmpPath)
 		}
 	}()
@@ -165,7 +169,6 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
-	tmpFile = nil // Mark as closed so defer doesn't try to close again
 
 	// Set permissions on temp file
 	if err := os.Chmod(tmpPath, perm); err != nil {
@@ -176,6 +179,7 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("failed to rename temp file to target: %w", err)
 	}
+	renamed = true
 
 	return nil
 }

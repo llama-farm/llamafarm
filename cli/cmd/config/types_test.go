@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -336,7 +337,7 @@ func TestAtomicWriteFile(t *testing.T) {
 			// Verify that we always read complete content (starts with "content from writer" or "initial content")
 			content := string(data)
 			if content != "initial content" && len(content) < len("content from writer ") {
-				errChan <- err
+				errChan <- fmt.Errorf("partial read detected: got %q (len %d)", content, len(content))
 			}
 		}()
 	}

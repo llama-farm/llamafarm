@@ -313,9 +313,13 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 	tmpPath := tmpFile.Name()
 
 	// Clean up temp file on error
+	var renamed bool
 	defer func() {
 		if tmpFile != nil {
 			tmpFile.Close()
+		}
+		// Always remove temp file if rename didn't succeed
+		if !renamed {
 			os.Remove(tmpPath)
 		}
 	}()
@@ -334,7 +338,6 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
-	tmpFile = nil // Mark as closed so defer doesn't try to close again
 
 	// Set permissions to match source file
 	if err := os.Chmod(tmpPath, sourceInfo.Mode()); err != nil {
@@ -345,6 +348,7 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		return fmt.Errorf("failed to rename temp file to target: %w", err)
 	}
+	renamed = true
 
 	return nil
 }
