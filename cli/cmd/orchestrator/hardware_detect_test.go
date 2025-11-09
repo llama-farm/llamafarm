@@ -51,7 +51,7 @@ func TestPyTorchIndexURL(t *testing.T) {
 		expected   string
 	}{
 		{HardwareCPU, "https://download.pytorch.org/whl/cpu"},
-		{HardwareCUDA, ""}, // Empty means use default PyPI (CUDA builds)
+		{HardwareCUDA, ""},  // Empty means use default PyPI (CUDA builds)
 		{HardwareMetal, ""}, // Empty means use default PyPI (Metal builds)
 		{HardwareROCm, "https://download.pytorch.org/whl/rocm6.0"},
 		{HardwareUnknown, "https://download.pytorch.org/whl/cpu"}, // Fallback to CPU

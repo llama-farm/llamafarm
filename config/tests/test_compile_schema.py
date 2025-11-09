@@ -174,4 +174,3 @@ properties:
 if __name__ == "__main__":
     # Run tests when executed directly
     pytest.main([__file__, "-v"])
-
