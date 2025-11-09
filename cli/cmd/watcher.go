@@ -133,7 +133,8 @@ func StartConfigWatcher(namespace, project string) error {
 		// Track last modification times to avoid infinite loops and debounce rapid changes
 		lastModTimes := make(map[string]time.Time)
 		// Debounce duration to wait for file changes to settle
-		const debounceDuration = 500 * time.Millisecond
+		// Keep this short (100ms) to ensure rapid sync while preventing bounce
+		const debounceDuration = 100 * time.Millisecond
 
 		for {
 			select {
@@ -193,8 +194,8 @@ func StartConfigWatcher(namespace, project string) error {
 						}
 					}
 
-					// Wait a bit to let the file write complete
-					time.Sleep(50 * time.Millisecond)
+					// Wait briefly to let the file write complete
+					time.Sleep(20 * time.Millisecond)
 
 					// Sync the files
 					if err := syncConfigFiles(sourcePath, targetPath); err != nil {
@@ -370,4 +371,77 @@ func StartConfigWatcherForCommand() {
 	if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to start config watcher: %v\n", err)
 	}
+}
+
+// EnsureConfigSynced forces an immediate sync of config files and waits for it to complete.
+// This should be called after API operations that modify the config to ensure the local
+// file is up-to-date before the command returns.
+func EnsureConfigSynced(namespace, project string) error {
+	configPaths, err := resolveConfigPaths(namespace, project)
+	if err != nil {
+		return fmt.Errorf("failed to resolve config paths: %w", err)
+	}
+
+	cwdConfigPath := configPaths.CwdConfigPath
+	homeConfigPath := configPaths.HomeConfigPath
+
+	// Check which file exists and is newer
+	cwdInfo, cwdErr := os.Stat(cwdConfigPath)
+	homeInfo, homeErr := os.Stat(homeConfigPath)
+
+	if cwdErr != nil && homeErr != nil {
+		// Neither file exists - nothing to sync
+		return nil
+	}
+
+	// Determine sync direction based on modification times and validity
+	var sourcePath, targetPath string
+
+	if cwdErr == nil && homeErr == nil {
+		// Both exist - sync the newer one to the older one, but validate first
+		cwdCfg, cwdLoadErr := config.LoadConfigFile(cwdConfigPath)
+		homeCfg, homeLoadErr := config.LoadConfigFile(homeConfigPath)
+
+		cwdValid := cwdLoadErr == nil && func() bool {
+			_, err := cwdCfg.GetProjectInfo()
+			return err == nil
+		}()
+
+		homeValid := homeLoadErr == nil && func() bool {
+			_, err := homeCfg.GetProjectInfo()
+			return err == nil
+		}()
+
+		// Prefer valid configs, then prefer newer configs
+		if homeValid && !cwdValid {
+			sourcePath = homeConfigPath
+			targetPath = cwdConfigPath
+		} else if cwdValid && !homeValid {
+			sourcePath = cwdConfigPath
+			targetPath = homeConfigPath
+		} else if homeInfo.ModTime().After(cwdInfo.ModTime()) {
+			// Both valid or both invalid - use the newer one
+			sourcePath = homeConfigPath
+			targetPath = cwdConfigPath
+		} else {
+			sourcePath = cwdConfigPath
+			targetPath = homeConfigPath
+		}
+	} else if homeErr == nil {
+		// Only home exists
+		sourcePath = homeConfigPath
+		targetPath = cwdConfigPath
+	} else {
+		// Only cwd exists
+		sourcePath = cwdConfigPath
+		targetPath = homeConfigPath
+	}
+
+	// Perform sync
+	utils.LogDebug(fmt.Sprintf("Forcing config sync: %s -> %s", sourcePath, targetPath))
+	if err := syncConfigFiles(sourcePath, targetPath); err != nil {
+		return fmt.Errorf("failed to sync config files: %w", err)
+	}
+
+	return nil
 }

@@ -218,6 +218,11 @@ Examples:
 		}
 		fmt.Printf("✅ Created dataset '%s' (strategy: %s, database: %s)\n", created.Dataset.Name, created.Dataset.DataProcessingStrategy, created.Dataset.Database)
 
+		// Ensure config is synced after creation so next commands see the new dataset
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after dataset creation: %v", err))
+		}
+
 		// 4) Optionally upload files if provided
 		filePaths := args[1:]
 		if len(filePaths) == 0 {
@@ -289,6 +294,11 @@ var datasetsDeleteCommand = &cobra.Command{
 			os.Exit(1)
 		}
 		fmt.Printf("✅ Successfully removed dataset '%s'\n", datasetName)
+
+		// Ensure config is synced after deletion
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after dataset deletion: %v", err))
+		}
 	},
 }
 
@@ -391,6 +401,11 @@ Examples:
 		if failed > 0 {
 			fmt.Printf("   ❌ Failed: %d\n", failed)
 		}
+
+		// Ensure config is synced after uploads (server updates file list in config)
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after uploads: %v", err))
+		}
 	},
 }
 
@@ -411,6 +426,11 @@ var datasetsProcessCmd = &cobra.Command{
 		// Start config watcher AFTER we've successfully loaded the config
 		// This prevents race conditions where the watcher syncs files before we read them
 		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
+
+		// Ensure config is synced BEFORE processing (server may have updated it)
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config before processing: %v", err))
+		}
 
 		datasetName := args[0]
 
