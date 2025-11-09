@@ -11,9 +11,13 @@ on:
 
 jobs:
   e2e-test:
-    name: End-to-End Testing
-    runs-on: ubuntu-latest
+    name: E2E Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     env:
       # Use the current branch/ref being tested instead of main
       LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
@@ -56,6 +60,7 @@ jobs:
       # ============================================================
       - name: Generate Python datamodels
         working-directory: config
+        shell: bash
         run: |
           echo "Generating datamodels from schema..."
           ./generate-types.sh
@@ -63,6 +68,7 @@ jobs:
 
       - name: Validate datamodel generation
         working-directory: config
+        shell: bash
         run: |
           if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
             echo "❌ Error: datamodel.py not generated or is empty"
@@ -77,9 +83,11 @@ jobs:
           echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Install go-jsonschema
+        shell: bash
         run: go install github.com/atombender/go-jsonschema@latest
 
       - name: Generate Go types
+        shell: bash
         run: |
           # Generate Go types from schema
           cd cli/cmd/config
@@ -88,28 +96,34 @@ jobs:
 
       - name: Build CLI binary
         working-directory: cli
+        shell: bash
         run: |
-          go build -o lf main.go
+          go build -o lf${{ runner.os == 'Windows' && '.exe' || '' }} main.go
           echo "✓ CLI binary built successfully"
 
       - name: Verify CLI binary works
         working-directory: cli
+        shell: bash
         run: |
-          ./lf version
+          ./lf${{ runner.os == 'Windows' && '.exe' || '' }} version
           echo "✓ CLI binary is functional"
 
       # ============================================================
       # Project Initialization
       # ============================================================
       - name: Create test directory
+        shell: bash
         run: |
-          mkdir -p /tmp/e2e-test
-          echo "✓ Test directory created at /tmp/e2e-test"
+          TEST_DIR="${{ runner.temp }}/e2e-test"
+          mkdir -p "$TEST_DIR"
+          echo "TEST_DIR=$TEST_DIR" >> $GITHUB_ENV
+          echo "✓ Test directory created at $TEST_DIR"
 
       - name: Initialize project with CLI
         working-directory: cli
+        shell: bash
         run: |
-          if ! ./lf init --cwd /tmp/e2e-test --debug; then
+          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} init --cwd "$TEST_DIR" --debug; then
             echo "❌ Project initialization failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -117,30 +131,32 @@ jobs:
           echo "✓ Project initialized"
 
       - name: Verify project config was created
+        shell: bash
         run: |
-          if [ ! -f "/tmp/e2e-test/llamafarm.yaml" ]; then
+          if [ ! -f "$TEST_DIR/llamafarm.yaml" ]; then
             echo "❌ Error: llamafarm.yaml not created"
             exit 1
           fi
           echo "✓ Project configuration exists"
           echo ""
           echo "=== FULL CONFIG AFTER INIT ==="
-          cat /tmp/e2e-test/llamafarm.yaml
+          cat "$TEST_DIR/llamafarm.yaml"
           echo ""
           echo "=== Checking critical fields ==="
-          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
+          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
       # ============================================================
       # Data Ingestion Test
       # ============================================================
       - name: Create dataset
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets create \
+          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets create \
             -s universal_processor \
             -b main_database \
             test_dataset; then
@@ -151,26 +167,29 @@ jobs:
           echo "✓ Dataset created"
 
       - name: Wait for config sync after dataset create
+        shell: bash
         run: sleep 2.5
 
       - name: Debug config after dataset create
+        shell: bash
         run: |
           echo ""
           echo "=== Config after dataset create (first 40 lines) ==="
-          head -40 /tmp/e2e-test/llamafarm.yaml
+          head -40 "$TEST_DIR/llamafarm.yaml"
           echo ""
           echo "=== Checking critical fields ==="
-          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
-          echo "datasets: $(grep -A5 '^datasets:' /tmp/e2e-test/llamafarm.yaml | head -6)"
+          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
+          echo "datasets: $(grep -A5 '^datasets:' "$TEST_DIR/llamafarm.yaml" | head -6)"
 
       - name: Upload sample files
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "../examples/quick_rag/files"; then
+          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets upload test_dataset "../examples/quick_rag/files"; then
             echo "❌ Upload failed for ../examples/quick_rag/files, checking server health..."
             echo "Current directory: $(pwd)"
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
@@ -179,30 +198,37 @@ jobs:
           echo "✓ All sample files uploaded"
 
       - name: Wait for config sync after dataset upload
+        shell: bash
         run: sleep 2.5
 
       - name: Debug config before dataset process
+        shell: bash
         run: |
           echo ""
           echo "=== Config before dataset process ==="
-          echo "File exists: $(test -f /tmp/e2e-test/llamafarm.yaml && echo 'YES' || echo 'NO')"
-          echo "File size: $(stat -c%s /tmp/e2e-test/llamafarm.yaml 2>/dev/null || echo 'N/A')"
+          echo "File exists: $(test -f "$TEST_DIR/llamafarm.yaml" && echo 'YES' || echo 'NO')"
+          if [ -f "$TEST_DIR/llamafarm.yaml" ]; then
+            echo "File size: $(wc -c < "$TEST_DIR/llamafarm.yaml")"
+          else
+            echo "File size: N/A"
+          fi
           echo ""
           echo "=== Full config content ==="
-          cat /tmp/e2e-test/llamafarm.yaml || echo "Failed to read config"
+          cat "$TEST_DIR/llamafarm.yaml" || echo "Failed to read config"
           echo ""
           echo "=== Critical fields check ==="
-          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
+          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
       - name: Process dataset
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           sleep 2
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets process test_dataset; then
+          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets process test_dataset; then
             echo "❌ Dataset processing failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -214,11 +240,12 @@ jobs:
       # ============================================================
       - name: Run RAG query
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running RAG query..."
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug rag query \
             --database main_database \
             --top-k 3 \
             "neural scaling laws" 2>&1); then
@@ -242,10 +269,11 @@ jobs:
 
       - name: Validate RAG query results
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug rag query \
             --database main_database \
             --top-k 3 \
             --include-metadata \
@@ -270,11 +298,12 @@ jobs:
       # ============================================================
       - name: Run chat command with RAG
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command with RAG..."
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug chat \
             "Summarize neural scaling laws in one sentence" 2>&1); then
             echo "❌ Chat command failed"
             echo "$OUTPUT"
@@ -304,11 +333,12 @@ jobs:
 
       - name: Test chat command without RAG
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command without RAG..."
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug chat \
             --no-rag \
             "What is 2 + 2?" 2>&1); then
             echo "❌ Chat command (no RAG) failed"
@@ -335,11 +365,12 @@ jobs:
       # ============================================================
       - name: List datasets to verify persistence
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Listing datasets..."
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets list; then
+          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets list; then
             echo "❌ Dataset listing failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -348,17 +379,19 @@ jobs:
 
       - name: Check RAG health
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Checking RAG health..."
-          ./lf --cwd /tmp/e2e-test --debug rag health || true
+          ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug rag health || true
           echo "✓ RAG health check complete"
 
       - name: E2E test summary
+        shell: bash
         run: |
           echo "=========================================="
-          echo "End-to-End Test Summary"
+          echo "End-to-End Test Summary (${{ matrix.os }})"
           echo "=========================================="
           echo "✓ CLI built successfully"
           echo "✓ Project initialized"
@@ -373,51 +406,60 @@ jobs:
       # ============================================================
       - name: Cleanup test artifacts
         if: always()
+        shell: bash
         run: |
           echo "Cleaning up test directory..."
-          rm -rf /tmp/e2e-test
+          rm -rf "$TEST_DIR"
           echo "✓ Cleanup complete"
 
       - name: Display service logs on failure
         if: failure()
+        shell: bash
         run: |
           echo "=========================================="
-          echo "Service Logs"
+          echo "Service Logs (${{ matrix.os }})"
           echo "=========================================="
 
-          # Display server logs if they exist
-          if [ -f "$HOME/.llamafarm/logs/server.log" ]; then
-            echo "--- Server Logs ---"
-            tail -100 "$HOME/.llamafarm/logs/server.log"
+          # Determine home directory (cross-platform)
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            LF_HOME="$USERPROFILE/.llamafarm"
           else
-            echo "No server logs found at $HOME/.llamafarm/logs/server.log"
+            LF_HOME="$HOME/.llamafarm"
+          fi
+
+          # Display server logs if they exist
+          if [ -f "$LF_HOME/logs/server.log" ]; then
+            echo "--- Server Logs ---"
+            tail -100 "$LF_HOME/logs/server.log"
+          else
+            echo "No server logs found at $LF_HOME/logs/server.log"
           fi
 
           echo ""
 
           # Display RAG logs if they exist
-          if [ -f "$HOME/.llamafarm/logs/rag.log" ]; then
+          if [ -f "$LF_HOME/logs/rag.log" ]; then
             echo "--- RAG Worker Logs ---"
-            tail -100 "$HOME/.llamafarm/logs/rag.log"
+            tail -100 "$LF_HOME/logs/rag.log"
           else
-            echo "No RAG logs found at $HOME/.llamafarm/logs/rag.log"
+            echo "No RAG logs found at $LF_HOME/logs/rag.log"
           fi
 
           echo ""
 
           # Display Universal Runtime logs if they exist
-          if [ -f "$HOME/.llamafarm/logs/universal-runtime.log" ]; then
+          if [ -f "$LF_HOME/logs/universal-runtime.log" ]; then
             echo "--- Universal Runtime Logs ---"
-            tail -100 "$HOME/.llamafarm/logs/universal-runtime.log"
+            tail -100 "$LF_HOME/logs/universal-runtime.log"
           else
-            echo "No Universal Runtime logs found at $HOME/.llamafarm/logs/universal-runtime.log"
+            echo "No Universal Runtime logs found at $LF_HOME/logs/universal-runtime.log"
           fi
 
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-test-logs
-          path: $HOME/.llamafarm/logs/
+          name: e2e-test-logs-${{ matrix.os }}
+          path: ~/.llamafarm/logs/
           retention-days: 7
           if-no-files-found: warn
