@@ -1,4 +1,5 @@
 import os
+import sys
 import threading
 
 from celery import Celery, signals
@@ -41,6 +42,16 @@ if settings.celery_broker_url and settings.celery_result_backend:
     )
 else:
     # Use default filesystem broker
+    # Convert Windows backslashes to forward slashes for file:// URL
+    result_backend_path = f"{settings.lf_data_dir}/broker/results".replace("\\", "/")
+    # Ensure proper file:// URL format (file:/// for absolute paths on Windows)
+    if sys.platform == "win32" and len(result_backend_path) > 1 and result_backend_path[1] == ":":
+        # Windows absolute path (e.g., C:/Users/...) needs file:///C:/...
+        result_backend_url = f"file:///{result_backend_path}"
+    else:
+        # Unix absolute path needs file:///path or relative path needs file://path
+        result_backend_url = f"file://{result_backend_path}"
+
     app.conf.update(
         {
             "broker_url": "filesystem://",
@@ -49,7 +60,7 @@ else:
                 "data_folder_out": f"{settings.lf_data_dir}/broker/in",  # has to be the same as 'data_folder_in'  # noqa: E501
                 "data_folder_processed": f"{settings.lf_data_dir}/broker/processed",
             },
-            "result_backend": f"file://{settings.lf_data_dir}/broker/results",
+            "result_backend": result_backend_url,
             "result_persistent": True,
             # Task routing - only handle server tasks, ignore rag.* tasks
             "task_routes": {

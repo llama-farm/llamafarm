@@ -2,13 +2,14 @@ package cmd
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 )
 
 // State represents the minimal shared application state decoupled from the UI model.
 type State struct {
 	CurrentDatabase string
 	CurrentStrategy string
-	ServerHealth    *HealthPayload
+	ServerHealth    *orchestrator.HealthPayload
 }
 
 // StateUpdateMsg is emitted by the controller to notify the UI of state changes.
@@ -78,7 +79,7 @@ func (c *Controller) SwitchDatabase(newDatabase string, available *DatabasesResp
 }
 
 // UpdateServerHealth stores the latest server health snapshot and notifies the UI.
-func (c *Controller) UpdateServerHealth(h *HealthPayload) tea.Cmd {
+func (c *Controller) UpdateServerHealth(h *orchestrator.HealthPayload) tea.Cmd {
 	c.state.ServerHealth = h
 	return func() tea.Msg { return StateUpdateMsg{NewState: c.state} }
 }

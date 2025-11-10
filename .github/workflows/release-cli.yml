@@ -16,6 +16,7 @@ permissions:
 
 env:
   BINARY_NAME: lf
+  NX_NO_CLOUD: true
 
 jobs:
   build-cli:

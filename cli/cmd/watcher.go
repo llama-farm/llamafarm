@@ -2,15 +2,15 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/llamafarm/cli/cmd/utils"
 )
 
 type ConfigPaths struct {
@@ -61,11 +61,11 @@ func StartConfigWatcher(namespace, project string) error {
 		return fmt.Errorf("failed to watch current directory: %w", err)
 	}
 
-	logDebug(fmt.Sprintf("cwdConfigPath: %s, homeConfigPath: %s", cwdConfigPath, homeConfigPath))
+	utils.LogDebug(fmt.Sprintf("cwdConfigPath: %s, homeConfigPath: %s", cwdConfigPath, homeConfigPath))
 	cwdConfigInfo, ciErr := os.Stat(cwdConfigPath)
 	homeConfigInfo, hiErr := os.Stat(homeConfigPath)
-	logDebug(fmt.Sprintf("cwdConfigInfo: %v, homeConfigInfo: %v", cwdConfigInfo, homeConfigInfo))
-	logDebug(fmt.Sprintf("ciErr: %v, hiErr: %v", ciErr, hiErr))
+	utils.LogDebug(fmt.Sprintf("cwdConfigInfo: %v, homeConfigInfo: %v", cwdConfigInfo, homeConfigInfo))
+	utils.LogDebug(fmt.Sprintf("ciErr: %v, hiErr: %v", ciErr, hiErr))
 
 	// Sync config files with priority: prefer configs that have valid name/namespace fields
 	// This ensures that valid configs don't get overwritten by invalid ones
@@ -130,8 +130,11 @@ func StartConfigWatcher(namespace, project string) error {
 	go func() {
 		defer watcher.Close()
 
-		// Track last modification times to avoid infinite loops
+		// Track last modification times to avoid infinite loops and debounce rapid changes
 		lastModTimes := make(map[string]time.Time)
+		// Debounce duration to wait for file changes to settle
+		// Keep this short (100ms) to ensure rapid sync while preventing bounce
+		const debounceDuration = 100 * time.Millisecond
 
 		for {
 			select {
@@ -158,9 +161,9 @@ func StartConfigWatcher(namespace, project string) error {
 						}
 					}
 
-					// Skip if we just modified this file (to prevent infinite loops)
+					// Skip if we recently synced this file (debounce to prevent rapid successive syncs)
 					if lastMod, exists := lastModTimes[sourcePath]; exists {
-						if time.Since(lastMod) < time.Second {
+						if time.Since(lastMod) < debounceDuration {
 							continue
 						}
 					}
@@ -184,16 +187,28 @@ func StartConfigWatcher(namespace, project string) error {
 						continue
 					}
 
+					// Also check if we recently synced to the target path (prevents ping-pong)
+					if lastMod, exists := lastModTimes[targetPath]; exists {
+						if time.Since(lastMod) < debounceDuration {
+							continue
+						}
+					}
+
+					// Wait briefly to let the file write complete
+					time.Sleep(20 * time.Millisecond)
+
 					// Sync the files
 					if err := syncConfigFiles(sourcePath, targetPath); err != nil {
 						fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
 						continue
 					}
 
-					// Update last modification time
-					lastModTimes[targetPath] = time.Now()
+					// Update last modification times for both source and target
+					now := time.Now()
+					lastModTimes[sourcePath] = now
+					lastModTimes[targetPath] = now
 
-					logDebug(fmt.Sprintf("Synced %s -> %s\n", sourcePath, targetPath))
+					utils.LogDebug(fmt.Sprintf("Synced %s -> %s\n", sourcePath, targetPath))
 				}
 
 			case err, ok := <-watcher.Errors:
@@ -208,8 +223,8 @@ func StartConfigWatcher(namespace, project string) error {
 	if debug {
 		fmt.Fprintf(os.Stderr, "Watching project: %s\n", cwd)
 	}
-	logDebug(fmt.Sprintf("Watching target directory: %s\n", cwdConfigPath))
-	logDebug(fmt.Sprintf("Watching home directory: %s\n", homeConfigDir))
+	utils.LogDebug(fmt.Sprintf("Watching target directory: %s\n", cwdConfigPath))
+	utils.LogDebug(fmt.Sprintf("Watching home directory: %s\n", homeConfigDir))
 
 	return nil
 }
@@ -220,7 +235,7 @@ func resolveConfigPaths(namespace, project string) (*ConfigPaths, error) {
 	}
 
 	// Get the effective current working directory
-	cwd := getEffectiveCWD()
+	cwd := utils.GetEffectiveCWD()
 
 	// Find config files in both locations
 	cwdConfigPath, err := config.FindConfigFile(cwd)
@@ -270,7 +285,7 @@ func resolveConfigPaths(namespace, project string) (*ConfigPaths, error) {
 	}, nil
 }
 
-// syncConfigFiles copies the source config file to the target location
+// syncConfigFiles copies the source config file to the target location using atomic writes
 func syncConfigFiles(sourcePath, targetPath string) error {
 	// Ensure target directory exists
 	targetDir := filepath.Dir(targetPath)
@@ -278,30 +293,62 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 		return fmt.Errorf("failed to create target directory %s: %w", targetDir, err)
 	}
 
-	// Open source file
-	sourceFile, err := os.Open(sourcePath)
+	// Read source file contents
+	sourceData, err := os.ReadFile(sourcePath)
 	if err != nil {
-		return fmt.Errorf("failed to open source file %s: %w", sourcePath, err)
-	}
-	defer sourceFile.Close()
-
-	// Create target file
-	targetFile, err := os.Create(targetPath)
-	if err != nil {
-		return fmt.Errorf("failed to create target file %s: %w", targetPath, err)
-	}
-	defer targetFile.Close()
-
-	// Copy contents
-	_, err = io.Copy(targetFile, sourceFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file contents: %w", err)
+		return fmt.Errorf("failed to read source file %s: %w", sourcePath, err)
 	}
 
-	// Ensure data is written
-	if err := targetFile.Sync(); err != nil {
-		return fmt.Errorf("failed to sync target file: %w", err)
+	// Get source file info for permissions
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat source file %s: %w", sourcePath, err)
 	}
+
+	// Write to target atomically using temp file + rename
+	tmpFile, err := os.CreateTemp(targetDir, ".llamafarm-sync-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file in %s: %w", targetDir, err)
+	}
+	tmpPath := tmpFile.Name()
+
+	// Clean up temp file on error
+	var renamed bool
+	defer func() {
+		if tmpFile != nil {
+			tmpFile.Close()
+		}
+		// Always remove temp file if rename didn't succeed
+		if !renamed {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	// Write source data to temp file
+	if _, err := tmpFile.Write(sourceData); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+
+	// Sync to ensure data is written to disk
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp file: %w", err)
+	}
+
+	// Close the temp file
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	// Set permissions to match source file
+	if err := os.Chmod(tmpPath, sourceInfo.Mode()); err != nil {
+		return fmt.Errorf("failed to set permissions on temp file: %w", err)
+	}
+
+	// Atomically rename temp file to target file
+	if err := os.Rename(tmpPath, targetPath); err != nil {
+		return fmt.Errorf("failed to rename temp file to target: %w", err)
+	}
+	renamed = true
 
 	return nil
 }
@@ -311,7 +358,7 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 // the watcher if both namespace and project can be determined.
 func StartConfigWatcherForCommand() {
 	// Load config to get namespace and project for watcher
-	cwd := getEffectiveCWD()
+	cwd := utils.GetEffectiveCWD()
 	cfg, err := config.LoadConfig(cwd)
 	if err != nil {
 		// If no config file found, don't start watcher (not an error)
@@ -328,4 +375,77 @@ func StartConfigWatcherForCommand() {
 	if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to start config watcher: %v\n", err)
 	}
+}
+
+// EnsureConfigSynced forces an immediate sync of config files and waits for it to complete.
+// This should be called after API operations that modify the config to ensure the local
+// file is up-to-date before the command returns.
+func EnsureConfigSynced(namespace, project string) error {
+	configPaths, err := resolveConfigPaths(namespace, project)
+	if err != nil {
+		return fmt.Errorf("failed to resolve config paths: %w", err)
+	}
+
+	cwdConfigPath := configPaths.CwdConfigPath
+	homeConfigPath := configPaths.HomeConfigPath
+
+	// Check which file exists and is newer
+	cwdInfo, cwdErr := os.Stat(cwdConfigPath)
+	homeInfo, homeErr := os.Stat(homeConfigPath)
+
+	if cwdErr != nil && homeErr != nil {
+		// Neither file exists - nothing to sync
+		return nil
+	}
+
+	// Determine sync direction based on modification times and validity
+	var sourcePath, targetPath string
+
+	if cwdErr == nil && homeErr == nil {
+		// Both exist - sync the newer one to the older one, but validate first
+		cwdCfg, cwdLoadErr := config.LoadConfigFile(cwdConfigPath)
+		homeCfg, homeLoadErr := config.LoadConfigFile(homeConfigPath)
+
+		cwdValid := cwdLoadErr == nil && func() bool {
+			_, err := cwdCfg.GetProjectInfo()
+			return err == nil
+		}()
+
+		homeValid := homeLoadErr == nil && func() bool {
+			_, err := homeCfg.GetProjectInfo()
+			return err == nil
+		}()
+
+		// Prefer valid configs, then prefer newer configs
+		if homeValid && !cwdValid {
+			sourcePath = homeConfigPath
+			targetPath = cwdConfigPath
+		} else if cwdValid && !homeValid {
+			sourcePath = cwdConfigPath
+			targetPath = homeConfigPath
+		} else if homeInfo.ModTime().After(cwdInfo.ModTime()) {
+			// Both valid or both invalid - use the newer one
+			sourcePath = homeConfigPath
+			targetPath = cwdConfigPath
+		} else {
+			sourcePath = cwdConfigPath
+			targetPath = homeConfigPath
+		}
+	} else if homeErr == nil {
+		// Only home exists
+		sourcePath = homeConfigPath
+		targetPath = cwdConfigPath
+	} else {
+		// Only cwd exists
+		sourcePath = cwdConfigPath
+		targetPath = homeConfigPath
+	}
+
+	// Perform sync
+	utils.LogDebug(fmt.Sprintf("Forcing config sync: %s -> %s", sourcePath, targetPath))
+	if err := syncConfigFiles(sourcePath, targetPath); err != nil {
+		return fmt.Errorf("failed to sync config files: %w", err)
+	}
+
+	return nil
 }

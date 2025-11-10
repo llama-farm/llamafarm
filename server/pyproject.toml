@@ -24,15 +24,15 @@ dependencies = [
   "uvicorn>=0.35.0",
   "openai>=1.0.0",
   "instructor>=1.0.0",
-  "urllib3==1.26.20",
+  "urllib3>=2.0.0",
   "six>=1.16.0",
-  "requests>=2.25.0",
+  "requests>=2.32.5,<3.0.0",
   "httpx>=0.25.0",
   "mcp>=1.2.0",
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
-  "jsonref>=1.1.0",             # Can be removed since it's now in config
+  "jsonref>=1.1.0", # Can be removed since it's now in config
   "celery>=5.5.3",
   # Configuration parsing
   "pyyaml>=6.0.0", # Can be removed since it's now in config
@@ -44,6 +44,8 @@ dependencies = [
   "fastapi-mcp>=0.4.0",
   "ollama>=0.6.0",
   "huggingface-hub>=1.0.1",
+  # Windows-specific dependencies
+  "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

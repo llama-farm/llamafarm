@@ -23,6 +23,9 @@ on:
       - ".github/workflows/test-installer.yml"
   workflow_dispatch:
 
+env:
+  NX_NO_CLOUD: true
+
 # Ensure cli/config directory exists and copy config/schema.json before any job
 # This step runs before all jobs using the workflow_call 'pre' trick
 jobs:

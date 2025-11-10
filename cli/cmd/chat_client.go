@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"gopkg.in/yaml.v2"
 )
 
@@ -85,7 +86,7 @@ type ChatSessionContext struct {
 	Temperature      float64
 	MaxTokens        int
 	Streaming        bool
-	HTTPClient       HTTPClient
+	HTTPClient       utils.HTTPClient
 	Model            string
 	// RAG fields
 	RAGEnabled           bool
@@ -107,7 +108,7 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
 		Temperature:      temperature,
 		MaxTokens:        maxTokens,
 		Streaming:        streaming,
-		HTTPClient:       getHTTPClient(),
+		HTTPClient:       utils.GetHTTPClient(),
 		RAGEnabled:       true, // RAG is enabled by default
 	}
 }
@@ -117,7 +118,7 @@ func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 		return "", fmt.Errorf("session context is nil")
 	}
 
-	lfDataDir, err := getLFDataDir()
+	lfDataDir, err := utils.GetLFDataDir()
 	if err != nil {
 		return "", err
 	}
@@ -285,11 +286,11 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 			sessionID = ""
 		} else {
 			if existingContext, err := readSessionContext(ctx); err != nil {
-				logDebug(fmt.Sprintf("Failed to read session context: %v", err))
+				utils.LogDebug(fmt.Sprintf("Failed to read session context: %v", err))
 			} else if existingContext != nil && existingContext.SessionID != "" {
 				ctx.SessionID = existingContext.SessionID
 				sessionID = existingContext.SessionID
-				logDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
+				utils.LogDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
 			}
 		}
 
@@ -332,7 +333,7 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 		}
 
 		jsonData, err := json.Marshal(request)
-		logDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))
+		utils.LogDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))
 		if err != nil {
 			errCh <- fmt.Errorf("failed to marshal request: %w", err)
 			return
@@ -355,11 +356,11 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 		} else if ctx.SessionMode == SessionModeStateless {
 			req.Header.Set("X-No-Session", "true")
 		}
-		logDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
-		logHeaders("request", req.Header)
+		utils.LogDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
+		utils.LogHeaders("request", req.Header)
 
 		// Log and restore request body
-		req.Body = logBodyContent(req.Body, "request body")
+		req.Body = utils.LogBodyContent(req.Body, "request body")
 
 		hc := &http.Client{Timeout: 0, Transport: &http.Transport{DisableCompression: true, IdleConnTimeout: 0}}
 		resp, err := hc.Do(req)
@@ -374,12 +375,12 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 				errCh <- fmt.Errorf("server returned error %d and body read failed: %v", resp.StatusCode, readErr)
 				return
 			}
-			errCh <- fmt.Errorf("server returned error %d: %s", resp.StatusCode, prettyServerError(resp, body))
+			errCh <- fmt.Errorf("server returned error %d: %s", resp.StatusCode, utils.PrettyServerError(resp, body))
 			return
 		}
 
-		logDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
-		logHeaders("response", resp.Header)
+		utils.LogDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
+		utils.LogHeaders("response", resp.Header)
 		if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
 			if ctx.SessionMode == SessionModeStateless {
 				ctx.SessionID = ""
@@ -388,7 +389,7 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 				ctx.SessionID = sessionIDHeader
 				sessionID = sessionIDHeader
 				if err := writeSessionContext(ctx, sessionIDHeader); err != nil {
-					logDebug(fmt.Sprintf("Failed to write session context: %v", err))
+					utils.LogDebug(fmt.Sprintf("Failed to write session context: %v", err))
 				}
 			}
 		}
@@ -396,7 +397,7 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 		reader := bufio.NewReader(resp.Body)
 		for {
 			line, err := reader.ReadString('\n')
-			logDebug(fmt.Sprintf("STREAM LINE: %v", line))
+			utils.LogDebug(fmt.Sprintf("STREAM LINE: %v", line))
 			if err != nil {
 				if err == io.EOF {
 					break
@@ -446,7 +447,7 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 					if tc.Function.Name != "" {
 						// Use special marker [TOOL_CALL] so TUI can style it
 						toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
-						logDebug(fmt.Sprintf("Tool call detected: %s", tc.Function.Name))
+						utils.LogDebug(fmt.Sprintf("Tool call detected: %s", tc.Function.Name))
 						outCh <- toolMsg
 					}
 				}
@@ -454,7 +455,7 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 
 			// Send content if present
 			if delta.Content != "" {
-				logDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
+				utils.LogDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
 				outCh <- delta.Content
 			}
 		}
@@ -481,7 +482,7 @@ func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
 		}
 		// Legacy fallback: CWD/.llamafarm/context.yaml
 		if strings.TrimSpace(contextFile) == "" {
-			cwd := getEffectiveCWD()
+			cwd := utils.GetEffectiveCWD()
 			contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
 		}
 	} else {
@@ -513,7 +514,7 @@ func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
 		return nil, nil
 	}
 
-	logDebug(fmt.Sprintf("readSessionContext: returning context from path %s: %+v", contextFile, context))
+	utils.LogDebug(fmt.Sprintf("readSessionContext: returning context from path %s: %+v", contextFile, context))
 
 	return &context, nil
 }
@@ -590,29 +591,29 @@ func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) Sess
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to create request: %v", err))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to create request: %v", err))
 		return SessionHistory{}
 	}
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to send request: %v", err))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to send request: %v", err))
 		return SessionHistory{}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to get history: %d", resp.StatusCode))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to get history: %d", resp.StatusCode))
 		return SessionHistory{}
 	}
 
 	var result SessionHistoryResponse
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to read body: %v", err))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to read body: %v", err))
 		return SessionHistory{}
 	}
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&result); err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to decode history: %v, %s", err, string(body)))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to decode history: %v, %s", err, string(body)))
 		return SessionHistory{}
 	}
 

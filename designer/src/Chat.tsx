@@ -121,17 +121,26 @@ function Chat() {
     e => {
       e.preventDefault()
       if (isMobile || !isPanelOpen) return
+      
+      // Capture current width before setting isDragging
+      if (chatPanelRef.current) {
+        const currentWidth = chatPanelRef.current.getBoundingClientRect().width
+        chatLeftRef.current = chatPanelRef.current.getBoundingClientRect().left
+        
+        // Set the width explicitly so it doesn't jump when isDragging becomes true
+        if (chatWidthPx == null || Math.abs(currentWidth - chatWidthPx) > 1) {
+          setChatWidthPx(currentWidth)
+        }
+      }
+      
       isDraggingRef.current = true
       setIsDragging(true)
-      if (chatPanelRef.current) {
-        chatLeftRef.current = chatPanelRef.current.getBoundingClientRect().left
-      }
       document.body.style.cursor = 'col-resize'
       ;(document.body.style as any).userSelect = 'none'
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [isMobile, isPanelOpen, handleMouseMove, handleMouseUp]
+    [isMobile, isPanelOpen, handleMouseMove, handleMouseUp, chatWidthPx]
   )
 
   // Auto-collapse chat panel on mid-width screens to avoid over-squeezing project pane
@@ -216,11 +225,7 @@ function Chat() {
         style={
           !isMobile && effectivePanelOpen
             ? {
-                width: isDragging
-                  ? undefined
-                  : chatWidthPx != null
-                    ? `${chatWidthPx}px`
-                    : undefined,
+                width: chatWidthPx != null ? `${chatWidthPx}px` : undefined,
                 maxWidth: '820px',
               }
             : undefined
