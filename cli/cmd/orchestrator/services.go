@@ -624,7 +624,7 @@ func (sm *ServiceManager) GetServerHealth() (*HealthPayload, error) {
 
 	utils.LogDebug(fmt.Sprintf("GetServerHealth: checking %s", healthURL))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
@@ -632,7 +632,7 @@ func (sm *ServiceManager) GetServerHealth() (*HealthPayload, error) {
 		utils.LogDebug(fmt.Sprintf("GetServerHealth: failed to create request: %v", err))
 		return nil, err
 	}
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 12 * time.Second}).Do(req)
 	if err != nil {
 		utils.LogDebug(fmt.Sprintf("GetServerHealth: request failed: %v", err))
 		return nil, err
