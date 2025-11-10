@@ -128,6 +128,7 @@ async def health_check():
         "device": device_info,
         "loaded_models": list(_models.keys()),
         "timestamp": datetime.utcnow().isoformat(),
+        "pid": os.getpid(),
     }
 
 

@@ -1,22 +1,52 @@
 name: End-to-End Tests
 permissions:
   contents: read
+  actions: read # Required to download artifacts from other workflows
 
 on:
-  push:
+  # Trigger after CLI build completes (for main branch pushes)
+  workflow_run:
+    workflows: ["Build CLI"]
+    types: [completed]
     branches: [main]
+  # For PRs, trigger normally and wait for artifacts
   pull_request:
     branches: [main]
+  # Also allow manual trigger
   workflow_dispatch:
+
+env:
+  NX_NO_CLOUD: true
 
 jobs:
   e2e-test:
-    name: End-to-End Testing
-    runs-on: ubuntu-latest
+    name: E2E Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    # Skip e2e if CLI build failed (only for workflow_run trigger)
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: llamafarm-linux-amd64
+            binary: lf
+          - os: macos-latest
+            artifact: llamafarm-darwin-arm64
+            binary: lf
+          - os: windows-latest
+            artifact: llamafarm-windows-amd64.exe
+            binary: lf.exe
     env:
       # Use the current branch/ref being tested instead of main
       LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
+      # Use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages in CI
+      UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+      # Force CPU usage to avoid MPS issues on macOS runners
+      TRANSFORMERS_FORCE_CPU: 1
 
     steps:
       # ============================================================
@@ -24,90 +54,113 @@ jobs:
       # ============================================================
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
         with:
-          go-version: "1.24.4"
-          cache-dependency-path: cli/go.sum
+          # For workflow_run, checkout the commit that triggered the build
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum', 'cli/cmd/**/*.go') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Install uv (for build-time datamodel generation)
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-          cache-dependency-glob: "**/uv.lock"
+      # ============================================================
+      # Download Pre-built CLI Binary
+      # ============================================================
+      - name: Wait for CLI build artifacts (PRs only)
+        if: github.event_name == 'pull_request'
+        id: wait-artifacts
+        shell: bash
         env:
-          UV_PYTHON_DOWNLOADS: "automatic"
-
-      # ============================================================
-      # Build Phase
-      # ============================================================
-      - name: Generate Python datamodels
-        working-directory: config
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Generating datamodels from schema..."
-          ./generate-types.sh
-          echo "✓ Datamodel generation complete"
+          echo "Waiting for CLI build to produce artifacts..."
+          COMMIT="${{ github.event.pull_request.head.sha }}"
+          ARTIFACT_NAME="${{ matrix.artifact }}"
+          MAX_WAIT=600  # 10 minutes
+          ELAPSED=0
 
-      - name: Validate datamodel generation
-        working-directory: config
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            echo "Checking for artifact (${ELAPSED}s elapsed)..."
+
+            # Get artifact info including run ID
+            ARTIFACT_INFO=$(gh api repos/${{ github.repository }}/actions/artifacts \
+              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | select(.workflow_run.head_sha == \"${COMMIT}\") | {id: .id, run_id: .workflow_run.id}" \
+              2>/dev/null | head -n 1)
+
+            if [ -n "$ARTIFACT_INFO" ]; then
+              ARTIFACT_ID=$(echo "$ARTIFACT_INFO" | jq -r '.id')
+              RUN_ID=$(echo "$ARTIFACT_INFO" | jq -r '.run_id')
+              echo "✓ Artifact found! (ID: ${ARTIFACT_ID}, Run: ${RUN_ID})"
+              echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
+          done
+
+          echo "❌ Timeout waiting for artifact after ${MAX_WAIT}s"
+          exit 1
+
+      - name: Download CLI binary artifact (with run_id)
+        if: github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: cli.yml
+          run_id: ${{ github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id }}
+          name: ${{ matrix.artifact }}
+          path: cli/
+          if_no_artifact_found: fail
+
+      - name: Download CLI binary artifact (search by commit)
+        if: ${{ !(github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id) }}
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: cli.yml
+          commit: ${{ github.sha }}
+          name: ${{ matrix.artifact }}
+          path: cli/
+          search_artifacts: true
+          if_no_artifact_found: fail
+
+      - name: Rename binary to standard name
+        shell: bash
         run: |
-          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
-            echo "❌ Error: datamodel.py not generated or is empty"
+          cd cli
+          # The artifact contains the binary with the full artifact name
+          # Rename it to the short name we want to use
+          if [ -f "${{ matrix.artifact }}" ]; then
+            mv "${{ matrix.artifact }}" "${{ matrix.binary }}"
+            echo "✓ Renamed ${{ matrix.artifact }} to ${{ matrix.binary }}"
+          else
+            echo "Error: Downloaded artifact not found at cli/${{ matrix.artifact }}"
+            ls -la
             exit 1
           fi
-          echo "✓ Datamodel validation passed"
-          # Verify that compile_schema.py copied the dereferenced schema to cli/cmd/config
-          if [ ! -f "../cli/cmd/config/schema.json" ]; then
-            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
-            exit 1
-          fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
-      - name: Install go-jsonschema
-        run: go install github.com/atombender/go-jsonschema@latest
-
-      - name: Generate Go types
-        run: |
-          # Generate Go types from schema
-          cd cli/cmd/config
-          sh generate-types.sh
-          echo "✓ Go types generation complete"
-
-      - name: Build CLI binary
-        working-directory: cli
-        run: |
-          go build -o lf main.go
-          echo "✓ CLI binary built successfully"
+      - name: Make CLI binary executable
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod +x cli/${{ matrix.binary }}
 
       - name: Verify CLI binary works
         working-directory: cli
+        shell: bash
         run: |
-          ./lf version
+          ./${{ matrix.binary }} version
           echo "✓ CLI binary is functional"
 
       # ============================================================
       # Project Initialization
       # ============================================================
       - name: Create test directory
+        shell: bash
         run: |
-          mkdir -p /tmp/e2e-test
-          echo "✓ Test directory created at /tmp/e2e-test"
+          TEST_DIR="${{ runner.temp }}/e2e-test"
+          mkdir -p "$TEST_DIR"
+          echo "TEST_DIR=$TEST_DIR" >> $GITHUB_ENV
+          echo "✓ Test directory created at $TEST_DIR"
 
       - name: Initialize project with CLI
         working-directory: cli
+        shell: bash
         run: |
-          if ! ./lf init --cwd /tmp/e2e-test --debug; then
+          if ! ./${{ matrix.binary }} init --cwd "$TEST_DIR" --debug; then
             echo "❌ Project initialization failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -115,30 +168,32 @@ jobs:
           echo "✓ Project initialized"
 
       - name: Verify project config was created
+        shell: bash
         run: |
-          if [ ! -f "/tmp/e2e-test/llamafarm.yaml" ]; then
+          if [ ! -f "$TEST_DIR/llamafarm.yaml" ]; then
             echo "❌ Error: llamafarm.yaml not created"
             exit 1
           fi
           echo "✓ Project configuration exists"
           echo ""
           echo "=== FULL CONFIG AFTER INIT ==="
-          cat /tmp/e2e-test/llamafarm.yaml
+          cat "$TEST_DIR/llamafarm.yaml"
           echo ""
           echo "=== Checking critical fields ==="
-          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
+          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
       # ============================================================
       # Data Ingestion Test
       # ============================================================
       - name: Create dataset
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets create \
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets create \
             -s universal_processor \
             -b main_database \
             test_dataset; then
@@ -149,26 +204,29 @@ jobs:
           echo "✓ Dataset created"
 
       - name: Wait for config sync after dataset create
-        run: sleep 0.5
+        shell: bash
+        run: sleep 2.5
 
       - name: Debug config after dataset create
+        shell: bash
         run: |
           echo ""
           echo "=== Config after dataset create (first 40 lines) ==="
-          head -40 /tmp/e2e-test/llamafarm.yaml
+          head -40 "$TEST_DIR/llamafarm.yaml"
           echo ""
           echo "=== Checking critical fields ==="
-          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
-          echo "datasets: $(grep -A5 '^datasets:' /tmp/e2e-test/llamafarm.yaml | head -6)"
+          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
+          echo "datasets: $(grep -A5 '^datasets:' "$TEST_DIR/llamafarm.yaml" | head -6)"
 
       - name: Upload sample files
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets upload test_dataset "../examples/quick_rag/files"; then
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets upload test_dataset "../examples/quick_rag/files"; then
             echo "❌ Upload failed for ../examples/quick_rag/files, checking server health..."
             echo "Current directory: $(pwd)"
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
@@ -177,30 +235,37 @@ jobs:
           echo "✓ All sample files uploaded"
 
       - name: Wait for config sync after dataset upload
-        run: sleep 0.5
+        shell: bash
+        run: sleep 2.5
 
       - name: Debug config before dataset process
+        shell: bash
         run: |
           echo ""
           echo "=== Config before dataset process ==="
-          echo "File exists: $(test -f /tmp/e2e-test/llamafarm.yaml && echo 'YES' || echo 'NO')"
-          echo "File size: $(stat -c%s /tmp/e2e-test/llamafarm.yaml 2>/dev/null || echo 'N/A')"
+          echo "File exists: $(test -f "$TEST_DIR/llamafarm.yaml" && echo 'YES' || echo 'NO')"
+          if [ -f "$TEST_DIR/llamafarm.yaml" ]; then
+            echo "File size: $(wc -c < "$TEST_DIR/llamafarm.yaml")"
+          else
+            echo "File size: N/A"
+          fi
           echo ""
           echo "=== Full config content ==="
-          cat /tmp/e2e-test/llamafarm.yaml || echo "Failed to read config"
+          cat "$TEST_DIR/llamafarm.yaml" || echo "Failed to read config"
           echo ""
           echo "=== Critical fields check ==="
-          echo "namespace: $(grep '^namespace:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "name: $(grep '^name:' /tmp/e2e-test/llamafarm.yaml || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' /tmp/e2e-test/llamafarm.yaml | grep 'name:' | head -1 || echo 'MISSING')"
+          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
+          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
       - name: Process dataset
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           sleep 2
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets process test_dataset; then
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets process test_dataset; then
             echo "❌ Dataset processing failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -212,11 +277,12 @@ jobs:
       # ============================================================
       - name: Run RAG query
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running RAG query..."
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag query \
             --database main_database \
             --top-k 3 \
             "neural scaling laws" 2>&1); then
@@ -240,10 +306,11 @@ jobs:
 
       - name: Validate RAG query results
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug rag query \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag query \
             --database main_database \
             --top-k 3 \
             --include-metadata \
@@ -268,11 +335,12 @@ jobs:
       # ============================================================
       - name: Run chat command with RAG
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command with RAG..."
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
             "Summarize neural scaling laws in one sentence" 2>&1); then
             echo "❌ Chat command failed"
             echo "$OUTPUT"
@@ -302,11 +370,12 @@ jobs:
 
       - name: Test chat command without RAG
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command without RAG..."
-          if ! OUTPUT=$(./lf --cwd /tmp/e2e-test --debug chat \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
             --no-rag \
             "What is 2 + 2?" 2>&1); then
             echo "❌ Chat command (no RAG) failed"
@@ -333,11 +402,12 @@ jobs:
       # ============================================================
       - name: List datasets to verify persistence
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Listing datasets..."
-          if ! ./lf --cwd /tmp/e2e-test --debug datasets list; then
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets list; then
             echo "❌ Dataset listing failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -346,19 +416,21 @@ jobs:
 
       - name: Check RAG health
         working-directory: cli
+        shell: bash
         env:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Checking RAG health..."
-          ./lf --cwd /tmp/e2e-test --debug rag health || true
+          ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag health || true
           echo "✓ RAG health check complete"
 
       - name: E2E test summary
+        shell: bash
         run: |
           echo "=========================================="
-          echo "End-to-End Test Summary"
+          echo "End-to-End Test Summary (${{ matrix.os }})"
           echo "=========================================="
-          echo "✓ CLI built successfully"
+          echo "✓ CLI binary downloaded and verified"
           echo "✓ Project initialized"
           echo "✓ Dataset created and processed"
           echo "✓ RAG queries executed"
@@ -371,51 +443,60 @@ jobs:
       # ============================================================
       - name: Cleanup test artifacts
         if: always()
+        shell: bash
         run: |
           echo "Cleaning up test directory..."
-          rm -rf /tmp/e2e-test
+          rm -rf "$TEST_DIR"
           echo "✓ Cleanup complete"
 
       - name: Display service logs on failure
         if: failure()
+        shell: bash
         run: |
           echo "=========================================="
-          echo "Service Logs"
+          echo "Service Logs (${{ matrix.os }})"
           echo "=========================================="
 
-          # Display server logs if they exist
-          if [ -f "$HOME/.llamafarm/logs/server.log" ]; then
-            echo "--- Server Logs ---"
-            tail -100 "$HOME/.llamafarm/logs/server.log"
+          # Determine home directory (cross-platform)
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            LF_HOME="$USERPROFILE/.llamafarm"
           else
-            echo "No server logs found at $HOME/.llamafarm/logs/server.log"
+            LF_HOME="$HOME/.llamafarm"
+          fi
+
+          # Display server logs if they exist
+          if [ -f "$LF_HOME/logs/server.log" ]; then
+            echo "--- Server Logs ---"
+            tail -100 "$LF_HOME/logs/server.log"
+          else
+            echo "No server logs found at $LF_HOME/logs/server.log"
           fi
 
           echo ""
 
           # Display RAG logs if they exist
-          if [ -f "$HOME/.llamafarm/logs/rag.log" ]; then
+          if [ -f "$LF_HOME/logs/rag.log" ]; then
             echo "--- RAG Worker Logs ---"
-            tail -100 "$HOME/.llamafarm/logs/rag.log"
+            tail -100 "$LF_HOME/logs/rag.log"
           else
-            echo "No RAG logs found at $HOME/.llamafarm/logs/rag.log"
+            echo "No RAG logs found at $LF_HOME/logs/rag.log"
           fi
 
           echo ""
 
           # Display Universal Runtime logs if they exist
-          if [ -f "$HOME/.llamafarm/logs/universal-runtime.log" ]; then
+          if [ -f "$LF_HOME/logs/universal-runtime.log" ]; then
             echo "--- Universal Runtime Logs ---"
-            tail -100 "$HOME/.llamafarm/logs/universal-runtime.log"
+            tail -100 "$LF_HOME/logs/universal-runtime.log"
           else
-            echo "No Universal Runtime logs found at $HOME/.llamafarm/logs/universal-runtime.log"
+            echo "No Universal Runtime logs found at $LF_HOME/logs/universal-runtime.log"
           fi
 
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-test-logs
-          path: $HOME/.llamafarm/logs/
+          name: e2e-test-logs-${{ matrix.os }}
+          path: ~/.llamafarm/logs/
           retention-days: 7
           if-no-files-found: warn

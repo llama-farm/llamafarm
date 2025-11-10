@@ -9,8 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +42,7 @@ Examples:
   # Clear without confirmation prompt
   lf rag clear --force`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -48,8 +50,7 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		// Confirm operation unless force flag is set
 		if !force {
@@ -109,7 +110,7 @@ Examples:
 			os.Exit(1)
 		}
 
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -117,8 +118,7 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		// Build deletion request
 		req := buildDeleteRequest()
@@ -181,14 +181,13 @@ Examples:
   # Prune without confirmation
   lf rag prune --force`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		// Get prune preview
 		preview, err := getPrunePreview(serverCfg, manageDatabase)
@@ -248,14 +247,13 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		outputFile := args[0]
 
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		fmt.Printf("📦 Exporting database to %s...\n", outputFile)
 
@@ -295,14 +293,13 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		inputFile := args[0]
 
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		// Read import file
 		importData, err := readImportFile(inputFile)
@@ -421,7 +418,7 @@ func getDeleteCount(cfg *config.ServerConfig, req DeleteRequest) (int, error) {
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := getHTTPClient().Do(httpReq)
+	resp, err := utils.GetHTTPClient().Do(httpReq)
 	if err != nil {
 		return 0, err
 	}
@@ -457,7 +454,7 @@ func clearRAGDatabase(cfg *config.ServerConfig, database string) (*ClearResult, 
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -494,7 +491,7 @@ func deleteRAGDocuments(cfg *config.ServerConfig, req DeleteRequest) (*DeleteRes
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := getHTTPClient().Do(httpReq)
+	resp, err := utils.GetHTTPClient().Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +525,7 @@ func getPrunePreview(cfg *config.ServerConfig, database string) (*PrunePreview, 
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +559,7 @@ func pruneRAGDatabase(cfg *config.ServerConfig, database string) (*PruneResult, 
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -604,7 +601,7 @@ func exportRAGDatabase(cfg *config.ServerConfig, database string, metadataOnly b
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +649,7 @@ func importRAGDatabase(cfg *config.ServerConfig, database string, strategy strin
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}

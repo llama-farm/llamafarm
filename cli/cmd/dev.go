@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -37,61 +37,34 @@ var devCmd = &cobra.Command{
 }
 
 func start(mode SessionMode) {
-	// Set up signal handler for cleanup
-	setupCleanupHandler()
-
 	// Load config to get namespace and project for watcher
-	cwd := getEffectiveCWD()
+	cwd := utils.GetEffectiveCWD()
 	cfg, err := config.LoadConfig(cwd)
 	if err != nil {
-		OutputError("Error loading config: %v\nRun `lf init` to create a new project if none exists.\n", err)
+		utils.OutputError("Error loading config: %v\nRun `lf init` to create a new project if none exists.\n", err)
 		os.Exit(1)
 	}
 
 	projectInfo, err := cfg.GetProjectInfo()
 	if err != nil {
-		OutputWarning("Warning: Could not extract project info for watcher: %v\n", err)
+		utils.OutputWarning("Warning: Could not extract project info for watcher: %v\n", err)
 	} else {
 		// Start the config file watcher in background
 		if err := StartConfigWatcher(projectInfo.Namespace, projectInfo.Project); err != nil {
-			OutputWarning("Warning: Failed to start config watcher: %v\n", err)
+			utils.OutputWarning("Warning: Failed to start config watcher: %v\n", err)
 		}
 	}
 
 	serverInfo, err := config.GetServerConfig(cwd, serverURL, "", "")
 	if err != nil {
-		OutputError("Error getting server config: %v\n", err)
+		utils.OutputError("Error getting server config: %v\n", err)
 		os.Exit(1)
 	}
 	serverURL = serverInfo.URL
 
-	// Use new service orchestrator for development
-	config := StartCommandConfig(serverURL)
-	serverHealth, _ := EnsureServicesWithConfigAndResult(config)
+	orchestrator.EnsureServicesOrExit(serverURL, "server")
 
-	// Filter health status to avoid alarming messages for optional services (like RAG)
-	// that are starting in the background
-	if serverHealth != nil {
-		serverHealth = FilterHealthForOptionalServices(serverHealth, config, mode)
-	}
-
-	runChatSessionTUI(mode, projectInfo, serverHealth)
-
-	// Cleanup on exit
-	cleanupNativeProcesses()
-}
-
-// setupCleanupHandler sets up signal handlers to cleanup processes on exit
-func setupCleanupHandler() {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-c
-		// Cleanup processes
-		cleanupNativeProcesses()
-		os.Exit(0)
-	}()
+	runChatSessionTUI(mode, projectInfo)
 }
 
 func init() {

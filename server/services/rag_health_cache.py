@@ -199,25 +199,49 @@ class RAGHealthCache:
         poll_interval = 0.1  # 100ms polling
         waited = 0.0
 
+        # Poll for result completion with proper error handling for Windows filesystem backend
         while waited < timeout:
-            if result.status not in ("PENDING", "STARTED"):
-                break
+            try:
+                status = result.status
+                if status not in ("PENDING", "STARTED"):
+                    break
+            except Exception as e:
+                logger.warning(f"Error accessing task status during health check: {e}")
+                # If we can't access status, wait and try again
+                time.sleep(poll_interval)
+                waited += poll_interval
+                continue
+
             time.sleep(poll_interval)
             waited += poll_interval
 
-        logger.debug(f"Task completed with status: {result.status}")
+        # Safely get final status and result with error handling
+        try:
+            final_status = result.status
+            logger.debug(f"Task completed with status: {final_status}")
+        except Exception as e:
+            logger.error(f"Error accessing final task status in health check: {e}")
+            raise Exception(f"Failed to get task status for health check: {e}")
 
-        if result.status == "SUCCESS":
-            return result.result
-        elif result.status == "FAILURE":
+        if final_status == "SUCCESS":
+            try:
+                return result.result
+            except Exception as e:
+                logger.error(f"Error accessing task result in health check: {e}")
+                raise Exception(f"Failed to get task result for health check: {e}")
+        elif final_status == "FAILURE":
             # Get the exception info and raise it
-            if hasattr(result, "traceback") and result.traceback:
-                raise Exception(f"Task failed: {result.traceback}")
-            else:
-                raise Exception(f"Task failed with status: {result.status}")
+            try:
+                if hasattr(result, "traceback") and result.traceback:
+                    raise Exception(f"Task failed: {result.traceback}")
+                else:
+                    raise Exception(f"Task failed with status: {final_status}")
+            except Exception as e:
+                logger.error(f"Error accessing failure details in health check: {e}")
+                raise Exception(f"Task failed but couldn't get error details: {e}")
         else:
             # Timeout or other status
-            raise Exception(f"Task timed out or failed: {result.status}")
+            raise Exception(f"Task timed out or failed: {final_status}")
 
     def get_cached_health(self) -> dict[str, Any]:
         """

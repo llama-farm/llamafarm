@@ -6,15 +6,12 @@ name: Build and Push Docker Images
 # - PR artifacts are used by create-manifest and test-compose jobs for validation
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: {}
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  NX_NO_CLOUD: true
 
 jobs:
   # Build AMD64 images on standard Ubuntu runners
@@ -111,6 +108,7 @@ jobs:
           outputs: ${{ github.event_name == 'pull_request' && format('type=docker,dest={0}/{1}-amd64.tar', runner.temp, matrix.service) || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
+            PYTORCH_VARIANT=${{ matrix.service == 'runtime' && github.event_name == 'pull_request' && 'cpu' || '' }}
 
       - name: Upload AMD64 image artifact (PR only)
         if: github.event_name == 'pull_request'
@@ -214,6 +212,7 @@ jobs:
           outputs: ${{ github.event_name == 'pull_request' && format('type=docker,dest={0}/{1}-arm64.tar', runner.temp, matrix.service) || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
+            PYTORCH_VARIANT=${{ matrix.service == 'runtime' && github.event_name == 'pull_request' && 'cpu' || '' }}
 
       - name: Upload ARM64 image artifact (PR only)
         if: github.event_name == 'pull_request'

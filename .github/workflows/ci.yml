@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  NX_NO_CLOUD: true
+
 jobs:
   # Test Go CLI component
   test-cli:
@@ -176,6 +179,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ matrix.component }}
+        env:
+          # For universal runtime, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
+          UV_EXTRA_INDEX_URL: ${{ matrix.component == 'runtimes/universal' && 'https://download.pytorch.org/whl/cpu' || '' }}
         run: |
           if [ -f "uv.lock" ]; then
             uv sync --all-extras

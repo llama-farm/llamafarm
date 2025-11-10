@@ -2,6 +2,7 @@ import type { EditorView } from '@codemirror/view'
 import type { EditorState, StateEffect } from '@codemirror/state'
 import type { HighlightStyle } from '@codemirror/language'
 import type { tags } from '@lezer/highlight'
+import type { EditorNavigationAPI } from './config-toc'
 
 /**
  * Type definition for dynamically loaded CodeMirror modules
@@ -12,6 +13,8 @@ export interface CodeMirrorModules {
   keymap: any // Extension function
   EditorState: typeof EditorState
   StateEffect: typeof StateEffect
+  StateField: any // StateField for decorations
+  Decoration: any // Decoration for highlighting
   json: any // Language extension
   yaml: any // Language extension
   defaultKeymap: any // Keymap array
@@ -52,9 +55,12 @@ export interface CodeMirrorEditorProps {
   theme?: 'light' | 'dark'
   onSave?: () => void
   onDiscard?: () => void
+  onCopy?: () => void
   isDirty?: boolean
   isSaving?: boolean
   saveError?: string | null
+  copyStatus?: 'idle' | 'success' | 'error'
+  onEditorReady?: (api: EditorNavigationAPI) => void
 }
 
 /**
@@ -69,6 +75,7 @@ export interface UseCodeMirrorReturn {
   modules: CodeMirrorModules | null
   destroy: () => void
   reconfigure: (extensions: any[]) => void
+  navigationAPI: EditorNavigationAPI | null
 }
 
 /**

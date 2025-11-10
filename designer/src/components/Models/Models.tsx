@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -29,6 +29,8 @@ import { PromptSetSelector } from './PromptSetSelector'
 import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
 import { CustomDownloadDialog } from './CustomDownloadDialog'
 import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 
 interface TabBarProps {
   activeTab: string
@@ -1520,6 +1522,18 @@ const Models = () => {
   const [downloadedBytes, setDownloadedBytes] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
+  const projectConfig = (projectResponse as any)?.project?.config as ProjectConfig | undefined
+  const getModelsLocation = useCallback(
+    () => ({ type: 'runtime.models' as const }),
+    []
+  )
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getModelsLocation,
+  })
+
 
   // Load models from config
   useEffect(() => {
@@ -1877,12 +1891,12 @@ const Models = () => {
         <h2 className="text-2xl">
           {mode === 'designer' ? 'Models' : 'Config editor'}
         </h2>
-        <PageActions mode={mode} onModeChange={setMode} />
+        <PageActions mode={mode} onModeChange={handleModeChange} />
       </div>
 
       {mode !== 'designer' ? (
         <div className="flex-1 min-h-0 overflow-hidden pb-6">
-          <ConfigEditor className="h-full" />
+          <ConfigEditor className="h-full" initialPointer={configPointer} />
         </div>
       ) : (
         <>

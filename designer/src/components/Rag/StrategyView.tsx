@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
@@ -50,6 +50,8 @@ import {
   type ExtractorRow,
 } from '../../hooks/useRagStrategy'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 
 // Maximum priority value as defined in rag/schema.yaml
 const MAX_PRIORITY = 1000
@@ -196,6 +198,24 @@ function StrategyView() {
     const found = defaultStrategies.find(s => s.id === strategyId)
     return found?.description || ''
   }, [strategyId])
+
+  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const getStrategyLocation = useCallback(() => {
+    if (actualStrategyName) {
+      return {
+        type: 'rag.dataProcessingStrategy' as const,
+        strategyName: actualStrategyName,
+      }
+    }
+    return { type: 'rag.dataProcessingStrategies' as const }
+  }, [actualStrategyName])
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getStrategyLocation,
+  })
+
 
   // RAG Strategy hook for parser/extractor updates - use ACTUAL name from config
   const ragStrategy = useRagStrategy(
@@ -1213,7 +1233,7 @@ function StrategyView() {
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground">{strategyDisplayName}</span>
             </nav>
-            <PageActions mode={mode} onModeChange={setMode} />
+            <PageActions mode={mode} onModeChange={handleModeChange} />
           </div>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
@@ -1243,13 +1263,13 @@ function StrategyView() {
       ) : (
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl">Config editor</h2>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
       )}
 
       {mode !== 'designer' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <ConfigEditor className="h-full" />
+          <ConfigEditor className="h-full" initialPointer={configPointer} />
         </div>
       ) : (
         <>

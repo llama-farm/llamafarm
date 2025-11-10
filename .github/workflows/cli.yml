@@ -5,16 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    paths:
-      - "cli/**"
-      - "config/schema.yaml"
-      - "server/**"
-      - "rag/**"
-      - "common/**"
-      - "designer/**"
-      - "runtimes/universal/**"
-      - "scripts/package-source.sh"
-      - ".github/workflows/cli**"
+
+env:
+  NX_VERSION: 21
+  NX_NO_CLOUD: true
 
 jobs:
   build-cli:
@@ -58,9 +52,9 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-go-${{ hashFiles('cli/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-${{ runner.arch }}-go-
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -71,7 +65,7 @@ jobs:
       - name: Install Node.js (for Nx)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install dependencies
         working-directory: cli
@@ -81,10 +75,11 @@ jobs:
         run: go install github.com/atombender/go-jsonschema@latest
 
       - name: Install Nx CLI
-        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+        run: |
+          npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
 
       - name: Run generate-types (compiles schema and generates Go types)
-        run: nx generate-types cli
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli
 
       - name: Create dist directory
         run: mkdir -p dist
@@ -150,10 +145,11 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install Nx CLI
-        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+        run: |
+          npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -172,7 +168,7 @@ jobs:
         run: go install github.com/atombender/go-jsonschema@latest
 
       - name: Generate types
-        run: nx generate-types cli
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli
 
       - name: Build designer
         run: |
@@ -206,7 +202,7 @@ jobs:
 
       - name: Package distribution archive
         run: |
-          VERSION=${{ steps.version.outputs.version }} nx pack
+          VERSION=${{ steps.version.outputs.version }} npx nx@${{ env.NX_VERSION }} pack
 
       - name: Upload distribution archive artifact
         uses: actions/upload-artifact@v4

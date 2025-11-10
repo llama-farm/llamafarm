@@ -31,6 +31,8 @@ class UniversalProvider(RuntimeProvider):
     - Auto-detects hardware acceleration (MPS/CUDA/CPU)
     """
 
+    name = "universal-runtime"
+
     @property
     def _base_url(self) -> str:
         """Get base URL for Universal Runtime API."""
@@ -121,7 +123,7 @@ class UniversalProvider(RuntimeProvider):
                     f"{len(model_ids)} model(s) loaded"
                 )
                 return HealthCheckResult(
-                    name="universal",
+                    name=self.name,
                     status="healthy",
                     message=message,
                     latency_ms=latency,
@@ -136,7 +138,7 @@ class UniversalProvider(RuntimeProvider):
                 )
             else:
                 return HealthCheckResult(
-                    name="universal",
+                    name=self.name,
                     status="unhealthy",
                     message=f"{base} returned HTTP {health_resp.status_code}",
                     latency_ms=latency,
@@ -149,7 +151,7 @@ class UniversalProvider(RuntimeProvider):
                 f"(cd runtimes/universal && uv run uvicorn server:app --port {port})"
             )
             return HealthCheckResult(
-                name="universal",
+                name=self.name,
                 status="unhealthy",
                 message=timeout_msg,
                 latency_ms=int(time.time() * 1000) - start,
@@ -157,7 +159,7 @@ class UniversalProvider(RuntimeProvider):
             )
         except Exception as e:
             return HealthCheckResult(
-                name="universal",
+                name=self.name,
                 status="unhealthy",
                 message=f"Error: {str(e)}",
                 latency_ms=int(time.time() * 1000) - start,
@@ -224,11 +226,13 @@ class UniversalProvider(RuntimeProvider):
                         if task.done():
                             # Task finished but no "done" event - likely an error
                             try:
-                                await task  # This will raise the exception if there was one
+                                await (
+                                    task
+                                )  # This will raise the exception if there was one
                             except Exception as task_error:
                                 yield {
                                     "event": "error",
-                                    "message": f"Download failed: {str(task_error)}"
+                                    "message": f"Download failed: {str(task_error)}",
                                 }
                                 raise
                         # If task still running, continue waiting

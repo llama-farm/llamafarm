@@ -74,11 +74,22 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
-    root_logger.setLevel(log_level.upper())
+    # Handle both string level names ("INFO") and numeric strings ("30")
+    if log_level.isdigit():
+        root_logger.setLevel(int(log_level))
+    else:
+        root_logger.setLevel(log_level.upper())
 
     # Configure celery logger
     celery_logger = logging.getLogger("celery.worker")
-    celery_logger.setLevel(settings.CELERY_LOG_LEVEL.upper() or "INFO")
+    # Handle both string level names ("INFO") and numeric strings ("30")
+    celery_level = settings.CELERY_LOG_LEVEL
+    if celery_level.isdigit():
+        # Numeric string like "30" -> convert to int
+        celery_logger.setLevel(int(celery_level))
+    else:
+        # Level name like "INFO" -> use upper case
+        celery_logger.setLevel(celery_level.upper() or "INFO")
 
     # Configure other loggers to use our root logger setup
     for logger_name in ["rag", "rag.tasks", "rag.core", "rag.components"]:
