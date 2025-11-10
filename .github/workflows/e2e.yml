@@ -58,6 +58,7 @@ jobs:
       # ============================================================
       - name: Wait for CLI build artifacts (PRs only)
         if: github.event_name == 'pull_request'
+        id: wait-artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -70,11 +71,16 @@ jobs:
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             echo "Checking for artifact (${ELAPSED}s elapsed)..."
 
-            # Check if artifact exists
-            if gh api repos/${{ github.repository }}/actions/artifacts \
-              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | select(.workflow_run.head_sha == \"${COMMIT}\") | .name" \
-              2>/dev/null | grep -q "${ARTIFACT_NAME}"; then
-              echo "✓ Artifact found!"
+            # Get artifact info including run ID
+            ARTIFACT_INFO=$(gh api repos/${{ github.repository }}/actions/artifacts \
+              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | select(.workflow_run.head_sha == \"${COMMIT}\") | {id: .id, run_id: .workflow_run.id}" \
+              2>/dev/null | head -n 1)
+
+            if [ -n "$ARTIFACT_INFO" ]; then
+              ARTIFACT_ID=$(echo "$ARTIFACT_INFO" | jq -r '.id')
+              RUN_ID=$(echo "$ARTIFACT_INFO" | jq -r '.run_id')
+              echo "✓ Artifact found! (ID: ${ARTIFACT_ID}, Run: ${RUN_ID})"
+              echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
               exit 0
             fi
 
@@ -89,14 +95,14 @@ jobs:
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
-          # For workflow_run, use the run that triggered us
-          run_id: ${{ github.event.workflow_run.id || '' }}
-          # For PRs and manual runs, search by commit
+          # For workflow_run and PRs (with captured run_id), use the run ID
+          run_id: ${{ github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id || '' }}
+          # For manual runs without run_id, search by commit
           commit: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
           name: ${{ matrix.artifact }}
           path: cli/
           search_artifacts: true
-          workflow_conclusion: success
+          # Don't require workflow completion - artifact existence is enough
           if_no_artifact_found: fail
 
       - name: Make CLI binary executable
