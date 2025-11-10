@@ -294,11 +294,6 @@ var datasetsDeleteCommand = &cobra.Command{
 			os.Exit(1)
 		}
 		fmt.Printf("✅ Successfully removed dataset '%s'\n", datasetName)
-
-		// Ensure config is synced after deletion
-		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
-			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after dataset deletion: %v", err))
-		}
 	},
 }
 

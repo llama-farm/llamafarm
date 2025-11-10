@@ -123,12 +123,13 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "server.py"},
 		Env: map[string]string{
-			"TRANSFORMERS_PORT":                "11540",
-			"TRANSFORMERS_HOST":                "127.0.0.1",
-			"TRANSFORMERS_OUTPUT_DIR":          filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
-			"TRANSFORMERS_CACHE_DIR":           filepath.Join("${HOME}", ".cache", "huggingface"),
-			"TRANSFORMERS_SKIP_MPS":            "",
-			"TRANSFORMERS_FORCE_CPU":           "",
+			"TRANSFORMERS_PORT":       "11540",
+			"TRANSFORMERS_HOST":       "127.0.0.1",
+			"TRANSFORMERS_OUTPUT_DIR": filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
+			"TRANSFORMERS_CACHE_DIR":  filepath.Join("${HOME}", ".cache", "huggingface"),
+			// Device control (empty = inherit from parent environment)
+			"TRANSFORMERS_SKIP_MPS":            "", // Set to "1" to skip MPS on macOS
+			"TRANSFORMERS_FORCE_CPU":           "", // Set to "1" to force CPU (useful in CI)
 			"PYTORCH_MPS_HIGH_WATERMARK_RATIO": "0.9",
 			"HF_TOKEN":                         "",
 			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
