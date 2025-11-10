@@ -558,26 +558,24 @@ function ChangeEmbeddingModel() {
     if (runtimeStr === 'local' || provider === 'Ollama (remote)') {
       if (baseUrl) config.base_url = baseUrl.trim()
       config.auto_pull = ollamaAutoPull !== undefined ? ollamaAutoPull : true
-    } else {
-      if (summaryProvider === 'OpenAI') {
-        if (baseUrl) config.base_url = baseUrl.trim()
-        if (openaiOrg) config.organization = openaiOrg.trim()
-        if (openaiMaxRetries) config.max_retries = openaiMaxRetries
-        if (encryptedKey) config.api_key = encryptedKey
-      } else if (summaryProvider === 'Azure OpenAI') {
-        if (azureDeployment) config.deployment = azureDeployment.trim()
-        if (azureResource) config.endpoint = azureResource.trim()
-        if (azureApiVersion) config.api_version = azureApiVersion.trim()
-        if (encryptedKey) config.api_key = encryptedKey
-      } else if (summaryProvider === 'Google') {
-        if (vertexProjectId) config.project_id = vertexProjectId.trim()
-        if (vertexLocation) config.region = vertexLocation.trim()
-        if (vertexEndpoint) config.endpoint = vertexEndpoint.trim()
-        if (encryptedKey) config.api_key = encryptedKey
-      } else if (summaryProvider === 'AWS Bedrock') {
-        if (bedrockRegion) config.region = bedrockRegion.trim()
-        if (encryptedKey) config.api_key = encryptedKey
-      }
+    } else if (summaryProvider === 'OpenAI') {
+      if (baseUrl) config.base_url = baseUrl.trim()
+      if (openaiOrg) config.organization = openaiOrg.trim()
+      if (openaiMaxRetries) config.max_retries = openaiMaxRetries
+      if (encryptedKey) config.api_key = encryptedKey
+    } else if (summaryProvider === 'Azure OpenAI') {
+      if (azureDeployment) config.deployment = azureDeployment.trim()
+      if (azureResource) config.endpoint = azureResource.trim()
+      if (azureApiVersion) config.api_version = azureApiVersion.trim()
+      if (encryptedKey) config.api_key = encryptedKey
+    } else if (summaryProvider === 'Google') {
+      if (vertexProjectId) config.project_id = vertexProjectId.trim()
+      if (vertexLocation) config.region = vertexLocation.trim()
+      if (vertexEndpoint) config.endpoint = vertexEndpoint.trim()
+      if (encryptedKey) config.api_key = encryptedKey
+    } else if (summaryProvider === 'AWS Bedrock') {
+      if (bedrockRegion) config.region = bedrockRegion.trim()
+      if (encryptedKey) config.api_key = encryptedKey
     }
     
     return config
@@ -622,12 +620,23 @@ function ChangeEmbeddingModel() {
         throw new Error(`Database ${database} not found in configuration`)
       }
 
+      // Validate strategy name uniqueness (if renamed)
+      const trimmedName = strategyName.trim() || originalStrategyName
+      if (trimmedName !== originalStrategyName) {
+        const nameExists = currentDb.embedding_strategies?.some(
+          (s: any) => s.name === trimmedName && s.name !== originalStrategyName
+        )
+        if (nameExists) {
+          throw new Error(`An embedding strategy with name "${trimmedName}" already exists`)
+        }
+      }
+
       // Find and update the specific strategy
       const updatedStrategies = currentDb.embedding_strategies?.map((strategy: any) => {
         if (strategy.name === originalStrategyName) {
           return {
             ...strategy,
-            name: strategyName.trim() || strategy.name,
+            name: trimmedName,
             type: mapProviderToType(summaryProvider),
             priority: priority,
             config: buildStrategyConfig(encryptedKey)
@@ -642,12 +651,12 @@ function ChangeEmbeddingModel() {
 
       // Check if we need to update the default strategy name
       let updatedDefaultStrategy = currentDb.default_embedding_strategy
-      if (isDefaultStrategy && strategyName.trim() !== originalStrategyName) {
+      if (isDefaultStrategy && trimmedName !== originalStrategyName) {
         // If this is the default and we renamed it, update the default reference
-        updatedDefaultStrategy = strategyName.trim()
+        updatedDefaultStrategy = trimmedName
       } else if (makeDefault) {
         // If user wants to make it default
-        updatedDefaultStrategy = strategyName.trim() || originalStrategyName
+        updatedDefaultStrategy = trimmedName
       }
 
       // Update database configuration

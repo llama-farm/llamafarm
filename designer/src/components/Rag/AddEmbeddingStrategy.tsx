@@ -438,6 +438,22 @@ function AddEmbeddingStrategy() {
       errors.push('Dimension must be between 1 and 8192')
     }
     
+    // Check for duplicate strategy name
+    if (projectResp && name.trim()) {
+      const projectConfig = (projectResp as any)?.project?.config
+      const currentDb = projectConfig?.rag?.databases?.find(
+        (db: any) => db.name === database
+      )
+      if (currentDb) {
+        const nameExists = currentDb.embedding_strategies?.some(
+          (s: any) => s.name === name.trim()
+        )
+        if (nameExists) {
+          errors.push(`An embedding strategy with name "${name.trim()}" already exists`)
+        }
+      }
+    }
+    
     return errors
   }
 

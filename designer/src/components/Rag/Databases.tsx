@@ -1043,11 +1043,13 @@ function Databases() {
                                 size="sm"
                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                 onClick={() => handleDeleteEmbedding(ei.name)}
-                                disabled={ei.isDefault}
+                                disabled={ei.isDefault || sortedEmbeddings.length === 1}
                                 title={
-                                  ei.isDefault
-                                    ? 'Cannot delete default strategy'
-                                    : 'Delete strategy'
+                                  sortedEmbeddings.length === 1
+                                    ? 'At least one embedding strategy is required'
+                                    : ei.isDefault
+                                      ? 'Cannot delete default strategy'
+                                      : 'Delete strategy'
                                 }
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1055,9 +1057,11 @@ function Databases() {
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>
-                                {ei.isDefault
-                                  ? 'Cannot delete default strategy'
-                                  : 'Delete strategy'}
+                                {sortedEmbeddings.length === 1
+                                  ? 'At least one embedding strategy is required'
+                                  : ei.isDefault
+                                    ? 'Cannot delete default strategy'
+                                    : 'Delete strategy'}
                               </p>
                             </TooltipContent>
                           </Tooltip>
@@ -1204,11 +1208,13 @@ function Databases() {
                                 size="sm"
                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                 onClick={() => handleDeleteRetrieval(ri.name)}
-                                disabled={ri.isDefault}
+                                disabled={ri.isDefault || sortedRetrievals.length === 1}
                                 title={
-                                  ri.isDefault
-                                    ? 'Cannot delete default strategy'
-                                    : 'Delete strategy'
+                                  sortedRetrievals.length === 1
+                                    ? 'At least one retrieval strategy is required'
+                                    : ri.isDefault
+                                      ? 'Cannot delete default strategy'
+                                      : 'Delete strategy'
                                 }
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1216,9 +1222,11 @@ function Databases() {
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>
-                                {ri.isDefault
-                                  ? 'Cannot delete default strategy'
-                                  : 'Delete strategy'}
+                                {sortedRetrievals.length === 1
+                                  ? 'At least one retrieval strategy is required'
+                                  : ri.isDefault
+                                    ? 'Cannot delete default strategy'
+                                    : 'Delete strategy'}
                               </p>
                             </TooltipContent>
                           </Tooltip>

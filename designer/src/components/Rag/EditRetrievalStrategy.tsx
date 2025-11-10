@@ -277,10 +277,8 @@ function EditRetrievalStrategy() {
       if (isNaN(finalK) || finalK < 1 || finalK > initialK) {
         errors.push('Final K must be between 1 and Initial K')
       }
-    } else if (strategyType === 'HybridUniversalStrategy') {
-      if (hybStrategies.length < 2) {
-        errors.push('At least 2 sub-strategies are required for hybrid approach')
-      }
+    } else if (strategyType === 'HybridUniversalStrategy' && hybStrategies.length < 2) {
+      errors.push('At least 2 sub-strategies are required for hybrid approach')
     }
     
     return errors

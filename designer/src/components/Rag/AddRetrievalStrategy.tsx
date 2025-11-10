@@ -235,10 +235,8 @@ function AddRetrievalStrategy() {
       if (isNaN(finalK) || finalK < 1 || finalK > initialK) {
         errors.push('Final K must be between 1 and Initial K')
       }
-    } else if (selectedType === 'HybridUniversalStrategy') {
-      if (hybStrategies.length < 2) {
-        errors.push('At least 2 sub-strategies are required for hybrid approach')
-      }
+    } else if (selectedType === 'HybridUniversalStrategy' && hybStrategies.length < 2) {
+      errors.push('At least 2 sub-strategies are required for hybrid approach')
     }
     
     return errors
@@ -352,12 +350,11 @@ function AddRetrievalStrategy() {
         }
       }
 
-      // Build the new strategy
+      // Build the new strategy (note: 'default' field is used in config, not 'isDefault')
       const newStrategy = {
         name: name.trim(),
         type: selectedType,
         config,
-        default: makeDefault || (currentDb.retrieval_strategies?.length || 0) === 0,
       }
 
       // Add to existing strategies
@@ -366,16 +363,8 @@ function AddRetrievalStrategy() {
         newStrategy,
       ]
 
-      // If making default, unset other defaults
-      const finalStrategies = makeDefault
-        ? updatedStrategies.map((s: any) => ({
-            ...s,
-            default: s.name === newStrategy.name,
-          }))
-        : updatedStrategies
-
-      // Determine default strategy name
-      const defaultStrategyName = makeDefault || finalStrategies.length === 1
+      // Determine default strategy name (no 'default' field on strategy objects)
+      const defaultStrategyName = makeDefault || updatedStrategies.length === 1
         ? newStrategy.name
         : currentDb.default_retrieval_strategy
 
@@ -383,7 +372,7 @@ function AddRetrievalStrategy() {
       await databaseManager.updateDatabase.mutateAsync({
         oldName: database,
         updates: {
-          retrieval_strategies: finalStrategies,
+          retrieval_strategies: updatedStrategies,
           default_retrieval_strategy: defaultStrategyName,
         },
         projectConfig,
