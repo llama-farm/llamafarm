@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"gopkg.in/yaml.v2"
 )
 
@@ -67,12 +68,16 @@ func TestWriteSessionContext(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Mock getLFDataDir to return our temp directory
-	origGetLFDataDir := getLFDataDir
-	getLFDataDir = func() (string, error) {
-		return filepath.Join(tempDir, ".llamafarm"), nil
-	}
-	defer func() { getLFDataDir = origGetLFDataDir }()
+	// Set LF_DATA_DIR to our temp directory (GetLFDataDir checks this env var)
+	origLFDataDir := os.Getenv("LF_DATA_DIR")
+	os.Setenv("LF_DATA_DIR", filepath.Join(tempDir, ".llamafarm"))
+	defer func() {
+		if origLFDataDir != "" {
+			os.Setenv("LF_DATA_DIR", origLFDataDir)
+		} else {
+			os.Unsetenv("LF_DATA_DIR")
+		}
+	}()
 
 	// Change to temp directory
 	originalCwd, _ := os.Getwd()
@@ -88,7 +93,7 @@ func TestWriteSessionContext(t *testing.T) {
 	}
 
 	// Verify projects directory and context file were created at the expected path
-	lfDir, _ := getLFDataDir()
+	lfDir, _ := utils.GetLFDataDir()
 	base := filepath.Join(lfDir, "projects", "test", "test", "cli", "context")
 	if _, err := os.Stat(base); os.IsNotExist(err) {
 		t.Fatalf("projects/test/test/cli/context directory was not created")
@@ -134,12 +139,16 @@ func TestReadSessionContext(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Mock getLFDataDir to return our temp directory
-	origGetLFDataDir := getLFDataDir
-	getLFDataDir = func() (string, error) {
-		return filepath.Join(tempDir, ".llamafarm"), nil
-	}
-	defer func() { getLFDataDir = origGetLFDataDir }()
+	// Set LF_DATA_DIR to our temp directory (GetLFDataDir checks this env var)
+	origLFDataDir := os.Getenv("LF_DATA_DIR")
+	os.Setenv("LF_DATA_DIR", filepath.Join(tempDir, ".llamafarm"))
+	defer func() {
+		if origLFDataDir != "" {
+			os.Setenv("LF_DATA_DIR", origLFDataDir)
+		} else {
+			os.Unsetenv("LF_DATA_DIR")
+		}
+	}()
 
 	// Test reading non-existent context file
 	ctx := &ChatSessionContext{SessionMode: SessionModeProject, Namespace: "test", ProjectID: "test"}

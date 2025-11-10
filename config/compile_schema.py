@@ -6,6 +6,7 @@ Schema compilation script using jsonref with proper conversion.
 import json
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import jsonref  # type: ignore[import-untyped]
 import yaml  # type: ignore[import-untyped]
@@ -17,7 +18,9 @@ def load_text_from_uri(uri: str) -> str:
     """Read local file:// or plain path URIs into text (UTF-8)."""
     parsed = urlparse(uri)
     if parsed.scheme in ("", "file"):
-        path = Path(parsed.path or uri)
+        # Use url2pathname to properly convert file URIs to filesystem paths
+        # This handles Windows paths correctly (e.g., file:///C:/Users/... -> C:\Users\...)
+        path = Path(url2pathname(parsed.path)) if parsed.scheme == "file" else Path(uri)
         return path.read_text(encoding="utf-8")
     raise ValueError(f"Unsupported URI scheme in $ref: {uri}")
 

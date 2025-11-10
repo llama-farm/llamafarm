@@ -5,8 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +47,7 @@ Examples:
 			proj = strings.TrimSpace(parts[1])
 		}
 
-		cwd := getEffectiveCWD()
+		cwd := utils.GetEffectiveCWD()
 		StartConfigWatcherForCommand()
 
 		// Resolve server configuration
@@ -59,8 +61,7 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up
-		config := ChatNoRAGConfig(serverURL) // Server only, no need for RAG
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server")
 
 		// Fetch models using shared function
 		models := fetchAvailableModels(serverURL, ns, proj)

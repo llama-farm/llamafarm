@@ -36,6 +36,8 @@ import {
 } from '../../hooks/useDatasets'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
@@ -102,6 +104,15 @@ const Data = () => {
     activeProject?.namespace || '',
     activeProject?.project || ''
   )
+
+  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const getDatasetsLocation = useCallback(() => ({ type: 'datasets' as const }), [])
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getDatasetsLocation,
+  })
 
   // Convert API datasets to UI format - only show real datasets from the API
   const datasets = useMemo(() => {
@@ -326,7 +337,7 @@ const Data = () => {
         <h2 className="text-2xl ">
           {mode === 'designer' ? 'Data' : 'Config editor'}
         </h2>
-        <PageActions mode={mode} onModeChange={setMode} />
+        <PageActions mode={mode} onModeChange={handleModeChange} />
       </div>
       <input
         type="file"
@@ -335,453 +346,451 @@ const Data = () => {
         multiple
         onChange={handleFileSelect}
       />
-      <div className="w-full flex-1 min-h-0 overflow-auto">
-        <div className="flex flex-col min-h-full">
-          {mode === 'designer' && (
-            <>
-            {/* Processing strategies section */}
-            <div className="flex items-center justify-between mt-0 mb-3">
-              <div>
-                <div className="font-medium">Processing strategies</div>
-                <div className="h-1" />
-                <div className="text-xs text-muted-foreground">
-                  Processing strategies are applied to datasets.
+      <div className="w-full flex-1 min-h-0 flex flex-col">
+        {mode === 'designer' ? (
+          <div className="flex-1 min-h-0 w-full overflow-auto">
+            <div className="flex flex-col min-h-full">
+              {/* Processing strategies section */}
+              <div className="flex items-center justify-between mt-0 mb-3">
+                <div>
+                  <div className="font-medium">Processing strategies</div>
+                  <div className="h-1" />
+                  <div className="text-xs text-muted-foreground">
+                    Processing strategies are applied to datasets.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setStrategyCreateName('')
+                      setStrategyCreateDescription('')
+                      setStrategyCopyFromId('')
+                      setStrategyCreateOpen(true)
+                    }}
+                  >
+                    Create new
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setStrategyCreateName('')
-                    setStrategyCreateDescription('')
-                    setStrategyCopyFromId('')
-                    setStrategyCreateOpen(true)
-                  }}
-                >
-                  Create new
-                </Button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-8">
+                {displayStrategies.map(s => {
+                  const assigned =
+                    datasetsByStrategyName.get(s.configName || '') || []
+                  return (
+                    <div
+                      key={s.id}
+                      className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${displayStrategies.length === 1 ? 'md:col-span-2' : ''}`}
+                      onClick={() => navigate(`/chat/data/strategies/${s.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/chat/data/strategies/${s.id}`)
+                        }
+                      }}
+                    >
+                      <div className="absolute top-2 right-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <FontIcon type="overflow" className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-[12rem] w-[12rem]"
+                          >
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                setStrategyEditId(s.id)
+                                setStrategyEditName(s.name)
+                                setStrategyEditDescription(s.description)
+                                setStrategyEditOpen(true)
+                              }}
+                            >
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                setStrategyCreateName(`${s.name} (copy)`)
+                                setStrategyCreateDescription(s.description)
+                                setStrategyCopyFromId(s.id)
+                                setStrategyCreateOpen(true)
+                              }}
+                            >
+                              Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={e => {
+                                e.stopPropagation()
+
+                                // Prevent deleting default strategy
+                                if (s.isDefault) {
+                                  toast({
+                                    message: 'Cannot delete default strategy',
+                                    variant: 'destructive',
+                                  })
+                                  return
+                                }
+
+                                const ok = confirm(
+                                  'Delete this processing strategy?'
+                                )
+                                if (!ok) return
+
+                                const projectConfig = (projectResp as any)
+                                  ?.project?.config
+                                if (!projectConfig || !s.configName) {
+                                  toast({
+                                    message: 'Unable to delete strategy',
+                                    variant: 'destructive',
+                                  })
+                                  return
+                                }
+
+                                strategies.deleteStrategy.mutate(
+                                  {
+                                    strategyName: s.configName,
+                                    projectConfig,
+                                  },
+                                  {
+                                    onSuccess: () => {
+                                      toast({
+                                        message: 'Strategy deleted',
+                                        variant: 'default',
+                                      })
+                                    },
+                                    onError: (error: any) => {
+                                      toast({
+                                        message:
+                                          error.message ||
+                                          'Failed to delete strategy',
+                                        variant: 'destructive',
+                                      })
+                                    },
+                                  }
+                                )
+                              }}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <div className="text-sm font-medium">{s.name}</div>
+                      <div className="text-xs text-primary text-left w-fit">
+                        {s.description ||
+                          'Unified processor for PDFs, Word docs, CSVs, Markdown, and text files.'}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                        {assigned.slice(0, 4).map(name => (
+                          <Badge
+                            key={name}
+                            variant="default"
+                            size="sm"
+                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                          >
+                            {name}
+                          </Badge>
+                        ))}
+                        {assigned.length > 4 ? (
+                          <Badge
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            +{assigned.length - 4}
+                          </Badge>
+                        ) : null}
+                        {assigned.length === 0 ? (
+                          <Badge
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            No datasets yet
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <div className="text-xs text-muted-foreground">
+                          {getParsersCount(s.configName || '')} parsers •{' '}
+                          {getExtractorsCount(s.configName || '')} extractors
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="px-3 h-7"
+                          onClick={e => {
+                            e.stopPropagation()
+                            navigate(`/chat/data/strategies/${s.id}`)
+                          }}
+                        >
+                          Configure
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-8">
-              {displayStrategies.map(s => {
-                const assigned =
-                  datasetsByStrategyName.get(s.configName || '') || []
-                return (
-                  <div
-                    key={s.id}
-                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${displayStrategies.length === 1 ? 'md:col-span-2' : ''}`}
-                    onClick={() => navigate(`/chat/data/strategies/${s.id}`)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        navigate(`/chat/data/strategies/${s.id}`)
+              {/* End processing strategies section */}
+
+              {/* Divider */}
+              <div className="border-t border-border mb-6"></div>
+
+              {/* Datasets section */}
+              <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
+                <div className="font-medium">Datasets</div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsImportOpen(true)}
+                  >
+                    Import sample dataset
+                  </Button>
+                  <Dialog
+                    open={isCreateOpen}
+                    onOpenChange={open => {
+                      // Prevent closing dialog during mutation
+                      if (!createDatasetMutation.isPending) {
+                        setIsCreateOpen(open)
+                        if (!open) {
+                          // Reset form when closing
+                          setNewDatasetName('')
+                          setNewDatasetDatabase('')
+                          setNewDatasetDataProcessingStrategy('')
+                        }
                       }
                     }}
                   >
-                    <div className="absolute top-2 right-2">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <FontIcon type="overflow" className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          className="min-w-[12rem] w-[12rem]"
-                        >
-                          <DropdownMenuItem
-                            onClick={e => {
-                              e.stopPropagation()
-                              setStrategyEditId(s.id)
-                              setStrategyEditName(s.name)
-                              setStrategyEditDescription(s.description)
-                              setStrategyEditOpen(true)
-                            }}
-                          >
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={e => {
-                              e.stopPropagation()
-                              setStrategyCreateName(`${s.name} (copy)`)
-                              setStrategyCreateDescription(s.description)
-                              setStrategyCopyFromId(s.id)
-                              setStrategyCreateOpen(true)
-                            }}
-                          >
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={e => {
-                              e.stopPropagation()
-
-                              // Prevent deleting default strategy
-                              if (s.isDefault) {
-                                toast({
-                                  message: 'Cannot delete default strategy',
-                                  variant: 'destructive',
-                                })
-                                return
-                              }
-
-                              const ok = confirm(
-                                'Delete this processing strategy?'
-                              )
-                              if (!ok) return
-
-                              const projectConfig = (projectResp as any)
-                                ?.project?.config
-                              if (!projectConfig || !s.configName) {
-                                toast({
-                                  message: 'Unable to delete strategy',
-                                  variant: 'destructive',
-                                })
-                                return
-                              }
-
-                              strategies.deleteStrategy.mutate(
-                                {
-                                  strategyName: s.configName,
-                                  projectConfig,
-                                },
-                                {
-                                  onSuccess: () => {
-                                    toast({
-                                      message: 'Strategy deleted',
-                                      variant: 'default',
-                                    })
-                                  },
-                                  onError: (error: any) => {
-                                    toast({
-                                      message:
-                                        error.message ||
-                                        'Failed to delete strategy',
-                                      variant: 'destructive',
-                                    })
-                                  },
-                                }
-                              )
-                            }}
-                          >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-
-                    <div className="text-sm font-medium">{s.name}</div>
-                    <div className="text-xs text-primary text-left w-fit">
-                      {s.description ||
-                        'Unified processor for PDFs, Word docs, CSVs, Markdown, and text files.'}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                      {assigned.slice(0, 4).map(name => (
-                        <Badge
-                          key={name}
-                          variant="default"
-                          size="sm"
-                          className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
-                        >
-                          {name}
-                        </Badge>
-                      ))}
-                      {assigned.length > 4 ? (
-                        <Badge
-                          variant="secondary"
-                          size="sm"
-                          className="rounded-xl"
-                        >
-                          +{assigned.length - 4}
-                        </Badge>
-                      ) : null}
-                      {assigned.length === 0 ? (
-                        <Badge
-                          variant="secondary"
-                          size="sm"
-                          className="rounded-xl"
-                        >
-                          No datasets yet
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <div className="text-xs text-muted-foreground">
-                        {getParsersCount(s.configName || '')} parsers •{' '}
-                        {getExtractorsCount(s.configName || '')} extractors
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="px-3 h-7"
-                        onClick={e => {
-                          e.stopPropagation()
-                          navigate(`/chat/data/strategies/${s.id}`)
-                        }}
-                      >
-                        Configure
+                    <DialogTrigger asChild>
+                      <Button variant="default" size="sm">
+                        Create new
                       </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {/* End processing strategies section */}
-
-            {/* Divider */}
-            <div className="border-t border-border mb-6"></div>
-
-            {/* Datasets section */}
-            <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
-              <div className="font-medium">Datasets</div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsImportOpen(true)}
-                >
-                  Import sample dataset
-                </Button>
-                <Dialog
-                  open={isCreateOpen}
-                  onOpenChange={open => {
-                    // Prevent closing dialog during mutation
-                    if (!createDatasetMutation.isPending) {
-                      setIsCreateOpen(open)
-                      if (!open) {
-                        // Reset form when closing
-                        setNewDatasetName('')
-                        setNewDatasetDatabase('')
-                        setNewDatasetDataProcessingStrategy('')
-                      }
-                    }
-                  }}
-                >
-                  <DialogTrigger asChild>
-                    <Button variant="default" size="sm">
-                      Create new
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>New dataset</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
-                          Name
-                        </label>
-                        <Input
-                          autoFocus
-                          value={newDatasetName}
-                          onChange={e => setNewDatasetName(e.target.value)}
-                          placeholder="Enter dataset name"
-                        />
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>New dataset</DialogTitle>
+                      </DialogHeader>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Name
+                          </label>
+                          <Input
+                            autoFocus
+                            value={newDatasetName}
+                            onChange={e => setNewDatasetName(e.target.value)}
+                            placeholder="Enter dataset name"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Data Processing Strategy
+                          </label>
+                          <select
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            value={newDatasetDataProcessingStrategy}
+                            onChange={e =>
+                              setNewDatasetDataProcessingStrategy(
+                                e.target.value
+                              )
+                            }
+                          >
+                            <option value="">Select a strategy...</option>
+                            {availableOptions?.data_processing_strategies?.map(
+                              strategy => (
+                                <option key={strategy} value={strategy}>
+                                  {strategy}
+                                </option>
+                              )
+                            )}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Database
+                          </label>
+                          <select
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            value={newDatasetDatabase}
+                            onChange={e => setNewDatasetDatabase(e.target.value)}
+                          >
+                            <option value="">Select a database...</option>
+                            {availableOptions?.databases?.map(database => (
+                              <option key={database} value={database}>
+                                {database}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
-                          Data Processing Strategy
-                        </label>
-                        <select
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          value={newDatasetDataProcessingStrategy}
-                          onChange={e =>
-                            setNewDatasetDataProcessingStrategy(e.target.value)
+                      <DialogFooter>
+                        <DialogClose
+                          asChild
+                          disabled={createDatasetMutation.isPending}
+                        >
+                          <Button variant="secondary">Cancel</Button>
+                        </DialogClose>
+                        <Button
+                          onClick={handleCreateDataset}
+                          disabled={
+                            !newDatasetName.trim() ||
+                            !newDatasetDataProcessingStrategy.trim() ||
+                            !newDatasetDatabase.trim() ||
+                            createDatasetMutation.isPending
                           }
                         >
-                          <option value="">Select a strategy...</option>
-                          {availableOptions?.data_processing_strategies?.map(
-                            strategy => (
-                              <option key={strategy} value={strategy}>
-                                {strategy}
-                              </option>
-                            )
-                          )}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
-                          Database
-                        </label>
-                        <select
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          value={newDatasetDatabase}
-                          onChange={e => setNewDatasetDatabase(e.target.value)}
-                        >
-                          <option value="">Select a database...</option>
-                          {availableOptions?.databases?.map(database => (
-                            <option key={database} value={database}>
-                              {database}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <DialogClose
-                        asChild
-                        disabled={createDatasetMutation.isPending}
-                      >
-                        <Button variant="secondary">Cancel</Button>
-                      </DialogClose>
-                      <Button
-                        onClick={handleCreateDataset}
-                        disabled={
-                          !newDatasetName.trim() ||
-                          !newDatasetDataProcessingStrategy.trim() ||
-                          !newDatasetDatabase.trim() ||
-                          createDatasetMutation.isPending
-                        }
-                      >
-                        {createDatasetMutation.isPending
-                          ? 'Creating...'
-                          : 'Create'}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-            </>
-          )}
-          {mode !== 'designer' ? (
-            <div className="flex-1 min-h-0 overflow-hidden pb-6">
-              <ConfigEditor className="h-full" />
-            </div>
-          ) : (
-            <div className="flex-1 min-h-0 pb-6">
-            {isDragging ? (
-              <div
-                className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
-              >
-                <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
-                  {isDropped ? (
-                    <Loader />
-                  ) : (
-                    <FontIcon
-                      type="upload"
-                      className="w-10 h-10 text-blue-200 dark:text-white"
-                    />
-                  )}
-                  <div className="text-xl text-foreground">Drop data here</div>
+                          {createDatasetMutation.isPending
+                            ? 'Creating...'
+                            : 'Create'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
-                <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
-                  You can upload PDFs, explore various list formats, or draw
-                  inspiration from other data sources to enhance your project
-                  with LlaMaFarm.
-                </p>
               </div>
-            ) : (
-              <div>
-                {mode === 'designer' && isDatasetsLoading ? (
-                  <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                    <Loader size={32} className="mr-2" />
-                    Loading datasets...
-                  </div>
-                ) : mode === 'designer' && datasets.length <= 0 ? (
-                  <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                    {datasetsError
-                      ? 'Unable to load datasets. Using local storage.'
-                      : 'No datasets found. Create one to get started.'}
+              <div className="flex-1 min-h-0 pb-6">
+                {isDragging ? (
+                  <div
+                    className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
+                  >
+                    <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
+                      {isDropped ? (
+                        <Loader />
+                      ) : (
+                        <FontIcon
+                          type="upload"
+                          className="w-10 h-10 text-blue-200 dark:text-white"
+                        />
+                      )}
+                      <div className="text-xl text-foreground">Drop data here</div>
+                    </div>
+                    <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
+                      You can upload PDFs, explore various list formats, or draw
+                      inspiration from other data sources to enhance your project
+                      with LlaMaFarm.
+                    </p>
                   </div>
                 ) : (
-                  mode === 'designer' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-2 mb-6">
-                      {datasets.map(ds => (
-                        <div
-                          key={ds.id}
-                          className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                          onClick={() => navigate(`/chat/data/${ds.id}`)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              navigate(`/chat/data/${ds.id}`)
-                            }
-                          }}
-                        >
-                          <div className="absolute right-3 top-3">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                                  onClick={e => e.stopPropagation()}
-                                  aria-label="Dataset actions"
+                  <div>
+                    {isDatasetsLoading ? (
+                      <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                        <Loader size={32} className="mr-2" />
+                        Loading datasets...
+                      </div>
+                    ) : datasets.length <= 0 ? (
+                      <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                        {datasetsError
+                          ? 'Unable to load datasets. Using local storage.'
+                          : 'No datasets found. Create one to get started.'}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-2 mb-6">
+                        {datasets.map(ds => (
+                          <div
+                            key={ds.id}
+                            className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
+                            onClick={() => navigate(`/chat/data/${ds.id}`)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                navigate(`/chat/data/${ds.id}`)
+                              }
+                            }}
+                          >
+                            <div className="absolute right-3 top-3">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                                    onClick={e => e.stopPropagation()}
+                                    aria-label="Dataset actions"
+                                  >
+                                    <FontIcon
+                                      type="overflow"
+                                      className="w-4 h-4"
+                                    />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="min-w-[10rem] w-[10rem]"
                                 >
-                                  <FontIcon
-                                    type="overflow"
-                                    className="w-4 h-4"
-                                  />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="min-w-[10rem] w-[10rem]"
-                              >
-                                {/* Edit removed - API doesn't support updating datasets */}
-                                <DropdownMenuItem
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    navigate(`/chat/data/${ds.id}`)
-                                  }}
+                                  {/* Edit removed - API doesn't support updating datasets */}
+                                  <DropdownMenuItem
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      navigate(`/chat/data/${ds.id}`)
+                                    }}
+                                  >
+                                    View
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      setConfirmDeleteId(ds.id)
+                                      setConfirmDeleteName(ds.name)
+                                      setIsConfirmDeleteOpen(true)
+                                    }}
+                                  >
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                            <div className="text-sm font-medium">{ds.name}</div>
+                            <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
+                              {ds.database && (
+                                <Badge
+                                  variant="default"
+                                  size="sm"
+                                  className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
                                 >
-                                  View
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    setConfirmDeleteId(ds.id)
-                                    setConfirmDeleteName(ds.name)
-                                    setIsConfirmDeleteOpen(true)
-                                  }}
-                                >
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                          <div className="text-sm font-medium">{ds.name}</div>
-                          <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
-                            {ds.database && (
+                                  {ds.database}
+                                </Badge>
+                              )}
                               <Badge
                                 variant="default"
                                 size="sm"
-                                className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                                className="rounded-xl"
                               >
-                                {ds.database}
+                                {ds.data_processing_strategy}
                               </Badge>
-                            )}
-                            <Badge
-                              variant="default"
-                              size="sm"
-                              className="rounded-xl"
-                            >
-                              {ds.data_processing_strategy}
-                            </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-2">
+                              {ds.files.length}{' '}
+                              {ds.files.length === 1 ? 'file' : 'files'}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground mt-2">
-                            {ds.files.length}{' '}
-                            {ds.files.length === 1 ? 'file' : 'files'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                )}
+                        ))}
+                      </div>
+                    )}
 
-                {/* Project-level raw files UI removed: files now only exist within datasets. */}
+                    {/* Project-level raw files UI removed: files now only exist within datasets. */}
+                  </div>
+                )}
               </div>
-            )}
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 overflow-hidden pb-6">
+            <ConfigEditor className="h-full" initialPointer={configPointer} />
+          </div>
+        )}
       </div>
 
       {/* Edit dataset dialog */}

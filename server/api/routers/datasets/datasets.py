@@ -1,4 +1,4 @@
-import time
+import asyncio
 from enum import Enum
 
 from config.datamodel import Dataset
@@ -354,10 +354,16 @@ async def process_dataset(
 
         # Store child task IDs in the backend for tracking
         # This is needed because GroupResult.restore() doesn't always work with filesystem backend
-        child_task_ids = [child.id for child in result.results]
+        try:
+            child_task_ids = [child.id for child in result.results]
+        except Exception as e:
+            logger.error(f"Error accessing group result children: {e}")
+            # Fallback: create task IDs from the file list
+            child_task_ids = []
 
         # Store metadata about this group task
         from core.celery import app as celery_app
+
         celery_app.backend.store_result(
             result.id,
             {
@@ -483,28 +489,72 @@ async def process_dataset(
         )
 
         # Wait for the task to complete using polling to avoid result.get() error
-        timeout = 300  # 5 minutes
-        poll_interval = 2  # seconds
+        timeout = 600  # 10 minutes
+        poll_interval = 5  # seconds
         waited = 0
 
         try:
             while waited < timeout:
-                if task.status not in ("PENDING", "STARTED"):
-                    break
-                time.sleep(poll_interval)
+                try:
+                    status = task.status
+                    if status not in ("PENDING", "STARTED"):
+                        break
+                except Exception as e:
+                    logger.error(
+                        f"Error checking task status for file {file_hash}: {e}",
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(poll_interval)
+                    waited += poll_interval
+                    continue
+
+                await asyncio.sleep(poll_interval)
                 waited += poll_interval
 
-            if task.status == "SUCCESS":
-                result = task.result
-                ok = result["success"]
-                file_details = result["details"]
-            elif task.status == "FAILURE":
+            # Get final status with error handling
+            try:
+                final_status = task.status
+            except Exception as e:
+                logger.error(
+                    f"Error getting final task status for file {file_hash}: {e}",
+                    exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to get task status for file {file_hash}: {str(e)}",
+                ) from e
+
+            if final_status == "SUCCESS":
+                try:
+                    result = task.result
+                    ok = result["success"]
+                    file_details = result["details"]
+                except Exception as e:
+                    logger.error(
+                        f"Error getting task result for file {file_hash}: {e}",
+                        exc_info=True,
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to get task result for file {file_hash}: {str(e)}",
+                    ) from e
+            elif final_status == "FAILURE":
                 # Handle task failure
-                logger.error(f"Task failed for file {file_hash}: {task.result}")
+                try:
+                    error_result = task.result
+                    logger.error(f"Task failed for file {file_hash}: {error_result}")
+                    error_message = str(error_result)
+                except Exception as e:
+                    logger.error(
+                        f"Error getting failure details for file {file_hash}: {e}",
+                        exc_info=True,
+                    )
+                    error_message = "Unknown error (couldn't access failure details)"
+
                 ok = False
                 file_details = {
                     "filename": filename,
-                    "error": str(task.result),
+                    "error": error_message,
                     "parser": None,
                     "extractors": [],
                     "chunks": None,
@@ -516,12 +566,12 @@ async def process_dataset(
             else:
                 # Timeout or other status
                 logger.error(
-                    f"Task timed out or failed for file {file_hash}: {task.status}"
+                    f"Task timed out or failed for file {file_hash}: status={final_status}"
                 )
                 ok = False
                 file_details = {
                     "filename": filename,
-                    "error": f"Task timed out or failed with status: {task.status}",
+                    "error": f"Task timed out or failed with status: {final_status}",
                     "parser": None,
                     "extractors": [],
                     "chunks": None,
