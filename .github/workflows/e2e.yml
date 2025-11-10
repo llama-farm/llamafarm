@@ -112,6 +112,21 @@ jobs:
           search_artifacts: true
           if_no_artifact_found: fail
 
+      - name: Rename binary to standard name
+        shell: bash
+        run: |
+          cd cli
+          # The artifact contains the binary with the full artifact name
+          # Rename it to the short name we want to use
+          if [ -f "${{ matrix.artifact }}" ]; then
+            mv "${{ matrix.artifact }}" "${{ matrix.binary }}"
+            echo "✓ Renamed ${{ matrix.artifact }} to ${{ matrix.binary }}"
+          else
+            echo "Error: Downloaded artifact not found at cli/${{ matrix.artifact }}"
+            ls -la
+            exit 1
+          fi
+
       - name: Make CLI binary executable
         if: runner.os != 'Windows'
         shell: bash
