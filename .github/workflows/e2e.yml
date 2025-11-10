@@ -62,6 +62,7 @@ jobs:
       - name: Wait for CLI build artifacts (PRs only)
         if: github.event_name == 'pull_request'
         id: wait-artifacts
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
