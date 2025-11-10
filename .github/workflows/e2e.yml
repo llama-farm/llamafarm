@@ -4,10 +4,15 @@ permissions:
   actions: read # Required to download artifacts from other workflows
 
 on:
-  push:
+  # Trigger after CLI build completes (for main branch pushes)
+  workflow_run:
+    workflows: ["Build CLI"]
+    types: [completed]
     branches: [main]
+  # For PRs, trigger normally and wait for artifacts
   pull_request:
     branches: [main]
+  # Also allow manual trigger
   workflow_dispatch:
 
 jobs:
@@ -15,6 +20,10 @@ jobs:
     name: E2E Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    # Skip e2e if CLI build failed (only for workflow_run trigger)
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -40,29 +49,29 @@ jobs:
       # ============================================================
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # For workflow_run, checkout the commit that triggered the build
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # ============================================================
       # Download Pre-built CLI Binary
       # ============================================================
-      - name: Wait for CLI build to complete
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.ref }}
-          check-name: "Build CLI Binaries"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-          allowed-conclusions: success
-
       - name: Download CLI binary artifact
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
-          commit: ${{ github.event.pull_request.head.sha || github.sha }}
+          # For workflow_run, use the run that triggered us
+          run_id: ${{ github.event.workflow_run.id || '' }}
+          # For PRs and manual runs, search by commit
+          commit: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
           name: ${{ matrix.artifact }}
           path: cli/
           search_artifacts: true
           workflow_conclusion: success
           if_no_artifact_found: fail
+          # Wait up to 10 minutes for artifact (for PRs where build may still be running)
+          check_artifacts: true
+          skip_unpack: false
 
       - name: Make CLI binary executable
         if: runner.os != 'Windows'
