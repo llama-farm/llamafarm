@@ -478,12 +478,13 @@ func (m *SourceManager) DownloadSource(version string) error {
 	return nil
 }
 
-// SyncDependencies runs `uv sync` on config, common, server and rag directories
+// SyncDependencies runs `uv sync` on config, common, server, rag, and universal-runtime directories
 func (m *SourceManager) SyncDependencies() error {
 	configDir := filepath.Join(m.srcDir, "config")
 	commonDir := filepath.Join(m.srcDir, "common")
 	serverDir := filepath.Join(m.srcDir, "server")
 	ragDir := filepath.Join(m.srcDir, "rag")
+	universalRuntimeDir := filepath.Join(m.srcDir, "runtimes", "universal")
 
 	// Verify directories exist
 	if _, err := os.Stat(configDir); os.IsNotExist(err) {
@@ -498,36 +499,46 @@ func (m *SourceManager) SyncDependencies() error {
 	if _, err := os.Stat(ragDir); os.IsNotExist(err) {
 		return fmt.Errorf("rag directory not found: %s", ragDir)
 	}
+	if _, err := os.Stat(universalRuntimeDir); os.IsNotExist(err) {
+		return fmt.Errorf("universal-runtime directory not found: %s", universalRuntimeDir)
+	}
 
 	// First, sync config and common (which are dependencies of server and rag)
 	utils.LogDebug("Syncing config dependencies...")
-	if err := m.syncDirectory(configDir, "config"); err != nil {
+	if err := m.syncDirectory(configDir, "config", false); err != nil {
 		return fmt.Errorf("failed to sync config dependencies: %w", err)
 	}
 
 	utils.LogDebug("Syncing common dependencies...")
-	if err := m.syncDirectory(commonDir, "common"); err != nil {
+	if err := m.syncDirectory(commonDir, "common", false); err != nil {
 		return fmt.Errorf("failed to sync common dependencies: %w", err)
 	}
 
-	// Now sync server and rag in parallel
+	// Now sync server, rag, and universal-runtime in parallel
 	var wg sync.WaitGroup
-	var serverErr, ragErr error
+	var serverErr, ragErr, universalRuntimeErr error
 
-	wg.Add(2)
+	wg.Add(3)
 
 	// Sync server dependencies
 	go func() {
 		defer wg.Done()
 		utils.LogDebug("Syncing server dependencies...")
-		serverErr = m.syncDirectory(serverDir, "server")
+		serverErr = m.syncDirectory(serverDir, "server", false)
 	}()
 
 	// Sync rag dependencies
 	go func() {
 		defer wg.Done()
 		utils.LogDebug("Syncing RAG dependencies...")
-		ragErr = m.syncDirectory(ragDir, "rag")
+		ragErr = m.syncDirectory(ragDir, "rag", false)
+	}()
+
+	// Sync universal-runtime dependencies (needs PyTorch index)
+	go func() {
+		defer wg.Done()
+		utils.LogDebug("Syncing universal-runtime dependencies...")
+		universalRuntimeErr = m.syncDirectory(universalRuntimeDir, "universal-runtime", true)
 	}()
 
 	wg.Wait()
@@ -539,13 +550,17 @@ func (m *SourceManager) SyncDependencies() error {
 	if ragErr != nil {
 		return fmt.Errorf("failed to sync rag dependencies: %w", ragErr)
 	}
+	if universalRuntimeErr != nil {
+		return fmt.Errorf("failed to sync universal-runtime dependencies: %w", universalRuntimeErr)
+	}
 
 	utils.LogDebug("Dependencies synced successfully")
 	return nil
 }
 
 // syncDirectory runs `uv sync` in a specific directory
-func (m *SourceManager) syncDirectory(dir string, name string) error {
+// keepPyTorchIndex controls whether UV_EXTRA_INDEX_URL should be preserved
+func (m *SourceManager) syncDirectory(dir string, name string, keepPyTorchIndex bool) error {
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 
 	// Verify the directory exists and contains pyproject.toml
@@ -556,11 +571,27 @@ func (m *SourceManager) syncDirectory(dir string, name string) error {
 
 	// Run UV sync command in the specific project directory
 	// This ensures .venv is created in the correct location
-	// Use unsafe-best-match to allow uv to search all indexes when UV_EXTRA_INDEX_URL is set
-	// This prevents issues where packages are found on PyTorch index but at incompatible versions
-	cmd := exec.Command(uvPath, "sync", "--managed-python", "--index-strategy", "unsafe-best-match")
+	cmd := exec.Command(uvPath, "sync", "--managed-python")
 	cmd.Dir = dir // Critical: run from project directory so .venv is created there
-	cmd.Env = m.pythonEnvMgr.GetEnvForProcess()
+
+	// Get base environment
+	env := m.pythonEnvMgr.GetEnvForProcess()
+
+	// Filter out UV_EXTRA_INDEX_URL unless this component needs PyTorch
+	// The PyTorch index should only be used by universal-runtime, not by server/rag/config/common
+	// Using the PyTorch index for server/rag causes issues because it has incomplete/incompatible
+	// versions of common packages (e.g., markupsafe 3.0.2 only for cp313, requests 2.28.1)
+	if !keepPyTorchIndex {
+		filteredEnv := make([]string, 0, len(env))
+		for _, e := range env {
+			if !strings.HasPrefix(e, "UV_EXTRA_INDEX_URL=") {
+				filteredEnv = append(filteredEnv, e)
+			}
+		}
+		env = filteredEnv
+	}
+
+	cmd.Env = env
 
 	utils.LogDebug(fmt.Sprintf("Running 'uv sync' in directory: %s", dir))
 
@@ -593,13 +624,15 @@ func (m *SourceManager) areDependenciesSynced() bool {
 	commonVenv := filepath.Join(m.srcDir, "common", ".venv")
 	serverVenv := filepath.Join(m.srcDir, "server", ".venv")
 	ragVenv := filepath.Join(m.srcDir, "rag", ".venv")
+	universalRuntimeVenv := filepath.Join(m.srcDir, "runtimes", "universal", ".venv")
 
 	_, configErr := os.Stat(configVenv)
 	_, commonErr := os.Stat(commonVenv)
 	_, serverErr := os.Stat(serverVenv)
 	_, ragErr := os.Stat(ragVenv)
+	_, universalRuntimeErr := os.Stat(universalRuntimeVenv)
 
-	return configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil
+	return configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil && universalRuntimeErr == nil
 }
 
 // readVersionFile reads the current version from the version file

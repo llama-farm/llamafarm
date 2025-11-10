@@ -47,13 +47,14 @@ py-modules = ["server", "download_model"]
 # The LlamaFarm CLI automatically detects your hardware (CUDA, Metal, ROCm, or CPU)
 # and sets UV_EXTRA_INDEX_URL appropriately to install the optimal PyTorch build.
 #
-# Manual override options:
-#   LF_PYTORCH_INDEX=https://download.pytorch.org/whl/cpu   # Force CPU-only
-#   LF_PYTORCH_INDEX=https://download.pytorch.org/whl/cu121 # Force CUDA 12.1
-#   LF_PYTORCH_INDEX=https://download.pytorch.org/whl/rocm6.0 # Force ROCm 6.0
+# Note: UV_EXTRA_INDEX_URL is only set for the universal-runtime service, not for
+# server/rag/config/common. This prevents dependency resolution issues where the
+# PyTorch index contains incomplete/incompatible versions of common packages.
 #
-# Or use UV_EXTRA_INDEX_URL directly:
-#   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+# Manual override options:
+#   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu   # Force CPU-only
+#   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu121 # Force CUDA 12.1
+#   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/rocm6.0 # Force ROCm 6.0
 #
 # Hardware detection priority:
 #   1. CUDA (NVIDIA GPUs) - uses default PyPI with GPU support (~3.4GB)
