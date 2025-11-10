@@ -91,18 +91,25 @@ jobs:
           echo "❌ Timeout waiting for artifact after ${MAX_WAIT}s"
           exit 1
 
-      - name: Download CLI binary artifact
+      - name: Download CLI binary artifact (with run_id)
+        if: github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
-          # For workflow_run and PRs (with captured run_id), use the run ID
-          run_id: ${{ github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id || '' }}
-          # For manual runs without run_id, search by commit
-          commit: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+          run_id: ${{ github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id }}
+          name: ${{ matrix.artifact }}
+          path: cli/
+          if_no_artifact_found: fail
+
+      - name: Download CLI binary artifact (search by commit)
+        if: ${{ !(github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id) }}
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: cli.yml
+          commit: ${{ github.sha }}
           name: ${{ matrix.artifact }}
           path: cli/
           search_artifacts: true
-          # Don't require workflow completion - artifact existence is enough
           if_no_artifact_found: fail
 
       - name: Make CLI binary executable
