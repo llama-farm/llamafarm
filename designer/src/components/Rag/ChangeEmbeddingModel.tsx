@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -72,6 +72,7 @@ async function encryptAPIKey(apiKey: string, secret: string) {
 
 function ChangeEmbeddingModel() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [mode, setMode] = useModeWithReset('designer')
   const { strategyId } = useParams()
   const [searchParams] = useSearchParams()
@@ -89,28 +90,35 @@ function ChangeEmbeddingModel() {
     activeProject?.project || ''
   )
   
-  // Get database from URL params
-  const database = searchParams.get('database') || 'main_database'
+  // Get data from navigation state or URL params (for backward compatibility)
+  const state = location.state as {
+    database?: string
+    strategyName?: string
+    strategyType?: string
+    currentConfig?: Record<string, any>
+    isDefault?: boolean
+    priority?: number
+  } | null
+
+  const database = state?.database || searchParams.get('database') || 'main_database'
+  const originalStrategyName = state?.strategyName || strategyId || ''
+  const strategyType = state?.strategyType || 'OllamaEmbedder'
+  const currentConfig = state?.currentConfig || {}
+  const isDefaultStrategy = state?.isDefault || false
+  const priority = state?.priority || 0
+
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Editable strategy name loaded from list
-  const [strategyName, setStrategyName] = useState<string>('')
+  // Editable strategy name - initialize from state
+  const [strategyName, setStrategyName] = useState<string>(originalStrategyName)
+  
+  // Initialize strategy name from state
   useEffect(() => {
-    try {
-      if (!strategyId) return
-      const raw = localStorage.getItem('lf_project_embeddings')
-      if (raw) {
-        const list = JSON.parse(raw)
-        const found = Array.isArray(list)
-          ? list.find((e: any) => e?.id === strategyId)
-          : null
-        if (found?.name) setStrategyName(found.name)
-        if (typeof found?.isDefault === 'boolean')
-          setIsDefaultStrategy(Boolean(found.isDefault))
-      }
-    } catch {}
-  }, [strategyId])
+    if (originalStrategyName) {
+      setStrategyName(originalStrategyName)
+    }
+  }, [originalStrategyName])
 
   // Removed currentModel display state along with summary card
 
@@ -296,7 +304,6 @@ function ChangeEmbeddingModel() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [makeDefault, setMakeDefault] = useState(false)
   const [reembedOpen, setReembedOpen] = useState(false)
-  const [isDefaultStrategy, setIsDefaultStrategy] = useState(false)
   const [azureDeployment, setAzureDeployment] = useState('')
   const [azureResource, setAzureResource] = useState('')
   const [azureApiVersion, setAzureApiVersion] = useState('')
@@ -343,39 +350,78 @@ function ChangeEmbeddingModel() {
   const selectedKey = model === 'Custom' ? customModel.trim() : model
   const meta = embeddingMeta[selectedKey]
 
+  // Initialize form fields from currentConfig state
   useEffect(() => {
+    if (!currentConfig || Object.keys(currentConfig).length === 0) return
+
     try {
-      if (!strategyId) return
-      const storedCfg = localStorage.getItem(
-        `lf_strategy_embedding_config_${strategyId}`
-      )
-      if (storedCfg) {
-        const parsed = JSON.parse(storedCfg)
-        if (typeof parsed?.dimension === 'number')
-          setDimension(parsed.dimension)
-        if (typeof parsed?.batchSize === 'number')
-          setBatchSize(parsed.batchSize)
-        if (typeof parsed?.timeout === 'number') setTimeoutSec(parsed.timeout)
-        if (typeof parsed?.auto_pull === 'boolean')
-          setOllamaAutoPull(parsed.auto_pull)
-        if (parsed?.baseUrl) setBaseUrl(parsed.baseUrl)
-        if (parsed?.modelId && typeof parsed.modelId === 'string') {
-          setExistingModelId(parsed.modelId)
-        }
-        if (parsed?.provider && typeof parsed.provider === 'string') {
-          const p = parsed.provider.includes('local')
-            ? 'Ollama (remote)'
-            : parsed.provider
-          if ((providerOptions as readonly string[]).includes(p))
-            setProvider(p as Provider)
+      // Initialize common fields
+      if (typeof currentConfig.dimension === 'number')
+        setDimension(currentConfig.dimension)
+      if (typeof currentConfig.batch_size === 'number')
+        setBatchSize(currentConfig.batch_size)
+      if (typeof currentConfig.batchSize === 'number')
+        setBatchSize(currentConfig.batchSize)
+      if (typeof currentConfig.timeout === 'number')
+        setTimeoutSec(currentConfig.timeout)
+      
+      // Initialize model and provider based on strategy type
+      let targetProvider: Provider = 'Ollama (remote)'
+      let targetTab: 'local' | 'cloud' = 'local'
+      
+      if (strategyType === 'OllamaEmbedder') {
+        targetProvider = 'Ollama (remote)'
+        targetTab = 'local'
+        if (currentConfig.base_url) setBaseUrl(currentConfig.base_url)
+        if (typeof currentConfig.auto_pull === 'boolean')
+          setOllamaAutoPull(currentConfig.auto_pull)
+      } else if (strategyType === 'OpenAIEmbedder') {
+        targetProvider = 'OpenAI'
+        targetTab = 'cloud'
+        if (currentConfig.base_url) setBaseUrl(currentConfig.base_url)
+        if (currentConfig.organization) setOpenaiOrg(currentConfig.organization)
+        if (currentConfig.max_retries)
+          setOpenaiMaxRetries(currentConfig.max_retries)
+      } else if (strategyType.includes('Azure')) {
+        targetProvider = 'Azure OpenAI'
+        targetTab = 'cloud'
+        if (currentConfig.deployment) setAzureDeployment(currentConfig.deployment)
+        if (currentConfig.endpoint) setAzureResource(currentConfig.endpoint)
+        if (currentConfig.api_version) setAzureApiVersion(currentConfig.api_version)
+      } else if (strategyType.includes('Google')) {
+        targetProvider = 'Google'
+        targetTab = 'cloud'
+        if (currentConfig.project_id) setVertexProjectId(currentConfig.project_id)
+        if (currentConfig.region) setVertexLocation(currentConfig.region)
+        if (currentConfig.endpoint) setVertexEndpoint(currentConfig.endpoint)
+      } else if (strategyType.includes('Bedrock')) {
+        targetProvider = 'AWS Bedrock'
+        targetTab = 'cloud'
+        if (currentConfig.region) setBedrockRegion(currentConfig.region)
+      }
+      
+      setProvider(targetProvider)
+      setSourceTab(targetTab)
+      
+      // Initialize model
+      if (currentConfig.model) {
+        const modelName = currentConfig.model
+        setExistingModelId(modelName)
+        
+        // Set model in the UI (check if it's in the provider's model list)
+        const providerModels = modelMap[targetProvider] || []
+        const modelInList = providerModels.includes(modelName)
+        if (modelInList) {
+          setModel(modelName)
+        } else {
+          setModel('Custom')
+          setCustomModel(modelName)
         }
       }
-      const storedModel = localStorage.getItem(
-        `lf_strategy_embedding_model_${strategyId}`
-      )
-      if (storedModel) setExistingModelId(storedModel)
-    } catch {}
-  }, [strategyId])
+    } catch (e) {
+      console.error('Failed to initialize form from config:', e)
+    }
+  }, [currentConfig, strategyType])
 
   // Sync dimension from model metadata when model/provider changes
   useEffect(() => {
@@ -518,7 +564,10 @@ function ChangeEmbeddingModel() {
   }
 
   const saveEdited = async () => {
-    if (!strategyId) return
+    if (!originalStrategyName) {
+      setError('Strategy name is required')
+      return
+    }
     
     try {
       setIsSaving(true)
@@ -555,19 +604,30 @@ function ChangeEmbeddingModel() {
 
       // Find and update the specific strategy
       const updatedStrategies = currentDb.embedding_strategies?.map((strategy: any) => {
-        if (strategy.name === strategyId) {
+        if (strategy.name === originalStrategyName) {
           return {
             ...strategy,
             name: strategyName.trim() || strategy.name,
             type: mapProviderToType(summaryProvider),
+            priority: priority,
             config: buildStrategyConfig(encryptedKey)
           }
         }
         return strategy
       })
 
-      if (!updatedStrategies?.some((s: any) => s.name === strategyId)) {
-        throw new Error(`Strategy ${strategyId} not found`)
+      if (!updatedStrategies?.some((s: any) => s.name === originalStrategyName)) {
+        throw new Error(`Strategy ${originalStrategyName} not found`)
+      }
+
+      // Check if we need to update the default strategy name
+      let updatedDefaultStrategy = currentDb.default_embedding_strategy
+      if (isDefaultStrategy && strategyName.trim() !== originalStrategyName) {
+        // If this is the default and we renamed it, update the default reference
+        updatedDefaultStrategy = strategyName.trim()
+      } else if (makeDefault) {
+        // If user wants to make it default
+        updatedDefaultStrategy = strategyName.trim() || originalStrategyName
       }
 
       // Update database configuration
@@ -575,15 +635,12 @@ function ChangeEmbeddingModel() {
         oldName: database,
         updates: {
           embedding_strategies: updatedStrategies,
-          // Update default if makeDefault is checked
-          default_embedding_strategy: makeDefault 
-            ? strategyName.trim() || strategyId
-            : currentDb.default_embedding_strategy
+          default_embedding_strategy: updatedDefaultStrategy
         },
         projectConfig
       })
 
-      if (makeDefault) {
+      if (makeDefault || (isDefaultStrategy && strategyName.trim() !== originalStrategyName)) {
         setReembedOpen(true)
       } else {
         toast({ message: 'Strategy saved', variant: 'default' })
@@ -595,6 +652,23 @@ function ChangeEmbeddingModel() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  // Show error if required state is missing
+  if (!state && !strategyId) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6">
+        <div className="text-destructive text-lg font-semibold">
+          Missing required information
+        </div>
+        <div className="text-muted-foreground text-sm">
+          Please return to the databases page and try again.
+        </div>
+        <Button onClick={() => navigate('/chat/databases')}>
+          Return to Databases
+        </Button>
+      </div>
+    )
   }
 
   return (

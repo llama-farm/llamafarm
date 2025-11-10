@@ -154,6 +154,10 @@ function App() {
                       element={<ChangeEmbeddingModel />}
                     />
                     <Route
+                      path="change-embedding-model"
+                      element={<ChangeEmbeddingModel />}
+                    />
+                    <Route
                       path="databases/:strategyId/retrieval"
                       element={<RetrievalMethod />}
                     />

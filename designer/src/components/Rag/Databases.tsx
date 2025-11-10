@@ -36,6 +36,7 @@ import {
   useDatabaseManager,
   type Database as DatabaseType,
 } from '../../hooks/useDatabaseManager'
+import { Settings, Star, Trash2 } from 'lucide-react'
 
 type Database = {
   name: string
@@ -578,6 +579,127 @@ function Databases() {
     )
   }, [editingDatabase, databaseModalMode, datasetsResp])
 
+  // Embedding strategy handlers
+  const handleEditEmbedding = (embedding: EmbeddingItem) => {
+    const strategy = getEmbeddingStrategy(embedding.name)
+    if (!strategy) {
+      toast({
+        message: 'Strategy not found',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    navigate(`/chat/change-embedding-model`, {
+      state: {
+        database: activeDatabase,
+        strategyName: embedding.name,
+        strategyType: strategy.type || 'OllamaEmbedder',
+        currentConfig: strategy.config || {},
+        isDefault: embedding.isDefault,
+        priority: strategy.priority || 0,
+      },
+    })
+  }
+
+  const handleSetDefaultEmbedding = async (strategyName: string) => {
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          default_embedding_strategy: strategyName,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `"${strategyName}" set as default embedding strategy`,
+        variant: 'default',
+      })
+    } catch (error: any) {
+      console.error('Failed to set default embedding:', error)
+      toast({
+        message: error.message || 'Failed to set default strategy',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDeleteEmbedding = async (strategyName: string) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete the embedding strategy "${strategyName}"? This action cannot be undone.`
+      )
+    ) {
+      return
+    }
+
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      const updatedStrategies =
+        currentDb.embedding_strategies?.filter(
+          (s: any) => s.name !== strategyName
+        ) || []
+
+      if (updatedStrategies.length === 0) {
+        throw new Error(
+          'Cannot delete the last embedding strategy. At least one strategy is required.'
+        )
+      }
+
+      // If deleting the default, set the first remaining as default
+      let updatedDefaultStrategy = currentDb.default_embedding_strategy
+      if (currentDb.default_embedding_strategy === strategyName) {
+        updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          embedding_strategies: updatedStrategies,
+          default_embedding_strategy: updatedDefaultStrategy,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `Embedding strategy "${strategyName}" deleted`,
+        variant: 'default',
+      })
+    } catch (error: any) {
+      console.error('Failed to delete embedding strategy:', error)
+      toast({
+        message: error.message || 'Failed to delete strategy',
+        variant: 'destructive',
+      })
+    }
+  }
+
   return (
     <>
       <div
@@ -716,7 +838,6 @@ function Databases() {
                     key={ei.id}
                     className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 transition-colors ${ei.enabled ? '' : 'opacity-70'} ${embeddingCount === 1 ? 'md:col-span-2' : ''}`}
                   >
-
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="text-base font-semibold truncate">
@@ -734,6 +855,73 @@ function Databases() {
                             return loc ? loc : ''
                           })()}
                         </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => handleEditEmbedding(ei)}
+                                title="Edit configuration"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit configuration</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {!ei.isDefault && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleSetDefaultEmbedding(ei.name)}
+                                  title="Set as default"
+                                >
+                                  <Star className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Set as default</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                onClick={() => handleDeleteEmbedding(ei.name)}
+                                disabled={ei.isDefault}
+                                title={
+                                  ei.isDefault
+                                    ? 'Cannot delete default strategy'
+                                    : 'Delete strategy'
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {ei.isDefault
+                                  ? 'Cannot delete default strategy'
+                                  : 'Delete strategy'}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap pt-2">
