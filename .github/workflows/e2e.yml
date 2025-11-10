@@ -47,7 +47,7 @@ jobs:
       - name: Wait for CLI build to complete
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.ref }}
           check-name: "Build CLI Binaries (${{ runner.os }}, ${{ runner.arch }}, llamafarm-${{ runner.os }}-${{ runner.arch }})"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
