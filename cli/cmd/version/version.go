@@ -27,7 +27,7 @@ func determineTargetVersion(targetVersion *string) (string, *UpgradeInfo, error)
 	var info *UpgradeInfo
 	var normalizedTargetVersion string
 
-	if targetVersion != nil {
+	if targetVersion != nil && *targetVersion != "" {
 		normalizedTargetVersion = normalizeVersion(*targetVersion)
 
 		// For specific version, create minimal info

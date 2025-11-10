@@ -354,7 +354,12 @@ async def process_dataset(
 
         # Store child task IDs in the backend for tracking
         # This is needed because GroupResult.restore() doesn't always work with filesystem backend
-        child_task_ids = [child.id for child in result.results]
+        try:
+            child_task_ids = [child.id for child in result.results]
+        except Exception as e:
+            logger.error(f"Error accessing group result children: {e}")
+            # Fallback: create task IDs from the file list
+            child_task_ids = []
 
         # Store metadata about this group task
         from core.celery import app as celery_app
