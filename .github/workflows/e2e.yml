@@ -1,6 +1,7 @@
 name: End-to-End Tests
 permissions:
   contents: read
+  actions: read # Required to download artifacts from other workflows
 
 on:
   push:
@@ -17,7 +18,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact: llamafarm-linux-amd64
+            binary: lf
+          - os: macos-latest
+            artifact: llamafarm-darwin-arm64
+            binary: lf
+          - os: windows-latest
+            artifact: llamafarm-windows-amd64.exe
+            binary: lf.exe
     env:
       # Use the current branch/ref being tested instead of main
       LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
@@ -31,81 +41,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24.4"
-          cache-dependency-path: cli/go.sum
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum', 'cli/cmd/**/*.go') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Install uv (for build-time datamodel generation)
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-          cache-dependency-glob: "**/uv.lock"
-        env:
-          UV_PYTHON_DOWNLOADS: "automatic"
-
       # ============================================================
-      # Build Phase
+      # Download Pre-built CLI Binary
       # ============================================================
-      - name: Generate Python datamodels
-        working-directory: config
-        shell: bash
-        run: |
-          echo "Generating datamodels from schema..."
-          ./generate-types.sh
-          echo "✓ Datamodel generation complete"
+      - name: Wait for CLI build to complete
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          check-name: "Build CLI Binaries"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          allowed-conclusions: success
 
-      - name: Validate datamodel generation
-        working-directory: config
-        shell: bash
-        run: |
-          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
-            echo "❌ Error: datamodel.py not generated or is empty"
-            exit 1
-          fi
-          echo "✓ Datamodel validation passed"
-          # Verify that compile_schema.py copied the dereferenced schema to cli/cmd/config
-          if [ ! -f "../cli/cmd/config/schema.json" ]; then
-            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
-            exit 1
-          fi
-          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
+      - name: Download CLI binary artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: cli.yml
+          commit: ${{ github.event.pull_request.head.sha || github.sha }}
+          name: ${{ matrix.artifact }}
+          path: cli/
+          search_artifacts: true
+          workflow_conclusion: success
+          if_no_artifact_found: fail
 
-      - name: Install go-jsonschema
+      - name: Make CLI binary executable
+        if: runner.os != 'Windows'
         shell: bash
-        run: go install github.com/atombender/go-jsonschema@latest
-
-      - name: Generate Go types
-        shell: bash
-        run: |
-          # Generate Go types from schema
-          cd cli/cmd/config
-          sh generate-types.sh
-          echo "✓ Go types generation complete"
-
-      - name: Build CLI binary
-        working-directory: cli
-        shell: bash
-        run: |
-          go build -o lf${{ runner.os == 'Windows' && '.exe' || '' }} main.go
-          echo "✓ CLI binary built successfully"
+        run: chmod +x cli/${{ matrix.binary }}
 
       - name: Verify CLI binary works
         working-directory: cli
         shell: bash
         run: |
-          ./lf${{ runner.os == 'Windows' && '.exe' || '' }} version
+          ./${{ matrix.binary }} version
           echo "✓ CLI binary is functional"
 
       # ============================================================
@@ -123,7 +91,7 @@ jobs:
         working-directory: cli
         shell: bash
         run: |
-          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} init --cwd "$TEST_DIR" --debug; then
+          if ! ./${{ matrix.binary }} init --cwd "$TEST_DIR" --debug; then
             echo "❌ Project initialization failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -156,7 +124,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets create \
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets create \
             -s universal_processor \
             -b main_database \
             test_dataset; then
@@ -189,7 +157,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets upload test_dataset "../examples/quick_rag/files"; then
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets upload test_dataset "../examples/quick_rag/files"; then
             echo "❌ Upload failed for ../examples/quick_rag/files, checking server health..."
             echo "Current directory: $(pwd)"
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
@@ -228,7 +196,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           sleep 2
-          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets process test_dataset; then
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets process test_dataset; then
             echo "❌ Dataset processing failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -245,7 +213,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running RAG query..."
-          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug rag query \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag query \
             --database main_database \
             --top-k 3 \
             "neural scaling laws" 2>&1); then
@@ -273,7 +241,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug rag query \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag query \
             --database main_database \
             --top-k 3 \
             --include-metadata \
@@ -303,7 +271,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command with RAG..."
-          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug chat \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
             "Summarize neural scaling laws in one sentence" 2>&1); then
             echo "❌ Chat command failed"
             echo "$OUTPUT"
@@ -338,7 +306,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command without RAG..."
-          if ! OUTPUT=$(./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug chat \
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
             --no-rag \
             "What is 2 + 2?" 2>&1); then
             echo "❌ Chat command (no RAG) failed"
@@ -370,7 +338,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Listing datasets..."
-          if ! ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug datasets list; then
+          if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets list; then
             echo "❌ Dataset listing failed, checking server health..."
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
@@ -384,7 +352,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Checking RAG health..."
-          ./lf${{ runner.os == 'Windows' && '.exe' || '' }} --cwd "$TEST_DIR" --debug rag health || true
+          ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag health || true
           echo "✓ RAG health check complete"
 
       - name: E2E test summary
@@ -393,7 +361,7 @@ jobs:
           echo "=========================================="
           echo "End-to-End Test Summary (${{ matrix.os }})"
           echo "=========================================="
-          echo "✓ CLI built successfully"
+          echo "✓ CLI binary downloaded and verified"
           echo "✓ Project initialized"
           echo "✓ Dataset created and processed"
           echo "✓ RAG queries executed"
