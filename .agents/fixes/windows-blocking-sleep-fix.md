@@ -25,7 +25,7 @@ The `process_dataset` endpoint in `server/api/routers/datasets/datasets.py` is d
 ```python
 async def process_dataset(...):
     # ... setup code ...
-    
+
     try:
         while waited < timeout:
             if task.status not in ("PENDING", "STARTED"):
@@ -52,7 +52,7 @@ import asyncio  # Added import
 
 async def process_dataset(...):
     # ... setup code ...
-    
+
     try:
         while waited < timeout:
             if task.status not in ("PENDING", "STARTED"):
@@ -75,7 +75,7 @@ async def process_dataset(...):
    ```python
    # Before:
    time.sleep(poll_interval)
-   
+
    # After:
    await asyncio.sleep(poll_interval)
    ```
@@ -149,4 +149,3 @@ async def process_dataset(...):
 - The issue could also cause performance problems on high-traffic deployments
 - Similar patterns should be reviewed in other endpoints for the same anti-pattern
 - Consider using `asyncio.wait_for()` or `asyncio.gather()` for future async task waiting
-
