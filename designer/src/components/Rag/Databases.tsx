@@ -8,13 +8,6 @@ import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { getStoredArray, setStoredArray } from '../../utils/storage'
-import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -176,26 +169,7 @@ function Databases() {
     enabled: boolean
   }
 
-  // Database-scoped storage keys (UI-only fallbacks for retrieval strategies; namespaced per project)
-  const RET_LIST_KEY = `lf_ui_${projectKey}_db_${activeDatabase}_retrievals`
-
-  // Note: Embedding strategies are now managed server-side only, no localStorage fallbacks
-
-  const getRetrievals = (): RetrievalItem[] => {
-    const arr = getStoredArray(RET_LIST_KEY)
-    return arr
-      .filter(
-        (e: any) => e && typeof e.id === 'string' && typeof e.name === 'string'
-      )
-      .map((e: any) => ({
-        id: e.id,
-        name: e.name,
-        isDefault: Boolean(e.isDefault),
-        enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
-      })) as RetrievalItem[]
-  }
-  const saveRetrievals = (list: RetrievalItem[]) =>
-    setStoredArray(RET_LIST_KEY, list)
+  // Note: Retrieval strategies are now managed server-side only, no localStorage fallbacks
 
   // Live RAG databases (includes both retrieval and embedding strategies) -------
   type RagDatabasesResponse = {
@@ -214,6 +188,7 @@ function Databases() {
         name: string
         type?: string
         is_default?: boolean
+        config?: Record<string, any>
       }[]
     }[]
     default_database?: string | null
@@ -348,13 +323,62 @@ function Databases() {
     // Ollama is local, others are typically cloud
     return strategy.type === 'OllamaEmbedder' ? 'Local' : 'Cloud'
   }
-  // (removed) summary helper was unused
-  const getRetrievalDescription = (_id: string): string => {
-    return 'Vector search with configurable extraction pipeline'
+  // Get retrieval strategy details from server data or project config
+  const getRetrievalStrategy = (strategyName: string) => {
+    // First try to get from API response
+    const db = ragDatabases?.databases?.find(d => d.name === activeDatabase)
+    const apiStrategy = db?.retrieval_strategies?.find(s => s.name === strategyName)
+    
+    // If config is missing, get it from project config
+    if (apiStrategy && !apiStrategy.config) {
+      const projectConfig = (projectResp as any)?.project?.config
+      const configDb = projectConfig?.rag?.databases?.find(
+        (d: any) => d.name === activeDatabase
+      )
+      const fullStrategy = configDb?.retrieval_strategies?.find(
+        (s: any) => s.name === strategyName
+      )
+      if (fullStrategy) {
+        return {
+          ...apiStrategy,
+          config: fullStrategy.config || {},
+        }
+      }
+    }
+    
+    return apiStrategy
   }
-  const getRetrievalMeta = (rid: string): string => {
-    if (rid.includes('filtered')) return 'MetadataFilteredStrategy'
-    return 'BasicSimilarityStrategy'
+
+  const getRetrievalDescription = (strategyName: string): string => {
+    const strategy = getRetrievalStrategy(strategyName)
+    if (!strategy) return 'Vector search with configurable extraction pipeline'
+    
+    const typeLabels: Record<string, string> = {
+      'BasicSimilarityStrategy': 'Basic similarity search',
+      'MetadataFilteredStrategy': 'Metadata filtered search',
+      'MultiQueryStrategy': 'Multi-query search',
+      'RerankedStrategy': 'Reranked search',
+      'HybridUniversalStrategy': 'Hybrid universal search',
+    }
+    return typeLabels[strategy.type || ''] || 'Vector search'
+  }
+  
+  const getRetrievalMeta = (strategyName: string): string => {
+    const strategy = getRetrievalStrategy(strategyName)
+    if (!strategy?.type) return 'BasicSimilarityStrategy'
+    return strategy.type
+  }
+  
+  const getRetrievalConfigSummary = (strategyName: string): string => {
+    const strategy = getRetrievalStrategy(strategyName)
+    if (!strategy?.config) return ''
+    
+    const parts: string[] = []
+    if (strategy.config.top_k) parts.push(`Top K: ${strategy.config.top_k}`)
+    if (strategy.config.distance_metric) parts.push(`Metric: ${strategy.config.distance_metric}`)
+    if (strategy.config.score_threshold) parts.push(`Threshold: ${strategy.config.score_threshold}`)
+    
+    return parts.join(' • ')
   }
 
   // Processing strategy helpers ----------------------------------------------
@@ -389,31 +413,6 @@ function Databases() {
   //   setMetaTick(t => t + 1)
   //   navigate(`/chat/databases/${id}/retrieval`)
   // }
-
-  // Retrieval strategy handlers (still using localStorage for now)
-  const setDefaultRetrieval = (id: string) => {
-    const list = getRetrievals().map(r => ({ ...r, isDefault: r.id === id }))
-    saveRetrievals(list)
-  }
-  const toggleRetrievalEnabled = (id: string) => {
-    const list = getRetrievals().map(r =>
-      r.id === id ? { ...r, enabled: !r.enabled } : r
-    )
-    saveRetrievals(list)
-  }
-  const duplicateRetrieval = (id: string) => {
-    const list = getRetrievals()
-    const found = list.find(r => r.id === id)
-    if (!found) return
-    const base = `${found.name} (copy)`
-    const slug = base
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-    const newId = `ret-${slug}-${Date.now()}`
-    list.push({ ...found, id: newId, name: base, isDefault: false })
-    saveRetrievals(list)
-  }
 
   const sortedEmbeddings = useMemo(() => {
     const list = serverEmbeddings || []
@@ -693,6 +692,141 @@ function Databases() {
       })
     } catch (error: any) {
       console.error('Failed to delete embedding strategy:', error)
+      toast({
+        message: error.message || 'Failed to delete strategy',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Retrieval strategy handlers
+  const handleEditRetrieval = (retrieval: RetrievalItem) => {
+    const strategy = getRetrievalStrategy(retrieval.name)
+    if (!strategy) {
+      toast({
+        message: 'Strategy not found',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Get full config from project config if not in API response
+    let fullConfig = strategy.config || {}
+    if (!fullConfig || Object.keys(fullConfig).length === 0) {
+      const projectConfig = (projectResp as any)?.project?.config
+      const configDb = projectConfig?.rag?.databases?.find(
+        (d: any) => d.name === activeDatabase
+      )
+      const fullStrategy = configDb?.retrieval_strategies?.find(
+        (s: any) => s.name === retrieval.name
+      )
+      if (fullStrategy?.config) {
+        fullConfig = fullStrategy.config
+      }
+    }
+
+    navigate(`/chat/edit-retrieval-strategy`, {
+      state: {
+        database: activeDatabase,
+        strategyName: retrieval.name,
+        strategyType: strategy.type || 'BasicSimilarityStrategy',
+        currentConfig: fullConfig,
+        isDefault: retrieval.isDefault,
+      },
+    })
+  }
+
+  const handleSetDefaultRetrieval = async (strategyName: string) => {
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          default_retrieval_strategy: strategyName,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `"${strategyName}" set as default retrieval strategy`,
+        variant: 'default',
+      })
+    } catch (error: any) {
+      console.error('Failed to set default retrieval:', error)
+      toast({
+        message: error.message || 'Failed to set default strategy',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDeleteRetrieval = async (strategyName: string) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete the retrieval strategy "${strategyName}"? This action cannot be undone.`
+      )
+    ) {
+      return
+    }
+
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      const updatedStrategies =
+        currentDb.retrieval_strategies?.filter(
+          (s: any) => s.name !== strategyName
+        ) || []
+
+      if (updatedStrategies.length === 0) {
+        throw new Error(
+          'Cannot delete the last retrieval strategy. At least one strategy is required.'
+        )
+      }
+
+      // If deleting the default, set the first remaining as default
+      let updatedDefaultStrategy = currentDb.default_retrieval_strategy
+      if (currentDb.default_retrieval_strategy === strategyName) {
+        updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          retrieval_strategies: updatedStrategies,
+          default_retrieval_strategy: updatedDefaultStrategy,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `Retrieval strategy "${strategyName}" deleted`,
+        variant: 'default',
+      })
+    } catch (error: any) {
+      console.error('Failed to delete retrieval strategy:', error)
       toast({
         message: error.message || 'Failed to delete strategy',
         variant: 'destructive',
@@ -981,7 +1115,7 @@ function Databases() {
                     size="sm"
                     onClick={() =>
                       navigate(
-                        `/chat/databases/add-retrieval?database=${activeDatabase}`
+                        `/chat/add-retrieval-strategy?database=${activeDatabase}`
                       )
                     }
                   >
@@ -990,136 +1124,125 @@ function Databases() {
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {sortedRetrievals.map(ri => (
-                  <div
-                    key={ri.id}
-                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${ri.enabled ? '' : 'opacity-70'} ${retrievalCount === 1 ? 'md:col-span-2' : ''}`}
-                    onClick={() =>
-                      navigate(`/chat/databases/${ri.id}/retrieval`)
-                    }
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        navigate(`/chat/databases/${ri.id}/retrieval`)
-                      }
-                    }}
-                  >
+                {sortedRetrievals.length === 0 && (
+                  <div className="col-span-2 text-center p-6 text-sm text-muted-foreground">
+                    No retrieval strategies configured for this database.
                     {!usingServerRetrievals && (
-                      <div className="absolute top-2 right-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <FontIcon type="overflow" className="w-4 h-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="min-w-[12rem] w-[12rem]"
-                          >
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                const name = prompt(
-                                  'Rename retrieval strategy',
-                                  ri.name
-                                )?.trim()
-                                if (!name) return
-                                const list = getRetrievals().map(x =>
-                                  x.id === ri.id ? { ...x, name } : x
-                                )
-                                saveRetrievals(list)
-                              }}
-                            >
-                              Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                duplicateRetrieval(ri.id)
-                              }}
-                            >
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                setDefaultRetrieval(ri.id)
-                              }}
-                            >
-                              Set as default
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                toggleRetrievalEnabled(ri.id)
-                              }}
-                            >
-                              {ri.enabled ? 'Disable' : 'Enable'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={e => {
-                                e.stopPropagation()
-                                const ok = confirm(
-                                  'Delete this retrieval strategy?'
-                                )
-                                if (!ok) return
-                                let list = getRetrievals().filter(
-                                  x => x.id !== ri.id
-                                )
-                                if (
-                                  list.length > 0 &&
-                                  !list.some(x => x.isDefault)
-                                ) {
-                                  list[0].isDefault = true
-                                }
-                                saveRetrievals(list)
-                              }}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    )}
-
-                    <div className="text-sm font-medium">{ri.name}</div>
-                    <div className="text-xs text-primary text-left w-full truncate">
-                      {getRetrievalDescription(ri.id)}
-                    </div>
-                    <div className="text-xs text-muted-foreground w-full truncate">
-                      {getRetrievalMeta(ri.id)}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-between pt-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {ri.isDefault ? (
-                          <Badge
-                            variant="default"
-                            size="sm"
-                            className="rounded-xl"
-                          >
-                            Default
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="ml-auto">
+                      <div className="mt-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="px-3 h-7"
-                          onClick={e => {
-                            e.stopPropagation()
-                            navigate(`/chat/databases/${ri.id}/retrieval`)
-                          }}
+                          onClick={() =>
+                            navigate(
+                              `/chat/add-retrieval-strategy?database=${activeDatabase}`
+                            )
+                          }
                         >
-                          Configure
+                          Add first strategy
                         </Button>
                       </div>
+                    )}
+                  </div>
+                )}
+                {sortedRetrievals.map(ri => (
+                  <div
+                    key={ri.id}
+                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 transition-colors ${ri.enabled ? '' : 'opacity-70'} ${retrievalCount === 1 ? 'md:col-span-2' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-base font-semibold truncate">
+                          {ri.name}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {getRetrievalDescription(ri.name)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {getRetrievalConfigSummary(ri.name)}
+                        </div>
+                        <div className="text-xs text-muted-foreground w-full truncate mt-0.5">
+                          {getRetrievalMeta(ri.name)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => handleEditRetrieval(ri)}
+                                title="Edit configuration"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit configuration</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {!ri.isDefault && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleSetDefaultRetrieval(ri.name)}
+                                  title="Set as default"
+                                >
+                                  <Star className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Set as default</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                onClick={() => handleDeleteRetrieval(ri.name)}
+                                disabled={ri.isDefault}
+                                title={
+                                  ri.isDefault
+                                    ? 'Cannot delete default strategy'
+                                    : 'Delete strategy'
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {ri.isDefault
+                                  ? 'Cannot delete default strategy'
+                                  : 'Delete strategy'}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap pt-2">
+                      {ri.isDefault && (
+                        <Badge variant="default" size="sm" className="rounded-xl">
+                          Default
+                        </Badge>
+                      )}
+                      {usingServerRetrievals && (
+                        <Badge variant="outline" size="sm" className="rounded-xl text-xs">
+                          Server managed
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}

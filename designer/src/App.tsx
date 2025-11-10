@@ -31,6 +31,7 @@ import AddEmbeddingStrategy from './components/Rag/AddEmbeddingStrategy'
 import RetrievalMethod from './components/Rag/RetrievalMethod'
 // @ts-ignore - component is TSX local file
 import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
+import EditRetrievalStrategy from './components/Rag/EditRetrievalStrategy'
 // Projects standalone page removed; Home now hosts projects section
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
@@ -148,6 +149,14 @@ function App() {
                     <Route
                       path="databases/add-retrieval"
                       element={<AddRetrievalStrategy />}
+                    />
+                    <Route
+                      path="add-retrieval-strategy"
+                      element={<AddRetrievalStrategy />}
+                    />
+                    <Route
+                      path="edit-retrieval-strategy"
+                      element={<EditRetrievalStrategy />}
                     />
                     <Route
                       path="databases/:strategyId/change-embedding"
