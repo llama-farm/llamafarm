@@ -118,7 +118,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Name:            "universal-runtime",
 		Dependencies:    []string{"server"},
 		CanStartLocally: true,
-		DefaultTimeout:  60 * time.Second,
+		DefaultTimeout:  180 * time.Second, // Longer timeout for first-time dependency installation
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "server.py"},
@@ -141,7 +141,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Name:            "server",
 		Dependencies:    []string{}, // No dependencies
 		CanStartLocally: true,
-		DefaultTimeout:  45 * time.Second,
+		DefaultTimeout:  90 * time.Second,
 		WorkDir:         "server",
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
@@ -154,7 +154,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Name:            "rag",
 		Dependencies:    []string{"server", "universal-runtime"}, // Depends on both
 		CanStartLocally: true,
-		DefaultTimeout:  30 * time.Second,
+		DefaultTimeout:  180 * time.Second,
 		WorkDir:         "rag",
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "main.py"},
