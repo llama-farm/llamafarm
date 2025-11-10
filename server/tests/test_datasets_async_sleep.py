@@ -246,9 +246,9 @@ async def test_process_dataset_polling_loop_is_async():
                 except Exception:
                     # Other exceptions are fine - we're just checking it doesn't block
                     pass
-                
+
                 elapsed = asyncio.get_event_loop().time() - start_time
-                
+
                 # Should complete very quickly (task status is immediately SUCCESS)
                 # If it's blocking, it would take at least 2 seconds (one poll interval)
                 assert elapsed < 1.0, (
