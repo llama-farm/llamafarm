@@ -244,12 +244,6 @@ function Databases() {
     }))
   }, [ragDatabases, activeDatabase])
 
-  const usingServerEmbeddings = Boolean(
-    serverEmbeddings && serverEmbeddings.length > 0
-  )
-  const usingServerRetrievals = Boolean(
-    serverRetrievals && serverRetrievals.length > 0
-  )
 
   // Get embedding strategy details from server data
   const getEmbeddingStrategy = (strategyName: string) => {
@@ -928,43 +922,35 @@ function Databases() {
                 <div className="text-sm text-foreground font-medium">
                   Embedding strategies ({embeddingCount})
                 </div>
-                {usingServerEmbeddings ? (
-                  <span className="text-xs text-muted-foreground">
-                    Managed by server
-                  </span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      navigate(
-                        `/chat/add-embedding-strategy?database=${activeDatabase}`
-                      )
-                    }
-                  >
-                    Add new
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/chat/add-embedding-strategy?database=${activeDatabase}`
+                    )
+                  }
+                >
+                  Add new
+                </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {sortedEmbeddings.length === 0 && (
                   <div className="col-span-2 text-center p-6 text-sm text-muted-foreground">
                     No embedding strategies configured for this database.
-                    {!usingServerEmbeddings && (
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            navigate(
-                              `/chat/add-embedding-strategy?database=${activeDatabase}`
-                            )
-                          }
-                        >
-                          Add first strategy
-                        </Button>
-                      </div>
-                    )}
+                    <div className="mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          navigate(
+                            `/chat/add-embedding-strategy?database=${activeDatabase}`
+                          )
+                        }
+                      >
+                        Add first strategy
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {sortedEmbeddings.map(ei => (
@@ -1088,11 +1074,6 @@ function Databases() {
                           Default
                         </Badge>
                       )}
-                      {usingServerEmbeddings && (
-                        <Badge variant="outline" size="sm" className="rounded-xl text-xs">
-                          Server managed
-                        </Badge>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -1105,43 +1086,35 @@ function Databases() {
                 <div className="text-sm text-foreground font-medium">
                   Retrieval strategies ({retrievalCount})
                 </div>
-                {usingServerRetrievals ? (
-                  <span className="text-xs text-muted-foreground">
-                    Managed by server
-                  </span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      navigate(
-                        `/chat/add-retrieval-strategy?database=${activeDatabase}`
-                      )
-                    }
-                  >
-                    Add new
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/chat/add-retrieval-strategy?database=${activeDatabase}`
+                    )
+                  }
+                >
+                  Add new
+                </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {sortedRetrievals.length === 0 && (
                   <div className="col-span-2 text-center p-6 text-sm text-muted-foreground">
                     No retrieval strategies configured for this database.
-                    {!usingServerRetrievals && (
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            navigate(
-                              `/chat/add-retrieval-strategy?database=${activeDatabase}`
-                            )
-                          }
-                        >
-                          Add first strategy
-                        </Button>
-                      </div>
-                    )}
+                    <div className="mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          navigate(
+                            `/chat/add-retrieval-strategy?database=${activeDatabase}`
+                          )
+                        }
+                      >
+                        Add first strategy
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {sortedRetrievals.map(ri => (
@@ -1236,11 +1209,6 @@ function Databases() {
                       {ri.isDefault && (
                         <Badge variant="default" size="sm" className="rounded-xl">
                           Default
-                        </Badge>
-                      )}
-                      {usingServerRetrievals && (
-                        <Badge variant="outline" size="sm" className="rounded-xl text-xs">
-                          Server managed
                         </Badge>
                       )}
                     </div>
