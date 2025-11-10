@@ -1,5 +1,4 @@
 import asyncio
-import time
 from enum import Enum
 
 from config.datamodel import Dataset
@@ -359,6 +358,7 @@ async def process_dataset(
 
         # Store metadata about this group task
         from core.celery import app as celery_app
+
         celery_app.backend.store_result(
             result.id,
             {
