@@ -1,5 +1,5 @@
 import FontIcon from '../../common/FontIcon'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
@@ -10,6 +10,8 @@ import { useProject } from '../../hooks/useProjects'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets } from '../../hooks/useDatasets'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 
 const Dashboard = () => {
   const navigate = useNavigate()
@@ -33,6 +35,17 @@ const Dashboard = () => {
     activeProject?.project || '',
     !!activeProject?.namespace && !!activeProject?.project
   )
+  const projectConfig = (projectDetail as any)?.project?.config as ProjectConfig | undefined
+  const getRootLocation = useCallback(
+    () => ({ type: 'root' as const }),
+    []
+  )
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getRootLocation,
+  })
 
   const { brief } = useMemo(() => {
     const cfg = (projectDetail?.project?.config || {}) as Record<string, any>
@@ -150,7 +163,7 @@ const Dashboard = () => {
               </button>
             )}
           </div>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
 
         {/* Validation Error Banner */}
@@ -222,7 +235,7 @@ const Dashboard = () => {
 
         {mode !== 'designer' ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-6">
-            <ConfigEditor className="h-full" />
+            <ConfigEditor className="h-full" initialPointer={configPointer} />
           </div>
         ) : (
           <>

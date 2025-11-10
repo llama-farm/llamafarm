@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
@@ -27,6 +27,8 @@ import { getClientSideSecret } from '../../utils/crypto'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 
 // Helper for symmetric AES encryption using Web Crypto API
 async function encryptAPIKey(apiKey: string, secret: string) {
@@ -99,6 +101,24 @@ function ChangeEmbeddingModel() {
     isDefault?: boolean
     priority?: number
   } | null
+  
+  // Config pointer for config editor mode
+  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const getEmbeddingLocation = useCallback(() => {
+    if (strategyId) {
+      return {
+        type: 'rag.database.embedding' as const,
+        embeddingName: strategyId,
+      }
+    }
+    return { type: 'rag.databases' as const }
+  }, [strategyId])
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getEmbeddingLocation,
+  })
 
   const database = state?.database || searchParams.get('database') || 'main_database'
   const originalStrategyName = state?.strategyName || strategyId || ''
@@ -694,7 +714,7 @@ function ChangeEmbeddingModel() {
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground">Edit strategy</span>
             </nav>
-            <PageActions mode={mode} onModeChange={setMode} />
+            <PageActions mode={mode} onModeChange={handleModeChange} />
           </div>
 
           {/* Header */}
@@ -756,7 +776,7 @@ function ChangeEmbeddingModel() {
       ) : (
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl">Config editor</h2>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
       )}
 
@@ -764,7 +784,7 @@ function ChangeEmbeddingModel() {
 
       {mode !== 'designer' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <ConfigEditor className="h-full" />
+          <ConfigEditor className="h-full" initialPointer={configPointer} />
         </div>
       ) : (
         <>
