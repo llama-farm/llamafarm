@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -24,6 +24,9 @@ import {
   DialogTitle,
 } from '../ui/dialog'
 import { getClientSideSecret } from '../../utils/crypto'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProject } from '../../hooks/useProjects'
+import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 
 // Helper for symmetric AES encryption using Web Crypto API
 async function encryptAPIKey(apiKey: string, secret: string) {
@@ -71,7 +74,25 @@ function ChangeEmbeddingModel() {
   const navigate = useNavigate()
   const [mode, setMode] = useModeWithReset('designer')
   const { strategyId } = useParams()
+  const [searchParams] = useSearchParams()
   const { toast } = useToast()
+  const activeProject = useActiveProject()
+  
+  // Get project config and database manager
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+  const databaseManager = useDatabaseManager(
+    activeProject?.namespace || '',
+    activeProject?.project || ''
+  )
+  
+  // Get database from URL params
+  const database = searchParams.get('database') || 'main_database'
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Editable strategy name loaded from list
   const [strategyName, setStrategyName] = useState<string>('')
@@ -365,34 +386,7 @@ function ChangeEmbeddingModel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, model, customModel])
 
-  const persistForStrategy = (payload: any) => {
-    if (!strategyId) return
-    try {
-      localStorage.setItem(
-        'lf_last_embedding_provider_config',
-        JSON.stringify(payload)
-      )
-      localStorage.setItem(
-        `lf_strategy_embedding_config_${strategyId}`,
-        JSON.stringify(payload)
-      )
-      if (payload?.modelId) {
-        localStorage.setItem(
-          `lf_strategy_embedding_model_${strategyId}`,
-          payload.modelId
-        )
-      }
-      if (typeof window !== 'undefined') {
-        try {
-          window.dispatchEvent(
-            new CustomEvent('lf:strategyEmbeddingUpdated', {
-              detail: { strategyId, modelId: payload?.modelId },
-            })
-          )
-        } catch {}
-      }
-    } catch {}
-  }
+  // Removed persistForStrategy - now saving directly to config via databaseManager
 
   // When provider changes, default model
   useEffect(() => {
@@ -460,39 +454,33 @@ function ChangeEmbeddingModel() {
       ? 'Local'
       : 'Cloud'
 
-  const saveEdited = async () => {
-    if (!strategyId) return
-    try {
-      const LIST_KEY = 'lf_project_embeddings'
-      const raw = localStorage.getItem(LIST_KEY)
-      const list = raw ? JSON.parse(raw) : []
-      const updated = Array.isArray(list)
-        ? list.map((e: any) => ({
-            ...e,
-            name: e.id === strategyId ? strategyName || e.name : e.name,
-            isDefault: makeDefault ? e.id === strategyId : e.isDefault,
-          }))
-        : list
-      localStorage.setItem(LIST_KEY, JSON.stringify(updated))
-    } catch {}
-
-    let encryptedKey: string | undefined
-    if (
-      (selected?.runtime === 'Cloud' || provider !== 'Ollama (remote)') &&
-      apiKey.trim()
-    ) {
-      try {
-        encryptedKey = await encryptAPIKey(apiKey.trim(), getClientSideSecret())
-      } catch (e) {
-        toast({ message: 'Failed to encrypt API key', variant: 'destructive' })
-        return
-      }
+  // Helper functions similar to AddEmbeddingStrategy
+  const mapProviderToType = (providerLabel: string): string => {
+    const typeMap: Record<string, string> = {
+      'Ollama': 'OllamaEmbedder',
+      'Ollama (remote)': 'OllamaEmbedder',
+      'OpenAI': 'OpenAIEmbedder',
+      'Google': 'OpenAIEmbedder',
+      'Azure OpenAI': 'OpenAIEmbedder',
+      'HuggingFace': 'HuggingFaceEmbedder',
+      'SentenceTransformer': 'SentenceTransformerEmbedder'
     }
+    return typeMap[providerLabel] || 'OllamaEmbedder'
+  }
 
+  const buildStrategyConfig = (encryptedKey?: string) => {
+    const config: Record<string, any> = {}
+    
     const chosenModelId =
       selected?.modelId ||
       existingModelId ||
       (model === 'Custom' ? customModel.trim() : model)
+    
+    if (chosenModelId) config.model = chosenModelId
+    if (dimension) config.dimension = parseInt(String(dimension))
+    if (batchSize) config.batch_size = parseInt(String(batchSize))
+    if (timeoutSec) config.timeout = parseInt(String(timeoutSec))
+    
     const runtimeStr = selected
       ? selected.runtime === 'Local'
         ? 'local'
@@ -500,44 +488,112 @@ function ChangeEmbeddingModel() {
       : provider === 'Ollama (remote)'
         ? 'local'
         : 'cloud'
-    const providerStr =
-      runtimeStr === 'local' ? 'local' : selected?.provider || provider
+    
+    if (runtimeStr === 'local' || provider === 'Ollama (remote)') {
+      if (baseUrl) config.base_url = baseUrl.trim()
+      config.auto_pull = ollamaAutoPull !== undefined ? ollamaAutoPull : true
+    } else {
+      if (summaryProvider === 'OpenAI') {
+        if (baseUrl) config.base_url = baseUrl.trim()
+        if (openaiOrg) config.organization = openaiOrg.trim()
+        if (openaiMaxRetries) config.max_retries = openaiMaxRetries
+        if (encryptedKey) config.api_key = encryptedKey
+      } else if (summaryProvider === 'Azure OpenAI') {
+        if (azureDeployment) config.deployment = azureDeployment.trim()
+        if (azureResource) config.endpoint = azureResource.trim()
+        if (azureApiVersion) config.api_version = azureApiVersion.trim()
+        if (encryptedKey) config.api_key = encryptedKey
+      } else if (summaryProvider === 'Google') {
+        if (vertexProjectId) config.project_id = vertexProjectId.trim()
+        if (vertexLocation) config.region = vertexLocation.trim()
+        if (vertexEndpoint) config.endpoint = vertexEndpoint.trim()
+        if (encryptedKey) config.api_key = encryptedKey
+      } else if (summaryProvider === 'AWS Bedrock') {
+        if (bedrockRegion) config.region = bedrockRegion.trim()
+        if (encryptedKey) config.api_key = encryptedKey
+      }
+    }
+    
+    return config
+  }
 
-    const cfg: any = {
-      runtime: runtimeStr,
-      provider: providerStr,
-      modelId: chosenModelId,
-      baseUrl: baseUrl.trim() || undefined,
-      dimension: Number(dimension) || undefined,
-      batchSize,
-      timeout: timeoutSec,
-      auto_pull: runtimeStr === 'local' ? ollamaAutoPull : undefined,
-      similarity: 'cosine',
-    }
-    if (summaryProvider === 'OpenAI') {
-      cfg.organization = openaiOrg.trim() || undefined
-      cfg.maxRetries = openaiMaxRetries
-    }
-    if (summaryProvider === 'Azure OpenAI') {
-      cfg.deployment = azureDeployment.trim() || undefined
-      cfg.endpoint = azureResource.trim() || undefined
-      cfg.apiVersion = azureApiVersion.trim() || undefined
-    }
-    if (summaryProvider === 'Google') {
-      cfg.projectId = vertexProjectId.trim() || undefined
-      cfg.endpoint = vertexEndpoint.trim() || undefined
-      cfg.region = vertexLocation.trim() || undefined
-    }
-    if (summaryProvider === 'AWS Bedrock') {
-      cfg.region = bedrockRegion.trim() || undefined
-    }
-    if (encryptedKey) cfg.apiKey = encryptedKey
+  const saveEdited = async () => {
+    if (!strategyId) return
+    
+    try {
+      setIsSaving(true)
+      setError(null)
 
-    persistForStrategy(cfg)
-    if (makeDefault) setReembedOpen(true)
-    else {
-      toast({ message: 'Strategy saved', variant: 'default' })
-      navigate('/chat/rag')
+      // Encrypt API key if needed
+      let encryptedKey: string | undefined
+      if (
+        (selected?.runtime === 'Cloud' || provider !== 'Ollama (remote)') &&
+        apiKey.trim()
+      ) {
+        try {
+          encryptedKey = await encryptAPIKey(apiKey.trim(), getClientSideSecret())
+        } catch (e) {
+          toast({ message: 'Failed to encrypt API key', variant: 'destructive' })
+          return
+        }
+      }
+
+      // Get current project config
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      // Find the database
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === database
+      )
+      
+      if (!currentDb) {
+        throw new Error(`Database ${database} not found in configuration`)
+      }
+
+      // Find and update the specific strategy
+      const updatedStrategies = currentDb.embedding_strategies?.map((strategy: any) => {
+        if (strategy.name === strategyId) {
+          return {
+            ...strategy,
+            name: strategyName.trim() || strategy.name,
+            type: mapProviderToType(summaryProvider),
+            config: buildStrategyConfig(encryptedKey)
+          }
+        }
+        return strategy
+      })
+
+      if (!updatedStrategies?.some((s: any) => s.name === strategyId)) {
+        throw new Error(`Strategy ${strategyId} not found`)
+      }
+
+      // Update database configuration
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: database,
+        updates: {
+          embedding_strategies: updatedStrategies,
+          // Update default if makeDefault is checked
+          default_embedding_strategy: makeDefault 
+            ? strategyName.trim() || strategyId
+            : currentDb.default_embedding_strategy
+        },
+        projectConfig
+      })
+
+      if (makeDefault) {
+        setReembedOpen(true)
+      } else {
+        toast({ message: 'Strategy saved', variant: 'default' })
+        navigate('/chat/databases')
+      }
+    } catch (error: any) {
+      console.error('Failed to save embedding strategy:', error)
+      setError(error.message || 'Failed to save strategy')
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -545,6 +601,11 @@ function ChangeEmbeddingModel() {
     <div
       className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-40' : ''}`}
     >
+      {error && (
+        <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-2 rounded-md text-sm">
+          {error}
+        </div>
+      )}
       {/* Breadcrumb + Actions */}
       {mode === 'designer' ? (
         <>
@@ -612,8 +673,8 @@ function ChangeEmbeddingModel() {
                   Make default
                 </label>
               )}
-              <Button onClick={() => setConfirmOpen(true)}>
-                Save strategy
+              <Button onClick={() => setConfirmOpen(true)} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save strategy'}
               </Button>
             </div>
           </div>
@@ -1274,10 +1335,12 @@ function ChangeEmbeddingModel() {
                 >
                   Cancel
                 </Button>
-                <Button onClick={saveEdited}>
-                  {selected?.runtime === 'Local'
-                    ? 'Download and save strategy'
-                    : 'Save strategy'}
+                <Button onClick={saveEdited} disabled={isSaving}>
+                  {isSaving 
+                    ? 'Saving...'
+                    : selected?.runtime === 'Local'
+                      ? 'Download and save strategy'
+                      : 'Save strategy'}
                 </Button>
               </DialogFooter>
             </DialogContent>

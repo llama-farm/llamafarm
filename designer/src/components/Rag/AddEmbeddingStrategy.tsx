@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProject } from '../../hooks/useProjects'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import {
@@ -19,6 +20,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from '../ui/dialog'
+import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { getClientSideSecret } from '../../utils/crypto'
 
 // Helper for symmetric AES encryption (same as edit page)
@@ -64,14 +66,23 @@ function AddEmbeddingStrategy() {
   const { toast } = useToast()
   const [searchParams] = useSearchParams()
   const activeProject = useActiveProject()
-  const projectKey = useMemo(() => {
-    const ns = activeProject?.namespace || 'global'
-    const proj = activeProject?.project || 'global'
-    return `${ns}__${proj}`
-  }, [activeProject?.namespace, activeProject?.project])
+  
+  // Get project config and database manager
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+  const databaseManager = useDatabaseManager(
+    activeProject?.namespace || '',
+    activeProject?.project || ''
+  )
 
   // Get the database from URL query params (defaults to main_database if not provided)
   const database = searchParams.get('database') || 'main_database'
+  
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Name
   const [name, setName] = useState('New embedding strategy')
@@ -353,92 +364,152 @@ function AddEmbeddingStrategy() {
     return null
   }
 
-  const createStrategy = (
+  // Helper to map UI provider names to config types
+  const mapProviderToType = (providerLabel: string): string => {
+    const typeMap: Record<string, string> = {
+      'Ollama': 'OllamaEmbedder',
+      'Ollama (remote)': 'OllamaEmbedder',
+      'OpenAI': 'OpenAIEmbedder',
+      'Google': 'OpenAIEmbedder', // Uses OpenAI-compatible endpoint
+      'Azure OpenAI': 'OpenAIEmbedder',
+      'HuggingFace': 'HuggingFaceEmbedder',
+      'SentenceTransformer': 'SentenceTransformerEmbedder'
+    }
+    return typeMap[providerLabel] || 'OllamaEmbedder'
+  }
+
+  // Helper to build strategy configuration
+  const buildStrategyConfig = (
     runtime: 'Local' | 'Cloud',
     providerLabel: string,
     chosenModel: string,
     encryptedApiKey?: string
   ) => {
-    const EMB_LIST_KEY = `lf_ui_${projectKey}_db_${database}_embeddings`
-    const raw = localStorage.getItem(EMB_LIST_KEY)
-    const list = raw ? JSON.parse(raw) : []
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-    const id = `emb-${slug || Date.now()}`
-    const exists = Array.isArray(list) && list.some((e: any) => e?.id === id)
-    const finalId = exists ? `emb-${slug}-${Date.now()}` : id
-    const entry = {
-      id: finalId,
-      name: name.trim(),
-      isDefault: list.length === 0,
-      enabled: true,
-    }
-    const nextList = Array.isArray(list) ? [...list, entry] : [entry]
-    localStorage.setItem(EMB_LIST_KEY, JSON.stringify(nextList))
-
-    const cfg: any = {
-      runtime: runtime === 'Local' ? 'local' : 'cloud',
-      provider: runtime === 'Local' ? 'local' : providerLabel,
-      modelId: chosenModel,
-      baseUrl: baseUrl.trim() || undefined,
-      dimension,
-      batchSize,
-      timeout: timeoutSec,
-      auto_pull: runtime === 'Local' ? autoPull : undefined,
-      similarity: 'cosine',
-    }
-
-    if (runtime === 'Cloud') {
+    const config: Record<string, any> = {}
+    
+    // Add common fields
+    if (chosenModel) config.model = chosenModel
+    if (dimension) config.dimension = parseInt(String(dimension))
+    if (batchSize) config.batch_size = parseInt(String(batchSize))
+    if (timeoutSec) config.timeout = parseInt(String(timeoutSec))
+    
+    // Add provider-specific fields
+    if (runtime === 'Local' || providerLabel === 'Ollama (remote)') {
+      if (baseUrl) config.base_url = baseUrl.trim()
+      config.auto_pull = autoPull !== undefined ? autoPull : true
+    } else if (runtime === 'Cloud') {
       if (providerLabel === 'OpenAI') {
-        cfg.organization = openaiOrg.trim() || undefined
-        cfg.maxRetries = openaiMaxRetries
+        if (baseUrl) config.base_url = baseUrl.trim()
+        if (openaiOrg) config.organization = openaiOrg.trim()
+        if (openaiMaxRetries) config.max_retries = openaiMaxRetries
+        if (encryptedApiKey) config.api_key = encryptedApiKey
+      } else if (providerLabel === 'Azure OpenAI') {
+        if (azureDeployment) config.deployment = azureDeployment.trim()
+        if (azureResource) config.endpoint = azureResource.trim()
+        if (azureApiVersion) config.api_version = azureApiVersion.trim()
+        if (encryptedApiKey) config.api_key = encryptedApiKey
+      } else if (providerLabel === 'Google') {
+        if (vertexProjectId) config.project_id = vertexProjectId.trim()
+        if (vertexLocation) config.region = vertexLocation.trim()
+        if (vertexEndpoint) config.endpoint = vertexEndpoint.trim()
+        if (encryptedApiKey) config.api_key = encryptedApiKey
+      } else if (providerLabel === 'AWS Bedrock') {
+        if (bedrockRegion) config.region = bedrockRegion.trim()
+        if (encryptedApiKey) config.api_key = encryptedApiKey
       }
-      if (providerLabel === 'Azure OpenAI') {
-        cfg.deployment = azureDeployment.trim() || undefined
-        cfg.endpoint = azureResource.trim() || undefined
-        cfg.apiVersion = azureApiVersion.trim() || undefined
-      }
-      if (providerLabel === 'Google') {
-        cfg.projectId = vertexProjectId.trim() || undefined
-        cfg.endpoint = vertexEndpoint.trim() || undefined
-        cfg.region = vertexLocation.trim() || undefined
-      }
-      if (providerLabel === 'AWS Bedrock') {
-        cfg.region = bedrockRegion.trim() || undefined
-      }
-      if (encryptedApiKey) cfg.apiKey = encryptedApiKey
     }
+    
+    return config
+  }
 
-    // Store only non-sensitive UI hints (avoid provider/base_url/api_key)
-    const sanitized = {
-      modelId: cfg?.modelId || chosenModel,
-      runtime: cfg?.runtime,
-      dimension: cfg?.dimension,
+  // Validation
+  const validateStrategy = (): string[] => {
+    const errors: string[] = []
+    
+    if (!name || !name.trim()) {
+      errors.push('Strategy name is required')
     }
-    localStorage.setItem(
-      `lf_ui_${projectKey}_db_${database}_embedding_config_${finalId}`,
-      JSON.stringify(sanitized)
-    )
-    localStorage.setItem(
-      `lf_ui_${projectKey}_db_${database}_embedding_model_${finalId}`,
-      chosenModel
-    )
-
-    if (makeDefault) {
-      try {
-        const curRaw = localStorage.getItem(EMB_LIST_KEY)
-        const curList = curRaw ? JSON.parse(curRaw) : []
-        const updated = curList.map((e: any) => ({
-          ...e,
-          isDefault: e.id === finalId,
-        }))
-        localStorage.setItem(EMB_LIST_KEY, JSON.stringify(updated))
-      } catch {}
+    
+    if (!selected) {
+      errors.push('Please select a model')
     }
+    
+    if (dimension && (dimension < 1 || dimension > 8192)) {
+      errors.push('Dimension must be between 1 and 8192')
+    }
+    
+    return errors
+  }
 
-    return finalId
+  const saveStrategyToConfig = async (
+    runtime: 'Local' | 'Cloud',
+    providerLabel: string,
+    chosenModel: string,
+    encryptedApiKey?: string
+  ) => {
+    try {
+      setIsSaving(true)
+      setError(null)
+
+      // Validate
+      const validationErrors = validateStrategy()
+      if (validationErrors.length > 0) {
+        setError(validationErrors.join(', '))
+        return false
+      }
+
+      // Get current project config
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      // Find the database
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === database
+      )
+      
+      if (!currentDb) {
+        throw new Error(`Database ${database} not found in configuration`)
+      }
+
+      // Build the new strategy
+      const newStrategy = {
+        name: name.trim(),
+        type: mapProviderToType(providerLabel),
+        priority: (currentDb.embedding_strategies?.length || 0) * 10,
+        config: buildStrategyConfig(runtime, providerLabel, chosenModel, encryptedApiKey)
+      }
+
+      // Add to existing strategies
+      const updatedStrategies = [
+        ...(currentDb.embedding_strategies || []),
+        newStrategy
+      ]
+
+      // Determine if this should be default
+      const shouldBeDefault = makeDefault || updatedStrategies.length === 1
+
+      // Update database configuration
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: database,
+        updates: {
+          embedding_strategies: updatedStrategies,
+          default_embedding_strategy: shouldBeDefault 
+            ? newStrategy.name 
+            : currentDb.default_embedding_strategy
+        },
+        projectConfig
+      })
+
+      return true
+    } catch (error: any) {
+      console.error('Failed to save embedding strategy:', error)
+      setError(error.message || 'Failed to save strategy')
+      return false
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const finalizeAndRedirect = () => {
@@ -448,6 +519,11 @@ function AddEmbeddingStrategy() {
 
   return (
     <div className="h-full w-full flex flex-col gap-3 pb-40">
+      {error && (
+        <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-2 rounded-md text-sm">
+          {error}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-1 md:mb-3">
         <nav className="text-sm md:text-base flex items-center gap-1.5">
           <button
@@ -1036,6 +1112,7 @@ function AddEmbeddingStrategy() {
               <Button
                 onClick={async () => {
                   if (!selected) return
+                  
                   let encryptedKey: string | undefined = undefined
                   try {
                     if (selected.runtime === 'Cloud' && apiKey.trim()) {
@@ -1051,12 +1128,18 @@ function AddEmbeddingStrategy() {
                     })
                     return
                   }
-                  createStrategy(
+                  
+                  const success = await saveStrategyToConfig(
                     selected.runtime,
                     summaryProvider || 'Provider',
                     selected.modelId,
                     encryptedKey
                   )
+                  
+                  if (!success) {
+                    return
+                  }
+                  
                   setConfirmOpen(false)
                   if (makeDefault) {
                     setReembedOpen(true)
@@ -1064,10 +1147,13 @@ function AddEmbeddingStrategy() {
                     finalizeAndRedirect()
                   }
                 }}
+                disabled={isSaving}
               >
-                {selected?.runtime === 'Local'
-                  ? 'Download and save strategy'
-                  : 'Save strategy'}
+                {isSaving 
+                  ? 'Saving...'
+                  : selected?.runtime === 'Local'
+                    ? 'Download and save strategy'
+                    : 'Save strategy'}
               </Button>
             </DialogFooter>
           </DialogContent>
