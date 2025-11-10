@@ -78,6 +78,8 @@ dependencies = [
   "docx2txt>=0.9",
   "spacy>=3.8.7",
   "msg-parser[rtf]>=1.2.0",
+  # Windows-specific dependencies
+  "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

@@ -14,8 +14,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -81,7 +83,7 @@ var datasetsListCmd = &cobra.Command{
 	Long:    `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load config first to ensure it's valid before starting watcher
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -91,9 +93,8 @@ var datasetsListCmd = &cobra.Command{
 		// This prevents race conditions where the watcher syncs files before we read them
 		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
-		// Ensure server is up (auto-start locally if needed)
-		config := ServerOnlyConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		// Ensure required services are running
+		orchestrator.EnsureServicesOrExit(serverURL, "server")
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=false", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
@@ -101,7 +102,7 @@ var datasetsListCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
 			os.Exit(1)
 		}
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
 			os.Exit(1)
@@ -113,7 +114,7 @@ var datasetsListCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Error (%d), and body read failed: %v\n", resp.StatusCode, readErr)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Error (%d): %s\n", resp.StatusCode, prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Error (%d): %s\n", resp.StatusCode, utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 
@@ -152,7 +153,7 @@ Examples:
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load config first to ensure it's valid before starting watcher
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -174,8 +175,7 @@ Examples:
 		}
 
 		// 2) Validate strategies and databases exist in project config
-		config := ServerOnlyConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
 		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -196,7 +196,7 @@ Examples:
 			os.Exit(1)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
 			os.Exit(1)
@@ -208,7 +208,7 @@ Examples:
 				fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 		var created createDatasetResponse
@@ -217,6 +217,11 @@ Examples:
 			os.Exit(1)
 		}
 		fmt.Printf("✅ Created dataset '%s' (strategy: %s, database: %s)\n", created.Dataset.Name, created.Dataset.DataProcessingStrategy, created.Dataset.Database)
+
+		// Ensure config is synced after creation so next commands see the new dataset
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after dataset creation: %v", err))
+		}
 
 		// 4) Optionally upload files if provided
 		filePaths := args[1:]
@@ -255,7 +260,7 @@ var datasetsDeleteCommand = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load config first to ensure it's valid before starting watcher
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -266,15 +271,14 @@ var datasetsDeleteCommand = &cobra.Command{
 
 		datasetName := args[0]
 		// Ensure server is up
-		config := ServerOnlyConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
 			os.Exit(1)
 		}
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
 			os.Exit(1)
@@ -286,7 +290,7 @@ var datasetsDeleteCommand = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 		fmt.Printf("✅ Successfully removed dataset '%s'\n", datasetName)
@@ -318,7 +322,7 @@ Examples:
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load config first to ensure it's valid before starting watcher
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -347,8 +351,7 @@ Examples:
 		fmt.Printf("Found %d files to upload\n", len(files))
 
 		// Ensure server is up
-		config := ServerOnlyConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
 
 		// Upload in batches with progress display
 		const batchSize = 10
@@ -393,6 +396,11 @@ Examples:
 		if failed > 0 {
 			fmt.Printf("   ❌ Failed: %d\n", failed)
 		}
+
+		// Ensure config is synced after uploads (server updates file list in config)
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after uploads: %v", err))
+		}
 	},
 }
 
@@ -404,7 +412,7 @@ var datasetsProcessCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load config first to ensure it's valid before starting watcher
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -414,11 +422,15 @@ var datasetsProcessCmd = &cobra.Command{
 		// This prevents race conditions where the watcher syncs files before we read them
 		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
+		// Ensure config is synced BEFORE processing (server may have updated it)
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config before processing: %v", err))
+		}
+
 		datasetName := args[0]
 
 		// Ensure server and RAG are up (process command needs RAG for ingestion)
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server", "rag", "universal-runtime")
 
 		// Call the process endpoint
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process",
@@ -436,7 +448,7 @@ var datasetsProcessCmd = &cobra.Command{
 		} else {
 			fmt.Printf("Processing dataset '%s' (this may take several minutes)\n", datasetName)
 		}
-		resp, err := getHTTPClientWithTimeout(0).Do(req)
+		resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 		stopProgress()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error processing dataset: %v\n", err)
@@ -451,7 +463,7 @@ var datasetsProcessCmd = &cobra.Command{
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Error: %s\n", utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 
@@ -707,7 +719,7 @@ func validateStrategiesAndDatabases(serverURL, namespace, project, dataProcessin
 		return nil
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		// If we can't validate, continue anyway (graceful degradation)
 		fmt.Printf("⚠️  Warning: Could not validate strategies: %v\n", err)
@@ -947,7 +959,7 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := getHTTPClientWithTimeout(0).Do(req)
+	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 	if err != nil {
 		return err
 	}
@@ -957,7 +969,7 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 		if readErr != nil {
 			return fmt.Errorf("%s", readErr.Error())
 		}
-		return fmt.Errorf("%s", prettyServerError(resp, body))
+		return fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 	return nil
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,9 @@ def _check_server() -> dict:
             "status": "healthy",
             "message": "FastAPI process responding",
             "latency_ms": _now_ms() - start,
+            "details": {
+                "pid": os.getpid(),
+            },
         }
     except Exception as e:  # pragma: no cover - defensive
         return {
@@ -240,6 +244,8 @@ def _check_rag_service() -> dict:
         details = {}
         if "worker_id" in health_data:
             details["worker_id"] = health_data["worker_id"]
+        if "pid" in health_data:
+            details["pid"] = health_data["pid"]
         if "checks" in health_data:
             details["checks"] = health_data["checks"]
         if "metrics" in health_data:

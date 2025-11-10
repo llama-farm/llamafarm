@@ -9,8 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +72,7 @@ Examples:
 		queryText := strings.Join(args, " ")
 
 		// Get server config
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -79,8 +81,7 @@ Examples:
 		StartConfigWatcherForCommand()
 
 		// Ensure server and RAG are available
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		// Build the request
 		queryRequest := buildQueryRequest(queryText)
@@ -212,7 +213,7 @@ func sendQueryRequest(serverCfg *config.ServerConfig, req QueryRequest) (*QueryR
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	// Send request
-	resp, err := getHTTPClient().Do(httpReq)
+	resp, err := utils.GetHTTPClient().Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}

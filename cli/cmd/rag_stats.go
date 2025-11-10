@@ -10,8 +10,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -42,14 +44,13 @@ Examples:
   # Output as JSON
   lf rag stats --json`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		stats, err := fetchRAGStats(serverCfg, statsDatabase)
 		if err != nil {
@@ -79,14 +80,13 @@ Examples:
   # Check health of specific database
   lf rag health --database main_database`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		health, err := fetchRAGHealth(serverCfg, statsDatabase)
 		if err != nil {
@@ -118,14 +118,13 @@ Examples:
   # Limit results
   lf rag list --limit 10`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		docs, err := fetchRAGDocuments(serverCfg, statsDatabase, listLimit, metadataFilters)
 		if err != nil {
@@ -152,14 +151,13 @@ Examples:
   # Compact specific database
   lf rag compact --database main_database`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		fmt.Println("🔧 Starting database compaction...")
 		result, err := compactRAGDatabase(serverCfg, statsDatabase)
@@ -187,14 +185,13 @@ Examples:
   # Reindex specific database with different strategy
   lf rag reindex --database main_database --strategy universal_processor`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		fmt.Println("🔄 Starting reindexing...")
 		result, err := reindexRAGDatabase(serverCfg, statsDatabase, ragDataStrategy)
@@ -281,7 +278,7 @@ func fetchRAGStats(cfg *config.ServerConfig, database string) (*RAGStats, error)
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +312,7 @@ func fetchRAGHealth(cfg *config.ServerConfig, database string) (*RAGHealth, erro
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +358,7 @@ func fetchRAGDocuments(cfg *config.ServerConfig, database string, limit int, fil
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +392,7 @@ func compactRAGDatabase(cfg *config.ServerConfig, database string) (*CompactionR
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +434,7 @@ func reindexRAGDatabase(cfg *config.ServerConfig, database string, strategy stri
 		return nil, err
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}

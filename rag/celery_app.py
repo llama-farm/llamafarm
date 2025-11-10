@@ -65,6 +65,20 @@ if celery_broker_url and celery_result_backend:
     )
 else:
     # Use default filesystem broker (same as server)
+    # Convert Windows backslashes to forward slashes for file:// URL
+    result_backend_path = f"{lf_data_dir}/broker/results".replace("\\", "/")
+    # Ensure proper file:// URL format (file:/// for absolute paths on Windows)
+    if (
+        sys.platform == "win32"
+        and len(result_backend_path) > 1
+        and result_backend_path[1] == ":"
+    ):
+        # Windows absolute path (e.g., C:/Users/...) needs file:///C:/...
+        result_backend_url = f"file:///{result_backend_path}"
+    else:
+        # Unix absolute path needs file:///path or relative path needs file://path
+        result_backend_url = f"file://{result_backend_path}"
+
     app.conf.update(
         broker_url="filesystem://",
         broker_transport_options={
@@ -72,7 +86,7 @@ else:
             "data_folder_out": f"{lf_data_dir}/broker/in",  # Must be same as data_folder_in
             "data_folder_processed": f"{lf_data_dir}/broker/processed",
         },
-        result_backend=f"file://{lf_data_dir}/broker/results",
+        result_backend=result_backend_url,
         result_persistent=True,
         task_serializer="json",
         accept_content=["json"],
@@ -101,17 +115,27 @@ def setup_celery_logging(**kwargs):
 
 def run_worker():
     try:
-        # For macOS development, use threads instead of processes to avoid fork issues
+        # For macOS and Windows, use threads instead of processes to avoid fork/spawn issues
         # Can also be forced with LF_CELERY_USE_THREADS=true
         worker_args = ["worker", "-Q", "rag"]
         use_threads = (
             sys.platform == "darwin"
+            or sys.platform == "win32"
             or os.getenv("LF_CELERY_USE_THREADS", "false").lower() == "true"
         )
 
         if use_threads:
             worker_args.extend(["--pool=threads", "--concurrency=2"])
-            logger.info("Using thread-based worker pool for macOS compatibility")
+            platform_name = (
+                "macOS"
+                if sys.platform == "darwin"
+                else "Windows"
+                if sys.platform == "win32"
+                else "platform"
+            )
+            logger.info(
+                f"Using thread-based worker pool for {platform_name} compatibility"
+            )
 
         # Only consume from the 'rag' queue, not the 'celery' queue
         app.worker_main(argv=worker_args)
