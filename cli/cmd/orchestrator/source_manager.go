@@ -556,7 +556,9 @@ func (m *SourceManager) syncDirectory(dir string, name string) error {
 
 	// Run UV sync command in the specific project directory
 	// This ensures .venv is created in the correct location
-	cmd := exec.Command(uvPath, "sync", "--managed-python")
+	// Use unsafe-best-match to allow uv to search all indexes when UV_EXTRA_INDEX_URL is set
+	// This prevents issues where packages are found on PyTorch index but at incompatible versions
+	cmd := exec.Command(uvPath, "sync", "--managed-python", "--index-strategy", "unsafe-best-match")
 	cmd.Dir = dir // Critical: run from project directory so .venv is created there
 	cmd.Env = m.pythonEnvMgr.GetEnvForProcess()
 
