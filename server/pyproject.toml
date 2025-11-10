@@ -44,6 +44,8 @@ dependencies = [
   "fastapi-mcp>=0.4.0",
   "ollama>=0.6.0",
   "huggingface-hub>=1.0.1",
+  # Windows-specific dependencies
+  "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
