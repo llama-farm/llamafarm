@@ -56,6 +56,35 @@ jobs:
       # ============================================================
       # Download Pre-built CLI Binary
       # ============================================================
+      - name: Wait for CLI build artifacts (PRs only)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Waiting for CLI build to produce artifacts..."
+          COMMIT="${{ github.event.pull_request.head.sha }}"
+          ARTIFACT_NAME="${{ matrix.artifact }}"
+          MAX_WAIT=600  # 10 minutes
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            echo "Checking for artifact (${ELAPSED}s elapsed)..."
+
+            # Check if artifact exists
+            if gh api repos/${{ github.repository }}/actions/artifacts \
+              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | select(.workflow_run.head_sha == \"${COMMIT}\") | .name" \
+              2>/dev/null | grep -q "${ARTIFACT_NAME}"; then
+              echo "✓ Artifact found!"
+              exit 0
+            fi
+
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
+          done
+
+          echo "❌ Timeout waiting for artifact after ${MAX_WAIT}s"
+          exit 1
+
       - name: Download CLI binary artifact
         uses: dawidd6/action-download-artifact@v6
         with:
@@ -69,9 +98,6 @@ jobs:
           search_artifacts: true
           workflow_conclusion: success
           if_no_artifact_found: fail
-          # Wait up to 10 minutes for artifact (for PRs where build may still be running)
-          check_artifacts: true
-          skip_unpack: false
 
       - name: Make CLI binary executable
         if: runner.os != 'Windows'
