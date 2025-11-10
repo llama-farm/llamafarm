@@ -9,6 +9,7 @@ import { useToast } from '../ui/toast'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -57,6 +58,14 @@ function Databases() {
   )
 
   const [reembedOpen, setReembedOpen] = useState(false)
+
+  // Delete confirmation modal state
+  const [deleteEmbeddingOpen, setDeleteEmbeddingOpen] = useState(false)
+  const [deleteRetrievalOpen, setDeleteRetrievalOpen] = useState(false)
+  const [strategyToDelete, setStrategyToDelete] = useState<{
+    name: string
+    type: 'embedding' | 'retrieval'
+  } | null>(null)
 
   // Database modal state
   const [databaseModalOpen, setDatabaseModalOpen] = useState(false)
@@ -650,14 +659,16 @@ function Databases() {
     }
   }
 
-  const handleDeleteEmbedding = async (strategyName: string) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the embedding strategy "${strategyName}"? This action cannot be undone.`
-      )
-    ) {
-      return
-    }
+  const handleDeleteEmbedding = (strategyName: string) => {
+    setStrategyToDelete({ name: strategyName, type: 'embedding' })
+    setDeleteEmbeddingOpen(true)
+  }
+
+  const confirmDeleteEmbedding = async () => {
+    if (!strategyToDelete || strategyToDelete.type !== 'embedding') return
+
+    const strategyName = strategyToDelete.name
+    setDeleteEmbeddingOpen(false)
 
     try {
       const projectConfig = (projectResp as any)?.project?.config
@@ -709,6 +720,8 @@ function Databases() {
         message: error.message || 'Failed to delete strategy',
         variant: 'destructive',
       })
+    } finally {
+      setStrategyToDelete(null)
     }
   }
 
@@ -785,14 +798,16 @@ function Databases() {
     }
   }
 
-  const handleDeleteRetrieval = async (strategyName: string) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the retrieval strategy "${strategyName}"? This action cannot be undone.`
-      )
-    ) {
-      return
-    }
+  const handleDeleteRetrieval = (strategyName: string) => {
+    setStrategyToDelete({ name: strategyName, type: 'retrieval' })
+    setDeleteRetrievalOpen(true)
+  }
+
+  const confirmDeleteRetrieval = async () => {
+    if (!strategyToDelete || strategyToDelete.type !== 'retrieval') return
+
+    const strategyName = strategyToDelete.name
+    setDeleteRetrievalOpen(false)
 
     try {
       const projectConfig = (projectResp as any)?.project?.config
@@ -844,6 +859,8 @@ function Databases() {
         message: error.message || 'Failed to delete strategy',
         variant: 'destructive',
       })
+    } finally {
+      setStrategyToDelete(null)
     }
   }
 
@@ -1356,6 +1373,66 @@ function Databases() {
             >
               Yes, proceed with re-embed
             </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete embedding strategy confirmation modal */}
+      <Dialog
+        open={deleteEmbeddingOpen}
+        onOpenChange={open => {
+          setDeleteEmbeddingOpen(open)
+          if (!open) {
+            setStrategyToDelete(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete embedding strategy</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            Are you sure you want to delete the embedding strategy{' '}
+            {strategyToDelete?.name ? `"${strategyToDelete.name}"` : ''}? This
+            action cannot be undone.
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={confirmDeleteEmbedding}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete retrieval strategy confirmation modal */}
+      <Dialog
+        open={deleteRetrievalOpen}
+        onOpenChange={open => {
+          setDeleteRetrievalOpen(open)
+          if (!open) {
+            setStrategyToDelete(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete retrieval strategy</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            Are you sure you want to delete the retrieval strategy{' '}
+            {strategyToDelete?.name ? `"${strategyToDelete.name}"` : ''}? This
+            action cannot be undone.
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={confirmDeleteRetrieval}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
