@@ -15,6 +15,9 @@ on:
   # Also allow manual trigger
   workflow_dispatch:
 
+env:
+  NX_NO_CLOUD: true
+
 jobs:
   e2e-test:
     name: E2E Tests (${{ matrix.os }})

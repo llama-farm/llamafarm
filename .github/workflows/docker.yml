@@ -11,6 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  NX_NO_CLOUD: true
 
 jobs:
   # Build AMD64 images on standard Ubuntu runners

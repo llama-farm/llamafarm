@@ -15,6 +15,9 @@ permissions:
   contents: read
   packages: read
 
+env:
+  NX_NO_CLOUD: true
+
 jobs:
   tag-docker-images:
     name: Tag Docker Images

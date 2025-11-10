@@ -8,6 +8,7 @@ on:
 
 env:
   NX_VERSION: 21
+  NX_NO_CLOUD: true
 
 jobs:
   build-cli:
