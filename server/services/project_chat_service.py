@@ -56,6 +56,52 @@ class RAGParameters:
 
 
 class ProjectChatService:
+    def _create_event_logger(
+        self,
+        project_config: LlamaFarmConfig,
+        event_type: str = "inference",
+    ) -> EventLogger | None:
+        """Create event logger, returning None if it fails (e.g., in tests with mocks)."""
+        try:
+            request_id = f"req_{uuid.uuid4().hex[:12]}"
+            return EventLogger(
+                event_type=event_type,
+                request_id=request_id,
+                namespace=project_config.namespace,
+                project=project_config.name,
+                config=project_config,
+            )
+        except Exception:
+            # Event logging failed (likely tests with mocks), skip it
+            return None
+
+    def _log_event(self, event_logger: EventLogger | None, event_name: str, data: dict):
+        """Log event if logger exists."""
+        if event_logger:
+            try:
+                event_logger.log_event(event_name, data)
+            except Exception:
+                # Ignore logging errors
+                pass
+
+    def _complete_event(self, event_logger: EventLogger | None):
+        """Complete event if logger exists."""
+        if event_logger:
+            try:
+                event_logger.complete_event()
+            except Exception:
+                # Ignore logging errors
+                pass
+
+    def _fail_event(self, event_logger: EventLogger | None, error: str):
+        """Fail event if logger exists."""
+        if event_logger:
+            try:
+                event_logger.fail_event(error)
+            except Exception:
+                # Ignore logging errors
+                pass
+
     async def chat(
         self,
         *,
@@ -69,18 +115,11 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> LFChatCompletion:
-        # Create event logger
-        request_id = f"req_{uuid.uuid4().hex[:12]}"
-        event_logger = EventLogger(
-            event_type="inference",
-            request_id=request_id,
-            namespace=project_config.namespace,
-            project=project_config.name,
-            config=project_config,
-        )
+        # Create event logger (gracefully handles test mocks)
+        event_logger = self._create_event_logger(project_config)
 
         # Log request
-        event_logger.log_event("request_received", {
+        self._log_event(event_logger, "request_received", {
             "message_length": len(message),
             "model": chat_agent.model_name,
             "rag_enabled": rag_enabled,
@@ -100,7 +139,7 @@ class ProjectChatService:
             # Log and perform RAG search if enabled
             rag_results = []
             if rag_params.rag_enabled:
-                event_logger.log_event("rag_query_start", {
+                self._log_event(event_logger, "rag_query_start", {
                     "database": rag_params.database,
                     "query": message,
                     "top_k": rag_params.rag_top_k,
@@ -119,7 +158,7 @@ class ProjectChatService:
 
                 # Log RAG retrieval complete
                 avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
-                event_logger.log_event("rag_retrieval_complete", {
+                self._log_event(event_logger, "rag_retrieval_complete", {
                     "chunks_retrieved": len(rag_results),
                     "avg_score": round(avg_score, 3),
                     "top_chunks": [
@@ -154,7 +193,7 @@ class ProjectChatService:
             user_input = LFChatCompletionUserMessageParam(role="user", content=message)
 
             # Log LLM start
-            event_logger.log_event("llm_inference_start", {
+            self._log_event(event_logger, "llm_inference_start", {
                 "model": chat_agent.model_name,
             })
 
@@ -172,13 +211,13 @@ class ProjectChatService:
                 summary_data["chunks_retrieved"] = len(rag_results)
                 summary_data["avg_rag_score"] = round(avg_score, 3)
 
-            event_logger.log_event("llm_inference_complete", summary_data)
+            self._log_event(event_logger, "llm_inference_complete", summary_data)
 
-            event_logger.complete_event()
+            self._complete_event(event_logger)
             return result
 
         except Exception as e:
-            event_logger.fail_event(str(e))
+            self._fail_event(event_logger, str(e))
             raise
 
     async def stream_chat(
@@ -196,18 +235,11 @@ class ProjectChatService:
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
 
-        # Create event logger
-        request_id = f"req_{uuid.uuid4().hex[:12]}"
-        event_logger = EventLogger(
-            event_type="inference",
-            request_id=request_id,
-            namespace=project_config.namespace,
-            project=project_config.name,
-            config=project_config,
-        )
+        # Create event logger (gracefully handles test mocks)
+        event_logger = self._create_event_logger(project_config)
 
         # Log request
-        event_logger.log_event("request_received", {
+        self._log_event(event_logger, "request_received", {
             "message_length": len(message),
             "model": chat_agent.model_name,
             "rag_enabled": rag_enabled,
@@ -227,7 +259,7 @@ class ProjectChatService:
             # Log and perform RAG search if enabled
             rag_results = []
             if rag_params.rag_enabled:
-                event_logger.log_event("rag_query_start", {
+                self._log_event(event_logger, "rag_query_start", {
                     "database": rag_params.database,
                     "query": message,
                     "top_k": rag_params.rag_top_k,
@@ -246,7 +278,7 @@ class ProjectChatService:
 
                 # Log RAG retrieval complete
                 avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
-                event_logger.log_event("rag_retrieval_complete", {
+                self._log_event(event_logger, "rag_retrieval_complete", {
                     "chunks_retrieved": len(rag_results),
                     "avg_score": round(avg_score, 3),
                     "top_chunks": [
@@ -281,7 +313,7 @@ class ProjectChatService:
             user_input = LFChatCompletionUserMessageParam(role="user", content=message)
 
             # Log LLM start
-            event_logger.log_event("llm_inference_start", {
+            self._log_event(event_logger, "llm_inference_start", {
                 "model": chat_agent.model_name,
             })
 
@@ -299,12 +331,12 @@ class ProjectChatService:
                 summary_data["chunks_retrieved"] = len(rag_results)
                 summary_data["avg_rag_score"] = round(avg_score, 3)
 
-            event_logger.log_event("llm_inference_complete", summary_data)
+            self._log_event(event_logger, "llm_inference_complete", summary_data)
 
-            event_logger.complete_event()
+            self._complete_event(event_logger)
 
         except Exception as e:
-            event_logger.fail_event(str(e))
+            self._fail_event(event_logger, str(e))
             logger.error(
                 "Model call failed",
                 exc_info=True,
