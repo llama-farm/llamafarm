@@ -205,7 +205,6 @@ jobs:
 
       - name: Wait for config sync after dataset create
         shell: bash
-
         run: sleep 2.5
 
       - name: Debug config after dataset create
@@ -236,7 +235,6 @@ jobs:
           echo "✓ All sample files uploaded"
 
       - name: Wait for config sync after dataset upload
-
         shell: bash
         run: sleep 2.5
 
