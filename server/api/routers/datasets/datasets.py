@@ -1,3 +1,4 @@
+import asyncio
 import time
 from enum import Enum
 
@@ -491,7 +492,7 @@ async def process_dataset(
             while waited < timeout:
                 if task.status not in ("PENDING", "STARTED"):
                     break
-                time.sleep(poll_interval)
+                await asyncio.sleep(poll_interval)
                 waited += poll_interval
 
             if task.status == "SUCCESS":
