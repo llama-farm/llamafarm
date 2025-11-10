@@ -21,11 +21,13 @@ type DefaultHTTPClient struct{ Timeout time.Duration }
 
 // Do implements the HTTPClient interface
 func (c *DefaultHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	client := &http.Client{Timeout: 60 * time.Second}
+	// Use the configured timeout (0 means no timeout in Go's http.Client)
+	client := &http.Client{Timeout: c.Timeout}
 	return client.Do(req)
 }
 
-var httpClient HTTPClient = &DefaultHTTPClient{}
+// Default HTTP client with 60-second timeout for normal API calls
+var httpClient HTTPClient = &DefaultHTTPClient{Timeout: 60 * time.Second}
 
 // LogBodyContent safely reads and logs a body, restoring it for later use.
 // Returns the restored body (or nil if input was nil).

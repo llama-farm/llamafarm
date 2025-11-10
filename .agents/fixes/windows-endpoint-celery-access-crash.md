@@ -25,7 +25,7 @@ The request ID from the 500 error (`f47efbc78b9e4c5a9a40e4cf0bdaf790`) **never a
 Added comprehensive error handling around **all** `task.status` and `task.result` accesses in the FastAPI endpoint polling loop:
 
 1. **Polling loop** - wrap status checks
-2. **Final status retrieval** - wrap with HTTPException on failure  
+2. **Final status retrieval** - wrap with HTTPException on failure
 3. **SUCCESS branch** - wrap result access
 4. **FAILURE branch** - wrap failure details access
 
@@ -58,7 +58,7 @@ while waited < timeout:
         await asyncio.sleep(poll_interval)
         waited += poll_interval
         continue
-    
+
     await asyncio.sleep(poll_interval)
     waited += poll_interval
 
@@ -107,7 +107,6 @@ After this fix, the endpoint will:
 ## Prevention
 When working with Celery AsyncResult on Windows filesystem backend:
 - **Always** wrap `result.status` access in try/except
-- **Always** wrap `result.result` access in try/except  
+- **Always** wrap `result.result` access in try/except
 - **Always** log errors with `exc_info=True` for debugging
 - **Never** assume file operations will succeed on Windows
-
