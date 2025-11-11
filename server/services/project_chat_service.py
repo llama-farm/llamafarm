@@ -155,6 +155,10 @@ class ProjectChatService:
 
         # Extract results from context provider to log completion metrics
         if rag_params.rag_enabled:
+            # Always log rag_retrieval_complete when RAG is enabled
+            chunks = []
+            avg_score = 0.0
+
             try:
                 # Access the RAG context provider to get results
                 context_provider = chat_agent.context_providers.get("rag_context")
@@ -162,28 +166,27 @@ class ProjectChatService:
                     chunks = context_provider.chunks
 
                     # Calculate average score
-                    avg_score = 0.0
                     if chunks:
                         scores = [chunk.metadata.get("score", 0.0) for chunk in chunks]
                         avg_score = sum(scores) / len(scores) if scores else 0.0
-
-                    # Log retrieval complete with top chunks
-                    self._log_event(event_logger, "rag_retrieval_complete", {
-                        "chunks_retrieved": len(chunks),
-                        "avg_score": round(avg_score, 3),
-                        "top_chunks": [
-                            {
-                                "rank": idx + 1,
-                                "content_preview": chunk.content[:100] if len(chunk.content) > 100 else chunk.content,
-                                "source": chunk.metadata.get("source", "unknown"),
-                                "score": round(chunk.metadata.get("score", 0.0), 3),
-                            }
-                            for idx, chunk in enumerate(chunks[:2])  # Top 2 chunks
-                        ]
-                    })
             except Exception:
-                # Don't fail if we can't extract metrics
+                # If we can't extract metrics, log with empty results
                 pass
+
+            # Always log the completion event (even if 0 chunks found)
+            self._log_event(event_logger, "rag_retrieval_complete", {
+                "chunks_retrieved": len(chunks),
+                "avg_score": round(avg_score, 3),
+                "top_chunks": [
+                    {
+                        "rank": idx + 1,
+                        "content_preview": chunk.content[:100] if len(chunk.content) > 100 else chunk.content,
+                        "source": chunk.metadata.get("source", "unknown"),
+                        "score": round(chunk.metadata.get("score", 0.0), 3),
+                    }
+                    for idx, chunk in enumerate(chunks[:2])  # Top 2 chunks
+                ] if chunks else []
+            })
 
     async def chat(
         self,
