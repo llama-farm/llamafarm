@@ -184,6 +184,37 @@ jobs:
           echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
           echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
+      - name: Update project model to qwen/qwen3-0.6B
+        shell: bash
+        run: |
+          echo "Updating model to qwen/qwen3-0.6B for e2e tests..."
+          # Use Python to safely update the YAML file
+          python3 << EOF
+          import yaml
+
+          config_path = "$TEST_DIR/llamafarm.yaml"
+
+          with open(config_path, 'r') as f:
+              config = yaml.safe_load(f)
+
+          # Update the model in the runtime.models array
+          if 'runtime' in config and 'models' in config['runtime']:
+              for model in config['runtime']['models']:
+                  if model.get('default', False) or model.get('name') == 'default':
+                      model['model'] = 'qwen/qwen3-0.6B'
+                      print(f"Updated model to: {model['model']}")
+                      break
+
+          with open(config_path, 'w') as f:
+              yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+          print("✓ Model updated successfully")
+          EOF
+
+          echo ""
+          echo "=== CONFIG AFTER MODEL UPDATE ==="
+          grep -A5 "runtime:" "$TEST_DIR/llamafarm.yaml" | head -10 || echo "Could not display runtime section"
+
       # ============================================================
       # Data Ingestion Test
       # ============================================================
