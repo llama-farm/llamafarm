@@ -625,6 +625,30 @@ export function useChatbox(options: UseChatboxOptions = {}) {
               onChunk: (chunk: ChatStreamChunk) => {
                 if (!isMountedRef.current) return
 
+                // Clear error on first successful chunk - server is responding!
+                if (error) {
+                  setError(null)
+                  // Also remove any error messages from the chat history
+                  // Check for all our error message patterns
+                  const isErrorMessage = (content: string) => {
+                    return content.includes("I can't connect to the LlamaFarm server") ||
+                           content.includes("The server is taking too long to respond") ||
+                           content.includes("The server is running but some services are unavailable") ||
+                           content.includes("There was a problem with the request") ||
+                           content.includes("I encountered an error:")
+                  }
+                  
+                  if (useProjectSessionMode) {
+                    setStreamingMessages(prev => 
+                      prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
+                    )
+                  } else {
+                    setLocalMessages(prev => 
+                      prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
+                    )
+                  }
+                }
+
                 const choice = chunk.choices?.[0]
                 if (!choice) return
 
@@ -1035,6 +1059,30 @@ export function useChatbox(options: UseChatboxOptions = {}) {
             options: chatRequest,
           })
 
+          // Clear error on successful response - server is responding!
+          if (error) {
+            setError(null)
+            // Also remove any error messages from the chat history
+            // Check for all our error message patterns
+            const isErrorMessage = (content: string) => {
+              return content.includes("I can't connect to the LlamaFarm server") ||
+                     content.includes("The server is taking too long to respond") ||
+                     content.includes("The server is running but some services are unavailable") ||
+                     content.includes("There was a problem with the request") ||
+                     content.includes("I encountered an error:")
+            }
+            
+            if (useProjectSessionMode) {
+              setStreamingMessages(prev => 
+                prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
+              )
+            } else {
+              setLocalMessages(prev => 
+                prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
+              )
+            }
+          }
+
           // Handle session management
           if (result.sessionId) {
             if (useProjectSessionMode) {
@@ -1163,6 +1211,8 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       projectSession,
       simpleSession,
       streamingMessages,
+      error,
+      getContextualErrorMessage,
     ]
   )
 
