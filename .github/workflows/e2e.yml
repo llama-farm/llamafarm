@@ -188,31 +188,20 @@ jobs:
         shell: bash
         run: |
           echo "Updating model to qwen/qwen3-0.6B for e2e tests..."
-          # Install PyYAML if not available
-          python3 -m pip install --quiet pyyaml || echo "PyYAML already installed or pip not available"
+          # Use sed to update the model line within the default model entry
+          # Find the model entry with "name: default" and replace the model line within that block
+          sed -i.bak '/^  - name: default$/,/^  - name:/ {
+            s/^    model: .*/    model: qwen\/qwen3-0.6B/
+          }' "$TEST_DIR/llamafarm.yaml"
 
-          # Use Python to safely update the YAML file
-          python3 << EOF
-          import yaml
-
-          config_path = "$TEST_DIR/llamafarm.yaml"
-
-          with open(config_path, 'r') as f:
-              config = yaml.safe_load(f)
-
-          # Update the model in the runtime.models array
-          if 'runtime' in config and 'models' in config['runtime']:
-              for model in config['runtime']['models']:
-                  if model.get('default', False) or model.get('name') == 'default':
-                      model['model'] = 'qwen/qwen3-0.6B'
-                      print(f"Updated model to: {model['model']}")
-                      break
-
-          with open(config_path, 'w') as f:
-              yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-
-          print("✓ Model updated successfully")
-          EOF
+          # Verify the update
+          if grep -q "model: qwen/qwen3-0.6B" "$TEST_DIR/llamafarm.yaml"; then
+            echo "✓ Model updated successfully"
+          else
+            echo "⚠ Warning: Model update may have failed, checking config..."
+            grep -A5 "runtime:" "$TEST_DIR/llamafarm.yaml" | head -10
+            exit 1
+          fi
 
           echo ""
           echo "=== CONFIG AFTER MODEL UPDATE ==="
