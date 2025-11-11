@@ -87,7 +87,7 @@ jobs:
           fi
 
           # Build the binary
-          go build -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=${{ steps.version.outputs.version }}'" -o "${BINARY_NAME}" .
+          go build -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=${{ steps.version.outputs.version }}'" -o "${BINARY_NAME}" .
 
           # SHA the binary
           sha256sum "${BINARY_NAME}" > "${BINARY_NAME}.sha256"

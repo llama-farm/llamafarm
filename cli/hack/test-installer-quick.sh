@@ -93,7 +93,7 @@ test_cli_build() {
 
     # Test basic build
     go generate -v ./...
-    if go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-quick-1.0.0'" -o ../dist/lf-test .; then
+    if go build -ldflags="-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-quick-1.0.0'" -o ../dist/lf-test .; then
         success "CLI build successful"
     else
         error "CLI build failed"
@@ -115,13 +115,13 @@ test_cli_build() {
     # Test cross-compilation (quick test)
     info "Testing cross-compilation..."
 
-    if GOOS=linux GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o ../dist/lf-linux .; then
+    if GOOS=linux GOARCH=amd64 go build -ldflags="-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-cross'" -o ../dist/lf-linux .; then
         success "Linux cross-compilation works"
     else
         error "Linux cross-compilation failed"
     fi
 
-    if GOOS=windows GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o ../dist/lf-windows.exe .; then
+    if GOOS=windows GOARCH=amd64 go build -ldflags="-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-cross'" -o ../dist/lf-windows.exe .; then
         success "Windows cross-compilation works"
     else
         error "Windows cross-compilation failed"
