@@ -161,17 +161,19 @@ class ProjectChatService:
 
             try:
                 # Access the RAG context provider to get results
-                context_provider = chat_agent.context_providers.get("rag_context")
-                if context_provider and hasattr(context_provider, "chunks"):
-                    chunks = context_provider.chunks
+                # Check if context_providers exists and is accessible
+                if hasattr(chat_agent, "context_providers"):
+                    context_provider = chat_agent.context_providers.get("rag_context")
+                    if context_provider and hasattr(context_provider, "chunks"):
+                        chunks = context_provider.chunks
 
-                    # Calculate average score
-                    if chunks:
-                        scores = [chunk.metadata.get("score", 0.0) for chunk in chunks]
-                        avg_score = sum(scores) / len(scores) if scores else 0.0
-            except Exception:
+                        # Calculate average score
+                        if chunks:
+                            scores = [chunk.metadata.get("score", 0.0) for chunk in chunks]
+                            avg_score = sum(scores) / len(scores) if scores else 0.0
+            except Exception as e:
                 # If we can't extract metrics, log with empty results
-                pass
+                logger.warning(f"Could not extract RAG metrics: {e}", exc_info=False)
 
             # Always log the completion event (even if 0 chunks found)
             self._log_event(event_logger, "rag_retrieval_complete", {
