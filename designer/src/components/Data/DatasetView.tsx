@@ -65,11 +65,22 @@ function DatasetView() {
   const uploadMutation = useUploadFileToDataset()
 
   // Fetch datasets from API to get file information
-  const { data: datasetsResponse } = useListDatasets(
+  const { data: datasetsResponse, refetch: refetchDatasets } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
-    { enabled: !!activeProject }
+    { 
+      enabled: !!activeProject,
+      // Reduce stale time to ensure fresh data after uploads
+      staleTime: 1000, // 1 second
+    }
   )
+  
+  // Force refetch on mount to ensure fresh data after navigation from upload
+  useEffect(() => {
+    if (activeProject?.namespace && activeProject?.project) {
+      refetchDatasets()
+    }
+  }, []) // Empty deps - only run on mount
 
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
@@ -264,19 +275,40 @@ function DatasetView() {
   // Drag-and-drop state
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
 
   // Note: Custom strategies now come from API via project config, not localStorage
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDragging(true)
-  }
+  }, [])
 
-  const handleDragLeave = () => {
-    setIsDragging(false)
-  }
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [])
 
-  const handleFilesUpload = async (list: File[]) => {
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set isDragging to false if we're actually leaving the drop zone
+    // and not just entering a child element
+    const rect = dropZoneRef.current?.getBoundingClientRect()
+    const isLeavingZone = rect && (
+      e.clientX <= rect.left ||
+      e.clientX >= rect.right ||
+      e.clientY <= rect.top ||
+      e.clientY >= rect.bottom
+    )
+    if (isLeavingZone) {
+      setIsDragging(false)
+    }
+  }, [])
+
+  const handleFilesUpload = useCallback(async (list: File[]) => {
     if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
       toast({
         message: 'Missing required information for upload',
@@ -360,17 +392,28 @@ function DatasetView() {
       })
     )
 
+    // Refetch datasets to update the file list
+    await refetchDatasets()
+
     // Clear stats after upload completes
     setTimeout(() => setUploadStats(null), 5000)
-  }
+  }, [datasetId, activeProject, toast, filterFilesByType, uploadMutation, refetchDatasets])
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDropped(true)
     setIsDragging(false)
     const files = Array.from(e.dataTransfer.files)
-    handleFilesUpload(files).finally(() => setIsDropped(false))
-  }
+    
+    if (files.length === 0) {
+      setIsDropped(false)
+      return
+    }
+    
+    await handleFilesUpload(files)
+    setIsDropped(false)
+  }, [handleFilesUpload])
 
   // Load dataset metadata from API only - no hardcoded values
   useEffect(() => {
@@ -564,7 +607,9 @@ function DatasetView() {
 
   return (
     <div
+      ref={dropZoneRef}
       className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-40' : ''}`}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

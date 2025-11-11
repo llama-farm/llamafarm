@@ -114,6 +114,7 @@ const Data = () => {
     data: apiDatasets,
     isLoading: isDatasetsLoading,
     error: datasetsError,
+    refetch: refetchDatasets,
   } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
@@ -510,7 +511,9 @@ const Data = () => {
 
   // Handle file upload to selected dataset
   const handleDatasetSelect = useCallback(async (datasetId: string, datasetName: string) => {
-    if (!activeProject || pendingFiles.length === 0) return
+    if (!activeProject || pendingFiles.length === 0) {
+      return
+    }
 
     const fileCount = pendingFiles.length // Store count before clearing
     setUploadingFileCount(fileCount)
@@ -557,6 +560,8 @@ const Data = () => {
 
       // Navigate to the dataset view to see uploaded files (only if some succeeded)
       if (successes.length > 0) {
+        // Explicitly refetch to ensure fresh data before navigating
+        await refetchDatasets()
         navigate(`/chat/data/${datasetId}`)
       }
     } catch (error) {
@@ -584,7 +589,7 @@ const Data = () => {
         fileInputRef.current.value = ''
       }
     }
-  }, [activeProject, pendingFiles, uploadFilesInBatches, toast, navigate])
+  }, [activeProject, pendingFiles, uploadFilesInBatches, toast, navigate, refetchDatasets])
 
   // Note: Auto-upload logic now handled directly in handleCreateDataset
   // No need for fragile useEffect watching datasets.length
