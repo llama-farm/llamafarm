@@ -40,6 +40,18 @@ import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+
+// Valid file extensions for data files
+const VALID_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.json', '.txt', '.tsv', '.parquet', '.pdf', '.docx', '.md', '.markdown']
+
+const hasValidExtension = (filename: string): boolean => {
+  const lower = filename.toLowerCase()
+  return VALID_EXTENSIONS.some(ext => lower.endsWith(ext))
+}
+
+// Batch size for uploads to prevent overwhelming the backend
+const UPLOAD_BATCH_SIZE = 3
+
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [isDropped, setIsDropped] = useState(false)
@@ -329,7 +341,14 @@ const Data = () => {
     }
 
     // Filter out directories and invalid files
-    const validFiles = files.filter(file => file.size > 0 && file.type !== '')
+    // Accept files with size > 0 and either:
+    // 1. A valid MIME type, OR
+    // 2. A valid file extension (for browsers that don't set MIME type)
+    const validFiles = files.filter(file => {
+      if (file.size === 0) return false
+      if (file.type !== '') return true
+      return hasValidExtension(file.name)
+    })
 
     if (validFiles.length === 0) {
       toast({
