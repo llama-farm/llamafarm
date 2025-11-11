@@ -411,19 +411,33 @@ class ProjectChatService:
             user_input = LFChatCompletionUserMessageParam(role="user", content=message)
 
             logger.info("Running async stream")
-            async for chunk in chat_agent.run_async_stream(user_input=user_input):
-                yield chunk
-
-            # Log stream complete
-            self._log_event(
-                event_logger,
-                "stream_complete",
-                {
-                    "finish_reason": "stop",
-                },
-            )
-
-            self._complete_event(event_logger)
+            stream_completed_normally = False
+            event_failed = False
+            try:
+                async for chunk in chat_agent.run_async_stream(user_input=user_input):
+                    yield chunk
+                # If we reach here, the stream completed normally
+                stream_completed_normally = True
+            except Exception:
+                # Mark event as failed so finally block doesn't complete it
+                # The outer exception handler will call _fail_event()
+                event_failed = True
+                raise
+            finally:
+                # Always complete the event if it hasn't failed, even if generator is abandoned
+                # This ensures observability data is written to disk
+                if not event_failed and stream_completed_normally:
+                    # Log stream complete only if it completed normally
+                    self._log_event(
+                        event_logger,
+                        "stream_complete",
+                        {
+                            "finish_reason": "stop",
+                        },
+                    )
+                    # Complete event if stream ended without exception
+                    # (normal completion or abandonment)
+                    self._complete_event(event_logger)
 
         except Exception as e:
             self._fail_event(event_logger, str(e))
