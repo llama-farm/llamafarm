@@ -41,21 +41,13 @@ import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
-
-// Valid file extensions for data files
-const VALID_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.json', '.txt', '.tsv', '.parquet', '.pdf', '.docx', '.md', '.markdown']
-
-const hasValidExtension = (filename: string): boolean => {
-  const lower = filename.toLowerCase()
-  return VALID_EXTENSIONS.some(ext => lower.endsWith(ext))
-}
+import { isValidFile } from '../../utils/fileValidation'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
 
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
-  const [isDropped, setIsDropped] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useModeWithReset('designer')
 
@@ -385,7 +377,7 @@ const Data = () => {
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
@@ -396,26 +388,37 @@ const Data = () => {
       return
     }
 
-    // Filter out directories and invalid files
-    // Security: Validate both file size and extension
-    // All files must have a valid extension regardless of MIME type
-    const validFiles = files.filter(file => {
-      if (file.size === 0) return false
-      if (!hasValidExtension(file.name)) return false
-      return true
-    })
+    // Comprehensive file validation with extension, MIME type, and content verification
+    const validationResults = await Promise.all(
+      files.map(async (file) => ({
+        file,
+        validation: await isValidFile(file),
+      }))
+    )
+
+    const validFiles = validationResults
+      .filter(result => result.validation.valid)
+      .map(result => result.file)
+
+    const invalidFiles = validationResults.filter(result => !result.validation.valid)
 
     if (validFiles.length === 0) {
+      const reasons = invalidFiles.map(r => `${r.file.name}: ${r.validation.reason}`).join('; ')
       toast({
-        message: 'No valid files to upload',
+        message: `No valid files to upload. ${reasons}`,
         variant: 'destructive',
       })
       return
     }
 
-    if (validFiles.length < files.length) {
+    if (invalidFiles.length > 0) {
+      const reasons = invalidFiles.slice(0, 3).map(r => `${r.file.name}: ${r.validation.reason}`)
+      const message = invalidFiles.length <= 3
+        ? reasons.join('; ')
+        : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+      
       toast({
-        message: `${files.length - validFiles.length} invalid file(s) were skipped`,
+        message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
         variant: 'default',
       })
     }
@@ -606,14 +609,53 @@ const Data = () => {
     })
   }, [activeUploadControllers, toast])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : []
     if (files.length === 0) return
 
-    setIsDropped(true)
-    setTimeout(() => setIsDropped(false), 1000)
+    // Apply the same comprehensive validation as drag-and-drop
+    const validationResults = await Promise.all(
+      files.map(async (file) => ({
+        file,
+        validation: await isValidFile(file),
+      }))
+    )
 
-    // console.log('Selected files:', files)
+    const validFiles = validationResults
+      .filter(result => result.validation.valid)
+      .map(result => result.file)
+
+    const invalidFiles = validationResults.filter(result => !result.validation.valid)
+
+    if (validFiles.length === 0) {
+      const reasons = invalidFiles.map(r => `${r.file.name}: ${r.validation.reason}`).join('; ')
+      toast({
+        message: `No valid files selected. ${reasons}`,
+        variant: 'destructive',
+      })
+      // Reset the input
+      e.target.value = ''
+      return
+    }
+
+    if (invalidFiles.length > 0) {
+      const reasons = invalidFiles.slice(0, 3).map(r => `${r.file.name}: ${r.validation.reason}`)
+      const message = invalidFiles.length <= 3
+        ? reasons.join('; ')
+        : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+      
+      toast({
+        message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
+        variant: 'default',
+      })
+    }
+
+    // Reset the input for next selection
+    e.target.value = ''
+
+    // Open dataset selection modal with validated files
+    setPendingFiles(validFiles)
+    setIsSelectDatasetModalOpen(true)
   }
 
   // Render modal for selecting destination dataset for dropped files
@@ -1060,14 +1102,10 @@ const Data = () => {
                     className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
                   >
                     <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
-                      {isDropped ? (
-                        <Loader />
-                      ) : (
-                        <FontIcon
-                          type="upload"
-                          className="w-10 h-10 text-blue-200 dark:text-white"
-                        />
-                      )}
+                      <FontIcon
+                        type="upload"
+                        className="w-10 h-10 text-blue-200 dark:text-white"
+                      />
                       <div className="text-xl text-foreground">Drop data here</div>
                     </div>
                     <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
