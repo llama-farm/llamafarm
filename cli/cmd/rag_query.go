@@ -133,6 +133,34 @@ type QueryResponse struct {
 	Database          string        `json:"database_used"`
 }
 
+// calculateResponseSize calculates the total byte size of the query response
+func calculateResponseSize(response *QueryResponse) int64 {
+	var totalBytes int64
+
+	// Size of query string
+	totalBytes += int64(len(response.Query))
+
+	// Size of results
+	for _, result := range response.Results {
+		// Content size
+		totalBytes += int64(len(result.Content))
+
+		// ChunkID and DocumentID
+		totalBytes += int64(len(result.ChunkID))
+		totalBytes += int64(len(result.DocumentID))
+
+		// Metadata (approximate by marshaling to JSON)
+		if result.Metadata != nil {
+			metadataJSON, err := json.Marshal(result.Metadata)
+			if err == nil {
+				totalBytes += int64(len(metadataJSON))
+			}
+		}
+	}
+
+	return totalBytes
+}
+
 func buildQueryRequest(queryText string) QueryRequest {
 	req := QueryRequest{
 		Query:          queryText,
@@ -255,6 +283,10 @@ func displayDefaultResults(response *QueryResponse, queryText string) {
 	fmt.Printf("📊 Strategy: %s | Database: %s\n", response.RetrievalStrategy, response.Database)
 	fmt.Printf("📝 Found %d results (showing top %d)\n", response.TotalResults, len(response.Results))
 
+	// Calculate and display result size
+	resultSize := calculateResponseSize(response)
+	fmt.Printf("📦 Result size: %s (%d bytes)\n", formatBytes(resultSize), resultSize)
+
 	if response.ProcessingTime > 0 {
 		fmt.Printf("⏱️  Processing time: %.2fms\n", response.ProcessingTime)
 	}
@@ -292,7 +324,9 @@ func displayDefaultResults(response *QueryResponse, queryText string) {
 
 func displayTableResults(response *QueryResponse, queryText string) {
 	fmt.Printf("\nQuery: %s\n", queryText)
-	fmt.Printf("Results: %d | Strategy: %s | Database: %s\n\n", response.TotalResults, response.RetrievalStrategy, response.Database)
+	resultSize := calculateResponseSize(response)
+	fmt.Printf("Results: %d | Strategy: %s | Database: %s | Size: %s (%d bytes)\n\n",
+		response.TotalResults, response.RetrievalStrategy, response.Database, formatBytes(resultSize), resultSize)
 
 	// Table header
 	if includeScore {
@@ -318,6 +352,10 @@ func displayTableResults(response *QueryResponse, queryText string) {
 }
 
 func displayJSONResults(response *QueryResponse) {
+	// Calculate and display result size
+	resultSize := calculateResponseSize(response)
+	fmt.Printf("# Result size: %s (%d bytes)\n", formatBytes(resultSize), resultSize)
+
 	// Pretty print JSON
 	output, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {
