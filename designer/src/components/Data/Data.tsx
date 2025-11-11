@@ -578,6 +578,11 @@ const Data = () => {
       activeUploadControllersRef.current = []
       setIsUploading(false)
       setShouldUploadAfterCreate(false)
+      setUploadingFileCount(0)
+      // Reset file input to allow reselecting the same files
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }, [activeProject, pendingFiles, uploadFilesInBatches, toast, navigate])
 
@@ -602,6 +607,7 @@ const Data = () => {
     setIsSelectDatasetModalOpen(false)
     setShouldUploadAfterCreate(false)
     setIsUploading(false)
+    setUploadingFileCount(0)
 
     // Show cancellation toast
     toast({
