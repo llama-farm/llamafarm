@@ -184,15 +184,26 @@ jobs:
           echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
           echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
       - name: Update project model to qwen/qwen3-0.6B
         shell: bash
         run: |
           echo "Updating model to qwen/qwen3-0.6B for e2e tests..."
-          # Use sed to update the model line within the default model entry
-          # Find the model entry with "name: default" and replace the model line within that block
-          sed -i.bak '/^  - name: default$/,/^  - name:/ {
-            s/^    model: .*/    model: qwen\/qwen3-0.6B/
-          }' "$TEST_DIR/llamafarm.yaml"
+          # Install yq using Go if not available
+          if ! command -v yq &> /dev/null; then
+            echo "Installing yq via Go..."
+            go install github.com/mikefarah/yq/v4@latest
+            # Add Go bin to PATH if not already there
+            export PATH="$HOME/go/bin:$PATH"
+          fi
+
+          # Use yq to update the model in the default model entry
+          # Find the model with name="default" and update its model field
+          yq eval '.runtime.models[] |= if .name == "default" then .model = "qwen/qwen3-0.6B" else . end' -i "$TEST_DIR/llamafarm.yaml"
 
           # Verify the update
           if grep -q "model: qwen/qwen3-0.6B" "$TEST_DIR/llamafarm.yaml"; then
