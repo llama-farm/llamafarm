@@ -64,6 +64,8 @@ const Data = () => {
   const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
   const previousDatasetCountRef = useRef<number>(0)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadingFileCount, setUploadingFileCount] = useState(0)
+  const [activeUploadControllers, setActiveUploadControllers] = useState<AbortController[]>([])
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -373,6 +375,8 @@ const Data = () => {
   const handleDatasetSelect = useCallback(async (datasetId: string, datasetName: string) => {
     if (!activeProject || pendingFiles.length === 0) return
 
+    const fileCount = pendingFiles.length // Store count before clearing
+    setUploadingFileCount(fileCount)
     setIsUploading(true)
     setIsSelectDatasetModalOpen(false)
 
@@ -433,10 +437,16 @@ const Data = () => {
 
   // Cancel file upload and reset state
   const handleCancelUpload = useCallback(() => {
+    // Abort all active uploads
+    activeUploadControllers.forEach(controller => controller.abort())
+    setActiveUploadControllers([])
+
+    // Clear all state
     setPendingFiles([])
     setIsSelectDatasetModalOpen(false)
     setShouldUploadAfterCreate(false)
-  }, [])
+    setIsUploading(false)
+  }, [activeUploadControllers])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : []
@@ -772,6 +782,9 @@ const Data = () => {
                           setNewDatasetName('')
                           setNewDatasetDatabase('')
                           setNewDatasetDataProcessingStrategy('')
+                          // Also clear upload-related state to prevent ghost uploads
+                          setPendingFiles([])
+                          setShouldUploadAfterCreate(false)
                         }
                       }
                     }}
@@ -1512,9 +1525,16 @@ const Data = () => {
             <div className="text-center">
               <div className="font-medium">Uploading Files...</div>
               <div className="text-sm text-muted-foreground mt-1">
-                {pendingFiles.length} {pendingFiles.length === 1 ? 'file' : 'files'}
+                {uploadingFileCount} {uploadingFileCount === 1 ? 'file' : 'files'}
               </div>
             </div>
+            <Button
+              variant="outline"
+              onClick={handleCancelUpload}
+              className="mt-2"
+            >
+              Cancel Upload
+            </Button>
           </div>
         </div>
       )}
