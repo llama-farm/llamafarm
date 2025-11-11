@@ -420,8 +420,20 @@ const Data = () => {
     let cancelled = false
 
     for (let i = 0; i < files.length; i += batchSize) {
-      // Stop processing if any upload was cancelled
-      if (cancelled) break
+      // CHECK FOR CANCELLATION AT START OF EACH BATCH
+      if (cancelled) {
+        // Add cancelled results for remaining files
+        const remainingFiles = files.slice(i)
+        remainingFiles.forEach(file => {
+          results.push({
+            file: file.name,
+            success: false,
+            error: new Error('Cancelled'),
+            cancelled: true,
+          })
+        })
+        break
+      }
 
       const batch = files.slice(i, i + batchSize)
       const batchResults = await Promise.all(
@@ -445,7 +457,7 @@ const Data = () => {
               (error as any)?.code === 'ERR_CANCELED' ||
               (error as any)?.message?.includes('cancel')
             ) {
-              cancelled = true
+              cancelled = true // Set flag to stop processing more batches
               return { file: file.name, success: false, error, cancelled: true }
             }
             return { file: file.name, success: false, error }
@@ -454,7 +466,24 @@ const Data = () => {
           }
         })
       )
+
       results.push(...batchResults)
+
+      // Check if any upload in this batch was cancelled
+      if (batchResults.some(r => (r as any).cancelled)) {
+        cancelled = true
+        // Add cancelled results for remaining files
+        const remainingFiles = files.slice(i + batchSize)
+        remainingFiles.forEach(file => {
+          results.push({
+            file: file.name,
+            success: false,
+            error: new Error('Cancelled'),
+            cancelled: true,
+          })
+        })
+        break
+      }
     }
 
     return results
