@@ -113,6 +113,7 @@ class ChatOrchestratorAgent(LFAgent):
         self,
         user_input: LFChatCompletionMessageParam | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_params: dict | None = None,
     ) -> LFChatCompletion:
         """Run the agent with MCP tool calling support.
 
@@ -132,7 +133,7 @@ class ChatOrchestratorAgent(LFAgent):
 
             try:
                 # Get LLM response
-                response = await super().run_async(user_input=user_input, tools=tools)
+                response = await super().run_async(user_input=user_input, tools=tools, extra_params=extra_params)
 
                 assistant_message = response.choices[0].message
                 tool_calls = assistant_message.tool_calls
@@ -224,6 +225,7 @@ class ChatOrchestratorAgent(LFAgent):
         self,
         user_input: LFChatCompletionMessageParam | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_params: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with MCP tool execution support."""
 
@@ -242,7 +244,7 @@ class ChatOrchestratorAgent(LFAgent):
             accumulated_reasoning = ""  # Accumulate chunks for reasoning
 
             async for chunk in super().run_async_stream(
-                user_input=current_input, tools=tools
+                user_input=current_input, tools=tools, extra_params=extra_params
             ):
                 choice = chunk.choices[0]
                 delta = choice.delta

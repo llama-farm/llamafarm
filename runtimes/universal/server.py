@@ -84,16 +84,40 @@ def get_device():
     return _current_device
 
 
-async def load_language(model_id: str):
-    """Load a causal language model for text generation."""
-    cache_key = f"language:{model_id}"
+async def load_language(model_id: str, n_ctx: int = 2048):
+    """Load a causal language model (GGUF or transformers format).
+
+    Automatically detects whether the model is in GGUF or transformers format
+    and loads it with the appropriate backend. GGUF models use llama-cpp-python
+    for optimized inference, while transformers models use the standard HuggingFace
+    transformers library.
+
+    Args:
+        model_id: HuggingFace model identifier
+        n_ctx: Context window size for GGUF models (default: 2048)
+    """
+    from utils.model_format import detect_model_format
+    from models import GGUFLanguageModel
+
+    # Include n_ctx in cache key for GGUF models so different context sizes are cached separately
+    cache_key = f"language:{model_id}:ctx{n_ctx}"
     if cache_key not in _models:
         async with _model_load_lock:
             # Double-check if model was loaded while waiting for the lock
             if cache_key not in _models:
-                logger.info(f"Loading causal LM: {model_id}")
+                logger.info(f"Loading causal LM: {model_id} (n_ctx={n_ctx})")
                 device = get_device()
-                model = LanguageModel(model_id, device)
+
+                # Detect model format (GGUF vs transformers)
+                model_format = detect_model_format(model_id)
+                logger.info(f"Detected format: {model_format}")
+
+                # Instantiate appropriate model class based on format
+                if model_format == "gguf":
+                    model = GGUFLanguageModel(model_id, device, n_ctx=n_ctx)
+                else:
+                    model = LanguageModel(model_id, device)
+
                 await model.load()
                 _models[cache_key] = model
     return _models[cache_key]

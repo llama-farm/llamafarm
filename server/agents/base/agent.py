@@ -45,24 +45,30 @@ class LFAgent:
         *,
         user_input: LFChatCompletionMessageParam | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_params: dict | None = None,
     ) -> LFChatCompletion:
         if user_input:
             self.history.add_message(user_input)
 
         messages = self._prepare_messages()
-        return await self._client.chat(messages=messages, tools=tools)
+        return await self._client.chat(
+            messages=messages, tools=tools, extra_params=extra_params
+        )
 
     async def run_async_stream(
         self,
         *,
         user_input: LFChatCompletionMessageParam | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_params: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         if user_input:
             self.history.add_message(user_input)
         messages = self._prepare_messages()
 
-        async for chunk in self._client.stream_chat(messages=messages, tools=tools):
+        async for chunk in self._client.stream_chat(
+            messages=messages, tools=tools, extra_params=extra_params
+        ):
             yield chunk
 
     def register_context_provider(

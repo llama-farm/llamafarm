@@ -66,6 +66,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        n_ctx: int | None = None,
     ) -> LFChatCompletion:
         await self._perform_rag_search_and_add_to_context(
             chat_agent,
@@ -81,7 +82,12 @@ class ProjectChatService:
 
         user_input = LFChatCompletionUserMessageParam(role="user", content=message)
 
-        return await chat_agent.run_async(user_input=user_input)
+        # Build extra_params dict for runtime-specific parameters
+        extra_params = {}
+        if n_ctx is not None:
+            extra_params["n_ctx"] = n_ctx
+
+        return await chat_agent.run_async(user_input=user_input, extra_params=extra_params if extra_params else None)
 
     async def stream_chat(
         self,
@@ -95,6 +101,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        n_ctx: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
 
@@ -111,9 +118,15 @@ class ProjectChatService:
         )
 
         user_input = LFChatCompletionUserMessageParam(role="user", content=message)
+
+        # Build extra_params dict for runtime-specific parameters
+        extra_params = {}
+        if n_ctx is not None:
+            extra_params["n_ctx"] = n_ctx
+
         try:
             logger.info("Running async stream")
-            async for chunk in chat_agent.run_async_stream(user_input=user_input):
+            async for chunk in chat_agent.run_async_stream(user_input=user_input, extra_params=extra_params if extra_params else None):
                 yield chunk
         except Exception:
             logger.error(

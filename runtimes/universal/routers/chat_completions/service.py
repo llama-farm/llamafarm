@@ -1,16 +1,20 @@
 import asyncio
-from datetime import datetime
-import os
 import logging
+import os
+from datetime import datetime
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from models import LanguageModel
 from openai.types.chat.chat_completion_chunk import (
     ChatCompletionChunk,
-    Choice as ChoiceChunk,
     ChoiceDelta,
 )
+from openai.types.chat.chat_completion_chunk import (
+    Choice as ChoiceChunk,
+)
+
+from models import GGUFLanguageModel, LanguageModel
+
 from .types import ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
@@ -29,12 +33,14 @@ class ChatCompletionsService:
         """
 
         try:
-            model = await self.load_language(chat_request.model)
+            # Get context window size from request, default to 2048
+            n_ctx = chat_request.n_ctx or 2048
+            model = await self.load_language(chat_request.model, n_ctx=n_ctx)
 
             # Convert messages to prompt
             # ChatCompletionMessageParam is already dict-compatible
             messages_dict = [dict(msg) for msg in chat_request.messages]
-            if isinstance(model, LanguageModel):
+            if isinstance(model, (LanguageModel, GGUFLanguageModel)):
                 prompt = model.format_messages(messages_dict)
 
             # Handle streaming if requested
@@ -68,7 +74,9 @@ class ChatCompletionsService:
                     async for token in model.generate_stream(
                         prompt=prompt,
                         max_tokens=chat_request.max_tokens,
-                        temperature=chat_request.temperature if chat_request.temperature is not None else 0.7,
+                        temperature=chat_request.temperature
+                        if chat_request.temperature is not None
+                        else 0.7,
                         top_p=chat_request.top_p,
                         stop=chat_request.stop,
                     ):

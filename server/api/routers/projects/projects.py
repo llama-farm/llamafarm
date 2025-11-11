@@ -220,19 +220,19 @@ async def update_project(
 async def delete_project(namespace: str, project_id: str):
     """
     Delete a project and all its associated resources.
-    
+
     This endpoint performs a complete cleanup including:
     - All datasets associated with the project
     - All chat sessions
     - All data files (raw, metadata, and indexes)
     - The entire project directory
-    
+
     Warning: This operation is irreversible.
     """
     try:
         # Call the delete_project method in ProjectService
         deleted_project = ProjectService.delete_project(namespace, project_id)
-        
+
         # Clean up in-memory chat sessions to prevent memory leak
         with _agent_sessions_lock:
             session_count = _delete_all_sessions(namespace, project_id)
@@ -245,7 +245,7 @@ async def delete_project(namespace: str, project_id: str):
                     project_id=project_id,
                     session_count=session_count,
                 )
-        
+
         # Convert the Project object to the API response format
         project = Project(
             namespace=deleted_project.namespace,
@@ -254,9 +254,9 @@ async def delete_project(namespace: str, project_id: str):
             validation_error=deleted_project.validation_error,
             last_modified=deleted_project.last_modified,
         )
-        
+
         return DeleteProjectResponse(project=project)
-        
+
     except ProjectNotFoundError as e:
         # Return 404 if project doesn't exist
         raise HTTPException(
@@ -373,6 +373,7 @@ class ChatRequest(BaseModel):
     rag_retrieval_strategy: str | None = None
     rag_top_k: int | None = None
     rag_score_threshold: float | None = None
+    n_ctx: int | None = None  # Context window size for GGUF models (universal runtime)
 
 
 @router.post(
@@ -473,6 +474,7 @@ async def chat(
                 retrieval_strategy=request.rag_retrieval_strategy,
                 rag_top_k=request.rag_top_k,
                 rag_score_threshold=request.rag_score_threshold,
+                n_ctx=request.n_ctx,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -488,6 +490,7 @@ async def chat(
             database=request.database,
             retrieval_strategy=request.rag_retrieval_strategy,
             rag_top_k=request.rag_top_k,
+            n_ctx=request.n_ctx,
             rag_score_threshold=request.rag_score_threshold,
         )
     except Exception as e:

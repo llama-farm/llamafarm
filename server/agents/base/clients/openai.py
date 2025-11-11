@@ -67,8 +67,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
+        extra_params: dict | None = None,
     ) -> LFChatCompletion:
-        """Chat with tool calling support."""
+        """Chat with tool calling support.
+
+        Args:
+            messages: Chat messages
+            tools: Tool definitions
+            extra_params: Additional parameters to pass to the API (e.g., n_ctx for GGUF models)
+        """
         client = AsyncOpenAI(
             api_key=self._model_config.api_key or "",
             base_url=self._model_config.base_url or "",
@@ -82,6 +89,10 @@ class LFAgentClientOpenAI(LFAgentClient):
         else:
             openai_tools = NOT_GIVEN
             self._update_system_message_with_tools(messages, tools)
+
+        # Prepare API parameters
+        # model_api_parameters go as direct kwargs, extra_params go in extra_body
+        api_params = self._model_config.model_api_parameters or {}
 
         # Create non-streaming request
         stream_param: Literal[False] = False
@@ -97,7 +108,8 @@ class LFAgentClientOpenAI(LFAgentClient):
             messages=cleaned_messages,
             model=self._model_config.model,
             tools=openai_tools,
-            **(self._model_config.model_api_parameters or {}),
+            **api_params,
+            extra_body=extra_params or {},
             stream=stream_param,
         )
 
@@ -114,8 +126,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
+        extra_params: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
-        """Stream chat with native OpenAI function calling."""
+        """Stream chat with native OpenAI function calling.
+
+        Args:
+            messages: Chat messages
+            tools: Tool definitions
+            extra_params: Additional parameters to pass to the API (e.g., n_ctx for GGUF models)
+        """
 
         client = AsyncOpenAI(
             api_key=self._model_config.api_key or "",
@@ -131,6 +150,10 @@ class LFAgentClientOpenAI(LFAgentClient):
             openai_tools = NOT_GIVEN
             self._update_system_message_with_tools(messages, tools)
 
+        # Prepare API parameters
+        # model_api_parameters go as direct kwargs, extra_params go in extra_body
+        api_params = self._model_config.model_api_parameters or {}
+
         stream_param: Literal[True] = True
         # Filter out None values from messages to avoid OpenAI validation errors
         cleaned_messages = [
@@ -144,7 +167,8 @@ class LFAgentClientOpenAI(LFAgentClient):
             messages=cleaned_messages,
             model=self._model_config.model,
             tools=openai_tools,
-            **(self._model_config.model_api_parameters or {}),
+            **api_params,
+            extra_body=extra_params or {},
             stream=stream_param,
         )
 

@@ -18,6 +18,7 @@ dependencies = [
   "openai>=1.0.0",
   "llamafarm-common",
   "structlog>=24.0.0",
+  "llama-cpp-python>=0.2.0",
 ]
 
 [dependency-groups]
