@@ -38,8 +38,13 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     // Also remove any orphaned closing tags
     processedContent = processedContent.replace(/<\/think>/g, '')
 
-    // Hide raw <tool_call> XML tags from display
+    // Hide raw <tool_call> XML tags from display (handle both closed and unclosed during streaming)
+    // First remove complete tool_call blocks
     processedContent = processedContent.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+    // Then remove any unclosed tool_call tags (streaming in progress)
+    processedContent = processedContent.replace(/<tool_call>[\s\S]*$/g, '')
+    // Also remove orphaned closing tags
+    processedContent = processedContent.replace(/<\/tool_call>/g, '')
     
     // Clean up extra whitespace
     processedContent = processedContent.trim()

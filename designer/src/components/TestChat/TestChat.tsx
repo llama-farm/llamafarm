@@ -957,6 +957,17 @@ export function TestChatMessage({
     }
   }
 
+  // Remove raw <tool_call> XML tags from display (handled as separate messages)
+  if (isAssistant && typeof contentWithoutThinking === 'string') {
+    // Remove complete tool_call blocks
+    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+    // Remove unclosed tool_call tags (streaming in progress)
+    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*$/g, '')
+    // Remove orphaned closing tags
+    contentWithoutThinking = contentWithoutThinking.replace(/<\/tool_call>/g, '')
+    contentWithoutThinking = contentWithoutThinking.trim()
+  }
+
   // Load persisted thumb for this message
   useEffect(() => {
     if (typeof window === 'undefined') return
