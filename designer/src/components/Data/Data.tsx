@@ -75,6 +75,21 @@ const Data = () => {
   // Get current active project for API calls
   const activeProject = useActiveProject()
 
+  // Cleanup effect: abort all active upload controllers on unmount
+  useEffect(() => {
+    return () => {
+      // Abort all active upload network requests when component unmounts
+      activeUploadControllers.forEach(controller => {
+        try {
+          controller.abort()
+        } catch (err) {
+          // Ignore errors from already aborted controllers
+          console.debug('Controller aborted on unmount:', err)
+        }
+      })
+    }
+  }, [activeUploadControllers])
+
   // File type mapping for parser creation (centralized to avoid duplication)
   const fileTypeMapping = useMemo(
     () => [
