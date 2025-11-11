@@ -23,13 +23,14 @@ interface ChatboxProps {
 /**
  * Copy button component for command boxes
  */
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, onCopy }: { text: string; onCopy?: () => void }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
+      onCopy?.()
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
@@ -37,16 +38,23 @@ function CopyButton({ text }: { text: string }) {
   }
 
   return (
-    <button
-      onClick={handleCopy}
-      className="p-1 hover:bg-muted/50 rounded transition-colors"
-      title={copied ? 'Copied!' : 'Copy to clipboard'}
-    >
-      <FontIcon
-        type={copied ? 'checkmark-filled' : 'copy'}
-        className={`w-4 h-4 ${copied ? 'text-green-500' : 'text-muted-foreground'}`}
-      />
-    </button>
+    <>
+      <button
+        onClick={handleCopy}
+        className="p-1 hover:bg-muted/50 rounded transition-colors"
+        title={copied ? 'Copied!' : 'Copy to clipboard'}
+        aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
+      >
+        <FontIcon
+          type={copied ? 'checkmark-filled' : 'copy'}
+          className={`w-4 h-4 ${copied ? 'text-green-500' : 'text-muted-foreground'}`}
+        />
+      </button>
+      {/* Screen reader announcement */}
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Command copied to clipboard.' : ''}
+      </span>
+    </>
   )
 }
 

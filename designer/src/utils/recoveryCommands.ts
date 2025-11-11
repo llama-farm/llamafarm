@@ -6,7 +6,8 @@
  */
 
 import { ErrorType } from './errorClassifier'
-import { HealthResponse, getUnhealthyComponents, getUnhealthySeeds } from '../api/healthService'
+import { HealthResponse } from '../types/chat'
+import { getUnhealthyComponents, getUnhealthySeeds } from '../api/healthService'
 
 /**
  * Recovery command with description
@@ -62,9 +63,11 @@ function getDegradedCommands(healthStatus: HealthResponse): RecoveryCommand[] {
   }
 
   if (hasOllamaIssue) {
+    // Check platform for appropriate command
+    const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0
     commands.push({
-      description: 'Start Ollama (open the Ollama app or run ollama serve)',
-      command: '# Open Ollama app, then restart services',
+      description: isMac ? 'Open Ollama app and restart services' : 'Start Ollama service',
+      command: isMac ? 'open -a Ollama && lf start' : 'ollama serve',
     })
   }
 

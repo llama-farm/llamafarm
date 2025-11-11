@@ -5,8 +5,7 @@
  * to provide better user feedback and recovery suggestions.
  */
 
-import { NetworkError, ValidationError, ChatApiError, ClassifiedError } from '../types/chat'
-import { HealthResponse } from '../api/healthService'
+import { NetworkError, ValidationError, ChatApiError, ClassifiedError, HealthResponse } from '../types/chat'
 
 /**
  * Error type categories
@@ -161,6 +160,31 @@ export function getErrorTitle(type: ErrorType): string {
 }
 
 /**
+ * Get detailed contextual error message for inline display in chat
+ * 
+ * @param classified - The classified error
+ * @returns Formatted markdown error message with recovery instructions
+ */
+export function getContextualErrorMessage(classified: ClassifiedError): string {
+  switch (classified.type) {
+    case 'server_down':
+      return `I can't connect to the LlamaFarm server. It appears to be offline.\n\n**To fix this:**\n1. Open a terminal\n2. Run: \`lf start\`\n3. Wait for the server to start\n4. Try your question again`
+    
+    case 'timeout':
+      return `The server is taking too long to respond (timed out after 60s).\n\nThis might mean the server is overloaded or stuck. Try restarting it with \`lf start\`.`
+    
+    case 'degraded':
+      return `The server is running but some services are unavailable.\n\n${classified.message}\n\nCheck the server logs or try restarting with \`lf start\`.`
+    
+    case 'validation':
+      return `There was a problem with the request:\n\n${classified.message}\n\nThis might be a configuration issue. Check your \`llamafarm.yaml\` file.`
+    
+    default:
+      return `I encountered an error: ${classified.message}\n\nPlease try again or check the server status.`
+  }
+}
+
+/**
  * Determine if health check should be attempted for this error
  */
 export function shouldCheckHealth(error: Error): boolean {
@@ -171,6 +195,7 @@ export function shouldCheckHealth(error: Error): boolean {
 export default {
   classifyError,
   getErrorTitle,
+  getContextualErrorMessage,
   shouldCheckHealth,
 }
 

@@ -6,43 +6,17 @@
  */
 
 import { apiClient } from './client'
+import { HealthResponse } from '../types/chat'
 
 /**
- * Component health status
+ * Component health status (re-exported for convenience)
  */
-export interface HealthComponent {
-  name: string
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  message: string
-  latency_ms?: number
-  details?: Record<string, any>
-}
+export type HealthComponent = HealthResponse['components'][number]
 
 /**
- * Seed project health status
+ * Seed project health status (re-exported for convenience)
  */
-export interface HealthSeed {
-  name: string
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  message: string
-  latency_ms?: number
-  runtime?: {
-    provider: string
-    model: string
-    host?: string
-  }
-}
-
-/**
- * Complete health check response from server
- */
-export interface HealthResponse {
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  summary: string
-  components: HealthComponent[]
-  seeds: HealthSeed[]
-  timestamp: number
-}
+export type HealthSeed = HealthResponse['seeds'][number]
 
 /**
  * Cached health result with timestamp

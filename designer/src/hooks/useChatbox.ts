@@ -16,7 +16,7 @@ import { useChatSession } from './useChatSession'
 import { ChatboxMessage } from '../types/chatbox'
 import { ChatStreamChunk, NetworkError, ChatMessage, ClassifiedError } from '../types/chat'
 import { generateMessageId } from '../utils/idGenerator'
-import { classifyError } from '../utils/errorClassifier'
+import { classifyError, getContextualErrorMessage } from '../utils/errorClassifier'
 import { getHealth } from '../api/healthService'
 import { generateRecoveryCommands } from '../utils/recoveryCommands'
 import {
@@ -187,26 +187,6 @@ export function useChatbox(options: UseChatboxOptions = {}) {
 
     setError(finalError)
     return finalError
-  }, [])
-
-  // Helper to create contextual error messages based on error type
-  const getContextualErrorMessage = useCallback((classified: ClassifiedError): string => {
-    switch (classified.type) {
-      case 'server_down':
-        return `I can't connect to the LlamaFarm server. It appears to be offline.\n\n**To fix this:**\n1. Open a terminal\n2. Run: \`lf start\`\n3. Wait for the server to start\n4. Try your question again`
-      
-      case 'timeout':
-        return `The server is taking too long to respond (timed out after 60s).\n\nThis might mean the server is overloaded or stuck. Try restarting it with \`lf start\`.`
-      
-      case 'degraded':
-        return `The server is running but some services are unavailable.\n\n${classified.message}\n\nCheck the server logs or try restarting with \`lf start\`.`
-      
-      case 'validation':
-        return `There was a problem with the request:\n\n${classified.message}\n\nThis might be a configuration issue. Check your \`llamafarm.yaml\` file.`
-      
-      default:
-        return `I encountered an error: ${classified.message}\n\nPlease try again or check the server status.`
-    }
   }, [])
 
   // Local messages state (for simple session mode)
@@ -511,8 +491,15 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       
       const deduplicated = Array.from(messageMap.values())
       
+      // Sort by timestamp to maintain chronological order
+      const sorted = deduplicated.sort((a, b) => {
+        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : 0
+        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : 0
+        return timeA - timeB
+      })
+      
       // Filter out "Thinking..." placeholder messages
-      return deduplicated.filter(msg => {
+      return sorted.filter(msg => {
         const isThinkingPlaceholder =
           msg.type === 'assistant' &&
           msg.content === 'Thinking...' &&
@@ -629,23 +616,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                 if (error) {
                   setError(null)
                   // Also remove any error messages from the chat history
-                  // Check for all our error message patterns
-                  const isErrorMessage = (content: string) => {
-                    return content.includes("I can't connect to the LlamaFarm server") ||
-                           content.includes("The server is taking too long to respond") ||
-                           content.includes("The server is running but some services are unavailable") ||
-                           content.includes("There was a problem with the request") ||
-                           content.includes("I encountered an error:")
-                  }
-                  
                   if (useProjectSessionMode) {
-                    setStreamingMessages(prev => 
-                      prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
-                    )
+                    setStreamingMessages(prev => prev.filter(msg => !msg.isError))
                   } else {
-                    setLocalMessages(prev => 
-                      prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
-                    )
+                    setLocalMessages(prev => prev.filter(msg => !msg.isError))
                   }
                 }
 
@@ -855,6 +829,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                           content: errorMessage,
                           isLoading: false,
                           isStreaming: false,
+                          isError: true,
                         })
                       }
                     )
@@ -871,6 +846,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                       content: errorMessage,
                       isLoading: false,
                       isStreaming: false,
+                      isError: true,
                     })
                   } else {
                     updateMessage(assistantMessageId, {
@@ -1063,23 +1039,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
           if (error) {
             setError(null)
             // Also remove any error messages from the chat history
-            // Check for all our error message patterns
-            const isErrorMessage = (content: string) => {
-              return content.includes("I can't connect to the LlamaFarm server") ||
-                     content.includes("The server is taking too long to respond") ||
-                     content.includes("The server is running but some services are unavailable") ||
-                     content.includes("There was a problem with the request") ||
-                     content.includes("I encountered an error:")
-            }
-            
             if (useProjectSessionMode) {
-              setStreamingMessages(prev => 
-                prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
-              )
+              setStreamingMessages(prev => prev.filter(msg => !msg.isError))
             } else {
-              setLocalMessages(prev => 
-                prev.filter(msg => msg.type !== 'assistant' || !isErrorMessage(msg.content))
-              )
+              setLocalMessages(prev => prev.filter(msg => !msg.isError))
             }
           }
 
@@ -1184,6 +1147,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
           content: errorMessage,
           isLoading: false,
           isStreaming: false,
+          isError: true,
         })
 
         return false
@@ -1212,7 +1176,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       simpleSession,
       streamingMessages,
       error,
-      getContextualErrorMessage,
+      classifyAndSetError,
     ]
   )
 
@@ -1234,7 +1198,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       const err = error instanceof Error 
         ? error 
         : new Error('Failed to clear chat')
-      classifyAndSetError(err)
+      await classifyAndSetError(err)
       return false
     }
   }, [useProjectSessionMode, projectSession, simpleSession])

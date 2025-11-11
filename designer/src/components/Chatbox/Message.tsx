@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChatboxMessage } from '../../types/chatbox'
 import Markdown from '../../utils/renderMarkdown'
+import { parseMessageContentMemo } from '../../utils/messageParser'
 
 export interface MessageProps {
   message: ChatboxMessage
@@ -17,45 +18,11 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     setIsThinkingExpanded(true) // Always start expanded
   }, [message.id])
 
-  // Extract thinking steps and tool calls from content
-  const parseMessageContent = (content: string) => {
-    if (type !== 'assistant') {
-      return { thinking: null, contentWithoutThinking: content }
-    }
-
-    let processedContent = content
-    let thinking = ''
-
-    // Extract all <think> sections (handle multiple)
-    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g
-    let thinkMatch
-    while ((thinkMatch = thinkRegex.exec(content)) !== null) {
-      thinking += (thinking ? '\n\n' : '') + thinkMatch[1].trim()
-      // Remove this thinking section from content
-      processedContent = processedContent.replace(thinkMatch[0], '')
-    }
-
-    // Also remove any orphaned closing tags
-    processedContent = processedContent.replace(/<\/think>/g, '')
-
-    // Hide raw <tool_call> XML tags from display (handle both closed and unclosed during streaming)
-    // First remove complete tool_call blocks
-    processedContent = processedContent.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-    // Then remove any unclosed tool_call tags (streaming in progress)
-    processedContent = processedContent.replace(/<tool_call>[\s\S]*$/g, '')
-    // Also remove orphaned closing tags
-    processedContent = processedContent.replace(/<\/tool_call>/g, '')
-    
-    // Clean up extra whitespace
-    processedContent = processedContent.trim()
-
-    return { 
-      thinking: thinking || null, 
-      contentWithoutThinking: processedContent 
-    }
-  }
-
-  const { thinking, contentWithoutThinking } = parseMessageContent(content)
+  // Parse message content using memoized utility
+  const { thinking, contentWithoutThinking } = useMemo(
+    () => parseMessageContentMemo(content, type, message.id),
+    [content, type, message.id]
+  )
 
   // Show typing indicator while assistant is preparing/streaming with no content yet
   const showTypingIndicator =
