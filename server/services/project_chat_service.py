@@ -1,9 +1,16 @@
+import asyncio
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 from observability.event_logger import EventLogger
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+from openai.types.chat.chat_completion_chunk import ChoiceDelta
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.completion_usage import CompletionUsage
 
 from agents.base.agent import LFAgent
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
@@ -16,6 +23,7 @@ from context_providers.rag_context_provider import (
     RAGContextProvider,
 )
 from core.logging import FastAPIStructLogger
+from core.settings import settings
 from services.rag_service import search_with_rag
 
 logger = FastAPIStructLogger()
@@ -56,6 +64,62 @@ class RAGParameters:
 
 
 class ProjectChatService:
+    def _create_echo_completion(
+        self, message: str, model_name: str
+    ) -> LFChatCompletion:
+        """Create an echo response that mirrors the input message."""
+        return LFChatCompletion(
+            id=f"chatcmpl-{uuid.uuid4()}",
+            created=int(time.time()),
+            model=model_name,
+            object="chat.completion",
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        content=f"[ECHO MODE] {message}",
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=len(message.split()),
+                completion_tokens=len(message.split()),
+                total_tokens=len(message.split()) * 2,
+            ),
+        )
+
+    async def _create_echo_stream(
+        self, message: str, model_name: str
+    ) -> AsyncGenerator[LFChatCompletionChunk]:
+        """Create a streaming echo response that mirrors the input message."""
+        echo_content = f"[ECHO MODE] {message}"
+        chunk_id = f"chatcmpl-{uuid.uuid4()}"
+        created_time = int(time.time())
+        # Simulate streaming by yielding chunks
+        words = echo_content.split()
+        for i, word in enumerate(words):
+            chunk_content = word + (" " if i < len(words) - 1 else "")
+            yield LFChatCompletionChunk(
+                id=chunk_id,
+                created=created_time,
+                model=model_name,
+                object="chat.completion.chunk",
+                choices=[
+                    ChoiceChunk(
+                        index=0,
+                        delta=ChoiceDelta(
+                            role="assistant",
+                            content=chunk_content,
+                        ),
+                        finish_reason="stop" if i == len(words) - 1 else None,
+                    )
+                ],
+            )
+            # Small delay to simulate streaming
+            await asyncio.sleep(0.01)
+
     def _create_event_logger(
         self,
         project_config: LlamaFarmConfig,
@@ -217,6 +281,13 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
     ) -> LFChatCompletion:
+        # Check if echo mode is enabled
+        if settings.lf_echo_mode:
+            logger.info(
+                "Echo mode enabled - returning echo response instead of invoking model"
+            )
+            return self._create_echo_completion(message, chat_agent.model_name)
+
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
 
@@ -298,6 +369,15 @@ class ProjectChatService:
         rag_score_threshold: float | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
+
+        # Check if echo mode is enabled
+        if settings.lf_echo_mode:
+            logger.info(
+                "Echo mode enabled - returning echo stream instead of invoking model"
+            )
+            async for chunk in self._create_echo_stream(message, chat_agent.model_name):
+                yield chunk
+            return
 
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)

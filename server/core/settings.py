@@ -54,5 +54,9 @@ class Settings(BaseSettings, env_file=".env"):
     universal_host: str = "127.0.0.1"
     universal_api_key: str = "universal"
 
+    # Echo mode - when enabled, chat responses echo back the input instead of invoking models
+    # Useful for CI/testing environments without GPU access
+    lf_echo_mode: bool = False
+
 
 settings = Settings()

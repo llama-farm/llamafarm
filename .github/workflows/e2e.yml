@@ -47,6 +47,9 @@ jobs:
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
+      # Enable echo mode - chat responses will echo input instead of invoking models
+      # This is necessary because GitHub Actions doesn't have GPU access
+      LF_ECHO_MODE: 1
 
     steps:
       # ============================================================
