@@ -62,7 +62,6 @@ const Data = () => {
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [isSelectDatasetModalOpen, setIsSelectDatasetModalOpen] = useState(false)
   const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
-  const previousDatasetCountRef = useRef<number>(0)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadingFileCount, setUploadingFileCount] = useState(0)
   const [activeUploadControllers, setActiveUploadControllers] = useState<AbortController[]>([])
@@ -298,7 +297,7 @@ const Data = () => {
     }
 
     try {
-      await createDatasetMutation.mutateAsync({
+      const newDataset = await createDatasetMutation.mutateAsync({
         namespace: activeProject.namespace,
         project: activeProject.project,
         name,
@@ -310,6 +309,11 @@ const Data = () => {
       setNewDatasetName('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
+
+      // If we should upload files after creating, directly use the new dataset
+      if (shouldUploadAfterCreate && newDataset?.name) {
+        handleDatasetSelect(newDataset.name, newDataset.name)
+      }
     } catch (error) {
       console.error('Failed to create dataset:', error)
       toast({
@@ -371,6 +375,49 @@ const Data = () => {
     setIsSelectDatasetModalOpen(true)
   }, [toast])
 
+  // Upload files in batches with cancellation support
+  const uploadFilesInBatches = useCallback(async (
+    files: File[],
+    datasetId: string,
+    namespace: string,
+    project: string,
+    batchSize: number = UPLOAD_BATCH_SIZE
+  ) => {
+    const results = []
+
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize)
+      const batchResults = await Promise.all(
+        batch.map(async (file) => {
+          const controller = new AbortController()
+          setActiveUploadControllers(prev => [...prev, controller])
+
+          try {
+            const result = await uploadMutation.mutateAsync({
+              namespace,
+              project,
+              dataset: datasetId,
+              file,
+              // Note: If your API supports AbortSignal, pass it here:
+              // signal: controller.signal,
+            })
+            return { file: file.name, success: true, result }
+          } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') {
+              return { file: file.name, success: false, error, cancelled: true }
+            }
+            return { file: file.name, success: false, error }
+          } finally {
+            setActiveUploadControllers(prev => prev.filter(c => c !== controller))
+          }
+        })
+      )
+      results.push(...batchResults)
+    }
+
+    return results
+  }, [uploadMutation])
+
   // Handle file upload to selected dataset
   const handleDatasetSelect = useCallback(async (datasetId: string, datasetName: string) => {
     if (!activeProject || pendingFiles.length === 0) return
@@ -380,26 +427,39 @@ const Data = () => {
     setIsUploading(true)
     setIsSelectDatasetModalOpen(false)
 
-    const namespace = activeProject.namespace
-    const project = activeProject.project
+    const { namespace, project } = activeProject
 
     try {
-      // Upload all files to the selected dataset
-      await Promise.all(
-        pendingFiles.map(async (file) => {
-          await uploadMutation.mutateAsync({
-            namespace,
-            project,
-            dataset: datasetId,
-            file,
-          })
-        })
+      // Upload all files to the selected dataset in batches
+      const results = await uploadFilesInBatches(
+        pendingFiles,
+        datasetId,
+        namespace,
+        project
       )
 
-      toast({
-        message: `${pendingFiles.length} file(s) uploaded to ${datasetName}`,
-        variant: 'default',
-      })
+      const failures = results.filter(r => !r.success)
+      const cancelled = results.filter(r => (r as any).cancelled)
+
+      if (cancelled.length > 0) {
+        toast({
+          message: 'Upload cancelled',
+          variant: 'default',
+        })
+        return
+      }
+
+      if (failures.length > 0) {
+        toast({
+          message: `Upload completed with ${failures.length} failure(s). Failed files: ${failures.map(f => f.file).join(', ')}`,
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          message: `${fileCount} file(s) uploaded to ${datasetName}`,
+          variant: 'default',
+        })
+      }
 
       // Navigate to the dataset view to see uploaded files
       navigate(`/chat/data/${datasetId}`)
@@ -411,29 +471,13 @@ const Data = () => {
       })
     } finally {
       setPendingFiles([])
+      setActiveUploadControllers([])
       setIsUploading(false)
     }
-  }, [activeProject, pendingFiles, uploadMutation, toast, navigate])
+  }, [activeProject, pendingFiles, uploadFilesInBatches, toast, navigate])
 
-  // Auto-upload pending files when a new dataset is created
-  useEffect(() => {
-    if (!shouldUploadAfterCreate || pendingFiles.length === 0 || !datasets) {
-      return
-    }
-
-    // Check if dataset count increased (new dataset was created)
-    const currentCount = datasets.length
-    const previousCount = previousDatasetCountRef.current
-
-    if (currentCount > previousCount) {
-      // A new dataset was added - find it (should be the last one)
-      const newestDataset = datasets[datasets.length - 1]
-
-      setShouldUploadAfterCreate(false)
-      previousDatasetCountRef.current = currentCount
-      handleDatasetSelect(newestDataset.id, newestDataset.name)
-    }
-  }, [datasets, shouldUploadAfterCreate, pendingFiles, handleDatasetSelect])
+  // Note: Auto-upload logic now handled directly in handleCreateDataset
+  // No need for fragile useEffect watching datasets.length
 
   // Cancel file upload and reset state
   const handleCancelUpload = useCallback(() => {
@@ -460,7 +504,17 @@ const Data = () => {
 
   // Render modal for selecting destination dataset for dropped files
   const renderSelectDatasetModal = () => (
-    <Dialog open={isSelectDatasetModalOpen} onOpenChange={setIsSelectDatasetModalOpen}>
+    <Dialog 
+      open={isSelectDatasetModalOpen} 
+      onOpenChange={(open) => {
+        setIsSelectDatasetModalOpen(open)
+        if (!open) {
+          // User closed modal without selecting - clean up state
+          setPendingFiles([])
+          setShouldUploadAfterCreate(false)
+        }
+      }}
+    >
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Add Files to Dataset</DialogTitle>
@@ -476,7 +530,6 @@ const Data = () => {
           {/* Create new dataset with dropped files */}
           <button
             onClick={() => {
-              previousDatasetCountRef.current = datasets.length
               setShouldUploadAfterCreate(true)
               setIsSelectDatasetModalOpen(false)
               setIsCreateOpen(true)
