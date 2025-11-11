@@ -188,6 +188,9 @@ jobs:
         shell: bash
         run: |
           echo "Updating model to qwen/qwen3-0.6B for e2e tests..."
+          # Install PyYAML if not available
+          python3 -m pip install --quiet pyyaml || echo "PyYAML already installed or pip not available"
+
           # Use Python to safely update the YAML file
           python3 << EOF
           import yaml
