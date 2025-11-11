@@ -327,22 +327,26 @@ const Data = () => {
     }
 
     try {
-      const newDataset = await createDatasetMutation.mutateAsync({
+      const response = await createDatasetMutation.mutateAsync({
         namespace: activeProject.namespace,
         project: activeProject.project,
         name,
         data_processing_strategy: newDatasetDataProcessingStrategy || 'default',
         database: newDatasetDatabase || 'default',
       })
+      
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
 
-      // If we should upload files after creating, directly use the new dataset
-      if (shouldUploadAfterCreate && newDataset?.dataset?.name) {
-        handleDatasetSelect(newDataset.dataset.name, newDataset.dataset.name)
+      // If we should upload files after creating, use the newly created dataset
+      // Note: In this system, dataset name serves as the unique identifier (ID)
+      if (shouldUploadAfterCreate && response?.dataset?.name) {
+        const datasetId = response.dataset.name
+        const datasetName = response.dataset.name
+        handleDatasetSelect(datasetId, datasetName)
       }
     } catch (error) {
       console.error('Failed to create dataset:', error)
