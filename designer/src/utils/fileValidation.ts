@@ -52,7 +52,14 @@ export const hasValidMimeType = (file: File): boolean => {
   if (!extension) return false
   
   const allowedMimes = VALID_FILE_TYPES[extension as keyof typeof VALID_FILE_TYPES]
-  return (allowedMimes as readonly string[]).includes(file.type) || file.type === ''
+  
+  // Only allow empty MIME type for known safe extensions (e.g., .txt)
+  const safeEmptyMimeExtensions = ['.txt', '.csv', '.md', '.markdown']
+  if (file.type === '') {
+    return safeEmptyMimeExtensions.includes(extension)
+  }
+  
+  return (allowedMimes as readonly string[]).includes(file.type)
 }
 
 /**
