@@ -157,12 +157,19 @@ class EventLogger:
         random_id = uuid.uuid4().hex[:6]
         event_id = f"evt_{timestamp}_{self.event_type}_{random_id}"
 
+        # Determine timestamp: use first event's timestamp if available, otherwise use start time
+        if self._events:
+            # Parse ISO timestamp from first event
+            event_timestamp = datetime.fromisoformat(self._events[0]["timestamp"])
+        else:
+            # Fallback to start time if no events logged
+            event_timestamp = self._start_time
+
         # Build complete event structure
         full_event = {
             "event_id": event_id,
             "event_type": self.event_type,
             "request_id": self.request_id,
-            # Note: No top-level timestamp - use first event's timestamp instead
             "namespace": self.namespace,
             "project": self.project,
             "config_hash": self.config_hash,
@@ -174,7 +181,13 @@ class EventLogger:
 
         # Merge summary data from final event (e.g., processing_complete) into top level
         if self._summary_data:
-            full_event.update(self._summary_data)
+            full_event |= self._summary_data
+
+        # Set timestamp AFTER merge to ensure it's never overwritten by summary_data
+        # This field is required by EventLogService.list_events() and EventLogService.get_event()
+        full_event["timestamp"] = (
+            event_timestamp.isoformat()
+        )  # ISO format for EventLogService
 
         # Get project path with security validation (follows ProjectService pattern)
         from .path_utils import get_project_path, validate_file_path

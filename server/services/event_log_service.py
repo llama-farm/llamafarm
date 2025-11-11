@@ -3,7 +3,6 @@ Service layer for reading event logs from filesystem.
 """
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -61,7 +60,8 @@ class EventLogService:
             return [], 0
 
         # Find all event log files
-        pattern = f"evt_{event_type}_*.json" if event_type else "evt_*.json"
+        # Event files are named: evt_{timestamp}_{event_type}_{random_id}.json
+        pattern = f"evt_*_{event_type}_*.json" if event_type else "evt_*.json"
         event_files = sorted(
             event_logs_dir.glob(pattern),
             key=lambda f: f.stat().st_mtime,
