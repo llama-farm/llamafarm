@@ -224,8 +224,15 @@ export default function TestChat({
   const projectChatError =
     projectChatStreamingMessage.error ||
     projectChatStreamingSession.sessionError
-  const combinedError =
-    error || (projectChatError ? projectChatError.message : null)
+  const combinedError = (() => {
+    if (error) {
+      return typeof error === 'string' ? error : error.message
+    }
+    if (projectChatError) {
+      return typeof projectChatError === 'string' ? projectChatError : projectChatError.message
+    }
+    return null
+  })()
 
   // Combined canSend state
   const combinedCanSend = canSend && !isProjectChatLoading

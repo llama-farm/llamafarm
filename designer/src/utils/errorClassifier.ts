@@ -5,7 +5,7 @@
  * to provide better user feedback and recovery suggestions.
  */
 
-import { NetworkError, ValidationError, ChatApiError } from '../types/chat'
+import { NetworkError, ValidationError, ChatApiError, ClassifiedError } from '../types/chat'
 import { HealthResponse } from '../api/healthService'
 
 /**
@@ -17,18 +17,6 @@ export type ErrorType =
   | 'timeout'          // Request timed out
   | 'validation'       // Invalid request (400/422)
   | 'unknown'          // Other errors
-
-/**
- * Classified error with recovery information
- */
-export interface ClassifiedError {
-  type: ErrorType
-  title: string
-  message: string
-  originalError: Error
-  healthStatus?: HealthResponse
-  shouldCheckHealth: boolean
-}
 
 /**
  * Check if error is a network connectivity error
@@ -98,7 +86,6 @@ export function classifyError(
       message: 'Unable to connect to the LlamaFarm server. It may not be running.',
       originalError: error,
       healthStatus,
-      shouldCheckHealth: true, // Try to get health status
     }
   }
 
@@ -110,7 +97,6 @@ export function classifyError(
       message: 'The server took too long to respond (>60s). It may be overloaded or stuck.',
       originalError: error,
       healthStatus,
-      shouldCheckHealth: false, // Don't check health on timeout
     }
   }
 
@@ -131,7 +117,6 @@ export function classifyError(
       message: validationMessage,
       originalError: error,
       healthStatus,
-      shouldCheckHealth: false,
     }
   }
 
@@ -143,7 +128,6 @@ export function classifyError(
       message: 'The server is running but some services are unavailable.',
       originalError: error,
       healthStatus,
-      shouldCheckHealth: false, // We already have health status
     }
   }
 
@@ -154,7 +138,6 @@ export function classifyError(
     message: error.message || 'An unexpected error occurred.',
     originalError: error,
     healthStatus,
-    shouldCheckHealth: false,
   }
 }
 

@@ -306,7 +306,7 @@ function Chatbox({
           const healthStatus = classifiedError?.healthStatus
 
           return (
-            <div className="mx-4 mb-2 rounded-xl border border-border bg-card/40 p-3">
+            <div className="mx-4 mb-2 rounded-xl border-2 border-red-500/40 bg-card/40 p-3">
               {/* Error header */}
               <div className="flex items-start gap-3 mb-2">
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/15 text-red-400 border border-red-500/30 flex-shrink-0 mt-0.5">
