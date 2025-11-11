@@ -366,6 +366,15 @@ jobs:
             exit 1
           fi
 
+          # Check if output contains fallback error message (indicates a problem)
+          if echo "$OUTPUT" | grep -qi "my previous response wasn't very helpful"; then
+            echo "❌ Error: Chat command returned fallback error message"
+            echo "This indicates the model call failed or returned an error response"
+            echo "$OUTPUT"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
           echo "✓ Chat command returned a response"
 
       - name: Test chat command without RAG
@@ -391,6 +400,15 @@ jobs:
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: Chat command (no RAG) returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          # Check if output contains fallback error message (indicates a problem)
+          if echo "$OUTPUT" | grep -qi "my previous response wasn't very helpful"; then
+            echo "❌ Error: Chat command (no RAG) returned fallback error message"
+            echo "This indicates the model call failed or returned an error response"
+            echo "$OUTPUT"
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
           fi

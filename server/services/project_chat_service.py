@@ -1,8 +1,9 @@
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
-import uuid
 
 from config.datamodel import LlamaFarmConfig  # noqa: E402
+from observability.event_logger import EventLogger
 
 from agents.base.agent import LFAgent
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
@@ -15,7 +16,6 @@ from context_providers.rag_context_provider import (
     RAGContextProvider,
 )
 from core.logging import FastAPIStructLogger
-from observability.event_logger import EventLogger
 from services.rag_service import search_with_rag
 
 logger = FastAPIStructLogger()
@@ -133,12 +133,16 @@ class ProjectChatService:
 
         # Log RAG query start if enabled
         if rag_params.rag_enabled:
-            self._log_event(event_logger, "rag_query_start", {
-                "database": rag_params.database,
-                "query": message,
-                "top_k": rag_params.rag_top_k,
-                "retrieval_strategy": rag_params.retrieval_strategy,
-            })
+            self._log_event(
+                event_logger,
+                "rag_query_start",
+                {
+                    "database": rag_params.database,
+                    "query": message,
+                    "top_k": rag_params.rag_top_k,
+                    "retrieval_strategy": rag_params.retrieval_strategy,
+                },
+            )
 
         # Perform RAG search using existing helper
         await self._perform_rag_search_and_add_to_context(
@@ -169,26 +173,36 @@ class ProjectChatService:
 
                         # Calculate average score
                         if chunks:
-                            scores = [chunk.metadata.get("score", 0.0) for chunk in chunks]
+                            scores = [
+                                chunk.metadata.get("score", 0.0) for chunk in chunks
+                            ]
                             avg_score = sum(scores) / len(scores) if scores else 0.0
             except Exception as e:
                 # If we can't extract metrics, log with empty results
                 logger.warning(f"Could not extract RAG metrics: {e}", exc_info=False)
 
             # Always log the completion event (even if 0 chunks found)
-            self._log_event(event_logger, "rag_retrieval_complete", {
-                "chunks_retrieved": len(chunks),
-                "avg_score": round(avg_score, 3),
-                "top_chunks": [
-                    {
-                        "rank": idx + 1,
-                        "content_preview": chunk.content[:100] if len(chunk.content) > 100 else chunk.content,
-                        "source": chunk.metadata.get("source", "unknown"),
-                        "score": round(chunk.metadata.get("score", 0.0), 3),
-                    }
-                    for idx, chunk in enumerate(chunks[:2])  # Top 2 chunks
-                ] if chunks else []
-            })
+            self._log_event(
+                event_logger,
+                "rag_retrieval_complete",
+                {
+                    "chunks_retrieved": len(chunks),
+                    "avg_score": round(avg_score, 3),
+                    "top_chunks": [
+                        {
+                            "rank": idx + 1,
+                            "content_preview": chunk.content[:100]
+                            if len(chunk.content) > 100
+                            else chunk.content,
+                            "source": chunk.metadata.get("source", "unknown"),
+                            "score": round(chunk.metadata.get("score", 0.0), 3),
+                        }
+                        for idx, chunk in enumerate(chunks[:2])  # Top 2 chunks
+                    ]
+                    if chunks
+                    else [],
+                },
+            )
 
     async def chat(
         self,
@@ -207,11 +221,15 @@ class ProjectChatService:
         event_logger = self._create_event_logger(project_config)
 
         # Log request
-        self._log_event(event_logger, "request_received", {
-            "message_length": len(message),
-            "model": chat_agent.model_name,
-            "rag_enabled": rag_enabled,
-        })
+        self._log_event(
+            event_logger,
+            "request_received",
+            {
+                "message_length": len(message),
+                "model": chat_agent.model_name,
+                "rag_enabled": rag_enabled,
+            },
+        )
 
         try:
             # Perform RAG search with event logging
@@ -234,18 +252,30 @@ class ProjectChatService:
 
             # Log response (handle both dict and object responses)
             if hasattr(result, "choices"):
-                response_content = result.choices[0].message.content if result.choices else ""
-                finish_reason = result.choices[0].finish_reason if result.choices else "unknown"
+                response_content = (
+                    result.choices[0].message.content if result.choices else ""
+                )
+                finish_reason = (
+                    result.choices[0].finish_reason if result.choices else "unknown"
+                )
             else:
                 # Handle dict response (from tests)
                 choices = result.get("choices", [])
-                response_content = choices[0].get("message", {}).get("content", "") if choices else ""
-                finish_reason = choices[0].get("finish_reason", "unknown") if choices else "unknown"
+                response_content = (
+                    choices[0].get("message", {}).get("content", "") if choices else ""
+                )
+                finish_reason = (
+                    choices[0].get("finish_reason", "unknown") if choices else "unknown"
+                )
 
-            self._log_event(event_logger, "response_generated", {
-                "response_length": len(response_content),
-                "finish_reason": finish_reason,
-            })
+            self._log_event(
+                event_logger,
+                "response_generated",
+                {
+                    "response_length": len(response_content),
+                    "finish_reason": finish_reason,
+                },
+            )
 
             self._complete_event(event_logger)
             return result
@@ -273,11 +303,15 @@ class ProjectChatService:
         event_logger = self._create_event_logger(project_config)
 
         # Log request
-        self._log_event(event_logger, "request_received", {
-            "message_length": len(message),
-            "model": chat_agent.model_name,
-            "rag_enabled": rag_enabled,
-        })
+        self._log_event(
+            event_logger,
+            "request_received",
+            {
+                "message_length": len(message),
+                "model": chat_agent.model_name,
+                "rag_enabled": rag_enabled,
+            },
+        )
 
         try:
             # Perform RAG search with event logging
@@ -301,9 +335,13 @@ class ProjectChatService:
                 yield chunk
 
             # Log stream complete
-            self._log_event(event_logger, "stream_complete", {
-                "finish_reason": "stop",
-            })
+            self._log_event(
+                event_logger,
+                "stream_complete",
+                {
+                    "finish_reason": "stop",
+                },
+            )
 
             self._complete_event(event_logger)
 
@@ -600,5 +638,6 @@ class ProjectChatService:
                 },
             )
             context_provider.chunks.append(chunk_item)
+
 
 project_chat_service = ProjectChatService()
