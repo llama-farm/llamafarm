@@ -189,10 +189,10 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Update project model to qwen/qwen3-0.6B
+      - name: Update project model to sshleifer/tiny-gpt2
         shell: bash
         run: |
-          echo "Updating model to qwen/qwen3-0.6B for e2e tests..."
+          echo "Updating model to sshleifer/tiny-gpt2 for e2e tests..."
           # Install yq using Go if not available
           if ! command -v yq &> /dev/null; then
             echo "Installing yq via Go..."
@@ -203,10 +203,10 @@ jobs:
 
           # Use yq to update the model in the default model entry
           # Find the model with name="default" and update its model field
-          yq eval '(.runtime.models[] | select(.name == "default") | .model) = "qwen/qwen3-0.6B"' -i "$TEST_DIR/llamafarm.yaml"
+          yq eval '(.runtime.models[] | select(.name == "default") | .model) = "sshleifer/tiny-gpt2"' -i "$TEST_DIR/llamafarm.yaml"
 
           # Verify the update
-          if grep -q "model: qwen/qwen3-0.6B" "$TEST_DIR/llamafarm.yaml"; then
+          if grep -q "model: sshleifer/tiny-gpt2" "$TEST_DIR/llamafarm.yaml"; then
             echo "✓ Model updated successfully"
           else
             echo "⚠ Warning: Model update may have failed, checking config..."
