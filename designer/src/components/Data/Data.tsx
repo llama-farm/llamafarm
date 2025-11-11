@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -34,8 +35,8 @@ import {
   useCreateDataset,
   useDeleteDataset,
   useAvailableStrategies,
-  useUploadFileToDataset,
 } from '../../hooks/useDatasets'
+import { uploadFileToDataset } from '../../api/datasets'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
@@ -113,7 +114,36 @@ const Data = () => {
   const createDatasetMutation = useCreateDataset()
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
-  const uploadMutation = useUploadFileToDataset()
+  
+  // Custom upload mutation with proper AbortSignal handling
+  const uploadMutation = useMutation({
+    mutationFn: async ({
+      namespace,
+      project,
+      dataset,
+      file,
+      signal,
+    }: {
+      namespace: string
+      project: string
+      dataset: string
+      file: File
+      signal?: AbortSignal
+    }) => {
+      // Use the API service which properly handles the signal
+      return await uploadFileToDataset(namespace, project, dataset, file, signal)
+    },
+    onError: (error) => {
+      // Don't show error toast for aborted uploads
+      if (
+        (error instanceof Error && error.name === 'AbortError') ||
+        (error as any)?.code === 'ERR_CANCELED'
+      ) {
+        return
+      }
+      // Error toasts for actual failures are handled in handleDatasetSelect
+    },
+  })
 
   // Fetch available strategies and databases from API
   const { data: availableOptions } = useAvailableStrategies(
