@@ -9,52 +9,48 @@ export interface MessageProps {
 const Message: React.FC<MessageProps> = ({ message }) => {
   const { type, content, isLoading, isStreaming, cancelled } = message
   const [isArgsExpanded, setIsArgsExpanded] = useState(false)
-  const [isThinkingExpanded, setIsThinkingExpanded] = useState(false)
-  const [hasManuallyToggled, setHasManuallyToggled] = useState(false)
+  const [isThinkingExpanded, setIsThinkingExpanded] = useState(true) // Always expanded by default
 
   // Reset expansion state when message changes
   useEffect(() => {
     setIsArgsExpanded(false)
-    setIsThinkingExpanded(false)
-    setHasManuallyToggled(false)
+    setIsThinkingExpanded(true) // Always start expanded
   }, [message.id])
 
-  // Auto-expand thinking while streaming, auto-collapse when done
-  useEffect(() => {
-    if (hasManuallyToggled) return // Don't override manual toggling
-    
-    if (isStreaming) {
-      setIsThinkingExpanded(true) // Expand while streaming
-    } else {
-      setIsThinkingExpanded(false) // Collapse when done
-    }
-  }, [isStreaming, hasManuallyToggled])
-
-  // Extract thinking steps from <think> tags for assistant messages
-  const parseThinkingContent = (content: string) => {
-    if (type !== 'assistant' || !content.includes('<think>')) {
+  // Extract thinking steps and tool calls from content
+  const parseMessageContent = (content: string) => {
+    if (type !== 'assistant') {
       return { thinking: null, contentWithoutThinking: content }
     }
 
-    const start = content.indexOf('<think>') + 7
-    const end = content.indexOf('</think>')
+    let processedContent = content
+    let thinking = ''
+
+    // Extract all <think> sections (handle multiple)
+    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g
+    let thinkMatch
+    while ((thinkMatch = thinkRegex.exec(content)) !== null) {
+      thinking += (thinking ? '\n\n' : '') + thinkMatch[1].trim()
+      // Remove this thinking section from content
+      processedContent = processedContent.replace(thinkMatch[0], '')
+    }
+
+    // Also remove any orphaned closing tags
+    processedContent = processedContent.replace(/<\/think>/g, '')
+
+    // Hide raw <tool_call> XML tags from display
+    processedContent = processedContent.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
     
-    if (end !== -1) {
-      const thinking = content.slice(start, end).trim()
-      const contentWithoutThinking = (
-        content.slice(0, content.indexOf('<think>')) +
-        content.slice(end + 8)
-      ).trim()
-      return { thinking, contentWithoutThinking }
-    } else {
-      // No closing tag, treat rest as thinking
-      const thinking = content.slice(start).trim()
-      const contentWithoutThinking = content.slice(0, content.indexOf('<think>')).trim()
-      return { thinking, contentWithoutThinking }
+    // Clean up extra whitespace
+    processedContent = processedContent.trim()
+
+    return { 
+      thinking: thinking || null, 
+      contentWithoutThinking: processedContent 
     }
   }
 
-  const { thinking, contentWithoutThinking } = parseThinkingContent(content)
+  const { thinking, contentWithoutThinking } = parseMessageContent(content)
 
   // Show typing indicator while assistant is preparing/streaming with no content yet
   const showTypingIndicator =
@@ -113,16 +109,11 @@ const Message: React.FC<MessageProps> = ({ message }) => {
         <div className="mb-2 rounded-md border border-border bg-card/40">
           <button
             type="button"
-            onClick={() => {
-              setIsThinkingExpanded(!isThinkingExpanded)
-              setHasManuallyToggled(true)
-            }}
+            onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
             className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
             aria-expanded={isThinkingExpanded}
           >
-            <span className="font-medium">
-              Thinking steps {isStreaming && '(live)'}
-            </span>
+            <span className="font-medium">Thinking steps</span>
             <span className="text-[11px]">
               {isThinkingExpanded ? 'Hide' : 'Show'}
             </span>

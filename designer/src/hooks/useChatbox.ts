@@ -158,6 +158,9 @@ export function useChatbox(options: UseChatboxOptions = {}) {
 
   // Helper function to classify and set errors
   const classifyAndSetError = useCallback(async (err: Error) => {
+    // Ensure streaming state is cleared on any error
+    setIsStreaming(false)
+
     // First classify the error
     let classified = classifyError(err)
 
@@ -471,6 +474,9 @@ export function useChatbox(options: UseChatboxOptions = {}) {
   // Handle sending message with streaming or non-streaming
   const sendMessage = useCallback(
     async (messageContent: string) => {
+      // Clear error when attempting a new message
+      setError(null)
+      
       if (
         !messageContent.trim() ||
         streamingChat.isPending ||
@@ -484,8 +490,6 @@ export function useChatbox(options: UseChatboxOptions = {}) {
         streamingAbortControllerRef.current.abort()
         streamingAbortControllerRef.current = null
       }
-
-      setError(null)
 
       // Add user message immediately
       addMessage({
