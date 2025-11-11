@@ -191,9 +191,12 @@ class ProjectChatService:
         })
 
         try:
-            # Resolve RAG parameters
-            rag_params = self._resolve_rag_parameters(
+            # Use existing helper method for RAG
+            await self._perform_rag_search_and_add_to_context(
+                chat_agent,
+                project_dir,
                 project_config,
+                message,
                 rag_enabled=rag_enabled,
                 database=database,
                 retrieval_strategy=retrieval_strategy,
@@ -201,82 +204,16 @@ class ProjectChatService:
                 rag_score_threshold=rag_score_threshold,
             )
 
-            # Log and perform RAG search if enabled
-            rag_results = []
-            if rag_params.rag_enabled:
-                self._log_event(event_logger, "rag_query_start", {
-                    "database": rag_params.database,
-                    "query": message,
-                    "top_k": rag_params.rag_top_k,
-                    "retrieval_strategy": rag_params.retrieval_strategy,
-                })
-
-                # Perform RAG search
-                rag_results = self._perform_rag_search(
-                    project_dir,
-                    project_config,
-                    message,
-                    top_k=rag_params.rag_top_k or 5,
-                    database=rag_params.database,
-                    retrieval_strategy=rag_params.retrieval_strategy,
-                )
-
-                # Log RAG retrieval complete
-                avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results) if rag_results else 0.0
-                self._log_event(event_logger, "rag_retrieval_complete", {
-                    "chunks_retrieved": len(rag_results),
-                    "avg_score": round(avg_score, 3),
-                    "top_chunks": [
-                        {
-                            "rank": idx + 1,
-                            "content_preview": result.content[:100] if len(result.content) > 100 else result.content,
-                            "source": result.metadata.get("source", "unknown"),
-                            "score": round(getattr(result, "score", 0.0), 3),
-                        }
-                        for idx, result in enumerate(rag_results[:2])  # Top 2 chunks
-                    ]
-                })
-
-                # Add RAG results to context
-                self._clear_rag_context_provider(chat_agent)
-                context_provider = RAGContextProvider(title="Project Chat Context")
-                chat_agent.register_context_provider("rag_context", context_provider)
-
-                for idx, result in enumerate(rag_results):
-                    chunk_item = ChunkItem(
-                        content=result.content,
-                        metadata={
-                            "source": result.metadata.get("source", "unknown"),
-                            "score": getattr(result, "score", 0.0),
-                            "chunk_index": idx,
-                            "retrieval_method": "rag_search",
-                            **result.metadata,
-                        },
-                    )
-                    context_provider.chunks.append(chunk_item)
-
             user_input = LFChatCompletionUserMessageParam(role="user", content=message)
-
-            # Log LLM start
-            self._log_event(event_logger, "llm_inference_start", {
-                "model": chat_agent.model_name,
-            })
 
             logger.info("Running async stream")
             async for chunk in chat_agent.run_async_stream(user_input=user_input):
                 yield chunk
 
-            # Log LLM complete with summary
-            summary_data = {
+            # Log stream complete
+            self._log_event(event_logger, "stream_complete", {
                 "finish_reason": "stop",
-            }
-            # Add RAG metrics if RAG was used
-            if rag_params.rag_enabled and rag_results:
-                avg_score = sum(getattr(r, "score", 0.0) for r in rag_results) / len(rag_results)
-                summary_data["chunks_retrieved"] = len(rag_results)
-                summary_data["avg_rag_score"] = round(avg_score, 3)
-
-            self._log_event(event_logger, "llm_inference_complete", summary_data)
+            })
 
             self._complete_event(event_logger)
 
