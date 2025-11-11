@@ -311,8 +311,8 @@ const Data = () => {
       setNewDatasetDataProcessingStrategy('')
 
       // If we should upload files after creating, directly use the new dataset
-      if (shouldUploadAfterCreate && newDataset?.name) {
-        handleDatasetSelect(newDataset.name, newDataset.name)
+      if (shouldUploadAfterCreate && newDataset?.dataset?.name) {
+        handleDatasetSelect(newDataset.dataset.name, newDataset.dataset.name)
       }
     } catch (error) {
       console.error('Failed to create dataset:', error)
@@ -384,8 +384,12 @@ const Data = () => {
     batchSize: number = UPLOAD_BATCH_SIZE
   ) => {
     const results = []
+    let cancelled = false
 
     for (let i = 0; i < files.length; i += batchSize) {
+      // Stop processing if any upload was cancelled
+      if (cancelled) break
+
       const batch = files.slice(i, i + batchSize)
       const batchResults = await Promise.all(
         batch.map(async (file) => {
@@ -398,12 +402,17 @@ const Data = () => {
               project,
               dataset: datasetId,
               file,
-              // Note: If your API supports AbortSignal, pass it here:
-              // signal: controller.signal,
+              signal: controller.signal,
             })
             return { file: file.name, success: true, result }
           } catch (error) {
-            if (error instanceof Error && error.name === 'AbortError') {
+            // Check if this is an abort/cancellation error
+            if (
+              (error instanceof Error && error.name === 'AbortError') ||
+              (error as any)?.code === 'ERR_CANCELED' ||
+              (error as any)?.message?.includes('cancel')
+            ) {
+              cancelled = true
               return { file: file.name, success: false, error, cancelled: true }
             }
             return { file: file.name, success: false, error }
@@ -438,33 +447,47 @@ const Data = () => {
         project
       )
 
-      const failures = results.filter(r => !r.success)
-      const cancelled = results.filter(r => (r as any).cancelled)
+      const cancelled = results.some(r => (r as any).cancelled)
+      const failures = results.filter(r => !r.success && !(r as any).cancelled)
+      const successes = results.filter(r => r.success)
 
-      if (cancelled.length > 0) {
-        toast({
-          message: 'Upload cancelled',
-          variant: 'default',
-        })
+      // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
+      if (cancelled) {
         return
       }
 
-      if (failures.length > 0) {
+      // Show appropriate toast based on results
+      if (failures.length > 0 && successes.length > 0) {
         toast({
-          message: `Upload completed with ${failures.length} failure(s). Failed files: ${failures.map(f => f.file).join(', ')}`,
+          message: `Uploaded ${successes.length} of ${fileCount} file(s). Failed: ${failures.map(f => f.file).join(', ')}`,
+          variant: 'destructive',
+        })
+      } else if (failures.length > 0) {
+        toast({
+          message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
           variant: 'destructive',
         })
       } else {
         toast({
-          message: `${fileCount} file(s) uploaded to ${datasetName}`,
+          message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
           variant: 'default',
         })
       }
 
-      // Navigate to the dataset view to see uploaded files
-      navigate(`/chat/data/${datasetId}`)
+      // Navigate to the dataset view to see uploaded files (only if some succeeded)
+      if (successes.length > 0) {
+        navigate(`/chat/data/${datasetId}`)
+      }
     } catch (error) {
       console.error('Upload failed:', error)
+      // Check if error is due to cancellation
+      if (
+        (error as any)?.code === 'ERR_CANCELED' ||
+        (error as any)?.message?.includes('cancel')
+      ) {
+        // Cancellation toast already shown, just return
+        return
+      }
       toast({
         message: error instanceof Error ? error.message : 'Failed to upload files',
         variant: 'destructive',
@@ -481,8 +504,15 @@ const Data = () => {
 
   // Cancel file upload and reset state
   const handleCancelUpload = useCallback(() => {
-    // Abort all active uploads
-    activeUploadControllers.forEach(controller => controller.abort())
+    // Abort all active upload network requests
+    activeUploadControllers.forEach(controller => {
+      try {
+        controller.abort()
+      } catch (err) {
+        // Ignore errors from already aborted controllers
+        console.debug('Controller already aborted:', err)
+      }
+    })
     setActiveUploadControllers([])
 
     // Clear all state
@@ -490,7 +520,13 @@ const Data = () => {
     setIsSelectDatasetModalOpen(false)
     setShouldUploadAfterCreate(false)
     setIsUploading(false)
-  }, [activeUploadControllers])
+
+    // Show cancellation toast
+    toast({
+      message: 'Upload cancelled - all active uploads have been stopped',
+      variant: 'default',
+    })
+  }, [activeUploadControllers, toast])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : []
