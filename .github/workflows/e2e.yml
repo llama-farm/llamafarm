@@ -187,7 +187,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
 
       - name: Update project model to qwen/qwen3-0.6B
         shell: bash
@@ -203,7 +203,7 @@ jobs:
 
           # Use yq to update the model in the default model entry
           # Find the model with name="default" and update its model field
-          yq eval '.runtime.models[] |= if .name == "default" then .model = "qwen/qwen3-0.6B" else . end' -i "$TEST_DIR/llamafarm.yaml"
+          yq eval '(.runtime.models[] | select(.name == "default") | .model) = "qwen/qwen3-0.6B"' -i "$TEST_DIR/llamafarm.yaml"
 
           # Verify the update
           if grep -q "model: qwen/qwen3-0.6B" "$TEST_DIR/llamafarm.yaml"; then
@@ -493,6 +493,18 @@ jobs:
       # ============================================================
       # Cleanup
       # ============================================================
+      - name: Stop services gracefully
+        if: always()
+        working-directory: cli
+        shell: bash
+        run: |
+          echo "Stopping LlamaFarm services gracefully..."
+          # Stop services to ensure logs are flushed before workflow ends
+          ./${{ matrix.binary }} --cwd "$TEST_DIR" services stop || true
+          # Give processes time to flush logs
+          sleep 10
+          echo "✓ Services stopped"
+
       - name: Cleanup test artifacts
         if: always()
         shell: bash
