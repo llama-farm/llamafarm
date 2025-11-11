@@ -1,12 +1,22 @@
-import { lazy, Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useFormattedConfig } from '../../hooks/useFormattedConfig'
 import { useUpdateProject } from '../../hooks/useProjects'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useUnsavedChanges } from '../../contexts/UnsavedChangesContext'
 import yaml from 'yaml'
 import ConfigLoading from './ConfigLoading'
 import ConfigError from './ConfigError'
 import ConfigTableOfContents from './ConfigTableOfContents'
+import UnsavedChangesModal from './UnsavedChangesModal'
 import Loader from '../../common/Loader'
 import FontIcon from '../../common/FontIcon'
 import type { EditorNavigationAPI } from '../../types/config-toc'
@@ -25,7 +35,10 @@ interface ConfigEditorProps {
   initialPointer?: string | null
 }
 
-const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPointer = null }) => {
+const ConfigEditor: React.FC<ConfigEditorProps> = ({
+  className = '',
+  initialPointer = null,
+}) => {
   // Get current project info using reactive hook
   const activeProject = useActiveProject()
   const { theme } = useTheme()
@@ -38,14 +51,30 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
   const [editedContent, setEditedContent] = useState<string>(formattedConfig)
   const [isDirty, setIsDirty] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [navigationAPI, setNavigationAPI] = useState<EditorNavigationAPI | null>(null)
+  const [navigationAPI, setNavigationAPI] =
+    useState<EditorNavigationAPI | null>(null)
   const [pendingPointer, setPendingPointer] = useState<string | null>(null)
   const [resolvedPointer, setResolvedPointer] = useState<string | null>(null)
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>(
+    'idle'
+  )
   const [searchQuery, setSearchQuery] = useState('')
   const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([])
   const [activeMatchIndex, setActiveMatchIndex] = useState<number>(-1)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Unsaved changes modal state
+  const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(
+    null
+  )
+
+  // Unsaved changes context
+  const unsavedChangesContext = useUnsavedChanges()
+
+  // Sync isDirty with context
+  useEffect(() => {
+    unsavedChangesContext.setIsDirty(isDirty)
+  }, [isDirty, unsavedChangesContext])
 
   const { nodes } = useConfigStructure(editedContent, !isDirty)
 
@@ -98,7 +127,8 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
     }
 
     const startLine = targetNode.lineStart || 1
-    const endLine = targetNode.lineEnd >= startLine ? targetNode.lineEnd : startLine
+    const endLine =
+      targetNode.lineEnd >= startLine ? targetNode.lineEnd : startLine
 
     navigationAPI.scrollToLine(startLine)
     navigationAPI.highlightLines(startLine, endLine, 2000)
@@ -110,13 +140,13 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
   }, [navigationAPI, pendingPointer, pointerMap])
 
   // Update edited content when formatted config changes
-  // Guard: Don't reset if user has unsaved changes
+  // Guard: Don't reset if user has unsaved changes OR if we're showing an error modal
   useEffect(() => {
-    if (!isDirty) {
+    if (!isDirty && !modalErrorMessage) {
       setEditedContent(formattedConfig)
       setSaveError(null) // Clear errors when config reloads
     }
-  }, [formattedConfig, isDirty])
+  }, [formattedConfig, isDirty, modalErrorMessage])
 
   useEffect(() => {
     const handleGlobalFind = (event: KeyboardEvent) => {
@@ -185,7 +215,10 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
   useEffect(() => {
     if (copyStatus === 'idle') return
 
-    const timeout = window.setTimeout(() => setCopyStatus('idle'), copyStatus === 'success' ? 2000 : 4000)
+    const timeout = window.setTimeout(
+      () => setCopyStatus('idle'),
+      copyStatus === 'success' ? 2000 : 4000
+    )
     return () => window.clearTimeout(timeout)
   }, [copyStatus])
 
@@ -274,7 +307,10 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
       return
     }
 
-    const ranges = searchMatches.map(match => ({ from: match.from, to: match.to }))
+    const ranges = searchMatches.map(match => ({
+      from: match.from,
+      to: match.to,
+    }))
     navigationAPI.highlightSearchMatches?.(
       ranges,
       activeMatchIndex >= 0 ? activeMatchIndex : null
@@ -289,9 +325,12 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
     navigationAPI.revealSearchMatch?.({ from: match.from, to: match.to })
   }, [activeMatchIndex, searchMatches, navigationAPI])
 
-  // Handle save
-  const handleSave = async () => {
-    if (!activeProject || !isDirty) return
+  // Handle save - returns object with success status and optional error message
+  const handleSave = async (): Promise<{
+    success: boolean
+    error?: string
+  }> => {
+    if (!activeProject || !isDirty) return { success: false }
 
     setSaveError(null) // Clear previous errors
 
@@ -301,8 +340,9 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
       try {
         configObj = yaml.parse(editedContent)
       } catch (parseError) {
-        setSaveError(`YAML syntax error: ${parseError instanceof Error ? parseError.message : 'Invalid YAML syntax'}. Please fix the syntax before saving.`)
-        return
+        const errorMsg = `YAML syntax error: ${parseError instanceof Error ? parseError.message : 'Invalid YAML syntax'}. Please fix the syntax before saving.`
+        setSaveError(errorMsg)
+        return { success: false, error: errorMsg }
       }
 
       // Update project via API
@@ -310,8 +350,8 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
         namespace: activeProject.namespace,
         projectId: activeProject.project,
         request: {
-          config: configObj
-        }
+          config: configObj,
+        },
       })
 
       // Refetch to get latest data
@@ -319,14 +359,16 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
 
       setIsDirty(false)
       setSaveError(null) // Clear any previous errors on success
+      return { success: true }
     } catch (err: any) {
-      console.error('Failed to save config:', err)
+      // Only log safe error information without exposing sensitive config data
+      console.error('Failed to save config:', err?.message || 'Unknown error')
 
       // Parse and sanitize backend validation errors
       let errorMessage = 'Failed to save configuration'
 
       if (err.response?.data) {
-        const {data} = err.response
+        const { data } = err.response
 
         // Handle backend validation errors - sanitize to avoid exposing internal details
         if (data.detail) {
@@ -335,13 +377,18 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
             const backendErrors = data.detail
               .slice(0, 5) // Limit to first 5 errors for UX
               .map((e: any) => {
-                const location = e.loc ? e.loc.slice(1).join('.') : 'configuration' // Remove 'body' prefix
+                const location = e.loc
+                  ? e.loc.slice(1).join('.')
+                  : 'configuration' // Remove 'body' prefix
                 const message = e.msg || e.message || 'Invalid value'
                 return `${location}: ${message}`
               })
               .join('; ')
 
-            const moreErrors = data.detail.length > 5 ? ` (and ${data.detail.length - 5} more)` : ''
+            const moreErrors =
+              data.detail.length > 5
+                ? ` (and ${data.detail.length - 5} more)`
+                : ''
             errorMessage = `Validation failed: ${backendErrors}${moreErrors}`
           } else if (typeof data.detail === 'string') {
             // Sanitize string errors to remove potential internal paths/traces
@@ -361,6 +408,7 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
       }
 
       setSaveError(errorMessage)
+      return { success: false, error: errorMessage }
     }
   }
 
@@ -369,6 +417,53 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
     setEditedContent(formattedConfig)
     setIsDirty(false)
     setSaveError(null) // Clear errors on discard
+  }
+
+  // Warn user when trying to close/refresh browser tab with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault()
+        // Modern browsers ignore the custom message, but setting returnValue is still required
+        e.returnValue = ''
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
+
+  // Modal handlers for unsaved changes warning
+  const handleModalSave = async () => {
+    const result = await handleSave()
+
+    // Only proceed with navigation if save was successful
+    if (result.success) {
+      // Save succeeded - handleSave already set isDirty to false
+      // Clear any error state and navigate
+      setModalErrorMessage(null)
+      unsavedChangesContext.confirmNavigation()
+    } else {
+      // If save failed, switch modal to error mode
+      // Show the error message and let user choose to fix or discard
+      setModalErrorMessage(result.error || 'Failed to save configuration')
+      // Don't cancel navigation - keep modal open in error state
+    }
+  }
+
+  const handleModalDiscard = () => {
+    // Clear error state
+    setModalErrorMessage(null)
+    handleDiscard()
+    // Discard already set isDirty to false, now navigate
+    unsavedChangesContext.confirmNavigation()
+  }
+
+  const handleModalCancel = () => {
+    // Clear error state when canceling
+    setModalErrorMessage(null)
+    setSaveError(null) // Also clear the main save error on the toolbar
+    unsavedChangesContext.cancelNavigation()
   }
 
   if (isActuallyLoading) {
@@ -454,7 +549,11 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
             theme={theme}
             readOnly={false}
             onChange={handleChange}
-            onSave={handleSave}
+            onSave={async () => {
+              await handleSave()
+              // Toolbar save doesn't need to handle the result
+              // Errors are shown via saveError prop
+            }}
             onDiscard={handleDiscard}
             onCopy={handleCopy}
             isDirty={isDirty}
@@ -465,9 +564,19 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '', initialPoin
           />
         </Suspense>
       </div>
+
+      {/* Unsaved changes modal */}
+      <UnsavedChangesModal
+        isOpen={unsavedChangesContext.showModal}
+        onSave={handleModalSave}
+        onDiscard={handleModalDiscard}
+        onCancel={handleModalCancel}
+        isSaving={updateProject.isPending}
+        errorMessage={modalErrorMessage}
+        isError={!!modalErrorMessage}
+      />
     </div>
   )
 }
 
 export default ConfigEditor
-

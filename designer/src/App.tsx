@@ -13,6 +13,7 @@ import {
   useProjectModalContext,
 } from './contexts/ProjectModalContext'
 import { ModeResetProvider } from './contexts/ModeContext'
+import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
 import Home from './Home'
 import Chat from './Chat'
 import Data from './components/Data/Data'
@@ -80,10 +81,11 @@ function App() {
         <ProjectModalProvider>
           <ModeResetProvider>
             <MobileViewProvider>
-              <Header currentVersion={currentVersion} />
-              {isHome ? <HomeUpgradeBanner /> : null}
-              <div className="h-full w-full">
-                <Routes>
+              <UnsavedChangesProvider>
+                <Header currentVersion={currentVersion} />
+                {isHome ? <HomeUpgradeBanner /> : null}
+                <div className="h-full w-full">
+                  <Routes>
                   <Route path="/" element={<Home />} />
                   {/* Redirect '/projects' to Home; Home will scroll to projects */}
                   <Route path="/projects" element={<Home />} />
@@ -167,6 +169,7 @@ function App() {
                 </Routes>
               </div>
               <ProjectModalRoot />
+              </UnsavedChangesProvider>
             </MobileViewProvider>
           </ModeResetProvider>
         </ProjectModalProvider>

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { findConfigPointer, type ConfigLocation } from '../utils/configNavigation'
+import {
+  findConfigPointer,
+  type ConfigLocation,
+} from '../utils/configNavigation'
 import type { ProjectConfig } from '../types/config'
 import type { Mode } from '../components/ModeToggle'
+import { useUnsavedChanges } from '../contexts/UnsavedChangesContext'
 
 interface UseConfigPointerParams {
   mode: Mode
@@ -25,6 +29,7 @@ export function useConfigPointer({
   const [configPointer, setConfigPointer] = useState<string | null>(
     mode === 'code' ? '/' : null
   )
+  const { attemptAction } = useUnsavedChanges()
 
   const computePointer = useCallback(
     (targetMode: Mode) => {
@@ -47,10 +52,18 @@ export function useConfigPointer({
 
   const handleModeChange = useCallback(
     (nextMode: Mode) => {
-      computePointer(nextMode)
-      setMode(nextMode)
+      // If switching from code mode to designer mode, check for unsaved changes
+      if (mode === 'code' && nextMode === 'designer') {
+        attemptAction(() => {
+          computePointer(nextMode)
+          setMode(nextMode)
+        })
+      } else {
+        computePointer(nextMode)
+        setMode(nextMode)
+      }
     },
-    [computePointer, setMode]
+    [mode, computePointer, setMode, attemptAction]
   )
 
   useEffect(() => {

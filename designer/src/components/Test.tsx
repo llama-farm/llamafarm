@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import FontIcon from '../common/FontIcon'
 import ModeToggle from './ModeToggle'
@@ -10,6 +10,10 @@ import TestChat from './TestChat/TestChat'
 import { usePackageModal } from '../contexts/PackageModalContext'
 import { Input } from './ui/input'
 import { useModeWithReset } from '../hooks/useModeWithReset'
+import { useConfigPointer } from '../hooks/useConfigPointer'
+import { useProject } from '../hooks/useProjects'
+import { useActiveProject } from '../hooks/useActiveProject'
+import type { ProjectConfig } from '../types/config'
 
 interface TestCase {
   id: number
@@ -203,6 +207,28 @@ const Test = () => {
   }
 
   const [mode, setMode] = useModeWithReset('designer')
+  
+  // Get active project and config for unsaved changes checking
+  const activeProject = useActiveProject()
+  const { data: projectDetail } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+  const projectConfig = (projectDetail as any)?.project?.config as ProjectConfig | undefined
+  
+  // Use config pointer to handle mode changes with unsaved changes check
+  const getRootLocation = useCallback(
+    () => ({ type: 'root' as const }),
+    []
+  )
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getRootLocation,
+  })
+  
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [showReferences, setShowReferences] = useState<boolean>(() => {
@@ -347,7 +373,7 @@ const Test = () => {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <ModeToggle mode={mode} onToggle={setMode} />
+          <ModeToggle mode={mode} onToggle={handleModeChange} />
           <Button
             variant="outline"
             size="sm"
@@ -750,7 +776,7 @@ const Test = () => {
         <div className="flex-1 min-h-0 pb-2 pr-0">
           {mode !== 'designer' ? (
             <div className="h-full overflow-hidden">
-              <ConfigEditor className="h-full" />
+              <ConfigEditor className="h-full" initialPointer={configPointer} />
             </div>
           ) : (
             <div className="h-full">
