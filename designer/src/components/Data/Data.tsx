@@ -66,6 +66,7 @@ const Data = () => {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadingFileCount, setUploadingFileCount] = useState(0)
   const [activeUploadControllers, setActiveUploadControllers] = useState<AbortController[]>([])
+  const [isTransitioningToCreate, setIsTransitioningToCreate] = useState(false)
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -605,9 +606,16 @@ const Data = () => {
     <Dialog 
       open={isSelectDatasetModalOpen} 
       onOpenChange={(open) => {
+        // Don't clear state if we're transitioning to create dialog
+        if (!open && isTransitioningToCreate) {
+          setIsTransitioningToCreate(false)
+          setIsSelectDatasetModalOpen(open)
+          return
+        }
+        
         setIsSelectDatasetModalOpen(open)
         if (!open) {
-          // User closed modal without selecting - clean up state
+          // Only clear if user is actually cancelling (not transitioning)
           setPendingFiles([])
           setShouldUploadAfterCreate(false)
         }
@@ -628,6 +636,7 @@ const Data = () => {
           {/* Create new dataset with dropped files */}
           <button
             onClick={() => {
+              setIsTransitioningToCreate(true)
               setShouldUploadAfterCreate(true)
               setIsSelectDatasetModalOpen(false)
               setIsCreateOpen(true)
@@ -928,12 +937,15 @@ const Data = () => {
                       // Prevent closing dialog during mutation
                       if (!createDatasetMutation.isPending) {
                         setIsCreateOpen(open)
-                        if (!open) {
-                          // Reset form when closing
+                        if (!open && shouldUploadAfterCreate && pendingFiles.length > 0) {
+                          // User cancelled dataset creation with pending files - go back to select modal
+                          setIsSelectDatasetModalOpen(true)
+                          // Keep pendingFiles and shouldUploadAfterCreate intact
+                        } else if (!open) {
+                          // Normal close without pending files, clear everything
                           setNewDatasetName('')
                           setNewDatasetDatabase('')
                           setNewDatasetDataProcessingStrategy('')
-                          // Also clear upload-related state to prevent ghost uploads
                           setPendingFiles([])
                           setShouldUploadAfterCreate(false)
                         }
