@@ -102,6 +102,89 @@ class ProjectChatService:
                 # Ignore logging errors
                 pass
 
+    async def _perform_rag_with_logging(
+        self,
+        event_logger: EventLogger | None,
+        chat_agent: LFAgent,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
+        message: str,
+        rag_enabled: bool | None = None,
+        database: str | None = None,
+        retrieval_strategy: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
+    ) -> None:
+        """
+        Perform RAG search with event logging.
+
+        Wraps _perform_rag_search_and_add_to_context to capture RAG metrics
+        for observability without duplicating RAG logic.
+        """
+        # Resolve RAG parameters to check if RAG is enabled
+        rag_params = self._resolve_rag_parameters(
+            project_config,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
+
+        # Log RAG query start if enabled
+        if rag_params.rag_enabled:
+            self._log_event(event_logger, "rag_query_start", {
+                "database": rag_params.database,
+                "query": message,
+                "top_k": rag_params.rag_top_k,
+                "retrieval_strategy": rag_params.retrieval_strategy,
+            })
+
+        # Perform RAG search using existing helper
+        await self._perform_rag_search_and_add_to_context(
+            chat_agent,
+            project_dir,
+            project_config,
+            message,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
+
+        # Extract results from context provider to log completion metrics
+        if rag_params.rag_enabled:
+            try:
+                # Access the RAG context provider to get results
+                context_provider = chat_agent.context_providers.get("rag_context")
+                if context_provider and hasattr(context_provider, "chunks"):
+                    chunks = context_provider.chunks
+
+                    # Calculate average score
+                    avg_score = 0.0
+                    if chunks:
+                        scores = [chunk.metadata.get("score", 0.0) for chunk in chunks]
+                        avg_score = sum(scores) / len(scores) if scores else 0.0
+
+                    # Log retrieval complete with top chunks
+                    self._log_event(event_logger, "rag_retrieval_complete", {
+                        "chunks_retrieved": len(chunks),
+                        "avg_score": round(avg_score, 3),
+                        "top_chunks": [
+                            {
+                                "rank": idx + 1,
+                                "content_preview": chunk.content[:100] if len(chunk.content) > 100 else chunk.content,
+                                "source": chunk.metadata.get("source", "unknown"),
+                                "score": round(chunk.metadata.get("score", 0.0), 3),
+                            }
+                            for idx, chunk in enumerate(chunks[:2])  # Top 2 chunks
+                        ]
+                    })
+            except Exception:
+                # Don't fail if we can't extract metrics
+                pass
+
     async def chat(
         self,
         *,
@@ -126,8 +209,9 @@ class ProjectChatService:
         })
 
         try:
-            # Use existing helper method for RAG
-            await self._perform_rag_search_and_add_to_context(
+            # Perform RAG search with event logging
+            await self._perform_rag_with_logging(
+                event_logger,
                 chat_agent,
                 project_dir,
                 project_config,
@@ -191,8 +275,9 @@ class ProjectChatService:
         })
 
         try:
-            # Use existing helper method for RAG
-            await self._perform_rag_search_and_add_to_context(
+            # Perform RAG search with event logging
+            await self._perform_rag_with_logging(
+                event_logger,
                 chat_agent,
                 project_dir,
                 project_config,
