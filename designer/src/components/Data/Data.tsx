@@ -347,13 +347,12 @@ const Data = () => {
     }
 
     // Filter out directories and invalid files
-    // Accept files with size > 0 and either:
-    // 1. A valid MIME type, OR
-    // 2. A valid file extension (for browsers that don't set MIME type)
+    // Security: Validate both file size and extension
+    // All files must have a valid extension regardless of MIME type
     const validFiles = files.filter(file => {
       if (file.size === 0) return false
-      if (file.type !== '') return true
-      return hasValidExtension(file.name)
+      if (!hasValidExtension(file.name)) return false
+      return true
     })
 
     if (validFiles.length === 0) {
