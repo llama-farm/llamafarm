@@ -57,7 +57,7 @@ const Data = () => {
   const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadingFileCount, setUploadingFileCount] = useState(0)
-  const [activeUploadControllers, setActiveUploadControllers] = useState<AbortController[]>([])
+  const activeUploadControllersRef = useRef<AbortController[]>([])
   const [isTransitioningToCreate, setIsTransitioningToCreate] = useState(false)
 
   const navigate = useNavigate()
@@ -71,7 +71,7 @@ const Data = () => {
   useEffect(() => {
     return () => {
       // Abort all active upload network requests when component unmounts
-      activeUploadControllers.forEach(controller => {
+      activeUploadControllersRef.current.forEach(controller => {
         try {
           controller.abort()
         } catch (err) {
@@ -80,7 +80,7 @@ const Data = () => {
         }
       })
     }
-  }, [activeUploadControllers])
+  }, []) // Empty dependency array - only run cleanup on unmount
 
   // File type mapping for parser creation (centralized to avoid duplication)
   const fileTypeMapping = useMemo(
@@ -458,7 +458,7 @@ const Data = () => {
       const batchResults = await Promise.all(
         batch.map(async (file) => {
           const controller = new AbortController()
-          setActiveUploadControllers(prev => [...prev, controller])
+          activeUploadControllersRef.current.push(controller)
 
           try {
             const result = await uploadMutation.mutateAsync({
@@ -481,7 +481,7 @@ const Data = () => {
             }
             return { file: file.name, success: false, error }
           } finally {
-            setActiveUploadControllers(prev => prev.filter(c => c !== controller))
+            activeUploadControllersRef.current = activeUploadControllersRef.current.filter(c => c !== controller)
           }
         })
       )
@@ -575,8 +575,9 @@ const Data = () => {
       })
     } finally {
       setPendingFiles([])
-      setActiveUploadControllers([])
+      activeUploadControllersRef.current = []
       setIsUploading(false)
+      setShouldUploadAfterCreate(false)
     }
   }, [activeProject, pendingFiles, uploadFilesInBatches, toast, navigate])
 
@@ -586,7 +587,7 @@ const Data = () => {
   // Cancel file upload and reset state
   const handleCancelUpload = useCallback(() => {
     // Abort all active upload network requests
-    activeUploadControllers.forEach(controller => {
+    activeUploadControllersRef.current.forEach(controller => {
       try {
         controller.abort()
       } catch (err) {
@@ -594,7 +595,7 @@ const Data = () => {
         console.debug('Controller already aborted:', err)
       }
     })
-    setActiveUploadControllers([])
+    activeUploadControllersRef.current = []
 
     // Clear all state
     setPendingFiles([])
@@ -607,7 +608,7 @@ const Data = () => {
       message: 'Upload cancelled - all active uploads have been stopped',
       variant: 'default',
     })
-  }, [activeUploadControllers, toast])
+  }, [toast]) // Removed activeUploadControllers from dependency array since using ref
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : []
