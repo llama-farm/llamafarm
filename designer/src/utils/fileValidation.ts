@@ -35,19 +35,39 @@ const FILE_SIGNATURES = {
 } as const
 
 /**
+ * Extracts the file extension from a filename (including the dot)
+ * Returns only the final extension after the last dot to prevent
+ * double-extension attacks (e.g., malicious.exe.txt)
+ */
+const getFileExtension = (filename: string): string | null => {
+  const lower = filename.toLowerCase()
+  const lastDotIndex = lower.lastIndexOf('.')
+  
+  // No extension found or dot is at the beginning
+  if (lastDotIndex === -1 || lastDotIndex === 0) {
+    return null
+  }
+  
+  // Return extension including the dot (e.g., '.txt')
+  return lower.substring(lastDotIndex)
+}
+
+/**
  * Validates file extension against allowed list
+ * Only validates the final extension to prevent double-extension attacks
  */
 export const hasValidExtension = (filename: string): boolean => {
-  const lower = filename.toLowerCase()
-  return Object.keys(VALID_FILE_TYPES).some(ext => lower.endsWith(ext))
+  const extension = getFileExtension(filename)
+  if (!extension) return false
+  
+  return Object.keys(VALID_FILE_TYPES).includes(extension)
 }
 
 /**
  * Validates MIME type matches the file extension
  */
 export const hasValidMimeType = (file: File): boolean => {
-  const lower = file.name.toLowerCase()
-  const extension = Object.keys(VALID_FILE_TYPES).find(ext => lower.endsWith(ext))
+  const extension = getFileExtension(file.name)
   
   if (!extension) return false
   
@@ -99,10 +119,12 @@ const matchesSignature = (
  */
 export const verifyFileSignature = async (file: File): Promise<boolean> => {
   // Only verify files where we have magic number signatures
-  const lower = file.name.toLowerCase()
+  const extension = getFileExtension(file.name)
+  
+  if (!extension) return false
   
   // PDF verification
-  if (lower.endsWith('.pdf')) {
+  if (extension === '.pdf') {
     try {
       const header = await readFileHeader(file, 4)
       return matchesSignature(header, FILE_SIGNATURES.pdf)
@@ -112,7 +134,7 @@ export const verifyFileSignature = async (file: File): Promise<boolean> => {
   }
   
   // DOCX/XLSX verification (both are ZIP files)
-  if (lower.endsWith('.docx') || lower.endsWith('.xlsx')) {
+  if (extension === '.docx' || extension === '.xlsx') {
     try {
       const header = await readFileHeader(file, 4)
       return matchesSignature(header, FILE_SIGNATURES.zip)
