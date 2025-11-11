@@ -180,3 +180,19 @@ export interface StreamingChatOptions {
   onComplete?: StreamCompleteHandler
   signal?: AbortSignal
 }
+
+/**
+ * Classified error with recovery information
+ * Used to provide better error messages and actionable recovery steps
+ */
+export interface ClassifiedError {
+  type: 'server_down' | 'degraded' | 'timeout' | 'validation' | 'unknown'
+  title: string
+  message: string
+  originalError: Error
+  healthStatus?: any // HealthResponse from healthService
+  recoveryCommands?: Array<{
+    description: string
+    command: string
+  }>
+}

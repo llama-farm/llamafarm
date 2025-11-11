@@ -14,8 +14,11 @@ import { parsePromptSets } from '../utils/promptSets'
 import { useProjectSession } from './useProjectSession'
 import { useChatSession } from './useChatSession'
 import { ChatboxMessage } from '../types/chatbox'
-import { ChatStreamChunk, NetworkError, ChatMessage } from '../types/chat'
+import { ChatStreamChunk, NetworkError, ChatMessage, ClassifiedError } from '../types/chat'
 import { generateMessageId } from '../utils/idGenerator'
+import { classifyError, shouldCheckHealth } from '../utils/errorClassifier'
+import { getHealth } from '../api/healthService'
+import { generateRecoveryCommands } from '../utils/recoveryCommands'
 import {
   useStreamingChatCompletionMessage,
   useChatCompletionMessage,
@@ -150,8 +153,35 @@ export function useChatbox(options: UseChatboxOptions = {}) {
 
   // UI state
   const [inputValue, setInputValue] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ClassifiedError | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+
+  // Helper function to classify and set errors
+  const classifyAndSetError = useCallback(async (err: Error) => {
+    // First classify the error
+    let classified = classifyError(err)
+
+    // If we should check health, try to get it
+    if (classified.shouldCheckHealth) {
+      try {
+        const health = await getHealth()
+        // Re-classify with health status
+        classified = classifyError(err, health)
+        // Generate recovery commands
+        classified.recoveryCommands = generateRecoveryCommands(classified.type, health)
+      } catch (healthError) {
+        // Health check failed, use original classification
+        console.warn('Health check failed:', healthError)
+      }
+    }
+
+    // Generate recovery commands if we don't have them yet
+    if (!classified.recoveryCommands) {
+      classified.recoveryCommands = generateRecoveryCommands(classified.type, classified.healthStatus)
+    }
+
+    setError(classified)
+  }, [])
 
   // Local messages state (for simple session mode)
   const [localMessages, setLocalMessages] = useState<ChatboxMessage[]>([])
@@ -730,33 +760,30 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                         }
                       },
                       fallbackError => {
-                        const errorMessage =
-                          fallbackError instanceof Error
-                            ? fallbackError.message
-                            : 'Failed to get response'
-                        setError(errorMessage)
+                        const err = fallbackError instanceof Error
+                          ? fallbackError
+                          : new Error('Failed to get response')
+                        classifyAndSetError(err)
                         addMessage({
                           type: 'error',
-                          content: `Error: ${errorMessage}`,
+                          content: `Error: ${err.message}`,
                           timestamp: new Date(),
                         })
                       }
                     )
                   }, 100)
                 } else {
-                  const errorMessage = isUserCancellation
-                    ? 'Request was cancelled'
-                    : error instanceof NetworkError
-                      ? error.message
-                      : 'Streaming connection failed'
+                  const err = error instanceof Error
+                    ? error
+                    : new Error(isUserCancellation ? 'Request was cancelled' : 'Streaming connection failed')
 
                   if (!isUserCancellation) {
-                    setError(errorMessage)
+                    classifyAndSetError(err)
                   }
 
                   addMessage({
                     type: 'error',
-                    content: `Error: ${errorMessage}`,
+                    content: `Error: ${err.message}`,
                     timestamp: new Date(),
                   })
                 }
@@ -1037,16 +1064,15 @@ export function useChatbox(options: UseChatboxOptions = {}) {
         }
 
         // Set error message
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred'
-        setError(errorMessage)
+        const err = error instanceof Error
+          ? error
+          : new Error('An unexpected error occurred')
+        classifyAndSetError(err)
 
         // Add error message to chat
         addMessage({
           type: 'error',
-          content: `Error: ${errorMessage}`,
+          content: `Error: ${err.message}`,
           timestamp: new Date(),
         })
 
@@ -1093,9 +1119,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       return true
     } catch (error) {
       console.error('Clear chat error:', error)
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to clear chat'
-      setError(errorMessage)
+      const err = error instanceof Error 
+        ? error 
+        : new Error('Failed to clear chat')
+      classifyAndSetError(err)
       return false
     }
   }, [useProjectSessionMode, projectSession, simpleSession])

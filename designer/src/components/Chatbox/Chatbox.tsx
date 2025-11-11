@@ -11,11 +11,43 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
+import { ClassifiedError } from '../../types/chat'
+import { getHealthSummary } from '../../utils/recoveryCommands'
 
 interface ChatboxProps {
   isPanelOpen: boolean
   setIsPanelOpen: (isOpen: boolean) => void
   initialMessage?: string | null
+}
+
+/**
+ * Copy button component for command boxes
+ */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="p-1 hover:bg-muted/50 rounded transition-colors"
+      title={copied ? 'Copied!' : 'Copy to clipboard'}
+    >
+      <FontIcon
+        type={copied ? 'checkmark-filled' : 'copy'}
+        className={`w-4 h-4 ${copied ? 'text-green-500' : 'text-muted-foreground'}`}
+      />
+    </button>
+  )
 }
 
 function Chatbox({
@@ -262,22 +294,66 @@ function Chatbox({
           </div>
         )}
 
-        {/* Error/empty state banner (dark-mode friendly) */}
-        {error && isPanelOpen && (
-          <div className="mx-4 mb-2 rounded-xl border border-border bg-card/40">
-            <div className="px-3 py-2 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
-                  !
+        {/* Enhanced error banner with recovery commands */}
+        {error && isPanelOpen && (() => {
+          // Handle both ClassifiedError and legacy string errors
+          const classifiedError = typeof error === 'string' 
+            ? null 
+            : (error as ClassifiedError)
+          const errorTitle = classifiedError?.title || 'Error'
+          const errorMessage = classifiedError?.message || (typeof error === 'string' ? error : 'An error occurred')
+          const recoveryCommands = classifiedError?.recoveryCommands || []
+          const healthStatus = classifiedError?.healthStatus
+
+          return (
+            <div className="mx-4 mb-2 rounded-xl border border-border bg-card/40 p-3">
+              {/* Error header */}
+              <div className="flex items-start gap-3 mb-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/15 text-red-400 border border-red-500/30 flex-shrink-0 mt-0.5">
+                  <FontIcon type="info" className="w-4 h-4" />
                 </span>
-                <div className="text-sm">
-                  <div className="font-medium text-foreground">
-                    Project setup required
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-foreground text-sm">
+                    {errorTitle}
                   </div>
-                  <div className="text-xs text-muted-foreground">{error}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {errorMessage}
+                  </div>
+                  {/* Health summary */}
+                  {healthStatus && (
+                    <div className="text-xs text-muted-foreground mt-1 italic">
+                      {getHealthSummary(healthStatus)}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Recovery commands */}
+              {recoveryCommands.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground font-medium">
+                    {recoveryCommands.length === 1 ? 'Fix:' : 'Try these steps:'}
+                  </div>
+                  {recoveryCommands.map((cmd, idx) => (
+                    <div key={idx} className="space-y-1">
+                      {cmd.description && (
+                        <div className="text-xs text-muted-foreground">
+                          {recoveryCommands.length > 1 ? `${idx + 1}. ${cmd.description}` : cmd.description}
+                        </div>
+                      )}
+                      <div className="bg-muted/50 border border-border rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                        <code className="font-mono text-sm text-foreground flex-1 overflow-x-auto">
+                          {cmd.command}
+                        </code>
+                        <CopyButton text={cmd.command} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 mt-3">
                 <button
                   onClick={() =>
                     window.open(
@@ -287,22 +363,12 @@ function Chatbox({
                   }
                   className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80"
                 >
-                  Docs
-                </button>
-                <button
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('lf-open-create-project')
-                    )
-                  }
-                  className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  Create project
+                  View Docs
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         <div
           className={`flex flex-col h-full p-4 pt-2 overflow-hidden ${isPanelOpen ? 'flex' : 'hidden'}`}
