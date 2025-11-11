@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.13](https://github.com/llama-farm/llamafarm/compare/v0.0.12...v0.0.13) (2025-11-11)
+
+
+### Bug Fixes
+
+* **cli:** use correct version number ([#440](https://github.com/llama-farm/llamafarm/issues/440)) ([d01f9b8](https://github.com/llama-farm/llamafarm/commit/d01f9b872b20e8e283daafe30a1e313c89682d99))
+
 ## [0.0.12](https://github.com/llama-farm/llamafarm/compare/v0.0.11...v0.0.12) (2025-11-11)
 
 
