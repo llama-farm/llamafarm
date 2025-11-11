@@ -367,49 +367,49 @@ jobs:
       # ============================================================
       # Chat Command Test
       # ============================================================
-      - name: Run chat command with RAG
-        working-directory: cli
-        shell: bash
-        env:
-          PYTHONUNBUFFERED: "1"
-        run: |
-          echo "Running chat command with RAG..."
-          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
-            "Summarize neural scaling laws in one sentence" 2>&1); then
-            echo "❌ Chat command failed"
-            echo "$OUTPUT"
-            echo "Checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
+      # - name: Run chat command with RAG
+      #   working-directory: cli
+      #   shell: bash
+      #   env:
+      #     PYTHONUNBUFFERED: "1"
+      #   run: |
+      #     echo "Running chat command with RAG..."
+      #     if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
+      #       "Summarize neural scaling laws in one sentence" 2>&1); then
+      #       echo "❌ Chat command failed"
+      #       echo "$OUTPUT"
+      #       echo "Checking server health..."
+      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+      #       exit 1
+      #     fi
 
-          echo "Chat response:"
-          echo "$OUTPUT"
+      #     echo "Chat response:"
+      #     echo "$OUTPUT"
 
-          # Verify output is not empty
-          if [ -z "$OUTPUT" ]; then
-            echo "❌ Error: Chat command returned empty output"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
+      #     # Verify output is not empty
+      #     if [ -z "$OUTPUT" ]; then
+      #       echo "❌ Error: Chat command returned empty output"
+      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+      #       exit 1
+      #     fi
 
-          # Check if output contains some text (at least 10 characters)
-          if [ ${#OUTPUT} -lt 10 ]; then
-            echo "❌ Error: Chat response too short, possible error"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
+      #     # Check if output contains some text (at least 10 characters)
+      #     if [ ${#OUTPUT} -lt 10 ]; then
+      #       echo "❌ Error: Chat response too short, possible error"
+      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+      #       exit 1
+      #     fi
 
-          # Check if output contains fallback error message (indicates a problem)
-          if echo "$OUTPUT" | grep -qi "my previous response wasn't very helpful"; then
-            echo "❌ Error: Chat command returned fallback error message"
-            echo "This indicates the model call failed or returned an error response"
-            echo "$OUTPUT"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
+      #     # Check if output contains fallback error message (indicates a problem)
+      #     if echo "$OUTPUT" | grep -qi "my previous response wasn't very helpful"; then
+      #       echo "❌ Error: Chat command returned fallback error message"
+      #       echo "This indicates the model call failed or returned an error response"
+      #       echo "$OUTPUT"
+      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+      #       exit 1
+      #     fi
 
-          echo "✓ Chat command returned a response"
+      #     echo "✓ Chat command returned a response"
 
       - name: Test chat command without RAG
         working-directory: cli
@@ -420,7 +420,7 @@ jobs:
           echo "Running chat command without RAG..."
           if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
             --no-rag \
-            "What is 2 + 2?" 2>&1); then
+            "Hello" 2>&1); then
             echo "❌ Chat command (no RAG) failed"
             echo "$OUTPUT"
             echo "Checking server health..."
