@@ -153,6 +153,10 @@ function App() {
                       element={<AddRetrievalStrategy />}
                     />
                     <Route
+                      path="add-embedding-strategy"
+                      element={<AddEmbeddingStrategy />}
+                    />
+                    <Route
                       path="add-retrieval-strategy"
                       element={<AddRetrievalStrategy />}
                     />
