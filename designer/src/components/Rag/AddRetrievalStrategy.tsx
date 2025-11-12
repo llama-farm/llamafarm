@@ -18,6 +18,7 @@ import {
   STRATEGY_DESCRIPTIONS,
   type StrategyType,
 } from '../../utils/strategyCatalog'
+import { parseMetadataFilters, validateStrategyName } from '../../utils/security'
 
 function AddRetrievalStrategy() {
   const navigate = useNavigate()
@@ -201,10 +202,10 @@ function AddRetrievalStrategy() {
       errors.push('Please select a strategy type')
     }
     
-    if (!name.trim()) {
-      errors.push('Strategy name is required')
-    } else if (!/^[a-zA-Z0-9_-]+$/.test(name.trim())) {
-      errors.push('Strategy name can only contain letters, numbers, hyphens, and underscores')
+    // Validate strategy name with security checks
+    const nameError = validateStrategyName(name)
+    if (nameError) {
+      errors.push(nameError)
     }
     
     // Type-specific validation
@@ -293,17 +294,8 @@ function AddRetrievalStrategy() {
           }
           break
         case 'MetadataFilteredStrategy': {
-          const filters: Record<string, unknown> = {}
-          for (const { key, value } of mfFilters) {
-            if (!key.trim()) continue
-            const raw = value.trim()
-            if (raw.includes(','))
-              filters[key] = raw.split(',').map(v => v.trim())
-            else if (raw === 'true' || raw === 'false')
-              filters[key] = raw === 'true'
-            else if (!Number.isNaN(Number(raw))) filters[key] = Number(raw)
-            else filters[key] = raw
-          }
+          // Use secure parsing to sanitize filter keys and values
+          const filters = parseMetadataFilters(mfFilters)
           config = {
             top_k: Number(mfTopK),
             filters,

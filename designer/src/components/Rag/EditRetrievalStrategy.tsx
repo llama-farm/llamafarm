@@ -16,6 +16,7 @@ import {
   STRATEGY_LABELS,
   type StrategyType,
 } from '../../utils/strategyCatalog'
+import { validateNavigationState, parseMetadataFilters, validateStrategyName } from '../../utils/security'
 
 function EditRetrievalStrategy() {
   const navigate = useNavigate()
@@ -34,20 +35,14 @@ function EditRetrievalStrategy() {
     activeProject?.project || ''
   )
 
-  // Get data from navigation state
-  const state = location.state as {
-    database?: string
-    strategyName?: string
-    strategyType?: string
-    currentConfig?: Record<string, any>
-    isDefault?: boolean
-  } | null
+  // Get data from navigation state with validation
+  const validatedState = validateNavigationState(location.state)
 
-  const database = state?.database || 'main_database'
-  const originalStrategyName = state?.strategyName || ''
-  const strategyType = (state?.strategyType || 'BasicSimilarityStrategy') as StrategyType
-  const currentConfig = state?.currentConfig || {}
-  const isDefaultStrategy = state?.isDefault || false
+  const database = validatedState.database
+  const originalStrategyName = validatedState.strategyName
+  const strategyType = validatedState.strategyType as StrategyType
+  const currentConfig = validatedState.currentConfig
+  const isDefaultStrategy = validatedState.isDefault
 
   // Form state
   const [name, setName] = useState(originalStrategyName)
@@ -223,7 +218,7 @@ function EditRetrievalStrategy() {
   }
 
   // Show error if required state is missing
-  if (!state || !originalStrategyName) {
+  if (!originalStrategyName) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6">
         <div className="text-destructive text-lg font-semibold">
@@ -337,17 +332,8 @@ function EditRetrievalStrategy() {
           }
           break
         case 'MetadataFilteredStrategy': {
-          const filters: Record<string, unknown> = {}
-          for (const { key, value } of mfFilters) {
-            if (!key.trim()) continue
-            const raw = value.trim()
-            if (raw.includes(','))
-              filters[key] = raw.split(',').map(v => v.trim())
-            else if (raw === 'true' || raw === 'false')
-              filters[key] = raw === 'true'
-            else if (!Number.isNaN(Number(raw))) filters[key] = Number(raw)
-            else filters[key] = raw
-          }
+          // Use secure parsing to sanitize filter keys and values
+          const filters = parseMetadataFilters(mfFilters)
           config = {
             top_k: Number(mfTopK),
             filters,

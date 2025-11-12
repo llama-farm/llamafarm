@@ -28,6 +28,7 @@ import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
+import { validateEmbeddingNavigationState } from '../../utils/security'
 import type { ProjectConfig } from '../../types/config'
 
 // Helper for symmetric AES encryption using Web Crypto API
@@ -92,15 +93,8 @@ function ChangeEmbeddingModel() {
     activeProject?.project || ''
   )
   
-  // Get data from navigation state or URL params (for backward compatibility)
-  const state = location.state as {
-    database?: string
-    strategyName?: string
-    strategyType?: string
-    currentConfig?: Record<string, any>
-    isDefault?: boolean
-    priority?: number
-  } | null
+  // Get data from navigation state with validation, or URL params (for backward compatibility)
+  const validatedState = validateEmbeddingNavigationState(location.state)
   
   // Config pointer for config editor mode
   const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
@@ -120,12 +114,15 @@ function ChangeEmbeddingModel() {
     getLocation: getEmbeddingLocation,
   })
 
-  const database = state?.database || searchParams.get('database') || 'main_database'
-  const originalStrategyName = state?.strategyName || strategyId || ''
-  const strategyType = state?.strategyType || 'OllamaEmbedder'
-  const currentConfig = state?.currentConfig || {}
-  const isDefaultStrategy = state?.isDefault || false
-  const priority = state?.priority || 0
+  // Use validated state or fall back to URL params for backward compatibility
+  const database = validatedState.database !== 'main_database' 
+    ? validatedState.database 
+    : (searchParams.get('database') || 'main_database')
+  const originalStrategyName = validatedState.strategyName || strategyId || ''
+  const strategyType = validatedState.strategyType
+  const currentConfig = validatedState.currentConfig
+  const isDefaultStrategy = validatedState.isDefault
+  const priority = validatedState.priority
 
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -684,7 +681,7 @@ function ChangeEmbeddingModel() {
   }
 
   // Show error if required state is missing
-  if (!state && !strategyId) {
+  if (!originalStrategyName && !strategyId) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6">
         <div className="text-destructive text-lg font-semibold">
