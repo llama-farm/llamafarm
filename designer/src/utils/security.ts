@@ -107,17 +107,12 @@ export const validateNavigationState = (state: unknown): {
     ? s.strategyName
     : ''
   
-  // Validate strategy type against allowed types
-  const allowedTypes = [
-    'BasicSimilarityStrategy',
-    'HybridUniversalStrategy',
-    'MetadataFilteredStrategy',
-    'AdvancedHybridStrategy',
-    'SemanticChunkStrategy',
-    'ContextAwareRetrievalStrategy',
-  ]
+  // Validate strategy type - accept any string strategy type from navigation
+  // We trust our own navigation state, just validate it's a valid identifier string
+  // This prevents silently overwriting complex strategy types like MultiQueryStrategy, RerankedStrategy, etc.
   const strategyType = typeof s?.strategyType === 'string' &&
-                       allowedTypes.includes(s.strategyType)
+                       s.strategyType.length > 0 &&
+                       /^[a-zA-Z0-9_]+$/.test(s.strategyType)
     ? s.strategyType
     : 'BasicSimilarityStrategy'
   
@@ -234,6 +229,39 @@ export const sanitizeFilterValue = (value: string): string => {
 }
 
 /**
+ * Safely parses a numeric value from a string
+ * Rejects NaN, Infinity, and values outside safe integer range
+ * 
+ * @param raw - The string value to parse
+ * @returns The numeric value, or null if invalid
+ * 
+ * @example
+ * parseNumericValue('123') // Returns 123
+ * parseNumericValue('Infinity') // Returns null
+ * parseNumericValue('-1e309') // Returns null (becomes -Infinity)
+ */
+const parseNumericValue = (raw: string): number | null => {
+  const num = Number(raw)
+  
+  // Check for NaN
+  if (Number.isNaN(num)) {
+    return null
+  }
+  
+  // Check for Infinity (positive or negative)
+  if (!Number.isFinite(num)) {
+    return null
+  }
+  
+  // Check for safe integer range
+  if (Math.abs(num) > Number.MAX_SAFE_INTEGER) {
+    return null
+  }
+  
+  return num
+}
+
+/**
  * Parses and sanitizes metadata filters from user input
  * Prevents injection attacks and DoS through oversized arrays
  * 
@@ -273,12 +301,15 @@ export const parseMetadataFilters = (
     } else if (raw === 'true' || raw === 'false') {
       // Parse as boolean
       result[sanitizedKey] = raw === 'true'
-    } else if (!Number.isNaN(Number(raw)) && Number(raw) < Number.MAX_SAFE_INTEGER) {
-      // Parse as number (with safety check)
-      result[sanitizedKey] = Number(raw)
     } else {
-      // Keep as string
-      result[sanitizedKey] = raw
+      // Try to parse as number with strict validation
+      const numValue = parseNumericValue(raw)
+      if (numValue !== null) {
+        result[sanitizedKey] = numValue
+      } else {
+        // Treat as string if not a valid number
+        result[sanitizedKey] = raw
+      }
     }
   }
   
