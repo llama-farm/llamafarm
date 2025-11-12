@@ -22,6 +22,7 @@ import {
 } from '../ui/dialog'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { getClientSideSecret } from '../../utils/crypto'
+import { validateStrategyName } from '../../utils/security'
 
 // Helper for symmetric AES encryption (same as edit page)
 async function encryptAPIKey(apiKey: string, secret: string) {
@@ -426,14 +427,43 @@ function AddEmbeddingStrategy() {
   const validateStrategy = (): string[] => {
     const errors: string[] = []
     
-    if (!name || !name.trim()) {
-      errors.push('Strategy name is required')
+    // Validate strategy name with security checks
+    const nameError = validateStrategyName(name)
+    if (nameError) {
+      errors.push(nameError)
     }
     
+    // Validate model selection
     if (!selected) {
       errors.push('Please select a model')
+    } else {
+      // Validate the selected model is valid
+      const selectedModelId = selected.modelId
+      
+      // For custom models, validate the custom model name
+      if (selectedModelId === 'Custom' || model === 'Custom') {
+        if (!customModel || !customModel.trim()) {
+          errors.push('Custom model name is required')
+        } else if (!/^[a-zA-Z0-9\/_.-]+$/.test(customModel)) {
+          errors.push('Custom model name contains invalid characters. Only letters, numbers, slashes, hyphens, dots, and underscores are allowed.')
+        }
+      } else {
+        // Validate non-custom model exists in our list
+        const isValidLocal = localGroups.some(group => 
+          group.name === selectedModelId || 
+          group.variants?.some(v => v.id === selectedModelId)
+        )
+        
+        // For cloud providers, we trust the selected object since it came from our provider data
+        const isCloudProvider = selected.runtime === 'Cloud'
+        
+        if (!isValidLocal && !isCloudProvider) {
+          errors.push('Selected model is not supported. Please choose a valid model.')
+        }
+      }
     }
     
+    // Validate dimension
     if (dimension && (dimension < 1 || dimension > 8192)) {
       errors.push('Dimension must be between 1 and 8192')
     }

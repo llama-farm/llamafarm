@@ -320,15 +320,14 @@ function Databases() {
     
     // Try endpoint
     if (strategy.config.endpoint) {
-      try {
-        const u = new URL(strategy.config.endpoint)
-        return `${u.hostname}${u.port ? `:${u.port}` : ''}`
-      } catch {
-        return String(strategy.config.endpoint)
-      }
+      const hostname = extractSafeHostname(strategy.config.endpoint)
+      return hostname !== 'Not set' && hostname !== 'Invalid URL' ? hostname : null
     }
     
-    if (strategy.config.region) return String(strategy.config.region)
+    // For region-based providers (e.g., AWS), sanitize region name
+    if (strategy.config.region) {
+      return sanitizeConfigValue(strategy.config.region)
+    }
     
     // Default for local Ollama
     if (strategy.type === 'OllamaEmbedder') {
@@ -658,7 +657,28 @@ function Databases() {
     }
   }
 
-  const handleDeleteEmbedding = (strategyName: string) => {
+  const handleDeleteEmbedding = (
+    strategyName: string,
+    isDefault: boolean,
+    totalStrategies: number
+  ) => {
+    // Prevent deleting the default or last embedding strategy
+    if (isDefault) {
+      toast({
+        message: 'Cannot delete the default embedding strategy. Set another strategy as default first.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    if (totalStrategies <= 1) {
+      toast({
+        message: 'Cannot delete the last embedding strategy. At least one strategy is required.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
     setStrategyToDelete({ name: strategyName, type: 'embedding' })
     setDeleteEmbeddingOpen(true)
   }
@@ -797,7 +817,28 @@ function Databases() {
     }
   }
 
-  const handleDeleteRetrieval = (strategyName: string) => {
+  const handleDeleteRetrieval = (
+    strategyName: string,
+    isDefault: boolean,
+    totalStrategies: number
+  ) => {
+    // Prevent deleting the default or last retrieval strategy
+    if (isDefault) {
+      toast({
+        message: 'Cannot delete the default retrieval strategy. Set another strategy as default first.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    if (totalStrategies <= 1) {
+      toast({
+        message: 'Cannot delete the last retrieval strategy. At least one strategy is required.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
     setStrategyToDelete({ name: strategyName, type: 'retrieval' })
     setDeleteRetrievalOpen(true)
   }
@@ -1058,7 +1099,11 @@ function Databases() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteEmbedding(ei.name)}
+                                onClick={() => handleDeleteEmbedding(
+                                  ei.name,
+                                  ei.isDefault,
+                                  sortedEmbeddings.length
+                                )}
                                 disabled={ei.isDefault || sortedEmbeddings.length === 1}
                                 title={
                                   sortedEmbeddings.length === 1
@@ -1223,7 +1268,11 @@ function Databases() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteRetrieval(ri.name)}
+                                onClick={() => handleDeleteRetrieval(
+                                  ri.name,
+                                  ri.isDefault,
+                                  sortedRetrievals.length
+                                )}
                                 disabled={ri.isDefault || sortedRetrievals.length === 1}
                                 title={
                                   sortedRetrievals.length === 1

@@ -238,10 +238,10 @@ function EditRetrievalStrategy() {
   const validateStrategy = (): string[] => {
     const errors: string[] = []
     
-    if (!name.trim()) {
-      errors.push('Strategy name is required')
-    } else if (!/^[a-zA-Z0-9_-]+$/.test(name.trim())) {
-      errors.push('Strategy name can only contain letters, numbers, hyphens, and underscores')
+    // Validate strategy name with security checks
+    const nameError = validateStrategyName(name)
+    if (nameError) {
+      errors.push(nameError)
     }
     
     // Type-specific validation
@@ -387,23 +387,46 @@ function EditRetrievalStrategy() {
             name: name.trim(),
             type: strategyType,
             config,
-            default: makeDefault,
+            // No 'default' field - it's determined by default_retrieval_strategy at database level
           }
-        }
-        // If we're setting a new default, unset others
-        if (makeDefault && strategy.default) {
-          return { ...strategy, default: false }
         }
         return strategy
       })
 
-      // Determine default strategy name
+      // Determine default strategy name with robust edge case handling
       let updatedDefaultStrategy = currentDb.default_retrieval_strategy
+
       if (makeDefault) {
-        updatedDefaultStrategy = name.trim()
+        // User explicitly wants this strategy to be the default
+        // Verify the new name exists in the updated strategies list
+        const exists = updatedStrategies.some((s: any) => s.name === name.trim())
+        if (exists) {
+          updatedDefaultStrategy = name.trim()
+        } else {
+          // Fallback if name somehow doesn't exist (shouldn't happen but defensive)
+          updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+        }
       } else if (isDefaultStrategy && name.trim() !== originalStrategyName) {
-        // If this was the default and we renamed it, update the default reference
-        updatedDefaultStrategy = name.trim()
+        // This WAS the default strategy and we're renaming it (but NOT unchecking makeDefault)
+        // Update the default reference to the new name
+        const exists = updatedStrategies.some((s: any) => s.name === name.trim())
+        if (exists) {
+          updatedDefaultStrategy = name.trim()
+        } else {
+          // Fallback: assign default to first available strategy
+          updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+        }
+      } else if (isDefaultStrategy && !makeDefault) {
+        // User is UNCHECKING the default status of the current default
+        // Assign default to another strategy (first one that's not this one)
+        const otherStrategy = updatedStrategies.find((s: any) => s.name !== name.trim())
+        updatedDefaultStrategy = otherStrategy?.name || name.trim()
+      }
+
+      // Final validation: ensure default strategy actually exists in the list
+      const defaultExists = updatedStrategies.some((s: any) => s.name === updatedDefaultStrategy)
+      if (!defaultExists && updatedStrategies.length > 0) {
+        updatedDefaultStrategy = updatedStrategies[0].name
       }
 
       // Update database configuration
