@@ -34,6 +34,7 @@ export interface TestChatProps {
   ragEnabled?: boolean
   ragTopK?: number
   ragScoreThreshold?: number
+  selectedDatabases?: string[]
   focusInput?: boolean
 }
 
@@ -79,6 +80,7 @@ export default function TestChat({
   ragEnabled = true,
   ragTopK = 10,
   ragScoreThreshold = 0.7,
+  selectedDatabases = [],
   focusInput = false,
 }: TestChatProps) {
   // Determine mock mode as early as possible
@@ -471,6 +473,7 @@ export default function TestChat({
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
+            database: selectedDatabases.length > 0 ? selectedDatabases[0] : undefined,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
@@ -700,6 +703,7 @@ export default function TestChat({
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
+            database: selectedDatabases.length > 0 ? selectedDatabases[0] : undefined,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
