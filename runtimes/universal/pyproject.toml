@@ -19,6 +19,9 @@ dependencies = [
   "llamafarm-common",
   "structlog>=24.0.0",
   "llama-cpp-python>=0.2.0",
+  "psutil>=5.9.0",
+  "pyyaml>=6.0",
+  "gguf>=0.17.1",
 ]
 
 [dependency-groups]

@@ -12,6 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from llama_cpp import Llama
 
+from utils.context_calculator import get_default_context_size
+from utils.model_format import get_gguf_file_path
+
 from .base import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -37,7 +40,7 @@ class GGUFLanguageModel(BaseModel):
         model_id: str,
         device: str,
         token: str | None = None,
-        n_ctx: int = 2048,
+        n_ctx: int | None = None,
     ):
         """Initialize GGUF language model.
 
@@ -45,13 +48,15 @@ class GGUFLanguageModel(BaseModel):
             model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-0.6B-GGUF")
             device: Target device ("cuda", "mps", or "cpu")
             token: Optional HuggingFace authentication token for gated models
-            n_ctx: Context window size (default: 2048, max depends on model)
+            n_ctx: Optional context window size. If None, will be computed automatically
+                   based on available memory and model defaults.
         """
         super().__init__(model_id, device, token=token)
         self.model_type = "language"
         self.supports_streaming = True
         self.llama: Llama | None = None
-        self.n_ctx = n_ctx
+        self.requested_n_ctx = n_ctx  # Store requested value
+        self.actual_n_ctx: int | None = None  # Will be computed during load()
         self._executor = ThreadPoolExecutor(max_workers=1)
 
     async def load(self) -> None:
@@ -59,21 +64,35 @@ class GGUFLanguageModel(BaseModel):
 
         This method:
         1. Locates the .gguf file in the HuggingFace cache
-        2. Configures GPU layers based on the target device
-        3. Initializes the llama-cpp-python Llama instance
-        4. Runs initialization in a thread pool (blocking operation)
+        2. Computes optimal context size based on memory and configuration
+        3. Configures GPU layers based on the target device
+        4. Initializes the llama-cpp-python Llama instance
+        5. Runs initialization in a thread pool (blocking operation)
 
         Raises:
             FileNotFoundError: If no .gguf file found in model repository
             Exception: If model loading fails
         """
-        from utils.model_format import get_gguf_file_path
 
         logger.info(f"Loading GGUF model: {self.model_id}")
 
         # Get path to .gguf file in HF cache
         gguf_path = get_gguf_file_path(self.model_id, self.token)
         logger.info(f"GGUF file located at: {gguf_path}")
+
+        # Compute optimal context size
+        self.actual_n_ctx, warnings = get_default_context_size(
+            model_id=self.model_id,
+            gguf_path=gguf_path,
+            device=self.device,
+            config_n_ctx=self.requested_n_ctx,
+        )
+
+        # Log warnings to stderr
+        for warning in warnings:
+            logger.warning(warning)
+
+        logger.info(f"Using context size: {self.actual_n_ctx}")
 
         # Configure GPU layers based on device
         if self.device in ("cuda", "mps"):
@@ -92,7 +111,7 @@ class GGUFLanguageModel(BaseModel):
         def _load_model():
             return Llama(
                 model_path=gguf_path,
-                n_ctx=self.n_ctx,  # Context window (configurable via API)
+                n_ctx=self.actual_n_ctx,  # Use computed context size
                 n_gpu_layers=n_gpu_layers,
                 n_threads=None,  # Auto-detect optimal threads
                 verbose=False,  # Disable verbose logging
@@ -103,7 +122,7 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(
             f"GGUF model loaded successfully on {self.device} "
-            f"with {n_gpu_layers} GPU layers and context size {self.n_ctx}"
+            f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
         )
 
     def format_messages(self, messages: list[dict]) -> str:

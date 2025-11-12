@@ -15,25 +15,28 @@ Key Features:
 """
 
 import asyncio
+import base64
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import List, Literal, Optional, Union
+
 from fastapi import (
     FastAPI,
     HTTPException,
 )
 from pydantic import BaseModel as PydanticBaseModel
-from typing import Optional, Literal, List, Union
-import os
-import base64
-from datetime import datetime
-from routers.chat_completions import router as chat_completions_router
 
+from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     BaseModel,
-    LanguageModel,
     EncoderModel,
+    GGUFLanguageModel,
+    LanguageModel,
 )
-from utils.device import get_optimal_device, get_device_info
-from core.logging import setup_logging, UniversalRuntimeLogger
+from routers.chat_completions import router as chat_completions_router
+from utils.device import get_device_info, get_optimal_device
+from utils.model_format import detect_model_format
 
 # Configure logging FIRST, before anything else
 log_file = os.getenv("LOG_FILE", "")
@@ -84,7 +87,7 @@ def get_device():
     return _current_device
 
 
-async def load_language(model_id: str, n_ctx: int = 2048):
+async def load_language(model_id: str, n_ctx: int | None = None):
     """Load a causal language model (GGUF or transformers format).
 
     Automatically detects whether the model is in GGUF or transformers format
@@ -94,18 +97,20 @@ async def load_language(model_id: str, n_ctx: int = 2048):
 
     Args:
         model_id: HuggingFace model identifier
-        n_ctx: Context window size for GGUF models (default: 2048)
+        n_ctx: Optional context window size for GGUF models. If None, will be
+               computed automatically based on available memory and model defaults.
     """
-    from utils.model_format import detect_model_format
-    from models import GGUFLanguageModel
 
     # Include n_ctx in cache key for GGUF models so different context sizes are cached separately
-    cache_key = f"language:{model_id}:ctx{n_ctx}"
+    # Use "auto" for None to allow automatic context size computation
+    cache_key = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}"
     if cache_key not in _models:
         async with _model_load_lock:
             # Double-check if model was loaded while waiting for the lock
             if cache_key not in _models:
-                logger.info(f"Loading causal LM: {model_id} (n_ctx={n_ctx})")
+                logger.info(
+                    f"Loading causal LM: {model_id} (n_ctx={n_ctx if n_ctx is not None else 'auto'})"
+                )
                 device = get_device()
 
                 # Detect model format (GGUF vs transformers)

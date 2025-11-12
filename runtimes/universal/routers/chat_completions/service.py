@@ -33,8 +33,8 @@ class ChatCompletionsService:
         """
 
         try:
-            # Get context window size from request, default to 2048
-            n_ctx = chat_request.n_ctx or 2048
+            # Get context window size from request
+            n_ctx = chat_request.n_ctx
             model = await self.load_language(chat_request.model, n_ctx=n_ctx)
 
             # Convert messages to prompt

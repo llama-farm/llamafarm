@@ -148,6 +148,138 @@ The Universal Runtime automatically configures llama-cpp-python for your hardwar
 
 No configuration needed - acceleration is detected and enabled automatically!
 
+### Context Size Configuration
+
+The Universal Runtime intelligently determines the optimal context window size for GGUF models using a three-tier priority system:
+
+#### 1. Priority System
+
+Context size is determined in this order (highest to lowest):
+
+1. **User Configuration** (via `llamafarm.yaml` → `model_api_parameters.n_ctx` or API `extra_body`)
+   - Explicit value from project configuration or API request
+   - Highest priority - respects user's explicit choice
+
+2. **Computed Maximum** (based on available memory)
+   - Automatically calculated using available VRAM (CUDA) or RAM (MPS/CPU)
+   - Accounts for model size and memory overhead
+   - Prevents out-of-memory errors
+
+3. **Pattern Match Defaults** (from `config/model_context_defaults.yaml`)
+   - Known defaults for model families (e.g., Qwen2.5 → 32k, Llama-3 → 8k)
+   - Uses Unix shell-style wildcard patterns
+
+4. **Fallback Default** (2048 tokens)
+   - Conservative safe value for unknown models
+
+#### 2. Memory-Based Computation & Model Training Context
+
+The runtime automatically:
+- **Reads the model's training context** (`n_ctx_train`) from GGUF metadata using the `gguf` library
+- **Computes maximum safe context size** based on available memory
+
+**Priority for determining context size:**
+1. **User Configuration** (explicit value in config/API)
+2. **Model's n_ctx_train** (what the model was trained for) - NEW! 🎯
+3. **Pattern Match Defaults** (from config file)
+4. **Computed Max from Memory** (hardware limitation)
+5. **Fallback Default** (2048 tokens)
+
+All choices are automatically capped by available memory to prevent OOM errors.
+
+**Memory calculation formula:**
+```
+usable_memory = (available_memory * 0.8) - model_file_size
+max_context = usable_memory / (bytes_per_token * overhead_factor)
+```
+
+- **Memory factor**: 80% of available memory by default (configurable in `model_context_defaults.yaml`)
+- **Automatic capping**: If any value exceeds computed maximum, it falls back to the maximum with a warning
+- **Smart rounding**: Results are rounded to powers of 2 (512, 1024, 2048, 4096, etc.)
+
+#### 3. Configuration File
+
+Default context sizes are defined in `runtimes/universal/config/model_context_defaults.yaml`:
+
+```yaml
+memory_usage_factor: 0.8  # Use 80% of available memory
+
+model_defaults:
+  # Exact match (highest priority)
+  - pattern: "unsloth/Qwen2.5-Coder-1.5B-Instruct-GGUF"
+    n_ctx: 32768
+
+  # Pattern matches for families
+  - pattern: "*/Qwen2.5-*-GGUF"
+    n_ctx: 32768
+
+  - pattern: "*/Llama-3*-GGUF"
+    n_ctx: 8192
+
+  # Fallback
+  - pattern: "*"
+    n_ctx: 2048
+```
+
+You can edit this file to add custom defaults for your models.
+
+#### 4. Specifying Context Size
+
+**Via LlamaFarm configuration** (`llamafarm.yaml`):
+
+```yaml
+runtime:
+  models:
+    - name: my-model
+      provider: universal
+      model: unsloth/Qwen3-4B-GGUF
+      model_api_parameters:
+        n_ctx: 16384  # Explicit context size
+```
+
+**Via API request** (OpenAI SDK):
+
+```python
+response = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF",
+    messages=[...],
+    extra_body={"n_ctx": 16384}  # Runtime-specific parameter
+)
+```
+
+**Via direct API call**:
+
+```bash
+curl -X POST http://localhost:11540/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "unsloth/Qwen3-4B-GGUF",
+    "messages": [...],
+    "n_ctx": 16384
+  }'
+```
+
+#### 5. Warnings and Logs
+
+Context size warnings are logged to stderr when:
+- Requested size exceeds computed maximum (falls back to maximum)
+- No pattern match found (using fallback default)
+- Low memory detected (using minimal context)
+
+Example log output:
+```
+INFO: Using context size: 8192
+WARNING: Requested context size 32768 exceeds computed maximum 16384 based on available memory (12.50 GB). Using 16384 instead.
+```
+
+#### 6. Best Practices
+
+- **Let it auto-detect**: For most use cases, omit `n_ctx` and let the runtime compute the optimal size
+- **Check logs**: Monitor stderr for warnings about memory constraints
+- **Start conservative**: If unsure, start with smaller context sizes and increase if needed
+- **Monitor memory**: Use system monitoring tools to verify memory usage during inference
+- **Test before deploying**: Validate context sizes work reliably with your hardware before production use
+
 ### Example Usage
 
 ```bash
