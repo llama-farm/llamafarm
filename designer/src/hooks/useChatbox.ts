@@ -1081,6 +1081,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
   // Handle clear chat
   const clearChat = useCallback(async () => {
     try {
+      if (isStreaming) {
+        cancelStreaming()
+      }
+
       if (useProjectSessionMode) {
         projectSession.clearHistory()
         setStreamingMessages([])
@@ -1098,7 +1102,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       setError(errorMessage)
       return false
     }
-  }, [useProjectSessionMode, projectSession, simpleSession])
+  }, [isStreaming, useProjectSessionMode, projectSession, simpleSession])
 
   // Handle input change
   const updateInput = useCallback((value: string) => {
