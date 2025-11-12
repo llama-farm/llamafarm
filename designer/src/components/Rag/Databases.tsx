@@ -33,6 +33,7 @@ import {
 import { Settings, Star, Trash2 } from 'lucide-react'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import { sanitizeConfigValue, extractSafeHostname } from '../../utils/security'
 
 type Database = {
   name: string
@@ -282,9 +283,9 @@ function Databases() {
   const getEmbeddingSummary = (strategyName: string): string => {
     const strategy = getEmbeddingStrategy(strategyName)
     if (!strategy?.config) return 'Not configured'
-    // Extract model name from config
+    // Extract model name from config and sanitize it
     const model = strategy.config.model || strategy.config.modelId || strategy.config.model_name
-    return model ? String(model) : 'Not set'
+    return sanitizeConfigValue(model)
   }
 
   const getEmbeddingProvider = (strategyName: string): string | null => {
@@ -310,16 +311,14 @@ function Databases() {
     const strategy = getEmbeddingStrategy(strategyName)
     if (!strategy?.config) return null
     
+    // Try base_url or baseUrl first
     const baseUrl = strategy.config.base_url || strategy.config.baseUrl
     if (baseUrl) {
-      try {
-        const u = new URL(baseUrl)
-        return `${u.hostname}${u.port ? `:${u.port}` : ''}`
-      } catch {
-        return baseUrl
-      }
+      const hostname = extractSafeHostname(baseUrl)
+      return hostname !== 'Not set' && hostname !== 'Invalid URL' ? hostname : null
     }
     
+    // Try endpoint
     if (strategy.config.endpoint) {
       try {
         const u = new URL(strategy.config.endpoint)
