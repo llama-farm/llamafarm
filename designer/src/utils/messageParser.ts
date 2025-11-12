@@ -40,7 +40,7 @@ export function parseMessageContent(
 
   // Extract all <think> sections (handles multiple blocks)
   const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g
-  processedContent = content.replace(thinkRegex, (match, thinkContent) => {
+  processedContent = content.replace(thinkRegex, (_match, thinkContent) => {
     const trimmedContent = thinkContent.trim()
     if (trimmedContent) {
       thinking += (thinking ? '\n\n' : '') + trimmedContent
