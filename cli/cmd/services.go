@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/llamafarm/cli/cmd/orchestrator"
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -103,50 +105,9 @@ func init() {
 	servicesStatusCmd.Flags().Bool("json", false, "Output status in JSON format")
 }
 
-// ensureSourceVersion checks and updates source code version if needed
-// This should be called at the start of all services commands to ensure
-// source code matches the CLI version
-func ensureSourceVersion() error {
-	// Create UV manager
-	uvMgr, err := NewUVManager()
-	if err != nil {
-		return fmt.Errorf("failed to create UV manager: %w", err)
-	}
-
-	// Create Python environment manager
-	pythonMgr, err := NewPythonEnvManager(uvMgr)
-	if err != nil {
-		return fmt.Errorf("failed to create Python environment manager: %w", err)
-	}
-
-	// Create source manager and ensure source version matches CLI
-	srcMgr, err := NewSourceManager(pythonMgr)
-	if err != nil {
-		return fmt.Errorf("failed to create source manager: %w", err)
-	}
-
-	// This will check version and download/update if needed
-	if err := srcMgr.EnsureSource(); err != nil {
-		return fmt.Errorf("failed to ensure source code version: %w", err)
-	}
-
-	return nil
-}
-
 // runServicesStatus is the main entry point for the services status command
 func runServicesStatus(cmd *cobra.Command, args []string) {
-	// Ensure source code version matches CLI version
-	if err := ensureSourceVersion(); err != nil {
-		OutputWarning("Warning: %v\n", err)
-		// Continue anyway - user might just want to check status
-	}
-
-	// Determine orchestration mode
-	orchestrationMode := determineOrchestrationMode()
-
 	var statuses []ServiceInfo
-	var orchestrationType string
-	dockerAvailable := false
 
 	// Get server URL for health checks
 	serverURLToUse := serverURL
@@ -156,56 +117,42 @@ func runServicesStatus(cmd *cobra.Command, args []string) {
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
-	// Check services based on orchestration mode
-	if orchestrationMode == OrchestrationDocker {
-		// Docker mode - check Docker containers
-		orchestrationType = "docker"
-		manager := NewDockerServiceManager(serverURLToUse)
+	sm, err := orchestrator.NewServiceManager(serverURLToUse)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
+		os.Exit(1)
+	}
 
-		// Check if Docker is available
-		if err := manager.IsAvailable(); err != nil {
-			dockerAvailable = false
+	// Check each service using native status checker
+	statusInfos, err := sm.GetServicesStatus()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get services status: %v\n", err)
+		os.Exit(1)
+	}
 
-			if jsonOutput {
-				output := ServicesStatusOutput{
-					Services:      []ServiceInfo{},
-					DockerRunning: false,
-					Orchestration: orchestrationType,
-					Timestamp:     time.Now().Unix(),
-				}
-				json.NewEncoder(os.Stdout).Encode(output)
-			} else {
-				OutputError("Docker is not available: %v\n", err)
-				fmt.Fprintf(os.Stderr, "\nPlease ensure Docker is installed and running.\n")
-				fmt.Fprintf(os.Stderr, "Visit https://docs.docker.com/get-docker/ for installation instructions.\n")
-			}
-			os.Exit(1)
+	// Convert orchestrator.ServiceStatusInfo to cmd.ServiceInfo
+	statuses = make([]ServiceInfo, 0, len(statusInfos))
+	for _, info := range statusInfos {
+		serviceInfo := ServiceInfo{
+			Name:    info.Name,
+			State:   info.State,
+			PID:     info.PID,
+			LogFile: info.LogFile,
+			Health:  info.Health,
 		}
 
-		dockerAvailable = true
-
-		// Check each service using Docker manager
-		for serviceName := range ServiceGraph {
-			status := manager.CheckStatus(serviceName, serverURLToUse)
-			statuses = append(statuses, status)
+		// Format uptime as a string if the service is running
+		if info.Uptime > 0 {
+			serviceInfo.Uptime = formatUptime(info.Uptime)
 		}
-	} else {
-		// Native mode - check native processes
-		orchestrationType = "native"
 
-		// Check each service using native status checker
-		for serviceName := range ServiceGraph {
-			status := checkServiceStatusNative(serviceName, serverURLToUse)
-			statuses = append(statuses, status)
-		}
+		statuses = append(statuses, serviceInfo)
 	}
 
 	// Build output structure
 	output := ServicesStatusOutput{
-		Services:      statuses,
-		DockerRunning: dockerAvailable,
-		Orchestration: orchestrationType,
-		Timestamp:     time.Now().Unix(),
+		Services:  statuses,
+		Timestamp: time.Now().Unix(),
 	}
 
 	// Format output based on --json flag
@@ -213,7 +160,7 @@ func runServicesStatus(cmd *cobra.Command, args []string) {
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(output); err != nil {
-			OutputError("Failed to encode JSON output: %v\n", err)
+			utils.OutputError("Failed to encode JSON output: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
@@ -223,15 +170,6 @@ func runServicesStatus(cmd *cobra.Command, args []string) {
 
 // runServicesStart is the main entry point for the services start command
 func runServicesStart(cmd *cobra.Command, args []string) {
-	// Ensure source code version matches CLI version
-	if err := ensureSourceVersion(); err != nil {
-		OutputError("Failed to ensure source code version: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Determine orchestration mode
-	orchestrationMode := determineOrchestrationMode()
-
 	// Get server URL for operations
 	serverURLToUse := serverURL
 	if serverURLToUse == "" {
@@ -242,33 +180,35 @@ func runServicesStart(cmd *cobra.Command, args []string) {
 	servicesToStart := getServicesToManage(args)
 
 	// Start services based on orchestration mode
-	if orchestrationMode == OrchestrationDocker {
-		startServicesDocker(servicesToStart, serverURLToUse)
-	} else {
-		startServicesNative(servicesToStart, serverURLToUse)
+	var failedServices []string
+	sm, err := orchestrator.NewServiceManager(serverURLToUse)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
+		os.Exit(1)
+	}
+	if err := sm.EnsureServices(servicesToStart...); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start services: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Show final status
-	fmt.Println()
-	OutputSuccess("Service start complete. Checking status...\n")
-	fmt.Println()
+	// Only show status if more than one service was requested
+	if len(servicesToStart) > 1 {
+		utils.OutputSuccess("Service start complete. Checking status...\n")
 
-	// Re-run status check to show final state
-	runServicesStatus(cmd, []string{})
+		// Re-run status check to show final state
+		runServicesStatus(cmd, []string{})
+	}
+
+	// If any services failed, exit with error code
+	if len(failedServices) > 0 {
+		fmt.Println()
+		utils.OutputError("Failed to start the following services: %v\n", failedServices)
+		os.Exit(1)
+	}
 }
 
 // runServicesStop is the main entry point for the services stop command
 func runServicesStop(cmd *cobra.Command, args []string) {
-	// Ensure source code version matches CLI version
-	// (Important even for stop - ensures source is ready if user restarts)
-	if err := ensureSourceVersion(); err != nil {
-		OutputWarning("Warning: %v\n", err)
-		// Continue anyway - stopping services doesn't require source to be perfect
-	}
-
-	// Determine orchestration mode
-	orchestrationMode := determineOrchestrationMode()
-
 	// Get server URL for operations
 	serverURLToUse := serverURL
 	if serverURLToUse == "" {
@@ -278,20 +218,40 @@ func runServicesStop(cmd *cobra.Command, args []string) {
 	// Determine which services to stop
 	servicesToStop := getServicesToManage(args)
 
-	// Stop services based on orchestration mode
-	if orchestrationMode == OrchestrationDocker {
-		stopServicesDocker(servicesToStop, serverURLToUse)
-	} else {
-		stopServicesNative(servicesToStop, serverURLToUse)
+	sm, err := orchestrator.NewServiceManager(serverURLToUse)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
+		os.Exit(1)
+	}
+	if err := sm.StopServices(servicesToStop...); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to stop services: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Show final status
 	fmt.Println()
-	OutputSuccess("Service stop complete. Checking status...\n")
+	utils.OutputSuccess("Service stop complete. Checking status...\n")
 	fmt.Println()
 
 	// Re-run status check to show final state
 	runServicesStatus(cmd, []string{})
+}
+
+// formatUptime formats a duration into a human-readable uptime string
+func formatUptime(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	} else if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	} else if d < 24*time.Hour {
+		hours := int(d.Hours())
+		minutes := int(d.Minutes()) % 60
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	} else {
+		days := int(d.Hours()) / 24
+		hours := int(d.Hours()) % 24
+		return fmt.Sprintf("%dd%dh", days, hours)
+	}
 }
 
 // getServicesToManage determines which services to manage based on command arguments
@@ -301,10 +261,10 @@ func getServicesToManage(args []string) []string {
 		serviceName := args[0]
 
 		// Validate service name
-		if _, exists := ServiceGraph[serviceName]; !exists {
-			OutputError("Unknown service: %s\n", serviceName)
+		if _, exists := orchestrator.ServiceGraph[serviceName]; !exists {
+			utils.OutputError("Unknown service: %s\n", serviceName)
 			fmt.Fprintf(os.Stderr, "\nAvailable services:\n")
-			for name := range ServiceGraph {
+			for name := range orchestrator.ServiceGraph {
 				fmt.Fprintf(os.Stderr, "  - %s\n", name)
 			}
 			os.Exit(1)
@@ -315,7 +275,7 @@ func getServicesToManage(args []string) []string {
 
 	// Start all services
 	var services []string
-	for serviceName := range ServiceGraph {
+	for serviceName := range orchestrator.ServiceGraph {
 		services = append(services, serviceName)
 	}
 	return services

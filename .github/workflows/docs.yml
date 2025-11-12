@@ -6,14 +6,17 @@ on:
       - main
       - fix-docs-deploy
     paths:
-      - 'docs/website/**'
-      - '.github/workflows/docs.yml'
+      - "docs/website/**"
+      - ".github/workflows/docs.yml"
   pull_request:
     branches:
       - main
     paths:
-      - 'docs/website/**'
-      - '.github/workflows/docs.yml'
+      - "docs/website/**"
+      - ".github/workflows/docs.yml"
+
+env:
+  NX_NO_CLOUD: true
 
 jobs:
   build:

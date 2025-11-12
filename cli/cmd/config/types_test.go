@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -282,6 +284,151 @@ func TestIsConfigFile(t *testing.T) {
 		result := IsConfigFile(test.filePath)
 		if result != test.expected {
 			t.Errorf("IsConfigFile(%q) = %v, expected %v", test.filePath, result, test.expected)
+		}
+	}
+}
+
+// TestAtomicWriteFile verifies that atomic writes prevent readers from seeing partial writes
+func TestAtomicWriteFile(t *testing.T) {
+	dir := t.TempDir()
+	testFile := filepath.Join(dir, "test.yaml")
+
+	// Write initial content
+	initialContent := []byte("initial content")
+	if err := atomicWriteFile(testFile, initialContent, 0644); err != nil {
+		t.Fatalf("Failed to write initial content: %v", err)
+	}
+
+	// Verify initial content
+	data, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+	if string(data) != string(initialContent) {
+		t.Errorf("Initial content mismatch: got %q, want %q", string(data), string(initialContent))
+	}
+
+	// Test concurrent writes and reads to ensure no partial reads
+	var wg sync.WaitGroup
+	errChan := make(chan error, 100)
+
+	// Start multiple writers
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			content := []byte("content from writer " + string(rune('0'+id)))
+			if err := atomicWriteFile(testFile, content, 0644); err != nil {
+				errChan <- err
+			}
+		}(i)
+	}
+
+	// Start multiple readers
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			data, err := os.ReadFile(testFile)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			// Verify that we always read complete content (starts with "content from writer" or "initial content")
+			content := string(data)
+			if content != "initial content" && len(content) < len("content from writer ") {
+				errChan <- fmt.Errorf("partial read detected: got %q (len %d)", content, len(content))
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors
+	for err := range errChan {
+		if err != nil {
+			t.Errorf("Concurrent operation error: %v", err)
+		}
+	}
+
+	// Verify file still exists and is valid
+	if _, err := os.Stat(testFile); err != nil {
+		t.Errorf("File does not exist after concurrent operations: %v", err)
+	}
+}
+
+// TestSaveConfigAtomic verifies that SaveConfig uses atomic writes
+func TestSaveConfigAtomic(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "llamafarm.yaml")
+
+	cfg := &LlamaFarmConfig{
+		Name:      "test-project",
+		Namespace: "test-namespace",
+		Version:   "v1",
+	}
+
+	// Save config
+	if err := SaveConfig(cfg, configPath); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
+
+	// Verify config can be loaded
+	loadedCfg, err := LoadConfigFile(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if loadedCfg.Name != cfg.Name || loadedCfg.Namespace != cfg.Namespace {
+		t.Errorf("Loaded config doesn't match: got {name: %s, namespace: %s}, want {name: %s, namespace: %s}",
+			loadedCfg.Name, loadedCfg.Namespace, cfg.Name, cfg.Namespace)
+	}
+
+	// Test concurrent saves and loads
+	var wg sync.WaitGroup
+	errChan := make(chan error, 50)
+
+	// Multiple writers
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			cfg := &LlamaFarmConfig{
+				Name:      "test-project",
+				Namespace: "test-namespace",
+				Version:   "v1",
+			}
+			if err := SaveConfig(cfg, configPath); err != nil {
+				errChan <- err
+			}
+		}(i)
+	}
+
+	// Multiple readers
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cfg, err := LoadConfigFile(configPath)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			// Verify we always get valid config with required fields
+			if cfg.Name == "" || cfg.Namespace == "" {
+				errChan <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors
+	for err := range errChan {
+		if err != nil {
+			t.Errorf("Concurrent save/load error: %v", err)
 		}
 	}
 }

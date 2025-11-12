@@ -10,7 +10,6 @@ func formatServicesStatus(output *ServicesStatusOutput) {
 	fmt.Println()
 	fmt.Println("LlamaFarm Services Status")
 	fmt.Println("=========================")
-	fmt.Printf("Orchestration: %s\n", output.Orchestration)
 	fmt.Println()
 
 	// Track if any services are running
@@ -21,31 +20,16 @@ func formatServicesStatus(output *ServicesStatusOutput) {
 		// Service name header
 		fmt.Printf("Service: %s\n", service.Name)
 
-		// Show orchestration-specific info
-		if service.Orchestration == "docker" && service.ContainerName != "" {
-			fmt.Printf("  Container: %s\n", service.ContainerName)
-		}
-
 		// State with icon
 		stateIcon := getStateIcon(service.State)
 		fmt.Printf("  State: %s %s\n", stateIcon, service.State)
 
-		if service.State == "running" {
+		if service.State != "stopped" && service.State != "not_found" {
 			anyRunning = true
 
 			// PID (for native processes)
 			if service.PID > 0 {
 				fmt.Printf("  PID: %d\n", service.PID)
-			}
-
-			// Container ID (for Docker)
-			if service.ContainerID != "" {
-				fmt.Printf("  Container ID: %s\n", service.ContainerID)
-			}
-
-			// Image (for Docker)
-			if service.Image != "" {
-				fmt.Printf("  Image: %s\n", service.Image)
 			}
 
 			// Log file (for native processes)
@@ -81,14 +65,6 @@ func formatServicesStatus(output *ServicesStatusOutput) {
 		} else {
 			allRunning = false
 
-			// Show container ID and image even if stopped (Docker)
-			if service.ContainerID != "" {
-				fmt.Printf("  Container ID: %s\n", service.ContainerID)
-			}
-			if service.Image != "" {
-				fmt.Printf("  Image: %s\n", service.Image)
-			}
-
 			// Show log file even if stopped (native)
 			if service.LogFile != "" {
 				fmt.Printf("  Log File: %s\n", service.LogFile)
@@ -103,11 +79,7 @@ func formatServicesStatus(output *ServicesStatusOutput) {
 		fmt.Println("⚠️  No services are currently running")
 		fmt.Println()
 		fmt.Println("To start services:")
-		if output.Orchestration == "docker" {
-			fmt.Println("  lf services start  (or set LF_ORCHESTRATION_MODE=native to use native processes)")
-		} else {
-			fmt.Println("  lf services start")
-		}
+		fmt.Println("  lf services start")
 		fmt.Println()
 	} else if !allRunning {
 		fmt.Println("⚠️  Some services are not running")
@@ -140,11 +112,11 @@ func getHealthIcon(status string) string {
 	status = strings.ToLower(strings.TrimSpace(status))
 	switch status {
 	case "healthy":
-		return "✅"
+		return "🟢"
 	case "degraded":
-		return "⚠️"
+		return "🟡"
 	case "unhealthy":
-		return "❌"
+		return "🔴"
 	default:
 		return "❓"
 	}

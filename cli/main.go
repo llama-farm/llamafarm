@@ -1,7 +1,7 @@
 package main
 
 import (
-	"llamafarm-cli/cmd"
+	"github.com/llamafarm/cli/cmd"
 )
 
 func main() {

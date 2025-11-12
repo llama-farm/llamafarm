@@ -212,7 +212,7 @@ test_cli_build() {
             go mod tidy
 
             # Test basic build
-            go build -buildvcs=false -ldflags='-X llamafarm-cli/cmd.Version=docker-test-1.0.0' -o ../dist/lf-test .
+            go build -buildvcs=false -ldflags='-X github.com/llamafarm/cli/cmd/version.CurrentVersion=docker-test-1.0.0' -o ../dist/lf-test .
 
             # Test binary execution
             ./../dist/lf-test version

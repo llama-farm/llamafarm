@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/llamafarm/cli/cmd/utils"
 )
 
 // ModelInfo represents a model configuration
@@ -30,13 +32,13 @@ func fetchAvailableModels(serverURL, namespace, projectID string) []ModelInfo {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		logDebug(fmt.Sprintf("Error creating models request: %v", err))
+		utils.LogDebug(fmt.Sprintf("Error creating models request: %v", err))
 		return nil
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
-		logDebug(fmt.Sprintf("Error fetching models: %v", err))
+		utils.LogDebug(fmt.Sprintf("Error fetching models: %v", err))
 		return nil
 	}
 	defer resp.Body.Close()
@@ -50,7 +52,7 @@ func fetchAvailableModels(serverURL, namespace, projectID string) []ModelInfo {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		logDebug(fmt.Sprintf("Error decoding models response: %v", err))
+		utils.LogDebug(fmt.Sprintf("Error decoding models response: %v", err))
 		return nil
 	}
 

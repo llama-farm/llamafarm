@@ -1,6 +1,10 @@
 # Use Python 3.12 slim image with multi-arch support
 FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
 
+# Build arg to control PyTorch variant (empty = CUDA, cpu = CPU-only)
+# Usage: docker build --build-arg PYTORCH_VARIANT=cpu ...
+ARG PYTORCH_VARIANT=
+
 # Disable/limit bytecode compilation to avoid CI stalls
 ENV UV_COMPILE_BYTECODE=0
 ENV UV_COMPILE_BYTECODE_WORKERS=1
@@ -11,6 +15,9 @@ ENV UV_CACHE_DIR=/tmp/uv-cache
 
 # Set UV to use a writable location for virtual environments
 ENV UV_PROJECT_ENVIRONMENT=/tmp/uv-venv
+
+# Set PyTorch index URL based on build arg
+ENV UV_EXTRA_INDEX_URL=${PYTORCH_VARIANT:+https://download.pytorch.org/whl/${PYTORCH_VARIANT}}
 
 ENV LF_DATA_DIR=/var/lib/llamafarm
 

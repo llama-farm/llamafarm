@@ -91,7 +91,7 @@ create_test_artifacts() {
         fi
 
         GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=$TEST_VERSION'" \
+            -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=$TEST_VERSION'" \
             -o "$binary_name" .
 
         # Create archive

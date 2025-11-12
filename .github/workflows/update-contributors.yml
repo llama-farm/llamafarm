@@ -11,6 +11,9 @@ on:
     paths:
       - 'scripts/update_contributors.py'
 
+env:
+  NX_NO_CLOUD: true
+
 jobs:
   update-contributors:
     runs-on: ubuntu-latest
