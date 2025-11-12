@@ -523,12 +523,24 @@ function ChangeEmbeddingModel() {
       'Ollama': 'OllamaEmbedder',
       'Ollama (remote)': 'OllamaEmbedder',
       'OpenAI': 'OpenAIEmbedder',
-      'Google': 'OpenAIEmbedder',
-      'Azure OpenAI': 'OpenAIEmbedder',
+      'Azure OpenAI': 'AzureOpenAIEmbedder',
+      'Google': 'VertexAIEmbedder',
+      'AWS Bedrock': 'BedrockEmbedder',
+      'Cohere': 'CohereEmbedder',
+      'Voyage AI': 'VoyageEmbedder',
       'HuggingFace': 'HuggingFaceEmbedder',
       'SentenceTransformer': 'SentenceTransformerEmbedder'
     }
-    return typeMap[providerLabel] || 'OllamaEmbedder'
+    
+    const mappedType = typeMap[providerLabel]
+    
+    if (!mappedType) {
+      console.error(`Unknown embedding provider: ${providerLabel}`)
+      // Return a safe fallback but log the issue
+      return 'OllamaEmbedder'
+    }
+    
+    return mappedType
   }
 
   const buildStrategyConfig = (encryptedKey?: string) => {
@@ -642,8 +654,9 @@ function ChangeEmbeddingModel() {
         return strategy
       })
 
-      if (!updatedStrategies?.some((s: any) => s.name === originalStrategyName)) {
-        throw new Error(`Strategy ${originalStrategyName} not found`)
+      // Verify the updated strategy exists (using NEW name after rename)
+      if (!updatedStrategies?.some((s: any) => s.name === trimmedName)) {
+        throw new Error(`Strategy ${trimmedName} not found after update`)
       }
 
       // Check if we need to update the default strategy name

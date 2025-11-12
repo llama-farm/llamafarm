@@ -417,6 +417,12 @@ function AddEmbeddingStrategy() {
       } else if (providerLabel === 'AWS Bedrock') {
         if (bedrockRegion) config.region = bedrockRegion.trim()
         if (encryptedApiKey) config.api_key = encryptedApiKey
+      } else if (providerLabel === 'Cohere') {
+        if (baseUrl) config.base_url = baseUrl.trim()
+        if (encryptedApiKey) config.api_key = encryptedApiKey
+      } else if (providerLabel === 'Voyage AI') {
+        if (baseUrl) config.base_url = baseUrl.trim()
+        if (encryptedApiKey) config.api_key = encryptedApiKey
       }
     }
     
