@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Message from './Message'
 import FontIcon from '../../common/FontIcon'
@@ -16,6 +16,139 @@ interface ChatboxProps {
   isPanelOpen: boolean
   setIsPanelOpen: (isOpen: boolean) => void
   initialMessage?: string | null
+}
+
+interface ErrorInfo {
+  title: string
+  description: string
+  primaryAction?: {
+    label: string
+    onClick: () => void
+  }
+  secondaryAction?: {
+    label: string
+    onClick: () => void
+  }
+}
+
+function getErrorInfo(error: string): ErrorInfo {
+  const errorLower = error.toLowerCase()
+
+  // Network/server connection errors
+  if (errorLower.includes('network') || errorLower.includes('connection') ||
+      errorLower.includes('fetch') || errorLower.includes('timeout') ||
+      errorLower.includes('server') && errorLower.includes('unavailable')) {
+    return {
+      title: 'Connection Issue',
+      description: 'Unable to connect to the LlamaFarm server. Please check that the server is running and accessible.',
+      primaryAction: {
+        label: 'Check Services',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-check-services'))
+      },
+      secondaryAction: {
+        label: 'Docs',
+        onClick: () => window.open('https://github.com/llama-farm/llamafarm#running-components-locally', '_blank')
+      }
+    }
+  }
+
+  // Authentication/authorization errors
+  if (errorLower.includes('unauthorized') || errorLower.includes('forbidden') ||
+      errorLower.includes('authentication') || errorLower.includes('permission')) {
+    return {
+      title: 'Authentication Required',
+      description: 'You need to authenticate or check your permissions to use this feature.',
+      primaryAction: {
+        label: 'Check Auth',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-check-auth'))
+      },
+      secondaryAction: {
+        label: 'Docs',
+        onClick: () => window.open('https://github.com/llama-farm/llamafarm#configuration', '_blank')
+      }
+    }
+  }
+
+  // Project configuration errors
+  if (errorLower.includes('project') && (errorLower.includes('not found') ||
+      errorLower.includes('invalid') || errorLower.includes('missing'))) {
+    return {
+      title: 'Project Configuration Issue',
+      description: 'The project configuration appears to be invalid or missing. Please check your project setup.',
+      primaryAction: {
+        label: 'Edit Config',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-open-config-editor'))
+      },
+      secondaryAction: {
+        label: 'Create Project',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-open-create-project'))
+      }
+    }
+  }
+
+  // Model/runtime errors
+  if (errorLower.includes('model') || errorLower.includes('runtime') ||
+      errorLower.includes('ollama') || errorLower.includes('instructor')) {
+    return {
+      title: 'Model/Runtime Issue',
+      description: 'There seems to be an issue with the AI model or runtime configuration.',
+      primaryAction: {
+        label: 'Check Models',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-open-models'))
+      },
+      secondaryAction: {
+        label: 'Docs',
+        onClick: () => window.open('https://github.com/llama-farm/llamafarm#models-and-runtimes', '_blank')
+      }
+    }
+  }
+
+  // Validation errors
+  if (errorLower.includes('validation') || errorLower.includes('invalid') ||
+      errorLower.includes('required') && !errorLower.includes('project')) {
+    return {
+      title: 'Validation Error',
+      description: 'The request contains invalid data. Please check your input and try again.',
+      primaryAction: {
+        label: 'Retry',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-retry-chat'))
+      },
+      secondaryAction: {
+        label: 'Docs',
+        onClick: () => window.open('https://github.com/llama-farm/llamafarm#configuration', '_blank')
+      }
+    }
+  }
+
+  // Streaming errors
+  if (errorLower.includes('streaming') || errorLower.includes('stream')) {
+    return {
+      title: 'Streaming Connection Failed',
+      description: 'The real-time chat connection was interrupted. You can try again or use a different connection method.',
+      primaryAction: {
+        label: 'Retry',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-retry-chat'))
+      },
+      secondaryAction: {
+        label: 'Disable Streaming',
+        onClick: () => window.dispatchEvent(new CustomEvent('lf-toggle-streaming'))
+      }
+    }
+  }
+
+  // Default fallback for unknown errors
+  return {
+    title: 'Chat Unavailable',
+    description: 'The build assistant is currently unavailable. Please check your setup and try again.',
+    primaryAction: {
+      label: 'Check Services',
+      onClick: () => window.dispatchEvent(new CustomEvent('lf-check-services'))
+    },
+    secondaryAction: {
+      label: 'Docs',
+      onClick: () => window.open('https://github.com/llama-farm/llamafarm#troubleshooting', '_blank')
+    }
+  }
 }
 
 function Chatbox({
@@ -50,6 +183,10 @@ function Chatbox({
   const activeProject = useActiveProject()
   const activeProjectName = activeProject?.project || ''
   // Session list UI removed: single session per project
+
+  const errorInfo = useMemo(() => {
+    return error ? getErrorInfo(error) : null
+  }, [error])
 
   // Refs for auto-scroll
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -263,7 +400,7 @@ function Chatbox({
         )}
 
         {/* Error/empty state banner (dark-mode friendly) */}
-        {error && isPanelOpen && (
+        {errorInfo && isPanelOpen && (
           <div className="mx-4 mb-2 rounded-xl border border-border bg-card/40">
             <div className="px-3 py-2 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -272,33 +409,28 @@ function Chatbox({
                 </span>
                 <div className="text-sm">
                   <div className="font-medium text-foreground">
-                    Project setup required
+                    {errorInfo.title}
                   </div>
-                  <div className="text-xs text-muted-foreground">{error}</div>
+                  <div className="text-xs text-muted-foreground">{errorInfo.description}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    window.open(
-                      'https://github.com/llama-farm/llamafarm#quickstart',
-                      '_blank'
-                    )
-                  }
-                  className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80"
-                >
-                  Docs
-                </button>
-                <button
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('lf-open-create-project')
-                    )
-                  }
-                  className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  Create project
-                </button>
+                {errorInfo.secondaryAction && (
+                  <button
+                    onClick={errorInfo.secondaryAction.onClick}
+                    className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80"
+                  >
+                    {errorInfo.secondaryAction.label}
+                  </button>
+                )}
+                {errorInfo.primaryAction && (
+                  <button
+                    onClick={errorInfo.primaryAction.onClick}
+                    className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
+                  >
+                    {errorInfo.primaryAction.label}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -323,9 +455,9 @@ function Chatbox({
                   <div className="mt-1 text-sm text-muted-foreground">
                     Type a message below to chat with your model.
                   </div>
-                  {error && (
+                  {errorInfo && (
                     <div className="mt-3 text-xs text-red-400">
-                      Set up a project config first to get responses.
+                      {errorInfo.description}
                     </div>
                   )}
                   <div className="mt-3 text-xs text-muted-foreground">
