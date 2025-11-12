@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -44,6 +45,7 @@ type Database = {
 function Databases() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [mode, setMode] = useModeWithReset('designer')
   const activeProject = useActiveProject()
   const { data: projectResp } = useProject(
@@ -648,6 +650,17 @@ function Databases() {
         message: `"${strategyName}" set as default embedding strategy`,
         variant: 'default',
       })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
+      })
+      
+      // Show re-embed confirmation dialog
+      setReembedOpen(true)
     } catch (error: any) {
       console.error('Failed to set default embedding:', error)
       toast({
@@ -733,6 +746,14 @@ function Databases() {
         message: `Embedding strategy "${strategyName}" deleted`,
         variant: 'default',
       })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
+      })
     } catch (error: any) {
       console.error('Failed to delete embedding strategy:', error)
       toast({
@@ -807,6 +828,14 @@ function Databases() {
       toast({
         message: `"${strategyName}" set as default retrieval strategy`,
         variant: 'default',
+      })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
       })
     } catch (error: any) {
       console.error('Failed to set default retrieval:', error)
@@ -892,6 +921,14 @@ function Databases() {
       toast({
         message: `Retrieval strategy "${strategyName}" deleted`,
         variant: 'default',
+      })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
       })
     } catch (error: any) {
       console.error('Failed to delete retrieval strategy:', error)
