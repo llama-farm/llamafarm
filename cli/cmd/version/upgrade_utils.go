@@ -237,30 +237,6 @@ func needsElevationUnix(path string) bool {
 	return false
 }
 
-// needsElevationWindows determines if UAC elevation is needed on Windows
-func needsElevationWindows(path string) bool {
-	// If we can write to the location, no elevation needed
-	if canWriteToLocation(path) {
-		return false
-	}
-
-	// Check if the path is in system directories that typically require elevation
-	systemDirs := []string{
-		"C:\\Program Files",
-		"C:\\Program Files (x86)",
-		"C:\\Windows",
-	}
-
-	upperPath := strings.ToUpper(path)
-	for _, sysDir := range systemDirs {
-		if strings.HasPrefix(upperPath, strings.ToUpper(sysDir)) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // getDefaultUserInstallDirUnix returns the default user install directory on Unix-like systems
 func getDefaultUserInstallDirUnix() (string, error) {
 	homeDir, err := os.UserHomeDir()

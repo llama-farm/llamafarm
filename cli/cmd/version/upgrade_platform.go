@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/llamafarm/cli/cmd/utils"
@@ -87,32 +88,64 @@ func (u *UnixUpgradeStrategy) upgradeDirectly(current, new string) error {
 func (u *UnixUpgradeStrategy) upgradeWithSudo(current, new string) error {
 	utils.LogDebug("performing upgrade with sudo elevation")
 
-	// Create a temporary script for sudo execution
+	// Step 1: Create backup (with sudo)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	backupPath := current + ".backup." + timestamp
 
-	script := fmt.Sprintf(`
-set -e
-echo "Creating backup..."
-cp "%s" "%s"
-echo "Installing new binary..."
-cp "%s" "%s"
-chmod +x "%s"
-echo "Verifying installation..."
-if "%s" version >/dev/null 2>&1; then
-    echo "Upgrade completed successfully"
-    rm -f "%s"
-else
-    echo "Verification failed, restoring backup..."
-    mv "%s" "%s"
-    exit 1
-fi
-`, current, backupPath, new, current, current, current, backupPath, backupPath, current)
+	utils.OutputProgress("Creating backup...")
+	if err := u.runSudoCommand("cp", current, backupPath); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
 
-	cmd := exec.Command("sudo", "sh", "-c", script)
+	// Step 2: Copy new binary to location (with sudo)
+	utils.OutputProgress("Installing new binary...")
+	if err := u.runSudoCommand("cp", new, current); err != nil {
+		// Attempt to restore backup
+		if restoreErr := u.runSudoCommand("mv", backupPath, current); restoreErr != nil {
+			utils.LogDebug(fmt.Sprintf("failed to restore backup after copy failure: %v", restoreErr))
+		}
+		return fmt.Errorf("failed to copy new binary: %w", err)
+	}
+
+	// Step 3: Set executable permissions (with sudo)
+	utils.OutputProgress("Setting executable permissions...")
+	if err := u.runSudoCommand("chmod", "+x", current); err != nil {
+		// Attempt to restore backup
+		if restoreErr := u.runSudoCommand("mv", backupPath, current); restoreErr != nil {
+			utils.LogDebug(fmt.Sprintf("failed to restore backup after chmod failure: %v", restoreErr))
+		}
+		return fmt.Errorf("failed to set executable permissions: %w", err)
+	}
+
+	// Step 4: Verify the installation
+	utils.OutputProgress("Verifying installation...")
+	if err := u.verifyBinary(current); err != nil {
+		utils.OutputError("Verification failed, restoring backup...")
+		// Attempt to restore backup
+		if restoreErr := u.runSudoCommand("mv", backupPath, current); restoreErr != nil {
+			utils.LogDebug(fmt.Sprintf("failed to restore backup after verification failure: %v", restoreErr))
+			return fmt.Errorf("upgrade verification failed and backup restore failed: %w (original: %v)", restoreErr, err)
+		}
+		return fmt.Errorf("upgrade verification failed, backup restored: %w", err)
+	}
+
+	// Step 5: Cleanup backup (with sudo)
+	utils.OutputProgress("Cleaning up backup...")
+	if err := u.runSudoCommand("rm", "-f", backupPath); err != nil {
+		utils.LogDebug(fmt.Sprintf("failed to cleanup backup %s: %v", backupPath, err))
+		// Non-fatal - continue
+	}
+
+	utils.OutputSuccess("Upgrade completed successfully")
+	return nil
+}
+
+// runSudoCommand executes a command with sudo, forwarding stdout/stderr
+func (u *UnixUpgradeStrategy) runSudoCommand(name string, args ...string) error {
+	cmdArgs := append([]string{name}, args...)
+	cmd := exec.Command("sudo", cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	return cmd.Run()
 }
 
@@ -170,8 +203,28 @@ func (w *WindowsUpgradeStrategy) CanUpgrade(binaryPath string) bool {
 	return validateBinaryPath(binaryPath) == nil
 }
 
+// RequiresElevation determines if UAC elevation is needed on Windows
 func (w *WindowsUpgradeStrategy) RequiresElevation(binaryPath string) bool {
-	return needsElevationWindows(binaryPath)
+	// If we can write to the location, no elevation needed
+	if canWriteToLocation(binaryPath) {
+		return false
+	}
+
+	// Check if the path is in system directories that typically require elevation
+	systemDirs := []string{
+		"C:\\Program Files",
+		"C:\\Program Files (x86)",
+		"C:\\Windows",
+	}
+
+	upperPath := strings.ToUpper(binaryPath)
+	for _, sysDir := range systemDirs {
+		if strings.HasPrefix(upperPath, strings.ToUpper(sysDir)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (w *WindowsUpgradeStrategy) GetFallbackDir() (string, error) {
