@@ -640,9 +640,37 @@ function DatasetView() {
           <ConfigEditor className="h-full" initialPointer={configPointer} />
         </div>
       ) : (
-        <>
-          {/* Header row */}
-          <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex-1 min-h-0 flex flex-col gap-3">
+          {isDragging || isDropped ? (
+            <div className="w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
+              <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
+                {isDropped ? (
+                  <>
+                    <Loader />
+                    <div className="text-xl text-foreground">Uploading files...</div>
+                    <p className="max-w-[527px] text-sm text-muted-foreground text-center">
+                      Please wait while your files are being uploaded to the dataset.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <FontIcon
+                      type="upload"
+                      className="w-10 h-10 text-blue-200 dark:text-white"
+                    />
+                    <div className="text-xl text-foreground">Drop data here</div>
+                    <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
+                      You can upload PDFs, CSVs, or other documents directly to this
+                      dataset.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Header row */}
+              <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex flex-col gap-1 flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -1321,26 +1349,6 @@ function DatasetView() {
 
           {/* Processing strategy and Embedding model sections removed per request */}
 
-          {isDragging && (
-            <div className="w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
-              <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
-                {isDropped ? (
-                  <Loader />
-                ) : (
-                  <FontIcon
-                    type="upload"
-                    className="w-10 h-10 text-blue-200 dark:text-white"
-                  />
-                )}
-                <div className="text-xl text-foreground">Drop data here</div>
-              </div>
-              <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
-                You can upload PDFs, CSVs, or other documents directly to this
-                dataset.
-              </p>
-            </div>
-          )}
-
           {/* Raw data */}
           <section className="rounded-lg border border-border bg-card p-4 mb-40">
             <div className="flex items-center justify-between mb-3">
@@ -1638,7 +1646,9 @@ function DatasetView() {
           </section>
 
           {/* File deletion now handled directly via API calls with confirmation dialog */}
-        </>
+            </>
+          )}
+        </div>
       )}
     </div>
   )
