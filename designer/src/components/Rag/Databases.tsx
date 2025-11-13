@@ -131,6 +131,9 @@ function Databases() {
     }
   })
 
+  // Track pending database to switch to after creation
+  const [pendingDatabaseSwitch, setPendingDatabaseSwitch] = useState<string | null>(null)
+
   const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
   const getDatabaseLocation = useCallback(() => {
     if (activeDatabase) {
@@ -168,15 +171,24 @@ function Databases() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ACTIVE_DB_KEY, databases])
 
-  // Ensure active database exists in the list
+  // Switch to pending database once it appears in the list
+  useEffect(() => {
+    if (pendingDatabaseSwitch && databases.some(db => db.name === pendingDatabaseSwitch)) {
+      setActiveDatabase(pendingDatabaseSwitch)
+      setPendingDatabaseSwitch(null)
+    }
+  }, [pendingDatabaseSwitch, databases])
+
+  // Ensure active database exists in the list (but don't reset if we're waiting for a pending switch)
   useEffect(() => {
     if (
       databases.length > 0 &&
-      !databases.find(db => db.name === activeDatabase)
+      !databases.find(db => db.name === activeDatabase) &&
+      !pendingDatabaseSwitch
     ) {
       setActiveDatabase(databases[0].name)
     }
-  }, [databases, activeDatabase])
+  }, [databases, activeDatabase, pendingDatabaseSwitch])
 
   // Connected datasets for the active database
   const connectedDatasets = useMemo(() => {
@@ -499,7 +511,8 @@ function Databases() {
         variant: 'default',
       })
 
-      setActiveDatabase(database.name)
+      // Set pending switch - will activate once database appears in list
+      setPendingDatabaseSwitch(database.name)
       setDatabaseModalOpen(false)
     } catch (error: any) {
       console.error('Failed to create database:', error)
@@ -549,7 +562,7 @@ function Databases() {
         updates.name !== oldName &&
         activeDatabase === oldName
       ) {
-        setActiveDatabase(updates.name)
+        setPendingDatabaseSwitch(updates.name)
       }
 
       setDatabaseModalOpen(false)
