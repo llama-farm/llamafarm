@@ -74,9 +74,9 @@ export class WindowManager {
       const designerPath = path.join(process.resourcesPath, 'designer', 'index.html')
       this.mainWindow.loadFile(designerPath)
     } else {
-      // In development, load from the designer's dev server
-      // Assuming designer runs on port 3000 during development
-      this.mainWindow.loadURL('http://localhost:3000')
+      // In development, load the renderer HTML (which has the designer iframe)
+      // The vite dev server is already running at localhost:5173
+      this.mainWindow.loadURL('http://localhost:5173')
     }
 
     // Open DevTools in development

@@ -7,7 +7,6 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { CLIInstaller, InstallProgress } from './backend/cli-installer'
 import { BackendManager, BackendStatus } from './backend/backend-manager'
 import { WindowManager } from './window-manager'
-import { ProjectFinder } from './backend/project-finder'
 
 class LlamaFarmApp {
   private cliInstaller: CLIInstaller
@@ -84,11 +83,18 @@ class LlamaFarmApp {
     const splash = this.windowManager.createSplashWindow()
 
     try {
-      // Step 1: Ensure CLI is installed
+      // Step 1: Ensure CLI is installed and upgraded
       await this.ensureCLI()
 
-      // Step 2: Start backend
-      await this.startBackend()
+      // Step 2: Open Designer (no backend startup)
+      // Users will choose/create projects in the Designer
+      this.windowManager.updateSplash({
+        message: 'Opening Designer...',
+        progress: 95
+      })
+
+      // Give a moment for the message to show
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       // Step 3: Create main window
       this.windowManager.createMainWindow()
@@ -99,7 +105,7 @@ class LlamaFarmApp {
   }
 
   /**
-   * Ensure CLI is installed
+   * Ensure CLI is installed and upgraded
    */
   private async ensureCLI(): Promise<void> {
     this.windowManager.updateSplash({
@@ -130,97 +136,68 @@ class LlamaFarmApp {
       })
     } else {
       console.log('CLI found at:', this.cliInstaller.getCLIPath())
-
-      // Check if upgrade is needed
-      const needsUpgrade = await this.cliInstaller.needsUpgrade()
-      if (needsUpgrade) {
-        console.log('CLI upgrade available, upgrading...')
-        this.windowManager.updateSplash({
-          message: 'Upgrading LlamaFarm CLI...',
-          progress: 15
-        })
-
-        await this.cliInstaller.install((progress: InstallProgress) => {
-          this.windowManager.updateSplash({
-            message: `Upgrading: ${progress.message}`,
-            progress: 15 + (progress.progress || 0) * 0.15
-          })
-        })
-      }
-
-      this.windowManager.updateSplash({
-        message: 'LlamaFarm CLI ready',
-        progress: 30
-      })
     }
+
+    // Always run upgrade to ensure latest version
+    this.windowManager.updateSplash({
+      message: 'Checking for CLI updates...',
+      progress: 50
+    })
+
+    try {
+      await this.cliInstaller.upgrade((progress: InstallProgress) => {
+        this.windowManager.updateSplash({
+          message: progress.message,
+          progress: 50 + (progress.progress || 0) * 0.2
+        })
+      })
+    } catch (error) {
+      // Upgrade failure is not critical, continue anyway
+      console.warn('CLI upgrade failed (continuing anyway):', error)
+    }
+
+    // Start services to ensure RAG server and dependencies are downloaded
+    this.windowManager.updateSplash({
+      message: 'Preparing services...',
+      progress: 70
+    })
+
+    try {
+      await this.startServices()
+    } catch (error) {
+      // Service start failure is not critical, continue anyway
+      console.warn('Services start failed (continuing anyway):', error)
+    }
+
+    this.windowManager.updateSplash({
+      message: 'LlamaFarm CLI ready',
+      progress: 90
+    })
   }
 
   /**
-   * Start the backend
+   * Start services (ensures RAG server and dependencies are downloaded)
    */
-  private async startBackend(): Promise<void> {
-    this.windowManager.updateSplash({
-      message: 'Finding project...',
-      progress: 35
-    })
+  private async startServices(): Promise<void> {
+    try {
+      console.log('Running lf services start...')
+      const { execAsync } = require('util').promisify(require('child_process').exec)
 
-    // Find or create a project
-    const projectFinder = new ProjectFinder()
-    const projectPath = await projectFinder.getOrCreateDefaultProject(
-      this.cliInstaller.getCLIPath()
-    )
+      const { stdout, stderr } = await execAsync(
+        `"${this.cliInstaller.getCLIPath()}" services start`,
+        { timeout: 180000 } // 3 minutes timeout for downloads
+      )
 
-    console.log('Using project at:', projectPath)
-
-    this.windowManager.updateSplash({
-      message: 'Starting LlamaFarm backend...',
-      progress: 40
-    })
-
-    this.backendManager = new BackendManager({
-      cliPath: this.cliInstaller.getCLIPath(),
-      projectPath, // Use the project directory
-      autoRestart: true,
-      maxRestartAttempts: 3
-    })
-
-    // Listen for status changes
-    this.backendManager.onStatus((status: BackendStatus) => {
-      console.log('Backend status:', status.state, status.message)
-
-      // Update splash during startup
-      if (status.state === 'starting') {
-        const progressMap: Record<string, number> = {
-          'Starting LlamaFarm backend...': 45,
-          'Backend services started, waiting for health check...': 60,
-          'default': 50
-        }
-
-        this.windowManager.updateSplash({
-          message: status.message,
-          progress: progressMap[status.message] || progressMap.default
-        })
-      } else if (status.state === 'running') {
-        this.windowManager.updateSplash({
-          message: 'Backend is running!',
-          progress: 90
-        })
-      }
-
-      // Notify main window of status changes
-      const mainWindow = this.windowManager.getMainWindow()
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('backend-status', status)
-      }
-    })
-
-    await this.backendManager.start()
-
-    this.windowManager.updateSplash({
-      message: 'Backend ready!',
-      progress: 95
-    })
+      console.log('Services output:', stdout)
+      if (stderr) console.error('Services stderr:', stderr)
+    } catch (error) {
+      console.warn('Services start had issues:', error)
+      // Continue anyway - not critical
+    }
   }
+
+  // Backend startup is now handled by the Designer when user selects a project
+  // This method is no longer called during app initialization
 
   /**
    * Handle startup errors

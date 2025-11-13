@@ -3,187 +3,138 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LlamaFarm Designer</title>
+  <title>LlamaFarm Desktop</title>
   <style>
     body {
       margin: 0;
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    }
-
-    #root {
-      width: 100vw;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       height: 100vh;
-    }
-
-    /* Status bar at the top */
-    .status-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 30px;
-      background: #667eea;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: white;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 15px;
-      font-size: 12px;
-      z-index: 10000;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    .status-bar.degraded {
-      background: #f59e0b;
+    .container {
+      text-align: center;
+      max-width: 600px;
+      padding: 40px;
     }
 
-    .status-bar.error {
-      background: #ef4444;
+    .logo {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: float 3s ease-in-out infinite;
     }
 
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
     }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+    h1 {
+      font-size: 48px;
+      margin: 0 0 20px;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      font-size: 24px;
+      margin-bottom: 40px;
+      opacity: 0.9;
+    }
+
+    .message {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+    }
+
+    .message h2 {
+      font-size: 20px;
+      margin-bottom: 15px;
+    }
+
+    .message p {
+      font-size: 16px;
+      line-height: 1.6;
+      opacity: 0.9;
+    }
+
+    .btn {
       background: white;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .status-actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    .status-btn {
-      background: rgba(255, 255, 255, 0.2);
+      color: #667eea;
       border: none;
-      color: white;
-      padding: 4px 10px;
-      border-radius: 4px;
+      padding: 15px 40px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 11px;
-      transition: background 0.2s;
+      transition: transform 0.2s, box-shadow 0.2s;
+      text-decoration: none;
+      display: inline-block;
     }
 
-    .status-btn:hover {
-      background: rgba(255, 255, 255, 0.3);
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .instructions {
+      margin-top: 40px;
+      font-size: 14px;
+      opacity: 0.8;
+    }
+
+    .instructions code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Courier New', monospace;
     }
   </style>
 </head>
 <body>
-  <!-- Status bar -->
-  <div class="status-bar" id="statusBar">
-    <div class="status-indicator">
-      <div class="status-dot"></div>
-      <span id="statusText">Backend Running</span>
+  <div class="container">
+    <div class="logo">🦙</div>
+    <h1>LlamaFarm</h1>
+    <div class="subtitle">Local AI Platform</div>
+
+    <div class="message">
+      <h2>Welcome to LlamaFarm Desktop!</h2>
+      <p>
+        Your CLI is ready and up to date.
+        <br><br>
+        To get started, open your terminal and navigate to a project directory,
+        then run <code>lf start</code> to launch the Designer interface.
+      </p>
     </div>
-    <div class="status-actions">
-      <button class="status-btn" id="restartBtn">Restart</button>
+
+    <div class="instructions">
+      <strong>Quick Start:</strong>
+      <br><br>
+      1. Open Terminal
+      <br>
+      2. Navigate to your project: <code>cd ~/.llamafarm/projects/default/your-project</code>
+      <br>
+      3. Run: <code>lf start</code>
+      <br>
+      4. The Designer will open in your browser at <code>http://localhost:7724</code>
     </div>
   </div>
 
-  <!-- Main app root (Designer will be loaded here via iframe or direct embedding) -->
-  <div id="root"></div>
-
   <script>
-    // Status bar management
+    // Listen for backend status updates (for future integration)
     if (window.llamafarm) {
-      const statusBar = document.getElementById('statusBar');
-      const statusText = document.getElementById('statusText');
-      const restartBtn = document.getElementById('restartBtn');
-
-      // Listen for backend status changes
       window.llamafarm.backend.onStatusChange((status) => {
-        console.log('Backend status:', status);
-
-        // Update status text
-        if (statusText) {
-          statusText.textContent = status.message || status.state;
-        }
-
-        // Update status bar color
-        if (statusBar) {
-          statusBar.className = 'status-bar';
-          if (status.state === 'degraded') {
-            statusBar.classList.add('degraded');
-          } else if (status.state === 'error' || status.state === 'stopped') {
-            statusBar.classList.add('error');
-          }
-        }
-      });
-
-      // Restart button
-      if (restartBtn) {
-        restartBtn.addEventListener('click', async () => {
-          try {
-            restartBtn.disabled = true;
-            restartBtn.textContent = 'Restarting...';
-            await window.llamafarm.backend.restart();
-          } catch (error) {
-            console.error('Restart failed:', error);
-          } finally {
-            restartBtn.disabled = false;
-            restartBtn.textContent = 'Restart';
-          }
-        });
-      }
-
-      // Load initial status
-      window.llamafarm.backend.getStatus().then((status) => {
-        if (statusText) {
-          statusText.textContent = status.message || status.state;
-        }
-      });
+        console.log('Backend status:', status)
+        // Could update UI here if backend starts
+      })
     }
-  </script>
-
-  <!-- The Designer app will be injected here or loaded via iframe -->
-  <iframe
-    src="http://localhost:7724"
-    style="width: 100%; height: calc(100vh - 30px); border: none; margin-top: 30px;"
-    id="designerFrame"
-  ></iframe>
-
-  <script>
-    // Fallback: if the iframe fails to load, show a message
-    const iframe = document.getElementById('designerFrame');
-    let iframeLoaded = false;
-
-    iframe.addEventListener('load', () => {
-      iframeLoaded = true;
-    });
-
-    setTimeout(() => {
-      if (!iframeLoaded) {
-        document.getElementById('root').innerHTML = `
-          <div style="
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: calc(100vh - 30px);
-            margin-top: 30px;
-            flex-direction: column;
-            gap: 20px;
-          ">
-            <h2>Designer Loading...</h2>
-            <p>Waiting for the backend to start...</p>
-            <div class="spinner"></div>
-          </div>
-        `;
-      }
-    }, 5000);
   </script>
 </body>
 </html>

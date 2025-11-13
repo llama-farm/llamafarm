@@ -90,6 +90,29 @@ export class CLIInstaller {
   }
 
   /**
+   * Upgrade CLI using the built-in upgrade command
+   */
+  async upgrade(onProgress?: (progress: InstallProgress) => void): Promise<void> {
+    try {
+      onProgress?.({ step: 'checking', message: 'Upgrading LlamaFarm CLI...' })
+
+      console.log('Running lf version upgrade...')
+      const { stdout, stderr } = await execAsync(`"${this.cliPath}" version upgrade`, {
+        timeout: 120000 // 2 minutes timeout
+      })
+
+      console.log('Upgrade output:', stdout)
+      if (stderr) console.error('Upgrade stderr:', stderr)
+
+      onProgress?.({ step: 'complete', message: 'CLI upgraded successfully!' })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      onProgress?.({ step: 'error', message: `Upgrade failed: ${errorMessage}` })
+      throw error
+    }
+  }
+
+  /**
    * Get the CLI executable path
    */
   getCLIPath(): string {
