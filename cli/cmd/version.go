@@ -52,6 +52,7 @@ func parseUpgradeFlags(cmd *cobra.Command, args []string) version.UpgradeOpts {
 	force, _ := cmd.Flags().GetBool("force")
 	noVerify, _ := cmd.Flags().GetBool("no-verify")
 	installDir, _ := cmd.Flags().GetString("install-dir")
+	serverURL, _ := cmd.Flags().GetString("server-url")
 
 	var targetVersion string
 	if len(args) > 0 {
@@ -64,5 +65,6 @@ func parseUpgradeFlags(cmd *cobra.Command, args []string) version.UpgradeOpts {
 		NoVerify:      noVerify,
 		InstallDir:    installDir,
 		TargetVersion: targetVersion,
+		ServerURL:     serverURL,
 	}
 }

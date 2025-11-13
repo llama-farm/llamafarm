@@ -3,16 +3,19 @@ package version
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
 
+	"github.com/llamafarm/cli/cmd/orchestrator"
 	"github.com/llamafarm/cli/cmd/utils"
+	"github.com/llamafarm/cli/internal/buildinfo"
 )
 
-// Version will be set by build flags during release builds
-var CurrentVersion = "dev"
+// CurrentVersion is now defined in internal/buildinfo to avoid import cycles
+var CurrentVersion = buildinfo.CurrentVersion
 
 type UpgradeOpts struct {
 	DryRun        bool
@@ -20,6 +23,7 @@ type UpgradeOpts struct {
 	NoVerify      bool
 	InstallDir    string
 	TargetVersion string
+	ServerURL     string
 }
 
 // determineTargetVersion resolves the target version from args or fetches the latest
@@ -195,6 +199,23 @@ func PerformUpgrade(opts UpgradeOpts) error {
 	// Confirm upgrade
 	utils.OutputInfo("\n🚀 Starting upgrade to %s...", targetVersion)
 
+	// Get currently running services before stopping them
+	// We'll restart these after the upgrade completes
+	runningServices, err := getRunningServices(opts.ServerURL)
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Warning: failed to get running services: %v", err))
+		runningServices = nil
+	} else if len(runningServices) > 0 {
+		utils.LogDebug(fmt.Sprintf("Currently running services: %v", runningServices))
+	}
+
+	// Stop all running services before upgrading the binary
+	// This ensures clean shutdown and prevents version mismatches
+	if len(runningServices) > 0 {
+		utils.OutputProgress("Stopping services before upgrade...")
+		_ = stopAllServices(opts.ServerURL)
+	}
+
 	platform := detectPlatform()
 
 	// Download and verify binary
@@ -232,6 +253,13 @@ func PerformUpgrade(opts UpgradeOpts) error {
 		utils.OutputInfo("Make sure this directory is in your PATH.")
 	}
 
+	// Restart services that were running before upgrade
+	// IMPORTANT: Use the NEW binary to restart services so dependencies sync correctly
+	if len(runningServices) > 0 {
+		utils.OutputInfo("Completing upgrade...")
+		_ = restartServicesWithNewBinary(finalBinaryPath, opts.ServerURL, runningServices)
+	}
+
 	// If requested (e.g., from TUI), restart into the updated binary
 	if os.Getenv("LF_RESTART_AFTER_UPGRADE") == "1" {
 		// Avoid looping if we were invoked as `lf version upgrade`
@@ -263,13 +291,83 @@ func PerformUpgrade(opts UpgradeOpts) error {
 	return nil
 }
 
-// showManualInstructions displays manual installation instructions as fallback
-func showManualInstructions(info *UpgradeInfo) {
-	utils.OutputInfo("\n📖 Manual Installation Instructions:")
-	utils.OutputInfo("  • macOS / Linux: curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash")
-	utils.OutputInfo("  • Windows:       winget install LlamaFarm.CLI")
-
-	if info.ReleaseURL != "" {
-		utils.OutputInfo("  • Release notes: %s", info.ReleaseURL)
+// getRunningServices returns a list of services that are currently running
+func getRunningServices(serverURL string) ([]string, error) {
+	// Create service manager
+	sm, err := orchestrator.NewServiceManager(serverURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create service manager: %w", err)
 	}
+
+	// Get status of all services
+	statusInfos, err := sm.GetServicesStatus()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get services status: %w", err)
+	}
+
+	// Filter to only running services
+	running := make([]string, 0)
+	for _, info := range statusInfos {
+		if info.State == "running" {
+			running = append(running, info.Name)
+		}
+	}
+
+	return running, nil
+}
+
+// stopAllServices stops all running services before binary upgrade
+// This prevents version mismatches between CLI and services
+func stopAllServices(serverURL string) error {
+	// Create service manager
+	sm, err := orchestrator.NewServiceManager(serverURL)
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Failed to create service manager: %v", err))
+		// If we can't create service manager, services might not be running
+		return nil
+	}
+
+	// Stop all services
+	utils.LogDebug("Stopping all services for binary upgrade")
+	if err := sm.StopAll(); err != nil {
+		// Services might not be running, which is fine
+		utils.LogDebug(fmt.Sprintf("Service stop returned error (services may not be running): %v", err))
+		return nil
+	}
+
+	return nil
+}
+
+// restartServicesWithNewBinary starts services using the newly upgraded binary
+// This ensures the new binary triggers source download and dependency sync
+func restartServicesWithNewBinary(newBinaryPath, serverURL string, services []string) error {
+	if len(services) == 0 {
+		return nil
+	}
+
+	utils.LogDebug(fmt.Sprintf("Restarting services with new binary: %v", services))
+
+	// Build command: lf services start <service1> <service2> ...
+	args := []string{"services", "start"}
+	args = append(args, strings.Join(services, ","))
+
+	// Execute the new binary to start services
+	cmd := exec.Command(newBinaryPath, args...)
+
+	// Set environment variables if serverURL is custom
+	if serverURL != "" {
+		cmd.Env = append(args, "--server-url", serverURL)
+	} else {
+		cmd.Env = os.Environ()
+	}
+
+	// Capture output for debugging
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Service restart output: %s", string(output)))
+		return fmt.Errorf("failed to start services: %w", err)
+	}
+
+	utils.LogDebug("Services started successfully with new binary")
+	return nil
 }

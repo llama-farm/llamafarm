@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/llamafarm/cli/cmd/orchestrator"
@@ -186,6 +187,7 @@ func runServicesStart(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
 		os.Exit(1)
 	}
+	utils.OutputInfo("Starting services (%s). This may take a minute...", strings.Join(servicesToStart, ", "))
 	if err := sm.EnsureServices(servicesToStart...); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start services: %v\n", err)
 		os.Exit(1)
@@ -257,20 +259,13 @@ func formatUptime(d time.Duration) string {
 // getServicesToManage determines which services to manage based on command arguments
 func getServicesToManage(args []string) []string {
 	if len(args) > 0 {
-		// Specific service requested
-		serviceName := args[0]
-
-		// Validate service name
-		if _, exists := orchestrator.ServiceGraph[serviceName]; !exists {
-			utils.OutputError("Unknown service: %s\n", serviceName)
-			fmt.Fprintf(os.Stderr, "\nAvailable services:\n")
-			for name := range orchestrator.ServiceGraph {
-				fmt.Fprintf(os.Stderr, "  - %s\n", name)
-			}
-			os.Exit(1)
+		// Support comma-separated service names and return a list
+		serviceNames := strings.Split(args[0], ",")
+		for i := range serviceNames {
+			serviceNames[i] = strings.TrimSpace(serviceNames[i])
 		}
 
-		return []string{serviceName}
+		return serviceNames
 	}
 
 	// Start all services
