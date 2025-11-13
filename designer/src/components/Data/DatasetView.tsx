@@ -289,6 +289,7 @@ function DatasetView() {
   }>({})
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const filteredFileInputRef = useRef<HTMLInputElement>(null)
   const directoryInputRef = useRef<HTMLInputElement>(null)
 
   // Set directory attributes on mount
@@ -1394,13 +1395,6 @@ function DatasetView() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium">Raw data</h3>
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowFileTypeFilter(!showFileTypeFilter)}
-                >
-                  {showFileTypeFilter ? 'Hide' : 'Filter'}
-                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="secondary" className="gap-1.5">
@@ -1421,7 +1415,7 @@ function DatasetView() {
                       </svg>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[160px]">
+                  <DropdownMenuContent align="end" className="w-[200px]">
                     <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 32 32" fill="none" className="mr-2">
                         <path d="M25.7 9.3L18.7 2.3C18.5 2.1 18.3 2 18 2H8C6.9 2 6 2.9 6 4V28C6 29.1 6.9 30 8 30H24C25.1 30 26 29.1 26 28V10C26 9.7 25.9 9.5 25.7 9.3ZM18 4.4L23.6 10H18V4.4ZM24 28H8V4H16V10C16 11.1 16.9 12 18 12H24V28Z" fill="currentColor"/>
@@ -1432,6 +1426,10 @@ function DatasetView() {
                     <DropdownMenuItem onClick={() => directoryInputRef.current?.click()}>
                       <FontIcon type="folder" className="w-4 h-4 mr-2" />
                       Upload folder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowFileTypeFilter(!showFileTypeFilter)}>
+                      <FontIcon type="search" className="w-4 h-4 mr-2" />
+                      Filtered file search
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1569,27 +1567,34 @@ function DatasetView() {
 
             {/* File type filter section */}
             {showFileTypeFilter && (
-              <div className="mb-3 p-3 bg-muted/20 rounded-md border border-border/60">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      File type filter (comma-separated)
-                    </label>
-                    {fileTypeFilter && (
-                      <button
-                        onClick={clearFileTypeFilter}
-                        className="text-xs text-blue-600 hover:text-blue-800"
-                      >
-                        Clear filter
-                      </button>
-                    )}
+              <div className="mb-3 p-3 bg-muted/20 rounded-md border border-border/60 relative">
+                <button
+                  onClick={() => setShowFileTypeFilter(false)}
+                  className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  aria-label="Close filter"
+                >
+                  <FontIcon type="close" className="w-4 h-4" />
+                </button>
+                <div className="flex flex-col gap-3">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    File type filter (comma-separated)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <SearchInput
+                      value={fileTypeFilter}
+                      onChange={e => setFileTypeFilter(e.target.value)}
+                      onClear={clearFileTypeFilter}
+                      placeholder="e.g., .pdf, .txt, .docx (leave empty for all files)"
+                      className="text-sm"
+                    />
+                    <Button
+                      onClick={() => filteredFileInputRef.current?.click()}
+                      className="whitespace-nowrap"
+                    >
+                      <FontIcon type="search" className="w-4 h-4 mr-2" />
+                      Search files with filters
+                    </Button>
                   </div>
-                  <Input
-                    value={fileTypeFilter}
-                    onChange={e => setFileTypeFilter(e.target.value)}
-                    placeholder="e.g., .pdf, .txt, .docx (leave empty for all files)"
-                    className="text-sm"
-                  />
                   <div className="flex flex-wrap gap-1.5">
                     <span className="text-xs text-muted-foreground">
                       Quick add:
@@ -1631,6 +1636,46 @@ function DatasetView() {
               type="file"
               className="hidden"
               multiple
+              onChange={async e => {
+                if (
+                  !datasetId ||
+                  !activeProject?.namespace ||
+                  !activeProject?.project
+                ) {
+                  toast({
+                    message: 'Missing required information for upload',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
+                const list = e.target.files ? Array.from(e.target.files) : []
+                if (list.length === 0) return
+
+                // Reset input immediately to allow re-selecting same files
+                const target = e.currentTarget
+                try {
+                  await handleFilesUpload(list)
+                } catch (error) {
+                  console.error('File upload error:', error)
+                  toast({
+                    message: 'Failed to upload files. See console for details.',
+                    variant: 'destructive',
+                  })
+                } finally {
+                  // Reset input value after upload completes
+                  if (target) {
+                    target.value = ''
+                  }
+                }
+              }}
+            />
+            <input
+              ref={filteredFileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              accept={fileTypeFilter ? fileTypeFilter.split(',').map(s => s.trim()).filter(Boolean).map(ext => ext.startsWith('.') ? ext : `.${ext}`).join(',') : undefined}
               onChange={async e => {
                 if (
                   !datasetId ||
@@ -1718,6 +1763,7 @@ function DatasetView() {
                   placeholder="Search raw files"
                   value={searchValue}
                   onChange={e => setSearchValue(e.target.value)}
+                  onClear={() => setSearchValue('')}
                 />
               </div>
             </div>
@@ -1733,12 +1779,37 @@ function DatasetView() {
                       {files.length} file{files.length !== 1 ? 's' : ''}
                     </div>
                   </div>
-                  <ul>
-                    {files
-                      .filter(f =>
-                        f.name.toLowerCase().includes(searchValue.toLowerCase())
+                  {(() => {
+                    const filteredFiles = files.filter(f =>
+                      f.name.toLowerCase().includes(searchValue.toLowerCase())
+                    )
+                    
+                    if (filteredFiles.length === 0 && searchValue) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                          <FontIcon 
+                            type="search" 
+                            className="w-8 h-8 text-muted-foreground/40 mb-3"
+                          />
+                          <div className="text-sm font-medium text-foreground mb-1">
+                            No results found
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-3">
+                            No files match "{searchValue}"
+                          </div>
+                          <button
+                            onClick={() => setSearchValue('')}
+                            className="text-xs text-blue-600 hover:text-blue-800 dark:text-white dark:hover:text-blue-200"
+                          >
+                            Clear search
+                          </button>
+                        </div>
                       )
-                      .map(f => (
+                    }
+                    
+                    return (
+                      <ul>
+                        {filteredFiles.map(f => (
                         <li
                           key={f.id}
                           className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
@@ -1826,8 +1897,10 @@ function DatasetView() {
                             </div>
                           </div>
                         </li>
-                      ))}
-                  </ul>
+                        ))}
+                      </ul>
+                    )
+                  })()}
                 </div>
               )}
             </div>
