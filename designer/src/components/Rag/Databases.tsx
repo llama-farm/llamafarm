@@ -227,27 +227,35 @@ function Databases() {
   const [ragDatabases, setRagDatabases] = useState<RagDatabasesResponse | null>(
     null
   )
-  useEffect(() => {
+  
+  // Refetch function to reload RAG databases
+  const refetchRagDatabases = useCallback(async () => {
     const ns = activeProject?.namespace
     const proj = activeProject?.project
     if (!ns || !proj) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const resp = await apiClient.get<RagDatabasesResponse>(
-          `/projects/${encodeURIComponent(ns)}/${encodeURIComponent(
-            proj
-          )}/rag/databases`
-        )
-        if (!cancelled) setRagDatabases(resp.data)
-      } catch {
-        if (!cancelled) setRagDatabases(null)
-      }
-    })()
-    return () => {
-      cancelled = true
+    try {
+      const resp = await apiClient.get<RagDatabasesResponse>(
+        `/projects/${encodeURIComponent(ns)}/${encodeURIComponent(
+          proj
+        )}/rag/databases`
+      )
+      setRagDatabases(resp.data)
+    } catch {
+      setRagDatabases(null)
     }
   }, [activeProject?.namespace, activeProject?.project])
+  
+  // Initial fetch and refetch when project changes
+  useEffect(() => {
+    refetchRagDatabases()
+  }, [refetchRagDatabases])
+  
+  // Refetch when projectResp updates (after database create/update/delete)
+  useEffect(() => {
+    if (projectResp) {
+      refetchRagDatabases()
+    }
+  }, [projectResp, refetchRagDatabases])
 
   // Embeddings from server (no localStorage fallback)
   const serverEmbeddings: EmbeddingItem[] | null = useMemo(() => {
