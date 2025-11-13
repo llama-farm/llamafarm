@@ -130,8 +130,8 @@ export class BackendManager {
       console.log('Working directory:', cwd)
 
       // Spawn the lf start process
-      // We'll use a custom approach similar to lf start but more controlled
-      this.process = spawn(this.config.cliPath, ['start', '--no-tui'], {
+      // Note: lf start is an alias for lf dev and runs without TUI by default in non-interactive mode
+      this.process = spawn(this.config.cliPath, ['start'], {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
@@ -142,25 +142,51 @@ export class BackendManager {
         detached: false
       })
 
-      // Handle stdout
-      this.process.stdout?.on('data', (data) => {
-        const output = data.toString()
-        console.log('[Backend]', output)
+      // Handle stdout (with error handling for EPIPE)
+      if (this.process.stdout) {
+        this.process.stdout.on('data', (data) => {
+          try {
+            const output = data.toString()
+            console.log('[Backend]', output)
 
-        // Look for startup indicators
-        if (output.includes('Application startup complete') ||
-            output.includes('Uvicorn running on')) {
-          this.updateStatus({
-            message: 'Backend services started, waiting for health check...'
-          })
-        }
-      })
+            // Look for startup indicators
+            if (output.includes('Application startup complete') ||
+                output.includes('Uvicorn running on')) {
+              this.updateStatus({
+                message: 'Backend services started, waiting for health check...'
+              })
+            }
+          } catch (error) {
+            // Ignore EPIPE errors
+          }
+        })
 
-      // Handle stderr
-      this.process.stderr?.on('data', (data) => {
-        const error = data.toString()
-        console.error('[Backend Error]', error)
-      })
+        this.process.stdout.on('error', (error) => {
+          // Ignore EPIPE errors from broken pipes
+          if ((error as any).code !== 'EPIPE') {
+            console.error('[Backend stdout error]', error)
+          }
+        })
+      }
+
+      // Handle stderr (with error handling for EPIPE)
+      if (this.process.stderr) {
+        this.process.stderr.on('data', (data) => {
+          try {
+            const error = data.toString()
+            console.error('[Backend Error]', error)
+          } catch (error) {
+            // Ignore EPIPE errors
+          }
+        })
+
+        this.process.stderr.on('error', (error) => {
+          // Ignore EPIPE errors from broken pipes
+          if ((error as any).code !== 'EPIPE') {
+            console.error('[Backend stderr error]', error)
+          }
+        })
+      }
 
       // Handle process exit
       this.process.on('exit', (code, signal) => {

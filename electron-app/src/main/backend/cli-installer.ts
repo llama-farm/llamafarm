@@ -55,6 +55,41 @@ export class CLIInstaller {
   }
 
   /**
+   * Get installed CLI version
+   */
+  async getInstalledVersion(): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync(`"${this.cliPath}" version`)
+      // Parse version from output like "lf version 0.0.14"
+      const match = stdout.match(/version\s+v?(\d+\.\d+\.\d+)/)
+      return match ? match[1] : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Check if CLI needs upgrade
+   */
+  async needsUpgrade(): Promise<boolean> {
+    try {
+      const installed = await this.getInstalledVersion()
+      if (!installed) return false
+
+      const latest = await this.getLatestVersion()
+      if (!latest) return false
+
+      // Remove 'v' prefix if present
+      const latestClean = latest.replace(/^v/, '')
+
+      // Simple version comparison
+      return latestClean !== installed
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Get the CLI executable path
    */
   getCLIPath(): string {

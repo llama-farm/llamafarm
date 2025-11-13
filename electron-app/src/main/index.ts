@@ -7,6 +7,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { CLIInstaller, InstallProgress } from './backend/cli-installer'
 import { BackendManager, BackendStatus } from './backend/backend-manager'
 import { WindowManager } from './window-manager'
+import { ProjectFinder } from './backend/project-finder'
 
 class LlamaFarmApp {
   private cliInstaller: CLIInstaller
@@ -129,6 +130,24 @@ class LlamaFarmApp {
       })
     } else {
       console.log('CLI found at:', this.cliInstaller.getCLIPath())
+
+      // Check if upgrade is needed
+      const needsUpgrade = await this.cliInstaller.needsUpgrade()
+      if (needsUpgrade) {
+        console.log('CLI upgrade available, upgrading...')
+        this.windowManager.updateSplash({
+          message: 'Upgrading LlamaFarm CLI...',
+          progress: 15
+        })
+
+        await this.cliInstaller.install((progress: InstallProgress) => {
+          this.windowManager.updateSplash({
+            message: `Upgrading: ${progress.message}`,
+            progress: 15 + (progress.progress || 0) * 0.15
+          })
+        })
+      }
+
       this.windowManager.updateSplash({
         message: 'LlamaFarm CLI ready',
         progress: 30
@@ -141,12 +160,26 @@ class LlamaFarmApp {
    */
   private async startBackend(): Promise<void> {
     this.windowManager.updateSplash({
+      message: 'Finding project...',
+      progress: 35
+    })
+
+    // Find or create a project
+    const projectFinder = new ProjectFinder()
+    const projectPath = await projectFinder.getOrCreateDefaultProject(
+      this.cliInstaller.getCLIPath()
+    )
+
+    console.log('Using project at:', projectPath)
+
+    this.windowManager.updateSplash({
       message: 'Starting LlamaFarm backend...',
       progress: 40
     })
 
     this.backendManager = new BackendManager({
       cliPath: this.cliInstaller.getCLIPath(),
+      projectPath, // Use the project directory
       autoRestart: true,
       maxRestartAttempts: 3
     })
