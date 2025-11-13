@@ -13,6 +13,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
+import { useDatabases } from '../../hooks/useDatabases'
+import { DatabaseSelector } from '../Models/DatabaseSelector'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -34,7 +36,6 @@ export interface TestChatProps {
   ragEnabled?: boolean
   ragTopK?: number
   ragScoreThreshold?: number
-  selectedDatabases?: string[]
   focusInput?: boolean
 }
 
@@ -80,7 +81,6 @@ export default function TestChat({
   ragEnabled = true,
   ragTopK = 10,
   ragScoreThreshold = 0.7,
-  selectedDatabases = [],
   focusInput = false,
 }: TestChatProps) {
   // Determine mock mode as early as possible
@@ -141,6 +141,22 @@ export default function TestChat({
     if (typeof window === 'undefined') return undefined
     return localStorage.getItem('lf_testchat_selected_model') || undefined
   })
+
+  const { data: databasesData, isLoading: databasesLoading } = useDatabases(
+    chatParams?.namespace || '',
+    chatParams?.projectId || '',
+    !!chatParams
+  )
+  const availableDatabases = databasesData?.databases || []
+  const [selectedDatabases, setSelectedDatabases] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = localStorage.getItem('lf_test_selectedDatabases')
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })
   useEffect(() => {
     if (!selectedModel) {
       const apiDefaultName = (defaultModel as any)?.name
@@ -156,6 +172,28 @@ export default function TestChat({
       localStorage.setItem('lf_testchat_selected_model', selectedModel)
     }
   }, [selectedModel])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem('lf_test_selectedDatabases', JSON.stringify(selectedDatabases))
+    } catch {}
+  }, [selectedDatabases])
+
+  const handleToggleDatabase = useCallback((name: string, checked: boolean | string) => {
+    setSelectedDatabases(prev => {
+      const current = new Set(prev)
+      if (checked) {
+        current.add(name)
+      } else {
+        current.delete(name)
+      }
+      return Array.from(current)
+    })
+  }, [])
+
+  const handleClearDatabases = useCallback(() => {
+    setSelectedDatabases([])
+  }, [])
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -787,33 +825,49 @@ export default function TestChat({
             'Session'
           )}
         </div>
-        {/* Model selector (if available) */}
-        {USE_PROJECT_CHAT && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Model</span>
-            <select
-              value={
-                selectedModel ||
-                (defaultModel as any)?.name ||
-                fallbackDefaultName ||
-                ''
-              }
-              onChange={e => setSelectedModel(e.target.value)}
-              className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground"
-            >
-              {modelsLoading && <option value="">Loading…</option>}
-              {!modelsLoading && unifiedModels.length === 0 && (
-                <option value="">No models</option>
-              )}
-              {!modelsLoading &&
-                unifiedModels.map(m => (
-                  <option key={m.name} value={m.name}>
-                    {m.name} ({m.model}) {m.default ? '(default)' : ''}
-                  </option>
-                ))}
-            </select>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Model selector (if available) */}
+          {USE_PROJECT_CHAT && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Model</span>
+              <select
+                value={
+                  selectedModel ||
+                  (defaultModel as any)?.name ||
+                  fallbackDefaultName ||
+                  ''
+                }
+                onChange={e => setSelectedModel(e.target.value)}
+                className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground"
+              >
+                {modelsLoading && <option value="">Loading…</option>}
+                {!modelsLoading && unifiedModels.length === 0 && (
+                  <option value="">No models</option>
+                )}
+                {!modelsLoading &&
+                  unifiedModels.map(m => (
+                    <option key={m.name} value={m.name}>
+                      {m.name} ({m.model}) {m.default ? '(default)' : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+          {/* Database selector */}
+          {USE_PROJECT_CHAT && availableDatabases.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Database</span>
+              <DatabaseSelector
+                databases={availableDatabases}
+                selectedDatabases={selectedDatabases}
+                onToggleDatabase={handleToggleDatabase}
+                onClearDatabases={handleClearDatabases}
+                disabled={databasesLoading}
+                label=""
+              />
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => {
