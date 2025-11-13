@@ -656,16 +656,26 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 response.state = "SUCCESS"
                 # Aggregate results from successful tasks
                 results = []
+                skipped_count = 0
                 for child in children:
                     if child.successful():
                         try:
-                            results.append(child.result)
+                            result_data = child.result
+                            results.append(result_data)
+                            # Check if this file was skipped by examining its details
+                            if isinstance(result_data, dict):
+                                details = result_data.get("details", {})
+                                # Check both details.status and details.result.status for "skipped"
+                                if details.get("status") == "skipped":
+                                    skipped_count += 1
+                                elif isinstance(details.get("result"), dict) and details["result"].get("status") == "skipped":
+                                    skipped_count += 1
                         except Exception:
                             pass
                 response.result = {
-                    "processed_files": successful,
+                    "processed_files": successful - skipped_count,
                     "failed_files": failed,
-                    "skipped_files": 0,
+                    "skipped_files": skipped_count,
                     "details": results,
                 }
             else:
@@ -704,16 +714,26 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 response.state = "SUCCESS"
                 # Aggregate results from successful tasks
                 results = []
+                skipped_count = 0
                 for child in children:
                     if child.successful():
                         try:
-                            results.append(child.result)
+                            result_data = child.result
+                            results.append(result_data)
+                            # Check if this file was skipped by examining its details
+                            if isinstance(result_data, dict):
+                                details = result_data.get("details", {})
+                                # Check both details.status and details.result.status for "skipped"
+                                if details.get("status") == "skipped":
+                                    skipped_count += 1
+                                elif isinstance(details.get("result"), dict) and details["result"].get("status") == "skipped":
+                                    skipped_count += 1
                         except Exception:
                             pass
                 response.result = {
-                    "processed_files": successful,
+                    "processed_files": successful - skipped_count,
                     "failed_files": failed,
-                    "skipped_files": 0,
+                    "skipped_files": skipped_count,
                     "details": results,
                 }
             else:

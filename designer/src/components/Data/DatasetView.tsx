@@ -101,6 +101,39 @@ function DatasetView() {
   const [processingResult, setProcessingResult] = useState<any>(null)
   const [isResultsOpen, setIsResultsOpen] = useState(false)
 
+  // Helper function to recalculate counts from details array
+  const recalculateCountsFromDetails = (result: any) => {
+    if (!result || !result.details || !Array.isArray(result.details)) {
+      return result
+    }
+    
+    let processedCount = 0
+    let skippedCount = 0
+    let failedCount = 0
+    
+    for (const detail of result.details) {
+      const detailsObj = detail.details || {}
+      const resultObj = detailsObj.result || {}
+      const isSkipped = resultObj.status === 'skipped' || detailsObj.status === 'skipped'
+      const isFailed = !detail.success
+      
+      if (isSkipped) {
+        skippedCount++
+      } else if (isFailed) {
+        failedCount++
+      } else if (detail.success) {
+        processedCount++
+      }
+    }
+    
+    return {
+      ...result,
+      processed_files: processedCount,
+      skipped_files: skippedCount,
+      failed_files: failedCount,
+    }
+  }
+
   // Load task ID and previous result from storage on mount
   useEffect(() => {
     if (activeProject?.namespace && activeProject?.project && datasetId) {
@@ -116,14 +149,16 @@ function DatasetView() {
         }
       }
       
-      // Load previous result from localStorage
+      // Load previous result from localStorage and recalculate counts
       const savedResult = loadDatasetResult(
         activeProject.namespace,
         activeProject.project,
         datasetId
       )
       if (savedResult) {
-        setProcessingResult(savedResult)
+        // Recalculate counts from details to ensure accuracy
+        const recalculatedResult = recalculateCountsFromDetails(savedResult)
+        setProcessingResult(recalculatedResult)
       }
     }
   }, [activeProject?.namespace, activeProject?.project, datasetId, currentTaskId])
@@ -156,8 +191,8 @@ function DatasetView() {
         // If no result but we have meta.files (on failure), construct result from that
         if (!resultsToSave && taskStatus.state === 'FAILURE' && taskStatus.meta?.files) {
           const files = taskStatus.meta.files
-          const processedCount = files.filter((f: any) => f.state === 'success').length
-          const failedCount = files.filter((f: any) => f.state === 'failure').length
+          const processedCount = files.filter((f: any) => f.state === 'processed' || f.state === 'success').length
+          const failedCount = files.filter((f: any) => f.state === 'failed' || f.state === 'failure').length
           const skippedCount = files.filter((f: any) => f.state === 'skipped').length
           
           resultsToSave = {
@@ -166,7 +201,7 @@ function DatasetView() {
             skipped_files: skippedCount,
             details: files.map((f: any) => ({
               file_hash: f.file_hash || f.filename,
-              success: f.state === 'success',
+              success: f.state === 'processed' || f.state === 'success',
               error: f.error,
               details: {
                 status: f.state,
@@ -180,12 +215,14 @@ function DatasetView() {
         
         // Save result for display and persist to localStorage (even on failure - preserve partial results)
         if (resultsToSave) {
-          setProcessingResult(resultsToSave)
+          // Recalculate counts from details to ensure accuracy
+          const recalculatedResult = recalculateCountsFromDetails(resultsToSave)
+          setProcessingResult(recalculatedResult)
           saveDatasetResult(
             activeProject.namespace,
             activeProject.project,
             datasetId,
-            resultsToSave
+            recalculatedResult
           )
           // Expand results section when new results arrive (even on failure if there are partial results)
           setIsResultsOpen(true)
@@ -410,7 +447,7 @@ function DatasetView() {
     }
   }, [])
 
-  const handleFilesUpload = useCallback(async (list: File[]) => {
+  const handleFilesUpload = useCallback(async (list: File[], skipFiltering = false) => {
     if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
       toast({
         message: 'Missing required information for upload',
@@ -420,13 +457,13 @@ function DatasetView() {
     }
     if (list.length === 0) return
 
-    // Apply file type filtering
+    // Apply file type filtering only if not skipped (e.g., for drag-and-drop)
     const totalFiles = list.length
-    const filteredFiles = filterFilesByType(list)
+    const filteredFiles = skipFiltering ? list : filterFilesByType(list)
     const filteredCount = filteredFiles.length
 
     // Show stats if filtering occurred
-    if (totalFiles !== filteredCount) {
+    if (!skipFiltering && totalFiles !== filteredCount) {
       setUploadStats({
         total: totalFiles,
         filtered: filteredCount,
@@ -513,7 +550,8 @@ function DatasetView() {
       return
     }
     
-    await handleFilesUpload(files)
+    // Skip filtering for dropped files - user explicitly selected these files
+    await handleFilesUpload(files, true)
     setIsDropped(false)
   }, [handleFilesUpload])
 
@@ -581,8 +619,8 @@ function DatasetView() {
       // If no result but we have meta.files, construct a result from that
       if (!partialResults && taskStatus.meta?.files) {
         const files = taskStatus.meta.files
-        const processedCount = files.filter((f: any) => f.state === 'success').length
-        const failedCount = files.filter((f: any) => f.state === 'failure').length
+        const processedCount = files.filter((f: any) => f.state === 'processed' || f.state === 'success').length
+        const failedCount = files.filter((f: any) => f.state === 'failed' || f.state === 'failure').length
         const skippedCount = files.filter((f: any) => f.state === 'skipped').length
         
         // Build a result object from the meta files
@@ -592,7 +630,7 @@ function DatasetView() {
           skipped_files: skippedCount,
           details: files.map((f: any) => ({
             file_hash: f.file_hash || f.filename,
-            success: f.state === 'success',
+            success: f.state === 'processed' || f.state === 'success',
             error: f.error,
             details: {
               status: f.state,
@@ -606,15 +644,18 @@ function DatasetView() {
       }
       
       // Keep partial results to show what succeeded and what failed
+      let recalculatedPartialResults = null
       if (partialResults) {
-        setProcessingResult(partialResults)
+        // Recalculate counts from details to ensure accuracy
+        recalculatedPartialResults = recalculateCountsFromDetails(partialResults)
+        setProcessingResult(recalculatedPartialResults)
       }
       
       const errorMessage = taskStatus.error || 'Unknown error occurred'
-      const hasPartialResults = partialResults && (
-        partialResults.processed_files > 0 || 
-        partialResults.skipped_files > 0 || 
-        partialResults.failed_files > 0
+      const hasPartialResults = recalculatedPartialResults && (
+        recalculatedPartialResults.processed_files > 0 || 
+        recalculatedPartialResults.skipped_files > 0 || 
+        recalculatedPartialResults.failed_files > 0
       )
       
       toast({
@@ -1660,7 +1701,8 @@ function DatasetView() {
                 // Reset input immediately to allow re-selecting same files
                 const target = e.currentTarget
                 try {
-                  await handleFilesUpload(list)
+                  // Skip filtering for regular file uploads - user explicitly selected these files
+                  await handleFilesUpload(list, true)
                 } catch (error) {
                   console.error('File upload error:', error)
                   toast({
@@ -1746,7 +1788,8 @@ function DatasetView() {
                 // Store reference to avoid null issues after async operation
                 const target = e.currentTarget
                 try {
-                  await handleFilesUpload(list)
+                  // Skip filtering for folder uploads - user explicitly selected this folder
+                  await handleFilesUpload(list, true)
                 } catch (error) {
                   console.error('Folder upload error:', error)
                   toast({
