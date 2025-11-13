@@ -13,8 +13,6 @@ import { useModeWithReset } from '../hooks/useModeWithReset'
 import { useConfigPointer } from '../hooks/useConfigPointer'
 import { useProject } from '../hooks/useProjects'
 import { useActiveProject } from '../hooks/useActiveProject'
-import { useDatabases } from '../hooks/useDatabases'
-import { DatabaseSelector } from './Models/DatabaseSelector'
 import type { ProjectConfig } from '../types/config'
 
 interface TestCase {
@@ -218,14 +216,6 @@ const Test = () => {
     !!activeProject
   )
   const projectConfig = (projectDetail as any)?.project?.config as ProjectConfig | undefined
-
-  // Fetch available databases for the project
-  const { data: databasesData, isLoading: databasesLoading } = useDatabases(
-    activeProject?.namespace || '',
-    activeProject?.project || '',
-    !!activeProject
-  )
-  const availableDatabases = databasesData?.databases || []
   
   // Use config pointer to handle mode changes with unsaved changes check
   const getRootLocation = useCallback(
@@ -270,16 +260,6 @@ const Test = () => {
     if (typeof window === 'undefined') return false
     const v = localStorage.getItem('lf_test_useTestData')
     return v == null ? false : v === 'true'
-  })
-
-  const [selectedDatabases, setSelectedDatabases] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const stored = localStorage.getItem('lf_test_selectedDatabases')
-      return stored ? JSON.parse(stored) : []
-    } catch {
-      return []
-    }
   })
   const [gen, setGen] = useState<{
     temperature: number
@@ -353,12 +333,6 @@ const Test = () => {
     localStorage.setItem('lf_test_useTestData', String(useTestData))
   }, [useTestData])
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem('lf_test_selectedDatabases', JSON.stringify(selectedDatabases))
-    } catch {}
-  }, [selectedDatabases])
-  useEffect(() => {
     try {
       localStorage.setItem('lf_gen_defaults', JSON.stringify(gen))
     } catch {}
@@ -376,22 +350,6 @@ const Test = () => {
     if (typeof window === 'undefined') return
     localStorage.setItem('lf_testchat_rag_threshold', String(ragThresholdUI))
   }, [ragThresholdUI])
-
-  const handleToggleDatabase = useCallback((name: string, checked: boolean | string) => {
-    setSelectedDatabases(prev => {
-      const current = new Set(prev)
-      if (checked) {
-        current.add(name)
-      } else {
-        current.delete(name)
-      }
-      return Array.from(current)
-    })
-  }, [])
-
-  const handleClearDatabases = useCallback(() => {
-    setSelectedDatabases([])
-  }, [])
 
   // Hide settings UI and close any open panels when switching to config view
   useEffect(() => {
@@ -806,28 +764,6 @@ const Test = () => {
                       </span>
                     </label>
                   </div>
-
-                  {/* Database filter */}
-                  <div className="flex flex-col gap-2">
-                    <DatabaseSelector
-                      databases={availableDatabases}
-                      selectedDatabases={selectedDatabases}
-                      onToggleDatabase={handleToggleDatabase}
-                      onClearDatabases={handleClearDatabases}
-                      disabled={databasesLoading || availableDatabases.length === 0}
-                      label="Test databases"
-                    />
-                    {databasesLoading && (
-                      <div className="text-xs text-muted-foreground">
-                        Loading databases…
-                      </div>
-                    )}
-                    {!databasesLoading && availableDatabases.length === 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        No databases configured for this project
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
@@ -856,7 +792,6 @@ const Test = () => {
                   ragEnabled: ragEnabledUI,
                   ragTopK: ragTopKUI,
                   ragScoreThreshold: ragThresholdUI,
-                  selectedDatabases,
                   focusInput: (location.state as any)?.focusInput,
                 } as any)}
               />
