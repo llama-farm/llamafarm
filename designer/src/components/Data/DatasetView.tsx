@@ -112,6 +112,11 @@ function DatasetView() {
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
   const [processingResult, setProcessingResult] = useState<any>(null)
+  const [processingFailure, setProcessingFailure] = useState<{
+    error: string
+    timestamp: Date
+    taskId: string
+  } | null>(null)
   const [isResultsOpen, setIsResultsOpen] = useState(false)
 
   // Helper function to recalculate counts from details array
@@ -556,7 +561,11 @@ function DatasetView() {
             setFileUploadStatuses(prev =>
               prev.map((s, i) => (i === idx ? { ...s, status: 'success' } : s))
             )
-            return { success: true, skipped: response.skipped || false, fileName: file.name }
+            return {
+              success: true,
+              skipped: response.skipped || false,
+              fileName: file.name,
+            }
           } catch (error: any) {
             console.error(`Failed to upload ${file.name}:`, error)
             toast({
@@ -689,6 +698,7 @@ function DatasetView() {
     if (taskStatus.state === 'SUCCESS') {
       // Task completed successfully
       setCurrentTaskId(null)
+      setProcessingFailure(null) // Clear any previous failures
 
       // Store the processing result
       if (taskStatus.result) {
@@ -758,6 +768,16 @@ function DatasetView() {
         (recalculatedPartialResults.processed_files > 0 ||
           recalculatedPartialResults.skipped_files > 0 ||
           recalculatedPartialResults.failed_files > 0)
+
+      // Always set failure state, even if there are no partial results
+      setProcessingFailure({
+        error: errorMessage,
+        timestamp: new Date(),
+        taskId: currentTaskId || 'unknown',
+      })
+
+      // Auto-open the results section to show the failure
+      setIsResultsOpen(true)
 
       toast({
         message: hasPartialResults
@@ -1034,7 +1054,7 @@ function DatasetView() {
               </div>
 
               {/* Processing Results */}
-              {processingResult && (
+              {(processingResult || processingFailure) && (
                 <section className="rounded-lg border border-border bg-card">
                   <Collapsible
                     open={isResultsOpen}
@@ -1055,6 +1075,7 @@ function DatasetView() {
                       <button
                         onClick={() => {
                           setProcessingResult(null)
+                          setProcessingFailure(null)
                           if (
                             activeProject?.namespace &&
                             activeProject?.project &&
@@ -1073,315 +1094,383 @@ function DatasetView() {
                       </button>
                     </div>
                     <CollapsibleContent>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 px-4">
-                        <div className="rounded-md border border-border px-3 py-2">
-                          <div className="text-xs text-muted-foreground mb-0.5">
-                            Processed Files
-                          </div>
-                          <div className="text-xl font-semibold text-green-600">
-                            {processingResult.processed_files || 0}
-                          </div>
-                        </div>
-                        <div className="rounded-md border border-border px-3 py-2">
-                          <div className="text-xs text-muted-foreground mb-0.5">
-                            Skipped Files
-                          </div>
-                          <div className="text-xl font-semibold text-yellow-600">
-                            {processingResult.skipped_files || 0}
-                          </div>
-                        </div>
-                        <div className="rounded-md border border-border px-3 py-2">
-                          <div className="text-xs text-muted-foreground mb-0.5">
-                            Failed Files
-                          </div>
-                          <div className="text-xl font-semibold text-red-600 dark:text-red-400">
-                            {processingResult.failed_files || 0}
-                          </div>
-                        </div>
-                      </div>
-                      {processingResult.details &&
-                        processingResult.details.length > 0 && (
-                          <div className="mt-3 px-4 pb-4">
-                            <div className="text-xs font-medium text-muted-foreground mb-2">
-                              File Processing Details
+                      {/* Show failure state if present and no partial results */}
+                      {processingFailure && !processingResult && (
+                        <div className="px-4 pb-4">
+                          <div className="rounded-md border border-red-600/50 dark:border-red-400/50 bg-red-50/50 dark:bg-red-950/20 p-4">
+                            <div className="flex items-start gap-3">
+                              <FontIcon
+                                type="close"
+                                className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-red-900 dark:text-red-100 mb-1">
+                                  Processing Failed
+                                </div>
+                                <div className="text-sm text-red-800 dark:text-red-200 mb-2">
+                                  {processingFailure.error}
+                                </div>
+                                <div className="text-xs text-red-700 dark:text-red-300">
+                                  Failed at{' '}
+                                  {processingFailure.timestamp.toLocaleString()}
+                                </div>
+                              </div>
                             </div>
-                            <div className="rounded-md border border-border max-h-96 overflow-auto">
-                              {processingResult.details.map(
-                                (fileResult: any, idx: number) => {
-                                  const details = fileResult.details || {}
-                                  const result = details.result || {}
-                                  const isSkipped =
-                                    result.status === 'skipped' ||
-                                    details.status === 'skipped'
-                                  const isFailed = !fileResult.success
-                                  const isSuccess =
-                                    fileResult.success && !isSkipped
+                          </div>
+                        </div>
+                      )}
 
-                                  // Get filename from result (actual name) or fall back to hash
-                                  const displayFilename =
-                                    result.filename ||
-                                    details.filename ||
-                                    fileResult.file_hash
-                                  const isHashFilename =
-                                    displayFilename === fileResult.file_hash ||
-                                    !result.filename
+                      {/* Show results grid if we have partial or complete results */}
+                      {processingResult && (
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 px-4">
+                            <div className="rounded-md border border-border px-3 py-2">
+                              <div className="text-xs text-muted-foreground mb-0.5">
+                                Processed Files
+                              </div>
+                              <div className="text-xl font-semibold text-green-600">
+                                {processingResult.processed_files || 0}
+                              </div>
+                            </div>
+                            <div className="rounded-md border border-border px-3 py-2">
+                              <div className="text-xs text-muted-foreground mb-0.5">
+                                Skipped Files
+                              </div>
+                              <div className="text-xl font-semibold text-yellow-600">
+                                {processingResult.skipped_files || 0}
+                              </div>
+                            </div>
+                            <div className="rounded-md border border-border px-3 py-2">
+                              <div className="text-xs text-muted-foreground mb-0.5">
+                                Failed Files
+                              </div>
+                              <div className="text-xl font-semibold text-red-600 dark:text-red-400">
+                                {processingResult.failed_files || 0}
+                              </div>
+                            </div>
+                          </div>
+                          {processingResult.details &&
+                            processingResult.details.length > 0 && (
+                              <div className="mt-3 px-4 pb-4">
+                                <div className="text-xs font-medium text-muted-foreground mb-2">
+                                  File Processing Details
+                                </div>
+                                <div className="rounded-md border border-border max-h-96 overflow-auto">
+                                  {processingResult.details.map(
+                                    (fileResult: any, idx: number) => {
+                                      const details = fileResult.details || {}
+                                      const result = details.result || {}
+                                      const isSkipped =
+                                        result.status === 'skipped' ||
+                                        details.status === 'skipped'
+                                      const isFailed = !fileResult.success
+                                      const isSuccess =
+                                        fileResult.success && !isSkipped
 
-                                  // Get file extension for icon
-                                  const getFileExtension = (
-                                    filename: string
-                                  ) => {
-                                    const parts = filename.split('.')
-                                    return parts.length > 1
-                                      ? parts[parts.length - 1].toLowerCase()
-                                      : ''
-                                  }
-                                  const fileExt =
-                                    getFileExtension(displayFilename)
-                                  const isDocumentFile = [
-                                    'pdf',
-                                    'doc',
-                                    'docx',
-                                    'txt',
-                                    'md',
-                                  ].includes(fileExt)
+                                      // Get filename from result (actual name) or fall back to hash
+                                      const displayFilename =
+                                        result.filename ||
+                                        details.filename ||
+                                        fileResult.file_hash
+                                      const isHashFilename =
+                                        displayFilename ===
+                                          fileResult.file_hash ||
+                                        !result.filename
 
-                                  // Calculate total chunks if available
-                                  const totalChunks =
-                                    result.document_count || details.chunks || 0
-                                  const storedChunks = result.stored_count || 0
-                                  const skippedChunks =
-                                    result.skipped_count || 0
+                                      // Get file extension for icon
+                                      const getFileExtension = (
+                                        filename: string
+                                      ) => {
+                                        const parts = filename.split('.')
+                                        return parts.length > 1
+                                          ? parts[
+                                              parts.length - 1
+                                            ].toLowerCase()
+                                          : ''
+                                      }
+                                      const fileExt =
+                                        getFileExtension(displayFilename)
+                                      const isDocumentFile = [
+                                        'pdf',
+                                        'doc',
+                                        'docx',
+                                        'txt',
+                                        'md',
+                                      ].includes(fileExt)
 
-                                  return (
-                                    <div
-                                      key={idx}
-                                      className="px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
-                                    >
-                                      {/* File header with status */}
-                                      <div className="flex items-start justify-between gap-3 mb-1.5">
-                                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                                          {/* Status icon */}
-                                          {isSuccess && (
-                                            <FontIcon
-                                              type="checkmark-filled"
-                                              className="w-4 h-4 text-green-600 flex-shrink-0"
-                                            />
-                                          )}
-                                          {isSkipped && (
-                                            <div className="w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center flex-shrink-0">
-                                              <span className="text-foreground text-[10px] font-bold">
-                                                !
-                                              </span>
-                                            </div>
-                                          )}
-                                          {isFailed && (
-                                            <FontIcon
-                                              type="close"
-                                              className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0"
-                                            />
-                                          )}
+                                      // Calculate total chunks if available
+                                      const totalChunks =
+                                        result.document_count ||
+                                        details.chunks ||
+                                        0
+                                      const storedChunks =
+                                        result.stored_count || 0
+                                      const skippedChunks =
+                                        result.skipped_count || 0
 
-                                          {/* Filename */}
-                                          <div className="flex flex-col flex-1 min-w-0">
-                                            <span className="text-sm font-medium truncate">
-                                              {displayFilename}
-                                            </span>
-                                            {isHashFilename &&
-                                              fileResult.file_hash && (
-                                                <TooltipProvider>
-                                                  <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                      <span className="text-xs text-muted-foreground font-mono cursor-pointer">
-                                                        Hash:{' '}
-                                                        {fileResult.file_hash.substring(
-                                                          0,
-                                                          12
-                                                        )}
-                                                        ...
-                                                      </span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                      <p className="font-mono text-xs">
-                                                        {fileResult.file_hash}
-                                                      </p>
-                                                    </TooltipContent>
-                                                  </Tooltip>
-                                                </TooltipProvider>
-                                              )}
-                                          </div>
-                                        </div>
-
-                                        {/* Status badge */}
-                                        <Badge
-                                          variant={
-                                            isSuccess
-                                              ? 'default'
-                                              : isSkipped
-                                                ? 'secondary'
-                                                : 'outline'
-                                          }
-                                          size="sm"
-                                          className="rounded-xl flex-shrink-0 font-medium"
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className="px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
                                         >
-                                          {isSuccess && 'SUCCESS'}
-                                          {isSkipped &&
-                                            `SKIPPED${result.reason ? ` (${result.reason})` : ''}`}
-                                          {isFailed && 'FAILED'}
-                                        </Badge>
-                                      </div>
-
-                                      {/* Processing stats - condensed */}
-                                      <div className="space-y-1.5 text-xs">
-                                        {/* Chunks info with reason inline */}
-                                        {totalChunks > 0 && (
-                                          <div className="flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-3 flex-wrap">
-                                              <div className="flex items-center gap-1.5">
+                                          {/* File header with status */}
+                                          <div className="flex items-start justify-between gap-3 mb-1.5">
+                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                              {/* Status icon */}
+                                              {isSuccess && (
                                                 <FontIcon
-                                                  type="cube"
-                                                  className="w-3.5 h-3.5 text-muted-foreground"
+                                                  type="checkmark-filled"
+                                                  className="w-4 h-4 text-green-600 flex-shrink-0"
                                                 />
-                                                <span className="font-semibold text-foreground">
-                                                  {totalChunks}
-                                                </span>
-                                                <span className="text-muted-foreground">
-                                                  chunk
-                                                  {totalChunks !== 1 ? 's' : ''}{' '}
-                                                  created
-                                                </span>
-                                              </div>
-                                              {storedChunks > 0 && (
-                                                <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
-                                                  <span className="font-semibold">
-                                                    {storedChunks}
+                                              )}
+                                              {isSkipped && (
+                                                <div className="w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center flex-shrink-0">
+                                                  <span className="text-foreground text-[10px] font-bold">
+                                                    !
                                                   </span>
-                                                  <span>stored</span>
                                                 </div>
                                               )}
-                                              {skippedChunks > 0 && (
-                                                <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
-                                                  <span className="font-semibold">
-                                                    {skippedChunks}
+                                              {isFailed && (
+                                                <FontIcon
+                                                  type="close"
+                                                  className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0"
+                                                />
+                                              )}
+
+                                              {/* Filename */}
+                                              <div className="flex flex-col flex-1 min-w-0">
+                                                <span className="text-sm font-medium truncate">
+                                                  {displayFilename}
+                                                </span>
+                                                {isHashFilename &&
+                                                  fileResult.file_hash && (
+                                                    <TooltipProvider>
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <span className="text-xs text-muted-foreground font-mono cursor-pointer">
+                                                            Hash:{' '}
+                                                            {fileResult.file_hash.substring(
+                                                              0,
+                                                              12
+                                                            )}
+                                                            ...
+                                                          </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                          <p className="font-mono text-xs">
+                                                            {
+                                                              fileResult.file_hash
+                                                            }
+                                                          </p>
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    </TooltipProvider>
+                                                  )}
+                                              </div>
+                                            </div>
+
+                                            {/* Status badge */}
+                                            <Badge
+                                              variant={
+                                                isSuccess
+                                                  ? 'default'
+                                                  : isSkipped
+                                                    ? 'secondary'
+                                                    : 'outline'
+                                              }
+                                              size="sm"
+                                              className="rounded-xl flex-shrink-0 font-medium"
+                                            >
+                                              {isSuccess && 'SUCCESS'}
+                                              {isSkipped &&
+                                                `SKIPPED${result.reason ? ` (${result.reason})` : ''}`}
+                                              {isFailed && 'FAILED'}
+                                            </Badge>
+                                          </div>
+
+                                          {/* Processing stats - condensed */}
+                                          <div className="space-y-1.5 text-xs">
+                                            {/* Chunks info with reason inline */}
+                                            {totalChunks > 0 && (
+                                              <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-3 flex-wrap">
+                                                  <div className="flex items-center gap-1.5">
+                                                    <FontIcon
+                                                      type="cube"
+                                                      className="w-3.5 h-3.5 text-muted-foreground"
+                                                    />
+                                                    <span className="font-semibold text-foreground">
+                                                      {totalChunks}
+                                                    </span>
+                                                    <span className="text-muted-foreground">
+                                                      chunk
+                                                      {totalChunks !== 1
+                                                        ? 's'
+                                                        : ''}{' '}
+                                                      created
+                                                    </span>
+                                                  </div>
+                                                  {storedChunks > 0 && (
+                                                    <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
+                                                      <span className="font-semibold">
+                                                        {storedChunks}
+                                                      </span>
+                                                      <span>stored</span>
+                                                    </div>
+                                                  )}
+                                                  {skippedChunks > 0 && (
+                                                    <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
+                                                      <span className="font-semibold">
+                                                        {skippedChunks}
+                                                      </span>
+                                                      <span>skipped</span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                {/* Reason inline - only show for failed files (not skipped, since badge already shows reason) */}
+                                                {(result.reason ||
+                                                  details.reason) &&
+                                                  isFailed && (
+                                                    <div className="flex items-center gap-1">
+                                                      <span className="font-medium text-red-600 dark:text-red-400">
+                                                        Reason:
+                                                      </span>
+                                                      <span className="text-red-600 dark:text-red-400">
+                                                        {result.reason ||
+                                                          details.reason}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                              </div>
+                                            )}
+
+                                            {/* Processing details - horizontal single row */}
+                                            <div className="flex items-center gap-3 flex-wrap text-muted-foreground ml-5">
+                                              {/* Parser info */}
+                                              {(details.parser ||
+                                                result.parsers_used?.length >
+                                                  0) && (
+                                                <div>
+                                                  <span className="font-medium text-foreground">
+                                                    Parser:
+                                                  </span>{' '}
+                                                  <span className="font-mono text-xs">
+                                                    {result.parsers_used?.join(
+                                                      ', '
+                                                    ) || details.parser}
                                                   </span>
-                                                  <span>skipped</span>
+                                                </div>
+                                              )}
+
+                                              {/* Embedder */}
+                                              {(details.embedder ||
+                                                result.embedder) && (
+                                                <div>
+                                                  <span className="font-medium text-foreground">
+                                                    Embedder:
+                                                  </span>{' '}
+                                                  <span className="font-mono text-xs">
+                                                    {result.embedder ||
+                                                      details.embedder}
+                                                  </span>
+                                                </div>
+                                              )}
+
+                                              {/* Extractors - inline */}
+                                              {(details.extractors?.length >
+                                                0 ||
+                                                result.extractors_applied
+                                                  ?.length > 0) && (
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="font-medium text-foreground">
+                                                    Extractors:
+                                                  </span>
+                                                  <div className="inline-flex flex-wrap gap-1">
+                                                    {(
+                                                      result.extractors_applied ||
+                                                      details.extractors ||
+                                                      []
+                                                    ).map(
+                                                      (
+                                                        ext: string,
+                                                        i: number
+                                                      ) => (
+                                                        <Badge
+                                                          key={i}
+                                                          variant="outline"
+                                                          size="sm"
+                                                          className="rounded font-mono text-[10px] px-1.5 py-0"
+                                                        >
+                                                          {ext}
+                                                        </Badge>
+                                                      )
+                                                    )}
+                                                  </div>
                                                 </div>
                                               )}
                                             </div>
-                                            {/* Reason inline - only show for failed files (not skipped, since badge already shows reason) */}
-                                            {(result.reason ||
-                                              details.reason) &&
-                                              isFailed && (
-                                                <div className="flex items-center gap-1">
-                                                  <span className="font-medium text-red-600 dark:text-red-400">
-                                                    Reason:
+
+                                            {/* Document IDs if stored */}
+                                            {result.document_ids &&
+                                              result.document_ids.length >
+                                                0 && (
+                                                <div className="text-muted-foreground ml-5">
+                                                  <span className="font-medium text-foreground">
+                                                    Document IDs:
+                                                  </span>{' '}
+                                                  <span className="font-mono text-xs">
+                                                    {result.document_ids.length}{' '}
+                                                    stored in vector database
                                                   </span>
-                                                  <span className="text-red-600 dark:text-red-400">
-                                                    {result.reason ||
-                                                      details.reason}
+                                                </div>
+                                              )}
+
+                                            {/* Error message for failures - keep on separate line for visibility */}
+                                            {isFailed &&
+                                              (fileResult.error ||
+                                                details.error) && (
+                                                <div className="mt-1.5 ml-5 px-2 py-1.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                                                  <span className="font-medium text-red-800 dark:text-red-400">
+                                                    Error:
+                                                  </span>{' '}
+                                                  <span className="text-red-700 dark:text-red-400">
+                                                    {fileResult.error ||
+                                                      details.error}
                                                   </span>
                                                 </div>
                                               )}
                                           </div>
-                                        )}
-
-                                        {/* Processing details - horizontal single row */}
-                                        <div className="flex items-center gap-3 flex-wrap text-muted-foreground ml-5">
-                                          {/* Parser info */}
-                                          {(details.parser ||
-                                            result.parsers_used?.length >
-                                              0) && (
-                                            <div>
-                                              <span className="font-medium text-foreground">
-                                                Parser:
-                                              </span>{' '}
-                                              <span className="font-mono text-xs">
-                                                {result.parsers_used?.join(
-                                                  ', '
-                                                ) || details.parser}
-                                              </span>
-                                            </div>
-                                          )}
-
-                                          {/* Embedder */}
-                                          {(details.embedder ||
-                                            result.embedder) && (
-                                            <div>
-                                              <span className="font-medium text-foreground">
-                                                Embedder:
-                                              </span>{' '}
-                                              <span className="font-mono text-xs">
-                                                {result.embedder ||
-                                                  details.embedder}
-                                              </span>
-                                            </div>
-                                          )}
-
-                                          {/* Extractors - inline */}
-                                          {(details.extractors?.length > 0 ||
-                                            result.extractors_applied?.length >
-                                              0) && (
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="font-medium text-foreground">
-                                                Extractors:
-                                              </span>
-                                              <div className="inline-flex flex-wrap gap-1">
-                                                {(
-                                                  result.extractors_applied ||
-                                                  details.extractors ||
-                                                  []
-                                                ).map(
-                                                  (ext: string, i: number) => (
-                                                    <Badge
-                                                      key={i}
-                                                      variant="outline"
-                                                      size="sm"
-                                                      className="rounded font-mono text-[10px] px-1.5 py-0"
-                                                    >
-                                                      {ext}
-                                                    </Badge>
-                                                  )
-                                                )}
-                                              </div>
-                                            </div>
-                                          )}
                                         </div>
+                                      )
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                        </>
+                      )}
 
-                                        {/* Document IDs if stored */}
-                                        {result.document_ids &&
-                                          result.document_ids.length > 0 && (
-                                            <div className="text-muted-foreground ml-5">
-                                              <span className="font-medium text-foreground">
-                                                Document IDs:
-                                              </span>{' '}
-                                              <span className="font-mono text-xs">
-                                                {result.document_ids.length}{' '}
-                                                stored in vector database
-                                              </span>
-                                            </div>
-                                          )}
-
-                                        {/* Error message for failures - keep on separate line for visibility */}
-                                        {isFailed &&
-                                          (fileResult.error ||
-                                            details.error) && (
-                                            <div className="mt-1.5 ml-5 px-2 py-1.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
-                                              <span className="font-medium text-red-800 dark:text-red-400">
-                                                Error:
-                                              </span>{' '}
-                                              <span className="text-red-700 dark:text-red-400">
-                                                {fileResult.error ||
-                                                  details.error}
-                                              </span>
-                                            </div>
-                                          )}
-                                      </div>
-                                    </div>
-                                  )
-                                }
-                              )}
+                      {/* Show failure banner if we have both partial results and a failure */}
+                      {processingFailure && processingResult && (
+                        <div className="px-4 pb-4">
+                          <div className="rounded-md border border-red-600/50 dark:border-red-400/50 bg-red-50/50 dark:bg-red-950/20 p-3">
+                            <div className="flex items-start gap-2">
+                              <FontIcon
+                                type="alert-triangle"
+                                className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-semibold text-red-900 dark:text-red-100 mb-0.5">
+                                  Completed with errors
+                                </div>
+                                <div className="text-xs text-red-800 dark:text-red-200">
+                                  {processingFailure.error}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        )}
+                        </div>
+                      )}
                     </CollapsibleContent>
                   </Collapsible>
                 </section>
