@@ -33,6 +33,7 @@ import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import { saveDatasetTaskId, loadDatasetTaskId, clearDatasetTaskId } from '../../utils/datasetTaskStorage'
 
 type Dataset = {
   id: string
@@ -85,6 +86,20 @@ function DatasetView() {
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
   const [processingResult, setProcessingResult] = useState<any>(null)
+
+  // Load task ID from sessionStorage on mount to resume processing if needed
+  useEffect(() => {
+    if (activeProject?.namespace && activeProject?.project && datasetId && !currentTaskId) {
+      const savedTaskId = loadDatasetTaskId(
+        activeProject.namespace,
+        activeProject.project,
+        datasetId
+      )
+      if (savedTaskId) {
+        setCurrentTaskId(savedTaskId)
+      }
+    }
+  }, [activeProject?.namespace, activeProject?.project, datasetId, currentTaskId])
   const processMutation = useProcessDataset()
   const deleteFileMutation = useDeleteDatasetFile()
   const deleteDatasetMutation = useDeleteDataset()
@@ -94,6 +109,28 @@ function DatasetView() {
     currentTaskId,
     { enabled: !!currentTaskId && !!activeProject }
   )
+
+  // Clear task ID from sessionStorage when processing completes
+  useEffect(() => {
+    if (currentTaskId && taskStatus && activeProject?.namespace && activeProject?.project && datasetId) {
+      if (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE') {
+        // Clear from sessionStorage
+        clearDatasetTaskId(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId
+        )
+        // Clear local state
+        setCurrentTaskId(null)
+        // Save result for display
+        if (taskStatus.result) {
+          setProcessingResult(taskStatus.result)
+        }
+        // Refetch datasets to get updated file list
+        refetchDatasets()
+      }
+    }
+  }, [taskStatus?.state, currentTaskId, activeProject?.namespace, activeProject?.project, datasetId, taskStatus, refetchDatasets])
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const datasetName = useMemo(
@@ -779,6 +816,13 @@ function DatasetView() {
                       // The process endpoint returns task_id directly
                       if (result.task_id) {
                         setCurrentTaskId(result.task_id)
+                        // Save task ID to sessionStorage so it persists across navigation
+                        saveDatasetTaskId(
+                          activeProject.namespace,
+                          activeProject.project,
+                          datasetId,
+                          result.task_id
+                        )
                         toast({
                           message: 'Dataset processing started...',
                           variant: 'default',
