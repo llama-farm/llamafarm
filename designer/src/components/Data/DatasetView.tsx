@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
+  DialogFooter,
 } from '../ui/dialog'
 import {
   DropdownMenu,
@@ -1249,39 +1250,43 @@ function DatasetView() {
           </Dialog>
 
           {/* File deletion confirmation modal */}
-          {showDeleteFileConfirmation && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full mx-4 border border-border">
-                <h3 className="text-lg font-semibold text-red-600 mb-2">
+          <Dialog open={showDeleteFileConfirmation} onOpenChange={(open) => !open && handleCancelDeleteFile()}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg text-foreground">
                   Delete File
-                </h3>
-                <p className="text-muted-foreground mb-4">
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="flex flex-col gap-3 pt-1">
+                <p className="text-muted-foreground">
                   Are you sure you want to delete this file?
                 </p>
-                <p className="text-sm text-muted-foreground mb-6 font-mono bg-muted p-2 rounded">
+                <p className="text-sm text-muted-foreground font-mono bg-muted p-2 rounded">
                   {pendingDeleteFileHash?.substring(0, 20)}...
                 </p>
-                <div className="flex gap-3 justify-end">
-                  <button
-                    onClick={handleCancelDeleteFile}
-                    className="px-4 py-2 border border-border rounded hover:bg-muted"
-                    disabled={deleteFileMutation.isPending}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleConfirmDeleteFile}
-                    disabled={deleteFileMutation.isPending}
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {deleteFileMutation.isPending
-                      ? 'Deleting...'
-                      : 'Delete File'}
-                  </button>
-                </div>
               </div>
-            </div>
-          )}
+
+              <DialogFooter className="flex flex-row items-center justify-end gap-3 sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelDeleteFile}
+                  disabled={deleteFileMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleConfirmDeleteFile}
+                  disabled={deleteFileMutation.isPending}
+                >
+                  {deleteFileMutation.isPending
+                    ? 'Deleting...'
+                    : 'Delete File'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Live Processing Progress - shown while task is running */}
           {currentTaskId && taskStatus && taskStatus.meta?.files && (
