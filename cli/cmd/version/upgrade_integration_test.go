@@ -64,7 +64,7 @@ func buildTestBinary(t *testing.T, testDir, name, version string) string {
 
 	// Build from current package
 	cmd := exec.Command("go", "build",
-		"-ldflags", "-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion="+version+"'",
+		"-ldflags", "-X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion="+version+"'",
 		"-o", binaryPath,
 		"github.com/llamafarm/cli")
 
