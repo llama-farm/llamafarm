@@ -263,10 +263,7 @@ type toolCallMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
 
-type designerReadyMsg struct{ url string }
-type designerErrorMsg struct{ err error }
 type serverHealthMsg struct{ health *orchestrator.HealthPayload }
-type modeSwitchMsg struct{ mode ChatMode }
 
 func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	var devMessages []Message
