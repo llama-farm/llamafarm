@@ -41,9 +41,9 @@ export function DatabaseSelector({
           <button
             id={triggerId}
             disabled={disabled}
-            className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`${label ? 'w-full h-9' : 'h-auto'} rounded-lg border border-input bg-background ${label ? 'px-3' : 'px-2 py-1'} text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            <span className="truncate text-sm flex items-center gap-2">
+            <span className={`truncate ${label ? 'text-sm' : 'text-xs'} flex items-center gap-2`}>
               {selectedDatabases.length > 0 ? (
                 <>
                   <span className="inline-flex items-center px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
