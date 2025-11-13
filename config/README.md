@@ -35,7 +35,7 @@ uv run python generate_types.py
 Datamodels are automatically generated during CI builds. The `datamodel.py` file is not committed to git and will be in your `.gitignore`.
 
 ### Troubleshooting:
-- **Import errors**: Run `./generate_types.py` to regenerate
+- **Import errors**: Run `uv run python generate_types.py` to regenerate
 - **Generation fails**: Check that `schema.yaml` is valid YAML
 - **CI fails**: Ensure all schema references are valid
 
