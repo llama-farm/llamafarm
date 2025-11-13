@@ -51,7 +51,7 @@ jobs:
         working-directory: config
         run: |
           echo "Generating datamodels from schema..."
-          ./generate-types.sh
+          uv run python generate_types.py
           echo "✓ Datamodel generation complete"
 
       - name: Validate datamodel generation
@@ -155,7 +155,7 @@ jobs:
         working-directory: config
         run: |
           echo "Generating datamodels for ${{ matrix.component }} component tests..."
-          ./generate-types.sh
+          uv run python generate_types.py
           echo "✓ Datamodel generation complete"
 
       - name: Verify datamodel was generated

@@ -348,7 +348,7 @@ When the backend schema changes:
 
 ```bash
 cd ../config
-./generate-types.sh
+uv run python generate_types.py
 ```
 
 This regenerates both backend and frontend types to keep them in sync.
@@ -418,4 +418,3 @@ npm run dev -- --port 3000
 - Return to the [Designer Overview](./index.md)
 - Explore [Designer Features](./features.md)
 - Check the [Contributing Guide](../contributing/index.md) for general contribution guidelines
-

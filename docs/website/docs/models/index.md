@@ -170,7 +170,7 @@ For detailed setup instructions, model recommendations, and troubleshooting, see
 To add a new provider enum:
 
 1. Update `config/schema.yaml` (`runtime.provider` enum).
-2. Regenerate datamodels via `config/generate-types.sh`.
+2. Regenerate datamodels via `config/generate_types.py`.
 3. Map the provider to an execution path in the server runtime service.
 4. Update CLI defaults or additional flags if needed.
 5. Document usage in this guide.

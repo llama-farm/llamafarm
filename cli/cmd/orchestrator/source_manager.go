@@ -811,10 +811,9 @@ func (m *SourceManager) GenerateDatamodel() error {
 		return fmt.Errorf("config directory not found: %s", configDir)
 	}
 
-	generateScript := filepath.Join(configDir, "generate-types.sh")
+	generateScript := filepath.Join(configDir, "generate_types.py")
 	if _, err := os.Stat(generateScript); os.IsNotExist(err) {
-		utils.OutputWarning("Warning: generate-types.sh not found, skipping datamodel generation\n")
-		return nil
+		return fmt.Errorf("generate_types.py not found, skipping datamodel generation: %w", err)
 	}
 
 	// Check if datamodel.py already exists and is up-to-date
