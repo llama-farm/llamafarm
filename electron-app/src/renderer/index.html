@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LlamaFarm Designer</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    #root {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Status bar at the top */
+    .status-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 30px;
+      background: #667eea;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 15px;
+      font-size: 12px;
+      z-index: 10000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .status-bar.degraded {
+      background: #f59e0b;
+    }
+
+    .status-bar.error {
+      background: #ef4444;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: white;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .status-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .status-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: background 0.2s;
+    }
+
+    .status-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <!-- Status bar -->
+  <div class="status-bar" id="statusBar">
+    <div class="status-indicator">
+      <div class="status-dot"></div>
+      <span id="statusText">Backend Running</span>
+    </div>
+    <div class="status-actions">
+      <button class="status-btn" id="restartBtn">Restart</button>
+    </div>
+  </div>
+
+  <!-- Main app root (Designer will be loaded here via iframe or direct embedding) -->
+  <div id="root"></div>
+
+  <script>
+    // Status bar management
+    if (window.llamafarm) {
+      const statusBar = document.getElementById('statusBar');
+      const statusText = document.getElementById('statusText');
+      const restartBtn = document.getElementById('restartBtn');
+
+      // Listen for backend status changes
+      window.llamafarm.backend.onStatusChange((status) => {
+        console.log('Backend status:', status);
+
+        // Update status text
+        if (statusText) {
+          statusText.textContent = status.message || status.state;
+        }
+
+        // Update status bar color
+        if (statusBar) {
+          statusBar.className = 'status-bar';
+          if (status.state === 'degraded') {
+            statusBar.classList.add('degraded');
+          } else if (status.state === 'error' || status.state === 'stopped') {
+            statusBar.classList.add('error');
+          }
+        }
+      });
+
+      // Restart button
+      if (restartBtn) {
+        restartBtn.addEventListener('click', async () => {
+          try {
+            restartBtn.disabled = true;
+            restartBtn.textContent = 'Restarting...';
+            await window.llamafarm.backend.restart();
+          } catch (error) {
+            console.error('Restart failed:', error);
+          } finally {
+            restartBtn.disabled = false;
+            restartBtn.textContent = 'Restart';
+          }
+        });
+      }
+
+      // Load initial status
+      window.llamafarm.backend.getStatus().then((status) => {
+        if (statusText) {
+          statusText.textContent = status.message || status.state;
+        }
+      });
+    }
+  </script>
+
+  <!-- The Designer app will be injected here or loaded via iframe -->
+  <iframe
+    src="http://localhost:7724"
+    style="width: 100%; height: calc(100vh - 30px); border: none; margin-top: 30px;"
+    id="designerFrame"
+  ></iframe>
+
+  <script>
+    // Fallback: if the iframe fails to load, show a message
+    const iframe = document.getElementById('designerFrame');
+    let iframeLoaded = false;
+
+    iframe.addEventListener('load', () => {
+      iframeLoaded = true;
+    });
+
+    setTimeout(() => {
+      if (!iframeLoaded) {
+        document.getElementById('root').innerHTML = `
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: calc(100vh - 30px);
+            margin-top: 30px;
+            flex-direction: column;
+            gap: 20px;
+          ">
+            <h2>Designer Loading...</h2>
+            <p>Waiting for the backend to start...</p>
+            <div class="spinner"></div>
+          </div>
+        `;
+      }
+    }, 5000);
+  </script>
+</body>
+</html>
