@@ -15,6 +15,12 @@ import {
   DialogTitle,
   DialogClose,
 } from '../ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -706,213 +712,63 @@ function DatasetView() {
             </div>
           ) : (
             <>
-              {/* Header row */}
+              {/* Combined Overview Card */}
               <div className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col gap-1 flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl md:text-2xl font-medium">
-                    {datasetName}
-                  </h2>
-                  <button
-                    className="p-1 rounded-md hover:bg-accent text-muted-foreground"
-                    onClick={openEdit}
-                    aria-label="Edit dataset"
-                    title="Edit dataset"
-                  >
-                    <FontIcon type="edit" className="w-4 h-4" />
-                  </button>
-                </div>
-                {/* Status shown inline on mobile */}
-                {currentTaskId && taskStatus && (
-                  <div className="sm:hidden mt-1 mb-2">
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="rounded-xl w-max flex items-center gap-1.5"
-                    >
-                      {taskStatus.state === 'PENDING' && (
-                        <>
-                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                          Queued...
-                        </>
+                {/* Header Section */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl md:text-2xl font-medium">
+                        {datasetName}
+                      </h2>
+                      <button
+                        className="p-1 rounded-md hover:bg-accent text-muted-foreground"
+                        onClick={openEdit}
+                        aria-label="Edit dataset"
+                        title="Edit dataset"
+                      >
+                        <FontIcon type="edit" className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground max-w-[640px] mb-3">
+                      {dataset?.description && dataset.description.trim().length > 0
+                        ? dataset.description
+                        : 'Add a short description so teammates know what this dataset is for.'}
+                    </p>
+
+                    {/* Configuration - Horizontal Stack */}
+                    <div className="flex items-center gap-4 flex-wrap">
+                      {/* Database */}
+                      {(currentApiDataset as any)?.database && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">Database:</span>
+                          <Badge
+                            variant="default"
+                            size="sm"
+                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900 cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => navigate('/chat/databases')}
+                          >
+                            {(currentApiDataset as any).database}
+                          </Badge>
+                        </div>
                       )}
-                      {taskStatus.state !== 'PENDING' &&
-                        taskStatus.state !== 'SUCCESS' &&
-                        taskStatus.state !== 'FAILURE' && (
-                          <>
-                            <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                            {taskStatus.meta?.progress
-                              ? `${taskStatus.meta.progress}%`
-                              : taskStatus.meta?.current && taskStatus.meta?.total
-                                ? `${taskStatus.meta.current}/${taskStatus.meta.total}`
-                                : 'Processing...'}
-                          </>
-                        )}
-                    </Badge>
+
+                      {/* Processing Strategy */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Strategy:</span>
+                        <Badge 
+                          variant="default" 
+                          size="sm" 
+                          className="rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => navigate(`/chat/data/strategies/${currentStrategy}`)}
+                        >
+                          {currentStrategy}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
-                )}
-                <p className="text-xs text-muted-foreground max-w-[640px]">
-                  {dataset?.description && dataset.description.trim().length > 0
-                    ? dataset.description
-                    : 'Add a short description so teammates know what this dataset is for.'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Processing status badge */}
-                {currentTaskId && taskStatus && (
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="rounded-xl w-max flex items-center gap-1.5"
-                    >
-                      {taskStatus.state === 'PENDING' && (
-                        <>
-                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                          Queued...
-                        </>
-                      )}
-                      {taskStatus.state !== 'PENDING' &&
-                        taskStatus.state !== 'SUCCESS' &&
-                        taskStatus.state !== 'FAILURE' && (
-                        <>
-                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                          {taskStatus.meta?.progress
-                            ? `Processing ${taskStatus.meta.progress}%`
-                            : taskStatus.meta?.current && taskStatus.meta?.total
-                              ? `Processing ${taskStatus.meta.current}/${taskStatus.meta.total}`
-                              : 'Processing...'}
-                        </>
-                      )}
-                    </Badge>
-                    {taskStatus.meta?.message && (
-                      <span className="text-xs text-muted-foreground max-w-[200px] truncate hidden sm:inline">
-                        {taskStatus.meta.message}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    if (
-                      !datasetId ||
-                      !activeProject?.namespace ||
-                      !activeProject?.project
-                    )
-                      return
-
-                    try {
-                      // Clear previous results
-                      setProcessingResult(null)
-
-                      const result = await processMutation.mutateAsync({
-                        namespace: activeProject.namespace,
-                        project: activeProject.project,
-                        dataset: datasetId,
-                      })
-
-                      // The process endpoint returns task_id directly
-                      if (result.task_id) {
-                        setCurrentTaskId(result.task_id)
-                        // Save task ID to sessionStorage so it persists across navigation
-                        saveDatasetTaskId(
-                          activeProject.namespace,
-                          activeProject.project,
-                          datasetId,
-                          result.task_id
-                        )
-                        toast({
-                          message: 'Dataset processing started...',
-                          variant: 'default',
-                        })
-                      }
-                    } catch (error) {
-                      console.error('Failed to start processing:', error)
-                      toast({
-                        message:
-                          'Failed to start processing. Please try again.',
-                        variant: 'destructive',
-                      })
-                    }
-                  }}
-                  disabled={processMutation.isPending || !!currentTaskId}
-                >
-                  {processMutation.isPending
-                    ? 'Starting...'
-                    : currentTaskId && taskStatus
-                      ? 'Processing...'
-                      : 'Process Dataset'}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Connected database card */}
-          {(currentApiDataset as any)?.database && (
-            <section className="rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-sm font-medium">Connected database</h3>
-                  <p className="text-xs text-muted-foreground">
-                    This dataset is connected to the following database
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="default"
-                    size="sm"
-                    className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
-                  >
-                    {(currentApiDataset as any).database}
-                  </Badge>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => navigate('/chat/databases')}
-                  >
-                    Go to database
-                  </Button>
                 </div>
               </div>
-            </section>
-          )}
-
-          {/* Processing Strategy card */}
-          <section className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium">Processing strategy</h3>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <Badge variant="default" size="sm" className="rounded-xl">
-                {currentStrategy}
-              </Badge>
-              {processingResult && (
-                <Badge variant="secondary" size="sm" className="rounded-xl">
-                  Last processed: {processingResult.processed_files || 0} files
-                </Badge>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <div className="text-xs text-muted-foreground">Parsers</div>
-                <Input
-                  value={parsersSummary}
-                  readOnly
-                  className="bg-background"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="text-xs text-muted-foreground">Extractors</div>
-                <Input
-                  value={extractorsSummary}
-                  readOnly
-                  className="bg-background"
-                />
-              </div>
-            </div>
-          </section>
 
           {/* Processing Results */}
           {processingResult && (
@@ -1317,9 +1173,35 @@ function DatasetView() {
             <section className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium">Processing Progress</h3>
-                <Badge variant="secondary" size="sm" className="rounded-xl">
-                  {taskStatus.meta.current || 0} / {taskStatus.meta.total || 0} files
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-xl w-max flex items-center gap-1.5"
+                  >
+                    {taskStatus.state === 'PENDING' && (
+                      <>
+                        <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                        Queued...
+                      </>
+                    )}
+                    {taskStatus.state !== 'PENDING' &&
+                      taskStatus.state !== 'SUCCESS' &&
+                      taskStatus.state !== 'FAILURE' && (
+                      <>
+                        <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                        {taskStatus.meta?.progress
+                          ? `Processing ${taskStatus.meta.progress}%`
+                          : taskStatus.meta?.current && taskStatus.meta?.total
+                            ? `Processing ${Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)}%`
+                            : 'Processing...'}
+                      </>
+                    )}
+                  </Badge>
+                  <Badge variant="secondary" size="sm" className="rounded-xl">
+                    {taskStatus.meta.current || 0} / {taskStatus.meta.total || 0} files
+                  </Badge>
+                </div>
               </div>
               <div className="rounded-md border border-border max-h-80 overflow-auto">
                 {taskStatus.meta.files.map((file: any, idx: number) => (
@@ -1405,18 +1287,159 @@ function DatasetView() {
                 >
                   {showFileTypeFilter ? 'Hide' : 'Filter'}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    directoryInputRef.current?.click()
-                  }}
-                >
-                  Upload folder
-                </Button>
-                <Button size="sm" onClick={() => fileInputRef.current?.click()}>
-                  Upload files
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="secondary" className="gap-1.5">
+                      Upload
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="opacity-60"
+                      >
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[160px]">
+                    <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 32 32" fill="none" className="mr-2">
+                        <path d="M25.7 9.3L18.7 2.3C18.5 2.1 18.3 2 18 2H8C6.9 2 6 2.9 6 4V28C6 29.1 6.9 30 8 30H24C25.1 30 26 29.1 26 28V10C26 9.7 25.9 9.5 25.7 9.3ZM18 4.4L23.6 10H18V4.4ZM24 28H8V4H16V10C16 11.1 16.9 12 18 12H24V28Z" fill="currentColor"/>
+                        <path d="M10 22H22V24H10V22ZM10 16H22V18H10V16Z" fill="currentColor"/>
+                      </svg>
+                      Upload files
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => directoryInputRef.current?.click()}>
+                      <FontIcon type="folder" className="w-4 h-4 mr-2" />
+                      Upload folder
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      size="sm" 
+                      className="gap-1.5"
+                      disabled={processMutation.isPending || !!currentTaskId}
+                    >
+                      {processMutation.isPending
+                        ? 'Starting...'
+                        : currentTaskId && taskStatus
+                          ? 'Processing...'
+                          : 'Process data'}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="opacity-60"
+                      >
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[200px]">
+                    <DropdownMenuItem onClick={async () => {
+                      if (
+                        !datasetId ||
+                        !activeProject?.namespace ||
+                        !activeProject?.project
+                      )
+                        return
+
+                      try {
+                        // Clear previous results
+                        setProcessingResult(null)
+
+                        const result = await processMutation.mutateAsync({
+                          namespace: activeProject.namespace,
+                          project: activeProject.project,
+                          dataset: datasetId,
+                        })
+
+                        // The process endpoint returns task_id directly
+                        if (result.task_id) {
+                          setCurrentTaskId(result.task_id)
+                          // Save task ID to sessionStorage so it persists across navigation
+                          saveDatasetTaskId(
+                            activeProject.namespace,
+                            activeProject.project,
+                            datasetId,
+                            result.task_id
+                          )
+                          toast({
+                            message: 'Processing new files...',
+                            variant: 'default',
+                          })
+                        }
+                      } catch (error) {
+                        console.error('Failed to start processing:', error)
+                        toast({
+                          message:
+                            'Failed to start processing. Please try again.',
+                          variant: 'destructive',
+                        })
+                      }
+                    }}>
+                      Process new files
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                      if (
+                        !datasetId ||
+                        !activeProject?.namespace ||
+                        !activeProject?.project
+                      )
+                        return
+
+                      try {
+                        // Clear previous results
+                        setProcessingResult(null)
+
+                        const result = await processMutation.mutateAsync({
+                          namespace: activeProject.namespace,
+                          project: activeProject.project,
+                          dataset: datasetId,
+                        })
+
+                        // The process endpoint returns task_id directly
+                        if (result.task_id) {
+                          setCurrentTaskId(result.task_id)
+                          // Save task ID to sessionStorage so it persists across navigation
+                          saveDatasetTaskId(
+                            activeProject.namespace,
+                            activeProject.project,
+                            datasetId,
+                            result.task_id
+                          )
+                          toast({
+                            message: 'Reprocessing all files...',
+                            variant: 'default',
+                          })
+                        }
+                      } catch (error) {
+                        console.error('Failed to start processing:', error)
+                        toast({
+                          message:
+                            'Failed to start processing. Please try again.',
+                          variant: 'destructive',
+                        })
+                      }
+                    }}>
+                      Reprocess all files
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
