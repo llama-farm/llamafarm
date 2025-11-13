@@ -165,6 +165,282 @@ For detailed setup instructions, model recommendations, and troubleshooting, see
 - [Lemonade Quickstart](#quick-setup)
 - [Lemonade Runtime overview](#lemonade-runtime)
 
+## Universal Runtime
+
+The Universal Runtime is LlamaFarm's most versatile runtime provider, supporting **any HuggingFace model** through PyTorch Transformers and Diffusers. Unlike Ollama (GGUF-only) or Lemonade (optimized quantized models), Universal Runtime provides access to the entire HuggingFace Hub ecosystem.
+
+### Supported Model Formats
+
+**Current Support (Production):**
+- **HuggingFace Transformers** – All PyTorch text models (GPT-2, Llama, Mistral, Qwen, Phi, BERT, etc.)
+- **HuggingFace Diffusers** – All PyTorch diffusion models (Stable Diffusion, SDXL, FLUX)
+- **Model Types**: Text Generation, Embeddings, Image Generation, Vision Classification, Audio Processing, Multimodal
+
+**Coming Soon:**
+- **ONNX Runtime** – 2-5x faster inference with automatic model conversion
+- **TensorRT** – GPU-optimized inference for NVIDIA hardware
+
+### Quick Setup
+
+**1. Start Universal Runtime server:**
+```bash
+# From project root (recommended)
+nx start universal-runtime
+
+# Or with custom port
+LF_RUNTIME_PORT=8080 nx start universal-runtime
+```
+
+**2. Configure your project:**
+```yaml
+runtime:
+  models:
+    - name: phi-2
+      description: "Fast small language model"
+      provider: universal
+      model: microsoft/phi-2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto              # auto, cuda, mps, cpu
+        dtype: auto               # auto, fp16, fp32, bf16
+        trust_remote_code: true
+        model_type: text          # text, embedding, image
+```
+
+**3. Start chatting:**
+```bash
+lf chat --model phi-2 "Explain quantum computing"
+```
+
+### Configuration Examples
+
+**Example 1: Multi-Model Setup (Chat + Embeddings + Images)**
+
+```yaml
+runtime:
+  default_model: balanced
+
+  models:
+    # Fast chat for quick responses
+    - name: fast
+      provider: universal
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto
+        dtype: auto
+
+    # Balanced chat for quality
+    - name: balanced
+      provider: universal
+      model: microsoft/phi-2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto
+        dtype: auto
+
+    # Embeddings for RAG
+    - name: embedder
+      provider: universal
+      model: sentence-transformers/all-MiniLM-L6-v2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto
+        dtype: auto
+        model_type: embedding
+
+    # Image generation
+    - name: image-gen
+      provider: universal
+      model: stabilityai/stable-diffusion-2-1
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto
+        dtype: auto
+        model_type: image
+      diffusion:
+        default_steps: 30
+        default_guidance: 7.5
+        default_size: "512x512"
+        scheduler: euler
+        enable_optimizations: true
+```
+
+**Example 2: RAG with Universal Embeddings**
+
+```yaml
+runtime:
+  models:
+    - name: chat
+      provider: universal
+      model: microsoft/phi-2
+      base_url: http://127.0.0.1:11540
+
+    - name: embedder
+      provider: universal
+      model: nomic-ai/nomic-embed-text-v1.5
+      base_url: http://127.0.0.1:11540
+      transformers:
+        model_type: embedding
+
+rag:
+  databases:
+    - name: main_database
+      type: ChromaStore
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v1.5
+            dimension: 768
+            batch_size: 16
+```
+
+### Hardware Acceleration
+
+Universal Runtime automatically detects and optimizes for your hardware:
+
+**Detection Priority:**
+1. **NVIDIA CUDA** – Best performance on NVIDIA GPUs
+2. **Apple Metal (MPS)** – Optimized for Apple Silicon (M1/M2/M3)
+3. **CPU** – Fallback for all platforms
+
+**Device Configuration:**
+```yaml
+transformers:
+  device: auto    # Recommended: auto-detect best device
+  device: cuda    # Force CUDA (NVIDIA)
+  device: mps     # Force Metal (Apple Silicon)
+  device: cpu     # Force CPU (compatible everywhere)
+```
+
+**Data Type Configuration:**
+```yaml
+transformers:
+  dtype: auto     # auto (fp16 on GPU, fp32 on CPU)
+  dtype: fp16     # Half precision (faster, less memory)
+  dtype: fp32     # Full precision (highest quality)
+  dtype: bf16     # BFloat16 (NVIDIA Ampere+)
+```
+
+### Environment Variables
+
+```bash
+# Server configuration
+UNIVERSAL_RUNTIME_HOST=127.0.0.1
+UNIVERSAL_RUNTIME_PORT=11540
+
+# Model caching
+TRANSFORMERS_CACHE=~/.cache/huggingface
+HF_TOKEN=hf_xxxxx  # For gated models (Llama, etc.)
+
+# Device control
+TRANSFORMERS_FORCE_CPU=1     # Force CPU mode
+TRANSFORMERS_SKIP_MPS=1      # Skip MPS, use CPU instead
+```
+
+### API Usage
+
+Universal Runtime provides an OpenAI-compatible API:
+
+**Chat Completions:**
+```bash
+curl -X POST http://localhost:11540/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "microsoft/phi-2",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 50
+  }'
+```
+
+**Embeddings:**
+```bash
+curl -X POST http://localhost:11540/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "input": "Hello world"
+  }'
+```
+
+**Image Generation:**
+```bash
+curl -X POST http://localhost:11540/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "a serene mountain lake at sunset",
+    "model": "stabilityai/stable-diffusion-2-1",
+    "size": "512x512"
+  }'
+```
+
+### Supported Model Categories
+
+1. **Text Generation (CausalLM)** – GPT-2, Llama, Mistral, Qwen, Phi
+2. **Embeddings (Encoder)** – BERT, sentence-transformers, BGE, nomic-embed
+3. **Image Generation (Diffusion)** – Stable Diffusion, SDXL, FLUX
+4. **Vision Classification** – ViT, CLIP, DINOv2
+5. **Audio Processing** – Whisper, Wav2Vec2
+6. **Multimodal (Vision-Language)** – BLIP, LLaVA, Florence
+
+### Key Differences: Universal vs Other Runtimes
+
+| Feature | Universal Runtime | Ollama | Lemonade |
+|---------|------------------|--------|----------|
+| **Model Format** | PyTorch (Transformers) | GGUF (llama.cpp) | GGUF (llama.cpp) |
+| **Model Source** | HuggingFace Hub | Ollama library | HuggingFace GGUF |
+| **Model Types** | 6 types (text, image, audio, etc.) | Text only | Text only |
+| **Optimization** | PyTorch native | Quantized CPU/GPU | NPU/GPU accelerated |
+| **Memory Usage** | Higher (full precision) | Lower (quantized) | Lower (quantized) |
+| **Setup** | Auto-download from HF | `ollama pull` | `lemonade-server-dev pull` |
+| **Default Port** | 11540 | 11434 | 11534 |
+| **Best For** | Flexibility, multimodal | CPU speed, ease of use | NPU/GPU acceleration |
+
+### When to Use Universal Runtime
+
+**Choose Universal Runtime when you need:**
+- Access to any HuggingFace model (latest research models, domain-specific fine-tunes)
+- Multimodal capabilities (images, audio, vision)
+- Embedding generation for RAG
+- Custom model configurations (LoRA, adapters)
+
+**Choose Ollama when you need:**
+- Fast CPU inference with quantized models
+- Simplest setup experience
+- Established model library
+
+**Choose Lemonade when you need:**
+- Maximum performance on Apple Silicon
+- NPU/GPU acceleration
+- GGUF model optimization
+
+### Troubleshooting
+
+**Model not found:**
+```bash
+# Models auto-download from HuggingFace on first use
+# Check internet connection and HF_TOKEN for gated models
+export HF_TOKEN=hf_your_token_here
+```
+
+**Out of memory:**
+```bash
+# Use smaller models or force CPU mode
+TRANSFORMERS_FORCE_CPU=1 nx start universal-runtime
+
+# Or reduce batch size in config
+transformers:
+  batch_size: 1
+```
+
+**Slow inference:**
+```bash
+# Ensure GPU is detected
+# Check device selection in logs
+# Consider using GGUF models with Ollama/Lemonade instead
+```
+
 ## Extending Provider Support
 
 To add a new provider enum:

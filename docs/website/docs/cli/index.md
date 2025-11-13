@@ -37,7 +37,8 @@ Environment helpers:
 | [`lf datasets`](./lf-datasets.md) | Create, upload, process, and delete datasets. |
 | [`lf rag`](./lf-rag.md) | Query documents and access RAG maintenance tools. |
 | [`lf projects`](./lf-projects.md) | List projects by namespace. |
-| [`lf version`](./lf-version.md) | Print CLI version/build info. |
+| [`lf services`](#services-management) | Manage LlamaFarm services (server, RAG worker, universal runtime). |
+| [`lf version`](./lf-version.md) | Print CLI version/build info and check for updates. |
 
 ## Troubleshooting CLI Output
 
@@ -47,3 +48,50 @@ Environment helpers:
 - **Authorization redaction** – `lf chat --curl` hides API keys automatically; replace `<redacted>` before running.
 
 Looking to add a new command? See [Extending LlamaFarm](../extending/index.md#extend-the-cli) for a Cobra walkthrough.
+
+## Services Management
+
+The `lf services` command provides control over LlamaFarm's backend services.
+
+### Check Service Status
+
+```bash
+lf services status
+lf services status --json  # Machine-readable output
+```
+
+Shows the status of all services (server, RAG worker, universal runtime).
+
+### Start Services
+
+```bash
+lf services start              # Start all services
+lf services start server       # Start specific service
+lf services start rag          # Start RAG worker
+lf services start universal-runtime  # Start Universal Runtime
+```
+
+**Orchestration Modes:**
+- `native` (default): Native processes managed by CLI
+- `docker`: Docker containers
+- `auto`: Auto-detect best mode
+
+Set via environment variable:
+```bash
+LF_ORCHESTRATION_MODE=docker lf services start
+```
+
+### Stop Services
+
+```bash
+lf services stop               # Stop all services
+lf services stop server        # Stop specific service
+```
+
+### Available Services
+
+| Service | Description | Default Port |
+|---------|-------------|--------------|
+| `server` | Main FastAPI server | 8000 |
+| `rag` | RAG/Celery worker | N/A |
+| `universal-runtime` | Universal Runtime server | 11540 |
