@@ -1746,43 +1746,40 @@ function DatasetView() {
                           <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
                             <span>{f.fullHash ? f.name : f.name}</span>
                             {f.fullHash && (
-                              <>
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await navigator.clipboard.writeText(
-                                        f.fullHash!
-                                      )
-                                      setCopyStatus(prev => ({
-                                        ...prev,
-                                        [f.id]: 'Copied!',
-                                      }))
-                                    } catch (err) {
-                                      setCopyStatus(prev => ({
-                                        ...prev,
-                                        [f.id]: 'Failed to copy',
-                                      }))
-                                    }
-                                    setTimeout(() => {
-                                      setCopyStatus(prev => ({
-                                        ...prev,
-                                        [f.id]: undefined,
-                                      }))
-                                    }, 1500)
-                                  }}
-                                  className="text-xs text-blue-600 hover:text-blue-800 text-left"
-                                  title="Click to copy full hash"
-                                >
-                                  Copy full hash
-                                </button>
-                                {copyStatus?.[f.id] && (
-                                  <span
-                                    className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}
-                                  >
-                                    {copyStatus[f.id]}
-                                  </span>
-                                )}
-                              </>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(
+                                      f.fullHash!
+                                    )
+                                    setCopyStatus(prev => ({
+                                      ...prev,
+                                      [f.id]: 'Copied!',
+                                    }))
+                                  } catch (err) {
+                                    setCopyStatus(prev => ({
+                                      ...prev,
+                                      [f.id]: 'Failed to copy',
+                                    }))
+                                  }
+                                  setTimeout(() => {
+                                    setCopyStatus(prev => ({
+                                      ...prev,
+                                      [f.id]: undefined,
+                                    }))
+                                  }, 1500)
+                                }}
+                                className={`text-xs text-left ${
+                                  copyStatus?.[f.id] === 'Copied!'
+                                    ? 'text-green-600'
+                                    : copyStatus?.[f.id] === 'Failed to copy'
+                                      ? 'text-red-600'
+                                      : 'text-blue-600 hover:text-blue-800'
+                                }`}
+                                title="Click to copy full hash"
+                              >
+                                {copyStatus?.[f.id] || 'Copy full hash'}
+                              </button>
                             )}
                           </div>
                           <div className="w-1/2 flex items-center justify-between gap-4">
