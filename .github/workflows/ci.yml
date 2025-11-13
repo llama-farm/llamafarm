@@ -96,8 +96,8 @@ jobs:
       - name: Run binary upgrade integration tests
         working-directory: cli
         run: |
-          chmod +x ./hack/test-binary-upgrade.sh
-          ./hack/test-binary-upgrade.sh
+          # Run Go-based integration tests
+          go test -v -run TestUpgradeIntegration ./cmd/version/...
 
       - name: Publish CLI coverage to job summary
         run: |

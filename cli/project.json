@@ -44,13 +44,6 @@
         "command": "cli/hack/test-install.sh"
       }
     },
-    "test-upgrade": {
-      "executor": "nx:run-commands",
-      "options": {
-        "cwd": "{workspaceRoot}",
-        "command": "cli/hack/test-binary-upgrade.sh"
-      }
-    },
     "coverage": {
       "executor": "nx:run-commands",
       "options": {
