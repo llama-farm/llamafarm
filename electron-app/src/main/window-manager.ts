@@ -19,6 +19,7 @@ export class WindowManager {
       frame: false,
       transparent: true,
       resizable: false,
+      alwaysOnTop: true,
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: false,
@@ -26,15 +27,114 @@ export class WindowManager {
       }
     })
 
-    // Load splash screen
-    if (app.isPackaged) {
-      this.splashWindow.loadFile(path.join(__dirname, '../renderer/splash.html'))
-    } else {
-      // In development, use a simple splash or the dev server
-      this.splashWindow.loadURL('http://localhost:5173/splash.html')
-    }
+    // Load embedded splash HTML
+    const splashHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+              background: hsl(222.2, 47.4%, 11.2%);
+              color: hsl(210, 40%, 98%);
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              height: 100vh;
+              overflow: hidden;
+            }
+            .logo {
+              font-size: 64px;
+              margin-bottom: 24px;
+              filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.3));
+            }
+            h1 {
+              font-size: 36px;
+              font-weight: 600;
+              margin-bottom: 48px;
+              background: linear-gradient(135deg, rgba(34, 211, 238, 1) 0%, rgba(59, 130, 246, 1) 100%);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+              background-clip: text;
+            }
+            .status {
+              font-size: 15px;
+              opacity: 0.8;
+              margin-bottom: 20px;
+              color: hsl(215, 20%, 65%);
+            }
+            .progress-container {
+              width: 320px;
+              height: 6px;
+              background: hsl(215, 28%, 17%);
+              border-radius: 3px;
+              overflow: hidden;
+              box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            }
+            .progress-bar {
+              height: 100%;
+              background: linear-gradient(90deg, rgba(34, 211, 238, 0.9) 0%, rgba(59, 130, 246, 0.9) 100%);
+              border-radius: 3px;
+              transition: width 0.3s ease;
+              width: 0%;
+              box-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+            }
+            .spinner {
+              width: 40px;
+              height: 40px;
+              border: 3px solid hsl(215, 28%, 17%);
+              border-top-color: rgba(34, 211, 238, 0.9);
+              border-radius: 50%;
+              animation: spin 1s linear infinite;
+              margin-top: 24px;
+            }
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+            .error {
+              color: #ff6b6b;
+              background: hsl(215, 28%, 17%);
+              padding: 16px;
+              border-radius: 8px;
+              margin-top: 24px;
+              max-width: 400px;
+              font-size: 13px;
+              border: 1px solid rgba(255, 107, 107, 0.2);
+            }
+          </style>
+        </head>
+        <body>
+          <div class="logo">🦙</div>
+          <h1>LlamaFarm</h1>
+          <div class="status" id="status">Starting...</div>
+          <div class="progress-container">
+            <div class="progress-bar" id="progress"></div>
+          </div>
+          <div class="spinner"></div>
+          <div class="error" id="error" style="display: none;"></div>
 
+          <script>
+            window.llamafarm.splash.onStatus((status) => {
+              document.getElementById('status').textContent = status.message;
+              if (status.progress !== undefined) {
+                document.getElementById('progress').style.width = status.progress + '%';
+              }
+              if (status.error) {
+                document.getElementById('error').textContent = status.error;
+                document.getElementById('error').style.display = 'block';
+              }
+            });
+          </script>
+        </body>
+      </html>
+    `
+
+    this.splashWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHTML)}`)
     this.splashWindow.center()
+    this.splashWindow.show() // Show immediately!
 
     return this.splashWindow
   }
@@ -62,33 +162,61 @@ export class WindowManager {
         preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: false,
         contextIsolation: true,
-        webSecurity: true
+        webSecurity: false // Disable for localhost CORS
       },
-      titleBarStyle: 'default',
+      titleBarStyle: 'hidden',
+      trafficLightPosition: { x: 20, y: 18 },
+      backgroundColor: '#1a1f2e',
       title: 'LlamaFarm'
     })
 
-    // Load the designer UI
-    if (app.isPackaged) {
-      // In production, serve the bundled designer
-      const designerPath = path.join(process.resourcesPath, 'designer', 'index.html')
-      this.mainWindow.loadFile(designerPath)
-    } else {
-      // In development, load the renderer HTML (which has the designer iframe)
-      // The vite dev server is already running at localhost:5173
-      this.mainWindow.loadURL('http://localhost:5173')
-    }
+    // Load the Designer UI
+    // The backend serves the Designer at localhost:8000 (via lf start/launch designer)
+    // MUST use localhost (not 127.0.0.1) as the Designer's API config depends on it
+    const designerURL = 'http://localhost:8000'
+    console.log('Loading Designer from:', designerURL)
+    this.mainWindow.loadURL(designerURL)
+
+    // Inject CSS to make header draggable once page loads
+    this.mainWindow.webContents.on('did-finish-load', () => {
+      this.mainWindow?.webContents.insertCSS(`
+        /* Make the Designer header draggable */
+        header, [class*="header"], [class*="Header"] {
+          -webkit-app-region: drag;
+          padding-left: 80px !important; /* Make room for traffic lights */
+        }
+        /* But keep buttons/links clickable */
+        header button, header a, header input, header select,
+        [class*="header"] button, [class*="header"] a, [class*="header"] input, [class*="header"] select {
+          -webkit-app-region: no-drag;
+        }
+      `)
+    })
 
     // Open DevTools in development
     if (!app.isPackaged) {
       this.mainWindow.webContents.openDevTools()
     }
 
-    // Show window when ready
-    this.mainWindow.once('ready-to-show', () => {
-      this.mainWindow?.show()
-      this.closeSplash()
-    })
+    // Show window when ready, or after timeout
+    let shown = false
+    const showWindow = () => {
+      if (!shown && this.mainWindow && !this.mainWindow.isDestroyed()) {
+        shown = true
+        this.mainWindow.show()
+        this.closeSplash()
+      }
+    }
+
+    this.mainWindow.once('ready-to-show', showWindow)
+
+    // Fallback: show window after 5 seconds even if not fully loaded
+    setTimeout(() => {
+      if (!shown) {
+        console.log('Main window timeout - showing anyway')
+        showWindow()
+      }
+    }, 5000)
 
     // Handle window close
     this.mainWindow.on('closed', () => {

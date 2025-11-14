@@ -37,8 +37,14 @@
       "dist/**/*",
       "package.json"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "llama-farm",
+      "repo": "llamafarm"
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "dmg",
@@ -49,11 +55,7 @@
           "arch": ["x64", "arm64"]
         }
       ],
-      "icon": "build/icon.icns",
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "identity": null
     },
     "win": {
       "target": ["nsis", "portable"],

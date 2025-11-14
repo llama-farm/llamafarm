@@ -3,23 +3,106 @@
  * Handles app lifecycle, backend orchestration, and window management
  */
 
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, nativeImage, nativeTheme } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { CLIInstaller, InstallProgress } from './backend/cli-installer'
-import { BackendManager, BackendStatus } from './backend/backend-manager'
 import { WindowManager } from './window-manager'
+import { MenuManager } from './menu-manager'
+import * as path from 'path'
+import * as fs from 'fs'
+import { promisify } from 'util'
+import { exec } from 'child_process'
+
+const execAsync = promisify(exec)
+
+// Configure auto-updater
+autoUpdater.autoDownload = true
+autoUpdater.autoInstallOnAppQuit = true
 
 class LlamaFarmApp {
   private cliInstaller: CLIInstaller
-  private backendManager: BackendManager | null = null
   private windowManager: WindowManager
+  private menuManager: MenuManager
   private isQuitting = false
 
   constructor() {
+    // Set app name early
+    app.setName('LlamaFarm')
+
+    // Force dark mode for title bar to match Designer UI
+    nativeTheme.themeSource = 'dark'
+
+    // Set dock icon on macOS (in development)
+    if (process.platform === 'darwin' && !app.isPackaged) {
+      try {
+        const iconPath = path.join(__dirname, '../../../designer/public/llama-farm-favicon.svg')
+        if (fs.existsSync(iconPath)) {
+          const icon = nativeImage.createFromPath(iconPath)
+          app.dock?.setIcon(icon)
+        }
+      } catch (error) {
+        console.log('Could not set dock icon:', error)
+      }
+    }
+
     this.cliInstaller = new CLIInstaller()
     this.windowManager = new WindowManager()
+    this.menuManager = new MenuManager()
 
     this.setupEventHandlers()
     this.setupIPCHandlers()
+    this.setupAutoUpdater()
+  }
+
+  /**
+   * Setup auto-updater
+   */
+  private setupAutoUpdater(): void {
+    // Only check for updates in production
+    if (!app.isPackaged) {
+      console.log('Skipping auto-update check in development mode')
+      return
+    }
+
+    autoUpdater.on('checking-for-update', () => {
+      console.log('Checking for updates...')
+    })
+
+    autoUpdater.on('update-available', (info) => {
+      console.log('Update available:', info.version)
+    })
+
+    autoUpdater.on('update-not-available', () => {
+      console.log('No updates available')
+    })
+
+    autoUpdater.on('error', (err) => {
+      console.error('Auto-updater error:', err)
+    })
+
+    autoUpdater.on('download-progress', (progressObj) => {
+      console.log(`Download progress: ${progressObj.percent.toFixed(1)}%`)
+    })
+
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log('Update downloaded:', info.version)
+
+      // Show dialog to user
+      const dialogOpts = {
+        type: 'info' as const,
+        buttons: ['Restart Now', 'Later'],
+        title: 'Update Available',
+        message: `LlamaFarm Designer ${info.version}`,
+        detail: 'A new version has been downloaded. Restart the application to apply the updates.'
+      }
+
+      dialog.showMessageBox(dialogOpts).then((returnValue) => {
+        if (returnValue.response === 0) {
+          // Restart now
+          autoUpdater.quitAndInstall()
+        }
+      })
+    })
   }
 
   /**
@@ -37,32 +120,6 @@ class LlamaFarmApp {
    * Setup IPC handlers for renderer communication
    */
   private setupIPCHandlers(): void {
-    // Get backend status
-    ipcMain.handle('backend:status', () => {
-      return this.backendManager?.getStatus() || {
-        state: 'stopped',
-        message: 'Backend not initialized'
-      }
-    })
-
-    // Restart backend
-    ipcMain.handle('backend:restart', async () => {
-      if (this.backendManager) {
-        await this.backendManager.restart()
-        return { success: true }
-      }
-      return { success: false, error: 'Backend not initialized' }
-    })
-
-    // Stop backend
-    ipcMain.handle('backend:stop', async () => {
-      if (this.backendManager) {
-        await this.backendManager.stop()
-        return { success: true }
-      }
-      return { success: false, error: 'Backend not initialized' }
-    })
-
     // Get CLI info
     ipcMain.handle('cli:info', async () => {
       const isInstalled = await this.cliInstaller.isInstalled()
@@ -71,13 +128,18 @@ class LlamaFarmApp {
         path: isInstalled ? this.cliInstaller.getCLIPath() : null
       }
     })
+
+    // Services are managed automatically - no manual control needed
   }
 
   /**
    * App ready handler - main initialization
    */
   private async onReady(): Promise<void> {
-    console.log('LlamaFarm Desktop starting...')
+    console.log('LlamaFarm starting...')
+
+    // Create application menu
+    this.menuManager.createMenu()
 
     // Create splash screen
     const splash = this.windowManager.createSplashWindow()
@@ -86,8 +148,14 @@ class LlamaFarmApp {
       // Step 1: Ensure CLI is installed and upgraded
       await this.ensureCLI()
 
-      // Step 2: Open Designer (no backend startup)
-      // Users will choose/create projects in the Designer
+      // Step 2: Services are already started by ensureCLI()
+      // No need to run lf start - services start already started server + RAG
+      // The server serves all projects from ~/.llamafarm/projects/
+
+      // Step 3: Wait for server to be ready
+      await this.waitForServer()
+
+      // Step 4: Create main window with Designer UI
       this.windowManager.updateSplash({
         message: 'Opening Designer...',
         progress: 95
@@ -96,8 +164,16 @@ class LlamaFarmApp {
       // Give a moment for the message to show
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Step 3: Create main window
       this.windowManager.createMainWindow()
+
+      // Step 5: Check for app updates (in background)
+      if (app.isPackaged) {
+        setTimeout(() => {
+          autoUpdater.checkForUpdatesAndNotify().catch(err => {
+            console.log('Failed to check for updates:', err)
+          })
+        }, 5000) // Wait 5 seconds after app starts
+      }
     } catch (error) {
       console.error('Startup failed:', error)
       this.handleStartupError(error)
@@ -176,12 +252,37 @@ class LlamaFarmApp {
   }
 
   /**
-   * Start services (ensures RAG server and dependencies are downloaded)
+   * Check and start services if needed
    */
   private async startServices(): Promise<void> {
     try {
-      console.log('Running lf services start...')
-      const { execAsync } = require('util').promisify(require('child_process').exec)
+      // First check if services are already running
+      console.log('Checking services status...')
+
+      const { stdout: statusOutput } = await execAsync(
+        `"${this.cliInstaller.getCLIPath()}" services status`,
+        { timeout: 30000 }
+      )
+
+      console.log('Services status:', statusOutput)
+
+      // Check if server and RAG are running
+      const serverRunning = statusOutput.includes('Service: server') &&
+                           statusOutput.includes('State: ✓ running')
+      const ragRunning = statusOutput.includes('Service: rag') &&
+                        statusOutput.includes('State: ✓ running')
+
+      if (serverRunning && ragRunning) {
+        console.log('Services already running, skipping start')
+        return
+      }
+
+      // Services not running, start them
+      console.log('Starting services...')
+      this.windowManager.updateSplash({
+        message: 'Starting LlamaFarm services...',
+        progress: 60
+      })
 
       const { stdout, stderr } = await execAsync(
         `"${this.cliInstaller.getCLIPath()}" services start`,
@@ -196,8 +297,47 @@ class LlamaFarmApp {
     }
   }
 
-  // Backend startup is now handled by the Designer when user selects a project
-  // This method is no longer called during app initialization
+  /**
+   * Wait for server to be ready
+   */
+  private async waitForServer(): Promise<void> {
+    this.windowManager.updateSplash({
+      message: 'Waiting for server...',
+      progress: 80
+    })
+
+    const axios = require('axios')
+    const maxAttempts = 30 // 30 attempts * 1 second = 30 seconds
+    let attempts = 0
+
+    while (attempts < maxAttempts) {
+      try {
+        // Check if server is responding - use 127.0.0.1 instead of localhost to avoid IPv6
+        const response = await axios.get('http://127.0.0.1:8000/health', {
+          timeout: 3000
+        })
+
+        console.log(`Health check response: ${response.status}`)
+        if (response.status === 200) {
+          console.log('Server is ready!')
+          this.windowManager.updateSplash({
+            message: 'Server ready!',
+            progress: 90
+          })
+          return
+        }
+      } catch (error) {
+        // Server not ready yet, continue waiting
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        console.log(`Server check attempt ${attempts + 1}/${maxAttempts} - Error: ${errorMsg}`)
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      attempts++
+    }
+
+    throw new Error('Server failed to start - timeout waiting for http://127.0.0.1:8000/health')
+  }
 
   /**
    * Handle startup errors
@@ -261,10 +401,16 @@ class LlamaFarmApp {
     console.log('Shutting down LlamaFarm...')
 
     try {
-      // Stop backend gracefully
-      if (this.backendManager) {
-        console.log('Stopping backend...')
-        await this.backendManager.cleanup()
+      // Stop services
+      console.log('Stopping services...')
+      try {
+        await execAsync(
+          `"${this.cliInstaller.getCLIPath()}" services stop`,
+          { timeout: 30000 }
+        )
+      } catch (error) {
+        console.warn('Services stop had issues:', error)
+        // Continue anyway
       }
 
       // Cleanup windows
