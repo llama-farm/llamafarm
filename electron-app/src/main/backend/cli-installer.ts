@@ -61,9 +61,17 @@ const { stdout } = await execAsync(process.platform === 'win32' ? 'where lf' : '
     try {
       const { stdout } = await execAsync(`"${this.cliPath}" version`)
       // Parse version from output like "lf version 0.0.14"
-      const match = stdout.match(/version\s+v?(\d+\.\d+\.\d+)/)
-      return match ? match[1] : null
-    } catch {
+      const match = stdout.match(/version\s+v?(\d+\.\d+\.\d+)/i)
+      if (match && match[1]) {
+        return match[1]
+      } else {
+        console.warn(
+          `Could not parse CLI version from output: "${stdout.trim()}". Output format may have changed.`
+        )
+        return null
+      }
+    } catch (err) {
+      console.error("Error getting installed CLI version:", err)
       return null
     }
   }
