@@ -55,7 +55,7 @@ class GGUFLanguageModel(BaseModel):
         self.model_type = "language"
         self.supports_streaming = True
         self.llama: Llama | None = None
-        self.requested_n_ctx = n_ctx  # Store requested value
+        self.requested_n_ctx = self.n_ctx = n_ctx  # Store requested value
         self.actual_n_ctx: int | None = None  # Will be computed during load()
         self._executor = ThreadPoolExecutor(max_workers=1)
 
@@ -95,10 +95,12 @@ class GGUFLanguageModel(BaseModel):
         logger.info(f"Using context size: {self.actual_n_ctx}")
 
         # Configure GPU layers based on device
-        if self.device in ("cuda", "mps"):
-            n_gpu_layers = -1  # Use all layers on GPU/Metal
+        # Note: llama-cpp-python automatically uses whatever backend it was compiled with
+        # (CUDA, ROCm, Metal, Vulkan, etc.). We just tell it whether to use GPU or CPU.
+        if self.device != "cpu":
+            n_gpu_layers = -1  # Use all layers on GPU (any backend)
             logger.info(
-                f"Configuring for {self.device.upper()} acceleration (all layers on GPU)"
+                f"Configuring for GPU acceleration on {self.device} (all layers on GPU)"
             )
         else:
             n_gpu_layers = 0  # CPU only
@@ -106,7 +108,7 @@ class GGUFLanguageModel(BaseModel):
 
         # Load model using llama-cpp-python
         # Run in thread pool since Llama() initialization is blocking
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _load_model():
             return Llama(
@@ -190,23 +192,35 @@ class GGUFLanguageModel(BaseModel):
         max_tokens = max_tokens or 512
 
         # Run generation in thread pool (blocking call)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _generate():
-            return self.llama(
-                prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                stop=stop or [],
-                echo=False,  # Don't echo the prompt in output
+            try:
+                return self.llama(
+                    prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                    echo=False,  # Don't echo the prompt in output
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error during llama-cpp-python generation: {e}", exc_info=True
+                )
+                raise RuntimeError(f"Text generation failed: {e}") from e
+
+        # Validate llama-cpp result structure before extracting text
+        try:
+            result = await loop.run_in_executor(self._executor, _generate)
+            # Extract text from llama-cpp result
+            generated_text = result["choices"][0]["text"]
+            return generated_text.strip()
+        except Exception as e:
+            logger.error(
+                f"Error validating llama-cpp result structure: {e}", exc_info=True
             )
-
-        result = await loop.run_in_executor(self._executor, _generate)
-
-        # Extract text from llama-cpp result
-        generated_text = result["choices"][0]["text"]
-        return generated_text.strip()
+            raise ValueError(f"Unexpected result structure: {result}") from e
 
     async def generate_stream(
         self,
@@ -243,9 +257,9 @@ class GGUFLanguageModel(BaseModel):
 
         max_tokens = max_tokens or 512
 
-        # Create a queue for passing tokens between threads
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
-        loop = asyncio.get_event_loop()
+        # Create a queue for passing tokens and exceptions between threads
+        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
         def _generate():
             """Run generation in separate thread."""
@@ -264,23 +278,29 @@ class GGUFLanguageModel(BaseModel):
                     future.result()  # Wait for put to complete
             except Exception as e:
                 logger.error(f"Error in GGUF generation: {e}", exc_info=True)
-                # Put error sentinel
-                future = asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+                # Put exception in queue so it can be propagated to caller
+                future = asyncio.run_coroutine_threadsafe(queue.put(e), loop)
                 future.result()
             finally:
-                # Signal completion
+                # Signal completion (None sentinel)
                 future = asyncio.run_coroutine_threadsafe(queue.put(None), loop)
                 future.result()
 
         # Start generation in thread pool
         loop.run_in_executor(self._executor, _generate)
 
-        # Yield tokens as they arrive
+        # Yield tokens as they arrive, propagate exceptions
         while True:
-            token = await queue.get()
-            if token is None:
+            item = await queue.get()
+            if item is None:
+                # Completion sentinel
                 break
-            yield token
+            elif isinstance(item, Exception):
+                # Propagate exception from streaming thread
+                raise item
+            else:
+                # Regular token
+                yield item
 
     def __del__(self):
         """Cleanup thread pool executor on deletion."""

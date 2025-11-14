@@ -19,7 +19,7 @@ import base64
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 from fastapi import (
     FastAPI,
@@ -31,6 +31,7 @@ from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     BaseModel,
     EncoderModel,
+    GGUFEncoderModel,
     GGUFLanguageModel,
     LanguageModel,
 )
@@ -118,6 +119,7 @@ async def load_language(model_id: str, n_ctx: int | None = None):
                 logger.info(f"Detected format: {model_format}")
 
                 # Instantiate appropriate model class based on format
+                model: BaseModel
                 if model_format == "gguf":
                     model = GGUFLanguageModel(model_id, device, n_ctx=n_ctx)
                 else:
@@ -129,15 +131,41 @@ async def load_language(model_id: str, n_ctx: int | None = None):
 
 
 async def load_encoder(model_id: str, task: str = "embedding"):
-    """Load an encoder model for embeddings or classification."""
-    cache_key = f"encoder:{task}:{model_id}"
+    """Load an encoder model for embeddings or classification (GGUF or transformers format).
+
+    Automatically detects whether the model is in GGUF or transformers format
+    and loads it with the appropriate backend. GGUF models use llama-cpp-python
+    for optimized inference, while transformers models use the standard HuggingFace
+    transformers library.
+
+    Args:
+        model_id: HuggingFace model identifier
+        task: Model task - "embedding" or "classification"
+    """
+    # Detect model format for proper caching and loading
+    model_format = detect_model_format(model_id)
+    cache_key = f"encoder:{task}:{model_format}:{model_id}"
+
     if cache_key not in _models:
         async with _model_load_lock:
             # Double-check if model was loaded while waiting for the lock
             if cache_key not in _models:
-                logger.info(f"Loading encoder ({task}): {model_id}")
+                logger.info(
+                    f"Loading encoder ({task}): {model_id} (format: {model_format})"
+                )
                 device = get_device()
-                model = EncoderModel(model_id, device, task=task)
+
+                # Instantiate appropriate model class based on format
+                model: BaseModel
+                if model_format == "gguf":
+                    if task != "embedding":
+                        raise ValueError(
+                            f"GGUF models only support embedding task, not '{task}'"
+                        )
+                    model = GGUFEncoderModel(model_id, device)
+                else:
+                    model = EncoderModel(model_id, device, task=task)
+
                 await model.load()
                 _models[cache_key] = model
     return _models[cache_key]
@@ -188,10 +216,10 @@ class EmbeddingRequest(PydanticBaseModel):
     """OpenAI-compatible embedding request."""
 
     model: str
-    input: Union[str, List[str]]
-    encoding_format: Optional[Literal["float", "base64"]] = "float"
-    user: Optional[str] = None
-    extra_body: Optional[dict] = None
+    input: str | list[str]
+    encoding_format: Literal["float", "base64"] | None = "float"
+    user: str | None = None
+    extra_body: dict | None = None
 
 
 @app.post("/v1/embeddings")
@@ -241,7 +269,7 @@ async def create_embeddings(request: EmbeddingRequest):
 
     except Exception as e:
         logger.error(f"Error in create_embeddings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":

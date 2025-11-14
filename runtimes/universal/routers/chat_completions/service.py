@@ -158,4 +158,4 @@ class ChatCompletionsService:
 
         except Exception as e:
             logger.error(f"Error in chat_completions: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e

@@ -15,6 +15,7 @@ from pathlib import Path
 import psutil
 import torch
 import yaml
+from gguf import GGUFReader
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +54,6 @@ def get_gguf_metadata(gguf_path: str) -> dict:
 
     # Try to read GGUF metadata using gguf library
     try:
-        from gguf import GGUFReader
-
         # Read GGUF file metadata without loading model weights
         reader = GGUFReader(gguf_path)
 

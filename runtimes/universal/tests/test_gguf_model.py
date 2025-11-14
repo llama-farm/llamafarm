@@ -106,7 +106,8 @@ class TestGGUFLanguageModel:
         assert model.model_type == "language"
         assert model.supports_streaming is True
         assert model.llama is None  # Not loaded yet
-        assert model.n_ctx == 2048  # Default context size
+        assert model.n_ctx is None  # Auto-computed on load
+        assert model.actual_n_ctx is None  # Not loaded yet
 
     def test_model_initialization_custom_ctx(self):
         """Test GGUF model initialization with custom context size."""
@@ -155,10 +156,11 @@ class TestGGUFLanguageModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch('utils.model_format.get_gguf_file_path', return_value=str(gguf_file)):
-            with patch('models.gguf_language_model.Llama', return_value=mock_llama):
-                await model.load()
-                assert model.llama is not None
+        with patch('models.gguf_language_model.get_gguf_file_path', return_value=str(gguf_file)):
+            with patch('models.gguf_language_model.get_default_context_size', return_value=(2048, [])):
+                with patch('models.gguf_language_model.Llama', return_value=mock_llama):
+                    await model.load()
+                    assert model.llama is not None
 
     @pytest.mark.asyncio
     async def test_load_model_gpu(self, tmp_path):
@@ -174,13 +176,14 @@ class TestGGUFLanguageModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch('utils.model_format.get_gguf_file_path', return_value=str(gguf_file)):
-            with patch('models.gguf_language_model.Llama', return_value=mock_llama) as mock_llama_cls:
-                await model.load()
-                assert model.llama is not None
-                # Verify that n_gpu_layers=-1 was passed for GPU
-                call_kwargs = mock_llama_cls.call_args[1]
-                assert call_kwargs['n_gpu_layers'] == -1
+        with patch('models.gguf_language_model.get_gguf_file_path', return_value=str(gguf_file)):
+            with patch('models.gguf_language_model.get_default_context_size', return_value=(2048, [])):
+                with patch('models.gguf_language_model.Llama', return_value=mock_llama) as mock_llama_cls:
+                    await model.load()
+                    assert model.llama is not None
+                    # Verify that n_gpu_layers=-1 was passed for GPU
+                    call_kwargs = mock_llama_cls.call_args[1]
+                    assert call_kwargs['n_gpu_layers'] == -1
 
     @pytest.mark.asyncio
     async def test_generate_not_loaded(self):
@@ -206,11 +209,12 @@ class TestGGUFLanguageModel:
             'choices': [{'text': 'Hello! How can I help?'}]
         }
 
-        with patch('utils.model_format.get_gguf_file_path', return_value=str(gguf_file)):
-            with patch('models.gguf_language_model.Llama', return_value=mock_llama):
-                await model.load()
-                result = await model.generate("Hi", max_tokens=10)
-                assert result == "Hello! How can I help?"
+        with patch('models.gguf_language_model.get_gguf_file_path', return_value=str(gguf_file)):
+            with patch('models.gguf_language_model.get_default_context_size', return_value=(2048, [])):
+                with patch('models.gguf_language_model.Llama', return_value=mock_llama):
+                    await model.load()
+                    result = await model.generate("Hi", max_tokens=10)
+                    assert result == "Hello! How can I help?"
 
     @pytest.mark.asyncio
     async def test_generate_stream_not_loaded(self):
