@@ -130,6 +130,57 @@ class TestMarkItDownPreprocessor:
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
+    def test_preprocess_pdf_file(self, preprocessor):
+        """Test preprocessing a real PDF file."""
+        pdf_path = Path(__file__).parent / "test_data" / "Alpaca-Care-for-Beginners.pdf"
+
+        if not pdf_path.exists():
+            pytest.skip(f"Test PDF not found: {pdf_path}")
+
+        result = preprocessor.preprocess(str(pdf_path), {"filename": "Alpaca-Care-for-Beginners.pdf"})
+
+        assert isinstance(result, PreprocessorResult)
+        assert result.success
+        assert len(result.content) > 0
+        assert "alpaca" in result.content.lower()  # Should contain alpaca-related content
+        assert result.output_format == "markdown"
+        assert result.metadata["preprocessor"] == "MarkItDownPreprocessor"
+        assert result.metadata["original_format"] == ".pdf"
+
+    def test_preprocess_docx_file(self, preprocessor):
+        """Test preprocessing a real DOCX file."""
+        docx_path = Path(__file__).parent / "test_data" / "Alpaca-Care-for-Beginners.docx"
+
+        if not docx_path.exists():
+            pytest.skip(f"Test DOCX not found: {docx_path}")
+
+        result = preprocessor.preprocess(str(docx_path), {"filename": "Alpaca-Care-for-Beginners.docx"})
+
+        assert isinstance(result, PreprocessorResult)
+        assert result.success
+        assert len(result.content) > 0
+        assert "alpaca" in result.content.lower()  # Should contain alpaca-related content
+        assert result.output_format == "markdown"
+        assert result.metadata["preprocessor"] == "MarkItDownPreprocessor"
+        assert result.metadata["original_format"] == ".docx"
+
+    def test_preprocess_xlsx_file(self, preprocessor):
+        """Test preprocessing a real Excel file."""
+        xlsx_path = Path(__file__).parent / "test_data" / "Dairy-Enterprise-Budget-ver-July-2025.xlsx"
+
+        if not xlsx_path.exists():
+            pytest.skip(f"Test XLSX not found: {xlsx_path}")
+
+        result = preprocessor.preprocess(str(xlsx_path), {"filename": "Dairy-Enterprise-Budget-ver-July-2025.xlsx"})
+
+        assert isinstance(result, PreprocessorResult)
+        assert result.success
+        assert len(result.content) > 0
+        # Excel files should be converted to markdown tables or similar
+        assert result.output_format == "markdown"
+        assert result.metadata["preprocessor"] == "MarkItDownPreprocessor"
+        assert result.metadata["original_format"] == ".xlsx"
+
     def test_preprocess_nonexistent_file(self, preprocessor):
         """Test preprocessing a file that doesn't exist."""
         result = preprocessor.preprocess(
