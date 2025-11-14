@@ -172,7 +172,9 @@ class TestPreprocessingIntegration:
 
     def test_sample_file_preprocessing(self):
         """Test preprocessing with actual sample files if available."""
-        samples_dir = Path("/Users/robthelen/llamafarm-head/llamafarm/.plans/samples")
+        # Use relative path from repository root
+        repo_root = Path(__file__).parent.parent.parent
+        samples_dir = repo_root / ".plans" / "samples"
 
         if not samples_dir.exists():
             pytest.skip("Sample files directory not found")

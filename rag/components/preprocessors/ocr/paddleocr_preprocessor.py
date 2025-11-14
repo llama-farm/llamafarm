@@ -221,10 +221,12 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
                 with tempfile.NamedTemporaryFile(
                     suffix=".png", delete=False
                 ) as tmp:
-                    pix.save(tmp.name)
+                    tmp_path = tmp.name
+                    pix.save(tmp_path)
 
+                try:
                     # OCR the page image
-                    page_result = self._process_image(tmp.name, {})
+                    page_result = self._process_image(tmp_path, {})
                     all_text.append(
                         f"=== Page {page_num + 1} ===\n{page_result.content}"
                     )
@@ -241,8 +243,9 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
                         for table in page_result.metadata["tables"]:
                             table["page"] = page_num + 1
                             all_tables.append(table)
-
-                    Path(tmp.name).unlink()  # Clean up temp file
+                finally:
+                    # Always clean up temp file, even if processing fails
+                    Path(tmp_path).unlink(missing_ok=True)
 
             doc.close()
 
