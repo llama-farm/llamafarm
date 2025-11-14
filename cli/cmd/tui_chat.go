@@ -246,6 +246,8 @@ type chatModel struct {
 	isFirstRender bool
 	// Track if we just started a new response (should auto-scroll)
 	justStartedResponse bool
+	// Track tool calls during streaming
+	pendingToolCalls []*ToolCall
 }
 
 // removed: old bottom menu state
@@ -1100,6 +1102,14 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		utils.LogDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
 		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
 
+		// Parse and store tool call for potential execution
+		if tc, err := ParseToolCallMessage(msg.content); err == nil {
+			m.pendingToolCalls = append(m.pendingToolCalls, tc)
+			utils.LogDebug(fmt.Sprintf("Stored tool call: %s (ID: %s)", tc.Name, tc.ID))
+		} else {
+			utils.LogDebug(fmt.Sprintf("Failed to parse tool call: %v", err))
+		}
+
 		// Auto-scroll to show tool call
 		if m.justStartedResponse || m.viewport.AtBottom() {
 			m.refreshViewportBottom()
@@ -1187,6 +1197,96 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.printing = false
 		m.streamCh = nil
 		m.justStartedResponse = false // Reset flag after streaming is complete
+
+		// Check if there are any CLI tools to execute
+		if len(m.pendingToolCalls) > 0 {
+			utils.LogDebug(fmt.Sprintf("Processing %d pending tool calls", len(m.pendingToolCalls)))
+
+			// Execute CLI tools and collect results
+			var toolResults []Message
+			for _, tc := range m.pendingToolCalls {
+				if strings.HasPrefix(tc.Name, "cli.") {
+					utils.LogDebug(fmt.Sprintf("Executing CLI tool: %s", tc.Name))
+
+					// Execute the tool
+					if toolResult, err := ExecuteToolCall(tc, chatCtx); err != nil {
+						// Tool execution failed - send error as tool result
+
+						errMsg := fmt.Sprintf("Tool execution failed: %v", err)
+						utils.LogDebug(errMsg)
+						toolResults = append(toolResults, Message{
+							Role:       "tool",
+							Content:    errMsg,
+							ToolCallID: tc.ID,
+						})
+						// Also show error to user
+						m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("❌ %s", errMsg)})
+					} else if toolResult != nil {
+						// Tool executed successfully
+						utils.LogDebug(fmt.Sprintf("Tool executed successfully: %s", toolResult.Content))
+						toolResults = append(toolResults, *toolResult)
+						// Show success to user
+						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("✅ %s", toolResult.Content)})
+					}
+				}
+			}
+
+			// Clear pending tool calls
+			m.pendingToolCalls = nil
+
+			// If we have tool results, send them back to continue the conversation
+			if len(toolResults) > 0 {
+				utils.LogDebug(fmt.Sprintf("Sending %d tool results back to API", len(toolResults)))
+				m.messages = append(m.messages, toolResults...)
+				m.setViewportContent()
+				m.refreshViewportBottom()
+
+				// Start a new stream with the tool results
+				m.thinking = true
+				m.printing = true
+				m.justStartedResponse = true
+				chunks, errs, _ := startChatStream(m.messages, chatCtx)
+				ch := make(chan tea.Msg, 32)
+				m.streamCh = ch
+				go func() {
+					var builder strings.Builder
+					for {
+						select {
+						case s, ok := <-chunks:
+							utils.LogDebug(fmt.Sprintf("TOOL RESPONSE CHUNK: %v", s))
+							if !ok {
+								utils.LogDebug(fmt.Sprintf("TOOL RESPONSE DONE: %v", builder.String()))
+								ch <- responseMsg{content: builder.String()}
+								ch <- streamDone{}
+								close(ch)
+								return
+							}
+							// Check if this chunk is a tool call
+							if strings.HasPrefix(s, "[TOOL_CALL]") {
+								// Send any accumulated content first
+								if builder.Len() > 0 {
+									ch <- responseMsg{content: builder.String()}
+								}
+								// Send tool call as separate message
+								ch <- toolCallMsg{content: s}
+								// Reset builder for subsequent content
+								builder.Reset()
+							} else {
+								// Regular content - accumulate and send
+								builder.WriteString(s)
+								ch <- responseMsg{content: builder.String()}
+							}
+						case e, ok := <-errs:
+							if ok && e != nil {
+								utils.LogDebug(fmt.Sprintf("TOOL RESPONSE ERROR: %v", e))
+								ch <- errorMsg{err: e}
+							}
+						}
+					}
+				}()
+				cmds = append(cmds, tea.Batch(listen(m.streamCh), thinkingCmd()))
+			}
+		}
 
 	case serverHealthMsg:
 		// Delegate to controller to update state and emit a unified StateUpdateMsg

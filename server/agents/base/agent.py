@@ -40,27 +40,43 @@ class LFAgent:
         self._system_prompt_generator = config.system_prompt_generator
         self._client = config.client
 
+    @property
+    def config_tools(self) -> list[ToolDefinition]:
+        return [
+            ToolDefinition.from_datamodel_tool(t)
+            for t in self._client._model_config.tools or []
+        ]
+
     async def run_async(
         self,
         *,
-        user_input: LFChatCompletionMessageParam | None = None,
+        messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
     ) -> LFChatCompletion:
-        if user_input:
-            self.history.add_message(user_input)
+        if messages:
+            for message in messages:
+                self.history.add_message(message)
 
         messages = self._prepare_messages()
+
+        # Combine config tools with extra tools
+        tools = self.config_tools + (tools or [])
+
         return await self._client.chat(messages=messages, tools=tools)
 
     async def run_async_stream(
         self,
         *,
-        user_input: LFChatCompletionMessageParam | None = None,
+        messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
-        if user_input:
-            self.history.add_message(user_input)
+        if messages:
+            for message in messages:
+                self.history.add_message(message)
         messages = self._prepare_messages()
+
+        # Combine config tools with extra tools
+        tools = self.config_tools + (tools or [])
 
         async for chunk in self._client.stream_chat(messages=messages, tools=tools):
             yield chunk

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias
 
-from config.datamodel import Model, PromptMessage, PromptSet
+from config.datamodel import Model, PromptMessage
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from pydantic import BaseModel
 

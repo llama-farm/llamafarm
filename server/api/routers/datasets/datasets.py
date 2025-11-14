@@ -213,7 +213,6 @@ class DatasetDataUploadResponse(BaseModel):
         "Upload a file to the dataset (stores it but does NOT process into vector database. "
         "Use the dataset actions endpoint with the 'ingest' action_type to process the file into the vector database)"
     ),
-    tags=["mcp"],
     responses={200: {"model": DatasetDataUploadResponse}},
 )
 async def upload_data(

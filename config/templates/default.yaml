@@ -7,15 +7,15 @@ namespace: default
 # =============================================================================
 runtime:
   models:
-  - name: default
-    description: "Default Universal model"
-    provider: universal
-    model: google/gemma-3-1b-it
-    default: true
-    prompt_format: unstructured
-    # instructor_mode: json
-    # api_key: optional, not needed for ollama
-    # model_api_parameters: optional additional parameters
+    - name: default
+      description: "Default Universal model"
+      provider: universal
+      model: google/gemma-3-1b-it
+      default: true
+      prompt_format: unstructured
+      # instructor_mode: json
+      # api_key: optional, not needed for ollama
+      # model_api_parameters: optional additional parameters
 
   # ---------------------------------------------------------------------------
   # LEMONADE RUNTIME - Local models with Universal NPU/GPU acceleration
@@ -92,7 +92,6 @@ runtime:
   #   provider: lemonade
   #   model: user.Qwen2.5-Coder-32B-Instruct
 
-
 # =============================================================================
 # PROMPTS CONFIGURATION
 # =============================================================================
@@ -111,15 +110,14 @@ prompts:
           When RAG context is provided, use it to enhance your answers.
           When no context is available, use your general knowledge.
 
-
 # =============================================================================
 # DATASETS CONFIGURATION
 # =============================================================================
 datasets:
-- name: default
-  database: main_database
-  data_processing_strategy: universal_processor
-  files: []
+  - name: default
+    database: main_database
+    data_processing_strategy: universal_processor
+    files: []
 
 # =============================================================================
 # RAG CONFIGURATION
@@ -153,7 +151,7 @@ rag:
             dimension: 768
             batch_size: 16
             timeout: 60
-            auto_pull: true      # Available retrieval strategies
+            auto_pull: true # Available retrieval strategies
       retrieval_strategies:
         - name: "basic_search"
           type: "BasicSimilarityStrategy"
@@ -179,7 +177,7 @@ rag:
         # PDF Parser with robust fallback
         - type: "PDFParser_LlamaIndex"
           file_include_patterns: ["*.pdf", "*.PDF"]
-          priority: 10  # Primary PDF parser
+          priority: 10 # Primary PDF parser
           config:
             chunk_strategy: "semantic"
             chunk_size: 300
@@ -189,13 +187,13 @@ rag:
 
         - type: "PDFParser_PyPDF2"
           file_include_patterns: ["*.pdf", "*.PDF"]
-          priority: 50  # Fallback PDF parser
+          priority: 50 # Fallback PDF parser
           config:
             chunk_size: 300
             chunk_overlap: 50
             chunk_strategy: "paragraphs"
             extract_metadata: true
-            combine_pages: false  # CRITICAL: Must be false to enable chunking
+            combine_pages: false # CRITICAL: Must be false to enable chunking
 
         # Word Document Parser
         - type: "DocxParser_LlamaIndex"
@@ -209,7 +207,8 @@ rag:
 
         # Markdown Parser
         - type: "MarkdownParser_Python"
-          file_include_patterns: ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*"]
+          file_include_patterns:
+            ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*"]
           priority: 10
           config:
             chunk_size: 400
@@ -234,20 +233,38 @@ rag:
           priority: 10
           config:
             chunk_size: 500
-            sheets: null  # Process all sheets
+            sheets: null # Process all sheets
             extract_metadata: true
 
         # Plain Text Parser (catch-all for text files)
         - type: "TextParser_Python"
-          file_include_patterns: [
-            "*.txt", "*.text", "*.log",
-            "*.json", "*.xml", "*.yaml", "*.yml", "*.toml",
-            "*.cfg", "*.conf", "*.ini",
-            "*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h",
-            "*.sh", "*.bash", "*.zsh",
-            "LICENSE*", "CHANGELOG*", "AUTHORS*"
-          ]
-          priority: 50  # Lower priority, acts as fallback
+          file_include_patterns:
+            [
+              "*.txt",
+              "*.text",
+              "*.log",
+              "*.json",
+              "*.xml",
+              "*.yaml",
+              "*.yml",
+              "*.toml",
+              "*.cfg",
+              "*.conf",
+              "*.ini",
+              "*.py",
+              "*.js",
+              "*.java",
+              "*.cpp",
+              "*.c",
+              "*.h",
+              "*.sh",
+              "*.bash",
+              "*.zsh",
+              "LICENSE*",
+              "CHANGELOG*",
+              "AUTHORS*",
+            ]
+          priority: 50 # Lower priority, acts as fallback
           config:
             encoding: "utf-8"
             chunk_size: 500
@@ -260,7 +277,7 @@ rag:
       extractors:
         # Universal extractors - work on all file types
         - type: "ContentStatisticsExtractor"
-          file_include_patterns: ["*"]  # Apply to all files
+          file_include_patterns: ["*"] # Apply to all files
           priority: 10
           config:
             include_readability: true
@@ -268,15 +285,16 @@ rag:
             include_structure: true
 
         - type: "EntityExtractor"
-          file_include_patterns: ["*"]  # Apply to all files
+          file_include_patterns: ["*"] # Apply to all files
           priority: 20
           config:
-            entity_types: ["PERSON", "ORG", "GPE", "DATE", "PRODUCT", "MONEY", "PERCENT"]
+            entity_types:
+              ["PERSON", "ORG", "GPE", "DATE", "PRODUCT", "MONEY", "PERCENT"]
             use_fallback: true
             min_entity_length: 2
 
         - type: "KeywordExtractor"
-          file_include_patterns: ["*"]  # Apply to all files
+          file_include_patterns: ["*"] # Apply to all files
           priority: 30
           config:
             algorithm: "yake"
@@ -303,7 +321,8 @@ rag:
 
         # Code file extractors
         - type: "PatternExtractor"
-          file_include_patterns: ["*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h"]
+          file_include_patterns:
+            ["*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h"]
           priority: 5
           config:
             predefined_patterns: ["email", "url", "ip_address", "version"]
