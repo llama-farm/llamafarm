@@ -351,16 +351,16 @@ function DatasetView() {
         typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
       const size =
         typeof fileObj === 'object' &&
-        fileObj !== null &&
-        'size' in fileObj &&
-        fileObj.size !== undefined
+          fileObj !== null &&
+          'size' in fileObj &&
+          fileObj.size !== undefined
           ? fileObj.size
           : 'unknown'
       const lastModified =
         typeof fileObj === 'object' &&
-        fileObj !== null &&
-        'lastModified' in fileObj &&
-        fileObj.lastModified !== undefined
+          fileObj !== null &&
+          'lastModified' in fileObj &&
+          fileObj.lastModified !== undefined
           ? fileObj.lastModified
           : 'unknown'
       return {
@@ -587,10 +587,10 @@ function DatasetView() {
               prev.map((s, i) =>
                 i === idx
                   ? {
-                      ...s,
-                      status: 'error',
-                      error: error?.message || 'Upload failed',
-                    }
+                    ...s,
+                    status: 'error',
+                    error: error?.message || 'Upload failed',
+                  }
                   : s
               )
             )
@@ -1022,7 +1022,7 @@ function DatasetView() {
                     </div>
                     <p className="text-xs text-muted-foreground max-w-[640px] mb-3">
                       {dataset?.description &&
-                      dataset.description.trim().length > 0
+                        dataset.description.trim().length > 0
                         ? dataset.description
                         : 'Add a short description so teammates know what this dataset is for.'}
                     </p>
@@ -1076,14 +1076,21 @@ function DatasetView() {
                   >
                     <CollapsibleTrigger asChild>
                       <div
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setIsResultsOpen(!isResultsOpen)
+                          }
+                        }}
                         className={`flex items-center justify-between px-4 cursor-pointer hover:opacity-70 transition-opacity ${isResultsOpen ? 'pt-4 pb-3' : 'py-4'}`}
                       >
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <FontIcon
                             type="chevron-down"
-                            className={`w-4 h-4 flex-shrink-0 transition-transform ${
-                              isResultsOpen ? '' : '-rotate-90'
-                            }`}
+                            className={`w-4 h-4 flex-shrink-0 transition-transform ${isResultsOpen ? '' : '-rotate-90'
+                              }`}
                           />
                           Last Processing Results
                         </div>
@@ -1197,7 +1204,7 @@ function DatasetView() {
                                         fileResult.file_hash
                                       const isHashFilename =
                                         displayFilename ===
-                                          fileResult.file_hash ||
+                                        fileResult.file_hash ||
                                         !result.filename
 
                                       // Get file extension for icon
@@ -1348,71 +1355,71 @@ function DatasetView() {
                                               {/* Parser info */}
                                               {(details.parser ||
                                                 result.parsers_used?.length >
-                                                  0) && (
-                                                <div>
-                                                  <span className="font-medium text-foreground">
-                                                    Parser:
-                                                  </span>{' '}
-                                                  <span className="font-mono text-xs">
-                                                    {result.parsers_used?.join(
-                                                      ', '
-                                                    ) || details.parser}
-                                                  </span>
-                                                </div>
-                                              )}
+                                                0) && (
+                                                  <div>
+                                                    <span className="font-medium text-foreground">
+                                                      Parser:
+                                                    </span>{' '}
+                                                    <span className="font-mono text-xs">
+                                                      {result.parsers_used?.join(
+                                                        ', '
+                                                      ) || details.parser}
+                                                    </span>
+                                                  </div>
+                                                )}
 
                                               {/* Embedder */}
                                               {(details.embedder ||
                                                 result.embedder) && (
-                                                <div>
-                                                  <span className="font-medium text-foreground">
-                                                    Embedder:
-                                                  </span>{' '}
-                                                  <span className="font-mono text-xs">
-                                                    {result.embedder ||
-                                                      details.embedder}
-                                                  </span>
-                                                </div>
-                                              )}
+                                                  <div>
+                                                    <span className="font-medium text-foreground">
+                                                      Embedder:
+                                                    </span>{' '}
+                                                    <span className="font-mono text-xs">
+                                                      {result.embedder ||
+                                                        details.embedder}
+                                                    </span>
+                                                  </div>
+                                                )}
 
                                               {/* Extractors - inline */}
                                               {(details.extractors?.length >
                                                 0 ||
                                                 result.extractors_applied
                                                   ?.length > 0) && (
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="font-medium text-foreground">
-                                                    Extractors:
-                                                  </span>
-                                                  <div className="inline-flex flex-wrap gap-1">
-                                                    {(
-                                                      result.extractors_applied ||
-                                                      details.extractors ||
-                                                      []
-                                                    ).map(
-                                                      (
-                                                        ext: string,
-                                                        i: number
-                                                      ) => (
-                                                        <Badge
-                                                          key={i}
-                                                          variant="outline"
-                                                          size="sm"
-                                                          className="rounded font-mono text-[10px] px-1.5 py-0"
-                                                        >
-                                                          {ext}
-                                                        </Badge>
-                                                      )
-                                                    )}
+                                                  <div className="flex items-center gap-1.5">
+                                                    <span className="font-medium text-foreground">
+                                                      Extractors:
+                                                    </span>
+                                                    <div className="inline-flex flex-wrap gap-1">
+                                                      {(
+                                                        result.extractors_applied ||
+                                                        details.extractors ||
+                                                        []
+                                                      ).map(
+                                                        (
+                                                          ext: string,
+                                                          i: number
+                                                        ) => (
+                                                          <Badge
+                                                            key={i}
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="rounded font-mono text-[10px] px-1.5 py-0"
+                                                          >
+                                                            {ext}
+                                                          </Badge>
+                                                        )
+                                                      )}
+                                                    </div>
                                                   </div>
-                                                </div>
-                                              )}
+                                                )}
                                             </div>
 
                                             {/* Document IDs if stored */}
                                             {result.document_ids &&
                                               result.document_ids.length >
-                                                0 && (
+                                              0 && (
                                                 <div className="text-muted-foreground ml-5">
                                                   <span className="font-medium text-foreground">
                                                     Document IDs:
@@ -1654,7 +1661,7 @@ function DatasetView() {
                               {taskStatus.meta?.progress
                                 ? `Processing ${taskStatus.meta.progress}%`
                                 : taskStatus.meta?.current &&
-                                    taskStatus.meta?.total
+                                  taskStatus.meta?.total
                                   ? `Processing ${Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)}%`
                                   : 'Processing...'}
                             </>
@@ -2071,11 +2078,11 @@ function DatasetView() {
                   accept={
                     fileTypeFilter
                       ? fileTypeFilter
-                          .split(',')
-                          .map(s => s.trim())
-                          .filter(Boolean)
-                          .map(ext => (ext.startsWith('.') ? ext : `.${ext}`))
-                          .join(',')
+                        .split(',')
+                        .map(s => s.trim())
+                        .filter(Boolean)
+                        .map(ext => (ext.startsWith('.') ? ext : `.${ext}`))
+                        .join(',')
                       : undefined
                   }
                   onChange={async e => {
@@ -2250,14 +2257,13 @@ function DatasetView() {
                                           }))
                                         }, 1500)
                                       }}
-                                      className={`text-xs text-left ${
-                                        copyStatus?.[f.id] === 'Copied!'
-                                          ? 'text-green-600'
-                                          : copyStatus?.[f.id] ===
-                                              'Failed to copy'
-                                            ? 'text-red-600'
-                                            : 'text-blue-600 hover:text-blue-800'
-                                      }`}
+                                      className={`text-xs text-left ${copyStatus?.[f.id] === 'Copied!'
+                                        ? 'text-green-600'
+                                        : copyStatus?.[f.id] ===
+                                          'Failed to copy'
+                                          ? 'text-red-600'
+                                          : 'text-blue-600 hover:text-blue-800'
+                                        }`}
                                       title="Click to copy full hash"
                                     >
                                       {copyStatus?.[f.id] || 'Copy full hash'}
@@ -2273,23 +2279,23 @@ function DatasetView() {
                                   <div className="flex items-center gap-6">
                                     {fileUploadStatuses.find(s => s.id === f.id)
                                       ?.status === 'uploading' && (
-                                      <div className="flex items-center gap-1 text-muted-foreground">
-                                        <FontIcon
-                                          type="fade"
-                                          className="w-4 h-4"
-                                        />
-                                        <span className="text-xs">
-                                          Processing
-                                        </span>
-                                      </div>
-                                    )}
+                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                          <FontIcon
+                                            type="fade"
+                                            className="w-4 h-4"
+                                          />
+                                          <span className="text-xs">
+                                            Processing
+                                          </span>
+                                        </div>
+                                      )}
                                     {fileUploadStatuses.find(s => s.id === f.id)
                                       ?.status === 'success' && (
-                                      <FontIcon
-                                        type="checkmark-outline"
-                                        className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                                      />
-                                    )}
+                                        <FontIcon
+                                          type="checkmark-outline"
+                                          className="w-4 h-4 text-teal-600 dark:text-teal-400"
+                                        />
+                                      )}
                                     <button
                                       className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
                                       onClick={() =>
@@ -2305,7 +2311,7 @@ function DatasetView() {
                                       title="Delete file"
                                     >
                                       {f.fullHash &&
-                                      isFileDeleting(f.fullHash) ? (
+                                        isFileDeleting(f.fullHash) ? (
                                         <span className="text-xs">...</span>
                                       ) : (
                                         <FontIcon
