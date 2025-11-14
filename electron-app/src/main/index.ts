@@ -12,6 +12,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { promisify } from 'util'
 import { exec } from 'child_process'
+import axios from 'axios'
 
 const execAsync = promisify(exec)
 
@@ -306,7 +307,6 @@ class LlamaFarmApp {
       progress: 80
     })
 
-    const axios = require('axios')
     const maxAttempts = 30 // 30 attempts * 1 second = 30 seconds
     let attempts = 0
 
