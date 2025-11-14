@@ -1112,6 +1112,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case toolCallMsg:
+		// Skip processing tool call if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping toolCallMsg due to intentional cancellation")
+			break
+		}
+
 		// Tool calls are added as separate assistant messages
 		utils.LogDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
 		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
@@ -1130,6 +1136,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case responseMsg:
 		if m.err != nil {
 			m.err = nil
+			break
+		}
+
+		// Skip processing response if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping responseMsg due to intentional cancellation")
 			break
 		}
 
