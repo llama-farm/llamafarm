@@ -30,10 +30,15 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.event.inputs.version }}"
           else
-            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.event.release.tag_name }}"
           fi
+          VERSION_NO_V="${VERSION#v}"
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
+          echo "Using version: ${VERSION} (no v: ${VERSION_NO_V})"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -139,26 +144,49 @@ jobs:
           echo "Build artifacts in release/${VERSION_NO_V}:"
           ls -lh "release/${VERSION_NO_V}/"
 
+      - name: Verify build artifacts exist
+        working-directory: electron-app
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+
+          echo "Checking for required artifacts in release/${VERSION_NO_V}/"
+
+          # Check for required DMG files
+          if ! ls "release/${VERSION_NO_V}"/*.dmg 1> /dev/null 2>&1; then
+            echo "❌ ERROR: No DMG files found!"
+            exit 1
+          fi
+
+          # Check for required ZIP files
+          if ! ls "release/${VERSION_NO_V}"/*-mac.zip 1> /dev/null 2>&1; then
+            echo "❌ ERROR: No ZIP files found!"
+            exit 1
+          fi
+
+          echo "✅ All required artifacts found"
+          ls -lh "release/${VERSION_NO_V}"/*.dmg "release/${VERSION_NO_V}"/*-mac.zip
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           files: |
-            electron-app/release/${{ steps.version.outputs.version }}/*.dmg
-            electron-app/release/${{ steps.version.outputs.version }}/*.dmg.sha256
-            electron-app/release/${{ steps.version.outputs.version }}/*.dmg.blockmap
-            electron-app/release/${{ steps.version.outputs.version }}/*-mac.zip
-            electron-app/release/${{ steps.version.outputs.version }}/*-mac.zip.sha256
-            electron-app/release/${{ steps.version.outputs.version }}/*-mac.zip.blockmap
-          fail_on_unmatched_files: false
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg.sha256
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg.blockmap
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*-mac.zip
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*-mac.zip.sha256
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*-mac.zip.blockmap
+          fail_on_unmatched_files: true
           append_body: true
           body: |
 
             ## Desktop App (macOS)
 
             Download the appropriate DMG for your Mac:
-            - **Apple Silicon (M1/M2/M3)**: `LlamaFarm-${{ steps.version.outputs.version }}-arm64.dmg`
-            - **Intel**: `LlamaFarm-${{ steps.version.outputs.version }}.dmg`
+            - **Apple Silicon (M1/M2/M3)**: `LlamaFarm-${{ steps.version.outputs.version_no_v }}-arm64.dmg`
+            - **Intel**: `LlamaFarm-${{ steps.version.outputs.version_no_v }}.dmg`
 
             ### Installation
             1. Download the DMG file
@@ -179,10 +207,15 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.event.inputs.version }}"
           else
-            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+            VERSION="${{ github.event.release.tag_name }}"
           fi
+          VERSION_NO_V="${VERSION#v}"
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
+          echo "Using version: ${VERSION} (no v: ${VERSION_NO_V})"
 
       - name: Wait for release assets
         run: |
@@ -198,34 +231,69 @@ jobs:
           DMG_URL="https://github.com/llama-farm/llamafarm/releases/download/${VERSION}/LlamaFarm-${VERSION_NO_V}-arm64.dmg"
           echo "Downloading from: $DMG_URL"
 
-          curl -L -o LlamaFarm.dmg "$DMG_URL" || {
-            echo "⚠️  Download failed, but this might be expected if the release was just created"
-            exit 0
-          }
+          # Download with retries
+          MAX_ATTEMPTS=3
+          ATTEMPT=0
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
 
-          # Verify the DMG exists and has content
-          if [ -f "LlamaFarm.dmg" ]; then
-            FILE_SIZE=$(stat -f%z "LlamaFarm.dmg")
-            echo "✅ DMG downloaded successfully (${FILE_SIZE} bytes)"
-
-            # Mount the DMG to verify it's valid
-            hdiutil attach LlamaFarm.dmg -mountpoint /Volumes/LlamaFarm || {
-              echo "❌ Failed to mount DMG"
-              exit 1
-            }
-
-            # Check if the app exists
-            if [ -d "/Volumes/LlamaFarm/LlamaFarm.app" ]; then
-              echo "✅ LlamaFarm.app found in DMG"
-            else
-              echo "❌ LlamaFarm.app not found in DMG"
-              hdiutil detach /Volumes/LlamaFarm
-              exit 1
+            if curl -L -f -o LlamaFarm.dmg "$DMG_URL"; then
+              echo "✅ Download successful"
+              break
             fi
 
-            # Unmount
-            hdiutil detach /Volumes/LlamaFarm
-            echo "✅ DMG is valid"
-          else
-            echo "⚠️  DMG not downloaded, skipping verification"
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              echo "⚠️  Download failed, retrying in 10 seconds..."
+              sleep 10
+            else
+              echo "❌ ERROR: Failed to download DMG after $MAX_ATTEMPTS attempts"
+              echo "The release may not have been published correctly."
+              exit 1
+            fi
+          done
+
+          # Verify the DMG exists and has content
+          if [ ! -f "LlamaFarm.dmg" ]; then
+            echo "❌ ERROR: DMG file not found after download"
+            exit 1
           fi
+
+          FILE_SIZE=$(stat -f%z "LlamaFarm.dmg")
+          echo "✅ DMG downloaded successfully (${FILE_SIZE} bytes)"
+
+          # Verify minimum file size (DMG should be at least 50MB)
+          MIN_SIZE=$((50 * 1024 * 1024))
+          if [ $FILE_SIZE -lt $MIN_SIZE ]; then
+            echo "❌ ERROR: DMG file is too small (${FILE_SIZE} bytes < ${MIN_SIZE} bytes)"
+            echo "The file may be corrupted or incomplete"
+            exit 1
+          fi
+
+          # Mount the DMG to verify it's valid
+          hdiutil attach LlamaFarm.dmg -mountpoint /Volumes/LlamaFarm || {
+            echo "❌ ERROR: Failed to mount DMG"
+            exit 1
+          }
+
+          # Check if the app exists
+          if [ ! -d "/Volumes/LlamaFarm/LlamaFarm.app" ]; then
+            echo "❌ ERROR: LlamaFarm.app not found in DMG"
+            hdiutil detach /Volumes/LlamaFarm 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "✅ LlamaFarm.app found in DMG"
+
+          # Verify app bundle structure
+          if [ ! -f "/Volumes/LlamaFarm/LlamaFarm.app/Contents/MacOS/LlamaFarm" ]; then
+            echo "❌ ERROR: App binary not found in bundle"
+            hdiutil detach /Volumes/LlamaFarm
+            exit 1
+          fi
+
+          echo "✅ App bundle structure is valid"
+
+          # Unmount
+          hdiutil detach /Volumes/LlamaFarm
+          echo "✅ DMG verification complete - all checks passed"
