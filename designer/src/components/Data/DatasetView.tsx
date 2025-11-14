@@ -364,16 +364,16 @@ function DatasetView() {
         typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
       const size =
         typeof fileObj === 'object' &&
-        fileObj !== null &&
-        'size' in fileObj &&
-        fileObj.size !== undefined
+          fileObj !== null &&
+          'size' in fileObj &&
+          fileObj.size !== undefined
           ? fileObj.size
           : 'unknown'
       const lastModified =
         typeof fileObj === 'object' &&
-        fileObj !== null &&
-        'lastModified' in fileObj &&
-        fileObj.lastModified !== undefined
+          fileObj !== null &&
+          'lastModified' in fileObj &&
+          fileObj.lastModified !== undefined
           ? fileObj.lastModified
           : 'unknown'
       return {
