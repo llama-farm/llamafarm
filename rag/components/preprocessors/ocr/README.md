@@ -8,10 +8,10 @@ High-accuracy OCR with layout analysis, table extraction, and formula recognitio
 
 ```bash
 # Install OCR dependencies (CPU version)
-uv pip install --extra ocr
+uv pip install '.[ocr]'
 
 # For GPU acceleration (optional)
-uv pip install --extra ocr-gpu
+uv pip install '.[ocr-gpu]'
 ```
 
 ### Pre-Download Models (Recommended)
@@ -212,7 +212,7 @@ Install GPU-enabled PaddlePaddle:
 uv pip install paddlepaddle-gpu
 
 # Or use ocr-gpu extra
-uv pip install --extra ocr-gpu
+uv pip install '.[ocr-gpu]'
 ```
 
 ## Model Files Location

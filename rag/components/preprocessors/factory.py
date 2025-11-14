@@ -233,9 +233,11 @@ class PreprocessorFactory:
                 deps = info.get("dependencies", {})
                 required_deps = deps.get("required", [])
                 if required_deps:
+                    # Quote each dependency to handle version specifiers like >=
+                    quoted_deps = ' '.join(f"'{dep}'" for dep in required_deps)
                     raise ImportError(
                         f"Preprocessor '{preprocessor_name}' requires missing dependencies: {required_deps}\n"
-                        f"Install with: uv pip install {' '.join(required_deps)}"
+                        f"Install with: uv pip install {quoted_deps}"
                     )
 
             raise ValueError(

@@ -54,6 +54,8 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
             from paddleocr import PaddleOCR
 
             # PaddleOCR v3 has a simplified API
+            # Note: use_gpu and use_angle_cls are stored but v3 API handles GPU automatically
+            # These config values are kept for potential use with v2 API or future versions
             self.ocr = PaddleOCR(
                 lang=self.lang,
             )
@@ -221,8 +223,9 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
             all_text = []
             all_layout = []
             all_tables = []
+            num_pages = len(doc)  # Capture page count before closing
 
-            for page_num in range(len(doc)):
+            for page_num in range(num_pages):
                 page = doc[page_num]
 
                 # Convert page to image (high DPI for better OCR)
@@ -271,7 +274,7 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
             result_metadata = {
                 "ocr_engine": "PaddleOCR",
                 "language": self.lang,
-                "num_pages": len(doc),
+                "num_pages": num_pages,
                 "layout": all_layout if self.detect_layout else None,
                 "table_count": len(all_tables),
                 "tables": all_tables or None,

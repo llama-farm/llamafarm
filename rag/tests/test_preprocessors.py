@@ -40,14 +40,20 @@ class TestPreprocessorFactory:
         preprocessor_class = PreprocessorFactory.load_preprocessor_class(
             "MarkItDownPreprocessor"
         )
-        assert preprocessor_class is not None
+        # May return None if markitdown is not installed (optional dependency)
+        if preprocessor_class is None:
+            pytest.skip("MarkItDown preprocessor not available (optional dependency)")
         assert issubclass(preprocessor_class, BasePreprocessor)
 
     def test_create_preprocessor(self):
         """Test creating a preprocessor instance."""
-        preprocessor = PreprocessorFactory.create(
-            "MarkItDownPreprocessor", config={}
-        )
+        try:
+            preprocessor = PreprocessorFactory.create(
+                "MarkItDownPreprocessor", config={}
+            )
+        except ImportError as e:
+            pytest.skip(f"MarkItDown preprocessor not available: {e}")
+
         assert preprocessor is not None
         assert isinstance(preprocessor, BasePreprocessor)
 

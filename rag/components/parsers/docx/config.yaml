@@ -63,7 +63,7 @@ parsers:
       required:
         - llama-index
       optional:
-        - docx  # python-docx package, imports as 'docx'
+        - python-docx  # Pip package name (imports as 'docx')
 
     default_config:
       chunk_size: 1000

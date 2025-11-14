@@ -236,18 +236,48 @@ class ToolAwareParserFactory:
             if parser_class:
                 return parser_class(name=parser_name, config=config)
             else:
-                # Parser not found - FAIL with clear error message
+                # Parser load failed - determine why
                 parser_info = cls.get_parser_info(parser_name)
-                if parser_info:
-                    deps = parser_info.get("dependencies", {})
-                    required_deps = deps.get("required", [])
-                    if required_deps:
-                        raise ImportError(
-                            f"Parser '{parser_name}' requires missing dependencies: {required_deps}\n"
-                            f"Install with: uv pip install {' '.join(required_deps)}"
-                        )
+                if not parser_info:
+                    raise ValueError(
+                        f"Parser '{parser_name}' not found. Available parsers: {list(cls.list_parsers())}"
+                    )
+
+                # Check if dependencies are actually missing
+                deps = parser_info.get("dependencies", {})
+                required_deps = deps.get("required", [])
+                missing_deps: list[str] = []
+
+                # Package name to import name mapping
+                PACKAGE_TO_IMPORT = {
+                    "python-docx": "docx",
+                    "llama-index-readers-file": "llama_index.readers.file",
+                    "beautifulsoup4": "bs4",
+                    "opencv-python": "cv2",
+                    "pillow": "PIL",
+                    "scikit-learn": "sklearn",
+                }
+
+                for dep in required_deps:
+                    import_name = PACKAGE_TO_IMPORT.get(dep, dep.replace("-", "_"))
+                    try:
+                        __import__(import_name)
+                    except ImportError:
+                        missing_deps.append(dep)
+
+                if missing_deps:
+                    # Dependencies are actually missing - provide install guidance
+                    # Quote each dependency to handle version specifiers like >=
+                    quoted_deps = ' '.join(f"'{dep}'" for dep in missing_deps)
+                    raise ImportError(
+                        f"Parser '{parser_name}' requires missing dependencies: {missing_deps}\n"
+                        f"Install with: uv pip install {quoted_deps}"
+                    )
+
+                # Dependencies present but implementation not found
                 raise ValueError(
-                    f"Parser '{parser_name}' not found. Available parsers: {list(cls.list_parsers())}"
+                    f"Parser '{parser_name}' implementation not found. "
+                    f"Check that the parser file exists in components/parsers/{parser_info.get('parser_type', 'unknown')}/"
                 )
 
         # If file_type and/or tool provided, find matching parser
