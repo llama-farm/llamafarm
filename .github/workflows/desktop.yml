@@ -109,32 +109,15 @@ jobs:
           "
           echo "✅ Updated app version to ${{ steps.version.outputs.version }}"
 
-      - name: Update package.json for signing
-        working-directory: electron-app
-        run: |
-          # Remove identity: null from package.json to enable signing
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            if (pkg.build && pkg.build.mac && pkg.build.mac.identity === null) {
-              delete pkg.build.mac.identity;
-              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-              console.log('✅ Removed identity: null to enable signing');
-            }
-          "
-
-      - name: Build and Sign Electron app
+      - name: Build Electron app (unsigned for PR testing)
         working-directory: electron-app
         env:
-          # Certificate (same as CLI workflow and release workflow)
-          CSC_LINK: ${{ secrets.APPLE_CERT_DATA }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
-          # Notarization via App Store Connect API
-          APPLE_API_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+          # SECURITY: Disable signing for PR builds to prevent exposing secrets to forks
+          # Only release workflow (release-desktop.yml) should sign builds
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
-          echo "Building and signing Electron app for ${{ matrix.arch }}..."
+          echo "Building unsigned Electron app for ${{ matrix.arch }}..."
+          echo "Note: PR builds are unsigned for security (prevents exposing secrets to forks)"
           npm run build
 
           if [ "${{ matrix.arch }}" == "arm64" ]; then
@@ -142,7 +125,7 @@ jobs:
           else
             npx electron-builder --mac --x64
           fi
-          echo "✅ Electron app built and signed successfully"
+          echo "✅ Electron app built successfully (unsigned)"
 
       - name: List build artifacts
         working-directory: electron-app
