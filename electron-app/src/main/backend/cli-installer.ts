@@ -42,7 +42,7 @@ export class CLIInstaller {
       }
 
       // Fallback: check if it's in system PATH
-      const { stdout } = await execAsync('which lf')
+const { stdout } = await execAsync(process.platform === 'win32' ? 'where lf' : 'which lf')
       if (stdout.trim()) {
         this.cliPath = stdout.trim()
         return true
