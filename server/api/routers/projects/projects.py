@@ -687,25 +687,65 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             file_statuses = progress["file_statuses"]
 
             # Determine overall state
-            if failed > 0 and completed == total:
-                response.state = "FAILURE"
-                response.error = f"{failed} of {total} tasks failed"
-            elif completed == total:
-                response.state = "SUCCESS"
-                # Aggregate results from successful tasks
+            if completed == total:
+                # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
-                for child in children:
+                skipped_count = 0
+                for i, child in enumerate(children):
                     if child.successful():
                         try:
-                            results.append(child.result)
+                            result_data = child.result
+                            results.append(result_data)
+                            # Check if this file was skipped by examining its details
+                            if isinstance(result_data, dict):
+                                details = result_data.get("details", {})
+                                # Check both details.status and details.result.status for "skipped"
+                                if details.get("status") == "skipped" or (
+                                    isinstance(details.get("result"), dict)
+                                    and details["result"].get("status") == "skipped"
+                                ):
+                                    skipped_count += 1
                         except Exception:
                             pass
+                    elif child.failed():
+                        # Also collect failed task results
+                        try:
+                            error_info = str(child.result)
+                            # Get file hash from file_hashes if available
+                            file_hash = (
+                                file_hashes[i]
+                                if i < len(file_hashes)
+                                else f"unknown_file_{i}"
+                            )
+                            # Create a failed result entry
+                            failed_result = {
+                                "file_hash": file_hash,
+                                "success": False,
+                                "error": error_info,
+                                "details": {
+                                    "status": "failed",
+                                    "filename": file_hash,
+                                    "error": error_info,
+                                },
+                            }
+                            results.append(failed_result)
+                        except Exception as e:
+                            logger.error(f"Error processing failed child result: {e}")
+
+                # Set result with all file details (successful, skipped, and failed)
                 response.result = {
-                    "processed_files": successful,
+                    "processed_files": successful - skipped_count,
                     "failed_files": failed,
-                    "skipped_files": 0,
+                    "skipped_files": skipped_count,
                     "details": results,
                 }
+
+                # Set state based on whether any files failed
+                if failed > 0:
+                    response.state = "FAILURE"
+                    response.error = f"{failed} of {total} tasks failed"
+                else:
+                    response.state = "SUCCESS"
             else:
                 response.state = "PROGRESS"
                 response.meta = {
@@ -731,7 +771,8 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             )
 
             # Process children using helper function (no file_hashes available from GroupResult)
-            progress = _process_group_children(children, [], task_id, logger)
+            file_hashes = []  # Initialize empty list since GroupResult doesn't provide file hashes
+            progress = _process_group_children(children, file_hashes, task_id, logger)
             total = progress["total"]
             completed = progress["completed"]
             failed = progress["failed"]
@@ -739,25 +780,65 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             file_statuses = progress["file_statuses"]
 
             # Determine overall state
-            if failed > 0 and completed == total:
-                response.state = "FAILURE"
-                response.error = f"{failed} of {total} tasks failed"
-            elif completed == total:
-                response.state = "SUCCESS"
-                # Aggregate results from successful tasks
+            if completed == total:
+                # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
-                for child in children:
+                skipped_count = 0
+                for i, child in enumerate(children):
                     if child.successful():
                         try:
-                            results.append(child.result)
+                            result_data = child.result
+                            results.append(result_data)
+                            # Check if this file was skipped by examining its details
+                            if isinstance(result_data, dict):
+                                details = result_data.get("details", {})
+                                # Check both details.status and details.result.status for "skipped"
+                                if details.get("status") == "skipped" or (
+                                    isinstance(details.get("result"), dict)
+                                    and details["result"].get("status") == "skipped"
+                                ):
+                                    skipped_count += 1
                         except Exception:
                             pass
+                    elif child.failed():
+                        # Also collect failed task results
+                        try:
+                            error_info = str(child.result)
+                            # Get file hash from file_hashes if available
+                            file_hash = (
+                                file_hashes[i]
+                                if i < len(file_hashes)
+                                else f"unknown_file_{i}"
+                            )
+                            # Create a failed result entry
+                            failed_result = {
+                                "file_hash": file_hash,
+                                "success": False,
+                                "error": error_info,
+                                "details": {
+                                    "status": "failed",
+                                    "filename": file_hash,
+                                    "error": error_info,
+                                },
+                            }
+                            results.append(failed_result)
+                        except Exception as e:
+                            logger.error(f"Error processing failed child result: {e}")
+
+                # Set result with all file details (successful, skipped, and failed)
                 response.result = {
-                    "processed_files": successful,
+                    "processed_files": successful - skipped_count,
                     "failed_files": failed,
-                    "skipped_files": 0,
+                    "skipped_files": skipped_count,
                     "details": results,
                 }
+
+                # Set state based on whether any files failed
+                if failed > 0:
+                    response.state = "FAILURE"
+                    response.error = f"{failed} of {total} tasks failed"
+                else:
+                    response.state = "SUCCESS"
             else:
                 response.state = "PROGRESS"
                 response.meta = {

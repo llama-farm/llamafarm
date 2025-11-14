@@ -53,7 +53,8 @@ const Data = () => {
 
   // File drag-and-drop state management
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const [isSelectDatasetModalOpen, setIsSelectDatasetModalOpen] = useState(false)
+  const [isSelectDatasetModalOpen, setIsSelectDatasetModalOpen] =
+    useState(false)
   const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadingFileCount, setUploadingFileCount] = useState(0)
@@ -123,7 +124,7 @@ const Data = () => {
   const createDatasetMutation = useCreateDataset()
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
-  
+
   // Custom upload mutation with proper AbortSignal handling
   const uploadMutation = useMutation({
     mutationFn: async ({
@@ -140,9 +141,15 @@ const Data = () => {
       signal?: AbortSignal
     }) => {
       // Use the API service which properly handles the signal
-      return await uploadFileToDataset(namespace, project, dataset, file, signal)
+      return await uploadFileToDataset(
+        namespace,
+        project,
+        dataset,
+        file,
+        signal
+      )
     },
-    onError: (error) => {
+    onError: error => {
       // Don't show error toast for aborted uploads
       if (
         (error instanceof Error && error.name === 'AbortError') ||
@@ -167,8 +174,13 @@ const Data = () => {
     activeProject?.project || ''
   )
 
-  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
-  const getDatasetsLocation = useCallback(() => ({ type: 'datasets' as const }), [])
+  const projectConfig = (projectResp as any)?.project?.config as
+    | ProjectConfig
+    | undefined
+  const getDatasetsLocation = useCallback(
+    () => ({ type: 'datasets' as const }),
+    []
+  )
   const { configPointer, handleModeChange } = useConfigPointer({
     mode,
     setMode,
@@ -343,7 +355,7 @@ const Data = () => {
         data_processing_strategy: newDatasetDataProcessingStrategy || 'default',
         database: newDatasetDatabase || 'default',
       })
-      
+
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
@@ -378,218 +390,280 @@ const Data = () => {
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragging(false)
 
-    const files = Array.from(e.dataTransfer.files)
+      const files = Array.from(e.dataTransfer.files)
 
-    if (files.length === 0) {
-      return
-    }
-
-    // Comprehensive file validation with extension, MIME type, and content verification
-    const validationResults = await Promise.all(
-      files.map(async (file) => ({
-        file,
-        validation: await isValidFile(file),
-      }))
-    )
-
-    const validFiles = validationResults
-      .filter(result => result.validation.valid)
-      .map(result => result.file)
-
-    const invalidFiles = validationResults.filter(result => !result.validation.valid)
-
-    if (validFiles.length === 0) {
-      const reasons = invalidFiles.map(r => `${r.file.name}: ${r.validation.reason}`).join('; ')
-      toast({
-        message: `No valid files to upload. ${reasons}`,
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (invalidFiles.length > 0) {
-      const reasons = invalidFiles.slice(0, 3).map(r => `${r.file.name}: ${r.validation.reason}`)
-      const message = invalidFiles.length <= 3
-        ? reasons.join('; ')
-        : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
-      
-      toast({
-        message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
-        variant: 'default',
-      })
-    }
-
-    setPendingFiles(validFiles)
-    setIsSelectDatasetModalOpen(true)
-  }, [toast])
-
-  // Upload files in batches with cancellation support
-  const uploadFilesInBatches = useCallback(async (
-    files: File[],
-    datasetId: string,
-    namespace: string,
-    project: string,
-    batchSize: number = UPLOAD_BATCH_SIZE
-  ) => {
-    const results = []
-    let cancelled = false
-
-    for (let i = 0; i < files.length; i += batchSize) {
-      // CHECK FOR CANCELLATION AT START OF EACH BATCH
-      if (cancelled) {
-        // Add cancelled results for remaining files
-        const remainingFiles = files.slice(i)
-        remainingFiles.forEach(file => {
-          results.push({
-            file: file.name,
-            success: false,
-            error: new Error('Cancelled'),
-            cancelled: true,
-          })
-        })
-        break
-      }
-
-      const batch = files.slice(i, i + batchSize)
-      const batchResults = await Promise.all(
-        batch.map(async (file) => {
-          const controller = new AbortController()
-          activeUploadControllersRef.current.push(controller)
-
-          try {
-            const result = await uploadMutation.mutateAsync({
-              namespace,
-              project,
-              dataset: datasetId,
-              file,
-              signal: controller.signal,
-            })
-            return { file: file.name, success: true, result }
-          } catch (error) {
-            // Check if this is an abort/cancellation error
-            if (
-              (error instanceof Error && error.name === 'AbortError') ||
-              (error as any)?.code === 'ERR_CANCELED' ||
-              (error as any)?.message?.includes('cancel')
-            ) {
-              cancelled = true // Set flag to stop processing more batches
-              return { file: file.name, success: false, error, cancelled: true }
-            }
-            return { file: file.name, success: false, error }
-          } finally {
-            activeUploadControllersRef.current = activeUploadControllersRef.current.filter(c => c !== controller)
-          }
-        })
-      )
-
-      results.push(...batchResults)
-
-      // Check if any upload in this batch was cancelled
-      if (batchResults.some(r => (r as any).cancelled)) {
-        cancelled = true
-        // Add cancelled results for remaining files
-        const remainingFiles = files.slice(i + batchSize)
-        remainingFiles.forEach(file => {
-          results.push({
-            file: file.name,
-            success: false,
-            error: new Error('Cancelled'),
-            cancelled: true,
-          })
-        })
-        break
-      }
-    }
-
-    return results
-  }, [uploadMutation])
-
-  // Handle file upload to selected dataset
-  const handleDatasetSelect = useCallback(async (datasetId: string, datasetName: string) => {
-    if (!activeProject || pendingFiles.length === 0) {
-      return
-    }
-
-    const fileCount = pendingFiles.length // Store count before clearing
-    setUploadingFileCount(fileCount)
-    setIsUploading(true)
-    setIsSelectDatasetModalOpen(false)
-
-    const { namespace, project } = activeProject
-
-    try {
-      // Upload all files to the selected dataset in batches
-      const results = await uploadFilesInBatches(
-        pendingFiles,
-        datasetId,
-        namespace,
-        project
-      )
-
-      const cancelled = results.some(r => (r as any).cancelled)
-      const failures = results.filter(r => !r.success && !(r as any).cancelled)
-      const successes = results.filter(r => r.success)
-
-      // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
-      if (cancelled) {
+      if (files.length === 0) {
         return
       }
 
-      // Show appropriate toast based on results
-      if (failures.length > 0 && successes.length > 0) {
+      // Comprehensive file validation with extension, MIME type, and content verification
+      const validationResults = await Promise.all(
+        files.map(async file => ({
+          file,
+          validation: await isValidFile(file),
+        }))
+      )
+
+      const validFiles = validationResults
+        .filter(result => result.validation.valid)
+        .map(result => result.file)
+
+      const invalidFiles = validationResults.filter(
+        result => !result.validation.valid
+      )
+
+      if (validFiles.length === 0) {
+        const reasons = invalidFiles
+          .map(r => `${r.file.name}: ${r.validation.reason}`)
+          .join('; ')
         toast({
-          message: `Uploaded ${successes.length} of ${fileCount} file(s). Failed: ${failures.map(f => f.file).join(', ')}`,
+          message: `No valid files to upload. ${reasons}`,
           variant: 'destructive',
         })
-      } else if (failures.length > 0) {
+        return
+      }
+
+      if (invalidFiles.length > 0) {
+        const reasons = invalidFiles
+          .slice(0, 3)
+          .map(r => `${r.file.name}: ${r.validation.reason}`)
+        const message =
+          invalidFiles.length <= 3
+            ? reasons.join('; ')
+            : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+
         toast({
-          message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
-          variant: 'destructive',
-        })
-      } else {
-        toast({
-          message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
+          message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
           variant: 'default',
         })
       }
 
-      // Navigate to the dataset view to see uploaded files (only if some succeeded)
-      if (successes.length > 0) {
-        // Explicitly refetch to ensure fresh data before navigating
-        await refetchDatasets()
-        navigate(`/chat/data/${datasetId}`)
+      setPendingFiles(validFiles)
+      setIsSelectDatasetModalOpen(true)
+    },
+    [toast]
+  )
+
+  // Upload files in batches with cancellation support
+  const uploadFilesInBatches = useCallback(
+    async (
+      files: File[],
+      datasetId: string,
+      namespace: string,
+      project: string,
+      batchSize: number = UPLOAD_BATCH_SIZE
+    ) => {
+      const results = []
+      let cancelled = false
+
+      for (let i = 0; i < files.length; i += batchSize) {
+        // CHECK FOR CANCELLATION AT START OF EACH BATCH
+        if (cancelled) {
+          // Add cancelled results for remaining files
+          const remainingFiles = files.slice(i)
+          remainingFiles.forEach(file => {
+            results.push({
+              file: file.name,
+              success: false,
+              error: new Error('Cancelled'),
+              cancelled: true,
+            })
+          })
+          break
+        }
+
+        const batch = files.slice(i, i + batchSize)
+        const batchResults = await Promise.all(
+          batch.map(async file => {
+            const controller = new AbortController()
+            activeUploadControllersRef.current.push(controller)
+
+            try {
+              const result = await uploadMutation.mutateAsync({
+                namespace,
+                project,
+                dataset: datasetId,
+                file,
+                signal: controller.signal,
+              })
+              return {
+                file: file.name,
+                success: true,
+                result,
+                skipped: result.skipped || false,
+              }
+            } catch (error) {
+              // Check if this is an abort/cancellation error
+              if (
+                (error instanceof Error && error.name === 'AbortError') ||
+                (error as any)?.code === 'ERR_CANCELED' ||
+                (error as any)?.message?.includes('cancel')
+              ) {
+                cancelled = true // Set flag to stop processing more batches
+                return {
+                  file: file.name,
+                  success: false,
+                  error,
+                  cancelled: true,
+                }
+              }
+              return { file: file.name, success: false, error }
+            } finally {
+              activeUploadControllersRef.current =
+                activeUploadControllersRef.current.filter(c => c !== controller)
+            }
+          })
+        )
+
+        results.push(...batchResults)
+
+        // Check if any upload in this batch was cancelled
+        if (batchResults.some(r => (r as any).cancelled)) {
+          cancelled = true
+          // Add cancelled results for remaining files
+          const remainingFiles = files.slice(i + batchSize)
+          remainingFiles.forEach(file => {
+            results.push({
+              file: file.name,
+              success: false,
+              error: new Error('Cancelled'),
+              cancelled: true,
+            })
+          })
+          break
+        }
       }
-    } catch (error) {
-      console.error('Upload failed:', error)
-      // Check if error is due to cancellation
-      if (
-        (error as any)?.code === 'ERR_CANCELED' ||
-        (error as any)?.message?.includes('cancel')
-      ) {
-        // Cancellation toast already shown, just return
+
+      return results
+    },
+    [uploadMutation]
+  )
+
+  // Handle file upload to selected dataset
+  const handleDatasetSelect = useCallback(
+    async (datasetId: string, datasetName: string) => {
+      if (!activeProject || pendingFiles.length === 0) {
         return
       }
-      toast({
-        message: error instanceof Error ? error.message : 'Failed to upload files',
-        variant: 'destructive',
-      })
-    } finally {
-      setPendingFiles([])
-      activeUploadControllersRef.current = []
-      setIsUploading(false)
-      setShouldUploadAfterCreate(false)
-      setUploadingFileCount(0)
-      // Reset file input to allow reselecting the same files
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+
+      const fileCount = pendingFiles.length // Store count before clearing
+      setUploadingFileCount(fileCount)
+      setIsUploading(true)
+      setIsSelectDatasetModalOpen(false)
+
+      const { namespace, project } = activeProject
+
+      try {
+        // Upload all files to the selected dataset in batches
+        const results = await uploadFilesInBatches(
+          pendingFiles,
+          datasetId,
+          namespace,
+          project
+        )
+
+        const cancelled = results.some(r => (r as any).cancelled)
+        const failures = results.filter(
+          r => !r.success && !(r as any).cancelled
+        )
+        const successes = results.filter(r => r.success && !(r as any).skipped)
+        const skipped = results.filter(r => r.success && (r as any).skipped)
+
+        // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
+        if (cancelled) {
+          return
+        }
+
+        // Show appropriate toast based on results
+        if (failures.length > 0 && successes.length > 0) {
+          // Partial success: some uploads succeeded, some failed
+          const skippedMsg =
+            skipped.length > 0 ? `, skipped ${skipped.length} duplicate(s)` : ''
+          toast({
+            message: `Uploaded ${successes.length} of ${fileCount} file(s)${skippedMsg}. Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (failures.length > 0 && skipped.length > 0) {
+          // All files either failed or were skipped
+          toast({
+            message: `Upload failed for ${failures.length} file(s), skipped ${skipped.length} duplicate(s). Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (failures.length > 0) {
+          // All files failed
+          toast({
+            message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (skipped.length > 0 && successes.length === 0) {
+          // All files were duplicates
+          toast({
+            message: `All ${skipped.length} file(s) were already in ${datasetName}`,
+            variant: 'default',
+            icon: 'alert-triangle',
+          })
+        } else if (skipped.length > 0) {
+          // Some successes with some skipped
+          toast({
+            message: `Uploaded ${successes.length} file(s) to ${datasetName}, skipped ${skipped.length} duplicate(s)`,
+            variant: 'default',
+          })
+        } else {
+          // All files succeeded
+          toast({
+            message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
+            variant: 'default',
+          })
+        }
+
+        // Navigate to the dataset view to see uploaded files (only if some succeeded)
+        if (successes.length > 0) {
+          // Explicitly refetch to ensure fresh data before navigating
+          await refetchDatasets()
+          navigate(`/chat/data/${datasetId}`)
+        }
+      } catch (error) {
+        console.error('Upload failed:', error)
+        // Check if error is due to cancellation
+        if (
+          (error as any)?.code === 'ERR_CANCELED' ||
+          (error as any)?.message?.includes('cancel')
+        ) {
+          // Cancellation toast already shown, just return
+          return
+        }
+        toast({
+          message:
+            error instanceof Error ? error.message : 'Failed to upload files',
+          variant: 'destructive',
+        })
+      } finally {
+        setPendingFiles([])
+        activeUploadControllersRef.current = []
+        setIsUploading(false)
+        setShouldUploadAfterCreate(false)
+        setUploadingFileCount(0)
+        // Reset file input to allow reselecting the same files
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
       }
-    }
-  }, [activeProject, pendingFiles, uploadFilesInBatches, toast, navigate, refetchDatasets])
+    },
+    [
+      activeProject,
+      pendingFiles,
+      uploadFilesInBatches,
+      toast,
+      navigate,
+      refetchDatasets,
+    ]
+  )
 
   // Note: Auto-upload logic now handled directly in handleCreateDataset
   // No need for fragile useEffect watching datasets.length
@@ -627,7 +701,7 @@ const Data = () => {
 
     // Apply the same comprehensive validation as drag-and-drop
     const validationResults = await Promise.all(
-      files.map(async (file) => ({
+      files.map(async file => ({
         file,
         validation: await isValidFile(file),
       }))
@@ -637,10 +711,14 @@ const Data = () => {
       .filter(result => result.validation.valid)
       .map(result => result.file)
 
-    const invalidFiles = validationResults.filter(result => !result.validation.valid)
+    const invalidFiles = validationResults.filter(
+      result => !result.validation.valid
+    )
 
     if (validFiles.length === 0) {
-      const reasons = invalidFiles.map(r => `${r.file.name}: ${r.validation.reason}`).join('; ')
+      const reasons = invalidFiles
+        .map(r => `${r.file.name}: ${r.validation.reason}`)
+        .join('; ')
       toast({
         message: `No valid files selected. ${reasons}`,
         variant: 'destructive',
@@ -651,11 +729,14 @@ const Data = () => {
     }
 
     if (invalidFiles.length > 0) {
-      const reasons = invalidFiles.slice(0, 3).map(r => `${r.file.name}: ${r.validation.reason}`)
-      const message = invalidFiles.length <= 3
-        ? reasons.join('; ')
-        : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
-      
+      const reasons = invalidFiles
+        .slice(0, 3)
+        .map(r => `${r.file.name}: ${r.validation.reason}`)
+      const message =
+        invalidFiles.length <= 3
+          ? reasons.join('; ')
+          : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+
       toast({
         message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
         variant: 'default',
@@ -672,16 +753,16 @@ const Data = () => {
 
   // Render modal for selecting destination dataset for dropped files
   const renderSelectDatasetModal = () => (
-    <Dialog 
-      open={isSelectDatasetModalOpen} 
-      onOpenChange={(open) => {
+    <Dialog
+      open={isSelectDatasetModalOpen}
+      onOpenChange={open => {
         // Don't clear state if we're transitioning to create dialog
         if (!open && isTransitioningToCreate) {
           setIsTransitioningToCreate(false)
           setIsSelectDatasetModalOpen(open)
           return
         }
-        
+
         setIsSelectDatasetModalOpen(open)
         if (!open) {
           // Only clear if user is actually cancelling (not transitioning)
@@ -694,13 +775,12 @@ const Data = () => {
         <DialogHeader>
           <DialogTitle>Add Files to Dataset</DialogTitle>
           <DialogDescription>
-            {pendingFiles.length === 1 
+            {pendingFiles.length === 1
               ? `Where would you like to add "${pendingFiles[0].name}"?`
-              : `Where would you like to add ${pendingFiles.length} files?`
-            }
+              : `Where would you like to add ${pendingFiles.length} files?`}
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-4 py-4">
           {/* Create new dataset with dropped files */}
           <button
@@ -713,14 +793,25 @@ const Data = () => {
             className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/5 transition-colors"
           >
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <svg
+                className="w-5 h-5 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
             </div>
             <div className="text-left">
               <div className="font-medium">Create New Dataset</div>
               <div className="text-sm text-muted-foreground">
-                Start a new dataset with {pendingFiles.length === 1 ? 'this file' : 'these files'}
+                Start a new dataset with{' '}
+                {pendingFiles.length === 1 ? 'this file' : 'these files'}
               </div>
             </div>
           </button>
@@ -732,15 +823,27 @@ const Data = () => {
                 Or add to existing dataset:
               </div>
               <div className="max-h-60 overflow-y-auto space-y-2">
-                {datasets.map((dataset) => (
+                {datasets.map(dataset => (
                   <button
                     key={dataset.id}
-                    onClick={() => handleDatasetSelect(dataset.id, dataset.name)}
+                    onClick={() =>
+                      handleDatasetSelect(dataset.id, dataset.name)
+                    }
                     className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-accent hover:border-accent-foreground/20 transition-colors text-left"
                   >
                     <div className="flex-shrink-0 w-8 h-8 rounded bg-accent flex items-center justify-center">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                        />
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -757,10 +860,7 @@ const Data = () => {
         </div>
 
         <DialogFooter>
-          <Button 
-            variant="outline" 
-            onClick={handleCancelUpload}
-          >
+          <Button variant="outline" onClick={handleCancelUpload}>
             Cancel
           </Button>
         </DialogFooter>
@@ -1006,7 +1106,11 @@ const Data = () => {
                       // Prevent closing dialog during mutation
                       if (!createDatasetMutation.isPending) {
                         setIsCreateOpen(open)
-                        if (!open && shouldUploadAfterCreate && pendingFiles.length > 0) {
+                        if (
+                          !open &&
+                          shouldUploadAfterCreate &&
+                          pendingFiles.length > 0
+                        ) {
                           // User cancelled dataset creation with pending files - go back to select modal
                           setIsSelectDatasetModalOpen(true)
                           // Keep pendingFiles and shouldUploadAfterCreate intact
@@ -1072,7 +1176,9 @@ const Data = () => {
                           <select
                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             value={newDatasetDatabase}
-                            onChange={e => setNewDatasetDatabase(e.target.value)}
+                            onChange={e =>
+                              setNewDatasetDatabase(e.target.value)
+                            }
                           >
                             <option value="">Select a database...</option>
                             {availableOptions?.databases?.map(database => (
@@ -1118,12 +1224,14 @@ const Data = () => {
                         type="upload"
                         className="w-10 h-10 text-blue-200 dark:text-white"
                       />
-                      <div className="text-xl text-foreground">Drop data here</div>
+                      <div className="text-xl text-foreground">
+                        Drop data here
+                      </div>
                     </div>
                     <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
                       You can upload PDFs, explore various list formats, or draw
-                      inspiration from other data sources to enhance your project
-                      with LlaMaFarm.
+                      inspiration from other data sources to enhance your
+                      project with LlaMaFarm.
                     </p>
                   </div>
                 ) : (
@@ -1753,7 +1861,8 @@ const Data = () => {
             <div className="text-center">
               <div className="font-medium">Uploading Files...</div>
               <div className="text-sm text-muted-foreground mt-1">
-                {uploadingFileCount} {uploadingFileCount === 1 ? 'file' : 'files'}
+                {uploadingFileCount}{' '}
+                {uploadingFileCount === 1 ? 'file' : 'files'}
               </div>
             </div>
             <Button

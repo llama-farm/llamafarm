@@ -5,7 +5,12 @@ import Loader from '../../common/Loader'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../ui/tooltip'
 import SearchInput from '../ui/search-input'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
@@ -14,7 +19,19 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
+  DialogFooter,
 } from '../ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '../ui/collapsible'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/toast'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -33,6 +50,14 @@ import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import {
+  saveDatasetTaskId,
+  loadDatasetTaskId,
+  clearDatasetTaskId,
+  saveDatasetResult,
+  loadDatasetResult,
+  clearDatasetResult,
+} from '../../utils/datasetStorage'
 
 type Dataset = {
   id: string
@@ -68,13 +93,13 @@ function DatasetView() {
   const { data: datasetsResponse, refetch: refetchDatasets } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
-    { 
+    {
       enabled: !!activeProject,
       // Reduce stale time to ensure fresh data after uploads
       staleTime: 1000, // 1 second
     }
   )
-  
+
   // Force refetch on mount to ensure fresh data after navigation from upload
   useEffect(() => {
     if (activeProject?.namespace && activeProject?.project) {
@@ -85,6 +110,93 @@ function DatasetView() {
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
   const [processingResult, setProcessingResult] = useState<any>(null)
+  const [processingFailure, setProcessingFailure] = useState<{
+    error: string
+    timestamp: Date
+    taskId: string
+  } | null>(null)
+  const [isResultsOpen, setIsResultsOpen] = useState(false)
+
+  // Helper function to recalculate counts from details array
+  const recalculateCountsFromDetails = (result: any) => {
+    if (!result || !result.details || !Array.isArray(result.details)) {
+      return result
+    }
+
+    let processedCount = 0
+    let skippedCount = 0
+    let failedCount = 0
+
+    for (const detail of result.details) {
+      const detailsObj = detail.details || {}
+      const resultObj = detailsObj.result || {}
+      const isSkipped =
+        resultObj.status === 'skipped' || detailsObj.status === 'skipped'
+      const isFailed = !detail.success
+
+      if (isSkipped) {
+        skippedCount++
+      } else if (isFailed) {
+        failedCount++
+      } else if (detail.success) {
+        processedCount++
+      }
+    }
+
+    return {
+      ...result,
+      processed_files: processedCount,
+      skipped_files: skippedCount,
+      failed_files: failedCount,
+    }
+  }
+
+  // Load task ID and previous result from storage on mount
+  useEffect(() => {
+    if (activeProject?.namespace && activeProject?.project && datasetId) {
+      // Load task ID from sessionStorage to resume processing if needed
+      if (!currentTaskId) {
+        const savedTaskId = loadDatasetTaskId(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId
+        )
+        if (savedTaskId) {
+          setCurrentTaskId(savedTaskId)
+        }
+      }
+
+      // Load previous result from localStorage and recalculate counts
+      const savedResult = loadDatasetResult(
+        activeProject.namespace,
+        activeProject.project,
+        datasetId
+      )
+      if (savedResult) {
+        // Recalculate counts from details to ensure accuracy
+        const recalculatedResult = recalculateCountsFromDetails(savedResult)
+        setProcessingResult(recalculatedResult)
+
+        // Don't restore failure state if there are partial successes
+        // (This ensures old stored failures don't show up incorrectly)
+        const hasPartialResults =
+          recalculatedResult &&
+          (recalculatedResult.processed_files > 0 ||
+            recalculatedResult.skipped_files > 0)
+
+        if (!hasPartialResults && recalculatedResult.failed_files > 0) {
+          // Only restore failure state for complete failures
+          // Note: we don't have the original error message, so don't set processingFailure
+          // The results grid will show the failure counts
+        }
+      }
+    }
+  }, [
+    activeProject?.namespace,
+    activeProject?.project,
+    datasetId,
+    currentTaskId,
+  ])
   const processMutation = useProcessDataset()
   const deleteFileMutation = useDeleteDatasetFile()
   const deleteDatasetMutation = useDeleteDataset()
@@ -95,13 +207,100 @@ function DatasetView() {
     { enabled: !!currentTaskId && !!activeProject }
   )
 
+  // Clear task ID from sessionStorage when processing completes
+  useEffect(() => {
+    if (
+      currentTaskId &&
+      taskStatus &&
+      activeProject?.namespace &&
+      activeProject?.project &&
+      datasetId
+    ) {
+      if (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE') {
+        // Clear from sessionStorage
+        clearDatasetTaskId(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId
+        )
+        // Clear local state
+        setCurrentTaskId(null)
+
+        // Try to get results - either from result field or construct from meta
+        let resultsToSave = taskStatus.result
+
+        // If no result but we have meta.files (on failure), construct result from that
+        if (
+          !resultsToSave &&
+          taskStatus.state === 'FAILURE' &&
+          taskStatus.meta?.files
+        ) {
+          const files = taskStatus.meta.files
+          const processedCount = files.filter(
+            (f: any) => f.state === 'processed' || f.state === 'success'
+          ).length
+          const failedCount = files.filter(
+            (f: any) => f.state === 'failed' || f.state === 'failure'
+          ).length
+          const skippedCount = files.filter(
+            (f: any) => f.state === 'skipped'
+          ).length
+
+          resultsToSave = {
+            processed_files: processedCount,
+            failed_files: failedCount,
+            skipped_files: skippedCount,
+            details: files.map((f: any) => ({
+              file_hash: f.file_hash || f.filename,
+              success: f.state === 'processed' || f.state === 'success',
+              error: f.error,
+              details: {
+                status: f.state,
+                filename: f.filename,
+                chunks: f.chunks,
+                reason: f.error,
+              },
+            })),
+          }
+        }
+
+        // Save result for display and persist to localStorage (even on failure - preserve partial results)
+        if (resultsToSave) {
+          // Recalculate counts from details to ensure accuracy
+          const recalculatedResult = recalculateCountsFromDetails(resultsToSave)
+          setProcessingResult(recalculatedResult)
+          saveDatasetResult(
+            activeProject.namespace,
+            activeProject.project,
+            datasetId,
+            recalculatedResult
+          )
+          // Expand results section when new results arrive (even on failure if there are partial results)
+          setIsResultsOpen(true)
+        }
+        // Refetch datasets to get updated file list
+        refetchDatasets()
+      }
+    }
+  }, [
+    taskStatus?.state,
+    currentTaskId,
+    activeProject?.namespace,
+    activeProject?.project,
+    datasetId,
+    taskStatus,
+    refetchDatasets,
+  ])
+
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const datasetName = useMemo(
     () => dataset?.name || datasetId || 'dataset',
     [dataset?.name, datasetId]
   )
 
-  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const projectConfig = (projectResp as any)?.project?.config as
+    | ProjectConfig
+    | undefined
   const getDatasetLocation = useCallback(() => {
     const targetName = dataset?.name || datasetId
     if (targetName) {
@@ -152,16 +351,16 @@ function DatasetView() {
         typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
       const size =
         typeof fileObj === 'object' &&
-        fileObj !== null &&
-        'size' in fileObj &&
-        fileObj.size !== undefined
+          fileObj !== null &&
+          'size' in fileObj &&
+          fileObj.size !== undefined
           ? fileObj.size
           : 'unknown'
       const lastModified =
         typeof fileObj === 'object' &&
-        fileObj !== null &&
-        'lastModified' in fileObj &&
-        fileObj.lastModified !== undefined
+          fileObj !== null &&
+          'lastModified' in fileObj &&
+          fileObj.lastModified !== undefined
           ? fileObj.lastModified
           : 'unknown'
       return {
@@ -189,6 +388,7 @@ function DatasetView() {
   }>({})
   const [searchValue, setSearchValue] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const filteredFileInputRef = useRef<HTMLInputElement>(null)
   const directoryInputRef = useRef<HTMLInputElement>(null)
 
   // Set directory attributes on mount
@@ -297,123 +497,177 @@ function DatasetView() {
     // Only set isDragging to false if we're actually leaving the drop zone
     // and not just entering a child element
     const rect = dropZoneRef.current?.getBoundingClientRect()
-    const isLeavingZone = rect && (
-      e.clientX <= rect.left ||
-      e.clientX >= rect.right ||
-      e.clientY <= rect.top ||
-      e.clientY >= rect.bottom
-    )
+    const isLeavingZone =
+      rect &&
+      (e.clientX <= rect.left ||
+        e.clientX >= rect.right ||
+        e.clientY <= rect.top ||
+        e.clientY >= rect.bottom)
     if (isLeavingZone) {
       setIsDragging(false)
     }
   }, [])
 
-  const handleFilesUpload = useCallback(async (list: File[]) => {
-    if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
-      toast({
-        message: 'Missing required information for upload',
-        variant: 'destructive',
-      })
-      return
-    }
-    if (list.length === 0) return
+  const handleFilesUpload = useCallback(
+    async (list: File[], skipFiltering = false) => {
+      if (!datasetId || !activeProject?.namespace || !activeProject?.project) {
+        toast({
+          message: 'Missing required information for upload',
+          variant: 'destructive',
+        })
+        return
+      }
+      if (list.length === 0) return
 
-    // Apply file type filtering
-    const totalFiles = list.length
-    const filteredFiles = filterFilesByType(list)
-    const filteredCount = filteredFiles.length
+      // Apply file type filtering only if not skipped (e.g., for drag-and-drop)
+      const totalFiles = list.length
+      const filteredFiles = skipFiltering ? list : filterFilesByType(list)
+      const filteredCount = filteredFiles.length
 
-    // Show stats if filtering occurred
-    if (totalFiles !== filteredCount) {
-      setUploadStats({
-        total: totalFiles,
-        filtered: filteredCount,
-        uploading: filteredCount,
-      })
-      toast({
-        message: `Filtered ${filteredCount} of ${totalFiles} files based on file type filter`,
-        variant: 'default',
-      })
-    }
+      // Show stats if filtering occurred
+      if (!skipFiltering && totalFiles !== filteredCount) {
+        setUploadStats({
+          total: totalFiles,
+          filtered: filteredCount,
+          uploading: filteredCount,
+        })
+        toast({
+          message: `Filtered ${filteredCount} of ${totalFiles} files based on file type filter`,
+          variant: 'default',
+        })
+      }
 
-    if (filteredFiles.length === 0) {
-      console.error('❌ All files filtered out by file type filter!')
-      toast({
-        message: 'No files match the selected file type filter',
-        variant: 'destructive',
-      })
-      return
-    }
+      if (filteredFiles.length === 0) {
+        console.error('❌ All files filtered out by file type filter!')
+        toast({
+          message: 'No files match the selected file type filter',
+          variant: 'destructive',
+        })
+        return
+      }
 
-    // Note: Filename stripping for folder uploads is now handled in the API layer
-    // (see datasets.ts uploadFileToDataset function)
+      // Note: Filename stripping for folder uploads is now handled in the API layer
+      // (see datasets.ts uploadFileToDataset function)
 
-    // Initialize upload statuses
-    const initialStatuses: FileUploadStatus[] = filteredFiles.map(f => ({
-      id: `${f.name}:${f.size}:${f.lastModified}`,
-      name: f.name.split('/').pop() || f.name, // Display basename only
-      status: 'pending',
-    }))
-    setFileUploadStatuses(initialStatuses)
+      // Initialize upload statuses
+      const initialStatuses: FileUploadStatus[] = filteredFiles.map(f => ({
+        id: `${f.name}:${f.size}:${f.lastModified}`,
+        name: f.name.split('/').pop() || f.name, // Display basename only
+        status: 'pending',
+      }))
+      setFileUploadStatuses(initialStatuses)
 
-    await Promise.all(
-      filteredFiles.map(async (file, idx) => {
-        setFileUploadStatuses(prev =>
-          prev.map((s, i) => (i === idx ? { ...s, status: 'uploading' } : s))
-        )
-        try {
-          await uploadMutation.mutateAsync({
-            namespace: activeProject.namespace!,
-            project: activeProject.project!,
-            dataset: datasetId!,
-            file,
-          })
+      const results = await Promise.all(
+        filteredFiles.map(async (file, idx) => {
           setFileUploadStatuses(prev =>
-            prev.map((s, i) => (i === idx ? { ...s, status: 'success' } : s))
+            prev.map((s, i) => (i === idx ? { ...s, status: 'uploading' } : s))
           )
-        } catch (error: any) {
-          console.error(`Failed to upload ${file.name}:`, error)
-          toast({
-            message: `Failed to upload ${file.name}`,
-            variant: 'destructive',
-          })
-          setFileUploadStatuses(prev =>
-            prev.map((s, i) =>
-              i === idx
-                ? {
+          try {
+            const response = await uploadMutation.mutateAsync({
+              namespace: activeProject.namespace!,
+              project: activeProject.project!,
+              dataset: datasetId!,
+              file,
+            })
+            setFileUploadStatuses(prev =>
+              prev.map((s, i) => (i === idx ? { ...s, status: 'success' } : s))
+            )
+            return {
+              success: true,
+              skipped: response.skipped || false,
+              fileName: file.name,
+            }
+          } catch (error: any) {
+            console.error(`Failed to upload ${file.name}:`, error)
+            toast({
+              message: `Failed to upload ${file.name}`,
+              variant: 'destructive',
+            })
+            setFileUploadStatuses(prev =>
+              prev.map((s, i) =>
+                i === idx
+                  ? {
                     ...s,
                     status: 'error',
                     error: error?.message || 'Upload failed',
                   }
-                : s
+                  : s
+              )
             )
-          )
-        }
-      })
-    )
+            return { success: false, skipped: false, fileName: file.name }
+          }
+        })
+      )
 
-    // Refetch datasets to update the file list
-    await refetchDatasets()
+      // Count successes, skipped, and failures
+      const successCount = results.filter(r => r.success && !r.skipped).length
+      const skippedCount = results.filter(r => r.skipped).length
+      const failureCount = results.filter(r => !r.success).length
 
-    // Clear stats after upload completes
-    setTimeout(() => setUploadStats(null), 5000)
-  }, [datasetId, activeProject, toast, filterFilesByType, uploadMutation, refetchDatasets])
+      // Show summary toast
+      if (failureCount > 0 && successCount > 0) {
+        toast({
+          message: `Uploaded ${successCount} file(s)${skippedCount > 0 ? `, skipped ${skippedCount} duplicate(s)` : ''}. ${failureCount} failed.`,
+          variant: 'destructive',
+        })
+      } else if (failureCount > 0) {
+        toast({
+          message: `Upload failed for all ${failureCount} file(s)`,
+          variant: 'destructive',
+        })
+      } else if (skippedCount > 0 && successCount === 0) {
+        toast({
+          message: `All ${skippedCount} file(s) were already in the dataset`,
+          variant: 'default',
+          icon: 'alert-triangle',
+        })
+      } else if (skippedCount > 0) {
+        toast({
+          message: `Uploaded ${successCount} file(s), skipped ${skippedCount} duplicate(s)`,
+          variant: 'default',
+        })
+      } else {
+        toast({
+          message: `Successfully uploaded ${successCount} file(s)`,
+          variant: 'default',
+        })
+      }
 
-  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDropped(true)
-    setIsDragging(false)
-    const files = Array.from(e.dataTransfer.files)
-    
-    if (files.length === 0) {
+      // Refetch datasets to update the file list
+      await refetchDatasets()
+
+      // Clear stats after upload completes
+      setTimeout(() => setUploadStats(null), 5000)
+    },
+    [
+      datasetId,
+      activeProject,
+      toast,
+      filterFilesByType,
+      uploadMutation,
+      refetchDatasets,
+    ]
+  )
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDropped(true)
+      setIsDragging(false)
+      const files = Array.from(e.dataTransfer.files)
+
+      if (files.length === 0) {
+        setIsDropped(false)
+        return
+      }
+
+      // Skip filtering for dropped files - user explicitly selected these files
+      await handleFilesUpload(files, true)
       setIsDropped(false)
-      return
-    }
-    
-    await handleFilesUpload(files)
-    setIsDropped(false)
-  }, [handleFilesUpload])
+    },
+    [handleFilesUpload]
+  )
 
   // Load dataset metadata from API only - no hardcoded values
   useEffect(() => {
@@ -455,6 +709,7 @@ function DatasetView() {
     if (taskStatus.state === 'SUCCESS') {
       // Task completed successfully
       setCurrentTaskId(null)
+      setProcessingFailure(null) // Clear any previous failures
 
       // Store the processing result
       if (taskStatus.result) {
@@ -468,17 +723,94 @@ function DatasetView() {
         variant: 'default',
       })
     } else if (taskStatus.state === 'FAILURE') {
-      // Task failed
+      // Task failed - but preserve partial results if they exist
       console.error('Task failed:', taskStatus.error, taskStatus.traceback)
+      console.log('Full taskStatus on failure:', taskStatus)
+      console.log('taskStatus.result:', taskStatus.result)
       setCurrentTaskId(null)
-      setProcessingResult(null)
+
+      // Try to extract partial results from either result or meta fields
+      let partialResults = taskStatus.result
+
+      // If no result but we have meta.files, construct a result from that
+      if (!partialResults && taskStatus.meta?.files) {
+        const files = taskStatus.meta.files
+        const processedCount = files.filter(
+          (f: any) => f.state === 'processed' || f.state === 'success'
+        ).length
+        const failedCount = files.filter(
+          (f: any) => f.state === 'failed' || f.state === 'failure'
+        ).length
+        const skippedCount = files.filter(
+          (f: any) => f.state === 'skipped'
+        ).length
+
+        // Build a result object from the meta files
+        partialResults = {
+          processed_files: processedCount,
+          failed_files: failedCount,
+          skipped_files: skippedCount,
+          details: files.map((f: any) => ({
+            file_hash: f.file_hash || f.filename,
+            success: f.state === 'processed' || f.state === 'success',
+            error: f.error,
+            details: {
+              status: f.state,
+              filename: f.filename,
+              chunks: f.chunks,
+              reason: f.error,
+            },
+          })),
+        }
+        console.log('Constructed partial results from meta:', partialResults)
+      }
+
+      // Keep partial results to show what succeeded and what failed
+      let recalculatedPartialResults = null
+      if (partialResults) {
+        // Recalculate counts from details to ensure accuracy
+        recalculatedPartialResults =
+          recalculateCountsFromDetails(partialResults)
+        setProcessingResult(recalculatedPartialResults)
+      }
+
       const errorMessage = taskStatus.error || 'Unknown error occurred'
+      const hasPartialResults =
+        recalculatedPartialResults &&
+        (recalculatedPartialResults.processed_files > 0 ||
+          recalculatedPartialResults.skipped_files > 0 ||
+          recalculatedPartialResults.failed_files > 0)
+
+      // Only set failure state if there are NO partial results (complete failure)
+      // If there are partial results, just show them in the results grid
+      if (!hasPartialResults) {
+        setProcessingFailure({
+          error: errorMessage,
+          timestamp: new Date(),
+          taskId: currentTaskId || 'unknown',
+        })
+      } else {
+        // Clear any previous failures since we have partial results to show
+        setProcessingFailure(null)
+      }
+
+      // Auto-open the results section to show the failure or partial results
+      setIsResultsOpen(true)
+
       toast({
-        message: `❌ Processing failed: ${errorMessage}`,
-        variant: 'destructive',
+        message: hasPartialResults
+          ? `⚠️ Processing completed with ${recalculatedPartialResults.failed_files} error(s). ${recalculatedPartialResults.processed_files} file(s) processed successfully.`
+          : `❌ Processing failed: ${errorMessage}`,
+        variant: hasPartialResults ? 'default' : 'destructive',
       })
     }
-  }, [taskStatus?.state, taskStatus?.error, taskStatus?.result, toast, currentTaskId])
+  }, [
+    taskStatus?.state,
+    taskStatus?.error,
+    taskStatus?.result,
+    toast,
+    currentTaskId,
+  ])
 
   const openEdit = () => {
     setEditName(dataset?.name ?? '')
@@ -599,10 +931,6 @@ function DatasetView() {
     'universal_processor'
 
   // Note: Parsers/extractors info now comes from project config API, not localStorage
-  // This is a placeholder - should be fetched from the strategy config if needed
-  const parsersSummary = 'Configured via strategy settings'
-  const extractorsSummary = 'Configured via strategy settings'
-
   // Removed unused derived values
 
   return (
@@ -640,1005 +968,1374 @@ function DatasetView() {
           <ConfigEditor className="h-full" initialPointer={configPointer} />
         </div>
       ) : (
-        <>
-          {/* Header row */}
-          <div className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col gap-1 flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl md:text-2xl font-medium">
-                    {datasetName}
-                  </h2>
-                  <button
-                    className="p-1 rounded-md hover:bg-accent text-muted-foreground"
-                    onClick={openEdit}
-                    aria-label="Edit dataset"
-                    title="Edit dataset"
-                  >
-                    <FontIcon type="edit" className="w-4 h-4" />
-                  </button>
-                </div>
-                {/* Status shown inline on mobile */}
-                {currentTaskId && taskStatus && (
-                  <div className="sm:hidden mt-1 mb-2">
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="rounded-xl w-max flex items-center gap-1.5"
-                    >
-                      {taskStatus.state === 'PENDING' && (
-                        <>
-                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                          Queued...
-                        </>
-                      )}
-                      {taskStatus.state !== 'PENDING' &&
-                        taskStatus.state !== 'SUCCESS' &&
-                        taskStatus.state !== 'FAILURE' && (
-                          <>
-                            <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                            {taskStatus.meta?.progress
-                              ? `${taskStatus.meta.progress}%`
-                              : taskStatus.meta?.current && taskStatus.meta?.total
-                                ? `${taskStatus.meta.current}/${taskStatus.meta.total}`
-                                : 'Processing...'}
-                          </>
-                        )}
-                    </Badge>
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground max-w-[640px]">
-                  {dataset?.description && dataset.description.trim().length > 0
-                    ? dataset.description
-                    : 'Add a short description so teammates know what this dataset is for.'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Processing status badge */}
-                {currentTaskId && taskStatus && (
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="rounded-xl w-max flex items-center gap-1.5"
-                    >
-                      {taskStatus.state === 'PENDING' && (
-                        <>
-                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                          Queued...
-                        </>
-                      )}
-                      {taskStatus.state !== 'PENDING' &&
-                        taskStatus.state !== 'SUCCESS' &&
-                        taskStatus.state !== 'FAILURE' && (
-                        <>
-                          <span className="inline-block animate-spin" aria-label="Loading" role="status">⟳</span>
-                          {taskStatus.meta?.progress
-                            ? `Processing ${taskStatus.meta.progress}%`
-                            : taskStatus.meta?.current && taskStatus.meta?.total
-                              ? `Processing ${taskStatus.meta.current}/${taskStatus.meta.total}`
-                              : 'Processing...'}
-                        </>
-                      )}
-                    </Badge>
-                    {taskStatus.meta?.message && (
-                      <span className="text-xs text-muted-foreground max-w-[200px] truncate hidden sm:inline">
-                        {taskStatus.meta.message}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    if (
-                      !datasetId ||
-                      !activeProject?.namespace ||
-                      !activeProject?.project
-                    )
-                      return
-
-                    try {
-                      // Clear previous results
-                      setProcessingResult(null)
-
-                      const result = await processMutation.mutateAsync({
-                        namespace: activeProject.namespace,
-                        project: activeProject.project,
-                        dataset: datasetId,
-                      })
-
-                      // The process endpoint returns task_id directly
-                      if (result.task_id) {
-                        setCurrentTaskId(result.task_id)
-                        toast({
-                          message: 'Dataset processing started...',
-                          variant: 'default',
-                        })
-                      }
-                    } catch (error) {
-                      console.error('Failed to start processing:', error)
-                      toast({
-                        message:
-                          'Failed to start processing. Please try again.',
-                        variant: 'destructive',
-                      })
-                    }
-                  }}
-                  disabled={processMutation.isPending || !!currentTaskId}
-                >
-                  {processMutation.isPending
-                    ? 'Starting...'
-                    : currentTaskId && taskStatus
-                      ? 'Processing...'
-                      : 'Process Dataset'}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Connected database card */}
-          {(currentApiDataset as any)?.database && (
-            <section className="rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-sm font-medium">Connected database</h3>
-                  <p className="text-xs text-muted-foreground">
-                    This dataset is connected to the following database
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="default"
-                    size="sm"
-                    className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
-                  >
-                    {(currentApiDataset as any).database}
-                  </Badge>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => navigate('/chat/databases')}
-                  >
-                    Go to database
-                  </Button>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* Processing Strategy card */}
-          <section className="rounded-lg border border-border bg-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium">Processing strategy</h3>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <Badge variant="default" size="sm" className="rounded-xl">
-                {currentStrategy}
-              </Badge>
-              {processingResult && (
-                <Badge variant="secondary" size="sm" className="rounded-xl">
-                  Last processed: {processingResult.processed_files || 0} files
-                </Badge>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <div className="text-xs text-muted-foreground">Parsers</div>
-                <Input
-                  value={parsersSummary}
-                  readOnly
-                  className="bg-background"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <div className="text-xs text-muted-foreground">Extractors</div>
-                <Input
-                  value={extractorsSummary}
-                  readOnly
-                  className="bg-background"
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Processing Results */}
-          {processingResult && (
-            <section className="rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium">Processing Results</h3>
-                <button
-                  onClick={() => setProcessingResult(null)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                <div className="rounded-md border border-border p-3">
-                  <div className="text-xs text-muted-foreground mb-1">
-                    Processed Files
-                  </div>
-                  <div className="text-2xl font-semibold text-green-600">
-                    {processingResult.processed_files || 0}
-                  </div>
-                </div>
-                <div className="rounded-md border border-border p-3">
-                  <div className="text-xs text-muted-foreground mb-1">
-                    Skipped Files
-                  </div>
-                  <div className="text-2xl font-semibold text-yellow-600">
-                    {processingResult.skipped_files || 0}
-                  </div>
-                </div>
-                <div className="rounded-md border border-border p-3">
-                  <div className="text-xs text-muted-foreground mb-1">
-                    Failed Files
-                  </div>
-                  <div className="text-2xl font-semibold text-red-600">
-                    {processingResult.failed_files || 0}
-                  </div>
-                </div>
-              </div>
-              {processingResult.details &&
-                processingResult.details.length > 0 && (
-                  <div className="mt-3">
-                    <div className="text-xs font-medium text-muted-foreground mb-2">
-                      File Processing Details
+        <div className="flex-1 min-h-0 flex flex-col gap-3">
+          {isDragging || isDropped ? (
+            <div className="w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
+              <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
+                {isDropped ? (
+                  <>
+                    <Loader />
+                    <div className="text-xl text-foreground">
+                      Uploading files...
                     </div>
-                    <div className="rounded-md border border-border max-h-96 overflow-auto">
-                      {processingResult.details.map(
-                        (fileResult: any, idx: number) => {
-                          const details = fileResult.details || {}
-                          const result = details.result || {}
-                          const isSkipped = result.status === 'skipped' || details.status === 'skipped'
-                          const isFailed = !fileResult.success
-                          const isSuccess = fileResult.success && !isSkipped
+                    <p className="max-w-[527px] text-sm text-muted-foreground text-center">
+                      Please wait while your files are being uploaded to the
+                      dataset.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <FontIcon
+                      type="upload"
+                      className="w-10 h-10 text-blue-200 dark:text-white"
+                    />
+                    <div className="text-xl text-foreground">
+                      Drop data here
+                    </div>
+                    <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
+                      You can upload PDFs, CSVs, or other documents directly to
+                      this dataset.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Combined Overview Card */}
+              <div className="rounded-lg border border-border bg-card p-4">
+                {/* Header Section */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl md:text-2xl font-medium">
+                        {datasetName}
+                      </h2>
+                      <button
+                        className="p-1 rounded-md hover:bg-accent text-muted-foreground"
+                        onClick={openEdit}
+                        aria-label="Edit dataset"
+                        title="Edit dataset"
+                      >
+                        <FontIcon type="edit" className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground max-w-[640px] mb-3">
+                      {dataset?.description &&
+                        dataset.description.trim().length > 0
+                        ? dataset.description
+                        : 'Add a short description so teammates know what this dataset is for.'}
+                    </p>
 
-                          // Get filename from result (actual name) or fall back to hash
-                          const displayFilename = result.filename || details.filename || fileResult.file_hash
-                          const isHashFilename = displayFilename === fileResult.file_hash || !result.filename
+                    {/* Configuration - Horizontal Stack */}
+                    <div className="flex items-center gap-4 flex-wrap">
+                      {/* Database */}
+                      {(currentApiDataset as any)?.database && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">
+                            Database:
+                          </span>
+                          <Badge
+                            variant="default"
+                            size="sm"
+                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900 cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => navigate('/chat/databases')}
+                          >
+                            {(currentApiDataset as any).database}
+                          </Badge>
+                        </div>
+                      )}
 
-                          // Get file extension for icon
-                          const getFileExtension = (filename: string) => {
-                            const parts = filename.split('.')
-                            return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : ''
+                      {/* Processing Strategy */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          Strategy:
+                        </span>
+                        <Badge
+                          variant="default"
+                          size="sm"
+                          className="rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() =>
+                            navigate(`/chat/data/strategies/${currentStrategy}`)
                           }
-                          const fileExt = getFileExtension(displayFilename)
-                          const fileIcon = ['pdf', 'doc', 'docx', 'txt', 'md'].includes(fileExt) ? '📄' : '📁'
+                        >
+                          {currentStrategy}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                          // Calculate total chunks if available
-                          const totalChunks = result.document_count || details.chunks || 0
-                          const storedChunks = result.stored_count || 0
-                          const skippedChunks = result.skipped_count || 0
-
-                          return (
-                            <div
-                              key={idx}
-                              className="p-4 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
-                            >
-                              {/* File header with status */}
-                              <div className="flex items-start justify-between gap-3 mb-2">
-                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                  {/* File type icon */}
-                                  <span className="text-xl flex-shrink-0">{fileIcon}</span>
-
-                                  {/* Status icon */}
-                                  {isSuccess && (
-                                    <FontIcon
-                                      type="checkmark-filled"
-                                      className="w-5 h-5 text-green-600 flex-shrink-0"
-                                    />
-                                  )}
-                                  {isSkipped && (
-                                    <div className="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-white text-xs font-bold">!</span>
-                                    </div>
-                                  )}
-                                  {isFailed && (
-                                    <FontIcon
-                                      type="close"
-                                      className="w-5 h-5 text-red-600 flex-shrink-0"
-                                    />
-                                  )}
-
-                                  {/* Filename */}
-                                  <div className="flex flex-col flex-1 min-w-0">
-                                    <span className="text-sm font-medium truncate">
-                                      {displayFilename}
-                                    </span>
-                                    {isHashFilename && fileResult.file_hash && (
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <span className="text-xs text-muted-foreground font-mono cursor-pointer">
-                                              Hash: {fileResult.file_hash.substring(0, 12)}...
-                                            </span>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p className="font-mono text-xs">{fileResult.file_hash}</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    )}
-                                  </div>
+              {/* Processing Results */}
+              {(processingResult || processingFailure) && (
+                <section className="rounded-lg border border-border bg-card">
+                  <Collapsible
+                    open={isResultsOpen}
+                    onOpenChange={setIsResultsOpen}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setIsResultsOpen(!isResultsOpen)
+                          }
+                        }}
+                        className={`flex items-center justify-between px-4 cursor-pointer hover:opacity-70 transition-opacity ${isResultsOpen ? 'pt-4 pb-3' : 'py-4'}`}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 flex-shrink-0 transition-transform ${isResultsOpen ? '' : '-rotate-90'
+                              }`}
+                          />
+                          Last Processing Results
+                        </div>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setProcessingResult(null)
+                            setProcessingFailure(null)
+                            setCurrentTaskId(null) // Stop polling the task
+                            if (
+                              activeProject?.namespace &&
+                              activeProject?.project &&
+                              datasetId
+                            ) {
+                              clearDatasetResult(
+                                activeProject.namespace,
+                                activeProject.project,
+                                datasetId
+                              )
+                              clearDatasetTaskId(
+                                activeProject.namespace,
+                                activeProject.project,
+                                datasetId
+                              )
+                            }
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      {/* Show failure state if present and no partial results */}
+                      {processingFailure && !processingResult && (
+                        <div className="px-4 pb-4">
+                          <div className="rounded-md border border-red-600/50 dark:border-red-400/50 bg-red-50/50 dark:bg-red-950/20 p-4">
+                            <div className="flex items-start gap-3">
+                              <FontIcon
+                                type="close"
+                                className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-red-900 dark:text-red-100 mb-1">
+                                  Processing Failed
                                 </div>
-
-                                {/* Status badge */}
-                                <Badge
-                                  variant={
-                                    isSuccess
-                                      ? 'default'
-                                      : isSkipped
-                                        ? 'secondary'
-                                        : 'outline'
-                                  }
-                                  size="sm"
-                                  className="rounded-xl flex-shrink-0 font-medium"
-                                >
-                                  {isSuccess && '✓ SUCCESS'}
-                                  {isSkipped && `⚠️ SKIPPED${result.reason ? ` (${result.reason})` : ''}`}
-                                  {isFailed && '✗ FAILED'}
-                                </Badge>
-                              </div>
-
-                              {/* Processing stats */}
-                              <div className="ml-9 space-y-2 text-xs">
-                                {/* Chunks info - enhanced display */}
-                                {totalChunks > 0 && (
-                                  <div className="flex items-center gap-3 bg-muted/40 rounded px-3 py-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-base">📦</span>
-                                      <span className="font-semibold text-foreground">
-                                        {totalChunks}
-                                      </span>
-                                      <span className="text-muted-foreground">
-                                        chunk{totalChunks !== 1 ? 's' : ''} created
-                                      </span>
-                                    </div>
-                                    {storedChunks > 0 && (
-                                      <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
-                                        <span className="font-semibold">✓ {storedChunks}</span>
-                                        <span>stored</span>
-                                      </div>
-                                    )}
-                                    {skippedChunks > 0 && (
-                                      <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-500">
-                                        <span className="font-semibold">⊘ {skippedChunks}</span>
-                                        <span>skipped</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Processing details grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-                                  {/* Parser info */}
-                                  {(details.parser || result.parsers_used?.length > 0) && (
-                                    <div className="text-muted-foreground">
-                                      <span className="font-medium text-foreground">Parser:</span>{' '}
-                                      <span className="font-mono text-xs">
-                                        {result.parsers_used?.join(', ') || details.parser}
-                                      </span>
-                                    </div>
-                                  )}
-
-                                  {/* Embedder */}
-                                  {(details.embedder || result.embedder) && (
-                                    <div className="text-muted-foreground">
-                                      <span className="font-medium text-foreground">Embedder:</span>{' '}
-                                      <span className="font-mono text-xs">
-                                        {result.embedder || details.embedder}
-                                      </span>
-                                    </div>
-                                  )}
+                                <div className="text-sm text-red-800 dark:text-red-200 mb-2">
+                                  {processingFailure.error}
                                 </div>
-
-                                {/* Extractors - full width */}
-                                {(details.extractors?.length > 0 || result.extractors_applied?.length > 0) && (
-                                  <div className="text-muted-foreground">
-                                    <span className="font-medium text-foreground">Extractors:</span>{' '}
-                                    <div className="inline-flex flex-wrap gap-1 mt-1">
-                                      {(result.extractors_applied || details.extractors || []).map((ext: string, i: number) => (
-                                        <Badge
-                                          key={i}
-                                          variant="outline"
-                                          size="sm"
-                                          className="rounded font-mono text-xs"
-                                        >
-                                          {ext}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Document IDs if stored */}
-                                {result.document_ids && result.document_ids.length > 0 && (
-                                  <div className="text-muted-foreground pt-1">
-                                    <span className="font-medium text-foreground">Document IDs:</span>{' '}
-                                    <span className="font-mono text-xs">
-                                      {result.document_ids.length} stored in vector database
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* Reason for skip/failure - highlighted */}
-                                {(result.reason || details.reason) && (
-                                  <div className={`mt-2 p-2 rounded ${
-                                    isSkipped
-                                      ? 'bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800'
-                                      : 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
-                                  }`}>
-                                    <span className={`font-medium ${isSkipped ? 'text-yellow-800 dark:text-yellow-300' : 'text-red-800 dark:text-red-300'}`}>
-                                      Reason:
-                                    </span>{' '}
-                                    <span className={isSkipped ? 'text-yellow-700 dark:text-yellow-400' : 'text-red-700 dark:text-red-400'}>
-                                      {result.reason || details.reason}
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* Error message for failures */}
-                                {isFailed && (fileResult.error || details.error) && (
-                                  <div className="mt-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
-                                    <span className="font-medium text-red-800 dark:text-red-300">Error:</span>{' '}
-                                    <span className="text-red-700 dark:text-red-400">
-                                      {fileResult.error || details.error}
-                                    </span>
-                                  </div>
-                                )}
+                                <div className="text-xs text-red-700 dark:text-red-300">
+                                  Failed at{' '}
+                                  {processingFailure.timestamp.toLocaleString()}
+                                </div>
                               </div>
                             </div>
-                          )
-                        }
+                          </div>
+                        </div>
                       )}
+
+                      {/* Show results grid if we have partial or complete results */}
+                      {processingResult && (
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 px-4">
+                            <div className="rounded-md border border-border px-3 py-2">
+                              <div className="text-xs text-muted-foreground mb-0.5">
+                                Processed Files
+                              </div>
+                              <div className="text-xl font-semibold text-green-600">
+                                {processingResult.processed_files || 0}
+                              </div>
+                            </div>
+                            <div className="rounded-md border border-border px-3 py-2">
+                              <div className="text-xs text-muted-foreground mb-0.5">
+                                Skipped Files
+                              </div>
+                              <div className="text-xl font-semibold text-yellow-600">
+                                {processingResult.skipped_files || 0}
+                              </div>
+                            </div>
+                            <div className="rounded-md border border-border px-3 py-2">
+                              <div className="text-xs text-muted-foreground mb-0.5">
+                                Failed Files
+                              </div>
+                              <div className="text-xl font-semibold text-red-600 dark:text-red-400">
+                                {processingResult.failed_files || 0}
+                              </div>
+                            </div>
+                          </div>
+                          {processingResult.details &&
+                            processingResult.details.length > 0 && (
+                              <div className="mt-3 px-4 pb-4">
+                                <div className="text-xs font-medium text-muted-foreground mb-2">
+                                  File Processing Details
+                                </div>
+                                <div className="rounded-md border border-border max-h-96 overflow-auto">
+                                  {processingResult.details.map(
+                                    (fileResult: any, idx: number) => {
+                                      const details = fileResult.details || {}
+                                      const result = details.result || {}
+                                      const isSkipped =
+                                        result.status === 'skipped' ||
+                                        details.status === 'skipped'
+                                      const isFailed = !fileResult.success
+                                      const isSuccess =
+                                        fileResult.success && !isSkipped
+
+                                      // Get filename from result (actual name) or fall back to hash
+                                      const displayFilename =
+                                        result.filename ||
+                                        details.filename ||
+                                        fileResult.file_hash
+                                      const isHashFilename =
+                                        displayFilename ===
+                                        fileResult.file_hash ||
+                                        !result.filename
+
+                                      // Get file extension for icon
+                                      // Calculate total chunks if available
+                                      const totalChunks =
+                                        result.document_count ||
+                                        details.chunks ||
+                                        0
+                                      const storedChunks =
+                                        result.stored_count || 0
+                                      const skippedChunks =
+                                        result.skipped_count || 0
+
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className="px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                                        >
+                                          {/* File header with status */}
+                                          <div className="flex items-start justify-between gap-3 mb-1.5">
+                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                              {/* Status icon */}
+                                              {isSuccess && (
+                                                <FontIcon
+                                                  type="checkmark-filled"
+                                                  className="w-4 h-4 text-green-600 flex-shrink-0"
+                                                />
+                                              )}
+                                              {isSkipped && (
+                                                <div className="w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center flex-shrink-0">
+                                                  <span className="text-foreground text-[10px] font-bold">
+                                                    !
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {isFailed && (
+                                                <FontIcon
+                                                  type="close"
+                                                  className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0"
+                                                />
+                                              )}
+
+                                              {/* Filename */}
+                                              <div className="flex flex-col flex-1 min-w-0">
+                                                <span className="text-sm font-medium truncate">
+                                                  {displayFilename}
+                                                </span>
+                                                {isHashFilename &&
+                                                  fileResult.file_hash && (
+                                                    <TooltipProvider>
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <span className="text-xs text-muted-foreground font-mono cursor-pointer">
+                                                            Hash:{' '}
+                                                            {fileResult.file_hash.substring(
+                                                              0,
+                                                              12
+                                                            )}
+                                                            ...
+                                                          </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                          <p className="font-mono text-xs">
+                                                            {
+                                                              fileResult.file_hash
+                                                            }
+                                                          </p>
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    </TooltipProvider>
+                                                  )}
+                                              </div>
+                                            </div>
+
+                                            {/* Status badge */}
+                                            <Badge
+                                              variant={
+                                                isSuccess
+                                                  ? 'default'
+                                                  : isSkipped
+                                                    ? 'secondary'
+                                                    : 'outline'
+                                              }
+                                              size="sm"
+                                              className="rounded-xl flex-shrink-0 font-medium"
+                                            >
+                                              {isSuccess && 'SUCCESS'}
+                                              {isSkipped &&
+                                                `SKIPPED${result.reason ? ` (${result.reason})` : ''}`}
+                                              {isFailed && 'FAILED'}
+                                            </Badge>
+                                          </div>
+
+                                          {/* Processing stats - condensed */}
+                                          <div className="space-y-1.5 text-xs">
+                                            {/* Chunks info with reason inline */}
+                                            {totalChunks > 0 && (
+                                              <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-3 flex-wrap">
+                                                  <div className="flex items-center gap-1.5">
+                                                    <span className="font-semibold text-foreground">
+                                                      {totalChunks}
+                                                    </span>
+                                                    <span className="text-muted-foreground">
+                                                      chunk
+                                                      {totalChunks !== 1
+                                                        ? 's'
+                                                        : ''}{' '}
+                                                      created
+                                                    </span>
+                                                  </div>
+                                                  {storedChunks > 0 && (
+                                                    <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
+                                                      <span className="font-semibold">
+                                                        {storedChunks}
+                                                      </span>
+                                                      <span>stored</span>
+                                                    </div>
+                                                  )}
+                                                  {skippedChunks > 0 && (
+                                                    <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
+                                                      <span className="font-semibold">
+                                                        {skippedChunks}
+                                                      </span>
+                                                      <span>skipped</span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                {/* Reason inline - only show for failed files (not skipped, since badge already shows reason) */}
+                                                {(result.reason ||
+                                                  details.reason) &&
+                                                  isFailed && (
+                                                    <div className="flex items-center gap-1">
+                                                      <span className="font-medium text-red-600 dark:text-red-400">
+                                                        Reason:
+                                                      </span>
+                                                      <span className="text-red-600 dark:text-red-400">
+                                                        {result.reason ||
+                                                          details.reason}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                              </div>
+                                            )}
+
+                                            {/* Processing details - horizontal single row */}
+                                            <div className="flex items-center gap-3 flex-wrap text-muted-foreground ml-5">
+                                              {/* Parser info */}
+                                              {(details.parser ||
+                                                result.parsers_used?.length >
+                                                0) && (
+                                                  <div>
+                                                    <span className="font-medium text-foreground">
+                                                      Parser:
+                                                    </span>{' '}
+                                                    <span className="font-mono text-xs">
+                                                      {result.parsers_used?.join(
+                                                        ', '
+                                                      ) || details.parser}
+                                                    </span>
+                                                  </div>
+                                                )}
+
+                                              {/* Embedder */}
+                                              {(details.embedder ||
+                                                result.embedder) && (
+                                                  <div>
+                                                    <span className="font-medium text-foreground">
+                                                      Embedder:
+                                                    </span>{' '}
+                                                    <span className="font-mono text-xs">
+                                                      {result.embedder ||
+                                                        details.embedder}
+                                                    </span>
+                                                  </div>
+                                                )}
+
+                                              {/* Extractors - inline */}
+                                              {(details.extractors?.length >
+                                                0 ||
+                                                result.extractors_applied
+                                                  ?.length > 0) && (
+                                                  <div className="flex items-center gap-1.5">
+                                                    <span className="font-medium text-foreground">
+                                                      Extractors:
+                                                    </span>
+                                                    <div className="inline-flex flex-wrap gap-1">
+                                                      {(
+                                                        result.extractors_applied ||
+                                                        details.extractors ||
+                                                        []
+                                                      ).map(
+                                                        (
+                                                          ext: string,
+                                                          i: number
+                                                        ) => (
+                                                          <Badge
+                                                            key={i}
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="rounded font-mono text-[10px] px-1.5 py-0"
+                                                          >
+                                                            {ext}
+                                                          </Badge>
+                                                        )
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                )}
+                                            </div>
+
+                                            {/* Document IDs if stored */}
+                                            {result.document_ids &&
+                                              result.document_ids.length >
+                                              0 && (
+                                                <div className="text-muted-foreground ml-5">
+                                                  <span className="font-medium text-foreground">
+                                                    Document IDs:
+                                                  </span>{' '}
+                                                  <span className="font-mono text-xs">
+                                                    {result.document_ids.length}{' '}
+                                                    stored in vector database
+                                                  </span>
+                                                </div>
+                                              )}
+
+                                            {/* Error message for failures - keep on separate line for visibility */}
+                                            {isFailed &&
+                                              (fileResult.error ||
+                                                details.error) && (
+                                                <div className="mt-1.5 ml-5 px-2 py-1.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                                                  <span className="font-medium text-red-800 dark:text-red-400">
+                                                    Error:
+                                                  </span>{' '}
+                                                  <span className="text-red-700 dark:text-red-400">
+                                                    {fileResult.error ||
+                                                      details.error}
+                                                  </span>
+                                                </div>
+                                              )}
+                                          </div>
+                                        </div>
+                                      )
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                        </>
+                      )}
+
+                      {/* Show failure banner if we have both partial results and a failure */}
+                      {processingFailure && processingResult && (
+                        <div className="px-4 pb-4">
+                          <div className="rounded-md border border-red-600/50 dark:border-red-400/50 bg-red-50/50 dark:bg-red-950/20 p-3">
+                            <div className="flex items-start gap-2">
+                              <FontIcon
+                                type="alert-triangle"
+                                className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-semibold text-red-900 dark:text-red-100 mb-0.5">
+                                  Completed with errors
+                                </div>
+                                <div className="text-xs text-red-800 dark:text-red-200">
+                                  {processingFailure.error}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                </section>
+              )}
+
+              <Dialog
+                open={isEditOpen}
+                onOpenChange={open => {
+                  setIsEditOpen(open)
+                  if (!open) {
+                    // Reset confirmation state when modal closes
+                    setShowDeleteConfirmation(false)
+                  }
+                }}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>
+                      {showDeleteConfirmation
+                        ? 'Delete Dataset'
+                        : 'Edit dataset'}
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  {showDeleteConfirmation ? (
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <h3 className="text-lg font-semibold text-red-600">
+                          Confirm Deletion
+                        </h3>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Are you sure you want to delete the dataset "
+                          {datasetName}
+                          "?
+                        </p>
+                        <p className="mt-1 text-xs text-red-500">
+                          This action cannot be undone. All files and data will
+                          be permanently deleted.
+                        </p>
+                      </div>
+
+                      <div className="flex gap-3 justify-center">
+                        <Button
+                          variant="secondary"
+                          onClick={handleCancelDelete}
+                          disabled={deleteDatasetMutation.isPending}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={handleConfirmDelete}
+                          disabled={deleteDatasetMutation.isPending}
+                        >
+                          {deleteDatasetMutation.isPending ? (
+                            <>
+                              <span className="inline-block animate-spin mr-2">
+                                ⟳
+                              </span>
+                              Deleting...
+                            </>
+                          ) : (
+                            'Delete Dataset'
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
-            </section>
-          )}
+                  ) : (
+                    <>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Name
+                          </label>
+                          <Input
+                            autoFocus
+                            value={editName}
+                            onChange={e => setEditName(e.target.value)}
+                            placeholder="Dataset name"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Description
+                          </label>
+                          <Textarea
+                            value={editDescription}
+                            onChange={e => setEditDescription(e.target.value)}
+                            placeholder="Optional description"
+                            rows={3}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <Button
+                          variant="destructive"
+                          onClick={handleDeleteClick}
+                        >
+                          Delete
+                        </Button>
+                        <div className="flex items-center gap-2">
+                          <DialogClose asChild>
+                            <Button variant="secondary">Cancel</Button>
+                          </DialogClose>
+                          <Button
+                            onClick={handleSaveEdit}
+                            disabled={!editName.trim()}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </DialogContent>
+              </Dialog>
 
-          <Dialog
-            open={isEditOpen}
-            onOpenChange={open => {
-              setIsEditOpen(open)
-              if (!open) {
-                // Reset confirmation state when modal closes
-                setShowDeleteConfirmation(false)
-              }
-            }}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>
-                  {showDeleteConfirmation ? 'Delete Dataset' : 'Edit dataset'}
-                </DialogTitle>
-              </DialogHeader>
+              {/* File deletion confirmation modal */}
+              <Dialog
+                open={showDeleteFileConfirmation}
+                onOpenChange={open => !open && handleCancelDeleteFile()}
+              >
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg text-foreground">
+                      Delete File
+                    </DialogTitle>
+                  </DialogHeader>
 
-              {showDeleteConfirmation ? (
-                <div className="space-y-4">
-                  <div className="text-center">
-                    <h3 className="text-lg font-semibold text-red-600">
-                      Confirm Deletion
-                    </h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Are you sure you want to delete the dataset "{datasetName}
-                      "?
+                  <div className="flex flex-col gap-3 pt-1">
+                    <p className="text-muted-foreground">
+                      Are you sure you want to delete this file?
                     </p>
-                    <p className="mt-1 text-xs text-red-500">
-                      This action cannot be undone. All files and data will be
-                      permanently deleted.
+                    <p className="text-sm text-muted-foreground font-mono bg-muted p-2 rounded">
+                      {pendingDeleteFileHash?.substring(0, 20)}...
                     </p>
                   </div>
 
-                  <div className="flex gap-3 justify-center">
+                  <DialogFooter className="flex flex-row items-center justify-end gap-3 sm:justify-end">
                     <Button
-                      variant="secondary"
-                      onClick={handleCancelDelete}
-                      disabled={deleteDatasetMutation.isPending}
+                      variant="outline"
+                      onClick={handleCancelDeleteFile}
+                      disabled={deleteFileMutation.isPending}
                     >
                       Cancel
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={handleConfirmDelete}
-                      disabled={deleteDatasetMutation.isPending}
+                      onClick={handleConfirmDeleteFile}
+                      disabled={deleteFileMutation.isPending}
                     >
-                      {deleteDatasetMutation.isPending ? (
-                        <>
-                          <span className="inline-block animate-spin mr-2">
-                            ⟳
-                          </span>
-                          Deleting...
-                        </>
-                      ) : (
-                        'Delete Dataset'
-                      )}
+                      {deleteFileMutation.isPending
+                        ? 'Deleting...'
+                        : 'Delete File'}
                     </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">
-                        Name
-                      </label>
-                      <Input
-                        autoFocus
-                        value={editName}
-                        onChange={e => setEditName(e.target.value)}
-                        placeholder="Dataset name"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">
-                        Description
-                      </label>
-                      <Textarea
-                        value={editDescription}
-                        onChange={e => setEditDescription(e.target.value)}
-                        placeholder="Optional description"
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <Button variant="destructive" onClick={handleDeleteClick}>
-                      Delete
-                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Live Processing Progress - shown while task is running */}
+              {currentTaskId && taskStatus && taskStatus.meta?.files && (
+                <section className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium">Processing Progress</h3>
                     <div className="flex items-center gap-2">
-                      <DialogClose asChild>
-                        <Button variant="secondary">Cancel</Button>
-                      </DialogClose>
-                      <Button
-                        onClick={handleSaveEdit}
-                        disabled={!editName.trim()}
-                      >
-                        Save
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </DialogContent>
-          </Dialog>
-
-          {/* File deletion confirmation modal */}
-          {showDeleteFileConfirmation && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-background p-6 rounded-lg shadow-lg max-w-md w-full mx-4 border border-border">
-                <h3 className="text-lg font-semibold text-red-600 mb-2">
-                  Delete File
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Are you sure you want to delete this file?
-                </p>
-                <p className="text-sm text-muted-foreground mb-6 font-mono bg-muted p-2 rounded">
-                  {pendingDeleteFileHash?.substring(0, 20)}...
-                </p>
-                <div className="flex gap-3 justify-end">
-                  <button
-                    onClick={handleCancelDeleteFile}
-                    className="px-4 py-2 border border-border rounded hover:bg-muted"
-                    disabled={deleteFileMutation.isPending}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleConfirmDeleteFile}
-                    disabled={deleteFileMutation.isPending}
-                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {deleteFileMutation.isPending
-                      ? 'Deleting...'
-                      : 'Delete File'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Live Processing Progress - shown while task is running */}
-          {currentTaskId && taskStatus && taskStatus.meta?.files && (
-            <section className="rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium">Processing Progress</h3>
-                <Badge variant="secondary" size="sm" className="rounded-xl">
-                  {taskStatus.meta.current || 0} / {taskStatus.meta.total || 0} files
-                </Badge>
-              </div>
-              <div className="rounded-md border border-border max-h-80 overflow-auto">
-                {taskStatus.meta.files.map((file: any, idx: number) => (
-                  <div
-                    key={file.task_id || idx}
-                    className="p-3 border-b last:border-b-0 text-xs"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        {/* Status icon */}
-                        {file.state === 'pending' && (
-                          <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
-                        )}
-                        {file.state === 'processing' && (
-                          <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex-shrink-0" />
-                        )}
-                        {file.state === 'success' && (
-                          <FontIcon
-                            type="checkmark-filled"
-                            className="w-4 h-4 text-green-600 flex-shrink-0"
-                          />
-                        )}
-                        {file.state === 'failure' && (
-                          <FontIcon
-                            type="close"
-                            className="w-4 h-4 text-red-600 flex-shrink-0"
-                          />
-                        )}
-
-                        {/* Filename */}
-                        <span className="font-mono text-muted-foreground truncate">
-                          {file.filename || `File ${idx + 1}`}
-                        </span>
-                      </div>
-
-                      {/* Status badge */}
                       <Badge
-                        variant={
-                          file.state === 'success'
-                            ? 'default'
-                            : file.state === 'failure'
-                              ? 'outline'
-                              : 'secondary'
-                        }
+                        variant="secondary"
                         size="sm"
-                        className="rounded-xl flex-shrink-0"
+                        className="rounded-xl w-max flex items-center gap-1.5"
                       >
-                        {file.state === 'pending' && 'Queued'}
-                        {file.state === 'processing' && 'Processing'}
-                        {file.state === 'success' && 'Complete'}
-                        {file.state === 'failure' && 'Failed'}
+                        {taskStatus.state === 'PENDING' && (
+                          <>
+                            <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                            Queued...
+                          </>
+                        )}
+                        {taskStatus.state !== 'PENDING' &&
+                          taskStatus.state !== 'SUCCESS' &&
+                          taskStatus.state !== 'FAILURE' && (
+                            <>
+                              <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                              {taskStatus.meta?.progress
+                                ? `Processing ${taskStatus.meta.progress}%`
+                                : taskStatus.meta?.current &&
+                                  taskStatus.meta?.total
+                                  ? `Processing ${Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)}%`
+                                  : 'Processing...'}
+                            </>
+                          )}
+                      </Badge>
+                      <Badge
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-xl"
+                      >
+                        {taskStatus.meta.current || 0} /{' '}
+                        {taskStatus.meta.total || 0} files
                       </Badge>
                     </div>
-
-                    {/* Additional info */}
-                    {file.chunks && (
-                      <div className="text-muted-foreground mt-1 ml-6">
-                        {file.chunks} chunks created
-                      </div>
-                    )}
-                    {file.error && (
-                      <div className="text-red-600 mt-1 ml-6 text-xs">
-                        Error: {file.error}
-                      </div>
-                    )}
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Processing strategy and Embedding model sections removed per request */}
-
-          {isDragging && (
-            <div className="w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input">
-              <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
-                {isDropped ? (
-                  <Loader />
-                ) : (
-                  <FontIcon
-                    type="upload"
-                    className="w-10 h-10 text-blue-200 dark:text-white"
-                  />
-                )}
-                <div className="text-xl text-foreground">Drop data here</div>
-              </div>
-              <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
-                You can upload PDFs, CSVs, or other documents directly to this
-                dataset.
-              </p>
-            </div>
-          )}
-
-          {/* Raw data */}
-          <section className="rounded-lg border border-border bg-card p-4 mb-40">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium">Raw data</h3>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowFileTypeFilter(!showFileTypeFilter)}
-                >
-                  {showFileTypeFilter ? 'Hide' : 'Filter'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    directoryInputRef.current?.click()
-                  }}
-                >
-                  Upload folder
-                </Button>
-                <Button size="sm" onClick={() => fileInputRef.current?.click()}>
-                  Upload files
-                </Button>
-              </div>
-            </div>
-
-            {/* File type filter section */}
-            {showFileTypeFilter && (
-              <div className="mb-3 p-3 bg-muted/20 rounded-md border border-border/60">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      File type filter (comma-separated)
-                    </label>
-                    {fileTypeFilter && (
-                      <button
-                        onClick={clearFileTypeFilter}
-                        className="text-xs text-blue-600 hover:text-blue-800"
+                  <div className="rounded-md border border-border max-h-80 overflow-auto">
+                    {taskStatus.meta.files.map((file: any, idx: number) => (
+                      <div
+                        key={file.task_id || idx}
+                        className="p-3 border-b last:border-b-0 text-xs"
                       >
-                        Clear filter
-                      </button>
-                    )}
-                  </div>
-                  <Input
-                    value={fileTypeFilter}
-                    onChange={e => setFileTypeFilter(e.target.value)}
-                    placeholder="e.g., .pdf, .txt, .docx (leave empty for all files)"
-                    className="text-sm"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-xs text-muted-foreground">
-                      Quick add:
-                    </span>
-                    {commonFileTypes.map(ext => (
-                      <button
-                        key={ext}
-                        onClick={() => addFileTypeToFilter(ext)}
-                        className="text-xs px-2 py-0.5 rounded bg-background border border-border hover:bg-accent"
-                      >
-                        {ext}
-                      </button>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            {/* Status icon */}
+                            {file.state === 'pending' && (
+                              <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
+                            )}
+                            {file.state === 'processing' && (
+                              <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex-shrink-0" />
+                            )}
+                            {file.state === 'success' && (
+                              <FontIcon
+                                type="checkmark-filled"
+                                className="w-4 h-4 text-green-600 flex-shrink-0"
+                              />
+                            )}
+                            {file.state === 'failure' && (
+                              <FontIcon
+                                type="close"
+                                className="w-4 h-4 text-red-600 flex-shrink-0"
+                              />
+                            )}
+
+                            {/* Filename */}
+                            <span className="font-mono text-muted-foreground truncate">
+                              {file.filename || `File ${idx + 1}`}
+                            </span>
+                          </div>
+
+                          {/* Status badge */}
+                          <Badge
+                            variant={
+                              file.state === 'success'
+                                ? 'default'
+                                : file.state === 'failure'
+                                  ? 'outline'
+                                  : 'secondary'
+                            }
+                            size="sm"
+                            className="rounded-xl flex-shrink-0"
+                          >
+                            {file.state === 'pending' && 'Queued'}
+                            {file.state === 'processing' && 'Processing'}
+                            {file.state === 'success' && 'Complete'}
+                            {file.state === 'failure' && 'Failed'}
+                          </Badge>
+                        </div>
+
+                        {/* Additional info */}
+                        {file.chunks && (
+                          <div className="text-muted-foreground mt-1 ml-6">
+                            {file.chunks} chunks created
+                          </div>
+                        )}
+                        {file.error && (
+                          <div className="text-red-600 mt-1 ml-6 text-xs">
+                            Error: {file.error}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
-                  {fileTypeFilter && (
-                    <p className="text-xs text-muted-foreground">
-                      Will only upload files matching:{' '}
-                      <span className="font-mono font-medium">
-                        {fileTypeFilter}
-                      </span>
-                    </p>
-                  )}
+                </section>
+              )}
+
+              {/* Processing strategy and Embedding model sections removed per request */}
+
+              {/* Raw data */}
+              <section className="rounded-lg border border-border bg-card p-4 mb-40">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium">Raw data</h3>
+                  <div className="flex items-center gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="gap-1.5"
+                        >
+                          Upload
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="opacity-60"
+                          >
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[200px]">
+                        <DropdownMenuItem
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 32 32"
+                            fill="none"
+                            className="mr-2"
+                          >
+                            <path
+                              d="M25.7 9.3L18.7 2.3C18.5 2.1 18.3 2 18 2H8C6.9 2 6 2.9 6 4V28C6 29.1 6.9 30 8 30H24C25.1 30 26 29.1 26 28V10C26 9.7 25.9 9.5 25.7 9.3ZM18 4.4L23.6 10H18V4.4ZM24 28H8V4H16V10C16 11.1 16.9 12 18 12H24V28Z"
+                              fill="currentColor"
+                            />
+                            <path
+                              d="M10 22H22V24H10V22ZM10 16H22V18H10V16Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                          Upload files
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => directoryInputRef.current?.click()}
+                        >
+                          <FontIcon type="folder" className="w-4 h-4 mr-2" />
+                          Upload folder
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            setShowFileTypeFilter(!showFileTypeFilter)
+                          }
+                        >
+                          <FontIcon type="search" className="w-4 h-4 mr-2" />
+                          Filtered file search
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={
+                            processMutation.isPending || !!currentTaskId
+                          }
+                        >
+                          {processMutation.isPending
+                            ? 'Starting...'
+                            : currentTaskId && taskStatus
+                              ? 'Processing...'
+                              : 'Process data'}
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="opacity-60"
+                          >
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[200px]">
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            if (
+                              !datasetId ||
+                              !activeProject?.namespace ||
+                              !activeProject?.project
+                            )
+                              return
+
+                            try {
+                              // Clear previous results from state and localStorage
+                              setProcessingResult(null)
+                              clearDatasetResult(
+                                activeProject.namespace,
+                                activeProject.project,
+                                datasetId
+                              )
+
+                              const result = await processMutation.mutateAsync({
+                                namespace: activeProject.namespace,
+                                project: activeProject.project,
+                                dataset: datasetId,
+                              })
+
+                              // The process endpoint returns task_id directly
+                              if (result.task_id) {
+                                setCurrentTaskId(result.task_id)
+                                // Save task ID to sessionStorage so it persists across navigation
+                                saveDatasetTaskId(
+                                  activeProject.namespace,
+                                  activeProject.project,
+                                  datasetId,
+                                  result.task_id
+                                )
+                                toast({
+                                  message: 'Processing new files...',
+                                  variant: 'default',
+                                })
+                              }
+                            } catch (error) {
+                              console.error(
+                                'Failed to start processing:',
+                                error
+                              )
+                              toast({
+                                message:
+                                  'Failed to start processing. Please try again.',
+                                variant: 'destructive',
+                              })
+                            }
+                          }}
+                        >
+                          Process new files
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            if (
+                              !datasetId ||
+                              !activeProject?.namespace ||
+                              !activeProject?.project
+                            )
+                              return
+
+                            try {
+                              // Clear previous results from state and localStorage
+                              setProcessingResult(null)
+                              clearDatasetResult(
+                                activeProject.namespace,
+                                activeProject.project,
+                                datasetId
+                              )
+
+                              const result = await processMutation.mutateAsync({
+                                namespace: activeProject.namespace,
+                                project: activeProject.project,
+                                dataset: datasetId,
+                              })
+
+                              // The process endpoint returns task_id directly
+                              if (result.task_id) {
+                                setCurrentTaskId(result.task_id)
+                                // Save task ID to sessionStorage so it persists across navigation
+                                saveDatasetTaskId(
+                                  activeProject.namespace,
+                                  activeProject.project,
+                                  datasetId,
+                                  result.task_id
+                                )
+                                toast({
+                                  message: 'Reprocessing all files...',
+                                  variant: 'default',
+                                })
+                              }
+                            } catch (error) {
+                              console.error(
+                                'Failed to start processing:',
+                                error
+                              )
+                              toast({
+                                message:
+                                  'Failed to start processing. Please try again.',
+                                variant: 'destructive',
+                              })
+                            }
+                          }}
+                        >
+                          Reprocess all files
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
-              </div>
-            )}
 
-            {/* Upload stats */}
-            {uploadStats && (
-              <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  Uploading {uploadStats.filtered} of {uploadStats.total} files
-                  (filtered by file type)
-                </p>
-              </div>
-            )}
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              onChange={async e => {
-                if (
-                  !datasetId ||
-                  !activeProject?.namespace ||
-                  !activeProject?.project
-                ) {
-                  toast({
-                    message: 'Missing required information for upload',
-                    variant: 'destructive',
-                  })
-                  return
-                }
-
-                const list = e.target.files ? Array.from(e.target.files) : []
-                if (list.length === 0) return
-
-                // Reset input immediately to allow re-selecting same files
-                const target = e.currentTarget
-                try {
-                  await handleFilesUpload(list)
-                } catch (error) {
-                  console.error('File upload error:', error)
-                  toast({
-                    message: 'Failed to upload files. See console for details.',
-                    variant: 'destructive',
-                  })
-                } finally {
-                  // Reset input value after upload completes
-                  if (target) {
-                    target.value = ''
-                  }
-                }
-              }}
-            />
-            <input
-              ref={directoryInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              onChange={async e => {
-                if (
-                  !datasetId ||
-                  !activeProject?.namespace ||
-                  !activeProject?.project
-                ) {
-                  toast({
-                    message: 'Missing required information for upload',
-                    variant: 'destructive',
-                  })
-                  return
-                }
-
-                const list = e.target.files ? Array.from(e.target.files) : []
-
-                if (list.length === 0) {
-                  toast({
-                    message: 'No files selected',
-                    variant: 'destructive',
-                  })
-                  return
-                }
-
-                // Store reference to avoid null issues after async operation
-                const target = e.currentTarget
-                try {
-                  await handleFilesUpload(list)
-                } catch (error) {
-                  console.error('Folder upload error:', error)
-                  toast({
-                    message:
-                      'Failed to upload folder. See console for details.',
-                    variant: 'destructive',
-                  })
-                } finally {
-                  // Reset input value after upload completes
-                  if (target) {
-                    target.value = ''
-                  }
-                }
-              }}
-            />
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-1/2">
-                <SearchInput
-                  placeholder="Search raw files"
-                  value={searchValue}
-                  onChange={e => setSearchValue(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="rounded-md border border-input bg-background p-0 text-xs">
-              {files.length === 0 ? (
-                <div className="p-3 text-muted-foreground">
-                  No files assigned yet.
-                </div>
-              ) : (
-                <div>
-                  <div className="p-3 border-b border-border/60 bg-muted/20">
-                    <div className="text-xs font-medium">
-                      {files.length} file{files.length !== 1 ? 's' : ''}
+                {/* File type filter section */}
+                {showFileTypeFilter && (
+                  <div className="mb-3 p-3 bg-muted/20 rounded-md border border-border/60 relative">
+                    <button
+                      onClick={() => setShowFileTypeFilter(false)}
+                      className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      aria-label="Close filter"
+                    >
+                      <FontIcon type="close" className="w-4 h-4" />
+                    </button>
+                    <div className="flex flex-col gap-3">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        File type filter (comma-separated)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <SearchInput
+                          value={fileTypeFilter}
+                          onChange={e => setFileTypeFilter(e.target.value)}
+                          onClear={clearFileTypeFilter}
+                          placeholder="e.g., .pdf, .txt, .docx (leave empty for all files)"
+                          className="text-sm"
+                        />
+                        <Button
+                          onClick={() => filteredFileInputRef.current?.click()}
+                          className="whitespace-nowrap"
+                        >
+                          <FontIcon type="search" className="w-4 h-4 mr-2" />
+                          Search files with filters
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          Quick add:
+                        </span>
+                        {commonFileTypes.map(ext => (
+                          <button
+                            key={ext}
+                            onClick={() => addFileTypeToFilter(ext)}
+                            className="text-xs px-2 py-0.5 rounded bg-background border border-border hover:bg-accent"
+                          >
+                            {ext}
+                          </button>
+                        ))}
+                      </div>
+                      {fileTypeFilter && (
+                        <p className="text-xs text-muted-foreground">
+                          Will only upload files matching:{' '}
+                          <span className="font-mono font-medium">
+                            {fileTypeFilter}
+                          </span>
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <ul>
-                    {files
-                      .filter(f =>
-                        f.name.toLowerCase().includes(searchValue.toLowerCase())
-                      )
-                      .map(f => (
-                        <li
-                          key={f.id}
-                          className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
-                        >
-                          <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
-                            <span>{f.fullHash ? f.name : f.name}</span>
-                            {f.fullHash && (
-                              <>
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await navigator.clipboard.writeText(
-                                        f.fullHash!
-                                      )
-                                      setCopyStatus(prev => ({
-                                        ...prev,
-                                        [f.id]: 'Copied!',
-                                      }))
-                                    } catch (err) {
-                                      setCopyStatus(prev => ({
-                                        ...prev,
-                                        [f.id]: 'Failed to copy',
-                                      }))
-                                    }
-                                    setTimeout(() => {
-                                      setCopyStatus(prev => ({
-                                        ...prev,
-                                        [f.id]: undefined,
-                                      }))
-                                    }, 1500)
-                                  }}
-                                  className="text-xs text-blue-600 hover:text-blue-800 text-left"
-                                  title="Click to copy full hash"
-                                >
-                                  Copy full hash
-                                </button>
-                                {copyStatus?.[f.id] && (
-                                  <span
-                                    className={`ml-2 text-xs ${copyStatus[f.id] === 'Copied!' ? 'text-green-600' : 'text-red-600'}`}
-                                  >
-                                    {copyStatus[f.id]}
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </div>
-                          <div className="w-1/2 flex items-center justify-between gap-4">
-                            <div className="text-xs text-muted-foreground">
-                              {f.size === 'unknown' || f.fullHash
-                                ? 'N/A'
-                                : `${Math.ceil(f.size / 1024)} KB`}
-                            </div>
-                            <div className="flex items-center gap-6">
-                              {fileUploadStatuses.find(s => s.id === f.id)
-                                ?.status === 'uploading' && (
-                                <div className="flex items-center gap-1 text-muted-foreground">
-                                  <FontIcon type="fade" className="w-4 h-4" />
-                                  <span className="text-xs">Processing</span>
-                                </div>
-                              )}
-                              {fileUploadStatuses.find(s => s.id === f.id)
-                                ?.status === 'success' && (
-                                <FontIcon
-                                  type="checkmark-outline"
-                                  className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                                />
-                              )}
+                )}
+
+                {/* Upload stats */}
+                {uploadStats && (
+                  <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      Uploading {uploadStats.filtered} of {uploadStats.total}{' '}
+                      files (filtered by file type)
+                    </p>
+                  </div>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={async e => {
+                    if (
+                      !datasetId ||
+                      !activeProject?.namespace ||
+                      !activeProject?.project
+                    ) {
+                      toast({
+                        message: 'Missing required information for upload',
+                        variant: 'destructive',
+                      })
+                      return
+                    }
+
+                    const list = e.target.files
+                      ? Array.from(e.target.files)
+                      : []
+                    if (list.length === 0) return
+
+                    // Reset input immediately to allow re-selecting same files
+                    const target = e.currentTarget
+                    try {
+                      // Skip filtering for regular file uploads - user explicitly selected these files
+                      await handleFilesUpload(list, true)
+                    } catch (error) {
+                      console.error('File upload error:', error)
+                      toast({
+                        message:
+                          'Failed to upload files. See console for details.',
+                        variant: 'destructive',
+                      })
+                    } finally {
+                      // Reset input value after upload completes
+                      if (target) {
+                        target.value = ''
+                      }
+                    }
+                  }}
+                />
+                <input
+                  ref={filteredFileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  accept={
+                    fileTypeFilter
+                      ? fileTypeFilter
+                        .split(',')
+                        .map(s => s.trim())
+                        .filter(Boolean)
+                        .map(ext => (ext.startsWith('.') ? ext : `.${ext}`))
+                        .join(',')
+                      : undefined
+                  }
+                  onChange={async e => {
+                    if (
+                      !datasetId ||
+                      !activeProject?.namespace ||
+                      !activeProject?.project
+                    ) {
+                      toast({
+                        message: 'Missing required information for upload',
+                        variant: 'destructive',
+                      })
+                      return
+                    }
+
+                    const list = e.target.files
+                      ? Array.from(e.target.files)
+                      : []
+                    if (list.length === 0) return
+
+                    // Reset input immediately to allow re-selecting same files
+                    const target = e.currentTarget
+                    try {
+                      await handleFilesUpload(list)
+                    } catch (error) {
+                      console.error('File upload error:', error)
+                      toast({
+                        message:
+                          'Failed to upload files. See console for details.',
+                        variant: 'destructive',
+                      })
+                    } finally {
+                      // Reset input value after upload completes
+                      if (target) {
+                        target.value = ''
+                      }
+                    }
+                  }}
+                />
+                <input
+                  ref={directoryInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={async e => {
+                    if (
+                      !datasetId ||
+                      !activeProject?.namespace ||
+                      !activeProject?.project
+                    ) {
+                      toast({
+                        message: 'Missing required information for upload',
+                        variant: 'destructive',
+                      })
+                      return
+                    }
+
+                    const list = e.target.files
+                      ? Array.from(e.target.files)
+                      : []
+
+                    if (list.length === 0) {
+                      toast({
+                        message: 'No files selected',
+                        variant: 'destructive',
+                      })
+                      return
+                    }
+
+                    // Store reference to avoid null issues after async operation
+                    const target = e.currentTarget
+                    try {
+                      // Skip filtering for folder uploads - user explicitly selected this folder
+                      await handleFilesUpload(list, true)
+                    } catch (error) {
+                      console.error('Folder upload error:', error)
+                      toast({
+                        message:
+                          'Failed to upload folder. See console for details.',
+                        variant: 'destructive',
+                      })
+                    } finally {
+                      // Reset input value after upload completes
+                      if (target) {
+                        target.value = ''
+                      }
+                    }
+                  }}
+                />
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1/2">
+                    <SearchInput
+                      placeholder="Search raw files"
+                      value={searchValue}
+                      onChange={e => setSearchValue(e.target.value)}
+                      onClear={() => setSearchValue('')}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-md border border-input bg-background p-0 text-xs">
+                  {files.length === 0 ? (
+                    <div className="p-3 text-muted-foreground">
+                      No files assigned yet.
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="p-3 border-b border-border/60 bg-muted/20">
+                        <div className="text-xs font-medium">
+                          {files.length} file{files.length !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                      {(() => {
+                        const filteredFiles = files.filter(f =>
+                          f.name
+                            .toLowerCase()
+                            .includes(searchValue.toLowerCase())
+                        )
+
+                        if (filteredFiles.length === 0 && searchValue) {
+                          return (
+                            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                              <FontIcon
+                                type="search"
+                                className="w-8 h-8 text-muted-foreground/40 mb-3"
+                              />
+                              <div className="text-sm font-medium text-foreground mb-1">
+                                No results found
+                              </div>
+                              <div className="text-xs text-muted-foreground mb-3">
+                                No files match "{searchValue}"
+                              </div>
                               <button
-                                className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
-                                onClick={() =>
-                                  f.fullHash && handleDeleteFile(f.fullHash)
-                                }
-                                disabled={
-                                  f.fullHash ? isFileDeleting(f.fullHash) : true
-                                }
-                                aria-label={`Delete ${f.name} from dataset`}
-                                title="Delete file"
+                                onClick={() => setSearchValue('')}
+                                className="text-xs text-blue-600 hover:text-blue-800 dark:text-white dark:hover:text-blue-200"
                               >
-                                {f.fullHash && isFileDeleting(f.fullHash) ? (
-                                  <span className="text-xs">...</span>
-                                ) : (
-                                  <FontIcon
-                                    type="trashcan"
-                                    className="w-4 h-4"
-                                  />
-                                )}
+                                Clear search
                               </button>
                             </div>
-                          </div>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </section>
+                          )
+                        }
 
-          {/* File deletion now handled directly via API calls with confirmation dialog */}
-        </>
+                        return (
+                          <ul>
+                            {filteredFiles.map(f => (
+                              <li
+                                key={f.id}
+                                className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
+                              >
+                                <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
+                                  <span>{f.fullHash ? f.name : f.name}</span>
+                                  {f.fullHash && (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          await navigator.clipboard.writeText(
+                                            f.fullHash!
+                                          )
+                                          setCopyStatus(prev => ({
+                                            ...prev,
+                                            [f.id]: 'Copied!',
+                                          }))
+                                        } catch (err) {
+                                          setCopyStatus(prev => ({
+                                            ...prev,
+                                            [f.id]: 'Failed to copy',
+                                          }))
+                                        }
+                                        setTimeout(() => {
+                                          setCopyStatus(prev => ({
+                                            ...prev,
+                                            [f.id]: undefined,
+                                          }))
+                                        }, 1500)
+                                      }}
+                                      className={`text-xs text-left ${copyStatus?.[f.id] === 'Copied!'
+                                        ? 'text-green-600'
+                                        : copyStatus?.[f.id] ===
+                                          'Failed to copy'
+                                          ? 'text-red-600'
+                                          : 'text-blue-600 hover:text-blue-800'
+                                        }`}
+                                      title="Click to copy full hash"
+                                    >
+                                      {copyStatus?.[f.id] || 'Copy full hash'}
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="w-1/2 flex items-center justify-between gap-4">
+                                  <div className="text-xs text-muted-foreground">
+                                    {f.size === 'unknown' || f.fullHash
+                                      ? 'N/A'
+                                      : `${Math.ceil(f.size / 1024)} KB`}
+                                  </div>
+                                  <div className="flex items-center gap-6">
+                                    {fileUploadStatuses.find(s => s.id === f.id)
+                                      ?.status === 'uploading' && (
+                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                          <FontIcon
+                                            type="fade"
+                                            className="w-4 h-4"
+                                          />
+                                          <span className="text-xs">
+                                            Processing
+                                          </span>
+                                        </div>
+                                      )}
+                                    {fileUploadStatuses.find(s => s.id === f.id)
+                                      ?.status === 'success' && (
+                                        <FontIcon
+                                          type="checkmark-outline"
+                                          className="w-4 h-4 text-teal-600 dark:text-teal-400"
+                                        />
+                                      )}
+                                    <button
+                                      className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                                      onClick={() =>
+                                        f.fullHash &&
+                                        handleDeleteFile(f.fullHash)
+                                      }
+                                      disabled={
+                                        f.fullHash
+                                          ? isFileDeleting(f.fullHash)
+                                          : true
+                                      }
+                                      aria-label={`Delete ${f.name} from dataset`}
+                                      title="Delete file"
+                                    >
+                                      {f.fullHash &&
+                                        isFileDeleting(f.fullHash) ? (
+                                        <span className="text-xs">...</span>
+                                      ) : (
+                                        <FontIcon
+                                          type="trashcan"
+                                          className="w-4 h-4"
+                                        />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* File deletion now handled directly via API calls with confirmation dialog */}
+            </>
+          )}
+        </div>
       )}
     </div>
   )
