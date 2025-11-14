@@ -265,7 +265,15 @@ func getServicesToManage(args []string) []string {
 			serviceNames[i] = strings.TrimSpace(serviceNames[i])
 		}
 
-		return serviceNames
+		// Filter out empty service names to prevent invalid arguments
+		filteredServiceNames := make([]string, 0, len(serviceNames))
+		for _, name := range serviceNames {
+			if name != "" {
+				filteredServiceNames = append(filteredServiceNames, name)
+			}
+		}
+
+		return filteredServiceNames
 	}
 
 	// Start all services

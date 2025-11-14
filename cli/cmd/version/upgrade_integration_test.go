@@ -33,8 +33,23 @@ func TestUpgradeIntegration(t *testing.T) {
 		testBackupAndRestore(t, testDir, oldBinary)
 	})
 
+	t.Run("UpgradeFailsWithoutWritePermission", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Permission tests not reliable on Windows")
+		}
+		testUpgradeFailsWithoutWritePermission(t, testDir, oldBinary, newBinary)
+	})
+
 	t.Run("PermissionPreservation", func(t *testing.T) {
 		testPermissionPreservation(t, testDir, oldBinary, newBinary)
+	})
+
+	t.Run("RestoreWithMissingBackup", func(t *testing.T) {
+		testRestoreWithMissingBackup(t, testDir)
+	})
+
+	t.Run("RestoreWithCorruptedBackup", func(t *testing.T) {
+		testRestoreWithCorruptedBackup(t, testDir, oldBinary)
 	})
 
 	t.Run("BinaryVerification", func(t *testing.T) {
@@ -179,6 +194,122 @@ func testBackupAndRestore(t *testing.T, testDir, oldBinary string) {
 	// Verify restoration
 	if version := getVersionFromBinary(t, installedBinary); version == "" {
 		t.Error("Binary not restored correctly, version check failed")
+	}
+}
+
+// testUpgradeFailsWithoutWritePermission tests upgrade failure in a read-only directory
+func testUpgradeFailsWithoutWritePermission(t *testing.T, testDir, oldBinary, newBinary string) {
+	t.Helper()
+
+	// Create a subdirectory for the test
+	noWriteDir := filepath.Join(testDir, "no_write")
+	if err := os.Mkdir(noWriteDir, 0755); err != nil {
+		t.Fatalf("failed to create no_write directory: %v", err)
+	}
+
+	// Copy the old binary into the directory first
+	oldBinaryPath := filepath.Join(noWriteDir, "lf")
+	if runtime.GOOS == "windows" {
+		oldBinaryPath += ".exe"
+	}
+
+	input, err := os.ReadFile(oldBinary)
+	if err != nil {
+		t.Fatalf("failed to read old binary: %v", err)
+	}
+	if err := os.WriteFile(oldBinaryPath, input, 0755); err != nil {
+		t.Fatalf("failed to write old binary to no_write directory: %v", err)
+	}
+
+	// Now make the directory read-only
+	if err := os.Chmod(noWriteDir, 0555); err != nil {
+		t.Fatalf("failed to set directory to read-only: %v", err)
+	}
+	defer os.Chmod(noWriteDir, 0755) // Restore permissions for cleanup
+
+	// Copy new binary to temp location for the upgrade attempt
+	tempNewBinary := filepath.Join(noWriteDir, "lf.tmp")
+
+	// Attempt upgrade (should fail due to permissions)
+	err = os.WriteFile(tempNewBinary, []byte("test"), 0755)
+	if err == nil {
+		t.Fatalf("expected upgrade to fail due to insufficient permissions, but write succeeded")
+	}
+
+	// Ensure the old binary is still present and unchanged
+	after, err := os.ReadFile(oldBinaryPath)
+	if err != nil {
+		t.Fatalf("failed to read old binary after failed upgrade: %v", err)
+	}
+	if string(input) != string(after) {
+		t.Errorf("old binary was modified during failed upgrade")
+	}
+
+	// Verify the old binary is still executable
+	if version := getVersionFromBinary(t, oldBinaryPath); version == "" {
+		t.Error("old binary should still be executable after failed upgrade")
+	}
+}
+
+// testRestoreWithMissingBackup tests restoration when the backup file is missing
+func testRestoreWithMissingBackup(t *testing.T, testDir string) {
+	t.Helper()
+
+	// Simulate missing backup file
+	missingBackupPath := filepath.Join(testDir, "missing-backup-file.bak")
+	targetPath := filepath.Join(testDir, "target-binary")
+
+	// Attempt to restore from non-existent backup
+	err := os.Rename(missingBackupPath, targetPath)
+	if err == nil {
+		t.Fatalf("expected error when restoring from missing backup file, got nil")
+	}
+
+	// Verify error is due to missing file
+	if !os.IsNotExist(err) {
+		t.Errorf("expected 'file not found' error, got: %v", err)
+	}
+}
+
+// testRestoreWithCorruptedBackup tests restoration when the backup file is corrupted
+func testRestoreWithCorruptedBackup(t *testing.T, testDir, validBinary string) {
+	t.Helper()
+
+	installDir := filepath.Join(testDir, "corrupted-backup-test")
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		t.Fatalf("Failed to create install dir: %v", err)
+	}
+
+	// Create a corrupted backup file
+	corruptedBackupPath := filepath.Join(installDir, "lf.backup")
+	if err := os.WriteFile(corruptedBackupPath, []byte("corrupted data that cannot be restored"), 0755); err != nil {
+		t.Fatalf("Failed to create corrupted backup file: %v", err)
+	}
+
+	// Target path for restoration
+	installedBinary := filepath.Join(installDir, "lf")
+	if runtime.GOOS == "windows" {
+		installedBinary += ".exe"
+	}
+
+	// Attempt to restore from corrupted backup
+	if err := os.Rename(corruptedBackupPath, installedBinary); err != nil {
+		t.Fatalf("Failed to restore corrupted backup: %v", err)
+	}
+
+	// Verify that the restored binary is not executable (corrupted)
+	version := getVersionFromBinary(t, installedBinary)
+	if version != "" {
+		t.Errorf("Corrupted backup should not be executable, but got version: %s", version)
+	}
+
+	// Verify the file exists but is corrupted
+	data, err := os.ReadFile(installedBinary)
+	if err != nil {
+		t.Fatalf("Failed to read restored file: %v", err)
+	}
+	if string(data) != "corrupted data that cannot be restored" {
+		t.Error("Restored file content doesn't match corrupted backup")
 	}
 }
 

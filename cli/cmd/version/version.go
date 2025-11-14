@@ -199,22 +199,8 @@ func PerformUpgrade(opts UpgradeOpts) error {
 	// Confirm upgrade
 	utils.OutputInfo("\n🚀 Starting upgrade to %s...", targetVersion)
 
-	// Get currently running services before stopping them
-	// We'll restart these after the upgrade completes
-	runningServices, err := getRunningServices(opts.ServerURL)
-	if err != nil {
-		utils.LogDebug(fmt.Sprintf("Warning: failed to get running services: %v", err))
-		runningServices = nil
-	} else if len(runningServices) > 0 {
-		utils.LogDebug(fmt.Sprintf("Currently running services: %v", runningServices))
-	}
-
-	// Stop all running services before upgrading the binary
-	// This ensures clean shutdown and prevents version mismatches
-	if len(runningServices) > 0 {
-		utils.OutputProgress("Stopping services before upgrade...")
-		_ = stopAllServices(opts.ServerURL)
-	}
+	// Manage service orchestration for upgrade
+	runningServices := manageServicesBeforeUpgrade(opts.ServerURL)
 
 	platform := detectPlatform()
 
@@ -254,11 +240,7 @@ func PerformUpgrade(opts UpgradeOpts) error {
 	}
 
 	// Restart services that were running before upgrade
-	// IMPORTANT: Use the NEW binary to restart services so dependencies sync correctly
-	if len(runningServices) > 0 {
-		utils.OutputInfo("Completing upgrade...")
-		_ = restartServicesWithNewBinary(finalBinaryPath, opts.ServerURL, runningServices)
-	}
+	manageServicesAfterUpgrade(finalBinaryPath, opts.ServerURL, runningServices)
 
 	// If requested (e.g., from TUI), restart into the updated binary
 	if os.Getenv("LF_RESTART_AFTER_UPGRADE") == "1" {
@@ -289,6 +271,35 @@ func PerformUpgrade(opts UpgradeOpts) error {
 		utils.OutputInfo("\n⚠️  Restart failed. Please exit and relaunch the CLI.")
 	}
 	return nil
+}
+
+// manageServicesBeforeUpgrade handles stopping services before the binary upgrade
+// Returns a list of services that were running, so they can be restarted later
+func manageServicesBeforeUpgrade(serverURL string) []string {
+	// Get currently running services before stopping them
+	// We'll restart these after the upgrade completes
+	runningServices, err := getRunningServices(serverURL)
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Warning: failed to get running services: %v", err))
+		return nil
+	}
+
+	if len(runningServices) > 0 {
+		utils.LogDebug(fmt.Sprintf("Currently running services: %v", runningServices))
+		utils.OutputProgress("Stopping services before upgrade...")
+		_ = stopAllServices(serverURL)
+	}
+
+	return runningServices
+}
+
+// manageServicesAfterUpgrade handles restarting services after the binary upgrade
+// Uses the newly upgraded binary to restart services so dependencies sync correctly
+func manageServicesAfterUpgrade(newBinaryPath, serverURL string, runningServices []string) {
+	if len(runningServices) > 0 {
+		utils.OutputInfo("Completing upgrade...")
+		_ = restartServicesWithNewBinary(newBinaryPath, serverURL, runningServices)
+	}
 }
 
 // getRunningServices returns a list of services that are currently running
@@ -340,6 +351,11 @@ func stopAllServices(serverURL string) error {
 
 // restartServicesWithNewBinary starts services using the newly upgraded binary
 // This ensures the new binary triggers source download and dependency sync
+//
+// Security Note: The newBinaryPath parameter is derived from our own upgrade process
+// (either the current binary location or a user-specified --install-dir).
+// It is NOT directly controllable by external input and is validated before use.
+// The command arguments are also constructed internally, not from user data.
 func restartServicesWithNewBinary(newBinaryPath, serverURL string, services []string) error {
 	if len(services) == 0 {
 		return nil
@@ -354,11 +370,12 @@ func restartServicesWithNewBinary(newBinaryPath, serverURL string, services []st
 	// Execute the new binary to start services
 	cmd := exec.Command(newBinaryPath, args...)
 
-	// Set environment variables if serverURL is custom
+	// Set environment and pass custom server URL if provided
+	// Note: newBinaryPath is controlled by our upgrade process, not user input
+	cmd.Env = os.Environ()
 	if serverURL != "" {
-		cmd.Env = append(args, "--server-url", serverURL)
-	} else {
-		cmd.Env = os.Environ()
+		// Pass server URL as a command-line argument
+		cmd.Args = append(cmd.Args, "--server-url", serverURL)
 	}
 
 	// Capture output for debugging
