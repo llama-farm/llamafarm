@@ -176,6 +176,19 @@ function DatasetView() {
         // Recalculate counts from details to ensure accuracy
         const recalculatedResult = recalculateCountsFromDetails(savedResult)
         setProcessingResult(recalculatedResult)
+
+        // Don't restore failure state if there are partial successes
+        // (This ensures old stored failures don't show up incorrectly)
+        const hasPartialResults =
+          recalculatedResult &&
+          (recalculatedResult.processed_files > 0 ||
+            recalculatedResult.skipped_files > 0)
+
+        if (!hasPartialResults && recalculatedResult.failed_files > 0) {
+          // Only restore failure state for complete failures
+          // Note: we don't have the original error message, so don't set processingFailure
+          // The results grid will show the failure counts
+        }
       }
     }
   }, [
@@ -713,6 +726,7 @@ function DatasetView() {
       // Task failed - but preserve partial results if they exist
       console.error('Task failed:', taskStatus.error, taskStatus.traceback)
       console.log('Full taskStatus on failure:', taskStatus)
+      console.log('taskStatus.result:', taskStatus.result)
       setCurrentTaskId(null)
 
       // Try to extract partial results from either result or meta fields
@@ -767,21 +781,27 @@ function DatasetView() {
           recalculatedPartialResults.skipped_files > 0 ||
           recalculatedPartialResults.failed_files > 0)
 
-      // Always set failure state, even if there are no partial results
-      setProcessingFailure({
-        error: errorMessage,
-        timestamp: new Date(),
-        taskId: currentTaskId || 'unknown',
-      })
+      // Only set failure state if there are NO partial results (complete failure)
+      // If there are partial results, just show them in the results grid
+      if (!hasPartialResults) {
+        setProcessingFailure({
+          error: errorMessage,
+          timestamp: new Date(),
+          taskId: currentTaskId || 'unknown',
+        })
+      } else {
+        // Clear any previous failures since we have partial results to show
+        setProcessingFailure(null)
+      }
 
-      // Auto-open the results section to show the failure
+      // Auto-open the results section to show the failure or partial results
       setIsResultsOpen(true)
 
       toast({
         message: hasPartialResults
-          ? `⚠️ Processing completed with errors: ${errorMessage}. Check results below for details.`
+          ? `⚠️ Processing completed with ${recalculatedPartialResults.failed_files} error(s). ${recalculatedPartialResults.processed_files} file(s) processed successfully.`
           : `❌ Processing failed: ${errorMessage}`,
-        variant: 'destructive',
+        variant: hasPartialResults ? 'default' : 'destructive',
       })
     }
   }, [
@@ -1072,12 +1092,18 @@ function DatasetView() {
                             e.stopPropagation()
                             setProcessingResult(null)
                             setProcessingFailure(null)
+                            setCurrentTaskId(null) // Stop polling the task
                             if (
                               activeProject?.namespace &&
                               activeProject?.project &&
                               datasetId
                             ) {
                               clearDatasetResult(
+                                activeProject.namespace,
+                                activeProject.project,
+                                datasetId
+                              )
+                              clearDatasetTaskId(
                                 activeProject.namespace,
                                 activeProject.project,
                                 datasetId
