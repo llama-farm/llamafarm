@@ -650,15 +650,18 @@ class ChatOrchestratorAgentFactory:
 
         # ProjectContextProvider: Only for dev chat to show the user's active project context
         # Regular user projects don't need this metadata clutter
-        if project_config.namespace == "llamafarm" and project_config.name == "project_seed":
-            # Dev chat: use active project from header if provided
-            if active_project_namespace and active_project_name:
-                project_context_provider = ProjectContextProvider(
-                    title="Project Context",
-                    namespace=active_project_namespace,
-                    name=active_project_name,
-                )
-                agent.register_context_provider("project_context", project_context_provider)
+        if (
+            project_config.namespace == "llamafarm"
+            and project_config.name == "project_seed"
+            and active_project_namespace
+            and active_project_name
+        ):
+            project_context_provider = ProjectContextProvider(
+                title="Project Context",
+                namespace=active_project_namespace,
+                name=active_project_name,
+            )
+            agent.register_context_provider("project_context", project_context_provider)
 
         await agent.setup_tools()
 
