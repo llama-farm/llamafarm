@@ -306,7 +306,7 @@ class TestLFAgent:
         agent = LFAgent(config=agent_config)
         user_msg = LFChatCompletionUserMessageParam(role="user", content="Hello")
 
-        response = await agent.run_async(user_input=user_msg)
+        response = await agent.run_async(messages=[user_msg])
 
         assert response == "Response"
         assert len(agent.history.history) == 1
@@ -334,7 +334,7 @@ class TestLFAgent:
         user_msg = LFChatCompletionUserMessageParam(role="user", content="Hello")
 
         chunks = []
-        async for chunk in agent.run_async_stream(user_input=user_msg):
+        async for chunk in agent.run_async_stream(messages=[user_msg]):
             chunks.append(chunk)
 
         assert len(chunks) > 0
@@ -354,7 +354,7 @@ class TestLFAgent:
         ]
 
         chunks = []
-        async for chunk in agent.run_async_stream(user_input=user_msg, tools=tools):
+        async for chunk in agent.run_async_stream(messages=[user_msg], tools=tools):
             chunks.append(chunk)
 
         assert len(chunks) > 0

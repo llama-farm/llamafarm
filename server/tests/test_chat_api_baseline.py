@@ -120,12 +120,15 @@ def app_client(mocker):
         async def run_async(
             self,
             *,
-            user_input: dict | None = None,
+            messages: list[dict] | None = None,
             input_schema=None,
             **_,
         ):
-            if user_input is not None:
-                chat_message = user_input
+            if messages is not None and len(messages) > 0:
+                # Get the last user message from the list
+                chat_message = (
+                    messages[-1] if messages else {"role": "user", "content": ""}
+                )
             elif input_schema is not None:
                 chat_message = input_schema.chat_message
             else:
@@ -142,7 +145,7 @@ def app_client(mocker):
                         "finish_reason": "stop",
                         "message": {
                             "role": "assistant",
-                            "content": chat_message["content"],
+                            "content": chat_message.get("content", ""),
                         },
                     }
                 ],
@@ -153,9 +156,14 @@ def app_client(mocker):
                 },
             }
 
-        async def run_async_stream(self, *, user_input=None, **_):
-            # Match the LFAgent signature with user_input keyword arg
-            message_content = (user_input or {}).get("content")
+        async def run_async_stream(self, *, messages=None, **_):
+            # Match the LFAgent signature with messages keyword arg
+            if messages and len(messages) > 0:
+                # Get the last user message from the list
+                last_message = messages[-1]
+                message_content = last_message.get("content", "")
+            else:
+                message_content = ""
             self.history.append(message_content)
 
             class FakeChunk:
