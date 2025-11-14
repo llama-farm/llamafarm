@@ -88,7 +88,7 @@ jobs:
             PR_NUMBER=$(echo "$GITHUB_REF" | sed 's/refs\/pull\/\(.*\)\/merge/\1/')
             VERSION="0.0.0-pr${PR_NUMBER}.${GITHUB_SHA::8}"
           else
-            VERSION="${GITHUB_SHA::8}"
+            VERSION="0.0.0-${GITHUB_SHA::8}"
           fi
           VERSION_NO_V="${VERSION#v}"
           echo "version=${VERSION_NO_V}" >> $GITHUB_OUTPUT
