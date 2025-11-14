@@ -203,7 +203,7 @@ electron-app/
 ### Data Location
 
 - **App Data**: `~/Library/Application Support/llamafarm-desktop/`
-- **CLI**: `~/Library/Application Support/llamafarm-desktop/bin/lf`
+- **CLI**: `~/Library/Application Support/LlamaFarm/bin/lf`
 - **Projects**: `~/.llamafarm/projects/`
 - **Logs**: `~/Library/Logs/LlamaFarm/`
 
