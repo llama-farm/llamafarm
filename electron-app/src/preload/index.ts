@@ -13,7 +13,10 @@ const api = {
     restart: () => ipcRenderer.invoke('backend:restart'),
     stop: () => ipcRenderer.invoke('backend:stop'),
     onStatusChange: (callback: (status: any) => void) => {
-      ipcRenderer.on('backend-status', (_event, status) => callback(status))
+      const listener = (_event: any, status: any) => callback(status)
+      ipcRenderer.on('backend-status', listener)
+      // Return cleanup function to remove listener
+      return () => ipcRenderer.removeListener('backend-status', listener)
     }
   },
 
@@ -25,7 +28,10 @@ const api = {
   // Splash screen operations
   splash: {
     onStatus: (callback: (status: any) => void) => {
-      ipcRenderer.on('splash-status', (_event, status) => callback(status))
+      const listener = (_event: any, status: any) => callback(status)
+      ipcRenderer.on('splash-status', listener)
+      // Return cleanup function to remove listener
+      return () => ipcRenderer.removeListener('splash-status', listener)
     }
   },
 

@@ -9,8 +9,8 @@ This guide will get you up and running with LlamaFarm Desktop in 5 minutes.
 1. **Download the app**
    - Go to https://github.com/llama-farm/llamafarm/releases/latest
    - Download the appropriate version:
-     - macOS Intel: `LlamaFarm-mac-x64.dmg`
-     - macOS Apple Silicon: `LlamaFarm-mac-arm64.dmg`
+     - macOS Intel: `LlamaFarm-{version}.dmg`
+     - macOS Apple Silicon: `LlamaFarm-{version}-arm64.dmg`
 
 2. **Install**
    - Open the downloaded DMG
@@ -197,12 +197,12 @@ electron-app/
 
 ### Updating
 
-- **Auto-update**: Coming in v0.2.0
+- **Auto-update**: The app automatically checks for updates on launch and prompts you when a new version is available
 - **Manual update**: Download latest DMG and reinstall
 
 ### Data Location
 
-- **App Data**: `~/Library/Application Support/llamafarm-desktop/`
+- **App Data**: `~/Library/Application Support/LlamaFarm/`
 - **CLI**: `~/Library/Application Support/LlamaFarm/bin/lf`
 - **Projects**: `~/.llamafarm/projects/`
 - **Logs**: `~/Library/Logs/LlamaFarm/`

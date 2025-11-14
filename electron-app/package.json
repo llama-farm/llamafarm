@@ -35,7 +35,8 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/**/*"
     ],
     "publish": {
       "provider": "github",

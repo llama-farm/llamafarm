@@ -19,6 +19,15 @@ NC='\033[0m' # No Color
 echo -n "Checking Node.js... "
 if command -v node &> /dev/null; then
     NODE_VERSION=$(node --version)
+    # Extract major version number (e.g., "v18.0.0" -> "18")
+    NODE_MAJOR=$(echo "$NODE_VERSION" | sed 's/v\([0-9]*\).*/\1/')
+
+    if [ "$NODE_MAJOR" -lt 18 ]; then
+        echo -e "${RED}✗${NC} $NODE_VERSION (requires Node.js 18+)"
+        echo "Please install Node.js 18+ from https://nodejs.org"
+        exit 1
+    fi
+
     echo -e "${GREEN}✓${NC} $NODE_VERSION"
 else
     echo -e "${RED}✗${NC} Node.js not found"
