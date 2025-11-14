@@ -26,7 +26,18 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
         self.use_angle_cls = self.config.get(
             "use_angle_cls", True
         )  # Detect text orientation
-        self.lang = self.config.get("language", "en")  # en, ch, fr, german, korean, japan
+
+        # Supported PaddleOCR languages
+        SUPPORTED_LANGUAGES = [
+            "en", "ch", "fr", "german", "korean", "japan", "ru", "it", "es", "pt", "ta", "hi", "ar"
+        ]
+        self.lang = self.config.get("language", "en")
+
+        if self.lang not in SUPPORTED_LANGUAGES:
+            raise ValueError(
+                f"Language '{self.lang}' is not supported by PaddleOCR. "
+                f"Supported languages are: {', '.join(SUPPORTED_LANGUAGES)}"
+            )
 
         # Table extraction config
         self.extract_tables = self.config.get("extract_tables", True)
@@ -173,7 +184,7 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
             "avg_confidence": avg_confidence,
             "layout": layout_info if self.detect_layout else None,
             "table_count": len(tables) if tables else 0,
-            "tables": tables if tables else None,
+            "tables": tables or None,
             **metadata,
         }
 
@@ -263,7 +274,7 @@ class PaddleOCRPreprocessor(BaseOCRPreprocessor):
                 "num_pages": len(doc),
                 "layout": all_layout if self.detect_layout else None,
                 "table_count": len(all_tables),
-                "tables": all_tables if all_tables else None,
+                "tables": all_tables or None,
                 **metadata,
             }
 

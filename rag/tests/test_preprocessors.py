@@ -72,16 +72,32 @@ class TestMarkItDownPreprocessor:
 
     def test_can_process_supported_formats(self, preprocessor):
         """Test can_process returns True for supported formats."""
-        # Test various supported formats
+        # Test various supported formats (lowercase)
         assert preprocessor.can_process("test.docx", {})
         assert preprocessor.can_process("test.pdf", {})
         assert preprocessor.can_process("test.pptx", {})
         assert preprocessor.can_process("test.html", {})
 
+        # Test uppercase extensions
+        assert preprocessor.can_process("test.DOCX", {})
+        assert preprocessor.can_process("test.PDF", {})
+        assert preprocessor.can_process("test.PPTX", {})
+        assert preprocessor.can_process("test.HTML", {})
+
+        # Test filenames with multiple dots
+        assert preprocessor.can_process("my.file.name.docx", {})
+        assert preprocessor.can_process("archive.v1.2.pdf", {})
+        assert preprocessor.can_process("presentation.final.pptx", {})
+        assert preprocessor.can_process("web.page.html", {})
+
     def test_can_process_unsupported_formats(self, preprocessor):
         """Test can_process returns False for unsupported formats."""
         assert not preprocessor.can_process("test.exe", {})
         assert not preprocessor.can_process("test.unknown", {})
+
+        # Test filenames with no extension
+        assert not preprocessor.can_process("noextension", {})
+        assert not preprocessor.can_process("anotherfile", {})
 
     def test_get_supported_formats(self, preprocessor):
         """Test getting supported formats."""
@@ -160,6 +176,18 @@ class TestOCRPreprocessor:
         assert ".png" in formats
         assert ".jpg" in formats
         assert ".pdf" in formats
+
+    def test_invalid_language_raises_error(self):
+        """Test that invalid language raises ValueError."""
+        from components.preprocessors.ocr.paddleocr_preprocessor import (
+            PaddleOCRPreprocessor,
+        )
+
+        with pytest.raises(ValueError) as excinfo:
+            PaddleOCRPreprocessor(config={"language": "invalid_lang"})
+
+        assert "not supported by PaddleOCR" in str(excinfo.value)
+        assert "invalid_lang" in str(excinfo.value)
 
 
 class TestPreprocessorResult:
