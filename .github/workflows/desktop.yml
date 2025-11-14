@@ -86,7 +86,7 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/}
           elif [[ "${GITHUB_REF}" == refs/pull/* ]]; then
             PR_NUMBER=$(echo "$GITHUB_REF" | sed 's/refs\/pull\/\(.*\)\/merge/\1/')
-            VERSION="pr${PR_NUMBER}-${GITHUB_SHA::8}"
+            VERSION="0.0.0-pr${PR_NUMBER}.${GITHUB_SHA::8}"
           else
             VERSION="${GITHUB_SHA::8}"
           fi
