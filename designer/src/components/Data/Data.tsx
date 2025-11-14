@@ -492,11 +492,11 @@ const Data = () => {
                 file,
                 signal: controller.signal,
               })
-              return { 
-                file: file.name, 
-                success: true, 
+              return {
+                file: file.name,
+                success: true,
                 result,
-                skipped: result.skipped || false
+                skipped: result.skipped || false,
               }
             } catch (error) {
               // Check if this is an abort/cancellation error
@@ -582,27 +582,40 @@ const Data = () => {
 
         // Show appropriate toast based on results
         if (failures.length > 0 && successes.length > 0) {
+          // Partial success: some uploads succeeded, some failed
+          const skippedMsg =
+            skipped.length > 0 ? `, skipped ${skipped.length} duplicate(s)` : ''
           toast({
-            message: `Uploaded ${successes.length} of ${fileCount} file(s)${skipped.length > 0 ? `, skipped ${skipped.length} duplicate(s)` : ''}. Failed: ${failures.map(f => f.file).join(', ')}`,
+            message: `Uploaded ${successes.length} of ${fileCount} file(s)${skippedMsg}. Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (failures.length > 0 && skipped.length > 0) {
+          // All files either failed or were skipped
+          toast({
+            message: `Upload failed for ${failures.length} file(s), skipped ${skipped.length} duplicate(s). Failed: ${failures.map(f => f.file).join(', ')}`,
             variant: 'destructive',
           })
         } else if (failures.length > 0) {
+          // All files failed
           toast({
             message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
             variant: 'destructive',
           })
         } else if (skipped.length > 0 && successes.length === 0) {
+          // All files were duplicates
           toast({
             message: `All ${skipped.length} file(s) were already in ${datasetName}`,
             variant: 'default',
             icon: 'alert-triangle',
           })
         } else if (skipped.length > 0) {
+          // Some successes with some skipped
           toast({
             message: `Uploaded ${successes.length} file(s) to ${datasetName}, skipped ${skipped.length} duplicate(s)`,
             variant: 'default',
           })
         } else {
+          // All files succeeded
           toast({
             message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
             variant: 'default',

@@ -54,12 +54,10 @@ import {
   saveDatasetTaskId,
   loadDatasetTaskId,
   clearDatasetTaskId,
-} from '../../utils/datasetTaskStorage'
-import {
   saveDatasetResult,
   loadDatasetResult,
   clearDatasetResult,
-} from '../../utils/datasetResultStorage'
+} from '../../utils/datasetStorage'
 
 type Dataset = {
   id: string
@@ -913,10 +911,6 @@ function DatasetView() {
     'universal_processor'
 
   // Note: Parsers/extractors info now comes from project config API, not localStorage
-  // This is a placeholder - should be fetched from the strategy config if needed
-  const parsersSummary = 'Configured via strategy settings'
-  const extractorsSummary = 'Configured via strategy settings'
-
   // Removed unused derived values
 
   return (
@@ -1060,39 +1054,42 @@ function DatasetView() {
                     open={isResultsOpen}
                     onOpenChange={setIsResultsOpen}
                   >
-                    <div
-                      className={`flex items-center justify-between px-4 ${isResultsOpen ? 'pt-4 pb-3' : 'py-4'}`}
-                    >
-                      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:opacity-70 transition-opacity">
-                        <FontIcon
-                          type={
-                            isResultsOpen ? 'chevron-down' : 'chevron-right'
-                          }
-                          className="w-4 h-4 flex-shrink-0"
-                        />
-                        Last Processing Results
-                      </CollapsibleTrigger>
-                      <button
-                        onClick={() => {
-                          setProcessingResult(null)
-                          setProcessingFailure(null)
-                          if (
-                            activeProject?.namespace &&
-                            activeProject?.project &&
-                            datasetId
-                          ) {
-                            clearDatasetResult(
-                              activeProject.namespace,
-                              activeProject.project,
-                              datasetId
-                            )
-                          }
-                        }}
-                        className="text-xs text-muted-foreground hover:text-foreground"
+                    <CollapsibleTrigger asChild>
+                      <div
+                        className={`flex items-center justify-between px-4 cursor-pointer hover:opacity-70 transition-opacity ${isResultsOpen ? 'pt-4 pb-3' : 'py-4'}`}
                       >
-                        Clear
-                      </button>
-                    </div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 flex-shrink-0 transition-transform ${
+                              isResultsOpen ? '' : '-rotate-90'
+                            }`}
+                          />
+                          Last Processing Results
+                        </div>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setProcessingResult(null)
+                            setProcessingFailure(null)
+                            if (
+                              activeProject?.namespace &&
+                              activeProject?.project &&
+                              datasetId
+                            ) {
+                              clearDatasetResult(
+                                activeProject.namespace,
+                                activeProject.project,
+                                datasetId
+                              )
+                            }
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </CollapsibleTrigger>
                     <CollapsibleContent>
                       {/* Show failure state if present and no partial results */}
                       {processingFailure && !processingResult && (
@@ -1178,26 +1175,6 @@ function DatasetView() {
                                         !result.filename
 
                                       // Get file extension for icon
-                                      const getFileExtension = (
-                                        filename: string
-                                      ) => {
-                                        const parts = filename.split('.')
-                                        return parts.length > 1
-                                          ? parts[
-                                              parts.length - 1
-                                            ].toLowerCase()
-                                          : ''
-                                      }
-                                      const fileExt =
-                                        getFileExtension(displayFilename)
-                                      const isDocumentFile = [
-                                        'pdf',
-                                        'doc',
-                                        'docx',
-                                        'txt',
-                                        'md',
-                                      ].includes(fileExt)
-
                                       // Calculate total chunks if available
                                       const totalChunks =
                                         result.document_count ||
@@ -1295,10 +1272,6 @@ function DatasetView() {
                                               <div className="flex items-center justify-between gap-3">
                                                 <div className="flex items-center gap-3 flex-wrap">
                                                   <div className="flex items-center gap-1.5">
-                                                    <FontIcon
-                                                      type="cube"
-                                                      className="w-3.5 h-3.5 text-muted-foreground"
-                                                    />
                                                     <span className="font-semibold text-foreground">
                                                       {totalChunks}
                                                     </span>
