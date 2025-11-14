@@ -109,29 +109,40 @@ jobs:
           "
           echo "✅ Updated app version to ${{ steps.version.outputs.version }}"
 
-      - name: Build Electron app (unsigned)
+      - name: Update package.json for signing
         working-directory: electron-app
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
-          npm run build
-          if [ "${{ matrix.arch }}" == "arm64" ]; then
-            npx electron-builder --mac --arm64 --dir
-          else
-            npx electron-builder --mac --x64 --dir
-          fi
-          echo "✅ Electron app built successfully"
+          # Remove identity: null from package.json to enable signing
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            if (pkg.build && pkg.build.mac && pkg.build.mac.identity === null) {
+              delete pkg.build.mac.identity;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+              console.log('✅ Removed identity: null to enable signing');
+            }
+          "
 
-      - name: Package DMG
+      - name: Build and Sign Electron app
         working-directory: electron-app
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Certificate (same as CLI workflow and release workflow)
+          CSC_LINK: ${{ secrets.APPLE_CERT_DATA }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          # Notarization via App Store Connect API
+          APPLE_API_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
         run: |
+          echo "Building and signing Electron app for ${{ matrix.arch }}..."
+          npm run build
+
           if [ "${{ matrix.arch }}" == "arm64" ]; then
             npx electron-builder --mac --arm64
           else
             npx electron-builder --mac --x64
           fi
+          echo "✅ Electron app built and signed successfully"
 
       - name: List build artifacts
         working-directory: electron-app
