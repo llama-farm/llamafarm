@@ -1,13 +1,29 @@
-import { lazy, Suspense, useState, useEffect } from 'react'
+import {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useFormattedConfig } from '../../hooks/useFormattedConfig'
 import { useUpdateProject } from '../../hooks/useProjects'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useUnsavedChanges } from '../../contexts/UnsavedChangesContext'
 import yaml from 'yaml'
 import ConfigLoading from './ConfigLoading'
 import ConfigError from './ConfigError'
+import ConfigTableOfContents from './ConfigTableOfContents'
+import UnsavedChangesModal from './UnsavedChangesModal'
 import Loader from '../../common/Loader'
 import FontIcon from '../../common/FontIcon'
+import type { EditorNavigationAPI } from '../../types/config-toc'
+import { useConfigStructure } from '../../hooks/useConfigStructure'
+import type { TOCNode } from '../../types/config-toc'
+import { normalisePointer, parentPointer } from '../../utils/configNavigation'
+import { findSearchMatches, type SearchMatch } from '../../utils/searchUtils'
 
 // Lazy load the CodeMirror editor
 const CodeMirrorEditor = lazy(
@@ -16,9 +32,13 @@ const CodeMirrorEditor = lazy(
 
 interface ConfigEditorProps {
   className?: string
+  initialPointer?: string | null
 }
 
-const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
+const ConfigEditor: React.FC<ConfigEditorProps> = ({
+  className = '',
+  initialPointer = null,
+}) => {
   // Get current project info using reactive hook
   const activeProject = useActiveProject()
   const { theme } = useTheme()
@@ -31,15 +51,117 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
   const [editedContent, setEditedContent] = useState<string>(formattedConfig)
   const [isDirty, setIsDirty] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [navigationAPI, setNavigationAPI] =
+    useState<EditorNavigationAPI | null>(null)
+  const [pendingPointer, setPendingPointer] = useState<string | null>(null)
+  const [resolvedPointer, setResolvedPointer] = useState<string | null>(null)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>(
+    'idle'
+  )
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([])
+  const [activeMatchIndex, setActiveMatchIndex] = useState<number>(-1)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Unsaved changes modal state
+  const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(
+    null
+  )
+
+  // Unsaved changes context
+  const unsavedChangesContext = useUnsavedChanges()
+
+  // Sync isDirty with context
+  useEffect(() => {
+    unsavedChangesContext.setIsDirty(isDirty)
+  }, [isDirty, unsavedChangesContext])
+
+  const { nodes } = useConfigStructure(editedContent, !isDirty)
+
+  const pointerMap = useMemo(() => {
+    const map = new Map<string, TOCNode>()
+    const visit = (list: TOCNode[]) => {
+      list.forEach(node => {
+        if (node.jsonPointer) {
+          map.set(normalisePointer(node.jsonPointer), node)
+        }
+        if (node.children && node.children.length > 0) {
+          visit(node.children)
+        }
+      })
+    }
+    visit(nodes)
+    return map
+  }, [nodes])
+
+  useEffect(() => {
+    if (typeof initialPointer === 'string') {
+      setPendingPointer(initialPointer)
+      setResolvedPointer(null)
+    } else if (initialPointer == null) {
+      setPendingPointer(null)
+      setResolvedPointer(null)
+    }
+  }, [initialPointer])
+
+  useEffect(() => {
+    if (!navigationAPI || !pendingPointer) return
+
+    const resolveNode = (pointer: string): TOCNode | null => {
+      if (pointerMap.size === 0) return null
+      let current: string | null = normalisePointer(pointer)
+      const tried = new Set<string>()
+      while (current) {
+        if (tried.has(current)) break
+        tried.add(current)
+        const node = pointerMap.get(current)
+        if (node) return node
+        current = parentPointer(current)
+      }
+      return pointerMap.get('/') ?? null
+    }
+
+    const targetNode = resolveNode(pendingPointer)
+    if (!targetNode) {
+      return
+    }
+
+    const startLine = targetNode.lineStart || 1
+    const endLine =
+      targetNode.lineEnd >= startLine ? targetNode.lineEnd : startLine
+
+    navigationAPI.scrollToLine(startLine)
+    navigationAPI.highlightLines(startLine, endLine, 2000)
+    const pointerToStore = targetNode.jsonPointer
+      ? normalisePointer(targetNode.jsonPointer)
+      : normalisePointer(pendingPointer)
+    setResolvedPointer(pointerToStore)
+    setPendingPointer(null)
+  }, [navigationAPI, pendingPointer, pointerMap])
 
   // Update edited content when formatted config changes
-  // Guard: Don't reset if user has unsaved changes
+  // Guard: Don't reset if user has unsaved changes OR if we're showing an error modal
   useEffect(() => {
-    if (!isDirty) {
+    if (!isDirty && !modalErrorMessage) {
       setEditedContent(formattedConfig)
       setSaveError(null) // Clear errors when config reloads
     }
-  }, [formattedConfig, isDirty])
+  }, [formattedConfig, isDirty, modalErrorMessage])
+
+  useEffect(() => {
+    const handleGlobalFind = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        if (searchInputRef.current) {
+          searchInputRef.current.focus()
+          searchInputRef.current.select()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleGlobalFind)
+    return () => window.removeEventListener('keydown', handleGlobalFind)
+  }, [])
 
   // Update project mutation
   const updateProject = useUpdateProject()
@@ -54,9 +176,161 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
     setSaveError(null) // Clear error on change
   }
 
-  // Handle save
-  const handleSave = async () => {
-    if (!activeProject || !isDirty) return
+  const handleCopy = useCallback(async () => {
+    const textToCopy = String(editedContent ?? '')
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(textToCopy)
+      } else if (typeof document !== 'undefined') {
+        const textarea = document.createElement('textarea')
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.top = '-1000px'
+        textarea.style.left = '-1000px'
+        textarea.style.opacity = '0'
+        textarea.value = textToCopy
+
+        document.body.appendChild(textarea)
+        try {
+          textarea.select()
+          const successful = document.execCommand('copy')
+          if (!successful) {
+            throw new Error('execCommand copy failed')
+          }
+        } finally {
+          textarea.remove()
+        }
+      } else {
+        throw new Error('Clipboard API unavailable')
+      }
+
+      setCopyStatus('success')
+    } catch (copyError) {
+      console.error('Failed to copy config:', copyError)
+      setCopyStatus('error')
+    }
+  }, [editedContent])
+
+  useEffect(() => {
+    if (copyStatus === 'idle') return
+
+    const timeout = window.setTimeout(
+      () => setCopyStatus('idle'),
+      copyStatus === 'success' ? 2000 : 4000
+    )
+    return () => window.clearTimeout(timeout)
+  }, [copyStatus])
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value)
+  }, [])
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('')
+    setSearchMatches([])
+    setActiveMatchIndex(-1)
+    navigationAPI?.clearSearchMatches?.()
+    if (searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [navigationAPI, searchInputRef])
+
+  const focusNextMatch = useCallback(() => {
+    if (searchMatches.length === 0) return
+    setActiveMatchIndex(prevIndex => {
+      if (prevIndex < 0) {
+        return 0
+      }
+      return (prevIndex + 1) % searchMatches.length
+    })
+  }, [searchMatches.length])
+
+  const focusPreviousMatch = useCallback(() => {
+    if (searchMatches.length === 0) return
+    setActiveMatchIndex(prevIndex => {
+      if (prevIndex < 0) {
+        return searchMatches.length - 1
+      }
+      return (prevIndex - 1 + searchMatches.length) % searchMatches.length
+    })
+  }, [searchMatches.length])
+
+  const handleSearchKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        if (event.shiftKey) {
+          focusPreviousMatch()
+        } else {
+          focusNextMatch()
+        }
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        handleSearchClear()
+      }
+    },
+    [focusNextMatch, focusPreviousMatch, handleSearchClear]
+  )
+
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim()
+    if (!trimmedQuery) {
+      setSearchMatches([])
+      setActiveMatchIndex(-1)
+      navigationAPI?.clearSearchMatches?.()
+      return
+    }
+
+    const handle = window.setTimeout(() => {
+      const matches = findSearchMatches(editedContent, trimmedQuery)
+      setSearchMatches(matches)
+      setActiveMatchIndex(prevIndex => {
+        if (matches.length === 0) {
+          return -1
+        }
+        if (prevIndex < 0) {
+          return 0
+        }
+        return Math.min(prevIndex, matches.length - 1)
+      })
+    }, 160)
+
+    return () => window.clearTimeout(handle)
+  }, [searchQuery, editedContent, navigationAPI])
+
+  useEffect(() => {
+    if (!navigationAPI) return
+
+    if (searchMatches.length === 0) {
+      navigationAPI.clearSearchMatches?.()
+      return
+    }
+
+    const ranges = searchMatches.map(match => ({
+      from: match.from,
+      to: match.to,
+    }))
+    navigationAPI.highlightSearchMatches?.(
+      ranges,
+      activeMatchIndex >= 0 ? activeMatchIndex : null
+    )
+  }, [navigationAPI, searchMatches, activeMatchIndex])
+
+  useEffect(() => {
+    if (!navigationAPI) return
+    if (activeMatchIndex < 0 || activeMatchIndex >= searchMatches.length) return
+
+    const match = searchMatches[activeMatchIndex]
+    navigationAPI.revealSearchMatch?.({ from: match.from, to: match.to })
+  }, [activeMatchIndex, searchMatches, navigationAPI])
+
+  // Handle save - returns object with success status and optional error message
+  const handleSave = async (): Promise<{
+    success: boolean
+    error?: string
+  }> => {
+    if (!activeProject || !isDirty) return { success: false }
 
     setSaveError(null) // Clear previous errors
 
@@ -66,8 +340,9 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
       try {
         configObj = yaml.parse(editedContent)
       } catch (parseError) {
-        setSaveError(`YAML syntax error: ${parseError instanceof Error ? parseError.message : 'Invalid YAML syntax'}. Please fix the syntax before saving.`)
-        return
+        const errorMsg = `YAML syntax error: ${parseError instanceof Error ? parseError.message : 'Invalid YAML syntax'}. Please fix the syntax before saving.`
+        setSaveError(errorMsg)
+        return { success: false, error: errorMsg }
       }
 
       // Update project via API
@@ -75,8 +350,8 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
         namespace: activeProject.namespace,
         projectId: activeProject.project,
         request: {
-          config: configObj
-        }
+          config: configObj,
+        },
       })
 
       // Refetch to get latest data
@@ -84,14 +359,16 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
 
       setIsDirty(false)
       setSaveError(null) // Clear any previous errors on success
+      return { success: true }
     } catch (err: any) {
-      console.error('Failed to save config:', err)
+      // Only log safe error information without exposing sensitive config data
+      console.error('Failed to save config:', err?.message || 'Unknown error')
 
       // Parse and sanitize backend validation errors
       let errorMessage = 'Failed to save configuration'
 
       if (err.response?.data) {
-        const {data} = err.response
+        const { data } = err.response
 
         // Handle backend validation errors - sanitize to avoid exposing internal details
         if (data.detail) {
@@ -100,13 +377,18 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
             const backendErrors = data.detail
               .slice(0, 5) // Limit to first 5 errors for UX
               .map((e: any) => {
-                const location = e.loc ? e.loc.slice(1).join('.') : 'configuration' // Remove 'body' prefix
+                const location = e.loc
+                  ? e.loc.slice(1).join('.')
+                  : 'configuration' // Remove 'body' prefix
                 const message = e.msg || e.message || 'Invalid value'
                 return `${location}: ${message}`
               })
               .join('; ')
 
-            const moreErrors = data.detail.length > 5 ? ` (and ${data.detail.length - 5} more)` : ''
+            const moreErrors =
+              data.detail.length > 5
+                ? ` (and ${data.detail.length - 5} more)`
+                : ''
             errorMessage = `Validation failed: ${backendErrors}${moreErrors}`
           } else if (typeof data.detail === 'string') {
             // Sanitize string errors to remove potential internal paths/traces
@@ -126,6 +408,7 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
       }
 
       setSaveError(errorMessage)
+      return { success: false, error: errorMessage }
     }
   }
 
@@ -134,6 +417,53 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
     setEditedContent(formattedConfig)
     setIsDirty(false)
     setSaveError(null) // Clear errors on discard
+  }
+
+  // Warn user when trying to close/refresh browser tab with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault()
+        // Modern browsers ignore the custom message, but setting returnValue is still required
+        e.returnValue = ''
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
+
+  // Modal handlers for unsaved changes warning
+  const handleModalSave = async () => {
+    const result = await handleSave()
+
+    // Only proceed with navigation if save was successful
+    if (result.success) {
+      // Save succeeded - handleSave already set isDirty to false
+      // Clear any error state and navigate
+      setModalErrorMessage(null)
+      unsavedChangesContext.confirmNavigation()
+    } else {
+      // If save failed, switch modal to error mode
+      // Show the error message and let user choose to fix or discard
+      setModalErrorMessage(result.error || 'Failed to save configuration')
+      // Don't cancel navigation - keep modal open in error state
+    }
+  }
+
+  const handleModalDiscard = () => {
+    // Clear error state
+    setModalErrorMessage(null)
+    handleDiscard()
+    // Discard already set isDirty to false, now navigate
+    unsavedChangesContext.confirmNavigation()
+  }
+
+  const handleModalCancel = () => {
+    // Clear error state when canceling
+    setModalErrorMessage(null)
+    setSaveError(null) // Also clear the main save error on the toolbar
+    unsavedChangesContext.cancelNavigation()
   }
 
   if (isActuallyLoading) {
@@ -152,57 +482,100 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({ className = '' }) => {
   }
 
   return (
-    <Suspense
-      fallback={
-        <div
-          className={`config-editor w-full h-full min-h-0 max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col ${className}`}
-        >
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-border bg-card flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FontIcon type="code" className="w-4 h-4 text-foreground" />
-                <h2 className="text-sm font-semibold text-foreground">
-                  Project Configuration
-                </h2>
-                <span className="text-xs text-muted-foreground">
-                  ({activeProject?.project || 'No project'})
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  Loading editor...
-                </span>
-              </div>
-            </div>
-          </div>
+    <div className={`flex flex-row h-full w-full overflow-hidden ${className}`}>
+      {/* TOC Panel - hidden on mobile */}
+      <div className="hidden md:block w-[240px] flex-shrink-0 h-full overflow-hidden">
+        <ConfigTableOfContents
+          configContent={editedContent}
+          navigationAPI={navigationAPI}
+          shouldUpdate={!isDirty}
+          activePointer={resolvedPointer}
+          searchQuery={searchQuery}
+          onSearchChange={handleSearchChange}
+          onSearchKeyDown={handleSearchKeyDown}
+          onNavigatePrevious={focusPreviousMatch}
+          onNavigateNext={focusNextMatch}
+          onClearSearch={handleSearchClear}
+          searchInputRef={searchInputRef}
+          searchSummary={{
+            total: searchMatches.length,
+            activeIndex: activeMatchIndex,
+          }}
+        />
+      </div>
 
-          {/* Loading editor */}
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader className="w-8 h-8" />
-              <span className="text-sm text-muted-foreground">
-                Loading code editor...
-              </span>
+      {/* Editor Panel */}
+      <div className="flex-1 min-w-0 h-full">
+        <Suspense
+          fallback={
+            <div className="config-editor w-full h-full min-h-0 max-h-full rounded-lg bg-card border border-border overflow-hidden flex flex-col">
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-border bg-card flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FontIcon type="code" className="w-4 h-4 text-foreground" />
+                    <h2 className="text-sm font-semibold text-foreground">
+                      Project Configuration
+                    </h2>
+                    <span className="text-xs text-muted-foreground">
+                      ({activeProject?.project || 'No project'})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Loading editor...
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Loading editor */}
+              <div className="flex-1 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader className="w-8 h-8" />
+                  <span className="text-sm text-muted-foreground">
+                    Loading code editor...
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      }
-    >
-      <CodeMirrorEditor
-        content={editedContent}
-        className={`w-full h-full min-h-0 ${className}`}
-        language="yaml"
-        theme={theme}
-        readOnly={false}
-        onChange={handleChange}
-        onSave={handleSave}
-        onDiscard={handleDiscard}
-        isDirty={isDirty}
+          }
+        >
+          <CodeMirrorEditor
+            key={`${activeProject?.namespace}-${activeProject?.project}`}
+            content={editedContent}
+            className="w-full h-full min-h-0"
+            language="yaml"
+            theme={theme}
+            readOnly={false}
+            onChange={handleChange}
+            onSave={async () => {
+              await handleSave()
+              // Toolbar save doesn't need to handle the result
+              // Errors are shown via saveError prop
+            }}
+            onDiscard={handleDiscard}
+            onCopy={handleCopy}
+            isDirty={isDirty}
+            isSaving={updateProject.isPending}
+            saveError={saveError}
+            copyStatus={copyStatus}
+            onEditorReady={setNavigationAPI}
+          />
+        </Suspense>
+      </div>
+
+      {/* Unsaved changes modal */}
+      <UnsavedChangesModal
+        isOpen={unsavedChangesContext.showModal}
+        onSave={handleModalSave}
+        onDiscard={handleModalDiscard}
+        onCancel={handleModalCancel}
         isSaving={updateProject.isPending}
-        saveError={saveError}
+        errorMessage={modalErrorMessage}
+        isError={!!modalErrorMessage}
       />
-    </Suspense>
+    </div>
   )
 }
 

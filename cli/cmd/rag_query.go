@@ -9,8 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +72,7 @@ Examples:
 		queryText := strings.Join(args, " ")
 
 		// Get server config
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -79,8 +81,7 @@ Examples:
 		StartConfigWatcherForCommand()
 
 		// Ensure server and RAG are available
-		config := RAGCommandConfig(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 
 		// Build the request
 		queryRequest := buildQueryRequest(queryText)
@@ -130,6 +131,34 @@ type QueryResponse struct {
 	ProcessingTime    float64       `json:"processing_time_ms,omitempty"`
 	RetrievalStrategy string        `json:"retrieval_strategy_used"`
 	Database          string        `json:"database_used"`
+}
+
+// calculateResponseSize calculates the total byte size of the query response
+func calculateResponseSize(response *QueryResponse) int64 {
+	var totalBytes int64
+
+	// Size of query string
+	totalBytes += int64(len(response.Query))
+
+	// Size of results
+	for _, result := range response.Results {
+		// Content size
+		totalBytes += int64(len(result.Content))
+
+		// ChunkID and DocumentID
+		totalBytes += int64(len(result.ChunkID))
+		totalBytes += int64(len(result.DocumentID))
+
+		// Metadata (approximate by marshaling to JSON)
+		if result.Metadata != nil {
+			metadataJSON, err := json.Marshal(result.Metadata)
+			if err == nil {
+				totalBytes += int64(len(metadataJSON))
+			}
+		}
+	}
+
+	return totalBytes
 }
 
 func buildQueryRequest(queryText string) QueryRequest {
@@ -212,7 +241,7 @@ func sendQueryRequest(serverCfg *config.ServerConfig, req QueryRequest) (*QueryR
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	// Send request
-	resp, err := getHTTPClient().Do(httpReq)
+	resp, err := utils.GetHTTPClient().Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
@@ -254,6 +283,10 @@ func displayDefaultResults(response *QueryResponse, queryText string) {
 	fmt.Printf("📊 Strategy: %s | Database: %s\n", response.RetrievalStrategy, response.Database)
 	fmt.Printf("📝 Found %d results (showing top %d)\n", response.TotalResults, len(response.Results))
 
+	// Calculate and display result size
+	resultSize := calculateResponseSize(response)
+	fmt.Printf("📦 Result size: %s (%d bytes)\n", formatBytes(resultSize), resultSize)
+
 	if response.ProcessingTime > 0 {
 		fmt.Printf("⏱️  Processing time: %.2fms\n", response.ProcessingTime)
 	}
@@ -291,7 +324,9 @@ func displayDefaultResults(response *QueryResponse, queryText string) {
 
 func displayTableResults(response *QueryResponse, queryText string) {
 	fmt.Printf("\nQuery: %s\n", queryText)
-	fmt.Printf("Results: %d | Strategy: %s | Database: %s\n\n", response.TotalResults, response.RetrievalStrategy, response.Database)
+	resultSize := calculateResponseSize(response)
+	fmt.Printf("Results: %d | Strategy: %s | Database: %s | Size: %s (%d bytes)\n\n",
+		response.TotalResults, response.RetrievalStrategy, response.Database, formatBytes(resultSize), resultSize)
 
 	// Table header
 	if includeScore {
@@ -317,6 +352,10 @@ func displayTableResults(response *QueryResponse, queryText string) {
 }
 
 func displayJSONResults(response *QueryResponse) {
+	// Calculate and display result size
+	resultSize := calculateResponseSize(response)
+	fmt.Printf("# Result size: %s (%d bytes)\n", formatBytes(resultSize), resultSize)
+
 	// Pretty print JSON
 	output, err := json.MarshalIndent(response, "", "  ")
 	if err != nil {

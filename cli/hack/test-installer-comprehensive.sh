@@ -76,7 +76,7 @@ build_test_binaries() {
     # Generate types first
     info "Generating types..."
     cd config
-    ./generate-types.sh || error "Failed to generate Python types"
+    uv run python generate_types.py || error "Failed to generate Python types"
 
     # Copy schema and generate Go types
     mkdir -p ../cli/cmd/config
@@ -111,7 +111,7 @@ build_test_binaries() {
         local out_name="lf-${goos}-${goarch}"
 
         GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=${TEST_VERSION}'" \
+            -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=${TEST_VERSION}'" \
             -o "../$test_dir/${out_name}" .
 
         chmod +x "../$test_dir/${out_name}"

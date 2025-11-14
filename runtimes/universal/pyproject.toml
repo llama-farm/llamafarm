@@ -21,7 +21,15 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.14.3"]
+dev = [
+  "ruff>=0.14.3",
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "pytest-timeout>=2.1.0",
+  "httpx>=0.24.0",
+  "numpy>=1.24.0",
+]
 
 [project.optional-dependencies]
 xformers = ["xformers>=0.0.22"]
@@ -35,14 +43,25 @@ packages = ["models", "utils", "core"]
 py-modules = ["server", "download_model"]
 
 [tool.uv]
-dev-dependencies = [
-  "pytest>=7.0.0",
-  "pytest-asyncio>=0.21.0",
-  "pytest-cov>=4.0.0",
-  "pytest-timeout>=2.1.0",
-  "httpx>=0.24.0",
-  "numpy>=1.24.0",
-]
+# PyTorch variant selection:
+# The LlamaFarm CLI automatically detects your hardware (CUDA, Metal, ROCm, or CPU)
+# and sets UV_EXTRA_INDEX_URL appropriately to install the optimal PyTorch build.
+#
+# Note: UV_EXTRA_INDEX_URL is only set for the universal-runtime service, not for
+# server/rag/config/common. This prevents dependency resolution issues where the
+# PyTorch index contains incomplete/incompatible versions of common packages.
+#
+# Manual override options:
+#   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu   # Force CPU-only
+#   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu121 # Force CUDA 12.1
+#   UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/rocm6.0 # Force ROCm 6.0
+#
+# Hardware detection priority:
+#   1. CUDA (NVIDIA GPUs) - uses default PyPI with GPU support (~3.4GB)
+#   2. Metal (Apple Silicon) - uses default PyPI with Metal support
+#   3. ROCm (AMD GPUs) - uses ROCm index
+#   4. CPU (fallback) - uses CPU-only index (~100MB)
+index-url = "https://pypi.org/simple"
 
 [tool.uv.sources]
 llamafarm-common = { path = "../../common", editable = true }

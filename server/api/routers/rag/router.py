@@ -19,6 +19,14 @@ router = APIRouter(
 )
 
 
+class EmbeddingStrategyInfo(BaseModel):
+    """Information about an embedding strategy."""
+    name: str
+    type: str
+    priority: int
+    is_default: bool
+
+
 class RetrievalStrategyInfo(BaseModel):
     name: str
     type: str
@@ -29,6 +37,7 @@ class DatabaseInfo(BaseModel):
     name: str
     type: str
     is_default: bool
+    embedding_strategies: list[EmbeddingStrategyInfo]
     retrieval_strategies: list[RetrievalStrategyInfo]
 
 
@@ -91,9 +100,172 @@ async def get_rag_health(
     return await handle_rag_health(project_obj.config, str(project_dir), database)
 
 
+def _build_embedding_strategies(
+    db, db_name: str
+) -> list[EmbeddingStrategyInfo]:
+    """
+    Build embedding strategies list with exactly one marked as default.
+    
+    Priority for default selection:
+    1. Explicitly configured default_embedding_strategy
+    2. First strategy in list (if strategies exist)
+    3. Empty list (if no strategies configured)
+    """
+    embedding_strategies = []
+    
+    # Early return for empty strategies
+    if not db.embedding_strategies:
+        return embedding_strategies
+    
+    default_embedding_name = (
+        str(db.default_embedding_strategy)
+        if hasattr(db, "default_embedding_strategy") and db.default_embedding_strategy
+        else None
+    )
+    
+    found_default = False
+    
+    for emb_strategy in db.embedding_strategies:
+        is_default = False
+        
+        # Mark as default based on priority order
+        if not found_default:
+            if default_embedding_name and str(emb_strategy.name) == default_embedding_name:
+                is_default = True
+                found_default = True
+            elif not default_embedding_name and not embedding_strategies:
+                # First strategy becomes default if none explicitly configured
+                is_default = True
+                found_default = True
+                logger.info(
+                    f"No default embedding strategy configured for database '{db_name}'. "
+                    f"Using first strategy '{emb_strategy.name}' as default."
+                )
+        
+        # Extract strategy type safely
+        strategy_type = str(emb_strategy.type)
+        if hasattr(emb_strategy.type, "value"):
+            strategy_type = emb_strategy.type.value
+        
+        embedding_strategies.append(
+            EmbeddingStrategyInfo(
+                name=str(emb_strategy.name),
+                type=strategy_type,
+                priority=getattr(emb_strategy, "priority", 0),
+                is_default=is_default,
+            )
+        )
+    
+    # Warn if configured default was not found and mark first strategy as default
+    if default_embedding_name and not found_default:
+        logger.warning(
+            f"Configured default embedding strategy '{default_embedding_name}' "
+            f"not found in database '{db_name}'. Using first strategy as default."
+        )
+        # Actually mark the first strategy as default
+        if embedding_strategies:
+            embedding_strategies[0].is_default = True
+    
+    return embedding_strategies
+
+
+def _build_retrieval_strategies(
+    db, db_name: str
+) -> list[RetrievalStrategyInfo]:
+    """
+    Build retrieval strategies list with exactly one marked as default.
+    
+    Priority for default selection:
+    1. Explicitly configured default_retrieval_strategy
+    2. First strategy with default=True attribute
+    3. First strategy in list (if strategies exist)
+    4. Empty list (if no strategies configured)
+    """
+    retrieval_strategies = []
+    
+    # Early return for empty strategies
+    if not db.retrieval_strategies:
+        return retrieval_strategies
+    
+    default_retrieval_name = (
+        str(db.default_retrieval_strategy)
+        if hasattr(db, "default_retrieval_strategy") and db.default_retrieval_strategy
+        else None
+    )
+    
+    # Check for multiple strategies marked as default (misconfiguration)
+    if not default_retrieval_name:
+        default_marked_strategies = [
+            str(s.name)
+            for s in db.retrieval_strategies
+            if hasattr(s, "default") and s.default
+        ]
+        
+        if len(default_marked_strategies) > 1:
+            logger.warning(
+                f"Multiple retrieval strategies marked as default in database '{db_name}': "
+                f"{default_marked_strategies}. Using first one: '{default_marked_strategies[0]}'"
+            )
+            default_retrieval_name = default_marked_strategies[0]
+        elif len(default_marked_strategies) == 1:
+            default_retrieval_name = default_marked_strategies[0]
+    
+    found_default = False
+    
+    for strategy in db.retrieval_strategies:
+        is_default = False
+        
+        # Mark as default based on priority order
+        if not found_default:
+            if default_retrieval_name and str(strategy.name) == default_retrieval_name:
+                is_default = True
+                found_default = True
+            elif not default_retrieval_name and not retrieval_strategies:
+                # First strategy becomes default if none explicitly configured
+                is_default = True
+                found_default = True
+                logger.info(
+                    f"No default retrieval strategy configured for database '{db_name}'. "
+                    f"Using first strategy '{strategy.name}' as default."
+                )
+        
+        # Extract strategy type safely
+        strategy_type = str(strategy.type)
+        if hasattr(strategy.type, "value"):
+            strategy_type = strategy.type.value
+        
+        retrieval_strategies.append(
+            RetrievalStrategyInfo(
+                name=str(strategy.name),
+                type=strategy_type,
+                is_default=is_default,
+            )
+        )
+    
+    # Warn if configured default was not found and mark first strategy as default
+    if default_retrieval_name and not found_default:
+        logger.warning(
+            f"Configured default retrieval strategy '{default_retrieval_name}' "
+            f"not found in database '{db_name}'. Using first strategy as default."
+        )
+        # Actually mark the first strategy as default
+        if retrieval_strategies:
+            retrieval_strategies[0].is_default = True
+    
+    return retrieval_strategies
+
+
+def _is_default_database(db_name: str, rag_config, databases: list) -> bool:
+    """Determine if this database should be marked as default."""
+    if rag_config.default_database and str(db_name) == str(rag_config.default_database):
+        return True
+    # First database is default if no explicit default configured
+    return not rag_config.default_database and not databases
+
+
 @router.get("/databases", response_model=DatabasesResponse)
 async def get_rag_databases(namespace: str, project: str):
-    """Get list of RAG databases and their retrieval strategies."""
+    """Get list of RAG databases with their embedding and retrieval strategies."""
     logger.bind(namespace=namespace, project=project)
 
     # Get project configuration
@@ -106,65 +278,28 @@ async def get_rag_databases(namespace: str, project: str):
 
     rag_config = project_obj.config.rag
 
-    # Build database list with retrieval strategies
+    # Build database list with strategies
     databases = []
     for db in rag_config.databases or []:
-        # Get retrieval strategies for this database
-        strategies = []
-        default_strategy_name = None
-        found_default = False
-
-        # Determine default strategy (priority: default_retrieval_strategy > strategy.default > first)
-        if hasattr(db, "default_retrieval_strategy") and db.default_retrieval_strategy:
-            default_strategy_name = str(db.default_retrieval_strategy)
-
-        # First pass: check if any strategy is explicitly marked as default
-        if not default_strategy_name:
-            for strategy in db.retrieval_strategies or []:
-                if hasattr(strategy, "default") and strategy.default:
-                    default_strategy_name = str(strategy.name)
-                    break
-
-        # Second pass: build strategy list with exactly one default
-        for strategy in db.retrieval_strategies or []:
-            is_default = False
-
-            # Mark as default based on priority order, ensuring only one default
-            if not found_default:
-                if default_strategy_name and strategy.name == default_strategy_name:
-                    is_default = True
-                    found_default = True
-                elif not default_strategy_name and not strategies:
-                    # First strategy is default if no explicit default found
-                    is_default = True
-                    found_default = True
-
-            strategies.append(
-                RetrievalStrategyInfo(
-                    name=str(strategy.name),
-                    type=strategy.type.value
-                    if hasattr(strategy.type, "value")
-                    else str(strategy.type),
-                    is_default=is_default,
-                )
-            )
-
-        # Check if this database is the default
-        is_default_db = False
-        if rag_config.default_database and str(db.name) == str(
-            rag_config.default_database
-        ):
-            is_default_db = True
-        elif not rag_config.default_database and not databases:
-            # First database is default if no explicit default
-            is_default_db = True
-
+        db_name = str(db.name)
+        
+        # Build strategies using helper functions
+        embedding_strategies = _build_embedding_strategies(db, db_name)
+        retrieval_strategies = _build_retrieval_strategies(db, db_name)
+        
+        # Determine if this is the default database
+        is_default_db = _is_default_database(db_name, rag_config, databases)
+        
+        # Extract database type safely
+        db_type = db.type.value if hasattr(db.type, "value") else str(db.type)
+        
         databases.append(
             DatabaseInfo(
-                name=str(db.name),
-                type=db.type.value if hasattr(db.type, "value") else str(db.type),
+                name=db_name,
+                type=db_type,
                 is_default=is_default_db,
-                retrieval_strategies=strategies,
+                embedding_strategies=embedding_strategies,
+                retrieval_strategies=retrieval_strategies,
             )
         )
 

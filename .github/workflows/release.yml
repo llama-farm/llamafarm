@@ -10,6 +10,9 @@ permissions:
     pull-requests: write
     issues: write
 
+env:
+  NX_NO_CLOUD: true
+
 jobs:
     release-please:
       runs-on: ubuntu-latest

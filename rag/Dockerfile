@@ -52,7 +52,7 @@ RUN cd common && uv sync --locked --all-extras --verbose
 RUN cd rag && uv sync --locked --extra llamaindex --extra markitdown --extra ocr --verbose
 
 # Generate config schema and datamodel types
-RUN cd config && ./generate-types.sh
+RUN cd config && uv run python generate_types.py
 
 # Optional: Pre-download OCR models during build (controlled by build arg)
 # Set WARMUP_OCR_MODELS=1 to enable: docker build --build-arg WARMUP_OCR_MODELS=1

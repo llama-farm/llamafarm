@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"llamafarm-cli/cmd/config"
-	uitk "llamafarm-cli/internal/tui"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+
+	uitk "github.com/llamafarm/cli/internal/tui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -21,6 +21,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
 	"github.com/google/uuid"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
+	"github.com/llamafarm/cli/cmd/utils"
+	"github.com/llamafarm/cli/cmd/version"
 )
 
 var (
@@ -131,14 +135,14 @@ var chatCtx = &ChatSessionContext{
 	SessionProject:   projectID,
 	Temperature:      temperature,
 	MaxTokens:        maxTokens,
-	HTTPClient:       getHTTPClient(),
+	HTTPClient:       utils.GetHTTPClient(),
 	RAGEnabled:       true, // RAG is enabled by default
 }
 
 // fetchAvailableModels is now defined in models_shared.go
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
-func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
+func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo) {
 	// Update session context with project info first
 	if projectInfo != nil {
 		chatCtx.SessionNamespace = projectInfo.Namespace
@@ -149,7 +153,7 @@ func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, server
 		}
 	}
 	chatCtx.ServerURL = serverURL
-	chatCtx.HTTPClient = getHTTPClient()
+	chatCtx.HTTPClient = utils.GetHTTPClient()
 	chatCtx.SessionMode = mode
 
 	// Load existing session context to restore session ID if available
@@ -158,26 +162,26 @@ func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, server
 	if chatCtx.SessionMode == SessionModeDev {
 		if existingContext, err := readSessionContext(chatCtx); err == nil && existingContext != nil {
 			chatCtx.SessionID = existingContext.SessionID
-			logDebug(fmt.Sprintf("Restored dev mode session ID: %s", chatCtx.SessionID))
+			utils.LogDebug(fmt.Sprintf("Restored dev mode session ID: %s", chatCtx.SessionID))
 		}
 	} else if chatCtx.SessionMode == SessionModeProject {
 		if existingContext, err := readSessionContext(chatCtx); err == nil && existingContext != nil {
 			chatCtx.SessionID = existingContext.SessionID
-			logDebug(fmt.Sprintf("Restored project mode session ID: %s", chatCtx.SessionID))
+			utils.LogDebug(fmt.Sprintf("Restored project mode session ID: %s", chatCtx.SessionID))
 		}
 	}
 
-	m := newChatModel(projectInfo, serverHealth)
+	m := newChatModel(projectInfo)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.program = p
 
 	// Enable TUI mode for output routing
-	SetTUIMode(p)
-	defer ClearTUIMode()
+	utils.SetTUIMode(p)
+	defer utils.ClearTUIMode()
 
 	if _, err := p.Run(); err != nil {
 		// Use the output API instead of direct stderr write
-		OutputError("Error running TUI: %v\n", err)
+		utils.OutputError("Error running TUI: %v\n", err)
 	}
 }
 
@@ -202,7 +206,7 @@ type ModeContext struct {
 
 type chatModel struct {
 	transcript     string
-	serverHealth   *HealthPayload
+	serverHealth   *orchestrator.HealthPayload
 	projectInfo    *config.ProjectInfo
 	spin           spinner.Model
 	messages       []Message
@@ -257,10 +261,10 @@ type tickMsg struct{}
 
 type designerReadyMsg struct{ url string }
 type designerErrorMsg struct{ err error }
-type serverHealthMsg struct{ health *HealthPayload }
+type serverHealthMsg struct{ health *orchestrator.HealthPayload }
 type modeSwitchMsg struct{ mode ChatMode }
 
-func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) chatModel {
+func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	var devMessages []Message
 
 	ta := textarea.New()
@@ -325,12 +329,15 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 					}
 				}
 			}
-			logDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
+			utils.LogDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
 		}
 		if len(devMessages) == 0 {
 			devMessages = append(devMessages, Message{Role: "client", Content: "Send a message or type '/help' for commands."})
 		}
 	}
+
+	sm, _ := orchestrator.NewServiceManager(chatCtx.ServerURL)
+	serverHealth, _ := sm.GetServerHealth()
 
 	// Fetch initial greeting for project_seed (disabled)
 	// if greeting := fetchInitialGreeting(chatCtx); greeting != "" {
@@ -368,11 +375,11 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		}
 		if existingContext, err := readSessionContext(projectChatCtx); err == nil && existingContext != nil {
 			projectSessionID = existingContext.SessionID
-			logDebug(fmt.Sprintf("Restored project mode session ID: %s", projectSessionID))
+			utils.LogDebug(fmt.Sprintf("Restored project mode session ID: %s", projectSessionID))
 		} else {
 			// Create new session for project mode
 			projectSessionID = uuid.New().String()
-			logDebug(fmt.Sprintf("Created new project mode session ID: %s", projectSessionID))
+			utils.LogDebug(fmt.Sprintf("Created new project mode session ID: %s", projectSessionID))
 		}
 
 		// Fetch and render project session history using the project's namespace/project
@@ -437,7 +444,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		// Fetch dataset names for commands menu
 		availableDatasets = fetchAvailableDatasets(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project)
 		// Load prompts from project config file on disk (best effort)
-		if cfg, err := config.LoadConfig(getEffectiveCWD()); err == nil && cfg != nil {
+		if cfg, err := config.LoadConfig(utils.GetEffectiveCWD()); err == nil && cfg != nil {
 			availablePrompts = cfg.Prompts
 		}
 		if availableDatabases != nil && len(availableDatabases.Databases) > 0 {
@@ -496,7 +503,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		menuCfg.Namespace = projectInfo.Namespace
 	}
 	// Attach CLI version for menu header
-	menuCfg.Version = formatVersionForDisplay(Version)
+	menuCfg.Version = version.FormatVersionForDisplay(version.CurrentVersion)
 	qm := uitk.NewQuickMenuModel(menuCfg)
 
 	// Populate menu with real configuration data
@@ -676,18 +683,18 @@ func (m *chatModel) switchMode(newMode ChatMode) {
 	// Save session context for the new mode
 	_ = writeSessionContext(chatCtx, chatCtx.SessionID)
 
-	config := &ServiceOrchestrationConfig{
-		ServerURL:   serverURL,
-		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"universal-runtime": ServiceOptional, // Start async, don't wait
-			"server":            ServiceRequired,
-			"rag":               ServiceOptional, // Start async, don't wait
-		},
-		DefaultTimeout: 45 * time.Second,
-	}
-	health, _ := checkServerHealth(serverURL)
-	m.serverHealth = FilterHealthForOptionalServices(health, config, chatCtx.SessionMode)
+	// config := &orchestrator.ServiceOrchestrationConfig{
+	// 	ServerURL:   serverURL,
+	// 	PrintStatus: true,
+	// 	ServiceNeeds: map[string]orchestrator.ServiceRequirement{
+	// 		"universal-runtime": orchestrator.ServiceOptional, // Start async, don't wait
+	// 		"server":            orchestrator.ServiceRequired,
+	// 		"rag":               orchestrator.ServiceOptional, // Start async, don't wait
+	// 	},
+	// 	DefaultTimeout: 45 * time.Second,
+	// }
+	// health, _ := orchestrator.CheckServerHealth(serverURL)
+	// m.serverHealth = FilterHealthForOptionalServices(health, config, chatCtx.SessionMode)
 
 	// Return switch message
 	chatMsg := ""
@@ -887,8 +894,9 @@ func (m chatModel) Init() tea.Cmd {
 
 func updateServerHealthCmd(m chatModel) tea.Cmd {
 	return func() tea.Msg {
-		health, _ := checkServerHealth(serverURL)
-		return serverHealthMsg{health: health}
+		// health, _ := orchestrator.CheckServerHealth(serverURL)
+		// return serverHealthMsg{health: health}
+		return serverHealthMsg{health: nil}
 	}
 }
 
@@ -958,7 +966,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	footerHeight := lipgloss.Height(renderChatInput(m))
 
 	if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
-		logDebug(fmt.Sprintf("Checking latest server health. Last: %v", m.serverHealth))
+		utils.LogDebug(fmt.Sprintf("Checking latest server health. Last: %v", m.serverHealth))
 		cmds = append(cmds, updateServerHealthCmd(m))
 	}
 
@@ -1041,7 +1049,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 			// Navigate history
-			logDebug(fmt.Sprintf("Up arrow pressed. Current history: %+v", m.history))
+			utils.LogDebug(fmt.Sprintf("Up arrow pressed. Current history: %+v", m.history))
 			if m.histIndex > 0 {
 				m.histIndex--
 				m.textarea.SetValue(m.history[m.histIndex])
@@ -1089,7 +1097,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case toolCallMsg:
 		// Tool calls are added as separate assistant messages
-		logDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
+		utils.LogDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
 		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
 
 		// Auto-scroll to show tool call
@@ -1109,7 +1117,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 
-		logDebug(fmt.Sprintf("RESPONSE MSG: %v", msg.content))
+		utils.LogDebug(fmt.Sprintf("RESPONSE MSG: %v", msg.content))
 		m.thinking = false
 		m.printing = true
 
@@ -1172,9 +1180,9 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamDone:
 		if len(m.messages) > 0 {
-			logDebug(fmt.Sprintf("STREAM DONE: %v", m.messages[len(m.messages)-1]))
+			utils.LogDebug(fmt.Sprintf("STREAM DONE: %v", m.messages[len(m.messages)-1]))
 		} else {
-			logDebug("STREAM DONE: no messages")
+			utils.LogDebug("STREAM DONE: no messages")
 		}
 		m.printing = false
 		m.streamCh = nil
@@ -1195,7 +1203,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Update Help tab summary when health updates
 		if m.serverHealth != nil {
-			m.quickMenu.RAGHealthSummary = formatRAGHealthSummary(m.serverHealth)
+			// m.quickMenu.RAGHealthSummary = formatRAGHealthSummary(m.serverHealth)
 		}
 		if strings.TrimSpace(msg.Notice) != "" {
 			m.messages = append(m.messages, Message{Role: "client", Content: msg.Notice})
@@ -1259,14 +1267,8 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Special-case: run upgrade inside the current process
 		if strings.HasPrefix(commandStr, "lf version upgrade") {
-			// Extract any args after 'lf version upgrade'
-			fields := strings.Fields(commandStr)
-			args := []string{}
-			if len(fields) > 3 {
-				args = fields[3:]
-			}
 			cmds = append(cmds, func() tea.Msg {
-				if err := performUpgrade(upgradeCmd, args); err != nil {
+				if err := version.PerformUpgrade(version.UpgradeOpts{}); err != nil {
 					return uitk.ShowToastMsg{Message: "Upgrade failed: " + err.Error()}
 				}
 				return uitk.ShowToastMsg{Message: "Upgrade completed successfully"}
@@ -1320,11 +1322,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.startChatStreamForMessage(val))
 		}
 
-	case TUIMessageMsg:
+	case utils.TUIMessageMsg:
 		// Handle output messages routed through the messaging API
-		formattedContent := FormatMessage(msg.Message)
+		formattedContent := utils.FormatMessage(msg.Message)
 
-		if msg.Message.Type == ProgressMessage {
+		if msg.Message.Type == utils.ProgressMessage {
 			// For progress messages, find and remove the most recent progress message,
 			// then add the updated progress message at the bottom (most recent position)
 			// This keeps progress updates always visible at the bottom of the chat
@@ -1363,7 +1365,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func listen(ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		msg, ok := <-ch
-		logDebug(fmt.Sprintf("LISTEN MSG: %v", msg))
+		utils.LogDebug(fmt.Sprintf("LISTEN MSG: %v", msg))
 		if !ok {
 			fmt.Println("LISTEN DONE")
 			return streamDone{}
@@ -1372,14 +1374,14 @@ func listen(ch <-chan tea.Msg) tea.Cmd {
 	}
 }
 
-func renderServerStatusProblems(health *HealthPayload) string {
+func renderServerStatusProblems(health *orchestrator.HealthPayload) string {
 	var b strings.Builder
 
 	if health == nil {
 		return ""
 	}
 
-	prettyPrintHealthProblems(&b, *health)
+	// prettyPrintHealthProblems(&b, *health)
 
 	return b.String()
 }
@@ -1432,64 +1434,6 @@ func computeTranscriptKey(m chatModel) string {
 	io.WriteString(h, msg.Role)
 	io.WriteString(h, msg.Content)
 	return fmt.Sprintf("%x", h.Sum64())
-}
-
-// formatRAGHealthSummary builds a compact health line from the server health payload.
-// It uses the existing /health API response and extracts:
-// - RAG overall status
-// - Task system status
-// - Memory usage in MB
-func formatRAGHealthSummary(h *HealthPayload) string {
-	if h == nil {
-		return "RAG: UNKNOWN  |  Task System: UNKNOWN  |  Memory: N/A"
-	}
-	rag := findRAGComponent(h)
-	if rag == nil {
-		return "RAG: UNKNOWN  |  Task System: UNKNOWN  |  Memory: N/A"
-	}
-
-	ragStatus := strings.ToUpper(strings.TrimSpace(rag.Status))
-
-	taskStatus := "UNKNOWN"
-	memoryText := "N/A"
-
-	if rag.Details != nil {
-		// Extract task system status
-		if checksRaw, ok := rag.Details["checks"]; ok {
-			if checks, ok := checksRaw.(map[string]interface{}); ok {
-				if tsRaw, ok := checks["task_system"]; ok {
-					if ts, ok := tsRaw.(map[string]interface{}); ok {
-						if st, ok := ts["status"].(string); ok && strings.TrimSpace(st) != "" {
-							taskStatus = strings.ToUpper(st)
-						}
-					}
-				}
-			}
-		}
-		// Extract memory usage (MB)
-		if metricsRaw, ok := rag.Details["metrics"]; ok {
-			if metrics, ok := metricsRaw.(map[string]interface{}); ok {
-				if memVal, ok := metrics["memory_mb"]; ok {
-					switch v := memVal.(type) {
-					case float64:
-						memoryText = fmt.Sprintf("%.0f MB", v)
-					case float32:
-						memoryText = fmt.Sprintf("%.0f MB", v)
-					case int:
-						memoryText = fmt.Sprintf("%d MB", v)
-					case int64:
-						memoryText = fmt.Sprintf("%d MB", v)
-					case string:
-						memoryText = v + " MB"
-					default:
-						memoryText = fmt.Sprintf("%v MB", v)
-					}
-				}
-			}
-		}
-	}
-
-	return fmt.Sprintf("RAG: %s  |  Task System: %s  |  Memory: %s", ragStatus, taskStatus, memoryText)
 }
 
 func renderChatContent(m chatModel) string {
@@ -1607,7 +1551,7 @@ func renderInfoBar(m chatModel) string {
 	}
 
 	// Server status (just icon + simple host)
-	statusIcon := iconForStatus(func() string {
+	statusIcon := utils.IconForStatus(func() string {
 		if m.serverHealth != nil {
 			return m.serverHealth.Status
 		}
@@ -1812,7 +1756,7 @@ func (m *chatModel) processCommandOrMessage(msg string) (wasCommand bool, cmd te
 						resp, err := chatCtx.HTTPClient.Do(req)
 						if err == nil {
 							resp.Body.Close()
-							logDebug(fmt.Sprintf("Deleted server session %s", ctx.SessionID))
+							utils.LogDebug(fmt.Sprintf("Deleted server session %s", ctx.SessionID))
 						}
 					}
 				}
@@ -1825,7 +1769,7 @@ func (m *chatModel) processCommandOrMessage(msg string) (wasCommand bool, cmd te
 
 				// Save new session context
 				_ = writeSessionContext(chatCtx, ctx.SessionID)
-				logDebug(fmt.Sprintf("Created new dev mode session ID: %s", ctx.SessionID))
+				utils.LogDebug(fmt.Sprintf("Created new dev mode session ID: %s", ctx.SessionID))
 			}
 
 			// Clear local state for current mode
@@ -1965,7 +1909,7 @@ func (m *chatModel) processCommandOrMessage(msg string) (wasCommand bool, cmd te
 				}
 			}
 			// Check for updates and reflect status in the menu
-			if info, err := maybeCheckForUpgrade(true); err == nil && info != nil {
+			if info, err := version.MaybeCheckForUpgrade(true); err == nil && info != nil {
 				if info.UpdateAvailable {
 					m.quickMenu.SetUpdateAvailable(info.LatestVersion)
 				} else {
@@ -2015,9 +1959,9 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 		for {
 			select {
 			case s, ok := <-chunks:
-				logDebug(fmt.Sprintf("STREAM CHUNK: %v", s))
+				utils.LogDebug(fmt.Sprintf("STREAM CHUNK: %v", s))
 				if !ok {
-					logDebug(fmt.Sprintf("CHANNEL CLOSED: %v", builder.String()))
+					utils.LogDebug(fmt.Sprintf("CHANNEL CLOSED: %v", builder.String()))
 					ch <- responseMsg{content: builder.String()}
 					ch <- streamDone{}
 					close(ch)
@@ -2040,7 +1984,7 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 				}
 			case e, ok := <-errs:
 				if ok && e != nil {
-					logDebug(fmt.Sprintf("STREAM ERROR: %v", e))
+					utils.LogDebug(fmt.Sprintf("STREAM ERROR: %v", e))
 					ch <- errorMsg{err: e}
 				}
 			}

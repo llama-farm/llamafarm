@@ -4,8 +4,10 @@ Schema compilation script using jsonref with proper conversion.
 """
 
 import json
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import jsonref  # type: ignore[import-untyped]
 import yaml  # type: ignore[import-untyped]
@@ -17,7 +19,9 @@ def load_text_from_uri(uri: str) -> str:
     """Read local file:// or plain path URIs into text (UTF-8)."""
     parsed = urlparse(uri)
     if parsed.scheme in ("", "file"):
-        path = Path(parsed.path or uri)
+        # Use url2pathname to properly convert file URIs to filesystem paths
+        # This handles Windows paths correctly (e.g., file:///C:/Users/... -> C:\Users\...)
+        path = Path(url2pathname(parsed.path)) if parsed.scheme == "file" else Path(uri)
         return path.read_text(encoding="utf-8")
     raise ValueError(f"Unsupported URI scheme in $ref: {uri}")
 
@@ -82,14 +86,59 @@ if __name__ == "__main__":
         # Load the main schema and dereference all $refs
         deref = load_and_deref_schema(ROOT)
 
+        # Validate that dereferencing produced a valid schema
+        if deref is None:
+            raise ValueError(
+                "Schema dereferencing produced None. This usually means the schema file "
+                "is empty or the $ref resolution failed."
+            )
+
+        if not isinstance(deref, dict):
+            raise ValueError(
+                f"Schema dereferencing produced invalid type: {type(deref).__name__}. "
+                "Expected a dictionary."
+            )
+
+        if not deref:
+            raise ValueError(
+                "Schema dereferencing produced an empty dictionary. "
+                "This usually means the schema file is empty or all $ref resolutions failed."
+            )
+
+        # Ensure the schema has required top-level fields
+        if "type" not in deref and "properties" not in deref:
+            raise ValueError(
+                f"Schema is missing required top-level fields. "
+                f"A valid JSON Schema must have 'type' and/or 'properties'. "
+                f"Found keys: {list(deref.keys())}"
+            )
+
         # Serialize to YAML
         compiled = yaml.safe_dump(
             deref, sort_keys=False, indent=2, default_flow_style=False, width=1000
         )
 
+        # Validate serialized output is not empty
+        if not compiled or compiled.strip() in ("null", "null\n...", "{}"):
+            raise ValueError(
+                f"YAML serialization produced invalid output: {repr(compiled[:100])}"
+            )
+
         # Write to file
         output_file = Path("./schema.deref.yaml")
         output_file.write_text(compiled, encoding="utf-8")
+
+        # Verify the file was written correctly
+        if not output_file.exists():
+            raise OSError(f"Failed to write schema file: {output_file}")
+
+        file_size = output_file.stat().st_size
+        if file_size < 100:  # A valid schema should be at least 100 bytes
+            raise ValueError(
+                f"Schema file is suspiciously small ({file_size} bytes). "
+                f"This indicates the schema may not have been dereferenced correctly."
+            )
+
         print(f"Schema compiled to {output_file}")
 
         # Copy the dereferenced schema to cli/cmd/config directory
@@ -108,8 +157,8 @@ if __name__ == "__main__":
         print(f"Schema also written in JSON format to {dest_file}")
 
     except Exception as e:
-        print(f"Error during schema compilation: {e}")
+        print(f"Error during schema compilation: {e}", file=sys.stderr)
         import traceback
 
         traceback.print_exc()
-        raise
+        sys.exit(1)

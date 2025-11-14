@@ -13,6 +13,7 @@ import {
   useProjectModalContext,
 } from './contexts/ProjectModalContext'
 import { ModeResetProvider } from './contexts/ModeContext'
+import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
 import Home from './Home'
 import Chat from './Chat'
 import Data from './components/Data/Data'
@@ -31,6 +32,7 @@ import AddEmbeddingStrategy from './components/Rag/AddEmbeddingStrategy'
 import RetrievalMethod from './components/Rag/RetrievalMethod'
 // @ts-ignore - component is TSX local file
 import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
+import EditRetrievalStrategy from './components/Rag/EditRetrievalStrategy'
 // Projects standalone page removed; Home now hosts projects section
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
@@ -80,10 +82,11 @@ function App() {
         <ProjectModalProvider>
           <ModeResetProvider>
             <MobileViewProvider>
-              <Header currentVersion={currentVersion} />
-              {isHome ? <HomeUpgradeBanner /> : null}
-              <div className="h-full w-full">
-                <Routes>
+              <UnsavedChangesProvider>
+                <Header currentVersion={currentVersion} />
+                {isHome ? <HomeUpgradeBanner /> : null}
+                <div className="h-full w-full">
+                  <Routes>
                   <Route path="/" element={<Home />} />
                   {/* Redirect '/projects' to Home; Home will scroll to projects */}
                   <Route path="/projects" element={<Home />} />
@@ -150,7 +153,23 @@ function App() {
                       element={<AddRetrievalStrategy />}
                     />
                     <Route
+                      path="add-embedding-strategy"
+                      element={<AddEmbeddingStrategy />}
+                    />
+                    <Route
+                      path="add-retrieval-strategy"
+                      element={<AddRetrievalStrategy />}
+                    />
+                    <Route
+                      path="edit-retrieval-strategy"
+                      element={<EditRetrievalStrategy />}
+                    />
+                    <Route
                       path="databases/:strategyId/change-embedding"
+                      element={<ChangeEmbeddingModel />}
+                    />
+                    <Route
+                      path="change-embedding-model"
                       element={<ChangeEmbeddingModel />}
                     />
                     <Route
@@ -167,6 +186,7 @@ function App() {
                 </Routes>
               </div>
               <ProjectModalRoot />
+              </UnsavedChangesProvider>
             </MobileViewProvider>
           </ModeResetProvider>
         </ProjectModalProvider>

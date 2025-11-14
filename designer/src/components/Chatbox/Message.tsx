@@ -1,5 +1,7 @@
+import { useState, useEffect, useMemo } from 'react'
 import { ChatboxMessage } from '../../types/chatbox'
 import Markdown from '../../utils/renderMarkdown'
+import { parseMessageContentMemo } from '../../utils/messageParser'
 
 export interface MessageProps {
   message: ChatboxMessage
@@ -7,6 +9,20 @@ export interface MessageProps {
 
 const Message: React.FC<MessageProps> = ({ message }) => {
   const { type, content, isLoading, isStreaming, cancelled } = message
+  const [isArgsExpanded, setIsArgsExpanded] = useState(false)
+  const [isThinkingExpanded, setIsThinkingExpanded] = useState(true) // Always expanded by default
+
+  // Reset expansion state when message changes
+  useEffect(() => {
+    setIsArgsExpanded(false)
+    setIsThinkingExpanded(true) // Always start expanded
+  }, [message.id])
+
+  // Parse message content using memoized utility
+  const { thinking, contentWithoutThinking } = useMemo(
+    () => parseMessageContentMemo(content, type, message.id),
+    [content, type, message.id]
+  )
 
   // Show typing indicator while assistant is preparing/streaming with no content yet
   const showTypingIndicator =
@@ -34,7 +50,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
       case 'assistant':
         return 'text-[15px] md:text-base leading-relaxed text-foreground/90'
       case 'tool':
-        return `${baseBubble} bg-blue-500/10 border border-blue-500/20 rounded-lg`
+        return `${baseBubble} bg-muted/50 border border-border`
       case 'system':
         return `${baseBubble} bg-green-500 text-white rounded-2xl border-green-500 italic`
       case 'error':
@@ -60,14 +76,39 @@ const Message: React.FC<MessageProps> = ({ message }) => {
 
   return (
     <div className={getMessageStyles()}>
+      {/* Thinking steps section - collapsible and smaller font */}
+      {type === 'assistant' && thinking && !isLoading && (
+        <div className="mb-2 rounded-md border border-border bg-card/40">
+          <button
+            type="button"
+            onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
+            className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+            aria-expanded={isThinkingExpanded}
+          >
+            <span className="font-medium">Thinking steps</span>
+            <span className="text-[11px]">
+              {isThinkingExpanded ? 'Hide' : 'Show'}
+            </span>
+          </button>
+          {isThinkingExpanded && (
+            <div className="px-3 py-2 border-t border-border">
+              <Markdown
+                className="text-xs leading-relaxed text-muted-foreground break-words [&>p]:my-1 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&>h1]:mt-2 [&>h1]:mb-1 [&>h2]:mt-2 [&>h2]:mb-1 [&>h3]:mt-1 [&>h3]:mb-0.5 [&>ul]:my-1 [&>ol]:my-1 [&>li]:my-0.5"
+                content={thinking}
+              />
+            </div>
+          )}
+        </div>
+      )}
+      
       <div className={getContentStyles()}>
         {type === 'assistant' ? (
           isLoading ? (
             <span className="italic opacity-70">{content}</span>
           ) : (
             <Markdown
-              className="leading-relaxed break-words [&>p]:my-2 [&>h1]:mt-4 [&>h1]:mb-2 [&>h2]:mt-3 [&>h2]:mb-2 [&>h3]:mt-2 [&>h3]:mb-1 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1"
-              content={content}
+              className="leading-relaxed break-words [&>p]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&>h1]:mt-4 [&>h1]:mb-2 [&>h2]:mt-3 [&>h2]:mb-2 [&>h3]:mt-2 [&>h3]:mb-1 [&>ul]:my-2 [&>ol]:my-2"
+              content={contentWithoutThinking}
             />
           )
         ) : type === 'tool' ? (
@@ -86,33 +127,55 @@ const Message: React.FC<MessageProps> = ({ message }) => {
 
               return (
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-blue-400">🔧</span>
-                    <span className="font-semibold text-blue-300">
-                      Calling tool:
-                    </span>
-                    <code className="px-2 py-0.5 bg-blue-500/20 rounded text-blue-200 font-mono text-sm">
-                      {parsed.toolName}
-                    </code>
-                  </div>
-                  {parsed.arguments && (
-                    <div className="ml-6 mt-1">
-                      <div className="text-xs text-blue-300/80 mb-1">
-                        Arguments:
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🔧</span>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground/60 font-medium">
+                          Tool call
+                        </span>
+                        <span className="text-sm font-semibold text-foreground">
+                          {parsed.toolName}
+                        </span>
                       </div>
-                      <pre className="text-xs bg-blue-500/10 border border-blue-500/20 rounded p-2 overflow-x-auto text-blue-200/90 font-mono">
-                        {typeof parsedArgs === 'object' && parsedArgs !== null
-                          ? JSON.stringify(parsedArgs, null, 2)
-                          : parsed.arguments}
-                      </pre>
                     </div>
+                    {parsed.arguments && (
+                      <button
+                        onClick={() => setIsArgsExpanded(!isArgsExpanded)}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <span className="font-medium">
+                          {isArgsExpanded ? 'Hide' : 'Show'} details
+                        </span>
+                        <svg
+                          className={`w-3 h-3 transition-transform ${isArgsExpanded ? 'rotate-90' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5l7 7-7 7"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  {parsed.arguments && isArgsExpanded && (
+                    <pre className="text-[11px] leading-relaxed bg-card border border-border rounded px-2.5 py-2 overflow-x-auto text-foreground/80 font-mono">
+                      {typeof parsedArgs === 'object' && parsedArgs !== null
+                        ? JSON.stringify(parsedArgs, null, 2)
+                        : parsed.arguments}
+                    </pre>
                   )}
                 </div>
               )
             }
             // Fallback to plain text if parsing fails
             return (
-              <span className="whitespace-pre-wrap text-sm text-blue-300">
+              <span className="whitespace-pre-wrap text-sm text-muted-foreground">
                 {content}
               </span>
             )

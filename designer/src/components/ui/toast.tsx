@@ -6,6 +6,7 @@ type Toast = {
   id: number
   message: string
   variant?: 'default' | 'destructive'
+  icon?: 'checkmark-filled' | 'alert-triangle' | 'close'
 }
 
 type ToastContextValue = { toast: (opts: Omit<Toast, 'id'>) => void }
@@ -51,12 +52,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 'w-7 h-7 rounded-full grid place-items-center',
                 t.variant === 'destructive'
                   ? 'bg-destructive text-destructive-foreground'
-                  : 'bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900'
+                  : t.icon === 'alert-triangle'
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900'
               )}
             >
               <FontIcon
                 type={
-                  t.variant === 'destructive' ? 'close' : 'checkmark-filled'
+                  t.icon ||
+                  (t.variant === 'destructive' ? 'close' : 'checkmark-filled')
                 }
                 className="w-4 h-4"
               />

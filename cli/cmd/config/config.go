@@ -104,7 +104,7 @@ func IsConfigFile(filePath string) bool {
 	return false
 }
 
-// SaveConfig saves a llamafarm.yaml configuration file
+// SaveConfig saves a llamafarm.yaml configuration file using atomic writes
 func SaveConfig(config *LlamaFarmConfig, configPath string) error {
 	// If no path specified, save to llamafarm.yaml in current directory
 	if configPath == "" {
@@ -123,9 +123,63 @@ func SaveConfig(config *LlamaFarmConfig, configPath string) error {
 		}
 	}
 
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	// Use atomic write: write to temp file, then rename
+	if err := atomicWriteFile(configPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
+
+	return nil
+}
+
+// atomicWriteFile writes data to a file atomically by writing to a temp file
+// and then renaming it. This prevents readers from seeing partial writes.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	// Create temp file in the same directory as the target file
+	// to ensure it's on the same filesystem (required for atomic rename)
+	dir := filepath.Dir(path)
+	tmpFile, err := os.CreateTemp(dir, ".llamafarm-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	// Clean up temp file on error
+	var renamed bool
+	defer func() {
+		if tmpFile != nil {
+			tmpFile.Close()
+		}
+		// Always remove temp file if rename didn't succeed
+		if !renamed {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	// Write data to temp file
+	if _, err := tmpFile.Write(data); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+
+	// Sync to ensure data is written to disk
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp file: %w", err)
+	}
+
+	// Close the temp file
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	// Set permissions on temp file
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return fmt.Errorf("failed to set permissions on temp file: %w", err)
+	}
+
+	// Atomically rename temp file to target file
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("failed to rename temp file to target: %w", err)
+	}
+	renamed = true
 
 	return nil
 }

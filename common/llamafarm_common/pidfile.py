@@ -14,8 +14,8 @@ _cached_pid_file_path: str = ""
 
 def get_pid_dir() -> Path:
     """Get the directory for PID files."""
-    home = Path.home()
-    pid_dir = home / ".llamafarm" / "pids"
+    lf_data_dir = os.getenv("LF_DATA_DIR", Path.home() / ".llamafarm")
+    pid_dir = Path(lf_data_dir) / "pids"
     pid_dir.mkdir(parents=True, exist_ok=True)
     return pid_dir
 

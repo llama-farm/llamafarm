@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/llamafarm/cli/cmd/utils"
 )
 
 // RetrievalStrategyInfo represents a retrieval strategy configuration
@@ -42,25 +44,25 @@ func fetchAvailableDatabases(serverURL, namespace, projectID string) *DatabasesR
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		OutputWarning("Failed to build request for databases endpoint: %v", err)
+		utils.OutputWarning("Failed to build request for databases endpoint: %v", err)
 		return nil
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
-		OutputWarning("Unable to fetch databases from server: %v", err)
+		utils.OutputWarning("Unable to fetch databases from server: %v", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		OutputWarning("Databases endpoint returned status %d", resp.StatusCode)
+		utils.OutputWarning("Databases endpoint returned status %d", resp.StatusCode)
 		return nil
 	}
 
 	var result DatabasesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		OutputWarning("Failed to decode databases response: %v", err)
+		utils.OutputWarning("Failed to decode databases response: %v", err)
 		return nil
 	}
 
@@ -101,25 +103,25 @@ func fetchAvailableDatasets(serverURL, namespace, projectID string) []DatasetBri
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		OutputWarning("Failed to build request for datasets endpoint: %v", err)
+		utils.OutputWarning("Failed to build request for datasets endpoint: %v", err)
 		return nil
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
-		OutputWarning("Unable to fetch datasets from server: %v", err)
+		utils.OutputWarning("Unable to fetch datasets from server: %v", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		OutputWarning("Datasets endpoint returned status %d", resp.StatusCode)
+		utils.OutputWarning("Datasets endpoint returned status %d", resp.StatusCode)
 		return nil
 	}
 
 	var result DatasetsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		OutputWarning("Failed to decode datasets response: %v", err)
+		utils.OutputWarning("Failed to decode datasets response: %v", err)
 		return nil
 	}
 

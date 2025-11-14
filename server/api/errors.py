@@ -2,6 +2,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.logging import FastAPIStructLogger
+
+logger = FastAPIStructLogger()
+
 
 class NotFoundError(Exception):
     def __init__(self, message: str | None = None):
@@ -101,6 +105,13 @@ async def _handle_reserved_namespace_error(
 
 
 async def _handle_unexpected_error(request: Request, exc: Exception) -> Response:
+    # Log the exception with full stack trace
+    logger.exception(
+        "Unhandled exception in request handler",
+        exception_class=exc.__class__.__name__,
+        path=request.url.path,
+    )
+
     payload = ErrorResponse(
         error="InternalServerError",
         message="An unexpected error occurred",

@@ -1,9 +1,9 @@
 name: Release - Docker images
 
 on:
-  release:
-    types:
-      - published
+  # release:
+  #   types:
+  #     - published
   workflow_dispatch:
     inputs:
       version:
@@ -14,6 +14,9 @@ on:
 permissions:
   contents: read
   packages: read
+
+env:
+  NX_NO_CLOUD: true
 
 jobs:
   tag-docker-images:

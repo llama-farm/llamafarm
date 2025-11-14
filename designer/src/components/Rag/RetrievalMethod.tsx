@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
@@ -26,6 +26,9 @@ import {
 } from '../ui/dialog'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProject } from '../../hooks/useProjects'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 import {
   STRATEGY_TYPES,
   STRATEGY_LABELS,
@@ -40,6 +43,27 @@ function RetrievalMethod() {
   const [mode, setMode] = useModeWithReset('designer')
   const [, setDefaultTick] = useState(0)
   const activeProject = useActiveProject()
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const getRetrievalLocation = useCallback(() => {
+    if (strategyId) {
+      return {
+        type: 'rag.database.retrieval' as const,
+        retrievalName: strategyId,
+      }
+    }
+    return { type: 'rag.databases' as const }
+  }, [strategyId])
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getRetrievalLocation,
+  })
 
   // removed unused strategyName
 
@@ -433,7 +457,7 @@ function RetrievalMethod() {
               <span className="text-muted-foreground px-1">/</span>
               <span className="text-foreground">Edit retrieval strategy</span>
             </nav>
-            <PageActions mode={mode} onModeChange={setMode} />
+            <PageActions mode={mode} onModeChange={handleModeChange} />
           </div>
 
           {/* Header */}
@@ -447,12 +471,12 @@ function RetrievalMethod() {
       ) : (
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-2xl">Config editor</h2>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
       )}
       {mode !== 'designer' ? (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <ConfigEditor className="h-full" />
+          <ConfigEditor className="h-full" initialPointer={configPointer} />
         </div>
       ) : (
         <>
