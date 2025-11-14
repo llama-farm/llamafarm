@@ -62,7 +62,6 @@ LlamaIndexWebParser = _create_legacy_parser_class(
     "TextParser_LlamaIndex"
 )  # Web parser fallback to text
 LlamaIndexMsgParser = _create_legacy_parser_class("MsgParser_ExtractMsg")
-MarkItDownParser = _create_legacy_parser_class("MarkItDownParser")
 
 # Additional legacy aliases
 PlainTextParser = LlamaIndexTextParser
@@ -195,8 +194,6 @@ __all__ = [
     "LlamaIndexParser",
     # Directory parser
     "DirectoryParser",
-    # Universal parsers
-    "MarkItDownParser",
     # Legacy compatibility classes (for backwards compatibility)
     "LlamaIndexTextParser",
     "LlamaIndexPDFParser",
