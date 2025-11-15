@@ -9,7 +9,13 @@ runtime:
     - name: default
       description: "Default Universal model for LlamaFarm"
       provider: universal
-      model: Qwen/Qwen3-1.7B
+      model: unsloth/Qwen3-1.7B-GGUF
+      model_api_parameters:
+        gguf_quantization: "Q4_K_M"
+      # For GGUF models, you can specify quantization preference:
+      # model: unsloth/Qwen3-1.7B-GGUF
+      # model_api_parameters:
+      #   gguf_quantization: "Q4_K_M"  # Options: Q4_K_M (default), Q8_0, F16, etc.
 
 prompts:
   - name: default

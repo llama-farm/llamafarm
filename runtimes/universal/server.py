@@ -88,7 +88,9 @@ def get_device():
     return _current_device
 
 
-async def load_language(model_id: str, n_ctx: int | None = None):
+async def load_language(
+    model_id: str, n_ctx: int | None = None, preferred_quantization: str | None = None
+):
     """Load a causal language model (GGUF or transformers format).
 
     Automatically detects whether the model is in GGUF or transformers format
@@ -100,6 +102,9 @@ async def load_language(model_id: str, n_ctx: int | None = None):
         model_id: HuggingFace model identifier
         n_ctx: Optional context window size for GGUF models. If None, will be
                computed automatically based on available memory and model defaults.
+        preferred_quantization: Optional quantization preference for GGUF models
+                                (e.g., "Q4_K_M", "Q8_0"). If None, defaults to Q4_K_M.
+                                Only downloads the specified quantization to save disk space.
     """
 
     # Include n_ctx in cache key for GGUF models so different context sizes are cached separately
@@ -121,7 +126,12 @@ async def load_language(model_id: str, n_ctx: int | None = None):
                 # Instantiate appropriate model class based on format
                 model: BaseModel
                 if model_format == "gguf":
-                    model = GGUFLanguageModel(model_id, device, n_ctx=n_ctx)
+                    model = GGUFLanguageModel(
+                        model_id,
+                        device,
+                        n_ctx=n_ctx,
+                        preferred_quantization=preferred_quantization,
+                    )
                 else:
                     model = LanguageModel(model_id, device)
 
@@ -130,7 +140,9 @@ async def load_language(model_id: str, n_ctx: int | None = None):
     return _models[cache_key]
 
 
-async def load_encoder(model_id: str, task: str = "embedding"):
+async def load_encoder(
+    model_id: str, task: str = "embedding", preferred_quantization: str | None = None
+):
     """Load an encoder model for embeddings or classification (GGUF or transformers format).
 
     Automatically detects whether the model is in GGUF or transformers format
@@ -141,6 +153,9 @@ async def load_encoder(model_id: str, task: str = "embedding"):
     Args:
         model_id: HuggingFace model identifier
         task: Model task - "embedding" or "classification"
+        preferred_quantization: Optional quantization preference for GGUF models
+                                (e.g., "Q4_K_M", "Q8_0"). If None, defaults to Q4_K_M.
+                                Only downloads the specified quantization to save disk space.
     """
     # Detect model format for proper caching and loading
     model_format = detect_model_format(model_id)
@@ -162,7 +177,9 @@ async def load_encoder(model_id: str, task: str = "embedding"):
                         raise ValueError(
                             f"GGUF models only support embedding task, not '{task}'"
                         )
-                    model = GGUFEncoderModel(model_id, device)
+                    model = GGUFEncoderModel(
+                        model_id, device, preferred_quantization=preferred_quantization
+                    )
                 else:
                     model = EncoderModel(model_id, device, task=task)
 
@@ -230,7 +247,14 @@ async def create_embeddings(request: EmbeddingRequest):
     Supports any HuggingFace encoder model for text embeddings.
     """
     try:
-        model = await load_encoder(request.model, task="embedding")
+        # Extract GGUF quantization preference from extra_body if provided
+        gguf_quantization = None
+        if request.extra_body:
+            gguf_quantization = request.extra_body.get("gguf_quantization")
+
+        model = await load_encoder(
+            request.model, task="embedding", preferred_quantization=gguf_quantization
+        )
 
         # Normalize input to list
         texts = [request.input] if isinstance(request.input, str) else request.input

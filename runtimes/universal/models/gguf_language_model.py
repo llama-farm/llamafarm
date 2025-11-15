@@ -41,6 +41,7 @@ class GGUFLanguageModel(BaseModel):
         device: str,
         token: str | None = None,
         n_ctx: int | None = None,
+        preferred_quantization: str | None = None,
     ):
         """Initialize GGUF language model.
 
@@ -50,6 +51,9 @@ class GGUFLanguageModel(BaseModel):
             token: Optional HuggingFace authentication token for gated models
             n_ctx: Optional context window size. If None, will be computed automatically
                    based on available memory and model defaults.
+            preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0").
+                                    If None, defaults to Q4_K_M. Only downloads the specified
+                                    quantization to save disk space.
         """
         super().__init__(model_id, device, token=token)
         self.model_type = "language"
@@ -57,6 +61,7 @@ class GGUFLanguageModel(BaseModel):
         self.llama: Llama | None = None
         self.requested_n_ctx = self.n_ctx = n_ctx  # Store requested value
         self.actual_n_ctx: int | None = None  # Will be computed during load()
+        self.preferred_quantization = preferred_quantization
         self._executor = ThreadPoolExecutor(max_workers=1)
 
     async def load(self) -> None:
@@ -77,7 +82,12 @@ class GGUFLanguageModel(BaseModel):
         logger.info(f"Loading GGUF model: {self.model_id}")
 
         # Get path to .gguf file in HF cache
-        gguf_path = get_gguf_file_path(self.model_id, self.token)
+        # This will intelligently select and download only the preferred quantization
+        gguf_path = get_gguf_file_path(
+            self.model_id,
+            self.token,
+            preferred_quantization=self.preferred_quantization,
+        )
         logger.info(f"GGUF file located at: {gguf_path}")
 
         # Compute optimal context size

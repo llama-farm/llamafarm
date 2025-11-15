@@ -38,6 +38,7 @@ class GGUFEncoderModel(BaseModel):
         model_id: str,
         device: str,
         token: str | None = None,
+        preferred_quantization: str | None = None,
     ):
         """Initialize GGUF encoder model for embeddings.
 
@@ -45,11 +46,15 @@ class GGUFEncoderModel(BaseModel):
             model_id: HuggingFace model identifier (e.g., "nomic-ai/nomic-embed-text-v1.5-GGUF")
             device: Target device ("cuda", "mps", or "cpu")
             token: Optional HuggingFace authentication token for gated models
+            preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0").
+                                    If None, defaults to Q4_K_M. Only downloads the specified
+                                    quantization to save disk space.
         """
         super().__init__(model_id, device, token=token)
         self.model_type = "encoder_embedding"
         self.supports_streaming = False
         self.llama: Llama | None = None
+        self.preferred_quantization = preferred_quantization
         self._executor = ThreadPoolExecutor(max_workers=1)
 
     async def load(self) -> None:
@@ -69,7 +74,12 @@ class GGUFEncoderModel(BaseModel):
         logger.info(f"Loading GGUF embedding model: {self.model_id}")
 
         # Get path to .gguf file in HF cache
-        gguf_path = get_gguf_file_path(self.model_id, self.token)
+        # This will intelligently select and download only the preferred quantization
+        gguf_path = get_gguf_file_path(
+            self.model_id,
+            self.token,
+            preferred_quantization=self.preferred_quantization,
+        )
         logger.info(f"GGUF file located at: {gguf_path}")
 
         # Configure GPU layers based on device

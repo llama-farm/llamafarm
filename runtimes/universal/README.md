@@ -129,6 +129,64 @@ The runtime automatically:
 2. Uses llama-cpp-python for optimized inference
 3. Configures appropriate hardware acceleration (Metal/CUDA/CPU)
 
+### Selecting GGUF Quantization
+
+Many GGUF model repositories (like `unsloth/Qwen3-1.7B-GGUF`) contain multiple quantization variants (Q4_K_M, Q8_0, F16, etc.). The Universal Runtime intelligently selects and downloads only the quantization you need, saving disk space.
+
+#### Automatic Selection (Default)
+
+By default, the runtime selects **Q4_K_M** quantization, which offers the best balance of size, speed, and quality:
+
+```python
+# Automatically selects Q4_K_M if available
+model = "unsloth/Qwen3-1.7B-GGUF"
+```
+
+**Selection priority order:**
+1. Q4_K_M (default - best balance)
+2. Q4_K, Q5_K_M, Q5_K
+3. Q8_0 (higher quality, larger)
+4. Others (Q6_K, Q4_K_S, Q3_K_M, Q2_K, F16)
+
+#### Manual Quantization Selection
+
+Specify your preferred quantization in `llamafarm.yaml` or via API:
+
+**In llamafarm.yaml:**
+```yaml
+runtime:
+  models:
+    - name: default
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF
+      model_api_parameters:
+        gguf_quantization: "Q8_0"  # Use higher quality 8-bit quantization
+```
+
+**Via OpenAI-compatible API:**
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1")
+response = client.chat.completions.create(
+    model="unsloth/Qwen3-1.7B-GGUF",
+    messages=[{"role": "user", "content": "Hello!"}],
+    extra_body={"gguf_quantization": "Q8_0"}  # Specify quantization at runtime
+)
+```
+
+**Common quantization types:**
+- **Q4_K_M**: 4-bit, medium variant (default, ~50-60% size reduction)
+- **Q5_K_M**: 5-bit, medium variant (~40-50% size reduction)
+- **Q8_0**: 8-bit (minimal quality loss, ~50% size vs F16)
+- **F16**: Full 16-bit precision (largest, highest quality)
+
+**Benefits:**
+- ✅ Only downloads the specific quantization you need
+- ✅ Saves disk space (no unused variants)
+- ✅ Explicit control over quality/size trade-off
+- ✅ Works with any GGUF model repository
+
 ### Recommended GGUF Models
 
 | Model | Size | Quantization | Best For |

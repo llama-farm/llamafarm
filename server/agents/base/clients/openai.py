@@ -92,7 +92,17 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Prepare API parameters
         # model_api_parameters go as direct kwargs, extra_params go in extra_body
-        api_params = self._model_config.model_api_parameters or {}
+        # However, some Universal Runtime-specific params need to go in extra_body
+        api_params = (self._model_config.model_api_parameters or {}).copy()
+
+        # Extract Universal Runtime-specific parameters to extra_body
+        universal_runtime_params = {}
+        for key in ["gguf_quantization", "n_ctx"]:
+            if key in api_params:
+                universal_runtime_params[key] = api_params.pop(key)
+
+        # Merge with extra_params
+        extra_body_params = {**(extra_params or {}), **universal_runtime_params}
 
         # Create non-streaming request
         stream_param: Literal[False] = False
@@ -109,7 +119,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,
-            extra_body=extra_params or {},
+            extra_body=extra_body_params,
             stream=stream_param,
         )
 
@@ -152,7 +162,17 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Prepare API parameters
         # model_api_parameters go as direct kwargs, extra_params go in extra_body
-        api_params = self._model_config.model_api_parameters or {}
+        # However, some Universal Runtime-specific params need to go in extra_body
+        api_params = (self._model_config.model_api_parameters or {}).copy()
+
+        # Extract Universal Runtime-specific parameters to extra_body
+        universal_runtime_params = {}
+        for key in ["gguf_quantization", "n_ctx"]:
+            if key in api_params:
+                universal_runtime_params[key] = api_params.pop(key)
+
+        # Merge with extra_params
+        extra_body_params = {**(extra_params or {}), **universal_runtime_params}
 
         stream_param: Literal[True] = True
         # Filter out None values from messages to avoid OpenAI validation errors
@@ -168,7 +188,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,
-            extra_body=extra_params or {},
+            extra_body=extra_body_params,
             stream=stream_param,
         )
 

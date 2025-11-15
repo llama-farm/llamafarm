@@ -131,7 +131,13 @@ properties:
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
             model_api_parameters:
               type: object
-              description: Additional parameters passed to the API provider
+              description: |
+                Additional parameters passed to the API provider.
+                For Universal runtime with GGUF models, you can specify:
+                - gguf_quantization: Preferred quantization (e.g., "Q4_K_M", "Q8_0", "F16").
+                  Defaults to Q4_K_M if not specified. Only downloads the selected quantization
+                  to save disk space.
+                - n_ctx: Context window size (auto-computed if not specified).
               additionalProperties: true
             prompts:
               type: array

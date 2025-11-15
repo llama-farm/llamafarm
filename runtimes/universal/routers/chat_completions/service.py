@@ -35,7 +35,17 @@ class ChatCompletionsService:
         try:
             # Get context window size from request
             n_ctx = chat_request.n_ctx
-            model = await self.load_language(chat_request.model, n_ctx=n_ctx)
+
+            # Extract GGUF quantization preference from extra_body if provided
+            gguf_quantization = None
+            if chat_request.extra_body:
+                gguf_quantization = chat_request.extra_body.get("gguf_quantization")
+
+            model = await self.load_language(
+                chat_request.model,
+                n_ctx=n_ctx,
+                preferred_quantization=gguf_quantization,
+            )
 
             # Convert messages to prompt
             # ChatCompletionMessageParam is already dict-compatible
