@@ -93,6 +93,12 @@ jobs:
           go build ./tools/coverreport
           ./coverreport -in coverage.out -format=markdown > coverage.md
 
+      - name: Run binary upgrade integration tests
+        working-directory: cli
+        run: |
+          # Run Go-based integration tests
+          go test -v -run TestUpgradeIntegration ./cmd/version/...
+
       - name: Publish CLI coverage to job summary
         run: |
           {
