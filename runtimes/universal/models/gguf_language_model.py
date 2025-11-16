@@ -312,6 +312,21 @@ class GGUFLanguageModel(BaseModel):
                 # Regular token
                 yield item
 
+    async def unload(self) -> None:
+        """Unload GGUF model and free resources."""
+        logger.info(f"Unloading GGUF language model: {self.model_id}")
+
+        # Clear llama-cpp-python instance
+        self.llama = None
+
+        # Shutdown thread pool executor
+        if hasattr(self, "_executor"):
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            # Create new executor for potential future use
+            self._executor = ThreadPoolExecutor(max_workers=1)
+
+        logger.info(f"GGUF language model unloaded: {self.model_id}")
+
     def __del__(self):
         """Cleanup thread pool executor on deletion."""
         if hasattr(self, "_executor"):

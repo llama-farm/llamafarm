@@ -38,8 +38,9 @@ COPY rag/pyproject.toml rag/uv.lock rag/README.md ./rag/
 COPY ruff.toml ./ruff.toml
 
 # Install dependencies in separate layers (cached unless lock files change)
-RUN cd config && uv sync --locked --all-extras
-RUN cd rag && uv sync --locked
+# Use --no-build to prevent building from source (forces prebuilt wheels)
+RUN cd config && uv sync --locked --all-extras --no-build
+RUN cd rag && uv sync --locked --no-build
 
 # Now copy the rest of the source code (changes won't invalidate dependency cache)
 COPY config/ ./config/
@@ -47,9 +48,10 @@ COPY common/ ./common/
 COPY rag/ ./rag/
 
 # Install each package with its own dependencies
-RUN cd config && uv sync --locked --all-extras --verbose
-RUN cd common && uv sync --locked --all-extras --verbose
-RUN cd rag && uv sync --locked  --verbose
+# Use --no-build to prevent building from source (forces prebuilt wheels)
+RUN cd config && uv sync --locked --all-extras --verbose --no-build
+RUN cd common && uv sync --locked --all-extras --verbose --no-build
+RUN cd rag && uv sync --locked  --verbose --no-build
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh

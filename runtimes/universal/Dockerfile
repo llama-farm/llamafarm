@@ -39,8 +39,9 @@ COPY rag/schema.yaml ./rag/schema.yaml
 COPY ruff.toml ./ruff.toml
 
 # Install config dependencies including dev dependencies for datamodel generation
-RUN cd config && uv sync --locked --all-extras --verbose
-RUN cd common && uv sync --locked --all-extras --verbose
+# Use --no-build to prevent building from source (forces prebuilt wheels)
+RUN cd config && uv sync --locked --all-extras --verbose --no-build
+RUN cd common && uv sync --locked --all-extras --verbose --no-build
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh
@@ -54,7 +55,8 @@ COPY runtimes/universal/pyproject.toml runtimes/universal/uv.lock runtimes/unive
 COPY runtimes/universal/ ./runtimes/universal/
 
 # Install server dependencies and install package in editable mode
-RUN cd runtimes/universal && uv sync --locked --verbose \
+# Use --no-build to prevent building from source (forces prebuilt wheels)
+RUN cd runtimes/universal && uv sync --locked --verbose --no-build \
     && uv cache clean \
     && rm -rf /tmp/uv-cache/*
 

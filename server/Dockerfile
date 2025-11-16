@@ -35,7 +35,8 @@ COPY rag/schema.yaml ./rag/schema.yaml
 COPY ruff.toml ./ruff.toml
 
 # Install config dependencies including dev dependencies for datamodel generation
-RUN cd config && uv sync --locked --all-extras --verbose
+# Use --no-build to prevent building from source (forces prebuilt wheels)
+RUN cd config && uv sync --locked --all-extras --verbose --no-build
 
 # Generate config schema and datamodel types
 RUN cd config && ./generate-types.sh
@@ -46,7 +47,8 @@ RUN rm -rf rag
 COPY server/pyproject.toml server/uv.lock server/README.md ./server/
 
 # Install server dependencies
-RUN cd server && uv sync --locked --verbose
+# Use --no-build to prevent building from source (forces prebuilt wheels)
+RUN cd server && uv sync --locked --verbose --no-build
 
 # Fix ownership and permissions of UV directories after they've been populated
 RUN chmod -R 777 /tmp/uv-cache /tmp/uv-venv

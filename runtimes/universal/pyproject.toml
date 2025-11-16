@@ -1,5 +1,5 @@
 [project]
-name = "transformers-runtime"
+name = "universal-runtime"
 version = "1.0.0"
 description = "OpenAI-compatible API for HuggingFace models"
 readme = "README.md"

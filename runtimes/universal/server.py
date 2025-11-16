@@ -9,15 +9,20 @@ model without restrictions. Supports:
 Key Features:
 - Auto-detects hardware (MPS/CUDA/CPU)
 - Lazy model loading (load on first request)
+- Automatic model unloading (after 5 minutes of inactivity by default)
 - Platform-specific optimizations
 - OpenAI API compatibility
 - No model restrictions (trust_remote_code=True)
+
+Environment Variables:
+- MODEL_UNLOAD_TIMEOUT: Seconds of inactivity before unloading models (default: 300)
+- CLEANUP_CHECK_INTERVAL: Seconds between cleanup checks (default: 30)
 """
 
 import asyncio
 import base64
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from typing import Literal
 
@@ -51,18 +56,45 @@ logger = UniversalRuntimeLogger("universal-runtime")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle (startup and shutdown)."""
+    global _cleanup_task
 
     # Startup
     logger.info("Starting Universal Runtime")
+
+    # Start model cleanup background task
+    _cleanup_task = asyncio.create_task(_cleanup_idle_models())
+    logger.info("Model cleanup background task started")
+
     yield
+
     # Shutdown
     logger.info("Shutting down Universal Runtime")
+
+    # Stop cleanup task
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _cleanup_task
+        logger.info("Model cleanup task stopped")
+
+    # Unload all remaining models
+    if _models:
+        logger.info(f"Unloading {len(_models)} remaining model(s)")
+        for cache_key, model in list(_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading model {cache_key}: {e}")
+        _models.clear()
+        _model_last_access.clear()
+
     logger.info("Shutdown complete")
 
 
 app = FastAPI(
     title="Universal Runtime",
-    description="OpenAI-compatible API for HuggingFace models (transformers & diffusers)",
+    description="OpenAI-compatible API for HuggingFace models (transformers, diffusers, embedders)",
     version="2.0.0",
     lifespan=lifespan,
 )
@@ -70,13 +102,77 @@ app.include_router(chat_completions_router)
 
 # Global model cache
 _models: dict[str, BaseModel] = {}
+_model_last_access: dict[str, datetime] = {}  # Track last access time for each model
 _model_load_lock = asyncio.Lock()
 _current_device = None
+_cleanup_task: asyncio.Task | None = None
+
+# Model unload timeout configuration (in seconds)
+# Default: 5 minutes (300 seconds)
+MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT", "300"))
+# Cleanup check interval (in seconds) - how often to check for idle models
+# Default: 30 seconds
+CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+
+def _track_model_access(cache_key: str) -> None:
+    """Track that a model was accessed."""
+    _model_last_access[cache_key] = datetime.now()
+
+
+async def _cleanup_idle_models() -> None:
+    """Background task that periodically unloads idle models.
+
+    Runs continuously, checking every CLEANUP_CHECK_INTERVAL seconds for models
+    that haven't been accessed in MODEL_UNLOAD_TIMEOUT seconds.
+    """
+    logger.info(
+        f"Model cleanup task started (timeout={MODEL_UNLOAD_TIMEOUT}s, "
+        f"check_interval={CLEANUP_CHECK_INTERVAL}s)"
+    )
+
+    while True:
+        try:
+            await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
+
+            now = datetime.now()
+            models_to_unload = []
+
+            # Find idle models
+            for cache_key, last_access in _model_last_access.items():
+                idle_time = (now - last_access).total_seconds()
+                if idle_time > MODEL_UNLOAD_TIMEOUT:
+                    models_to_unload.append(cache_key)
+
+            # Unload idle models
+            if models_to_unload:
+                logger.info(f"Unloading {len(models_to_unload)} idle model(s)")
+
+                for cache_key in models_to_unload:
+                    try:
+                        model = _models.get(cache_key)
+                        if model:
+                            logger.info(f"Unloading idle model: {cache_key}")
+                            await model.unload()
+                            del _models[cache_key]
+                            del _model_last_access[cache_key]
+                            logger.info(f"Successfully unloaded: {cache_key}")
+                    except Exception as e:
+                        logger.error(
+                            f"Error unloading model {cache_key}: {e}", exc_info=True
+                        )
+
+        except asyncio.CancelledError:
+            logger.info("Model cleanup task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}", exc_info=True)
+            # Continue running despite errors
 
 
 def get_device():
@@ -137,6 +233,11 @@ async def load_language(
 
                 await model.load()
                 _models[cache_key] = model
+                _track_model_access(cache_key)
+    else:
+        # Model already loaded, track access
+        _track_model_access(cache_key)
+
     return _models[cache_key]
 
 
@@ -185,6 +286,11 @@ async def load_encoder(
 
                 await model.load()
                 _models[cache_key] = model
+                _track_model_access(cache_key)
+    else:
+        # Model already loaded, track access
+        _track_model_access(cache_key)
+
     return _models[cache_key]
 
 

@@ -184,7 +184,8 @@ jobs:
           UV_EXTRA_INDEX_URL: ${{ matrix.component == 'runtimes/universal' && 'https://download.pytorch.org/whl/cpu' || '' }}
         run: |
           if [ -f "uv.lock" ]; then
-            uv sync --all-extras
+            # Use --no-build to prevent building from source (forces prebuilt wheels)
+            uv sync --all-extras --no-build
           else
             echo "No uv.lock found, attempting to install from pyproject.toml"
             uv pip install -e .

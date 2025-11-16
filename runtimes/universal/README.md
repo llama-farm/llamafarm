@@ -57,6 +57,7 @@ The Universal Runtime is a FastAPI-based inference server that bridges HuggingFa
 ✅ **Developer Experience**
 - Lazy model loading (models load on first request)
 - Model caching (keeps frequently-used models in memory)
+- Automatic model unloading (frees VRAM/RAM after 5 minutes of inactivity)
 - Streaming responses for text generation
 - Base64 and file path support for images/audio
 - Comprehensive error messages and logging
@@ -970,6 +971,8 @@ Visual question answering.
 | `TRANSFORMERS_CACHE` | `~/.cache/huggingface` | Model cache directory |
 | `HF_TOKEN` | None | HuggingFace token (for gated models) |
 | `RUNTIME_BACKEND` | `pytorch` | Backend (future: `onnx`) |
+| `MODEL_UNLOAD_TIMEOUT` | `300` | Seconds of inactivity before unloading models (5 minutes) |
+| `CLEANUP_CHECK_INTERVAL` | `30` | Seconds between cleanup checks for idle models |
 
 ### LlamaFarm Integration
 
