@@ -27,7 +27,7 @@ If you modify `config/schema.yaml` or `rag/schema.yaml`:
 
 ```bash
 cd config
-./generate-types.sh
+uv run python generate_types.py
 cd ..
 ```
 

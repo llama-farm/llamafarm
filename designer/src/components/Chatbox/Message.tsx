@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChatboxMessage } from '../../types/chatbox'
 import Markdown from '../../utils/renderMarkdown'
+import { parseMessageContentMemo } from '../../utils/messageParser'
 
 export interface MessageProps {
   message: ChatboxMessage
@@ -9,11 +10,19 @@ export interface MessageProps {
 const Message: React.FC<MessageProps> = ({ message }) => {
   const { type, content, isLoading, isStreaming, cancelled } = message
   const [isArgsExpanded, setIsArgsExpanded] = useState(false)
+  const [isThinkingExpanded, setIsThinkingExpanded] = useState(true) // Always expanded by default
 
   // Reset expansion state when message changes
   useEffect(() => {
     setIsArgsExpanded(false)
+    setIsThinkingExpanded(true) // Always start expanded
   }, [message.id])
+
+  // Parse message content using memoized utility
+  const { thinking, contentWithoutThinking } = useMemo(
+    () => parseMessageContentMemo(content, type, message.id),
+    [content, type, message.id]
+  )
 
   // Show typing indicator while assistant is preparing/streaming with no content yet
   const showTypingIndicator =
@@ -67,6 +76,31 @@ const Message: React.FC<MessageProps> = ({ message }) => {
 
   return (
     <div className={getMessageStyles()}>
+      {/* Thinking steps section - collapsible and smaller font */}
+      {type === 'assistant' && thinking && !isLoading && (
+        <div className="mb-2 rounded-md border border-border bg-card/40">
+          <button
+            type="button"
+            onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
+            className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+            aria-expanded={isThinkingExpanded}
+          >
+            <span className="font-medium">Thinking steps</span>
+            <span className="text-[11px]">
+              {isThinkingExpanded ? 'Hide' : 'Show'}
+            </span>
+          </button>
+          {isThinkingExpanded && (
+            <div className="px-3 py-2 border-t border-border">
+              <Markdown
+                className="text-xs leading-relaxed text-muted-foreground break-words [&>p]:my-1 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&>h1]:mt-2 [&>h1]:mb-1 [&>h2]:mt-2 [&>h2]:mb-1 [&>h3]:mt-1 [&>h3]:mb-0.5 [&>ul]:my-1 [&>ol]:my-1 [&>li]:my-0.5"
+                content={thinking}
+              />
+            </div>
+          )}
+        </div>
+      )}
+      
       <div className={getContentStyles()}>
         {type === 'assistant' ? (
           isLoading ? (
@@ -74,7 +108,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
           ) : (
             <Markdown
               className="leading-relaxed break-words [&>p]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&>h1]:mt-4 [&>h1]:mb-2 [&>h2]:mt-3 [&>h2]:mb-2 [&>h3]:mt-2 [&>h3]:mb-1 [&>ul]:my-2 [&>ol]:my-2"
-              content={content}
+              content={contentWithoutThinking}
             />
           )
         ) : type === 'tool' ? (

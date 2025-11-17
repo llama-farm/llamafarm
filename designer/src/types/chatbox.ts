@@ -40,6 +40,8 @@ export interface ChatboxMessage extends BaseMessage {
   isStreaming?: boolean
   /** Whether the message stream was cancelled mid-response */
   cancelled?: boolean
+  /** Whether this message represents an error state (for filtering/cleanup) */
+  isError?: boolean
   /** Additional context or citation sources for display */
   sources?: any[]
   /** Extended metadata for UI purposes */

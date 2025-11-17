@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/llamafarm/cli/cmd/version"
+	"github.com/llamafarm/cli/internal/buildinfo"
 )
 
 func TestGetCurrentCLIVersion(t *testing.T) {
@@ -69,11 +69,11 @@ func TestGetCurrentCLIVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Save original values
-			originalVersion := version.CurrentVersion
+			originalVersion := buildinfo.CurrentVersion
 			originalEnv := os.Getenv("LF_VERSION_REF")
 
 			// Set test values
-			version.CurrentVersion = tt.versionVar
+			buildinfo.CurrentVersion = tt.versionVar
 			if tt.envVar != "" {
 				os.Setenv("LF_VERSION_REF", tt.envVar)
 			} else {
@@ -82,7 +82,7 @@ func TestGetCurrentCLIVersion(t *testing.T) {
 
 			// Restore after test
 			defer func() {
-				version.CurrentVersion = originalVersion
+				buildinfo.CurrentVersion = originalVersion
 				if originalEnv != "" {
 					os.Setenv("LF_VERSION_REF", originalEnv)
 				} else {

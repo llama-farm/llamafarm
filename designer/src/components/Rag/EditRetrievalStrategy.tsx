@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
@@ -7,7 +7,6 @@ import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-// removed unused imports
 import {
   getDefaultConfigForRetrieval,
   parseWeightsList,
@@ -15,14 +14,13 @@ import {
 import {
   STRATEGY_TYPES,
   STRATEGY_LABELS,
-  STRATEGY_DESCRIPTIONS,
   type StrategyType,
 } from '../../utils/strategyCatalog'
-import { parseMetadataFilters, validateStrategyName } from '../../utils/security'
+import { validateNavigationState, parseMetadataFilters, validateStrategyName } from '../../utils/security'
 
-function AddRetrievalStrategy() {
+function EditRetrievalStrategy() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const location = useLocation()
   const { toast } = useToast()
   const activeProject = useActiveProject()
   
@@ -37,17 +35,20 @@ function AddRetrievalStrategy() {
     activeProject?.project || ''
   )
 
-  // Get the database from URL query params (defaults to main_database if not provided)
-  const database = searchParams.get('database') || 'main_database'
+  // Get data from navigation state with validation
+  const validatedState = validateNavigationState(location.state)
 
-  // New retrieval name and default toggle
-  const [name, setName] = useState('New retrieval strategy')
-  const [makeDefault, setMakeDefault] = useState(false)
+  const database = validatedState.database
+  const originalStrategyName = validatedState.strategyName
+  const strategyType = validatedState.strategyType as StrategyType
+  const currentConfig = validatedState.currentConfig
+  const isDefaultStrategy = validatedState.isDefault
+
+  // Form state
+  const [name, setName] = useState(originalStrategyName)
+  const [makeDefault, setMakeDefault] = useState(isDefaultStrategy)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Selected type + settings state
-  const [selectedType, setSelectedType] = useState<StrategyType | null>(null)
 
   // Shared UI helpers
   const inputClass =
@@ -93,52 +94,109 @@ function AddRetrievalStrategy() {
     </div>
   )
 
-  // Strategy-specific state and defaults (match RetrievalMethod)
+  // Strategy-specific state and defaults
   const DISTANCE_OPTIONS = ['cosine', 'euclidean', 'manhattan', 'dot']
   const META_FILTER_MODE = ['pre', 'post']
   const MQ_AGGREGATION = ['max', 'mean', 'weighted', 'reciprocal_rank']
   const HYBRID_COMBINATION = ['weighted_average', 'rank_fusion', 'score_fusion']
 
-  const [basicTopK, setBasicTopK] = useState<string>('10')
-  const [basicDistance, setBasicDistance] = useState<string>('cosine')
-  const [basicScoreThreshold, setBasicScoreThreshold] = useState<string>('')
-
-  const [mfTopK, setMfTopK] = useState<string>('10')
-  const [mfFilterMode, setMfFilterMode] = useState<string>('pre')
-  const [mfFallbackMultiplier, setMfFallbackMultiplier] = useState<string>('3')
-  const [mfFilters, setMfFilters] = useState<
-    Array<{ key: string; value: string }>
-  >([])
-
-  const [mqNumQueries, setMqNumQueries] = useState<string>('3')
-  const [mqTopK, setMqTopK] = useState<string>('10')
-  const [mqAggregation, setMqAggregation] = useState<string>('weighted')
-  const [mqQueryWeights, setMqQueryWeights] = useState<string>('')
-
-  const [rrInitialK, setRrInitialK] = useState<string>('30')
-  const [rrFinalK, setRrFinalK] = useState<string>('10')
-  const [rrSimW, setRrSimW] = useState<string>('0.7')
-  const [rrRecencyW, setRrRecencyW] = useState<string>('0.1')
-  const [rrLengthW, setRrLengthW] = useState<string>('0.1')
-  const [rrMetaW, setRrMetaW] = useState<string>('0.1')
-  const [rrNormalize, setRrNormalize] = useState<'Enabled' | 'Disabled'>(
-    'Enabled'
+  // Initialize from currentConfig
+  const [basicTopK, setBasicTopK] = useState<string>(
+    String(currentConfig?.top_k || 10)
+  )
+  const [basicDistance, setBasicDistance] = useState<string>(
+    currentConfig?.distance_metric || 'cosine'
+  )
+  const [basicScoreThreshold, setBasicScoreThreshold] = useState<string>(
+    currentConfig?.score_threshold ? String(currentConfig.score_threshold) : ''
   )
 
+  const [mfTopK, setMfTopK] = useState<string>(
+    String(currentConfig?.top_k || 10)
+  )
+  const [mfFilterMode, setMfFilterMode] = useState<string>(
+    currentConfig?.filter_mode || 'pre'
+  )
+  const [mfFallbackMultiplier, setMfFallbackMultiplier] = useState<string>(
+    String(currentConfig?.fallback_multiplier || 3)
+  )
+  const [mfFilters, setMfFilters] = useState<
+    Array<{ key: string; value: string }>
+  >(() => {
+    if (currentConfig?.filters) {
+      return Object.entries(currentConfig.filters).map(([k, v]) => ({
+        key: k,
+        value: Array.isArray(v) ? v.join(',') : String(v),
+      }))
+    }
+    return []
+  })
+
+  const [mqNumQueries, setMqNumQueries] = useState<string>(
+    String(currentConfig?.num_queries || 3)
+  )
+  const [mqTopK, setMqTopK] = useState<string>(
+    String(currentConfig?.top_k || 10)
+  )
+  const [mqAggregation, setMqAggregation] = useState<string>(
+    currentConfig?.aggregation_method || 'weighted'
+  )
+  const [mqQueryWeights, setMqQueryWeights] = useState<string>(
+    currentConfig?.query_weights?.join(',') || ''
+  )
+
+  const [rrInitialK, setRrInitialK] = useState<string>(
+    String(currentConfig?.initial_k || 20)
+  )
+  const [rrFinalK, setRrFinalK] = useState<string>(
+    String(currentConfig?.final_k || 5)
+  )
+  const [rrSimW, setRrSimW] = useState<string>(
+    String(currentConfig?.rerank_factors?.similarity_weight || 0.5)
+  )
+  const [rrRecencyW, setRrRecencyW] = useState<string>(
+    String(currentConfig?.rerank_factors?.recency_weight || 0.2)
+  )
+  const [rrLengthW, setRrLengthW] = useState<string>(
+    String(currentConfig?.rerank_factors?.length_weight || 0.1)
+  )
+  const [rrMetaW, setRrMetaW] = useState<string>(
+    String(currentConfig?.rerank_factors?.metadata_weight || 0.2)
+  )
+  const [rrNormalize, setRrNormalize] = useState<string>(
+    currentConfig?.normalize_scores ? 'Enabled' : 'Disabled'
+  )
+
+  const [hybCombination, setHybCombination] = useState<string>(
+    currentConfig?.combination_method || 'weighted_average'
+  )
+  const [hybFinalK, setHybFinalK] = useState<string>(
+    String(currentConfig?.final_k || 10)
+  )
   type HybridSub = {
     id: string
     type: Exclude<StrategyType, 'HybridUniversalStrategy'>
     weight: string
     config?: Record<string, unknown>
   }
-  const [hybStrategies, setHybStrategies] = useState<HybridSub[]>([])
-  const [hybCombination, setHybCombination] =
-    useState<string>('weighted_average')
-  const [hybFinalK, setHybFinalK] = useState<string>('10')
+  const [hybStrategies, setHybStrategies] = useState<HybridSub[]>(() => {
+    if (currentConfig?.strategies) {
+      return currentConfig.strategies.map((s: any, idx: number) => ({
+        id: `sub-${idx}`,
+        type: s.type as Exclude<StrategyType, 'HybridUniversalStrategy'>,
+        weight: String(s.weight || 1.0),
+        config: s.config || {},
+      }))
+    }
+    return []
+  })
 
   const getDefaultConfigForType = (
     type: Exclude<StrategyType, 'HybridUniversalStrategy'>
-  ): Record<string, unknown> => getDefaultConfigForRetrieval(type)
+  ): Record<string, unknown> => {
+    return getDefaultConfigForRetrieval(type)
+  }
+  
   const updateHybridSub = (index: number, partial: Partial<HybridSub>) => {
     setHybStrategies(prev => {
       const next = [...prev]
@@ -146,6 +204,7 @@ function AddRetrievalStrategy() {
       return next
     })
   }
+  
   const updateHybridSubConfig = (
     index: number,
     updater: (prev: Record<string, unknown>) => Record<string, unknown>
@@ -158,49 +217,26 @@ function AddRetrievalStrategy() {
     })
   }
 
-  // Reset defaults when type changes
-  useEffect(() => {
-    if (!selectedType) return
-    setBasicTopK('10')
-    setBasicDistance('cosine')
-    setBasicScoreThreshold('')
-    setMfTopK('10')
-    setMfFilterMode('pre')
-    setMfFallbackMultiplier('3')
-    setMfFilters([])
-    setMqNumQueries('3')
-    setMqTopK('10')
-    setMqAggregation('weighted')
-    setMqQueryWeights('')
-    setRrInitialK('30')
-    setRrFinalK('10')
-    setRrSimW('0.7')
-    setRrRecencyW('0.1')
-    setRrLengthW('0.1')
-    setRrMetaW('0.1')
-    setRrNormalize('Enabled')
-    setHybCombination('weighted_average')
-    setHybFinalK('10')
-    setHybStrategies([])
-  }, [selectedType])
-
-  // Ensure default checked when first retrieval
-  useEffect(() => {
-    if (projectResp && database) {
-      const projectConfig = (projectResp as any)?.project?.config
-      const db = projectConfig?.rag?.databases?.find((d: any) => d.name === database)
-      const hasStrategies = db?.retrieval_strategies?.length > 0
-      setMakeDefault(!hasStrategies)
-    }
-  }, [projectResp, database])
+  // Show error if required state is missing
+  if (!originalStrategyName) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6">
+        <div className="text-destructive text-lg font-semibold">
+          Missing required information
+        </div>
+        <div className="text-muted-foreground text-sm">
+          Please return to the databases page and try again.
+        </div>
+        <Button onClick={() => navigate('/chat/databases')}>
+          Return to Databases
+        </Button>
+      </div>
+    )
+  }
 
   // Validation function
   const validateStrategy = (): string[] => {
     const errors: string[] = []
-    
-    if (!selectedType) {
-      errors.push('Please select a strategy type')
-    }
     
     // Validate strategy name with security checks
     const nameError = validateStrategyName(name)
@@ -209,7 +245,7 @@ function AddRetrievalStrategy() {
     }
     
     // Type-specific validation
-    if (selectedType === 'BasicSimilarityStrategy') {
+    if (strategyType === 'BasicSimilarityStrategy') {
       const topK = Number(basicTopK)
       if (isNaN(topK) || topK < 1 || topK > 1000) {
         errors.push('Top K must be between 1 and 1000')
@@ -217,17 +253,17 @@ function AddRetrievalStrategy() {
       if (basicScoreThreshold.trim() && (Number(basicScoreThreshold) < 0 || Number(basicScoreThreshold) > 1)) {
         errors.push('Score threshold must be between 0 and 1')
       }
-    } else if (selectedType === 'MetadataFilteredStrategy') {
+    } else if (strategyType === 'MetadataFilteredStrategy') {
       const topK = Number(mfTopK)
       if (isNaN(topK) || topK < 1 || topK > 1000) {
         errors.push('Top K must be between 1 and 1000')
       }
-    } else if (selectedType === 'MultiQueryStrategy') {
+    } else if (strategyType === 'MultiQueryStrategy') {
       const numQueries = Number(mqNumQueries)
       if (isNaN(numQueries) || numQueries < 2 || numQueries > 10) {
         errors.push('Number of queries must be between 2 and 10')
       }
-    } else if (selectedType === 'RerankedStrategy') {
+    } else if (strategyType === 'RerankedStrategy') {
       const initialK = Number(rrInitialK)
       const finalK = Number(rrFinalK)
       if (isNaN(initialK) || initialK < 1 || initialK > 1000) {
@@ -236,14 +272,14 @@ function AddRetrievalStrategy() {
       if (isNaN(finalK) || finalK < 1 || finalK > initialK) {
         errors.push('Final K must be between 1 and Initial K')
       }
-    } else if (selectedType === 'HybridUniversalStrategy' && hybStrategies.length < 2) {
+    } else if (strategyType === 'HybridUniversalStrategy' && hybStrategies.length < 2) {
       errors.push('At least 2 sub-strategies are required for hybrid approach')
     }
     
     return errors
   }
 
-  // Save handler - updated to use project config
+  // Save handler
   const onSave = async () => {
     try {
       setIsSaving(true)
@@ -272,17 +308,19 @@ function AddRetrievalStrategy() {
         throw new Error(`Database ${database} not found in configuration`)
       }
 
-      // Check if name already exists
-      const existingStrategy = currentDb.retrieval_strategies?.find(
-        (s: any) => s.name === name.trim()
-      )
-      if (existingStrategy) {
-        throw new Error(`A retrieval strategy with name "${name.trim()}" already exists`)
+      // Check if renamed to an existing name
+      if (name.trim() !== originalStrategyName) {
+        const existingStrategy = currentDb.retrieval_strategies?.find(
+          (s: any) => s.name === name.trim() && s.name !== originalStrategyName
+        )
+        if (existingStrategy) {
+          throw new Error(`A retrieval strategy with name "${name.trim()}" already exists`)
+        }
       }
 
       // Build config from current state
       let config: Record<string, unknown> = {}
-      switch (selectedType) {
+      switch (strategyType) {
         case 'BasicSimilarityStrategy':
           config = {
             top_k: Number(basicTopK),
@@ -342,51 +380,86 @@ function AddRetrievalStrategy() {
         }
       }
 
-      // Build the new strategy (note: 'default' field is used in config, not 'isDefault')
-      const newStrategy = {
-        name: name.trim(),
-        type: selectedType,
-        config,
+      // Update the specific strategy
+      const updatedStrategies = currentDb.retrieval_strategies?.map((strategy: any) => {
+        if (strategy.name === originalStrategyName) {
+          return {
+            name: name.trim(),
+            type: strategyType,
+            config,
+            // No 'default' field - it's determined by default_retrieval_strategy at database level
+          }
+        }
+        return strategy
+      })
+
+      // Determine default strategy name with robust edge case handling
+      let updatedDefaultStrategy = currentDb.default_retrieval_strategy
+
+      if (makeDefault) {
+        // User explicitly wants this strategy to be the default
+        // Verify the new name exists in the updated strategies list
+        const exists = updatedStrategies.some((s: any) => s.name === name.trim())
+        if (exists) {
+          updatedDefaultStrategy = name.trim()
+        } else {
+          // Fallback if name somehow doesn't exist (shouldn't happen but defensive)
+          updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+        }
+      } else if (isDefaultStrategy && name.trim() !== originalStrategyName) {
+        // This WAS the default strategy and we're renaming it (but NOT unchecking makeDefault)
+        // Update the default reference to the new name
+        const exists = updatedStrategies.some((s: any) => s.name === name.trim())
+        if (exists) {
+          updatedDefaultStrategy = name.trim()
+        } else {
+          // Fallback: assign default to first available strategy
+          updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+        }
+      } else if (isDefaultStrategy && !makeDefault) {
+        // User is UNCHECKING the default status of the current default
+        // Assign default to another strategy (first one that's not this one)
+        const otherStrategy = updatedStrategies.find((s: any) => s.name !== name.trim())
+        updatedDefaultStrategy = otherStrategy?.name || name.trim()
       }
 
-      // Add to existing strategies
-      const updatedStrategies = [
-        ...(currentDb.retrieval_strategies || []),
-        newStrategy,
-      ]
-
-      // Determine default strategy name (no 'default' field on strategy objects)
-      const defaultStrategyName = makeDefault || updatedStrategies.length === 1
-        ? newStrategy.name
-        : currentDb.default_retrieval_strategy
+      // Final validation: ensure default strategy actually exists in the list
+      const defaultExists = updatedStrategies.some((s: any) => s.name === updatedDefaultStrategy)
+      if (!defaultExists && updatedStrategies.length > 0) {
+        updatedDefaultStrategy = updatedStrategies[0].name
+      }
 
       // Update database configuration
       await databaseManager.updateDatabase.mutateAsync({
         oldName: database,
         updates: {
           retrieval_strategies: updatedStrategies,
-          default_retrieval_strategy: defaultStrategyName,
+          default_retrieval_strategy: updatedDefaultStrategy,
         },
         projectConfig,
       })
 
       toast({
-        message: `Retrieval strategy "${name.trim()}" created successfully`,
+        message: `Retrieval strategy "${name.trim()}" updated successfully`,
         variant: 'default',
       })
 
       navigate('/chat/databases')
     } catch (error: any) {
-      console.error('Failed to create retrieval strategy:', error)
-      setError(error.message || 'Failed to create strategy')
+      console.error('Failed to update retrieval strategy:', error)
+      setError(error.message || 'Failed to update strategy')
     } finally {
       setIsSaving(false)
     }
   }
 
+  // The rest of the component would be the same as AddRetrievalStrategy
+  // but with the form fields initialized from currentConfig
+  // For brevity, I'll include a simplified version - the full implementation
+  // would mirror AddRetrievalStrategy's UI but with pre-filled values
+
   return (
     <div className="h-full w-full flex flex-col gap-3 pb-20">
-      {/* Breadcrumb + Actions */}
       <div className="flex items-center justify-between mb-1">
         <nav className="text-sm md:text-base flex items-center gap-1.5">
           <button
@@ -396,7 +469,7 @@ function AddRetrievalStrategy() {
             Databases
           </button>
           <span className="text-muted-foreground px-1">/</span>
-          <span className="text-foreground">New retrieval strategy</span>
+          <span className="text-foreground">Edit retrieval strategy</span>
         </nav>
         <div className="flex items-center gap-2">
           <Button
@@ -409,9 +482,9 @@ function AddRetrievalStrategy() {
           </Button>
           <Button
             onClick={onSave}
-            disabled={isSaving || !selectedType || name.trim().length === 0}
+            disabled={isSaving || !name.trim()}
           >
-            {isSaving ? 'Saving...' : 'Save strategy'}
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </div>
@@ -441,67 +514,29 @@ function AddRetrievalStrategy() {
                 type="checkbox"
                 checked={makeDefault}
                 onChange={e => setMakeDefault(e.target.checked)}
+                className="rounded"
               />
-              <span>Make default</span>
+              Set as default
             </label>
           </div>
         </div>
-      </section>
 
-      {/* Type chooser / summary */}
-      <section className="rounded-lg border border-border bg-card p-4">
-        {!selectedType ? (
-          <div className="flex flex-col gap-2">
-            <div className="text-sm font-medium">Select retrieval strategy</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {STRATEGY_TYPES.map(t => (
-                <button
-                  key={t}
-                  className={`text-left rounded-lg border border-border bg-card hover:bg-accent/20 ${
-                    t === 'BasicSimilarityStrategy' ? 'pt-2 pb-3 px-3' : 'p-3'
-                  }`}
-                  onClick={() => setSelectedType(t)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-medium">
-                      {STRATEGY_LABELS[t]}
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Select
-                    </Button>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {STRATEGY_DESCRIPTIONS[t]}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
+        <div className="mt-4">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
               <div className="text-xs text-muted-foreground mb-1">
                 Current strategy
               </div>
               <div className="text-xl md:text-2xl font-medium">
-                {STRATEGY_LABELS[selectedType]}
+                {STRATEGY_LABELS[strategyType]}
               </div>
             </div>
-            <div className="ml-3 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedType(null)}
-              >
-                Change
-              </Button>
-            </div>
           </div>
-        )}
+        </div>
       </section>
 
       {/* Settings per selected type */}
-      {selectedType === 'BasicSimilarityStrategy' ? (
+      {strategyType === 'BasicSimilarityStrategy' ? (
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="text-sm font-medium mb-3">Basic similarity</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -534,7 +569,7 @@ function AddRetrievalStrategy() {
         </section>
       ) : null}
 
-      {selectedType === 'MetadataFilteredStrategy' ? (
+      {strategyType === 'MetadataFilteredStrategy' ? (
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="text-sm font-medium mb-3">Metadata-filtered</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -621,7 +656,7 @@ function AddRetrievalStrategy() {
         </section>
       ) : null}
 
-      {selectedType === 'MultiQueryStrategy' ? (
+      {strategyType === 'MultiQueryStrategy' ? (
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="text-sm font-medium mb-3">Multi-query</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -660,7 +695,7 @@ function AddRetrievalStrategy() {
         </section>
       ) : null}
 
-      {selectedType === 'RerankedStrategy' ? (
+      {strategyType === 'RerankedStrategy' ? (
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="text-sm font-medium mb-3">Reranked</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -683,7 +718,7 @@ function AddRetrievalStrategy() {
             <Field label="Normalize scores">
               <SelectDropdown
                 value={rrNormalize}
-                onChange={v => setRrNormalize(v as 'Enabled' | 'Disabled')}
+                onChange={v => setRrNormalize(v)}
                 options={['Enabled', 'Disabled']}
               />
             </Field>
@@ -729,7 +764,7 @@ function AddRetrievalStrategy() {
         </section>
       ) : null}
 
-      {selectedType === 'HybridUniversalStrategy' ? (
+      {strategyType === 'HybridUniversalStrategy' ? (
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="text-sm font-medium mb-3">Hybrid universal</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -996,4 +1031,5 @@ function AddRetrievalStrategy() {
   )
 }
 
-export default AddRetrievalStrategy
+export default EditRetrievalStrategy
+

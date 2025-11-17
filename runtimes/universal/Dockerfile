@@ -43,7 +43,7 @@ RUN cd config && uv sync --locked --all-extras --verbose
 RUN cd common && uv sync --locked --all-extras --verbose
 
 # Generate config schema and datamodel types
-RUN cd config && ./generate-types.sh
+RUN cd config && uv run python generate_types.py
 RUN rm -rf rag server
 
 

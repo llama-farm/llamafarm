@@ -224,8 +224,15 @@ export default function TestChat({
   const projectChatError =
     projectChatStreamingMessage.error ||
     projectChatStreamingSession.sessionError
-  const combinedError =
-    error || (projectChatError ? projectChatError.message : null)
+  const combinedError = (() => {
+    if (error) {
+      return typeof error === 'string' ? error : error.message
+    }
+    if (projectChatError) {
+      return typeof projectChatError === 'string' ? projectChatError : projectChatError.message
+    }
+    return null
+  })()
 
   // Combined canSend state
   const combinedCanSend = canSend && !isProjectChatLoading
@@ -948,6 +955,17 @@ export function TestChatMessage({
         .slice(0, message.content.indexOf('<think>'))
         .trim()
     }
+  }
+
+  // Remove raw <tool_call> XML tags from display (handled as separate messages)
+  if (isAssistant && typeof contentWithoutThinking === 'string') {
+    // Remove complete tool_call blocks
+    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+    // Remove unclosed tool_call tags (streaming in progress)
+    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*$/g, '')
+    // Remove orphaned closing tags
+    contentWithoutThinking = contentWithoutThinking.replace(/<\/tool_call>/g, '')
+    contentWithoutThinking = contentWithoutThinking.trim()
   }
 
   // Load persisted thumb for this message

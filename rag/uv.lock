@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'darwin'",
@@ -2096,6 +2096,7 @@ dependencies = [
     { name = "pytest-mock" },
     { name = "python-docx" },
     { name = "python-magic" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "pyyaml" },
     { name = "reportlab" },
     { name = "requests" },
@@ -2299,6 +2300,7 @@ requires-dist = [
     { name = "python-docx", specifier = ">=1.0.0" },
     { name = "python-magic", specifier = ">=0.4.27" },
     { name = "python-magic", marker = "extra == 'llamaindex'", specifier = ">=0.4.27" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "qdrant-client", marker = "extra == 'vector-dbs'", specifier = ">=1.6.0" },
     { name = "reportlab", specifier = ">=4.4.3" },

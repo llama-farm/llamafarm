@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -8,14 +9,8 @@ import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { getStoredArray, setStoredArray } from '../../utils/storage'
-import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -36,8 +31,10 @@ import {
   useDatabaseManager,
   type Database as DatabaseType,
 } from '../../hooks/useDatabaseManager'
+import { Settings, Star, Trash2 } from 'lucide-react'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import { sanitizeConfigValue, extractSafeHostname } from '../../utils/security'
 
 type Database = {
   name: string
@@ -48,6 +45,7 @@ type Database = {
 function Databases() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [mode, setMode] = useModeWithReset('designer')
   const activeProject = useActiveProject()
   const { data: projectResp } = useProject(
@@ -62,8 +60,15 @@ function Databases() {
     { enabled: !!activeProject }
   )
 
-  const [metaTick, setMetaTick] = useState(0)
   const [reembedOpen, setReembedOpen] = useState(false)
+
+  // Delete confirmation modal state
+  const [deleteEmbeddingOpen, setDeleteEmbeddingOpen] = useState(false)
+  const [deleteRetrievalOpen, setDeleteRetrievalOpen] = useState(false)
+  const [strategyToDelete, setStrategyToDelete] = useState<{
+    name: string
+    type: 'embedding' | 'retrieval'
+  } | null>(null)
 
   // Database modal state
   const [databaseModalOpen, setDatabaseModalOpen] = useState(false)
@@ -195,52 +200,26 @@ function Databases() {
     enabled: boolean
   }
 
-  // Database-scoped storage keys (UI-only fallbacks; namespaced per project)
-  const EMB_LIST_KEY = `lf_ui_${projectKey}_db_${activeDatabase}_embeddings`
-  const RET_LIST_KEY = `lf_ui_${projectKey}_db_${activeDatabase}_retrievals`
+  // Note: Retrieval strategies are now managed server-side only, no localStorage fallbacks
 
-  const getEmbeddings = (): EmbeddingItem[] => {
-    const arr = getStoredArray(EMB_LIST_KEY)
-    return arr
-      .filter(
-        (e: any) => e && typeof e.id === 'string' && typeof e.name === 'string'
-      )
-      .map((e: any) => ({
-        id: e.id,
-        name: e.name,
-        isDefault: Boolean(e.isDefault),
-        enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
-      })) as EmbeddingItem[]
-  }
-  const saveEmbeddings = (list: EmbeddingItem[]) =>
-    setStoredArray(EMB_LIST_KEY, list)
-
-  const getRetrievals = (): RetrievalItem[] => {
-    const arr = getStoredArray(RET_LIST_KEY)
-    return arr
-      .filter(
-        (e: any) => e && typeof e.id === 'string' && typeof e.name === 'string'
-      )
-      .map((e: any) => ({
-        id: e.id,
-        name: e.name,
-        isDefault: Boolean(e.isDefault),
-        enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
-      })) as RetrievalItem[]
-  }
-  const saveRetrievals = (list: RetrievalItem[]) =>
-    setStoredArray(RET_LIST_KEY, list)
-
-  // Live RAG databases (for retrieval strategies defaults) -------------------
+  // Live RAG databases (includes both retrieval and embedding strategies) -------
   type RagDatabasesResponse = {
     databases: {
       name: string
       type?: string
       is_default?: boolean
+      embedding_strategies?: {
+        name: string
+        type?: string
+        priority?: number
+        is_default?: boolean
+        config?: Record<string, any>
+      }[]
       retrieval_strategies?: {
         name: string
         type?: string
         is_default?: boolean
+        config?: Record<string, any>
       }[]
     }[]
     default_database?: string | null
@@ -270,29 +249,20 @@ function Databases() {
     }
   }, [activeProject?.namespace, activeProject?.project])
 
-  // Current config database (for embedding strategies)
-  const currentConfigDb = useMemo(() => {
-    const cfgDbs = (projectResp as any)?.project?.config?.rag?.databases
-    if (!Array.isArray(cfgDbs)) return null
-    return cfgDbs.find((d: any) => d?.name === activeDatabase) || null
-  }, [projectResp, activeDatabase])
-
-  // Embeddings from config (fallback to local only if config missing)
-  const configEmbeddings: EmbeddingItem[] | null = useMemo(() => {
-    if (!currentConfigDb) return null
-    const list = Array.isArray(currentConfigDb.embedding_strategies)
-      ? (currentConfigDb.embedding_strategies as any[])
-      : []
-    const def = currentConfigDb.default_embedding_strategy
-    return list.map((e: any) => ({
-      id: String(e?.name ?? 'embedding'),
-      name: String(e?.name ?? 'embedding'),
-      isDefault: def ? String(def) === String(e?.name) : false,
+  // Embeddings from server (no localStorage fallback)
+  const serverEmbeddings: EmbeddingItem[] | null = useMemo(() => {
+    if (!ragDatabases) return null
+    const db = ragDatabases.databases?.find(d => d.name === activeDatabase)
+    const list = db?.embedding_strategies || []
+    return list.map(s => ({
+      id: s.name,
+      name: s.name,
+      isDefault: Boolean(s.is_default),
       enabled: true,
     }))
-  }, [currentConfigDb])
+  }, [ragDatabases, activeDatabase])
 
-  // Retrievals from server (fallback to local only if missing)
+  // Retrievals from server (no localStorage fallback)
   const serverRetrievals: RetrievalItem[] | null = useMemo(() => {
     if (!ragDatabases) return null
     const db = ragDatabases.databases?.find(d => d.name === activeDatabase)
@@ -305,179 +275,132 @@ function Databases() {
     }))
   }, [ragDatabases, activeDatabase])
 
-  const usingConfigEmbeddings = Boolean(
-    configEmbeddings && configEmbeddings.length > 0
-  )
-  const usingServerRetrievals = Boolean(
-    serverRetrievals && serverRetrievals.length > 0
-  )
 
-  // Seed defaults once
-  useEffect(() => {
-    // Skip local seeding when live config/server data are present
-    if (usingConfigEmbeddings || usingServerRetrievals) return
-    try {
-      if (getEmbeddings().length === 0) {
-        saveEmbeddings([
-          {
-            id: 'default_embeddings',
-            name: 'default_embeddings',
-            isDefault: true,
-            enabled: true,
-          },
-        ])
-      }
-      if (getRetrievals().length === 0) {
-        saveRetrievals([
-          {
-            id: 'basic_search',
-            name: 'basic_search',
-            isDefault: true,
-            enabled: true,
-          },
-        ])
-      }
-      // Ensure each embedding strategy has a default config for display
-      const embeddings = getEmbeddings()
-      embeddings.forEach(e => {
-        const key = `lf_db_${activeDatabase}_embedding_config_${e.id}`
-        const raw = localStorage.getItem(key)
-        if (!raw) {
-          const payload = {
-            runtime: 'local',
-            provider: 'Ollama (remote)',
-            modelId: 'nomic-embed-text',
-            baseUrl: 'http://localhost:11434',
-            batchSize: 16,
-            dimension: 768,
-            maxInputTokens: 8192,
-            similarity: 'cosine',
-            timeout: 60,
-          }
-          try {
-            localStorage.setItem(key, JSON.stringify(payload))
-          } catch {}
-        }
-      })
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDatabase, usingConfigEmbeddings, usingServerRetrievals])
+  // Get embedding strategy details from server data
+  const getEmbeddingStrategy = (strategyName: string) => {
+    const db = ragDatabases?.databases?.find(d => d.name === activeDatabase)
+    return db?.embedding_strategies?.find(s => s.name === strategyName)
+  }
 
-  const getEmbeddingSummary = (id: string): string => {
-    try {
-      const storedCfg = localStorage.getItem(
-        `lf_db_${activeDatabase}_embedding_config_${id}`
-      )
-      const storedModel = localStorage.getItem(
-        `lf_db_${activeDatabase}_embedding_model_${id}`
-      )
-      if (storedModel) return storedModel
-      if (storedCfg) {
-        const parsed = JSON.parse(storedCfg)
-        if (parsed?.modelId) return parsed.modelId
-      }
-    } catch {}
-    return 'Not set'
+  const getEmbeddingSummary = (strategyName: string): string => {
+    const strategy = getEmbeddingStrategy(strategyName)
+    if (!strategy?.config) return 'Not configured'
+    // Extract model name from config and sanitize it
+    const model = strategy.config.model || strategy.config.modelId || strategy.config.model_name
+    return sanitizeConfigValue(model)
   }
-  const getEmbeddingProvider = (id: string): string | null => {
-    try {
-      const raw = localStorage.getItem(
-        `lf_db_${activeDatabase}_embedding_config_${id}`
-      )
-      if (!raw) return null
-      const cfg = JSON.parse(raw)
-      const p = cfg?.provider || cfg?.runtime || null
-      if (!p) return null
-      if (typeof p === 'string') {
-        if (p.includes('Ollama')) return 'Ollama'
-        if (p.includes('OpenAI')) return 'OpenAI'
-        if (p.includes('Cohere')) return 'Cohere'
-        if (p.includes('Google')) return 'Google'
-        if (p.includes('Azure')) return 'Azure OpenAI'
-        if (p.includes('Bedrock')) return 'AWS Bedrock'
-      }
-      return String(p)
-    } catch {
-      return null
+
+  const getEmbeddingProvider = (strategyName: string): string | null => {
+    const strategy = getEmbeddingStrategy(strategyName)
+    if (!strategy || !strategy.type) return null
+    // Map type to provider label
+    const typeToProvider: Record<string, string> = {
+      'OllamaEmbedder': 'Ollama',
+      'OpenAIEmbedder': 'OpenAI',
+      'HuggingFaceEmbedder': 'HuggingFace',
+      'SentenceTransformerEmbedder': 'Sentence Transformers'
     }
+    return typeToProvider[strategy.type] || strategy.type
   }
-  // kept for future use if needed; currently not used after card redesign
-  const getEmbeddingDimension = (id: string): number | null => {
-    try {
-      const raw = localStorage.getItem(
-        `lf_db_${activeDatabase}_embedding_config_${id}`
-      )
-      if (!raw) return null
-      const cfg = JSON.parse(raw)
-      return typeof cfg?.dimension === 'number' ? cfg.dimension : null
-    } catch {
-      return null
+
+  const getEmbeddingDimension = (strategyName: string): number | null => {
+    const strategy = getEmbeddingStrategy(strategyName)
+    if (!strategy?.config) return null
+    return strategy.config.dimension || strategy.config.vector_size || null
+  }
+
+  const getEmbeddingLocation = (strategyName: string): string | null => {
+    const strategy = getEmbeddingStrategy(strategyName)
+    if (!strategy?.config) return null
+    
+    // Try base_url or baseUrl first
+    const baseUrl = strategy.config.base_url || strategy.config.baseUrl
+    if (baseUrl) {
+      const hostname = extractSafeHostname(baseUrl)
+      return hostname !== 'Not set' && hostname !== 'Invalid URL' ? hostname : null
     }
+    
+    // Try endpoint
+    if (strategy.config.endpoint) {
+      const hostname = extractSafeHostname(strategy.config.endpoint)
+      return hostname !== 'Not set' && hostname !== 'Invalid URL' ? hostname : null
+    }
+    
+    // For region-based providers (e.g., AWS), sanitize region name
+    if (strategy.config.region) {
+      return sanitizeConfigValue(strategy.config.region)
+    }
+    
+    // Default for local Ollama
+    if (strategy.type === 'OllamaEmbedder') {
+      return 'localhost:11434'
+    }
+    
+    return null
   }
-  const getEmbeddingLocation = (id: string): string | null => {
-    try {
-      let raw = localStorage.getItem(
-        `lf_db_${activeDatabase}_embedding_config_${id}`
+
+  const getEmbeddingRuntime = (strategyName: string): 'Local' | 'Cloud' | null => {
+    const strategy = getEmbeddingStrategy(strategyName)
+    if (!strategy) return null
+    // Ollama is local, others are typically cloud
+    return strategy.type === 'OllamaEmbedder' ? 'Local' : 'Cloud'
+  }
+  // Get retrieval strategy details from server data or project config
+  const getRetrievalStrategy = (strategyName: string) => {
+    // First try to get from API response
+    const db = ragDatabases?.databases?.find(d => d.name === activeDatabase)
+    const apiStrategy = db?.retrieval_strategies?.find(s => s.name === strategyName)
+    
+    // If config is missing, get it from project config
+    if (apiStrategy && !apiStrategy.config) {
+      const projectConfig = (projectResp as any)?.project?.config
+      const configDb = projectConfig?.rag?.databases?.find(
+        (d: any) => d.name === activeDatabase
       )
-      if (!raw) {
-        raw = localStorage.getItem('lf_last_embedding_provider_config')
-      }
-      if (!raw) return null
-      const cfg = JSON.parse(raw)
-      const baseUrl = cfg?.baseUrl || cfg?.base_url
-      if (typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
-        try {
-          const u = new URL(baseUrl)
-          return `${u.hostname}${u.port ? `:${u.port}` : ''}`
-        } catch {
-          return baseUrl
+      const fullStrategy = configDb?.retrieval_strategies?.find(
+        (s: any) => s.name === strategyName
+      )
+      if (fullStrategy) {
+        return {
+          ...apiStrategy,
+          config: fullStrategy.config || {},
         }
       }
-      if (cfg?.endpoint) {
-        try {
-          const u = new URL(cfg.endpoint)
-          return `${u.hostname}${u.port ? `:${u.port}` : ''}`
-        } catch {
-          return String(cfg.endpoint)
-        }
-      }
-      if (cfg?.region) return String(cfg.region)
-      if (cfg?.deployment) return String(cfg.deployment)
-      if (
-        (cfg?.provider &&
-          String(cfg.provider).toLowerCase().includes('ollama')) ||
-        cfg?.runtime === 'local'
-      ) {
-        return 'localhost:11434'
-      }
-      return null
-    } catch {
-      return null
     }
+    
+    return apiStrategy
   }
-  const getEmbeddingRuntime = (id: string): 'Local' | 'Cloud' | null => {
-    try {
-      const raw = localStorage.getItem(
-        `lf_db_${activeDatabase}_embedding_config_${id}`
-      )
-      if (!raw) return null
-      const cfg = JSON.parse(raw)
-      if (cfg?.runtime === 'local') return 'Local'
-      if (cfg?.runtime === 'cloud') return 'Cloud'
-      const p = String(cfg?.provider || '').toLowerCase()
-      if (p.includes('ollama')) return 'Local'
-      return 'Cloud'
-    } catch {
-      return null
+
+  const getRetrievalDescription = (strategyName: string): string => {
+    const strategy = getRetrievalStrategy(strategyName)
+    if (!strategy) return 'Vector search with configurable extraction pipeline'
+    
+    const typeLabels: Record<string, string> = {
+      'BasicSimilarityStrategy': 'Basic similarity search',
+      'MetadataFilteredStrategy': 'Metadata filtered search',
+      'MultiQueryStrategy': 'Multi-query search',
+      'RerankedStrategy': 'Reranked search',
+      'HybridUniversalStrategy': 'Hybrid universal search',
     }
+    return typeLabels[strategy.type || ''] || 'Vector search'
   }
-  // (removed) summary helper was unused
-  const getRetrievalDescription = (_id: string): string => {
-    return 'Vector search with configurable extraction pipeline'
+  
+  const getRetrievalMeta = (strategyName: string): string => {
+    const strategy = getRetrievalStrategy(strategyName)
+    if (!strategy?.type) return 'BasicSimilarityStrategy'
+    return strategy.type
   }
-  const getRetrievalMeta = (rid: string): string => {
-    if (rid.includes('filtered')) return 'MetadataFilteredStrategy'
-    return 'BasicSimilarityStrategy'
+  
+  const getRetrievalConfigSummary = (strategyName: string): string => {
+    const strategy = getRetrievalStrategy(strategyName)
+    if (!strategy?.config) return ''
+    
+    const parts: string[] = []
+    if (strategy.config.top_k) parts.push(`Top K: ${strategy.config.top_k}`)
+    if (strategy.config.distance_metric) parts.push(`Metric: ${strategy.config.distance_metric}`)
+    if (strategy.config.score_threshold) parts.push(`Threshold: ${strategy.config.score_threshold}`)
+    
+    return parts.join(' • ')
   }
 
   // Processing strategy helpers ----------------------------------------------
@@ -513,54 +436,23 @@ function Databases() {
   //   navigate(`/chat/databases/${id}/retrieval`)
   // }
 
-  const setDefaultEmbedding = (id: string) => {
-    const list = getEmbeddings().map(e => ({ ...e, isDefault: e.id === id }))
-    saveEmbeddings(list)
-    setMetaTick(t => t + 1)
-  }
-  const setDefaultRetrieval = (id: string) => {
-    const list = getRetrievals().map(r => ({ ...r, isDefault: r.id === id }))
-    saveRetrievals(list)
-    setMetaTick(t => t + 1)
-  }
-  const toggleRetrievalEnabled = (id: string) => {
-    const list = getRetrievals().map(r =>
-      r.id === id ? { ...r, enabled: !r.enabled } : r
-    )
-    saveRetrievals(list)
-    setMetaTick(t => t + 1)
-  }
-  const duplicateRetrieval = (id: string) => {
-    const list = getRetrievals()
-    const found = list.find(r => r.id === id)
-    if (!found) return
-    const base = `${found.name} (copy)`
-    const slug = base
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-    const newId = `ret-${slug}-${Date.now()}`
-    list.push({ ...found, id: newId, name: base, isDefault: false })
-    saveRetrievals(list)
-    setMetaTick(t => t + 1)
-  }
-
   const sortedEmbeddings = useMemo(() => {
-    const list = configEmbeddings ?? getEmbeddings()
+    const list = serverEmbeddings || []
     return [...list].sort((a, b) => {
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
       if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
       return a.name.localeCompare(b.name)
     })
-  }, [metaTick, activeDatabase, configEmbeddings])
+  }, [serverEmbeddings])
+  
   const sortedRetrievals = useMemo(() => {
-    const list = serverRetrievals ?? getRetrievals()
+    const list = serverRetrievals || []
     return [...list].sort((a, b) => {
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
       if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
       return a.name.localeCompare(b.name)
     })
-  }, [metaTick, activeDatabase, serverRetrievals])
+  }, [serverRetrievals])
   const embeddingCount = sortedEmbeddings.length
   const retrievalCount = sortedRetrievals.length
 
@@ -708,6 +600,347 @@ function Databases() {
     )
   }, [editingDatabase, databaseModalMode, datasetsResp])
 
+  // Embedding strategy handlers
+  const handleEditEmbedding = (embedding: EmbeddingItem) => {
+    const strategy = getEmbeddingStrategy(embedding.name)
+    if (!strategy) {
+      toast({
+        message: 'Strategy not found',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    navigate(`/chat/change-embedding-model`, {
+      state: {
+        database: activeDatabase,
+        strategyName: embedding.name,
+        strategyType: strategy.type || 'OllamaEmbedder',
+        currentConfig: strategy.config || {},
+        isDefault: embedding.isDefault,
+        priority: strategy.priority || 0,
+      },
+    })
+  }
+
+  const handleSetDefaultEmbedding = async (strategyName: string) => {
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          default_embedding_strategy: strategyName,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `"${strategyName}" set as default embedding strategy`,
+        variant: 'default',
+      })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
+      })
+      
+      // Show re-embed confirmation dialog
+      setReembedOpen(true)
+    } catch (error: any) {
+      console.error('Failed to set default embedding:', error)
+      toast({
+        message: error.message || 'Failed to set default strategy',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDeleteEmbedding = (
+    strategyName: string,
+    isDefault: boolean,
+    totalStrategies: number
+  ) => {
+    // Prevent deleting the default or last embedding strategy
+    if (isDefault) {
+      toast({
+        message: 'Cannot delete the default embedding strategy. Set another strategy as default first.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    if (totalStrategies <= 1) {
+      toast({
+        message: 'Cannot delete the last embedding strategy. At least one strategy is required.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    setStrategyToDelete({ name: strategyName, type: 'embedding' })
+    setDeleteEmbeddingOpen(true)
+  }
+
+  const confirmDeleteEmbedding = async () => {
+    if (!strategyToDelete || strategyToDelete.type !== 'embedding') return
+
+    const strategyName = strategyToDelete.name
+    setDeleteEmbeddingOpen(false)
+
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      const updatedStrategies =
+        currentDb.embedding_strategies?.filter(
+          (s: any) => s.name !== strategyName
+        ) || []
+
+      if (updatedStrategies.length === 0) {
+        throw new Error(
+          'Cannot delete the last embedding strategy. At least one strategy is required.'
+        )
+      }
+
+      // If deleting the default, set the first remaining as default
+      let updatedDefaultStrategy = currentDb.default_embedding_strategy
+      if (currentDb.default_embedding_strategy === strategyName) {
+        updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          embedding_strategies: updatedStrategies,
+          default_embedding_strategy: updatedDefaultStrategy,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `Embedding strategy "${strategyName}" deleted`,
+        variant: 'default',
+      })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
+      })
+    } catch (error: any) {
+      console.error('Failed to delete embedding strategy:', error)
+      toast({
+        message: error.message || 'Failed to delete strategy',
+        variant: 'destructive',
+      })
+    } finally {
+      setStrategyToDelete(null)
+    }
+  }
+
+  // Retrieval strategy handlers
+  const handleEditRetrieval = (retrieval: RetrievalItem) => {
+    const strategy = getRetrievalStrategy(retrieval.name)
+    if (!strategy) {
+      toast({
+        message: 'Strategy not found',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Get full config from project config if not in API response
+    let fullConfig = strategy.config || {}
+    if (!fullConfig || Object.keys(fullConfig).length === 0) {
+      const projectConfig = (projectResp as any)?.project?.config
+      const configDb = projectConfig?.rag?.databases?.find(
+        (d: any) => d.name === activeDatabase
+      )
+      const fullStrategy = configDb?.retrieval_strategies?.find(
+        (s: any) => s.name === retrieval.name
+      )
+      if (fullStrategy?.config) {
+        fullConfig = fullStrategy.config
+      }
+    }
+
+    navigate(`/chat/edit-retrieval-strategy`, {
+      state: {
+        database: activeDatabase,
+        strategyName: retrieval.name,
+        strategyType: strategy.type || 'BasicSimilarityStrategy',
+        currentConfig: fullConfig,
+        isDefault: retrieval.isDefault,
+      },
+    })
+  }
+
+  const handleSetDefaultRetrieval = async (strategyName: string) => {
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          default_retrieval_strategy: strategyName,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `"${strategyName}" set as default retrieval strategy`,
+        variant: 'default',
+      })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
+      })
+    } catch (error: any) {
+      console.error('Failed to set default retrieval:', error)
+      toast({
+        message: error.message || 'Failed to set default strategy',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDeleteRetrieval = (
+    strategyName: string,
+    isDefault: boolean,
+    totalStrategies: number
+  ) => {
+    // Prevent deleting the default or last retrieval strategy
+    if (isDefault) {
+      toast({
+        message: 'Cannot delete the default retrieval strategy. Set another strategy as default first.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    if (totalStrategies <= 1) {
+      toast({
+        message: 'Cannot delete the last retrieval strategy. At least one strategy is required.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    setStrategyToDelete({ name: strategyName, type: 'retrieval' })
+    setDeleteRetrievalOpen(true)
+  }
+
+  const confirmDeleteRetrieval = async () => {
+    if (!strategyToDelete || strategyToDelete.type !== 'retrieval') return
+
+    const strategyName = strategyToDelete.name
+    setDeleteRetrievalOpen(false)
+
+    try {
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === activeDatabase
+      )
+
+      if (!currentDb) {
+        throw new Error(`Database ${activeDatabase} not found`)
+      }
+
+      const updatedStrategies =
+        currentDb.retrieval_strategies?.filter(
+          (s: any) => s.name !== strategyName
+        ) || []
+
+      if (updatedStrategies.length === 0) {
+        throw new Error(
+          'Cannot delete the last retrieval strategy. At least one strategy is required.'
+        )
+      }
+
+      // If deleting the default, set the first remaining as default
+      let updatedDefaultStrategy = currentDb.default_retrieval_strategy
+      if (currentDb.default_retrieval_strategy === strategyName) {
+        updatedDefaultStrategy = updatedStrategies[0]?.name || ''
+      }
+
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: activeDatabase,
+        updates: {
+          retrieval_strategies: updatedStrategies,
+          default_retrieval_strategy: updatedDefaultStrategy,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `Retrieval strategy "${strategyName}" deleted`,
+        variant: 'default',
+      })
+      
+      // Refetch to update UI with latest data
+      await queryClient.invalidateQueries({
+        queryKey: ['rag', 'databases', activeProject?.namespace, activeProject?.project]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project]
+      })
+    } catch (error: any) {
+      console.error('Failed to delete retrieval strategy:', error)
+      toast({
+        message: error.message || 'Failed to delete strategy',
+        variant: 'destructive',
+      })
+    } finally {
+      setStrategyToDelete(null)
+    }
+  }
+
   return (
     <>
       <div className="w-full h-full flex flex-col">
@@ -803,179 +1036,166 @@ function Databases() {
                 <div className="text-sm text-foreground font-medium">
                   Embedding strategies ({embeddingCount})
                 </div>
-                {!usingConfigEmbeddings && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      navigate(
-                        `/chat/databases/add-embedding?database=${activeDatabase}`
-                      )
-                    }
-                  >
-                    Add new
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/chat/add-embedding-strategy?database=${activeDatabase}`
+                    )
+                  }
+                >
+                  Add new
+                </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {sortedEmbeddings.length === 0 && (
+                  <div className="col-span-2 text-center p-6 text-sm text-muted-foreground">
+                    No embedding strategies configured for this database.
+                    <div className="mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          navigate(
+                            `/chat/add-embedding-strategy?database=${activeDatabase}`
+                          )
+                        }
+                      >
+                        Add first strategy
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {sortedEmbeddings.map(ei => (
                   <div
                     key={ei.id}
-                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${ei.enabled ? '' : 'opacity-70'} ${embeddingCount === 1 ? 'md:col-span-2' : ''}`}
-                    onClick={() =>
-                      navigate(`/chat/databases/${ei.id}/change-embedding`)
-                    }
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        navigate(`/chat/databases/${ei.id}/change-embedding`)
-                      }
-                    }}
+                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 transition-colors ${ei.enabled ? '' : 'opacity-70'} ${embeddingCount === 1 ? 'md:col-span-2' : ''}`}
                   >
-                    {!usingConfigEmbeddings && (
-                      <div className="absolute top-2 right-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <FontIcon type="overflow" className="w-4 h-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="min-w-[12rem] w-[12rem]"
-                          >
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                navigate(
-                                  `/chat/databases/${ei.id}/change-embedding`
-                                )
-                              }}
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                setDefaultEmbedding(ei.id)
-                                setReembedOpen(true)
-                              }}
-                            >
-                              Make default
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={e => {
-                                e.stopPropagation()
-                                const ok = confirm(
-                                  'Remove this embedding strategy?'
-                                )
-                                if (!ok) return
-                                // hard delete config and list entry
-                                try {
-                                  localStorage.removeItem(
-                                    `lf_db_${activeDatabase}_embedding_config_${ei.id}`
-                                  )
-                                  localStorage.removeItem(
-                                    `lf_db_${activeDatabase}_embedding_model_${ei.id}`
-                                  )
-                                } catch {}
-                                let list = getEmbeddings().filter(
-                                  x => x.id !== ei.id
-                                )
-                                if (
-                                  list.length > 0 &&
-                                  !list.some(x => x.isDefault)
-                                ) {
-                                  list[0].isDefault = true
-                                }
-                                saveEmbeddings(list)
-                                setMetaTick(t => t + 1)
-                              }}
-                            >
-                              Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    )}
-
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">
-                          {getEmbeddingProvider(ei.id) || 'Provider'}
+                        <div className="text-base font-semibold truncate">
+                          {ei.name}
                         </div>
-                        <div className="text-base font-semibold font-mono truncate">
-                          {getEmbeddingSummary(ei.id)}
+                        <div className="text-sm text-muted-foreground">
+                          {getEmbeddingProvider(ei.name) || 'Provider'}
                         </div>
-                        <div className="text-xs text-muted-foreground w-full truncate">
+                        <div className="text-xs font-mono text-foreground mt-1">
+                          {getEmbeddingSummary(ei.name)}
+                        </div>
+                        <div className="text-xs text-muted-foreground w-full truncate mt-0.5">
                           {(() => {
-                            const loc = getEmbeddingLocation(ei.id)
+                            const loc = getEmbeddingLocation(ei.name)
                             return loc ? loc : ''
                           })()}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap" />
+                      <div className="flex items-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => handleEditEmbedding(ei)}
+                                title="Edit configuration"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit configuration</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {!ei.isDefault && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleSetDefaultEmbedding(ei.name)}
+                                  title="Set as default"
+                                >
+                                  <Star className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Set as default</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                onClick={() => handleDeleteEmbedding(
+                                  ei.name,
+                                  ei.isDefault,
+                                  sortedEmbeddings.length
+                                )}
+                                disabled={ei.isDefault || sortedEmbeddings.length === 1}
+                                title={
+                                  sortedEmbeddings.length === 1
+                                    ? 'At least one embedding strategy is required'
+                                    : ei.isDefault
+                                      ? 'Cannot delete default strategy'
+                                      : 'Delete strategy'
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {sortedEmbeddings.length === 1
+                                  ? 'At least one embedding strategy is required'
+                                  : ei.isDefault
+                                    ? 'Cannot delete default strategy'
+                                    : 'Delete strategy'}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {ei.name}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-between pt-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {(() => {
-                          const dim = getEmbeddingDimension(ei.id)
-                          return dim ? (
-                            <Badge
-                              variant="secondary"
-                              size="sm"
-                              className="rounded-xl"
-                            >
-                              {dim}-d
-                            </Badge>
-                          ) : null
-                        })()}
-                        {(() => {
-                          const runtime = getEmbeddingRuntime(ei.id)
-                          return runtime ? (
-                            <Badge
-                              variant="secondary"
-                              size="sm"
-                              className="rounded-xl"
-                            >
-                              {runtime}
-                            </Badge>
-                          ) : null
-                        })()}
-                        {ei.isDefault ? (
+                    <div className="flex items-center gap-2 flex-wrap pt-2">
+                      {(() => {
+                        const dim = getEmbeddingDimension(ei.name)
+                        return dim ? (
                           <Badge
-                            variant="default"
+                            variant="secondary"
                             size="sm"
                             className="rounded-xl"
                           >
-                            Default
+                            {dim}-d
                           </Badge>
-                        ) : null}
-                      </div>
-                      <div className="ml-auto">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="px-3 h-7"
-                          onClick={e => {
-                            e.stopPropagation()
-                            navigate(
-                              `/chat/databases/${ei.id}/change-embedding`
-                            )
-                          }}
-                        >
-                          Configure
-                        </Button>
-                      </div>
+                        ) : null
+                      })()}
+                      {(() => {
+                        const runtime = getEmbeddingRuntime(ei.name)
+                        return runtime ? (
+                          <Badge
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            {runtime}
+                          </Badge>
+                        ) : null
+                      })()}
+                      {ei.isDefault && (
+                        <Badge variant="default" size="sm" className="rounded-xl">
+                          Default
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -988,157 +1208,139 @@ function Databases() {
                 <div className="text-sm text-foreground font-medium">
                   Retrieval strategies ({retrievalCount})
                 </div>
-                {usingServerRetrievals ? (
-                  <span className="text-xs text-muted-foreground">
-                    Managed by server
-                  </span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      navigate(
-                        `/chat/databases/add-retrieval?database=${activeDatabase}`
-                      )
-                    }
-                  >
-                    Add new
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/chat/add-retrieval-strategy?database=${activeDatabase}`
+                    )
+                  }
+                >
+                  Add new
+                </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {sortedRetrievals.length === 0 && (
+                  <div className="col-span-2 text-center p-6 text-sm text-muted-foreground">
+                    No retrieval strategies configured for this database.
+                    <div className="mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          navigate(
+                            `/chat/add-retrieval-strategy?database=${activeDatabase}`
+                          )
+                        }
+                      >
+                        Add first strategy
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {sortedRetrievals.map(ri => (
                   <div
                     key={ri.id}
-                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${ri.enabled ? '' : 'opacity-70'} ${retrievalCount === 1 ? 'md:col-span-2' : ''}`}
-                    onClick={() =>
-                      navigate(`/chat/databases/${ri.id}/retrieval`)
-                    }
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        navigate(`/chat/databases/${ri.id}/retrieval`)
-                      }
-                    }}
+                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 transition-colors ${ri.enabled ? '' : 'opacity-70'} ${retrievalCount === 1 ? 'md:col-span-2' : ''}`}
                   >
-                    {!usingServerRetrievals && (
-                      <div className="absolute top-2 right-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <FontIcon type="overflow" className="w-4 h-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="min-w-[12rem] w-[12rem]"
-                          >
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                const name = prompt(
-                                  'Rename retrieval strategy',
-                                  ri.name
-                                )?.trim()
-                                if (!name) return
-                                const list = getRetrievals().map(x =>
-                                  x.id === ri.id ? { ...x, name } : x
-                                )
-                                saveRetrievals(list)
-                                setMetaTick(t => t + 1)
-                              }}
-                            >
-                              Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                duplicateRetrieval(ri.id)
-                              }}
-                            >
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                setDefaultRetrieval(ri.id)
-                              }}
-                            >
-                              Set as default
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation()
-                                toggleRetrievalEnabled(ri.id)
-                              }}
-                            >
-                              {ri.enabled ? 'Disable' : 'Enable'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={e => {
-                                e.stopPropagation()
-                                const ok = confirm(
-                                  'Delete this retrieval strategy?'
-                                )
-                                if (!ok) return
-                                let list = getRetrievals().filter(
-                                  x => x.id !== ri.id
-                                )
-                                if (
-                                  list.length > 0 &&
-                                  !list.some(x => x.isDefault)
-                                ) {
-                                  list[0].isDefault = true
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-base font-semibold truncate">
+                          {ri.name}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {getRetrievalDescription(ri.name)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {getRetrievalConfigSummary(ri.name)}
+                        </div>
+                        <div className="text-xs text-muted-foreground w-full truncate mt-0.5">
+                          {getRetrievalMeta(ri.name)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => handleEditRetrieval(ri)}
+                                title="Edit configuration"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit configuration</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {!ri.isDefault && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleSetDefaultRetrieval(ri.name)}
+                                  title="Set as default"
+                                >
+                                  <Star className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Set as default</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                onClick={() => handleDeleteRetrieval(
+                                  ri.name,
+                                  ri.isDefault,
+                                  sortedRetrievals.length
+                                )}
+                                disabled={ri.isDefault || sortedRetrievals.length === 1}
+                                title={
+                                  sortedRetrievals.length === 1
+                                    ? 'At least one retrieval strategy is required'
+                                    : ri.isDefault
+                                      ? 'Cannot delete default strategy'
+                                      : 'Delete strategy'
                                 }
-                                saveRetrievals(list)
-                                setMetaTick(t => t + 1)
-                              }}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {sortedRetrievals.length === 1
+                                  ? 'At least one retrieval strategy is required'
+                                  : ri.isDefault
+                                    ? 'Cannot delete default strategy'
+                                    : 'Delete strategy'}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
-                    )}
-
-                    <div className="text-sm font-medium">{ri.name}</div>
-                    <div className="text-xs text-primary text-left w-full truncate">
-                      {getRetrievalDescription(ri.id)}
                     </div>
-                    <div className="text-xs text-muted-foreground w-full truncate">
-                      {getRetrievalMeta(ri.id)}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-between pt-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {ri.isDefault ? (
-                          <Badge
-                            variant="default"
-                            size="sm"
-                            className="rounded-xl"
-                          >
-                            Default
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="ml-auto">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="px-3 h-7"
-                          onClick={e => {
-                            e.stopPropagation()
-                            navigate(`/chat/databases/${ri.id}/retrieval`)
-                          }}
-                        >
-                          Configure
-                        </Button>
-                      </div>
+                    <div className="flex items-center gap-2 flex-wrap pt-2">
+                      {ri.isDefault && (
+                        <Badge variant="default" size="sm" className="rounded-xl">
+                          Default
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1256,6 +1458,66 @@ function Databases() {
             >
               Yes, proceed with re-embed
             </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete embedding strategy confirmation modal */}
+      <Dialog
+        open={deleteEmbeddingOpen}
+        onOpenChange={open => {
+          setDeleteEmbeddingOpen(open)
+          if (!open) {
+            setStrategyToDelete(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete embedding strategy</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            Are you sure you want to delete the embedding strategy{' '}
+            {strategyToDelete?.name ? `"${strategyToDelete.name}"` : ''}? This
+            action cannot be undone.
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={confirmDeleteEmbedding}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete retrieval strategy confirmation modal */}
+      <Dialog
+        open={deleteRetrievalOpen}
+        onOpenChange={open => {
+          setDeleteRetrievalOpen(open)
+          if (!open) {
+            setStrategyToDelete(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete retrieval strategy</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            Are you sure you want to delete the retrieval strategy{' '}
+            {strategyToDelete?.name ? `"${strategyToDelete.name}"` : ''}? This
+            action cannot be undone.
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={confirmDeleteRetrieval}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

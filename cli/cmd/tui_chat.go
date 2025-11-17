@@ -246,6 +246,10 @@ type chatModel struct {
 	isFirstRender bool
 	// Track if we just started a new response (should auto-scroll)
 	justStartedResponse bool
+	// Cancel function for active stream
+	cancelStream func()
+	// Track if user intentionally cancelled (to suppress error messages)
+	intentionallyCancelled bool
 }
 
 // removed: old bottom menu state
@@ -259,10 +263,7 @@ type toolCallMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
 
-type designerReadyMsg struct{ url string }
-type designerErrorMsg struct{ err error }
 type serverHealthMsg struct{ health *orchestrator.HealthPayload }
-type modeSwitchMsg struct{ mode ChatMode }
 
 func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	var devMessages []Message
@@ -1040,7 +1041,22 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// removed cmd+r menu opener
 
 		case "esc":
-			// No-op here; overlay handles its own ESC
+			// If overlay is active, let it handle ESC
+			if m.quickMenu.IsActive() {
+				return m, tea.Batch(cmds...)
+			}
+			// Cancel active stream if one is in progress
+			if (m.thinking || m.printing) && m.cancelStream != nil {
+				m.intentionallyCancelled = true // Mark as intentional to suppress context.Canceled errors
+				m.cancelStream()
+				m.cancelStream = nil
+				m.thinking = false
+				m.printing = false
+				m.streamCh = nil
+				m.justStartedResponse = false
+				m.messages = append(m.messages, Message{Role: "client", Content: "⚠️ Operation aborted"})
+				m.refreshViewportBottom()
+			}
 			return m, tea.Batch(cmds...)
 
 		case "up":
@@ -1096,6 +1112,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case toolCallMsg:
+		// Skip processing tool call if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping toolCallMsg due to intentional cancellation")
+			break
+		}
+
 		// Tool calls are added as separate assistant messages
 		utils.LogDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
 		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
@@ -1114,6 +1136,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case responseMsg:
 		if m.err != nil {
 			m.err = nil
+			break
+		}
+
+		// Skip processing response if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping responseMsg due to intentional cancellation")
 			break
 		}
 
@@ -1166,8 +1194,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorMsg:
 		m.thinking = false
 		m.err = msg.err
-		m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
-		m.justStartedResponse = false // Reset flag on error
+		// Don't show error if user intentionally cancelled and this is a context cancellation error
+		if !(m.intentionallyCancelled && strings.Contains(msg.err.Error(), "context canceled")) {
+			m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
+		}
+		m.justStartedResponse = false    // Reset flag on error
+		m.cancelStream = nil             // Clear cancel function on error
+		m.intentionallyCancelled = false // Reset cancellation flag
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
 		}
@@ -1186,7 +1219,9 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.printing = false
 		m.streamCh = nil
-		m.justStartedResponse = false // Reset flag after streaming is complete
+		m.cancelStream = nil             // Clear cancel function when stream completes
+		m.intentionallyCancelled = false // Reset cancellation flag
+		m.justStartedResponse = false    // Reset flag after streaming is complete
 
 	case serverHealthMsg:
 		// Delegate to controller to update state and emit a unified StateUpdateMsg
@@ -1483,7 +1518,7 @@ func renderChatInput(m chatModel) string {
 	} else {
 		modeHint = "Ctrl+T: dev help | Ctrl+K: cycle models"
 	}
-	helpText := fmt.Sprintf("/help for commands | Up/Down: history | %s", modeHint)
+	helpText := fmt.Sprintf("/help for commands | Up/Down: history | Esc: cancel | %s", modeHint)
 
 	b.WriteString("\n")
 	wrappedHelp := lipgloss.NewStyle().Faint(true).Width(m.width - 2).Render(helpText)
@@ -1645,7 +1680,7 @@ func (m *chatModel) processCommandOrMessage(msg string) (wasCommand bool, cmd te
 		cmdName := fields[0]
 		switch cmdName {
 		case "/help":
-			m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models"})
+			m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models\n  Esc - Cancel current operation"})
 			m.textarea.SetValue("")
 		case "/mode":
 			if len(fields) < 2 {
@@ -1934,7 +1969,8 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 	m.textarea.SetValue("")
 	m.thinking = true
 	m.printing = true
-	m.justStartedResponse = true // Mark that we're starting a new response
+	m.justStartedResponse = true     // Mark that we're starting a new response
+	m.intentionallyCancelled = false // Reset cancellation flag for new request
 	// Scroll to bottom when user sends a message - ensures they see the response
 	m.refreshViewportBottom()
 	// Update chatCtx with current selections (PROJECT mode)
@@ -1951,7 +1987,8 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 		}
 	}
 	// Start channel-based streaming - important for showing progress
-	chunks, errs, _ := startChatStream(m.messages, chatCtx)
+	chunks, errs, cancel := startChatStream(m.messages, chatCtx)
+	m.cancelStream = cancel // Store cancel function so Escape key can abort
 	ch := make(chan tea.Msg, 32)
 	m.streamCh = ch
 	go func() {

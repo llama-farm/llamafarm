@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/llamafarm/cli/cmd/utils"
-	"github.com/llamafarm/cli/cmd/version"
+	"github.com/llamafarm/cli/internal/buildinfo"
 )
 
 // Environment Variables:
@@ -148,7 +148,7 @@ func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 	}
 
 	// Use the CLI's actual version (set by build flags during release)
-	cliVersion := strings.TrimSpace(version.CurrentVersion)
+	cliVersion := strings.TrimSpace(buildinfo.CurrentVersion)
 
 	// Development builds (Version = "dev") should use "main" branch
 	if cliVersion == "" || cliVersion == "dev" {
@@ -811,10 +811,9 @@ func (m *SourceManager) GenerateDatamodel() error {
 		return fmt.Errorf("config directory not found: %s", configDir)
 	}
 
-	generateScript := filepath.Join(configDir, "generate-types.sh")
+	generateScript := filepath.Join(configDir, "generate_types.py")
 	if _, err := os.Stat(generateScript); os.IsNotExist(err) {
-		utils.OutputWarning("Warning: generate-types.sh not found, skipping datamodel generation\n")
-		return nil
+		return fmt.Errorf("generate_types.py not found, skipping datamodel generation: %w", err)
 	}
 
 	// Check if datamodel.py already exists and is up-to-date

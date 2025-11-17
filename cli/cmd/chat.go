@@ -118,8 +118,7 @@ Examples:
 
 		// Start an interactive chat session if no input is provided
 		if input == "" {
-			// FIXME: ADD THIS BACK WHEN CLI COMPILES
-			// start(SessionModeProject)
+			start(SessionModeProject)
 			return
 		}
 

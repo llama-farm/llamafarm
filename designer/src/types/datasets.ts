@@ -110,6 +110,12 @@ export interface DatasetActionResponse {
 export interface FileUploadResponse {
   /** Name of the uploaded file */
   filename: string
+  /** Hash of the uploaded file */
+  hash: string
+  /** Whether the file has been processed */
+  processed: boolean
+  /** Whether the file was skipped (duplicate) */
+  skipped: boolean
 }
 
 /**
