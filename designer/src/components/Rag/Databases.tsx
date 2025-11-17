@@ -531,7 +531,6 @@ function Databases() {
     } catch (error: any) {
       console.error('Failed to create database:', error)
       setDatabaseError(error.message || 'Failed to create database')
-      throw error
     }
   }
 
