@@ -72,9 +72,12 @@ class ProjectChatService:
         rag_score_threshold: float | None = None,
     ) -> LFChatCompletion:
         latest_user_message = next(
-            msg
-            for msg in reversed(messages)
-            if msg.get("role", None) == "user" and msg.get("content", None)
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
         )
 
         if latest_user_message:
@@ -108,9 +111,12 @@ class ProjectChatService:
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         latest_user_message = next(
-            msg
-            for msg in reversed(messages)
-            if msg.get("role", None) == "user" and msg.get("content", None)
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
         )
 
         if latest_user_message:

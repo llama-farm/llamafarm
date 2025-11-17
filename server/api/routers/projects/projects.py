@@ -455,11 +455,14 @@ async def chat(
         set_session_header(response, session_id)
 
     # Extract the latest user message
-    latest_user_message = None
-    for msg in reversed(request.messages):
-        if msg.get("role", None) == "user" and msg.get("content", None):
-            latest_user_message = str(msg.get("content", ""))
-            break
+    latest_user_message = next(
+        (
+            msg
+            for msg in reversed(request.messages)
+            if msg.get("role", None) == "user" and msg.get("content", None)
+        ),
+        None,
+    )
 
     # Inject relevant documentation based on user query (dev mode only)
     if (
