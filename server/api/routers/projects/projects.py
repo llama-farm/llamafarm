@@ -360,7 +360,6 @@ def _delete_all_sessions(namespace: str, project_id: str) -> int:
 class ChatRequest(BaseModel):
     messages: list[ChatCompletionMessageParam]
     model: str | None = None
-    tools: list[ChatCompletionToolParam] | None = None
     frequency_penalty: float | None = None
     logit_bias: dict[str, int] | None = None
     logprobs: bool | None = None
@@ -377,7 +376,7 @@ class ChatRequest(BaseModel):
     stream_options: dict | None = None
     temperature: float | None = None
     tool_choice: str | dict | None = None
-    tools: list[dict] | None = None
+    tools: list[ChatCompletionToolParam] | None = None
     top_logprobs: int | None = None
     top_p: float | None = None
     user: str | None = None
