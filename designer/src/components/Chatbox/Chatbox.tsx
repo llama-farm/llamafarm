@@ -11,11 +11,51 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip'
+import { ClassifiedError } from '../../types/chat'
+import { getHealthSummary } from '../../utils/recoveryCommands'
 
 interface ChatboxProps {
   isPanelOpen: boolean
   setIsPanelOpen: (isOpen: boolean) => void
   initialMessage?: string | null
+}
+
+/**
+ * Copy button component for command boxes
+ */
+function CopyButton({ text, onCopy }: { text: string; onCopy?: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      onCopy?.()
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={handleCopy}
+        className="p-1 hover:bg-muted/50 rounded transition-colors"
+        title={copied ? 'Copied!' : 'Copy to clipboard'}
+        aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
+      >
+        <FontIcon
+          type={copied ? 'checkmark-filled' : 'copy'}
+          className={`w-4 h-4 ${copied ? 'text-green-500' : 'text-muted-foreground'}`}
+        />
+      </button>
+      {/* Screen reader announcement */}
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Command copied to clipboard.' : ''}
+      </span>
+    </>
+  )
 }
 
 function Chatbox({
@@ -54,15 +94,80 @@ function Chatbox({
   // Refs for auto-scroll
   const listRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
+  const rafRef = useRef<number | null>(null)
 
-  useEffect(() => {
-    // Scroll to bottom on mount and whenever messages change
-    if (endRef.current) {
-      endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    } else if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
+  // Sticky scroll state
+  const BOTTOM_THRESHOLD = 24 // pixels from bottom to consider "at bottom"
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
+  const [wantsAutoScroll, setWantsAutoScroll] = useState(true)
+
+  // Check if user is at the bottom of the scroll container
+  const checkIfAtBottom = useCallback(() => {
+    if (!listRef.current) return false
+    const { scrollTop, scrollHeight, clientHeight } = listRef.current
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+    return distanceFromBottom <= BOTTOM_THRESHOLD
+  }, [BOTTOM_THRESHOLD])
+
+  // Handle scroll events with RAF debouncing
+  const handleScroll = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
     }
-  }, [messages])
+
+    rafRef.current = requestAnimationFrame(() => {
+      const atBottom = checkIfAtBottom()
+      setIsUserAtBottom(atBottom)
+
+      // If user scrolled back to bottom, resume auto-scroll
+      if (atBottom) {
+        setWantsAutoScroll(true)
+      } else {
+        // User scrolled up, pause auto-scroll
+        setWantsAutoScroll(false)
+      }
+    })
+  }, [checkIfAtBottom])
+
+  // Cleanup RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  }, [])
+
+  // Handle window resize - recompute scroll position
+  useEffect(() => {
+    const handleResize = () => {
+      // Recompute if we're at bottom after resize
+      const atBottom = checkIfAtBottom()
+      setIsUserAtBottom(atBottom)
+      
+      // If we were wanting to auto-scroll and we're now at bottom, maintain that
+      if (wantsAutoScroll && atBottom && listRef.current) {
+        listRef.current.scrollTo({
+          top: listRef.current.scrollHeight,
+          behavior: 'auto',
+        })
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [checkIfAtBottom, wantsAutoScroll])
+
+  // Conditional auto-scroll effect
+  useEffect(() => {
+    if (wantsAutoScroll && listRef.current) {
+      // Use scrollTo for better control during streaming
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: 'auto', // 'auto' prevents jank during streaming
+      })
+    }
+  }, [messages, wantsAutoScroll])
 
   // Handle initial message from home page project creation
   useEffect(() => {
@@ -90,6 +195,10 @@ function Chatbox({
     const messageContent = inputValue.trim()
     if (!canSend || !messageContent) return
 
+    // Optionally scroll to bottom when sending a new message
+    setWantsAutoScroll(true)
+    setIsUserAtBottom(true)
+
     // Send message using the hook
     const success = await sendMessage(messageContent)
 
@@ -98,6 +207,18 @@ function Chatbox({
       updateInput('')
     }
   }, [inputValue, canSend, sendMessage, updateInput])
+
+  // Handle "Jump to latest" button click
+  const handleJumpToLatest = useCallback(() => {
+    if (listRef.current) {
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
+      setWantsAutoScroll(true)
+      setIsUserAtBottom(true)
+    }
+  }, [])
 
   // Handle clear chat
   const handleClearChat = useCallback(async () => {
@@ -262,22 +383,66 @@ function Chatbox({
           </div>
         )}
 
-        {/* Error/empty state banner (dark-mode friendly) */}
-        {error && isPanelOpen && (
-          <div className="mx-4 mb-2 rounded-xl border border-border bg-card/40">
-            <div className="px-3 py-2 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
-                  !
+        {/* Enhanced error banner with recovery commands */}
+        {error && isPanelOpen && (() => {
+          // Handle both ClassifiedError and legacy string errors
+          const classifiedError = typeof error === 'string' 
+            ? null 
+            : (error as ClassifiedError)
+          const errorTitle = classifiedError?.title || 'Error'
+          const errorMessage = classifiedError?.message || (typeof error === 'string' ? error : 'An error occurred')
+          const recoveryCommands = classifiedError?.recoveryCommands || []
+          const healthStatus = classifiedError?.healthStatus
+
+          return (
+            <div className="mx-4 mb-2 rounded-xl border-2 border-red-500/40 bg-card/40 p-3">
+              {/* Error header */}
+              <div className="flex items-start gap-3 mb-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/15 text-red-400 border border-red-500/30 flex-shrink-0 mt-0.5">
+                  <FontIcon type="info" className="w-4 h-4" />
                 </span>
-                <div className="text-sm">
-                  <div className="font-medium text-foreground">
-                    Project setup required
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-foreground text-sm">
+                    {errorTitle}
                   </div>
-                  <div className="text-xs text-muted-foreground">{error}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {errorMessage}
+                  </div>
+                  {/* Health summary */}
+                  {healthStatus && (
+                    <div className="text-xs text-muted-foreground mt-1 italic">
+                      {getHealthSummary(healthStatus)}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Recovery commands */}
+              {recoveryCommands.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground font-medium">
+                    {recoveryCommands.length === 1 ? 'Fix:' : 'Try these steps:'}
+                  </div>
+                  {recoveryCommands.map((cmd, idx) => (
+                    <div key={idx} className="space-y-1">
+                      {cmd.description && (
+                        <div className="text-xs text-muted-foreground">
+                          {recoveryCommands.length > 1 ? `${idx + 1}. ${cmd.description}` : cmd.description}
+                        </div>
+                      )}
+                      <div className="bg-muted/50 border border-border rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                        <code className="font-mono text-sm text-foreground flex-1 overflow-x-auto">
+                          {cmd.command}
+                        </code>
+                        <CopyButton text={cmd.command} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 mt-3">
                 <button
                   onClick={() =>
                     window.open(
@@ -287,58 +452,74 @@ function Chatbox({
                   }
                   className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80"
                 >
-                  Docs
-                </button>
-                <button
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('lf-open-create-project')
-                    )
-                  }
-                  className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  Create project
+                  View Docs
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         <div
           className={`flex flex-col h-full p-4 pt-2 overflow-hidden ${isPanelOpen ? 'flex' : 'hidden'}`}
         >
-          <div
-            ref={listRef}
-            className="flex-1 overflow-y-auto flex flex-col gap-5 pr-1"
-          >
-            {!hasMessages ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40 max-w-[560px]">
-                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
-                    <span className="text-primary text-lg">💬</span>
-                  </div>
-                  <div className="text-base font-medium">
-                    Start a conversation
-                  </div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    Type a message below to chat with your model.
-                  </div>
-                  {error && (
-                    <div className="mt-3 text-xs text-red-400">
-                      Set up a project config first to get responses.
+          <div className="relative flex-1 min-h-0">
+            <div
+              ref={listRef}
+              onScroll={handleScroll}
+              className="absolute inset-0 overflow-y-auto flex flex-col gap-5 pr-1"
+            >
+              {!hasMessages ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40 max-w-[560px]">
+                    <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+                      <span className="text-primary text-lg">💬</span>
                     </div>
-                  )}
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    Tip: Press Enter to send
+                    <div className="text-base font-medium">
+                      Start a conversation
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Type a message below to chat with your model.
+                    </div>
+                    {error && (
+                      <div className="mt-3 text-xs text-red-400">
+                        Set up a project config first to get responses.
+                      </div>
+                    )}
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      Tip: Press Enter to send
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              messages.map(message => (
-                <Message key={message.id} message={message} />
-              ))
+              ) : (
+                messages.map(message => (
+                  <Message key={message.id} message={message} />
+                ))
+              )}
+              <div ref={endRef} />
+            </div>
+
+            {/* Jump to latest pill - shown when user scrolls up */}
+            {!isUserAtBottom && hasMessages && (
+              <button
+                onClick={handleJumpToLatest}
+                className="absolute bottom-4 right-6 z-10 flex items-center gap-2 px-3 py-2 rounded-full bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg transition-all hover:shadow-xl"
+                aria-label="Jump to latest message"
+              >
+                <span className="text-sm font-medium">Jump to latest</span>
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="7 13 12 18 17 13" />
+                  <polyline points="7 6 12 11 17 6" />
+                </svg>
+              </button>
             )}
-            <div ref={endRef} />
           </div>
           <div className="flex flex-col gap-3 p-3 rounded-lg bg-secondary mt-auto sticky bottom-4">
             <div className="relative">

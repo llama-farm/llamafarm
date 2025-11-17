@@ -203,6 +203,9 @@ class DatasetDataUploadResponse(BaseModel):
     filename: str = Field(..., description="The name of the uploaded file")
     hash: str = Field(..., description="The hash of the uploaded file")
     processed: bool = Field(..., description="Whether the file has been processed")
+    skipped: bool = Field(
+        default=False, description="Whether the file was skipped (duplicate)"
+    )
 
 
 @router.post(
@@ -230,24 +233,33 @@ async def upload_data(
         file=file,
     )
 
-    DatasetService.add_file_to_dataset(
+    was_added = DatasetService.add_file_to_dataset(
         namespace=namespace,
         project=project,
         dataset=dataset,
         file=metadata_file_content,
     )
 
-    logger.info(
-        "File uploaded to dataset",
-        dataset=dataset,
-        filename=file.filename,
-        hash=metadata_file_content.hash,
-    )
+    if was_added:
+        logger.info(
+            "File uploaded to dataset",
+            dataset=dataset,
+            filename=file.filename,
+            hash=metadata_file_content.hash,
+        )
+    else:
+        logger.info(
+            "File skipped (duplicate)",
+            dataset=dataset,
+            filename=file.filename,
+            hash=metadata_file_content.hash,
+        )
 
     return DatasetDataUploadResponse(
         filename=file.filename,
         hash=metadata_file_content.hash,
         processed=False,
+        skipped=not was_added,
     )
 
 

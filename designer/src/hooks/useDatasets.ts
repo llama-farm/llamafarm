@@ -192,12 +192,14 @@ export function useUploadFileToDataset() {
       project: string
       dataset: string
       file: File
+      signal?: AbortSignal
     }) =>
       datasetService.uploadFileToDataset(
         data.namespace,
         data.project,
         data.dataset,
-        data.file
+        data.file,
+        data.signal
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh file counts

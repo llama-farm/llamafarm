@@ -152,13 +152,15 @@ export async function executeDatasetAction(
  * @param project - The project identifier
  * @param dataset - The dataset name
  * @param file - The file to upload
+ * @param signal - Optional AbortSignal for cancelling the upload
  * @returns Promise<FileUploadResponse> - The upload response with filename
  */
 export async function uploadFileToDataset(
   namespace: string,
   project: string,
   dataset: string,
-  file: File
+  file: File,
+  signal?: AbortSignal
 ): Promise<FileUploadResponse> {
   const formData = new FormData()
 
@@ -177,6 +179,7 @@ export async function uploadFileToDataset(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data`,
     formData,
     {
+      signal,
       headers: {
         'Content-Type': 'multipart/form-data',
       },
