@@ -1,5 +1,6 @@
 """Tests for preprocessor components."""
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -7,6 +8,9 @@ import pytest
 
 from components.preprocessors.base import BasePreprocessor, PreprocessorResult
 from components.preprocessors.factory import PreprocessorFactory
+
+# Skip OCR tests in CI - they require ~2GB model downloads and take 5-10 minutes
+SKIP_OCR_IN_CI = os.environ.get("CI") == "true"
 
 
 class TestPreprocessorFactory:
@@ -198,6 +202,10 @@ class TestMarkItDownPreprocessor:
         assert len(result.errors) > 0
 
 
+@pytest.mark.skipif(
+    SKIP_OCR_IN_CI,
+    reason="OCR tests skipped in CI (require ~2GB model downloads, 5-10 min)",
+)
 class TestOCRPreprocessor:
     """Test OCR preprocessor base functionality."""
 
