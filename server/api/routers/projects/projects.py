@@ -360,7 +360,6 @@ def _delete_all_sessions(namespace: str, project_id: str) -> int:
 class ChatRequest(BaseModel):
     messages: list[ChatCompletionMessageParam]
     model: str | None = None
-    tools: list[ChatCompletionToolParam] | None = None
     frequency_penalty: float | None = None
     logit_bias: dict[str, int] | None = None
     logprobs: bool | None = None
