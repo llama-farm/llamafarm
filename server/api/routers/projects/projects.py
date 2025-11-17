@@ -470,7 +470,7 @@ async def chat(
     # Extract the latest user message
     latest_user_message = next(
         (
-            str(msg.get("content", ""))
+            msg
             for msg in reversed(request.messages)
             if msg.get("role", None) == "user" and msg.get("content", None)
         ),
