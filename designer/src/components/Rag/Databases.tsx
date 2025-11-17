@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
@@ -240,20 +240,34 @@ function Databases() {
     null
   )
   
+  // Generation counter to prevent stale data updates
+  const ragDatabasesGenerationRef = useRef(0)
+  
   // Refetch function to reload RAG databases
   const refetchRagDatabases = useCallback(async () => {
     const ns = activeProject?.namespace
     const proj = activeProject?.project
     if (!ns || !proj) return
+    
+    // Increment generation counter for this request
+    const currentGeneration = ++ragDatabasesGenerationRef.current
+    
     try {
       const resp = await apiClient.get<RagDatabasesResponse>(
         `/projects/${encodeURIComponent(ns)}/${encodeURIComponent(
           proj
         )}/rag/databases`
       )
-      setRagDatabases(resp.data)
-    } catch {
-      setRagDatabases(null)
+      
+      // Only update state if this is still the latest request
+      if (currentGeneration === ragDatabasesGenerationRef.current) {
+        setRagDatabases(resp.data)
+      }
+    } catch (error) {
+      // Only update state if this is still the latest request
+      if (currentGeneration === ragDatabasesGenerationRef.current) {
+        setRagDatabases(null)
+      }
     }
   }, [activeProject?.namespace, activeProject?.project])
   
