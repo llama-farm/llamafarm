@@ -77,6 +77,10 @@ type ServiceDefinition struct {
 	Env             map[string]string // Environment variables
 	HealthComponent string            // Component name in /health endpoint (e.g., "server", "rag")
 
+	// Hardware-specific packages (optional)
+	// If set, these packages will be installed with hardware-appropriate wheels after uv sync
+	HardwarePackages []HardwarePackageSpec
+
 	// Runtime info
 	State *ServiceState
 }
@@ -136,6 +140,10 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
 		},
 		HealthComponent: "universal-runtime",
+		HardwarePackages: []HardwarePackageSpec{
+			PyTorchSpec,
+			LlamaCppSpec,
+		},
 	},
 	"server": {
 		Name:            "server",

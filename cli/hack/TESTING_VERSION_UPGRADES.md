@@ -196,3 +196,4 @@ kill $LF_PID 2>/dev/null || true
 - `~/.llamafarm/src/` - Source code directory
 - `~/.llamafarm/logs/*.log` - Service logs showing shutdown
 - `cli/cmd/orchestrator/source_manager.go` - Contains the upgrade logic
+

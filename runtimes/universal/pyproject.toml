@@ -5,7 +5,6 @@ description = "OpenAI-compatible API for HuggingFace models"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-  "torch>=2.0.0",
   "transformers>=4.35.0",
   "diffusers>=0.25.0",
   "accelerate>=0.25.0",
@@ -18,7 +17,6 @@ dependencies = [
   "openai>=1.0.0",
   "llamafarm-common",
   "structlog>=24.0.0",
-  "llama-cpp-python>=0.2.0",
   "psutil>=5.9.0",
   "pyyaml>=6.0",
   "gguf>=0.17.1",
@@ -36,6 +34,9 @@ dev = [
 ]
 
 [project.optional-dependencies]
+# Hardware-accelerated packages installed separately via CLI based on detected hardware
+# These are not installed during 'uv sync' to avoid compilation dependencies
+gpu = ["torch>=2.0.0", "llama-cpp-python>=0.3.0"]
 xformers = ["xformers>=0.0.22"]
 
 [build-system]

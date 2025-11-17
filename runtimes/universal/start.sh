@@ -42,9 +42,8 @@ if [ ! -f .python-version ]; then
 fi
 
 # Run uv sync to ensure all dependencies are installed
-# Use --no-build to prevent building from source (forces prebuilt wheels)
 echo -e "${GREEN}Ensuring dependencies are installed...${NC}"
-uv sync --no-build
+uv sync
 
 echo ""
 echo -e "${GREEN}Starting Universal Runtime Server...${NC}"
