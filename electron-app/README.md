@@ -17,8 +17,8 @@ LlamaFarm Desktop is an Electron-based application that packages the LlamaFarm D
 ## Download
 
 **macOS** (recommended to start with):
-- [Download for macOS (Intel)](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-mac-x64.dmg)
-- [Download for macOS (Apple Silicon)](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-mac-arm64.dmg)
+- **Apple Silicon (M1/M2/M3)**: [Download ARM64 DMG](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-mac-arm64.dmg)
+- **Intel**: [Download x64 DMG](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-mac-x64.dmg)
 
 **Windows** (coming soon):
 - Download for Windows (installer)
@@ -27,6 +27,20 @@ LlamaFarm Desktop is an Electron-based application that packages the LlamaFarm D
 **Linux** (coming soon):
 - Download AppImage
 - Download .deb package
+
+### ⚠️ macOS Security Warning
+
+If you see **"LlamaFarm is damaged and can't be opened"**, the app isn't actually damaged - it's just **unsigned**.
+
+**Quick Fix:**
+```bash
+# Remove quarantine attribute before opening
+xattr -cr "/Applications/LlamaFarm.app"
+```
+
+Or right-click the app and select "Open" instead of double-clicking.
+
+See [TESTING.md](TESTING.md) for detailed instructions.
 
 ## Quick Start
 
