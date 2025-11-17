@@ -257,22 +257,24 @@ class LFAgentClientOpenAI(LFAgentClient):
             A new ChatCompletionChunk with tool call information
         """
         delta = (
-            ChoiceDelta(
-                role="assistant",
-                tool_calls=[
-                    ChoiceDeltaToolCall(
-                        index=0,
-                        id=tool_call_id,
-                        type="function",
-                        function=ChoiceDeltaToolCallFunction(
-                            name=tool_name,
-                            arguments=tool_arguments,
-                        ),
-                    )
-                ],
+            ChoiceDelta()
+            if is_finished
+            else (
+                ChoiceDelta(
+                    role="assistant",
+                    tool_calls=[
+                        ChoiceDeltaToolCall(
+                            index=0,
+                            id=tool_call_id,
+                            type="function",
+                            function=ChoiceDeltaToolCallFunction(
+                                name=tool_name,
+                                arguments=tool_arguments,
+                            ),
+                        )
+                    ],
+                )
             )
-            if not is_finished
-            else ChoiceDelta()
         )
 
         return ChatCompletionChunk(
