@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.0.14](https://github.com/llama-farm/llamafarm/compare/v0.0.13...v0.0.14) (2025-11-13)
+
+
+### Features
+
+* **cli:** show size stats in raq query result ([#442](https://github.com/llama-farm/llamafarm/issues/442)) ([f602692](https://github.com/llama-farm/llamafarm/commit/f6026924ba03fdc719c16481d4cd385ad9b754e4))
+* **designer:** database embedding and retrieval strategies ([#438](https://github.com/llama-farm/llamafarm/issues/438)) ([db5ee11](https://github.com/llama-farm/llamafarm/commit/db5ee110dd840b00f8cb8d476d087d0594b4a0be))
+
+
+### Bug Fixes
+
+* **designer:** build chat errors ([#444](https://github.com/llama-farm/llamafarm/issues/444)) ([964ed95](https://github.com/llama-farm/llamafarm/commit/964ed95f2268c787a5dbe01aa9025e0bb3049263))
+* **designer:** file drop dataset selection ([#423](https://github.com/llama-farm/llamafarm/issues/423)) ([1bd0a42](https://github.com/llama-farm/llamafarm/commit/1bd0a429103b3cc8d3ff69b0ff804862ee92b506))
+* **package:** missing ruff config for datamodel gen ([#450](https://github.com/llama-farm/llamafarm/issues/450)) ([1e5a31b](https://github.com/llama-farm/llamafarm/commit/1e5a31bad7bec5a2bf4c8ea4932fffe47896bf06))
+
+
+### Miscellaneous Chores
+
+* release 0.0.14 ([58522a1](https://github.com/llama-farm/llamafarm/commit/58522a1a681030d1b4328b23da39b06c1acf676d))
+
 ## [0.0.13](https://github.com/llama-farm/llamafarm/compare/v0.0.12...v0.0.13) (2025-11-11)
 
 

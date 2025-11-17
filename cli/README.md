@@ -120,5 +120,5 @@ LF_VERSION_REF=abc123def456... lf start
 ## Development Notes
 - Commands live under `cmd/` as Cobra subcommands.
 - Shared helpers (HTTP clients, config resolution) live in `cmd/*` modules.
-- Regenerate Go config types after schema updates via `config/generate-types.sh`.
+- Regenerate Go config types after schema updates via `config/generate_types.py`.
 - The CLI's `CurrentVersion` variable is set via `-ldflags` during build: `-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=v1.2.3'`

@@ -1,11 +1,14 @@
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from agents.base.types import ToolDefinition
+
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 
 from agents.base.agent import LFAgent
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
 from agents.base.history import (
+    LFChatCompletionMessageParam,
     LFChatCompletionUserMessageParam,
 )
 from agents.chat_orchestrator import ChatOrchestratorAgent
@@ -60,7 +63,8 @@ class ProjectChatService:
         project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: ChatOrchestratorAgent,
-        message: str,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -68,26 +72,38 @@ class ProjectChatService:
         rag_score_threshold: float | None = None,
         n_ctx: int | None = None,
     ) -> LFChatCompletion:
-        await self._perform_rag_search_and_add_to_context(
-            chat_agent,
-            project_dir,
-            project_config,
-            message,
-            rag_enabled=rag_enabled,
-            database=database,
-            retrieval_strategy=retrieval_strategy,
-            rag_top_k=rag_top_k,
-            rag_score_threshold=rag_score_threshold,
+        latest_user_message = next(
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
         )
 
-        user_input = LFChatCompletionUserMessageParam(role="user", content=message)
+        if latest_user_message:
+            await self._perform_rag_search_and_add_to_context(
+                chat_agent,
+                project_dir,
+                project_config,
+                latest_user_message.get("content", ""),
+                rag_enabled=rag_enabled,
+                database=database,
+                retrieval_strategy=retrieval_strategy,
+                rag_top_k=rag_top_k,
+                rag_score_threshold=rag_score_threshold,
+            )
 
         # Build extra_params dict for runtime-specific parameters
         extra_params = {}
         if n_ctx is not None:
             extra_params["n_ctx"] = n_ctx
 
-        return await chat_agent.run_async(user_input=user_input, extra_params=extra_params if extra_params else None)
+        return await chat_agent.run_async(
+            messages=messages,
+            tools=tools,
+            extra_params=extra_params if extra_params else None,
+        )
 
     async def stream_chat(
         self,
@@ -95,7 +111,8 @@ class ProjectChatService:
         project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: LFAgent,
-        message: str,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -104,20 +121,27 @@ class ProjectChatService:
         n_ctx: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
-
-        await self._perform_rag_search_and_add_to_context(
-            chat_agent,
-            project_dir,
-            project_config,
-            message,
-            rag_enabled=rag_enabled,
-            database=database,
-            retrieval_strategy=retrieval_strategy,
-            rag_top_k=rag_top_k,
-            rag_score_threshold=rag_score_threshold,
+        latest_user_message = next(
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
         )
 
-        user_input = LFChatCompletionUserMessageParam(role="user", content=message)
+        if latest_user_message:
+            await self._perform_rag_search_and_add_to_context(
+                chat_agent,
+                project_dir,
+                project_config,
+                latest_user_message.get("content", ""),
+                rag_enabled=rag_enabled,
+                database=database,
+                retrieval_strategy=retrieval_strategy,
+                rag_top_k=rag_top_k,
+                rag_score_threshold=rag_score_threshold,
+            )
 
         # Build extra_params dict for runtime-specific parameters
         extra_params = {}
@@ -126,7 +150,11 @@ class ProjectChatService:
 
         try:
             logger.info("Running async stream")
-            async for chunk in chat_agent.run_async_stream(user_input=user_input, extra_params=extra_params if extra_params else None):
+            async for chunk in chat_agent.run_async_stream(
+                messages=messages,
+                tools=tools,
+                extra_params=extra_params if extra_params else None,
+            ):
                 yield chunk
         except Exception:
             logger.error(

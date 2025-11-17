@@ -6,12 +6,19 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from atomic_agents import BaseTool
-from config.datamodel import LlamaFarmConfig, Provider
+from config.datamodel import LlamaFarmConfig
 from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
 from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
-from openai.types.chat.chat_completion_chunk import ChoiceDelta
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.chat.chat_completion_chunk import (
+    Choice as ChoiceChunk,
+)
+from openai.types.chat.chat_completion_chunk import (
+    ChoiceDelta,
+    ChoiceDeltaToolCall,
+)
+from openai.types.chat.chat_completion_message import (
+    ChatCompletionMessage,
+)
 from openai.types.chat.chat_completion_message_tool_call_param import (
     Function,
 )
@@ -31,7 +38,7 @@ from core.logging import FastAPIStructLogger
 from core.mcp_registry import register_mcp_service
 from services.mcp_service import MCPService
 from services.model_service import ModelService
-from services.prompt_service import PromptService  # type: ignore
+from services.prompt_service import PromptService  # type: ignore  # type: ignore
 from services.runtime_service.runtime_service import RuntimeService
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
@@ -111,7 +118,7 @@ class ChatOrchestratorAgent(LFAgent):
 
     async def run_async(
         self,
-        user_input: LFChatCompletionMessageParam | None = None,
+        messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
         extra_params: dict | None = None,
     ) -> LFChatCompletion:
@@ -124,7 +131,9 @@ class ChatOrchestratorAgent(LFAgent):
         4. Repeat until LLM provides final answer
         """
         iteration = 0
-        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
+        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools] + (
+            tools or []
+        )
 
         final_response: LFChatCompletion | None = None
 
@@ -133,7 +142,9 @@ class ChatOrchestratorAgent(LFAgent):
 
             try:
                 # Get LLM response
-                response = await super().run_async(user_input=user_input, tools=tools, extra_params=extra_params)
+                response = await super().run_async(
+                    messages=messages, tools=tools, extra_params=extra_params
+                )
 
                 assistant_message = response.choices[0].message
                 tool_calls = assistant_message.tool_calls
@@ -172,6 +183,14 @@ class ChatOrchestratorAgent(LFAgent):
                     )
                 )
 
+                if not self._can_execute_tool_call(tool_call):
+                    logger.debug(
+                        "Tool call cannot be executed on the server. Skipping tool call.",
+                        tool_call=tool_call,
+                    )
+                    final_response = response
+                    break
+
                 result = await self._execute_mcp_tool(
                     tool_call.function.name, tool_call.function.arguments
                 )
@@ -184,7 +203,7 @@ class ChatOrchestratorAgent(LFAgent):
                     )
                 )
 
-                user_input = None
+                messages = None
 
             except Exception as e:
                 logger.error("Error in orchestrator loop", exc_info=True)
@@ -223,17 +242,19 @@ class ChatOrchestratorAgent(LFAgent):
 
     async def run_async_stream(
         self,
-        user_input: LFChatCompletionMessageParam | None = None,
+        messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
         extra_params: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with MCP tool execution support."""
 
         # Convert MCP tools to ToolDefinition format
-        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
+        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools] + (
+            tools or []
+        )
 
         iteration = 0
-        current_input = user_input
+        current_messages = messages
         done = False
 
         while not done and iteration < MAX_TOOL_ITERATIONS:
@@ -242,10 +263,14 @@ class ChatOrchestratorAgent(LFAgent):
             # Stream chat with tools
             accumulated_content = ""  # Accumulate chunks for history
             accumulated_reasoning = ""  # Accumulate chunks for reasoning
+            accumulated_tool_call: ChoiceDeltaToolCall | None = None
+            should_yield_tool_call_chunks = False
+            last_chunk: LFChatCompletionChunk | None = None
 
             async for chunk in super().run_async_stream(
-                user_input=current_input, tools=tools, extra_params=extra_params
+                messages=current_messages, tools=tools, extra_params=extra_params
             ):
+                last_chunk = chunk
                 choice = chunk.choices[0]
                 delta = choice.delta
 
@@ -259,11 +284,8 @@ class ChatOrchestratorAgent(LFAgent):
                 if not tool_call:
                     if choice.finish_reason == "stop":
                         done = True
-                        yield chunk
-                        continue
-                    else:
-                        yield chunk
-                        continue
+                    yield chunk
+                    continue
 
                 if tool_call.type != "function":
                     logger.warning(
@@ -273,45 +295,80 @@ class ChatOrchestratorAgent(LFAgent):
                     yield chunk
                     continue
 
-                if not (
-                    tool_call.function
-                    and tool_call.function.name
-                    and tool_call.function.arguments
-                    and tool_call.id
+                if accumulated_tool_call and tool_call.function.arguments:
+                    accumulated_tool_call.function.arguments += (
+                        tool_call.function.arguments
+                    )
+                else:
+                    accumulated_tool_call = tool_call
+
+                # Tool calls are streamed in multiple chunks. The first chunk should
+                # always have the tool call ID and the function name set.
+                if tool_call.function.name and not self._can_execute_tool_call(
+                    tool_call
                 ):
-                    logger.warning("Tool call function missing required fields")
+                    should_yield_tool_call_chunks = True
+
+                if should_yield_tool_call_chunks:
                     yield chunk
-                    continue
 
-                logger.info(
-                    "Executing MCP tool",
-                    tool_name=tool_call.function.name,
-                    iteration=iteration,
-                )
+                # End of async stream loop
 
+            if accumulated_tool_call:
                 tool_call_message = LFChatCompletionAssistantMessageParam(
                     role="assistant",
                     content=choice.delta.content,
                     tool_calls=[
                         ChatCompletionMessageFunctionToolCallParam(
                             type="function",
-                            id=tool_call.id or f"call_{uuid.uuid4()}",
+                            id=accumulated_tool_call.id or f"call_{uuid.uuid4()}",
                             function=Function(
-                                name=tool_call.function.name,  # type: ignore
-                                arguments=tool_call.function.arguments,  # type: ignore
+                                name=accumulated_tool_call.function.name,  # type: ignore
+                                arguments=accumulated_tool_call.function.arguments,  # type: ignore
                             ),
                         )
-                        for tool_call in choice.delta.tool_calls or []
-                        if hasattr(tool_call, "function")
                     ],
                 )
                 self.history.add_message(tool_call_message)
-                # Yield the tool call chunk - CLI will handle rendering
-                yield chunk
+
+                if not self._can_execute_tool_call(accumulated_tool_call):
+                    logger.debug(
+                        "Tool call cannot be executed on the server. Skipping tool call.",
+                        tool_call=accumulated_tool_call,
+                    )
+                    done = True
+                    continue
+
+                logger.info(
+                    "Executing MCP tool",
+                    tool_name=accumulated_tool_call.function.name,
+                    iteration=iteration,
+                )
+
+                tool_call_chunk = LFChatCompletionChunk(
+                    id=last_chunk.id,
+                    object="chat.completion.chunk",
+                    created=last_chunk.created,
+                    model=last_chunk.model,
+                    system_fingerprint=last_chunk.system_fingerprint,
+                    service_tier=last_chunk.service_tier,
+                    choices=[
+                        ChoiceChunk(
+                            index=0,
+                            delta=ChoiceDelta(
+                                role="assistant",
+                                tool_calls=[accumulated_tool_call],
+                            ),
+                        )
+                    ],
+                    usage=last_chunk.usage,
+                )
+                yield tool_call_chunk
 
                 # Execute the MCP tool
                 result = await self._execute_mcp_tool(
-                    tool_call.function.name, tool_call.function.arguments
+                    accumulated_tool_call.function.name,
+                    accumulated_tool_call.function.arguments,
                 )
 
                 # Add tool call and result to history
@@ -319,13 +376,10 @@ class ChatOrchestratorAgent(LFAgent):
                     LFChatCompletionToolMessageParam(
                         role="tool",
                         content=result,
-                        tool_call_id=tool_call.id,
+                        tool_call_id=accumulated_tool_call.id,
                     )
                 )
-
-                # Prepare for next iteration
-                current_input = None  # No need to pass input to next iteration
-                break  # Exit event loop, continue while loop
+                current_messages = None
 
         # Add final accumulated content to history
         if accumulated_content:
@@ -409,6 +463,21 @@ class ChatOrchestratorAgent(LFAgent):
             tool_names=[
                 getattr(t, "mcp_tool_name", t.__name__) for t in self._mcp_tools
             ],
+        )
+
+    def _can_execute_tool_call(
+        self, tool_call: ChatCompletionMessageFunctionToolCallParam
+    ) -> bool:
+        """Check if a tool call can be executed on the server."""
+        return bool(
+            next(
+                (
+                    t
+                    for t in self._mcp_tools
+                    if getattr(t, "mcp_tool_name", None) == tool_call.function.name
+                ),
+                None,
+            )
         )
 
     async def _execute_mcp_tool(self, tool_name: str, arguments: str | None) -> str:
@@ -588,6 +657,5 @@ class ChatOrchestratorAgentFactory:
         agent.register_context_provider("project_context", project_context_provider)
 
         await agent.setup_tools()
-
 
         return agent

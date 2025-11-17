@@ -52,7 +52,7 @@ RUN cd common && uv sync --locked --all-extras --verbose
 RUN cd rag && uv sync --locked  --verbose
 
 # Generate config schema and datamodel types
-RUN cd config && ./generate-types.sh
+RUN cd config && uv run python generate_types.py
 
 # Fix ownership and permissions of UV directories after they've been populated
 RUN chmod -R 777 /tmp/uv-cache /tmp/uv-venv

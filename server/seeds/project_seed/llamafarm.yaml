@@ -12,10 +12,30 @@ runtime:
       model: unsloth/Qwen3-1.7B-GGUF
       model_api_parameters:
         gguf_quantization: "Q4_K_M"
-      # For GGUF models, you can specify quantization preference:
-      # model: unsloth/Qwen3-1.7B-GGUF
-      # model_api_parameters:
-      #   gguf_quantization: "Q4_K_M"  # Options: Q4_K_M (default), Q8_0, F16, etc.
+      tools:
+        - type: function
+          name: cli.dataset_upload
+          description: Upload a file to the dataset
+          parameters:
+            type: object
+            required:
+              - filepath
+              - namespace
+              - project
+              - dataset
+            properties:
+              namespace:
+                type: string
+                description: The namespace of the dataset
+              project:
+                type: string
+                description: The project of the dataset
+              dataset:
+                type: string
+                description: The dataset of the dataset
+              filepath:
+                type: string
+                description: The path to the file to upload
 
 prompts:
   - name: default
@@ -68,7 +88,3 @@ mcp:
     - name: llamafarm-server
       transport: http
       base_url: http://localhost:8000/mcp
-    - name: hackernews
-      transport: stdio
-      command: uvx
-      args: [mcp-hn]

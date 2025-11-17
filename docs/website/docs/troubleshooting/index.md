@@ -40,7 +40,7 @@ Common symptoms, their causes, and how to resolve them when working with LlamaFa
 
 ## Extensibility Pitfalls
 
-- Forgot to regenerate types after editing `config/schema.yaml` or `rag/schema.yaml` → run `config/generate-types.sh`.
+- Forgot to regenerate types after editing `config/schema.yaml` or `rag/schema.yaml` → run `config/generate_types.py`.
 - Added a provider/store without updating docs → document how to configure it so others know it exists.
 - CLI command not appearing → ensure you added it via `rootCmd.AddCommand()` and compiled with `go build`.
 

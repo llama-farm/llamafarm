@@ -51,7 +51,7 @@ jobs:
         working-directory: config
         run: |
           echo "Generating datamodels from schema..."
-          ./generate-types.sh
+          uv run python generate_types.py
           echo "✓ Datamodel generation complete"
 
       - name: Validate datamodel generation
@@ -92,6 +92,12 @@ jobs:
           ./cover2lcov -in coverage.out -out coverage.lcov
           go build ./tools/coverreport
           ./coverreport -in coverage.out -format=markdown > coverage.md
+
+      - name: Run binary upgrade integration tests
+        working-directory: cli
+        run: |
+          # Run Go-based integration tests
+          go test -v -run TestUpgradeIntegration ./cmd/version/...
 
       - name: Publish CLI coverage to job summary
         run: |
@@ -155,7 +161,7 @@ jobs:
         working-directory: config
         run: |
           echo "Generating datamodels for ${{ matrix.component }} component tests..."
-          ./generate-types.sh
+          uv run python generate_types.py
           echo "✓ Datamodel generation complete"
 
       - name: Verify datamodel was generated

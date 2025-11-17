@@ -105,7 +105,7 @@ runtime:
 | `port`         | number | ✅       | Port number (default: 11534)                 |
 | `context_size` | number | Optional | Context window size (default: 32768)         |
 
-> **Extending providers:** To add a new provider enum, update `config/schema.yaml`, regenerate types via `config/generate-types.sh`, and implement routing in the server/CLI. See [Extending runtimes](../extending/index.md#extend-runtimes).
+> **Extending providers:** To add a new provider enum, update `config/schema.yaml`, regenerate types via `config/generate_types.py`, and implement routing in the server/CLI. See [Extending runtimes](../extending/index.md#extend-runtimes).
 
 ### Prompts
 
@@ -190,7 +190,7 @@ datasets:
 ## Extending the Schema
 
 1. Edit `config/schema.yaml` or `rag/schema.yaml` to add new enums/properties.
-2. Run `config/generate-types.sh` to regenerate Pydantic/Go datamodels.
+2. Run `config/generate_types.py` to regenerate Pydantic/Go datamodels.
 3. Update server/CLI logic to accept the new fields.
 4. Document the addition in this guide and the Extending section.
 

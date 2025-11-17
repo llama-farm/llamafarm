@@ -28,6 +28,7 @@ from config.datamodel import (
 )
 
 from agents.chat_orchestrator import ChatOrchestratorAgent
+from agents.base.history import LFChatCompletionUserMessageParam
 from services.project_chat_service import ProjectChatService, RAGParameters
 from services.project_service import ProjectService
 
@@ -293,7 +294,7 @@ class TestProjectChatService:
                 project_dir=project_dir,
                 project_config=base_config,
                 chat_agent=mock_agent,
-                message="Hi",
+                messages=[LFChatCompletionUserMessageParam(role="user", content="Hi")],
                 rag_enabled=False,
             ):
                 chunks.append(chunk)
@@ -339,7 +340,9 @@ class TestProjectChatService:
                 project_dir=project_dir,
                 project_config=config_with_rag,
                 chat_agent=mock_agent,
-                message="Question",
+                messages=[
+                    LFChatCompletionUserMessageParam(role="user", content="Question")
+                ],
                 rag_enabled=True,
             ):
                 chunks.append(chunk)
@@ -374,7 +377,9 @@ class TestProjectChatService:
                 project_dir=project_dir,
                 project_config=config_with_rag,
                 chat_agent=mock_agent,
-                message="Test",
+                messages=[
+                    LFChatCompletionUserMessageParam(role="user", content="Test")
+                ],
                 rag_enabled=False,
             )
 

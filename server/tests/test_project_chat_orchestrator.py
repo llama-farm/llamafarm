@@ -114,13 +114,14 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     # Intercept LFAgent.run_async to capture messages (no network calls)
     from agents.base.agent import LFAgent
 
-    async def fake_run_async(self, *, user_input=None, tools=None):
-        # LFAgent.run_async adds user_input to history if provided
-        if user_input:
-            self.history.add_message(user_input)
+    async def fake_run_async(self, *, messages=None, tools=None):
+        # LFAgent.run_async adds messages to history if provided
+        if messages:
+            for message in messages:
+                self.history.add_message(message)
         # Capture messages after preparation
-        messages = self._prepare_messages()
-        captured["messages"] = messages
+        prepared_messages = self._prepare_messages()
+        captured["messages"] = prepared_messages
         # Return a simple string response (not a schema object)
         message = SimpleNamespace(role="assistant", content="ok", tool_calls=None)
         choice = SimpleNamespace(index=0, finish_reason="stop", message=message)
@@ -143,7 +144,7 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     agent.register_context_provider("project_chat_context", provider)
 
     await agent.run_async(
-        user_input=LFChatCompletionUserMessageParam(role="user", content="Hello there")
+        messages=[LFChatCompletionUserMessageParam(role="user", content="Hello there")]
     )
 
     messages = captured.get("messages", [])

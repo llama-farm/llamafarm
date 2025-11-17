@@ -239,15 +239,31 @@ Examples:
 			filesToUpload = append(filesToUpload, matches...)
 		}
 		uploaded := 0
+		skipped := 0
+		failed := 0
 		for _, fp := range filesToUpload {
-			if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, fp); err != nil {
-				fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", fp, err)
+			result := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, fp)
+			if result.err != nil {
+				fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", fp, result.err)
+				failed++
 				continue
 			}
-			fmt.Printf("   📤 Uploaded: %s\n", fp)
-			uploaded++
+			if result.skipped {
+				fmt.Printf("   ⏭️  Skipped: %s (already in dataset)\n", fp)
+				skipped++
+			} else {
+				fmt.Printf("   📤 Uploaded: %s\n", fp)
+				uploaded++
+			}
 		}
-		fmt.Printf("   Done. Uploaded %d/%d file(s).\n", uploaded, len(filesToUpload))
+		fmt.Printf("   Done. Uploaded %d", uploaded)
+		if skipped > 0 {
+			fmt.Printf(", skipped %d duplicate(s)", skipped)
+		}
+		if failed > 0 {
+			fmt.Printf(", failed %d", failed)
+		}
+		fmt.Printf(" out of %d file(s).\n", len(filesToUpload))
 	},
 }
 
@@ -358,6 +374,7 @@ Examples:
 		totalBatches := (len(files) + batchSize - 1) / batchSize
 
 		uploaded := 0
+		skipped := 0
 		failed := 0
 
 		for batchNum := 0; batchNum < totalBatches; batchNum++ {
@@ -379,13 +396,19 @@ Examples:
 					}
 				}
 
-				if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f); err != nil {
-					fmt.Fprintf(os.Stderr, "   ❌ Failed: %s (%v)\n", relPath, err)
+				result := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f)
+				if result.err != nil {
+					fmt.Fprintf(os.Stderr, "   ❌ Failed: %s (%v)\n", relPath, result.err)
 					failed++
 					continue
 				}
-				fmt.Printf("   ✅ Uploaded: %s\n", relPath)
-				uploaded++
+				if result.skipped {
+					fmt.Printf("   ⏭️  Skipped: %s (already in dataset)\n", relPath)
+					skipped++
+				} else {
+					fmt.Printf("   ✅ Uploaded: %s\n", relPath)
+					uploaded++
+				}
 			}
 		}
 
@@ -393,6 +416,9 @@ Examples:
 		fmt.Printf("\n📊 Final Summary:\n")
 		fmt.Printf("   Total files: %d\n", len(files))
 		fmt.Printf("   ✅ Successful: %d\n", uploaded)
+		if skipped > 0 {
+			fmt.Printf("   ⏭️  Skipped (duplicates): %d\n", skipped)
+		}
 		if failed > 0 {
 			fmt.Printf("   ❌ Failed: %d\n", failed)
 		}
@@ -929,11 +955,16 @@ func expandPathsToFiles(paths []string) ([]string, error) {
 	return allFiles, nil
 }
 
-func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) error {
+type uploadResult struct {
+	skipped bool
+	err     error
+}
+
+func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) uploadResult {
 	// Open file
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	defer file.Close()
 
@@ -942,34 +973,44 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 	writer := multipart.NewWriter(&buf)
 	part, err := writer.CreateFormFile("file", filepath.Base(path))
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	if _, err := io.Copy(part, file); err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	if err := writer.Close(); err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 
 	// Build request
 	url := buildServerURL(server, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/data", namespace, project, dataset))
 	req, err := http.NewRequest("POST", url, &buf)
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	defer resp.Body.Close()
 	body, readErr := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if readErr != nil {
-			return fmt.Errorf("%s", readErr.Error())
+			return uploadResult{err: fmt.Errorf("%s", readErr.Error())}
 		}
-		return fmt.Errorf("%s", utils.PrettyServerError(resp, body))
+		return uploadResult{err: fmt.Errorf("%s", utils.PrettyServerError(resp, body))}
 	}
-	return nil
+
+	// Parse response to check if file was skipped
+	var uploadResp struct {
+		Skipped bool `json:"skipped"`
+	}
+	if err := json.Unmarshal(body, &uploadResp); err != nil {
+		// If we can't parse the response, assume it was successful (backwards compatibility)
+		return uploadResult{skipped: false, err: nil}
+	}
+
+	return uploadResult{skipped: uploadResp.Skipped, err: nil}
 }

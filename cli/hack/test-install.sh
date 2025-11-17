@@ -39,7 +39,7 @@ test_local_build() {
     # Generate types first
     info "Generating types..."
     cd config
-    ./generate-types.sh || error "Failed to generate Python types"
+    uv run python generate_types.py || error "Failed to generate Python types"
 
     # Install go-jsonschema if needed
     if ! command -v go-jsonschema >/dev/null 2>&1; then

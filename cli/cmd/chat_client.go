@@ -19,8 +19,9 @@ import (
 
 // Message represents a single chat message
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string `json:"role"`
+	Content    string `json:"content"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
 // ChatRequest represents the request payload for the chat API
@@ -395,6 +396,15 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 		}
 
 		reader := bufio.NewReader(resp.Body)
+
+		// Track accumulated tool calls by index
+		toolCallAccumulator := make(map[int]struct {
+			ID        string
+			Type      string
+			Name      string
+			Arguments strings.Builder
+		})
+
 		for {
 			line, err := reader.ReadString('\n')
 			utils.LogDebug(fmt.Sprintf("STREAM LINE: %v", line))
@@ -422,14 +432,16 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 						Role      string `json:"role,omitempty"`
 						Content   string `json:"content,omitempty"`
 						ToolCalls []struct {
-							ID       string `json:"id"`
-							Type     string `json:"type"`
+							Index    int    `json:"index"`
+							ID       string `json:"id,omitempty"`
+							Type     string `json:"type,omitempty"`
 							Function struct {
-								Name      string `json:"name"`
-								Arguments string `json:"arguments"`
+								Name      string `json:"name,omitempty"`
+								Arguments string `json:"arguments,omitempty"`
 							} `json:"function"`
 						} `json:"tool_calls,omitempty"`
 					} `json:"delta"`
+					FinishReason string `json:"finish_reason,omitempty"`
 				} `json:"choices"`
 			}
 			if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
@@ -438,26 +450,64 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 			if len(chunk.Choices) == 0 {
 				continue
 			}
-			delta := chunk.Choices[0].Delta
+			choice := chunk.Choices[0]
+			delta := choice.Delta
 
-			// Check for tool calls first
+			// Accumulate tool call chunks
 			if len(delta.ToolCalls) > 0 {
-				// Format tool call notification with special marker for TUI styling
 				for _, tc := range delta.ToolCalls {
-					if tc.Function.Name != "" {
+					if !strings.HasPrefix(tc.Function.Name, "cli.") {
 						// Use special marker [TOOL_CALL] so TUI can style it
 						toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
 						utils.LogDebug(fmt.Sprintf("Tool call detected: %s", tc.Function.Name))
 						outCh <- toolMsg
+						continue
 					}
+
+					accumulated := toolCallAccumulator[tc.Index]
+
+					// Update fields if present in this chunk
+					if tc.ID != "" {
+						accumulated.ID = tc.ID
+					}
+					if tc.Type != "" {
+						accumulated.Type = tc.Type
+					}
+					if tc.Function.Name != "" {
+						accumulated.Name = tc.Function.Name
+						utils.LogDebug(fmt.Sprintf("Tool call started: %s (index: %d)", tc.Function.Name, tc.Index))
+					}
+					if tc.Function.Arguments != "" {
+						accumulated.Arguments.WriteString(tc.Function.Arguments)
+						utils.LogDebug(fmt.Sprintf("Tool arguments chunk (index %d): %s", tc.Index, tc.Function.Arguments))
+					}
+
+					// Only add the tool call to the accumulator if it is one that we can handle in the CLI
+					toolCallAccumulator[tc.Index] = accumulated
 				}
 			}
 
-			// Send content if present
-			if delta.Content != "" {
-				utils.LogDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
-				outCh <- delta.Content
+			// Check if streaming finished with tool_calls
+			if choice.FinishReason == "tool_calls" {
+				utils.LogDebug(fmt.Sprintf("Tool calls complete, emitting %d tool call(s)", len(toolCallAccumulator)))
+				// Emit all accumulated tool calls
+				for idx, tc := range toolCallAccumulator {
+					toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Name, tc.ID, tc.Arguments.String())
+					utils.LogDebug(fmt.Sprintf("Emitting complete tool call %d: %s with args: %s", idx, tc.Name, tc.Arguments.String()))
+					outCh <- toolMsg
+				}
+				// Clear accumulator after emitting
+				toolCallAccumulator = make(map[int]struct {
+					ID        string
+					Type      string
+					Name      string
+					Arguments strings.Builder
+				})
 			}
+
+			// Send content if present
+			utils.LogDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
+			outCh <- delta.Content
 		}
 	}()
 

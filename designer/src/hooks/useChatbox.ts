@@ -14,8 +14,11 @@ import { parsePromptSets } from '../utils/promptSets'
 import { useProjectSession } from './useProjectSession'
 import { useChatSession } from './useChatSession'
 import { ChatboxMessage } from '../types/chatbox'
-import { ChatStreamChunk, NetworkError, ChatMessage } from '../types/chat'
+import { ChatStreamChunk, NetworkError, ChatMessage, ClassifiedError } from '../types/chat'
 import { generateMessageId } from '../utils/idGenerator'
+import { classifyError, getContextualErrorMessage } from '../utils/errorClassifier'
+import { getHealth } from '../api/healthService'
+import { generateRecoveryCommands } from '../utils/recoveryCommands'
 import {
   useStreamingChatCompletionMessage,
   useChatCompletionMessage,
@@ -150,8 +153,41 @@ export function useChatbox(options: UseChatboxOptions = {}) {
 
   // UI state
   const [inputValue, setInputValue] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ClassifiedError | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+
+  // Helper function to classify and set errors
+  const classifyAndSetError = useCallback(async (err: Error): Promise<ClassifiedError> => {
+    // Ensure streaming state is cleared on any error
+    setIsStreaming(false)
+
+    // First classify the error
+    let classified = classifyError(err)
+
+    // Attempt health check for network errors
+    if (classified.type === 'server_down') {
+      try {
+        const health = await getHealth()
+        // Re-classify with health status
+        classified = classifyError(err, health)
+      } catch (healthError) {
+        // Health check failed, use original classification
+        console.warn('Health check failed:', healthError)
+      }
+    }
+
+    // Generate recovery commands
+    const recoveryCommands = generateRecoveryCommands(classified.type, classified.healthStatus)
+    
+    // Create final error with recovery commands
+    const finalError: ClassifiedError = {
+      ...classified,
+      recoveryCommands,
+    }
+
+    setError(finalError)
+    return finalError
+  }, [])
 
   // Local messages state (for simple session mode)
   const [localMessages, setLocalMessages] = useState<ChatboxMessage[]>([])
@@ -390,20 +426,41 @@ export function useChatbox(options: UseChatboxOptions = {}) {
         setStreamingMessages(prev => {
           const existing = prev.find(msg => msg.id === id)
           if (existing) {
+            // Update existing streaming message
             return prev.map(msg =>
               msg.id === id ? { ...msg, ...updates } : msg
             )
           } else {
-            return [
-              ...prev,
-              {
-                id,
-                type: 'assistant',
-                content: '',
-                timestamp: new Date(),
-                ...updates,
-              } as ChatboxMessage,
-            ]
+            // Message doesn't exist in streaming messages
+            // Check if it's already in persistent storage
+            const existsInSession = projectSessionMessages.find(msg => msg.id === id)
+            
+            // If the message exists in session but we're trying to update it 
+            // (e.g., with an error), create a temporary streaming message to show the update
+            if (existsInSession && updates.content) {
+              // Create a temporary streaming version with the updates
+              return [
+                ...prev,
+                {
+                  ...existsInSession,
+                  ...updates,
+                } as ChatboxMessage,
+              ]
+            } else if (!existsInSession) {
+              // Message doesn't exist anywhere, create it
+              return [
+                ...prev,
+                {
+                  id,
+                  type: 'assistant',
+                  content: '',
+                  timestamp: new Date(),
+                  ...updates,
+                } as ChatboxMessage,
+              ]
+            }
+            // Message exists in session and no content update, don't duplicate
+            return prev
           }
         })
       } else {
@@ -413,15 +470,36 @@ export function useChatbox(options: UseChatboxOptions = {}) {
         )
       }
     },
-    [useProjectSessionMode]
+    [useProjectSessionMode, projectSessionMessages]
   )
 
   // Combine messages based on mode
   const currentMessages = useMemo(() => {
     if (useProjectSessionMode) {
-      const combined = [...projectSessionMessages, ...streamingMessages]
+      // Deduplicate messages by ID, preferring streaming messages (most recent state)
+      const messageMap = new Map<string, ChatboxMessage>()
+      
+      // Add session messages first
+      projectSessionMessages.forEach(msg => {
+        messageMap.set(msg.id, msg)
+      })
+      
+      // Override with streaming messages (these have the most recent updates)
+      streamingMessages.forEach(msg => {
+        messageMap.set(msg.id, msg)
+      })
+      
+      const deduplicated = Array.from(messageMap.values())
+      
+      // Sort by timestamp to maintain chronological order
+      const sorted = deduplicated.sort((a, b) => {
+        const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : 0
+        const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : 0
+        return timeA - timeB
+      })
+      
       // Filter out "Thinking..." placeholder messages
-      return combined.filter(msg => {
+      return sorted.filter(msg => {
         const isThinkingPlaceholder =
           msg.type === 'assistant' &&
           msg.content === 'Thinking...' &&
@@ -441,6 +519,9 @@ export function useChatbox(options: UseChatboxOptions = {}) {
   // Handle sending message with streaming or non-streaming
   const sendMessage = useCallback(
     async (messageContent: string) => {
+      // Don't clear error immediately - let it persist until we successfully start sending
+      // This ensures the error banner stays visible when sending multiple messages while server is down
+      
       if (
         !messageContent.trim() ||
         streamingChat.isPending ||
@@ -454,8 +535,6 @@ export function useChatbox(options: UseChatboxOptions = {}) {
         streamingAbortControllerRef.current.abort()
         streamingAbortControllerRef.current = null
       }
-
-      setError(null)
 
       // Add user message immediately
       addMessage({
@@ -532,6 +611,17 @@ export function useChatbox(options: UseChatboxOptions = {}) {
               signal: abortController.signal,
               onChunk: (chunk: ChatStreamChunk) => {
                 if (!isMountedRef.current) return
+
+                // Clear error on first successful chunk - server is responding!
+                if (error) {
+                  setError(null)
+                  // Also remove any error messages from the chat history
+                  if (useProjectSessionMode) {
+                    setStreamingMessages(prev => prev.filter(msg => !msg.isError))
+                  } else {
+                    setLocalMessages(prev => prev.filter(msg => !msg.isError))
+                  }
+                }
 
                 const choice = chunk.choices?.[0]
                 if (!choice) return
@@ -670,7 +760,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                   }
                 }
               },
-              onError: error => {
+              onError: async error => {
                 console.error('Streaming error:', error)
                 if (!isMountedRef.current) return
 
@@ -729,36 +819,42 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                           }
                         }
                       },
-                      fallbackError => {
-                        const errorMessage =
-                          fallbackError instanceof Error
-                            ? fallbackError.message
-                            : 'Failed to get response'
-                        setError(errorMessage)
-                        addMessage({
-                          type: 'error',
-                          content: `Error: ${errorMessage}`,
-                          timestamp: new Date(),
+                      async fallbackError => {
+                        const err = fallbackError instanceof Error
+                          ? fallbackError
+                          : new Error('Failed to get response')
+                        const classified = await classifyAndSetError(err)
+                        const errorMessage = getContextualErrorMessage(classified)
+                        updateMessage(assistantMessageId, {
+                          content: errorMessage,
+                          isLoading: false,
+                          isStreaming: false,
+                          isError: true,
                         })
                       }
                     )
                   }, 100)
                 } else {
-                  const errorMessage = isUserCancellation
-                    ? 'Request was cancelled'
-                    : error instanceof NetworkError
-                      ? error.message
-                      : 'Streaming connection failed'
+                  const err = error instanceof Error
+                    ? error
+                    : new Error(isUserCancellation ? 'Request was cancelled' : 'Streaming connection failed')
 
                   if (!isUserCancellation) {
-                    setError(errorMessage)
+                    const classified = await classifyAndSetError(err)
+                    const errorMessage = getContextualErrorMessage(classified)
+                    updateMessage(assistantMessageId, {
+                      content: errorMessage,
+                      isLoading: false,
+                      isStreaming: false,
+                      isError: true,
+                    })
+                  } else {
+                    updateMessage(assistantMessageId, {
+                      content: 'Request was cancelled',
+                      isLoading: false,
+                      isStreaming: false,
+                    })
                   }
-
-                  addMessage({
-                    type: 'error',
-                    content: `Error: ${errorMessage}`,
-                    timestamp: new Date(),
-                  })
                 }
               },
               onComplete: () => {
@@ -861,10 +957,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
                           }
                         },
                         () => {
-                          addMessage({
-                            type: 'error',
-                            content: 'Error: Failed to get response',
-                            timestamp: new Date(),
+                          updateMessage(assistantMessageId, {
+                            content: `I encountered an error: Failed to get response\n\nPlease try again or check the server status.`,
+                            isLoading: false,
+                            isStreaming: false,
                           })
                         }
                       )
@@ -938,6 +1034,17 @@ export function useChatbox(options: UseChatboxOptions = {}) {
             sessionId: currentSessionId || undefined,
             options: chatRequest,
           })
+
+          // Clear error on successful response - server is responding!
+          if (error) {
+            setError(null)
+            // Also remove any error messages from the chat history
+            if (useProjectSessionMode) {
+              setStreamingMessages(prev => prev.filter(msg => !msg.isError))
+            } else {
+              setLocalMessages(prev => prev.filter(msg => !msg.isError))
+            }
+          }
 
           // Handle session management
           if (result.sessionId) {
@@ -1025,29 +1132,22 @@ export function useChatbox(options: UseChatboxOptions = {}) {
           return false
         }
 
-        // Remove loading message
-        if (useProjectSessionMode) {
-          setStreamingMessages(prev =>
-            prev.filter(msg => msg.id !== assistantMessageId)
-          )
-        } else {
-          setLocalMessages(prev =>
-            prev.filter(msg => msg.id !== assistantMessageId)
-          )
-        }
+        // Set error message (for banner, if needed)
+        const err = error instanceof Error
+          ? error
+          : new Error('An unexpected error occurred')
+        
+        // Classify the error and get contextual message
+        const classified = await classifyAndSetError(err)
+        const errorMessage = getContextualErrorMessage(classified)
 
-        // Set error message
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred'
-        setError(errorMessage)
-
-        // Add error message to chat
-        addMessage({
-          type: 'error',
-          content: `Error: ${errorMessage}`,
-          timestamp: new Date(),
+        // Instead of removing the assistant message, update it to show the error inline
+        // Keep it as assistant type so it doesn't get the bright red styling
+        updateMessage(assistantMessageId, {
+          content: errorMessage,
+          isLoading: false,
+          isStreaming: false,
+          isError: true,
         })
 
         return false
@@ -1075,6 +1175,8 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       projectSession,
       simpleSession,
       streamingMessages,
+      error,
+      classifyAndSetError,
     ]
   )
 
@@ -1093,9 +1195,10 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       return true
     } catch (error) {
       console.error('Clear chat error:', error)
-      const errorMessage =
-        error instanceof Error ? error.message : 'Failed to clear chat'
-      setError(errorMessage)
+      const err = error instanceof Error 
+        ? error 
+        : new Error('Failed to clear chat')
+      await classifyAndSetError(err)
       return false
     }
   }, [useProjectSessionMode, projectSession, simpleSession])

@@ -12,9 +12,14 @@ import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
 from fastapi import APIRouter, Header, HTTPException, Response
 from fastapi import Path as FastAPIPath
-from openai.types.chat import ChatCompletion
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionMessageParam,
+    ChatCompletionToolParam,
+)
 from pydantic import BaseModel, Field
 
+from agents.base.types import ToolDefinition
 from agents.chat_orchestrator import ChatOrchestratorAgent, ChatOrchestratorAgentFactory
 from api.errors import ErrorResponse, ProjectNotFoundError
 
@@ -36,9 +41,15 @@ from services.project_service import ProjectService
 class Project(BaseModel):
     namespace: str = Field(..., description="The namespace of the project")
     name: str = Field(..., description="The name of the project")
-    config: LlamaFarmConfig | dict = Field(..., description="The configuration of the project")
-    validation_error: str | None = Field(None, description="Validation error message if config has issues")
-    last_modified: datetime | None = Field(None, description="Last modified timestamp of the project config")
+    config: LlamaFarmConfig | dict = Field(
+        ..., description="The configuration of the project"
+    )
+    validation_error: str | None = Field(
+        None, description="Validation error message if config has issues"
+    )
+    last_modified: datetime | None = Field(
+        None, description="Last modified timestamp of the project config"
+    )
 
 
 class ListProjectsResponse(BaseModel):
@@ -121,7 +132,9 @@ async def list_projects(
                 namespace=namespace,
                 name=project.name,
                 # Use validated config if available, otherwise use raw dict
-                config=project.config if project.config is not None else project.config_dict,
+                config=project.config
+                if project.config is not None
+                else project.config_dict,
                 validation_error=project.validation_error,
                 last_modified=project.last_modified,
             )
@@ -169,7 +182,9 @@ async def get_project(namespace: str, project_id: str):
             namespace=safe_project.namespace,
             name=safe_project.name,
             # Use validated config if available, otherwise use raw dict
-            config=safe_project.config if safe_project.config is not None else safe_project.config_dict,
+            config=safe_project.config
+            if safe_project.config is not None
+            else safe_project.config_dict,
             validation_error=safe_project.validation_error,
             last_modified=safe_project.last_modified,
         ),
@@ -238,6 +253,7 @@ async def delete_project(namespace: str, project_id: str):
             session_count = _delete_all_sessions(namespace, project_id)
             if session_count > 0:
                 from core.logging import FastAPIStructLogger
+
                 logger = FastAPIStructLogger()
                 logger.info(
                     "Cleared in-memory chat sessions during project deletion",
@@ -260,18 +276,17 @@ async def delete_project(namespace: str, project_id: str):
     except ProjectNotFoundError as e:
         # Return 404 if project doesn't exist
         raise HTTPException(
-            status_code=404,
-            detail=f"Project {namespace}/{project_id} not found"
+            status_code=404, detail=f"Project {namespace}/{project_id} not found"
         ) from e
     except PermissionError as e:
         # Return 403 for permission issues
         raise HTTPException(
-            status_code=403,
-            detail=f"Permission denied: {str(e)}"
+            status_code=403, detail=f"Permission denied: {str(e)}"
         ) from e
     except Exception as e:
         # Log the full error for debugging
         from core.logging import FastAPIStructLogger
+
         logger = FastAPIStructLogger()
         logger.error(
             "Failed to delete project",
@@ -282,8 +297,7 @@ async def delete_project(namespace: str, project_id: str):
         )
         # Return 500 for other failures
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete project: {str(e)}"
+            status_code=500, detail=f"Failed to delete project: {str(e)}"
         ) from e
 
 
@@ -344,7 +358,7 @@ def _delete_all_sessions(namespace: str, project_id: str) -> int:
 
 
 class ChatRequest(BaseModel):
-    messages: list[dict]
+    messages: list[ChatCompletionMessageParam]
     model: str | None = None
     frequency_penalty: float | None = None
     logit_bias: dict[str, int] | None = None
@@ -362,7 +376,7 @@ class ChatRequest(BaseModel):
     stream_options: dict | None = None
     temperature: float | None = None
     tool_choice: str | dict | None = None
-    tools: list[dict] | None = None
+    tools: list[ChatCompletionToolParam] | None = None
     top_logprobs: int | None = None
     top_p: float | None = None
     user: str | None = None
@@ -441,15 +455,14 @@ async def chat(
         set_session_header(response, session_id)
 
     # Extract the latest user message
-    latest_user_message = None
-    for msg in reversed(request.messages):
-        if msg.get("role", None) == "user" and msg.get("content", None):
-            latest_user_message = str(msg.get("content", ""))
-            break
-
-    # If no user message, check if this is a greeting request (new session)
-    if latest_user_message is None:
-        raise HTTPException(status_code=400, detail="No user message provided")  # noqa: F821
+    latest_user_message = next(
+        (
+            str(msg.get("content", ""))
+            for msg in reversed(request.messages)
+            if msg.get("role", None) == "user" and msg.get("content", None)
+        ),
+        None,
+    )
 
     # Inject relevant documentation based on user query (dev mode only)
     if (
@@ -461,6 +474,8 @@ async def chat(
         matched_docs = docs_service.match_docs_for_query(latest_user_message)
         agent.docs_context_provider.set_docs(matched_docs)
 
+    tools = [ToolDefinition.from_openai_tool_dict(t) for t in request.tools or []]
+
     if request.stream:
         return create_streaming_response_from_iterator(
             request,
@@ -468,7 +483,8 @@ async def chat(
                 project_dir=project_dir,
                 project_config=project_config,
                 chat_agent=agent,
-                message=latest_user_message,
+                messages=request.messages,
+                tools=tools,
                 rag_enabled=request.rag_enabled,
                 database=request.database,
                 retrieval_strategy=request.rag_retrieval_strategy,
@@ -485,7 +501,8 @@ async def chat(
             project_dir=project_dir,
             project_config=project_config,
             chat_agent=agent,
-            message=latest_user_message,
+            messages=request.messages,
+            tools=tools,
             rag_enabled=request.rag_enabled,
             database=request.database,
             retrieval_strategy=request.rag_retrieval_strategy,
@@ -522,7 +539,9 @@ class GetTaskResponse(BaseModel):
     )
 
 
-def _process_group_children(children: list, file_hashes: list, task_id: str, logger) -> dict:
+def _process_group_children(
+    children: list, file_hashes: list, task_id: str, logger
+) -> dict:
     """
     Process a list of Celery child tasks and return aggregated progress information.
 
@@ -540,7 +559,14 @@ def _process_group_children(children: list, file_hashes: list, task_id: str, log
     failed = sum(child.failed() for child in children)
     successful = sum(child.successful() for child in children)
 
-    logger.info("Group progress", task_id=task_id, total=total, completed=completed, failed=failed, successful=successful)
+    logger.info(
+        "Group progress",
+        task_id=task_id,
+        total=total,
+        completed=completed,
+        failed=failed,
+        successful=successful,
+    )
 
     # Build per-file status details
     file_statuses = []
@@ -634,13 +660,25 @@ async def get_task(namespace: str, project_id: str, task_id: str):
     try:
         # First check if we stored group metadata manually
         # This is needed because GroupResult.restore() doesn't work well with filesystem backend
-        group_info = res.result if res.state == "PENDING" and isinstance(res.result, dict) and res.result.get("type") == "group" else None
+        group_info = (
+            res.result
+            if res.state == "PENDING"
+            and isinstance(res.result, dict)
+            and res.result.get("type") == "group"
+            else None
+        )
 
         if group_info and "children" in group_info:
             # We have stored group metadata - query child tasks directly
-            logger.info("Found stored group metadata", task_id=task_id, child_count=len(group_info["children"]))
+            logger.info(
+                "Found stored group metadata",
+                task_id=task_id,
+                child_count=len(group_info["children"]),
+            )
 
-            children = [app.AsyncResult(child_id) for child_id in group_info["children"]]
+            children = [
+                app.AsyncResult(child_id) for child_id in group_info["children"]
+            ]
             file_hashes = group_info.get("file_hashes", [])
 
             # Process children using helper function
@@ -652,25 +690,65 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             file_statuses = progress["file_statuses"]
 
             # Determine overall state
-            if failed > 0 and completed == total:
-                response.state = "FAILURE"
-                response.error = f"{failed} of {total} tasks failed"
-            elif completed == total:
-                response.state = "SUCCESS"
-                # Aggregate results from successful tasks
+            if completed == total:
+                # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
-                for child in children:
+                skipped_count = 0
+                for i, child in enumerate(children):
                     if child.successful():
                         try:
-                            results.append(child.result)
+                            result_data = child.result
+                            results.append(result_data)
+                            # Check if this file was skipped by examining its details
+                            if isinstance(result_data, dict):
+                                details = result_data.get("details", {})
+                                # Check both details.status and details.result.status for "skipped"
+                                if details.get("status") == "skipped" or (
+                                    isinstance(details.get("result"), dict)
+                                    and details["result"].get("status") == "skipped"
+                                ):
+                                    skipped_count += 1
                         except Exception:
                             pass
+                    elif child.failed():
+                        # Also collect failed task results
+                        try:
+                            error_info = str(child.result)
+                            # Get file hash from file_hashes if available
+                            file_hash = (
+                                file_hashes[i]
+                                if i < len(file_hashes)
+                                else f"unknown_file_{i}"
+                            )
+                            # Create a failed result entry
+                            failed_result = {
+                                "file_hash": file_hash,
+                                "success": False,
+                                "error": error_info,
+                                "details": {
+                                    "status": "failed",
+                                    "filename": file_hash,
+                                    "error": error_info,
+                                },
+                            }
+                            results.append(failed_result)
+                        except Exception as e:
+                            logger.error(f"Error processing failed child result: {e}")
+
+                # Set result with all file details (successful, skipped, and failed)
                 response.result = {
-                    "processed_files": successful,
+                    "processed_files": successful - skipped_count,
                     "failed_files": failed,
-                    "skipped_files": 0,
+                    "skipped_files": skipped_count,
                     "details": results,
                 }
+
+                # Set state based on whether any files failed
+                if failed > 0:
+                    response.state = "FAILURE"
+                    response.error = f"{failed} of {total} tasks failed"
+                else:
+                    response.state = "SUCCESS"
             else:
                 response.state = "PROGRESS"
                 response.meta = {
@@ -684,15 +762,20 @@ async def get_task(namespace: str, project_id: str, task_id: str):
 
         # Fallback: Try to restore the group from the result backend
         group_res = GroupResult.restore(task_id, app=app)
-        logger.info("GroupResult.restore attempt", task_id=task_id, found=group_res is not None)
+        logger.info(
+            "GroupResult.restore attempt", task_id=task_id, found=group_res is not None
+        )
 
         if group_res is not None:
             # This is a group - aggregate children's states and track per-file progress
             children = list(group_res.results)
-            logger.info("Group children found", task_id=task_id, child_count=len(children))
+            logger.info(
+                "Group children found", task_id=task_id, child_count=len(children)
+            )
 
             # Process children using helper function (no file_hashes available from GroupResult)
-            progress = _process_group_children(children, [], task_id, logger)
+            file_hashes = []  # Initialize empty list since GroupResult doesn't provide file hashes
+            progress = _process_group_children(children, file_hashes, task_id, logger)
             total = progress["total"]
             completed = progress["completed"]
             failed = progress["failed"]
@@ -700,25 +783,65 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             file_statuses = progress["file_statuses"]
 
             # Determine overall state
-            if failed > 0 and completed == total:
-                response.state = "FAILURE"
-                response.error = f"{failed} of {total} tasks failed"
-            elif completed == total:
-                response.state = "SUCCESS"
-                # Aggregate results from successful tasks
+            if completed == total:
+                # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
-                for child in children:
+                skipped_count = 0
+                for i, child in enumerate(children):
                     if child.successful():
                         try:
-                            results.append(child.result)
+                            result_data = child.result
+                            results.append(result_data)
+                            # Check if this file was skipped by examining its details
+                            if isinstance(result_data, dict):
+                                details = result_data.get("details", {})
+                                # Check both details.status and details.result.status for "skipped"
+                                if details.get("status") == "skipped" or (
+                                    isinstance(details.get("result"), dict)
+                                    and details["result"].get("status") == "skipped"
+                                ):
+                                    skipped_count += 1
                         except Exception:
                             pass
+                    elif child.failed():
+                        # Also collect failed task results
+                        try:
+                            error_info = str(child.result)
+                            # Get file hash from file_hashes if available
+                            file_hash = (
+                                file_hashes[i]
+                                if i < len(file_hashes)
+                                else f"unknown_file_{i}"
+                            )
+                            # Create a failed result entry
+                            failed_result = {
+                                "file_hash": file_hash,
+                                "success": False,
+                                "error": error_info,
+                                "details": {
+                                    "status": "failed",
+                                    "filename": file_hash,
+                                    "error": error_info,
+                                },
+                            }
+                            results.append(failed_result)
+                        except Exception as e:
+                            logger.error(f"Error processing failed child result: {e}")
+
+                # Set result with all file details (successful, skipped, and failed)
                 response.result = {
-                    "processed_files": successful,
+                    "processed_files": successful - skipped_count,
                     "failed_files": failed,
-                    "skipped_files": 0,
+                    "skipped_files": skipped_count,
                     "details": results,
                 }
+
+                # Set state based on whether any files failed
+                if failed > 0:
+                    response.state = "FAILURE"
+                    response.error = f"{failed} of {total} tasks failed"
+                else:
+                    response.state = "SUCCESS"
             else:
                 response.state = "PROGRESS"
                 response.meta = {
@@ -733,7 +856,12 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             logger.info("No group found via GroupResult.restore", task_id=task_id)
     except Exception as e:
         # Not a group, handle as normal task
-        logger.warning("Error checking for group task", task_id=task_id, error=str(e), exc_info=True)
+        logger.warning(
+            "Error checking for group task",
+            task_id=task_id,
+            error=str(e),
+            exc_info=True,
+        )
 
     if res.info:
         response.meta = res.info
