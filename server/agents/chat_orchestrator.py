@@ -292,7 +292,7 @@ class ChatOrchestratorAgent(LFAgent):
                     yield chunk
                     continue
 
-                if accumulated_tool_call:
+                if accumulated_tool_call and accumulated_tool_call.function.arguments:
                     accumulated_tool_call.function.arguments += (
                         tool_call.function.arguments
                     )
