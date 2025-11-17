@@ -173,11 +173,11 @@ class LFAgentClientOpenAI(LFAgentClient):
             if not self._detect_probable_tool_call_in_content(accumulated_content):
                 yield chunk
 
-            (t_name, t_args_json) = self._detect_tool_call_in_content(
+            (tool_name, tool_args_json) = self._detect_tool_call_in_content(
                 accumulated_content
             ) or (None, None)
 
-            if not t_name:
+            if not tool_name:
                 # Continue to accumulate tool call JSON content
                 continue
 
@@ -186,7 +186,7 @@ class LFAgentClientOpenAI(LFAgentClient):
                 # arguments delta
                 yield self._create_synthetic_tool_call_chunk(
                     base_chunk=chunk,
-                    tool_arguments=t_args_json,
+                    tool_arguments=tool_args_json,
                 )
                 yield self._create_synthetic_tool_call_chunk(
                     base_chunk=chunk,
@@ -199,7 +199,7 @@ class LFAgentClientOpenAI(LFAgentClient):
                 yield self._create_synthetic_tool_call_chunk(
                     base_chunk=chunk,
                     tool_call_id=tool_call_id,
-                    tool_name=t_name,
+                    tool_name=tool_name,
                     tool_arguments="",
                 )
                 is_in_tool_call = True
