@@ -21,9 +21,14 @@ class TestModelFormatDetection:
         (model_dir / "model.gguf").touch()
         (model_dir / "config.json").touch()
 
-        with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
-            format_type = detect_model_format("test/model")
-            assert format_type == "gguf"
+        # Mock HfApi to return list of files without making API calls
+        mock_api = MagicMock()
+        mock_api.list_repo_files.return_value = ["model.gguf", "config.json"]
+
+        with patch('utils.model_format.HfApi', return_value=mock_api):
+            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+                format_type = detect_model_format("test/model")
+                assert format_type == "gguf"
 
     def test_detect_transformers_format_with_mock(self, tmp_path):
         """Test detection of transformers format with mocked filesystem."""
@@ -36,9 +41,14 @@ class TestModelFormatDetection:
         (model_dir / "config.json").touch()
         (model_dir / "pytorch_model.bin").touch()
 
-        with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
-            format_type = detect_model_format("test/model")
-            assert format_type == "transformers"
+        # Mock HfApi to return list of files without .gguf
+        mock_api = MagicMock()
+        mock_api.list_repo_files.return_value = ["config.json", "pytorch_model.bin"]
+
+        with patch('utils.model_format.HfApi', return_value=mock_api):
+            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+                format_type = detect_model_format("test/model")
+                assert format_type == "transformers"
 
     def test_format_detection_caching(self, tmp_path):
         """Test that format detection results are cached."""
@@ -49,16 +59,21 @@ class TestModelFormatDetection:
         model_dir.mkdir()
         (model_dir / "model.gguf").touch()
 
-        with patch('utils.model_format.snapshot_download', return_value=str(model_dir)) as mock_download:
-            # First call should trigger download
-            format1 = detect_model_format("test/model")
-            assert format1 == "gguf"
-            assert mock_download.call_count == 1
+        # Mock HfApi to return list of files
+        mock_api = MagicMock()
+        mock_api.list_repo_files.return_value = ["model.gguf"]
 
-            # Second call should use cache (no additional download)
-            format2 = detect_model_format("test/model")
-            assert format2 == "gguf"
-            assert mock_download.call_count == 1  # Still just 1 call
+        with patch('utils.model_format.HfApi', return_value=mock_api) as mock_hf_api:
+            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+                # First call should trigger API call
+                format1 = detect_model_format("test/model")
+                assert format1 == "gguf"
+                assert mock_hf_api.call_count == 1
+
+                # Second call should use cache (no additional API call)
+                format2 = detect_model_format("test/model")
+                assert format2 == "gguf"
+                assert mock_hf_api.call_count == 1  # Still just 1 call
 
     def test_get_gguf_file_path_with_mock(self, tmp_path):
         """Test getting GGUF file path with mocked filesystem."""
@@ -67,10 +82,15 @@ class TestModelFormatDetection:
         gguf_file = model_dir / "model-q4_k_m.gguf"
         gguf_file.touch()
 
-        with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
-            gguf_path = get_gguf_file_path("test/model")
-            assert gguf_path.endswith('.gguf')
-            assert os.path.exists(gguf_path)
+        # Mock HfApi to return list of GGUF files
+        mock_api = MagicMock()
+        mock_api.list_repo_files.return_value = ["model-q4_k_m.gguf"]
+
+        with patch('utils.model_format.HfApi', return_value=mock_api):
+            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+                gguf_path = get_gguf_file_path("test/model")
+                assert gguf_path.endswith('.gguf')
+                assert os.path.exists(gguf_path)
 
     def test_get_gguf_file_path_not_found(self, tmp_path):
         """Test error when no GGUF file found."""
@@ -78,9 +98,14 @@ class TestModelFormatDetection:
         model_dir.mkdir()
         (model_dir / "config.json").touch()
 
-        with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
-            with pytest.raises(FileNotFoundError, match="No GGUF file found"):
-                get_gguf_file_path("test/model")
+        # Mock HfApi to return no GGUF files
+        mock_api = MagicMock()
+        mock_api.list_repo_files.return_value = ["config.json"]
+
+        with patch('utils.model_format.HfApi', return_value=mock_api):
+            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+                with pytest.raises(FileNotFoundError, match="No GGUF files found in model repository"):
+                    get_gguf_file_path("test/model")
 
     def test_get_gguf_file_path_multiple_files(self, tmp_path):
         """Test handling of multiple GGUF files (should use first one)."""
@@ -89,10 +114,15 @@ class TestModelFormatDetection:
         (model_dir / "model-q4.gguf").touch()
         (model_dir / "model-q8.gguf").touch()
 
-        with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
-            gguf_path = get_gguf_file_path("test/model")
-            assert gguf_path.endswith('.gguf')
-            assert os.path.exists(gguf_path)
+        # Mock HfApi to return multiple GGUF files
+        mock_api = MagicMock()
+        mock_api.list_repo_files.return_value = ["model-q4.gguf", "model-q8.gguf"]
+
+        with patch('utils.model_format.HfApi', return_value=mock_api):
+            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+                gguf_path = get_gguf_file_path("test/model")
+                assert gguf_path.endswith('.gguf')
+                assert os.path.exists(gguf_path)
 
 
 class TestGGUFLanguageModel:
