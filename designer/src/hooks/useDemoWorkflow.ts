@@ -32,6 +32,13 @@ export interface ApiCall {
   description: string
 }
 
+export interface ProcessingResult {
+  totalFiles: number
+  totalChunks: number
+  parsers: string[]
+  embedder: string | null
+}
+
 export interface UseDemoWorkflowReturn {
   // State
   currentStep: DemoStep
@@ -39,10 +46,12 @@ export interface UseDemoWorkflowReturn {
   error: string | null
   apiCalls: ApiCall[]
   projectName: string | null
+  processingResult: ProcessingResult | null
 
   // Actions
   startDemo: (demo: DemoConfig, namespace: string) => Promise<void>
   reset: () => void
+  navigateToChat: () => void
 }
 
 export function useDemoWorkflow(): UseDemoWorkflowReturn {
@@ -54,6 +63,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
   const [error, setError] = useState<string | null>(null)
   const [apiCalls, setApiCalls] = useState<ApiCall[]>([])
   const [projectName, setProjectName] = useState<string | null>(null)
+  const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null)
 
   const addApiCall = useCallback((call: Omit<ApiCall, 'id' | 'timestamp'>) => {
     const newCall: ApiCall = {
@@ -77,7 +87,14 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
     setError(null)
     setApiCalls([])
     setProjectName(null)
+    setProcessingResult(null)
   }, [])
+
+  const navigateToChat = useCallback(() => {
+    if (projectName) {
+      navigate('/chat/dashboard')
+    }
+  }, [navigate, projectName])
 
   const startDemo = useCallback(
     async (demo: DemoConfig, namespace: string) => {
@@ -141,7 +158,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         })
 
         const createStart = Date.now()
-        const createdProject = await projectService.createProject(namespace, {
+        await projectService.createProject(namespace, {
           name: newProjectName
         })
 
@@ -236,6 +253,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         )
 
         // Poll for completion
+        let taskResult: any = null
         if (processResult.task_id) {
           let completed = false
           let attempts = 0
@@ -252,6 +270,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
             if (taskStatus.state === 'SUCCESS') {
               completed = true
+              taskResult = taskStatus.result
             } else if (taskStatus.state === 'FAILURE') {
               throw new Error('Dataset processing failed')
             }
@@ -275,6 +294,18 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         setProgress(100)
 
+        // Extract processing results from task
+        // The task returns: { message, namespace, project, dataset, strategy, files, total_files }
+        const totalFiles = taskResult?.total_files || demo.files.length
+        const strategy = taskResult?.strategy || 'default'
+
+        setProcessingResult({
+          totalFiles,
+          totalChunks: 0, // Backend doesn't aggregate this yet
+          parsers: [strategy],
+          embedder: null
+        })
+
         // Mark as completed
         setCurrentStep('completed')
 
@@ -284,10 +315,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Invalidate queries
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
 
-        // Navigate after a brief delay to show completion
-        setTimeout(() => {
-          navigate('/chat/dashboard')
-        }, 1500)
+        // Navigate to test page immediately - modal will stay open over the chat page
+        navigate('/chat/test', { state: { fromDemo: true } })
 
       } catch (err) {
         console.error('Demo creation failed:', err)
@@ -304,7 +333,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
     error,
     apiCalls,
     projectName,
+    processingResult,
     startDemo,
-    reset
+    reset,
+    navigateToChat
   }
 }

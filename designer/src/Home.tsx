@@ -26,11 +26,11 @@ import {
 import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
-import { DemoModal } from './components/Demo/DemoModal'
+import { useDemoModal } from './contexts/DemoModalContext'
 
 function Home() {
-  // Demo modal state
-  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false)
+  // Demo modal context
+  const demoModal = useDemoModal()
 
   // Form state
   const [projectName, setProjectName] = useState('')
@@ -327,7 +327,7 @@ function Home() {
         {/* Demo App Button */}
         <div className="max-w-3xl mx-auto">
           <button
-            onClick={() => setIsDemoModalOpen(true)}
+            onClick={() => demoModal.openModal()}
             className="w-full group relative flex items-center justify-between gap-4 rounded-xl border-2 border-primary bg-gradient-to-r from-primary/5 to-primary/10 p-6 text-left transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/20"
           >
             <div className="flex items-start gap-4">
@@ -686,13 +686,7 @@ function Home() {
       </div>
       {/* Project edit modal over Home */}
       {/* Modal rendered globally in App */}
-
-      {/* Demo Modal */}
-      <DemoModal
-        isOpen={isDemoModalOpen}
-        onClose={() => setIsDemoModalOpen(false)}
-        namespace={namespace}
-      />
+      {/* Demo Modal rendered globally in App via DemoModalRoot */}
     </div>
   )
 }

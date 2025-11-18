@@ -12,7 +12,7 @@ import {
   DialogDescription
 } from '../ui/dialog'
 import { AVAILABLE_DEMOS, DemoConfig } from '../../config/demos'
-import { useDemoWorkflow, DemoStep, ApiCall } from '../../hooks/useDemoWorkflow'
+import { useDemoWorkflow, DemoStep, ApiCall, ProcessingResult } from '../../hooks/useDemoWorkflow'
 import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface DemoModalProps {
@@ -190,7 +190,8 @@ function WorkflowProgress({
   progress,
   error,
   apiCalls,
-  projectName
+  projectName,
+  processingResult
 }: {
   demo: DemoConfig
   currentStep: DemoStep
@@ -198,6 +199,7 @@ function WorkflowProgress({
   error: string | null
   apiCalls: ApiCall[]
   projectName: string | null
+  processingResult: ProcessingResult | null
 }) {
   const steps: DemoStep[] = [
     'fetching_config',
@@ -275,23 +277,60 @@ function WorkflowProgress({
 
       {/* Completion message */}
       {currentStep === 'completed' && (
-        <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-          <div className="flex items-start gap-2">
-            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-semibold text-green-600 mb-2">Demo Created!</p>
-              <p className="text-sm text-muted-foreground mb-3">
-                Your demo app is ready. Try these questions:
-              </p>
-              <ul className="space-y-1">
-                {demo.sampleQuestions.slice(0, 3).map((q, i) => (
-                  <li key={i} className="text-sm text-foreground flex items-start gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    <span className="italic">&ldquo;{q}&rdquo;</span>
-                  </li>
-                ))}
-              </ul>
+        <div className="space-y-4">
+          {/* Success header */}
+          <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-lg font-semibold text-green-600 mb-1">
+                  Your project is ready!
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Test it by chatting with the model and the {demo.displayName.toLowerCase()} in RAG.
+                </p>
+              </div>
             </div>
+          </div>
+
+          {/* Processing stats */}
+          {processingResult && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-accent/50 border border-accent">
+                <p className="text-xs text-muted-foreground mb-1">Files Processed</p>
+                <p className="text-2xl font-semibold text-foreground">
+                  {processingResult.totalFiles}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-accent/50 border border-accent">
+                <p className="text-xs text-muted-foreground mb-1">Strategy</p>
+                <p className="text-sm font-medium text-foreground truncate" title={processingResult.parsers[0]}>
+                  {processingResult.parsers[0] || 'default'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Sample questions */}
+          <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
+            <p className="text-sm font-medium text-foreground mb-3">
+              Try these sample questions to see professional answers:
+            </p>
+            <ul className="space-y-2">
+              {demo.sampleQuestions.slice(0, 4).map((q, i) => (
+                <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                  <span className="text-primary font-semibold mt-0.5 shrink-0">{i + 1}.</span>
+                  <span className="italic text-muted-foreground">&ldquo;{q}&rdquo;</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Close to start chatting */}
+          <div className="text-center p-3 rounded-lg bg-accent/30 border border-accent/50">
+            <p className="text-sm text-muted-foreground">
+              👆 Close this modal to start chatting
+            </p>
           </div>
         </div>
       )}
@@ -301,7 +340,7 @@ function WorkflowProgress({
 
 export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
   const [selectedDemo, setSelectedDemo] = useState<DemoConfig | null>(null)
-  const { currentStep, progress, error, apiCalls, projectName, startDemo, reset } =
+  const { currentStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
     useDemoWorkflow()
 
   const handleSelectDemo = (demo: DemoConfig) => {
@@ -342,6 +381,7 @@ export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
               error={error}
               apiCalls={apiCalls}
               projectName={projectName}
+              processingResult={processingResult}
             />
           )}
         </div>
@@ -352,7 +392,7 @@ export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
               onClick={handleClose}
               className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
             >
-              {currentStep === 'completed' ? 'Go to Chat' : 'Close'}
+              {currentStep === 'completed' ? 'Start Chatting' : 'Close'}
             </button>
           </div>
         )}
