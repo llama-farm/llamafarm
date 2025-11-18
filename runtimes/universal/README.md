@@ -147,7 +147,11 @@ model = "unsloth/Qwen3-1.7B-GGUF"
 1. Q4_K_M (default - best balance)
 2. Q4_K, Q5_K_M, Q5_K
 3. Q8_0 (higher quality, larger)
-4. Others (Q6_K, Q4_K_S, Q3_K_M, Q2_K, F16)
+4. Q6_K (between Q5 and Q8)
+5. Q4_K_S (smaller Q4 variant)
+6. Q5_K_S (smaller Q5 variant)
+7. Q3_K_M, Q2_K (lower quality, smaller)
+8. F16 (full precision, very large)
 
 #### Manual Quantization Selection
 

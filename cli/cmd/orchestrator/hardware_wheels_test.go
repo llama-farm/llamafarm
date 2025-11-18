@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -236,11 +237,9 @@ func TestHardwarePackageSpec_URLValidation(t *testing.T) {
 		for hw, url := range PyTorchSpec.WheelURLs {
 			if url != "" {
 				// Non-empty URLs should be from PyTorch download site
-				if url != "" && len(url) > 0 {
-					expectedPrefix := "https://download.pytorch.org/whl/"
-					if url[:len(expectedPrefix)] != expectedPrefix {
-						t.Errorf("PyTorchSpec[%s] URL doesn't start with %s: %s", hw, expectedPrefix, url)
-					}
+				expectedPrefix := "https://download.pytorch.org/whl/"
+				if !strings.HasPrefix(url, expectedPrefix) {
+					t.Errorf("PyTorchSpec[%s] URL doesn't start with %s: %s", hw, expectedPrefix, url)
 				}
 			}
 		}
@@ -252,7 +251,7 @@ func TestHardwarePackageSpec_URLValidation(t *testing.T) {
 			if url == "" {
 				t.Errorf("LlamaCppSpec[%s] has empty URL (should have wheel URL)", hw)
 			}
-			if url[:len(expectedPrefix)] != expectedPrefix {
+			if !strings.HasPrefix(url, expectedPrefix) {
 				t.Errorf("LlamaCppSpec[%s] URL doesn't start with %s: %s", hw, expectedPrefix, url)
 			}
 		}
@@ -269,10 +268,10 @@ func TestHardwarePackageSpec_VersionConstraints(t *testing.T) {
 	}
 
 	// Verify they use >= constraints (allowing newer versions)
-	if PyTorchSpec.Version[0:2] != ">=" {
+	if !strings.HasPrefix(PyTorchSpec.Version, ">=") {
 		t.Errorf("PyTorchSpec.Version should start with >=, got: %s", PyTorchSpec.Version)
 	}
-	if LlamaCppSpec.Version[0:2] != ">=" {
+	if !strings.HasPrefix(LlamaCppSpec.Version, ">=") {
 		t.Errorf("LlamaCppSpec.Version should start with >=, got: %s", LlamaCppSpec.Version)
 	}
 }
