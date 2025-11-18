@@ -42,6 +42,7 @@ import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrate
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { isValidFile } from '../../utils/fileValidation'
+import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
@@ -306,6 +307,7 @@ const Data = () => {
     newDatasetDataProcessingStrategy,
     setNewDatasetDataProcessingStrategy,
   ] = useState('')
+  const [datasetNameError, setDatasetNameError] = useState<string | null>(null)
 
   // Set default values when dialog opens and options are available
   useEffect(() => {
@@ -339,6 +341,18 @@ const Data = () => {
     const name = newDatasetName.trim()
     if (!name) return
 
+    // Validate dataset name
+    const existingDatasetNames = datasets?.map(d => d.name) || []
+    const validation = validateDatasetNameWithDuplicateCheck(
+      name,
+      existingDatasetNames
+    )
+
+    if (!validation.isValid) {
+      setDatasetNameError(validation.error || 'Invalid dataset name')
+      return
+    }
+
     if (!activeProject?.namespace || !activeProject?.project) {
       toast({
         message: 'No active project selected',
@@ -361,6 +375,7 @@ const Data = () => {
       setNewDatasetName('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
+      setDatasetNameError(null)
 
       // If we should upload files after creating, use the newly created dataset
       // Note: In this system, dataset name serves as the unique identifier (ID)
@@ -1119,6 +1134,7 @@ const Data = () => {
                           setNewDatasetName('')
                           setNewDatasetDatabase('')
                           setNewDatasetDataProcessingStrategy('')
+                          setDatasetNameError(null)
                           setPendingFiles([])
                           setShouldUploadAfterCreate(false)
                         }
@@ -1142,9 +1158,34 @@ const Data = () => {
                           <Input
                             autoFocus
                             value={newDatasetName}
-                            onChange={e => setNewDatasetName(e.target.value)}
+                            onChange={e => {
+                              const newName = e.target.value
+                              setNewDatasetName(newName)
+
+                              // Validate on change for real-time feedback
+                              const existingDatasetNames =
+                                datasets?.map(d => d.name) || []
+                              const validation =
+                                validateDatasetNameWithDuplicateCheck(
+                                  newName,
+                                  existingDatasetNames
+                                )
+                              setDatasetNameError(
+                                validation.isValid
+                                  ? null
+                                  : validation.error || 'Invalid dataset name'
+                              )
+                            }}
                             placeholder="Enter dataset name"
+                            className={
+                              datasetNameError ? 'border-destructive' : ''
+                            }
                           />
+                          {datasetNameError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {datasetNameError}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1">
                           <label className="text-xs text-muted-foreground">
@@ -1202,6 +1243,7 @@ const Data = () => {
                             !newDatasetName.trim() ||
                             !newDatasetDataProcessingStrategy.trim() ||
                             !newDatasetDatabase.trim() ||
+                            !!datasetNameError ||
                             createDatasetMutation.isPending
                           }
                         >

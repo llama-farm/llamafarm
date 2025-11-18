@@ -5,6 +5,7 @@ import Loader from '../../common/Loader'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
+import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
 import {
   Tooltip,
   TooltipContent,
@@ -377,6 +378,7 @@ function DatasetView() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [editNameError, setEditNameError] = useState<string | null>(null)
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
   const [pendingDeleteFileHash, setPendingDeleteFileHash] = useState<
     string | null
@@ -815,11 +817,26 @@ function DatasetView() {
   const openEdit = () => {
     setEditName(dataset?.name ?? '')
     setEditDescription(dataset?.description ?? '')
+    setEditNameError(null)
     setIsEditOpen(true)
   }
 
   const handleSaveEdit = () => {
     if (!dataset || !datasetId) return
+    
+    // Validate dataset name
+    const existingDatasetNames = datasetsResponse?.datasets?.map((d: any) => d.name) || []
+    const validation = validateDatasetNameWithDuplicateCheck(
+      editName,
+      existingDatasetNames,
+      dataset.name // Allow keeping the same name
+    )
+    
+    if (!validation.isValid) {
+      setEditNameError(validation.error || 'Invalid dataset name')
+      return
+    }
+    
     // Note: Dataset name/description updates are local-only until backend supports PATCH endpoint
     const updatedDataset = {
       ...dataset,
@@ -827,6 +844,7 @@ function DatasetView() {
       description: editDescription,
     }
     setDataset(updatedDataset)
+    setEditNameError(null)
     setIsEditOpen(false)
   }
 
@@ -1554,9 +1572,27 @@ function DatasetView() {
                           <Input
                             autoFocus
                             value={editName}
-                            onChange={e => setEditName(e.target.value)}
+                            onChange={e => {
+                              const newName = e.target.value
+                              setEditName(newName)
+                              
+                              // Validate on change for real-time feedback
+                              const existingDatasetNames = datasetsResponse?.datasets?.map((d: any) => d.name) || []
+                              const validation = validateDatasetNameWithDuplicateCheck(
+                                newName,
+                                existingDatasetNames,
+                                dataset?.name || null // Allow keeping the same name
+                              )
+                              setEditNameError(validation.isValid ? null : (validation.error || 'Invalid dataset name'))
+                            }}
                             placeholder="Dataset name"
+                            className={editNameError ? 'border-destructive' : ''}
                           />
+                          {editNameError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {editNameError}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1">
                           <label className="text-xs text-muted-foreground">
@@ -1583,7 +1619,7 @@ function DatasetView() {
                           </DialogClose>
                           <Button
                             onClick={handleSaveEdit}
-                            disabled={!editName.trim()}
+                            disabled={!editName.trim() || !!editNameError}
                           >
                             Save
                           </Button>
