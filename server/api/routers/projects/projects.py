@@ -410,7 +410,7 @@ async def chat(
     active_project_name = None
     if x_active_project:
         parts = x_active_project.split("/", 1)
-        if len(parts) == 2:
+        if len(parts) == 2 and parts[0] and parts[1]:
             active_project_namespace, active_project_name = parts
 
     now = time.time()

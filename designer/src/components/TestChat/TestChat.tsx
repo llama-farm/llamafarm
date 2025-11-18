@@ -164,6 +164,9 @@ export default function TestChat({
       } else if (validModelNames.length > 0) {
         // Use first available model as last resort
         setSelectedModel(validModelNames[0])
+      } else {
+        // No valid models available, clear selection
+        setSelectedModel(undefined)
       }
     }
   }, [(defaultModel as any)?.name, fallbackDefaultName, selectedModel, unifiedModels])
