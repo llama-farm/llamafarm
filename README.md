@@ -45,8 +45,10 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
 3. **Create and run a project**
    ```bash
    lf init my-project            # Generates llamafarm.yaml using the server template
-   lf start                      # Spins up Docker services & opens the dev chat UI
+   lf start                      # Spins up Docker services, opens dev chat UI & Designer web UI
    ```
+   
+   The Designer web interface will be available at `http://localhost:7724` for visual project management.
 
 4. **Start an interactive project chat or send a one-off message**
 ```bash
@@ -90,12 +92,14 @@ Open another terminal to run `lf` commands (installed or built from source). Thi
 - **Own your stack** – Run small local models today and swap to hosted vLLM, Together, or custom APIs tomorrow by changing `llamafarm.yaml`.
 - **Battle-tested RAG** – Configure parsers, extractors, embedding strategies, and databases without touching orchestration code.
 - **Config over code** – Every project is defined by YAML schemas that are validated at runtime and easy to version control.
-- **Friendly CLI** – `lf` handles project bootstrapping, dataset lifecycle, RAG queries, and non-interactive chats.
+- **Friendly CLI & Web UI** – `lf` CLI handles project bootstrapping, dataset lifecycle, and RAG queries. Prefer visual tools? Use the Designer web interface for drag-and-drop dataset management and interactive configuration.
 - **Built to extend** – Add a new provider or vector store by registering a backend and regenerating schema types.
 
 ---
 
-## 🔧 Core CLI Workflows
+## 🔧 Core Workflows
+
+### CLI Commands
 
 | Task | Command | Notes |
 | ---- | ------- | ----- |
@@ -203,6 +207,19 @@ If you see: `Service 'server' is not running and auto-start is disabled`
    ```
 
 See the [CLI reference](docs/website/docs/cli/index.md) for full command details and troubleshooting advice.
+
+### Designer Web UI
+
+Prefer a visual interface? The Designer provides a browser-based way to manage projects:
+
+- **Visual dataset management** – Drag-and-drop file uploads, see processing status in real-time
+- **Interactive configuration** – Edit your project settings with live validation and helpful hints
+- **Integrated chat** – Test your AI with full RAG context directly in the browser
+- **Dual-mode editing** – Switch between visual designer and direct YAML editing
+
+Access the Designer at `http://localhost:7724` after running `lf start`, or at `http://localhost:3123` when using Docker Compose.
+
+See the [Designer documentation](docs/website/docs/designer/index.md) for a complete feature walkthrough.
 
 ---
 

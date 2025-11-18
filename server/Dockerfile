@@ -30,14 +30,15 @@ WORKDIR /app
 # Copy the required packages from the monorepo (lightweight server only)
 # Note: This Dockerfile should be run from the repo root: docker build -f server/Dockerfile .
 COPY config/ ./config/
+COPY common/ ./common/
 COPY rag/schema.yaml ./rag/schema.yaml
+COPY ruff.toml ./ruff.toml
 
 # Install config dependencies including dev dependencies for datamodel generation
-RUN ls -la config
 RUN cd config && uv sync --locked --all-extras --verbose
 
 # Generate config schema and datamodel types
-RUN cd config && ./generate-types.sh
+RUN cd config && uv run python generate_types.py
 RUN rm -rf rag
 
 

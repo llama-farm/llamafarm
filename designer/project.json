@@ -11,6 +11,21 @@
         "command": "npm run dev",
         "cwd": "designer"
       }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run build",
+        "cwd": "designer"
+      },
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
+      "inputs": [
+        "{projectRoot}/**/*",
+        "!{projectRoot}/dist/**",
+        "!{projectRoot}/node_modules/**"
+      ]
     }
   }
 }

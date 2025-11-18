@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any
 
 from config.datamodel import Model, Provider
 
+from core.designer import get_designer_dist_path
 from core.settings import settings
 from services import runtime_service
 from services.model_service import ModelService
@@ -24,6 +26,9 @@ def _check_server() -> dict:
             "status": "healthy",
             "message": "FastAPI process responding",
             "latency_ms": _now_ms() - start,
+            "details": {
+                "pid": os.getpid(),
+            },
         }
     except Exception as e:  # pragma: no cover - defensive
         return {
@@ -70,7 +75,7 @@ def _check_storage() -> dict:
         }
 
 
-def _check_ollama() -> dict:
+def _check_ollama_runtime() -> dict:
     """Check Ollama runtime health using provider registry."""
     # Create minimal config with one model for health check
     model_config_dict = {
@@ -80,7 +85,20 @@ def _check_ollama() -> dict:
     }
     model_config = Model.model_validate(model_config_dict)
 
-    provider = runtime_service.get_provider(Provider.ollama, model_config)
+    provider = runtime_service.get_provider(model_config)
+    result = provider.check_health()
+    return result.to_dict()
+
+
+def _check_universal_runtime() -> dict:
+    """Check Universal runtime health using provider registry."""
+    model_config_dict = {
+        "name": "universal-health",
+        "provider": Provider.universal,
+        "model": "health-check",
+    }
+    model_config = Model.model_validate(model_config_dict)
+    provider = runtime_service.get_provider(model_config)
     result = provider.check_health()
     return result.to_dict()
 
@@ -91,7 +109,7 @@ def _check_seed_project() -> dict:
 
     # Load seed project config for ModelService
     try:
-        import yaml
+        from config.helpers.loader import load_config
 
         seed_path = (
             Path(__file__).resolve().parents[1]
@@ -109,18 +127,14 @@ def _check_seed_project() -> dict:
                 "runtime": {"provider": None, "model": None},
             }
 
-        project_config_data = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
-        from config.datamodel import LlamaFarmConfig
-
-        project_config = LlamaFarmConfig(**project_config_data)
+        # Use the proper config loader that includes URL rewriting for Docker
+        project_config = load_config(config_path=seed_path, validate=False)
 
         # Use ModelService to get the correct model config
         model_config = ModelService.get_model(project_config, model_name=None)
 
         # Get provider and check health
-        provider_impl = runtime_service.get_provider(
-            model_config.provider, model_config
-        )
+        provider_impl = runtime_service.get_provider(model_config)
         health_result = provider_impl.check_health()
 
         # Enhance with model validation for Ollama
@@ -172,6 +186,34 @@ def _check_seed_project() -> dict:
         }
 
 
+def _check_designer() -> dict:
+    """Check if designer static files are available."""
+    start = _now_ms()
+    try:
+        designer_dist_path = get_designer_dist_path()
+        if designer_dist_path is not None:
+            return {
+                "name": "designer",
+                "status": "healthy",
+                "message": "Static files available",
+                "latency_ms": _now_ms() - start,
+            }
+
+        return {
+            "name": "designer",
+            "status": "degraded",
+            "message": "Designer static files not found",
+            "latency_ms": _now_ms() - start,
+        }
+    except Exception as e:
+        return {
+            "name": "designer",
+            "status": "degraded",
+            "message": f"Designer check failed: {e}",
+            "latency_ms": _now_ms() - start,
+        }
+
+
 def _check_rag_service() -> dict:
     """Check RAG service health using cached status with background updates."""
     start = _now_ms()
@@ -202,6 +244,8 @@ def _check_rag_service() -> dict:
         details = {}
         if "worker_id" in health_data:
             details["worker_id"] = health_data["worker_id"]
+        if "pid" in health_data:
+            details["pid"] = health_data["pid"]
         if "checks" in health_data:
             details["checks"] = health_data["checks"]
         if "metrics" in health_data:
@@ -232,11 +276,12 @@ def compute_overall_status(components: list[dict], seeds: list[dict]) -> str:
     order = {"healthy": 0, "degraded": 1, "unhealthy": 2}
     worst = 0
 
-    # Only consider non-RAG components for overall status
-    # RAG service status is included in response but doesn't affect overall health
+    # Only consider core server components for overall status
+    # RAG service, Ollama, Universal, and Project seed are informational
+    # but don't affect server health
     for c in components + seeds:
-        # Skip RAG service and Project seed when computing overall status
-        if c.get("name", "") in ["rag-service", "seed:project"]:
+        # Skip optional services when computing overall status
+        if c.get("name", "") not in ["server", "storage"]:
             continue
         worst = max(worst, order.get(c.get("status", "unhealthy"), 2))
 
@@ -250,7 +295,9 @@ def health_summary() -> dict[str, Any]:
 
     components.append(_check_server())
     components.append(_check_storage())
-    components.append(_check_ollama())
+    components.append(_check_designer())
+    components.append(_check_ollama_runtime())
+    components.append(_check_universal_runtime())
     components.append(_check_rag_service())
 
     seeds.append(_check_seed_project())

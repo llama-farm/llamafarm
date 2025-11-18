@@ -4,10 +4,10 @@ Four ready-to-run demos showcase different retrieval scenarios using the latest 
 
 | Example | Folder | Scenario |
 |---------|--------|----------|
-| Large, Complex PDFs | `examples/large-complex-rag/` | Raleigh UDO ordinance (multi-megabyte planning PDF). |
-| Many Small Files | `examples/many-small-file-rag/` | FDA correspondence letters (several shorter PDFs). |
-| Mixed Formats | `examples/mixed-format-rag/` | Blend of PDF, Markdown, HTML, text, and code. |
-| Quick Notes | `examples/quick-rag/` | Two tiny engineering notes for rapid smoke tests. |
+| Large, Complex PDFs | `examples/large_complex_rag/` | Raleigh UDO ordinance (multi-megabyte planning PDF). |
+| Many Small Files | `examples/many_small_file_rag/` | FDA correspondence letters (several shorter PDFs). |
+| Mixed Formats | `examples/mixed_format_rag/` | Blend of PDF, Markdown, HTML, text, and code. |
+| Quick Notes | `examples/quick_rag/` | Two tiny engineering notes for rapid smoke tests. |
 
 Each directory contains:
 - `files/` – sample documents.

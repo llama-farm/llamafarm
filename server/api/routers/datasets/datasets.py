@@ -1,9 +1,11 @@
-import time
+import asyncio
+from enum import Enum
 
 from config.datamodel import Dataset
 from fastapi import APIRouter, HTTPException, Query, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from api.routers.datasets._models import ListDatasetsResponse
 from core.celery.tasks import process_dataset_task
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, FileExistsInAnotherDatasetError
@@ -18,12 +20,12 @@ router = APIRouter(
 )
 
 
-class ListDatasetsResponse(BaseModel):
-    total: int
-    datasets: list[Dataset | DatasetWithFileDetails]
-
-
-@router.get("/", response_model=ListDatasetsResponse)
+@router.get(
+    "/",
+    operation_id="dataset_list",
+    tags=["mcp"],
+    responses={200: {"model": ListDatasetsResponse}},
+)
 async def list_datasets(
     namespace: str,
     project: str,
@@ -70,7 +72,14 @@ class AvailableStrategiesResponse(BaseModel):
     databases: list[str]
 
 
-@router.get("/strategies", response_model=AvailableStrategiesResponse)
+@router.get(
+    "/strategies",
+    operation_id="dataset_strategies_list",
+    tags=["mcp"],
+    summary="List available data processing strategies and databases for the project",
+    description="List available data processing strategies and databases for the project",
+    responses={200: {"model": AvailableStrategiesResponse}},
+)
 async def get_available_strategies(namespace: str, project: str):
     """Get available data processing strategies and databases for the project"""
     logger.bind(namespace=namespace, project=project)
@@ -94,7 +103,12 @@ class CreateDatasetResponse(BaseModel):
     dataset: Dataset
 
 
-@router.post("/", response_model=CreateDatasetResponse)
+@router.post(
+    "/",
+    operation_id="dataset_create",
+    tags=["mcp"],
+    responses={200: {"model": CreateDatasetResponse}},
+)
 async def create_dataset(namespace: str, project: str, request: CreateDatasetRequest):
     logger.bind(namespace=namespace, project=project)
     try:
@@ -114,7 +128,12 @@ class DeleteDatasetResponse(BaseModel):
     dataset: Dataset
 
 
-@router.delete("/{dataset}", response_model=DeleteDatasetResponse)
+@router.delete(
+    "/{dataset}",
+    operation_id="dataset_delete",
+    tags=["mcp"],
+    responses={200: {"model": DeleteDatasetResponse}},
+)
 async def delete_dataset(namespace: str, project: str, dataset: str):
     logger.bind(namespace=namespace, project=project)
     try:
@@ -126,11 +145,36 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+class DatasetActionType(str, Enum):
+    INGEST = "ingest"  # alias for "process"
+    PROCESS = Field(
+        "process",
+        description="Process all files in the dataset using the configured data processing strategy",
+    )
+
+
 class DatasetActionRequest(BaseModel):
-    action_type: str
+    action_type: DatasetActionType = Field(
+        ..., description="The type of action to execute"
+    )
 
 
-@router.post("/{dataset}/actions")
+class DatasetActionResponse(BaseModel):
+    message: str = Field(..., description="The status message")
+    task_uri: str = Field(..., description="The URI for tracking the task")
+
+
+@router.post(
+    "/{dataset}/actions",
+    operation_id="dataset_actions",
+    summary="Execute an action on a dataset",
+    description="""Execute an action on a dataset
+    - INGEST: Process all files in the dataset using the configured data processing strategy
+    - PROCESS: Process all files in the dataset using the configured data processing strategy
+    """,
+    tags=["mcp"],
+    responses={200: {"model": DatasetActionResponse}},
+)
 async def actions(
     namespace: str, project: str, dataset: str, request: DatasetActionRequest
 ):
@@ -143,7 +187,7 @@ async def actions(
             f"http://localhost:8000/v1/projects/{namespace}/{project}/tasks/{task_id}"
         )
 
-    if action_type == "ingest":
+    if action_type in [DatasetActionType.INGEST, DatasetActionType.PROCESS]:
         task = process_dataset_task.delay(namespace, project, dataset)
         return {
             "message": "Accepted",
@@ -155,7 +199,25 @@ async def actions(
         )
 
 
-@router.post("/{dataset}/data")
+class DatasetDataUploadResponse(BaseModel):
+    filename: str = Field(..., description="The name of the uploaded file")
+    hash: str = Field(..., description="The hash of the uploaded file")
+    processed: bool = Field(..., description="Whether the file has been processed")
+    skipped: bool = Field(
+        default=False, description="Whether the file was skipped (duplicate)"
+    )
+
+
+@router.post(
+    "/{dataset}/data",
+    operation_id="dataset_data_upload",
+    summary="Upload a file to the dataset",
+    description=(
+        "Upload a file to the dataset (stores it but does NOT process into vector database. "
+        "Use the dataset actions endpoint with the 'ingest' action_type to process the file into the vector database)"
+    ),
+    responses={200: {"model": DatasetDataUploadResponse}},
+)
 async def upload_data(
     namespace: str,
     project: str,
@@ -170,25 +232,34 @@ async def upload_data(
         file=file,
     )
 
-    DatasetService.add_file_to_dataset(
+    was_added = DatasetService.add_file_to_dataset(
         namespace=namespace,
         project=project,
         dataset=dataset,
         file=metadata_file_content,
     )
 
-    logger.info(
-        "File uploaded to dataset",
-        dataset=dataset,
+    if was_added:
+        logger.info(
+            "File uploaded to dataset",
+            dataset=dataset,
+            filename=file.filename,
+            hash=metadata_file_content.hash,
+        )
+    else:
+        logger.info(
+            "File skipped (duplicate)",
+            dataset=dataset,
+            filename=file.filename,
+            hash=metadata_file_content.hash,
+        )
+
+    return DatasetDataUploadResponse(
         filename=file.filename,
         hash=metadata_file_content.hash,
+        processed=False,
+        skipped=not was_added,
     )
-
-    return {
-        "filename": file.filename,
-        "hash": metadata_file_content.hash,
-        "processed": False,
-    }
 
 
 class FileProcessingDetail(BaseModel):
@@ -288,6 +359,39 @@ async def process_dataset(
 
         # Execute the chain asynchronously
         result = task_chain.apply_async()
+
+        # Save the group result so it can be queried later
+        result.save()
+
+        # Store child task IDs in the backend for tracking
+        # This is needed because GroupResult.restore() doesn't always work with filesystem backend
+        try:
+            child_task_ids = [child.id for child in result.results]
+        except Exception as e:
+            logger.error(f"Error accessing group result children: {e}")
+            # Fallback: create task IDs from the file list
+            child_task_ids = []
+
+        # Store metadata about this group task
+        from core.celery import app as celery_app
+
+        celery_app.backend.store_result(
+            result.id,
+            {
+                "type": "group",
+                "children": child_task_ids,
+                "total_files": len(child_task_ids),
+                "file_hashes": dataset_config.files or [],
+            },
+            "PENDING",  # Initial state
+        )
+
+        logger.info(
+            "Started async dataset processing",
+            task_id=result.id,
+            file_count=len(dataset_config.files or []),
+            child_task_ids=child_task_ids[:3],  # Log first 3 for debugging
+        )
 
         # Return immediately with task information
         return ProcessDatasetResponse(
@@ -396,28 +500,72 @@ async def process_dataset(
         )
 
         # Wait for the task to complete using polling to avoid result.get() error
-        timeout = 300  # 5 minutes
-        poll_interval = 2  # seconds
+        timeout = 600  # 10 minutes
+        poll_interval = 5  # seconds
         waited = 0
 
         try:
             while waited < timeout:
-                if task.status not in ("PENDING", "STARTED"):
-                    break
-                time.sleep(poll_interval)
+                try:
+                    status = task.status
+                    if status not in ("PENDING", "STARTED"):
+                        break
+                except Exception as e:
+                    logger.error(
+                        f"Error checking task status for file {file_hash}: {e}",
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(poll_interval)
+                    waited += poll_interval
+                    continue
+
+                await asyncio.sleep(poll_interval)
                 waited += poll_interval
 
-            if task.status == "SUCCESS":
-                result = task.result
-                ok = result["success"]
-                file_details = result["details"]
-            elif task.status == "FAILURE":
+            # Get final status with error handling
+            try:
+                final_status = task.status
+            except Exception as e:
+                logger.error(
+                    f"Error getting final task status for file {file_hash}: {e}",
+                    exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to get task status for file {file_hash}: {str(e)}",
+                ) from e
+
+            if final_status == "SUCCESS":
+                try:
+                    result = task.result
+                    ok = result["success"]
+                    file_details = result["details"]
+                except Exception as e:
+                    logger.error(
+                        f"Error getting task result for file {file_hash}: {e}",
+                        exc_info=True,
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to get task result for file {file_hash}: {str(e)}",
+                    ) from e
+            elif final_status == "FAILURE":
                 # Handle task failure
-                logger.error(f"Task failed for file {file_hash}: {task.result}")
+                try:
+                    error_result = task.result
+                    logger.error(f"Task failed for file {file_hash}: {error_result}")
+                    error_message = str(error_result)
+                except Exception as e:
+                    logger.error(
+                        f"Error getting failure details for file {file_hash}: {e}",
+                        exc_info=True,
+                    )
+                    error_message = "Unknown error (couldn't access failure details)"
+
                 ok = False
                 file_details = {
                     "filename": filename,
-                    "error": str(task.result),
+                    "error": error_message,
                     "parser": None,
                     "extractors": [],
                     "chunks": None,
@@ -429,12 +577,12 @@ async def process_dataset(
             else:
                 # Timeout or other status
                 logger.error(
-                    f"Task timed out or failed for file {file_hash}: {task.status}"
+                    f"Task timed out or failed for file {file_hash}: status={final_status}"
                 )
                 ok = False
                 file_details = {
                     "filename": filename,
-                    "error": f"Task timed out or failed with status: {task.status}",
+                    "error": f"Task timed out or failed with status: {final_status}",
                     "parser": None,
                     "extractors": [],
                     "chunks": None,

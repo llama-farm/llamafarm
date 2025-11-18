@@ -1,5 +1,198 @@
 # Changelog
 
+## [0.0.14](https://github.com/llama-farm/llamafarm/compare/v0.0.13...v0.0.14) (2025-11-13)
+
+
+### Features
+
+* **cli:** show size stats in raq query result ([#442](https://github.com/llama-farm/llamafarm/issues/442)) ([f602692](https://github.com/llama-farm/llamafarm/commit/f6026924ba03fdc719c16481d4cd385ad9b754e4))
+* **designer:** database embedding and retrieval strategies ([#438](https://github.com/llama-farm/llamafarm/issues/438)) ([db5ee11](https://github.com/llama-farm/llamafarm/commit/db5ee110dd840b00f8cb8d476d087d0594b4a0be))
+
+
+### Bug Fixes
+
+* **designer:** build chat errors ([#444](https://github.com/llama-farm/llamafarm/issues/444)) ([964ed95](https://github.com/llama-farm/llamafarm/commit/964ed95f2268c787a5dbe01aa9025e0bb3049263))
+* **designer:** file drop dataset selection ([#423](https://github.com/llama-farm/llamafarm/issues/423)) ([1bd0a42](https://github.com/llama-farm/llamafarm/commit/1bd0a429103b3cc8d3ff69b0ff804862ee92b506))
+* **package:** missing ruff config for datamodel gen ([#450](https://github.com/llama-farm/llamafarm/issues/450)) ([1e5a31b](https://github.com/llama-farm/llamafarm/commit/1e5a31bad7bec5a2bf4c8ea4932fffe47896bf06))
+
+
+### Miscellaneous Chores
+
+* release 0.0.14 ([58522a1](https://github.com/llama-farm/llamafarm/commit/58522a1a681030d1b4328b23da39b06c1acf676d))
+
+## [0.0.13](https://github.com/llama-farm/llamafarm/compare/v0.0.12...v0.0.13) (2025-11-11)
+
+
+### Bug Fixes
+
+* **cli:** use correct version number ([#440](https://github.com/llama-farm/llamafarm/issues/440)) ([d01f9b8](https://github.com/llama-farm/llamafarm/commit/d01f9b872b20e8e283daafe30a1e313c89682d99))
+
+## [0.0.12](https://github.com/llama-farm/llamafarm/compare/v0.0.11...v0.0.12) (2025-11-11)
+
+
+### Features
+
+* add tests for project deletion ([afdf3a5](https://github.com/llama-farm/llamafarm/commit/afdf3a51e4b54313ff1345528009c068468052c4))
+* **cli:** add delete projects command ([#420](https://github.com/llama-farm/llamafarm/issues/420)) ([0a03d2a](https://github.com/llama-farm/llamafarm/commit/0a03d2adf54a2d3b3bc09ddacfe3ba1b2a502441))
+* **designer:** add copy button to config editor ([af22097](https://github.com/llama-farm/llamafarm/commit/af22097401cb951cfd9591d20c59f8270d8f7169))
+* **designer:** config anchor points and outline, jump to section, parse config, highligh ([04b3c52](https://github.com/llama-farm/llamafarm/commit/04b3c528a402b391274ef1598416f68dac28dae4))
+* **designer:** config unsaved changes modal ([fd8c588](https://github.com/llama-farm/llamafarm/commit/fd8c588cf6f7914a694809b1ad582faac5fbb11f))
+* **designer:** scroll to spot (search incl) ([0c9b707](https://github.com/llama-farm/llamafarm/commit/0c9b70769a12b8ba4a17ed8f05add8cfe350cfb1))
+* **designer:** search field in config editor ([1a2c2a8](https://github.com/llama-farm/llamafarm/commit/1a2c2a837daece6085058460765acab64560cb89))
+* **designer:** tab specific section jumping for config editor toggling ([61edd24](https://github.com/llama-farm/llamafarm/commit/61edd2445724fa6ccf4567455bf8b1b4857eeabd))
+* **designer:** unsaved changes prompt for config editor ([401fcf7](https://github.com/llama-farm/llamafarm/commit/401fcf7091a6e1f857f4dab89feec443609da945))
+* implement delete_project in ProjectService ([1d896b0](https://github.com/llama-farm/llamafarm/commit/1d896b0c74d600bd9531868dcaeb410722188e68))
+* **server:** add embedding strategies to database api ([#428](https://github.com/llama-farm/llamafarm/issues/428)) ([053b965](https://github.com/llama-farm/llamafarm/commit/053b9658ace6d4b624c1ca6dab758527396e3e1a))
+* **server:** add mcp_server prop to runtime config ([#415](https://github.com/llama-farm/llamafarm/issues/415)) ([693ecad](https://github.com/llama-farm/llamafarm/commit/693ecadff546bac8d5eae3a8b79ba03a7ba02f0d))
+* **server:** add project context provider ([#417](https://github.com/llama-farm/llamafarm/issues/417)) ([4d50045](https://github.com/llama-farm/llamafarm/commit/4d50045841f17fc61c635edcfa43cad565e15e12))
+* **server:** implement delete project api ([db0536b](https://github.com/llama-farm/llamafarm/commit/db0536b9035717d932d6827a759eba3fd9deb3c5))
+* update API endpoint to use new delete method ([8e6233d](https://github.com/llama-farm/llamafarm/commit/8e6233d2fe2fd7f9e30c30131b5b053cb3686099))
+
+
+### Bug Fixes
+
+* allow deleting projects with invalid configs ([b125192](https://github.com/llama-farm/llamafarm/commit/b125192f0512f9e4c6ce44fd489df19fbc36a672))
+* clean up in-memory sessions ([476fbc2](https://github.com/llama-farm/llamafarm/commit/476fbc2cee52bab853acad87488328e0627e9942))
+* **cli:** ensure we use a managed python ([#410](https://github.com/llama-farm/llamafarm/issues/410)) ([13683ea](https://github.com/llama-farm/llamafarm/commit/13683ea810469971e27fea3fb2ee3821f59bc4b8))
+* delete entire directory ([8cfc62d](https://github.com/llama-farm/llamafarm/commit/8cfc62d131e606962a93a847395ae6c0f2ff4e0a))
+* **designer:** add footer to chat window to nudge testing chats to test tab ([1ba4fd8](https://github.com/llama-farm/llamafarm/commit/1ba4fd8bb21b59603875f6f7bc29aa3cb8b61be0))
+* **designer:** add title to chat window "build assistant" ([020080e](https://github.com/llama-farm/llamafarm/commit/020080efc106dec44a8a8126013789b801a948d5))
+* **designer:** address comments ([3908d4c](https://github.com/llama-farm/llamafarm/commit/3908d4c59889b1208c823a5827d4771d4b0df8fc))
+* **designer:** address comments and slim down PR maybe ([6f465c8](https://github.com/llama-farm/llamafarm/commit/6f465c86b75c70f3ca01ce9a87ee867abcbfce09))
+* **designer:** address cubic comment ([6a36728](https://github.com/llama-farm/llamafarm/commit/6a3672878d536a612d7ce7a51d7f95c23c9887ea))
+* **designer:** addressing comments ([6f26ae8](https://github.com/llama-farm/llamafarm/commit/6f26ae8f89c3f317292379904bdc0c9118abfe09))
+* **designer:** addressing comments ([7f491b6](https://github.com/llama-farm/llamafarm/commit/7f491b625cadd08714a1fb0c75e8fae5ccba3be1))
+* **designer:** addressing field validation comment ([fbcf7f5](https://github.com/llama-farm/llamafarm/commit/fbcf7f5c1332ae1ab42a8e919622c24387db15f2))
+* **designer:** allow edit database ([b9bddb9](https://github.com/llama-farm/llamafarm/commit/b9bddb98f878a0873270d3b305e1397c60da1230))
+* **designer:** allow model swap from existing project and disk models ([#433](https://github.com/llama-farm/llamafarm/issues/433)) ([0e5870a](https://github.com/llama-farm/llamafarm/commit/0e5870af54395f9e42c69956498b1089490a2a54))
+* **designer:** allow project delete from designer with new API ([#418](https://github.com/llama-farm/llamafarm/issues/418)) ([ae9c6ba](https://github.com/llama-farm/llamafarm/commit/ae9c6ba7e700d914398b4a798ea3a29f8017eeb5))
+* **designer:** bug in config editor with collapsing ad expanding menus ([fd08028](https://github.com/llama-farm/llamafarm/commit/fd08028fede58e9716f7c65d0b83ab610efe6766))
+* **designer:** build error end2end fix maybe ([d850c83](https://github.com/llama-farm/llamafarm/commit/d850c8391bb592f07fb32b7ba18a3b4ecd50d28b))
+* **designer:** build errors ([73bdfa5](https://github.com/llama-farm/llamafarm/commit/73bdfa511b422cb11fb6cc88e2ccb689d6413983))
+* **designer:** chat response scroll ux ([5c027f6](https://github.com/llama-farm/llamafarm/commit/5c027f69e96253faf2ac65bccf3d7e5fe4a5eaf4))
+* **designer:** clean up code ([92021af](https://github.com/llama-farm/llamafarm/commit/92021af2d0a29630fe089f497b0736c78e1a36eb))
+* **designer:** config editor contents style polish ([938a71b](https://github.com/llama-farm/llamafarm/commit/938a71bc79eae7bfe425e885ba9555db9ffe4721))
+* **designer:** data config editor was not loading ([b0ebc8e](https://github.com/llama-farm/llamafarm/commit/b0ebc8e053e19d9a00f6d6fbbed64f2f23d94091))
+* **designer:** fix build errors and jump to section issue ([6687e8f](https://github.com/llama-farm/llamafarm/commit/6687e8f7ecc3cab22aedd64e50cf54fd3d2f90dc))
+* **designer:** fix issue with unsaved changes modal not appearing ([efca91c](https://github.com/llama-farm/llamafarm/commit/efca91cfc13cd9373e2e9dce9f10365f46ad930d))
+* **designer:** fix scroll issue on the botton of the dataset page ([01c4567](https://github.com/llama-farm/llamafarm/commit/01c4567c19d4ef665515763b9d91a2114298809a))
+* **designer:** fix tab issue created by last commit ([8191181](https://github.com/llama-farm/llamafarm/commit/81911814b996ee2ff82cc597e9dcb36ab9534e81))
+* **designer:** fix test page bug with switcher save ([32bda2e](https://github.com/llama-farm/llamafarm/commit/32bda2e31fe71f62f1536731894fae13bc0e381e))
+* **designer:** fixed bug where editing config cleared contents panel state ([24bbf66](https://github.com/llama-farm/llamafarm/commit/24bbf6656dfd32e8d467be2ab7a48b774e5de59b))
+* **designer:** fixing what I broke ([a8b5212](https://github.com/llama-farm/llamafarm/commit/a8b5212060e070c47d396e6a2d3cf4eb9b527c99))
+* **designer:** mobile mode switch to test tab was not working ([71beea5](https://github.com/llama-farm/llamafarm/commit/71beea52dbdf036fa80459fe46365083cb299009))
+* **designer:** new project creation experience ([#411](https://github.com/llama-farm/llamafarm/issues/411)) ([2f9db9d](https://github.com/llama-farm/llamafarm/commit/2f9db9df61e557831f23fc7c200705a34c85f5f0))
+* **designer:** re-add "add database" button ([4fcdc3a](https://github.com/llama-farm/llamafarm/commit/4fcdc3a159756dbb57a751da8b880902f74a8cf0))
+* **designer:** removing code that wasn't working (scroll) ([fd63c41](https://github.com/llama-farm/llamafarm/commit/fd63c418eadaf8f9b5fe751496e00eea5377b4b7))
+* **designer:** simplify create projects fields ([cf20236](https://github.com/llama-farm/llamafarm/commit/cf202361b4f1662efc1d297c58f8aa29c5eb2b15))
+* **designer:** simplify PR ([084efb8](https://github.com/llama-farm/llamafarm/commit/084efb888664b0d7c28a3634697d4f7969b1a8f1))
+* **designer:** small edits to dropdown ([0ae6405](https://github.com/llama-farm/llamafarm/commit/0ae6405c4e46810cc122f157b0c46b61450e23f0))
+* **designer:** tool call and chat style enhancements + markdown edits ([f774e7e](https://github.com/llama-farm/llamafarm/commit/f774e7e2adc4d9d92ba53dd7d673782b8829e5bd))
+* **designer:** upgrade show correct version ([#406](https://github.com/llama-farm/llamafarm/issues/406)) ([11cf9cd](https://github.com/llama-farm/llamafarm/commit/11cf9cd24accd0cac30676a10a52039cbeb597a1))
+
+
+### Miscellaneous Chores
+
+* release 0.0.12 ([dd942a1](https://github.com/llama-farm/llamafarm/commit/dd942a1d59ef303a8914bd50f3eb4a9055dfaeea))
+
+## [0.0.11](https://github.com/llama-farm/llamafarm/compare/v0.0.10...v0.0.11) (2025-10-31)
+
+
+### Features
+
+* **designer:** run as part of server ([#389](https://github.com/llama-farm/llamafarm/issues/389)) ([72b7942](https://github.com/llama-farm/llamafarm/commit/72b7942711b8b8dfdfa7971a817d9295458d38b3))
+
+
+### Bug Fixes
+
+* **designer:** make the chats work ([#387](https://github.com/llama-farm/llamafarm/issues/387)) ([f4e3e0b](https://github.com/llama-farm/llamafarm/commit/f4e3e0b33e0adb15acc3ea5a7aac601a1cb99ffb))
+* **runtime:** docker tweak ([54ba31a](https://github.com/llama-farm/llamafarm/commit/54ba31a611c9334c2c4dbfee5541c878e87f8665))
+
+
+### Miscellaneous Chores
+
+* release 0.0.11 ([f624e6b](https://github.com/llama-farm/llamafarm/commit/f624e6bbb460588f8427b90bc24650f6bb12d54e))
+
+## [0.0.10](https://github.com/llama-farm/llamafarm/compare/v0.0.9...v0.0.10) (2025-10-31)
+
+
+### Features
+
+* add MCP server and improve config importing ([#301](https://github.com/llama-farm/llamafarm/issues/301)) ([65fc50f](https://github.com/llama-farm/llamafarm/commit/65fc50faeef3a34e62d69d946da36d85e8e8a355))
+* **cli:** add services status command ([#363](https://github.com/llama-farm/llamafarm/issues/363)) ([69166ce](https://github.com/llama-farm/llamafarm/commit/69166ce3042f00dbda260f70beb44ef4a3698d1a))
+* **cli:** enable upgrades via TUI menu ([#339](https://github.com/llama-farm/llamafarm/issues/339)) ([ec80e34](https://github.com/llama-farm/llamafarm/commit/ec80e34bf887d699be25e7b51514dca1a9816ac9))
+* **designer:** allow models to refernce prompt sets ([0865e3b](https://github.com/llama-farm/llamafarm/commit/0865e3b6fdc1e8222b7a0d2db60cbd05d856e422))
+* **designer:** double click to toggle to tab home state + polish padding on header ([fa30e2a](https://github.com/llama-farm/llamafarm/commit/fa30e2aa19ec5310c11073136b81cc781f3757c5))
+* **designer:** download models and use disk models ([#382](https://github.com/llama-farm/llamafarm/issues/382)) ([48c8ee5](https://github.com/llama-farm/llamafarm/commit/48c8ee591b7cb480f1f18dc5df73097d07afd934))
+* **designer:** Enhanced dataset processing progress tracking and results display ([#375](https://github.com/llama-farm/llamafarm/issues/375)) ([6689606](https://github.com/llama-farm/llamafarm/commit/668960633fd2d968d5217be8f93a7734ed76475e))
+* **designer:** hide cloud models, update local models to capture name and description ([7b9cc80](https://github.com/llama-farm/llamafarm/commit/7b9cc8008a1dbc42858aedbdba73ba4b6130b11b))
+* **designer:** hook up dev chat to designer chat ([ab56435](https://github.com/llama-farm/llamafarm/commit/ab56435952faf79b4201ab3dde11059b64d8e8b3))
+* **designer:** hook up models to read and display the correct model ([c594db9](https://github.com/llama-farm/llamafarm/commit/c594db93c465d9e2ae6db83992509cb44e9a6b65))
+* **designer:** hook up models to read and display the correct model ([8fb249d](https://github.com/llama-farm/llamafarm/commit/8fb249d441dfaa2cc217ef160dc2a616edc4c63f))
+* **designer:** hook up test chat ([#378](https://github.com/llama-farm/llamafarm/issues/378)) ([92e4eff](https://github.com/llama-farm/llamafarm/commit/92e4eff3b5702868cb4908c04c6838d01002eda2))
+* **designer:** prompts and models ux quick updates so they can be hooked up ([fe47d08](https://github.com/llama-farm/llamafarm/commit/fe47d086905024e0c4c3828e009e3e311879d374))
+* **designer:** update "add prompt" modal to "add to set" ([16d4848](https://github.com/llama-farm/llamafarm/commit/16d4848651ebf7953f83a46df371c0aba7e44cf0))
+* **designer:** Updating the Data to be dynamic, update config, and process folders.  ([#361](https://github.com/llama-farm/llamafarm/issues/361)) ([bbc69ee](https://github.com/llama-farm/llamafarm/commit/bbc69ee57afd474643aa6ffd64279f113348a823))
+* **designer:** UX for prompt sets ([67e3a77](https://github.com/llama-farm/llamafarm/commit/67e3a771d79a50b24a682692023f053981c23cdd))
+* editable code in code viewer ([8bf1fe9](https://github.com/llama-farm/llamafarm/commit/8bf1fe9a07d8529c8a4a02ba23fe70fd0bf0509f))
+* **rag:** .msg parsing and loader refactor ([#309](https://github.com/llama-farm/llamafarm/issues/309)) ([424eadf](https://github.com/llama-farm/llamafarm/commit/424eadf6da8d6e86aa2010993bc2eeb10bfa201e))
+* universal runtime and native processes ([#349](https://github.com/llama-farm/llamafarm/issues/349)) ([d535842](https://github.com/llama-farm/llamafarm/commit/d535842ad0d0ea092de2352711445e46647dc562))
+
+
+### Bug Fixes
+
+* add Python version constraints for PyTorch compatibility ([#380](https://github.com/llama-farm/llamafarm/issues/380)) ([df0a9b4](https://github.com/llama-farm/llamafarm/commit/df0a9b466c8ed418cdb6b4e6970ed97d6cd9ae3d))
+* **ci:** bust Go build cache when source files change ([b1f0c24](https://github.com/llama-farm/llamafarm/commit/b1f0c248c4f4d1d032147c8f4de224c7491ba5fa))
+* **ci:** make chmod non-fatal in docker compose test ([2cde502](https://github.com/llama-farm/llamafarm/commit/2cde50297526d1b4198f51405196cf77ff9778d4)), closes [#372](https://github.com/llama-farm/llamafarm/issues/372)
+* **ci:** resolve docker compose test permission error on self-hosted runners ([f73e4c6](https://github.com/llama-farm/llamafarm/commit/f73e4c62ed4cf29251fa4184211f7b2dc96ec146)), closes [#367](https://github.com/llama-farm/llamafarm/issues/367)
+* **ci:** use sudo to remove docker-created files in test cleanup ([0c3f532](https://github.com/llama-farm/llamafarm/commit/0c3f532c2eb34f1cd45c0fc3c5ca3b6d568fe6ea))
+* Clear-text logging of sensitive information ([#345](https://github.com/llama-farm/llamafarm/issues/345)) ([5a0f2be](https://github.com/llama-farm/llamafarm/commit/5a0f2bef130a6792bf2099bba982bc498656ad90))
+* **dashboard:** swap out fake metric cards on dashboard with real counts ([f940dd2](https://github.com/llama-farm/llamafarm/commit/f940dd24911d4a1ba76def2afa5989be6aef63af))
+* **designer:** add 404 page ([ad95bd4](https://github.com/llama-farm/llamafarm/commit/ad95bd4b91299c04b910c68f0b5069a788a0e768))
+* **designer:** add prompts empty state ([c7c1763](https://github.com/llama-farm/llamafarm/commit/c7c176341f872ef8235e8d7358abd4787079329a))
+* **designer:** address build errors and things ([84f3fcb](https://github.com/llama-farm/llamafarm/commit/84f3fcb8b9fd9f0cdf83950fe5802acd8737686b))
+* **designer:** address code review issues ([74cfdde](https://github.com/llama-farm/llamafarm/commit/74cfddeafb6909a7c19eace9a6ef0ff86fc69909))
+* **designer:** addressing comments and simplifying I think ([69163e6](https://github.com/llama-farm/llamafarm/commit/69163e670d84434a75009b16404da5e9d2984af2))
+* **designer:** addressing high priority AI comments ([0bd65e2](https://github.com/llama-farm/llamafarm/commit/0bd65e2c4fa90d5cdde34e2f97c0b62cf1f6cd53))
+* **designer:** build errors ([d3b1c95](https://github.com/llama-farm/llamafarm/commit/d3b1c9541e317b3dee1e4132494a8e689e957f3d))
+* **designer:** build errors ([7ddc1a4](https://github.com/llama-farm/llamafarm/commit/7ddc1a488543d0213ba84120fec9ef6b36caad0b))
+* **designer:** build errors ([2176bcf](https://github.com/llama-farm/llamafarm/commit/2176bcf20ee18db88d103c072cad67142dcdfc62))
+* **designer:** build errors and comments ([60bb603](https://github.com/llama-farm/llamafarm/commit/60bb60340ea2723e77d0ff7883594a8f52523945))
+* **designer:** clean up markdown responses and typing annimation ([cce0ea4](https://github.com/llama-farm/llamafarm/commit/cce0ea450299cc3d0941e0f21dbd8cc59b875517))
+* **designer:** designer project name validation ([#385](https://github.com/llama-farm/llamafarm/issues/385)) ([96c5499](https://github.com/llama-farm/llamafarm/commit/96c5499f403b4be2da1f1057d1d5d5d2c985b09c))
+* **designer:** empty state to prompts tables/page and styling ([df9a732](https://github.com/llama-farm/llamafarm/commit/df9a73290f7d4a3f6f0f0cf668552ef0d6d685e5))
+* **designer:** fix build error ([5d3c6a9](https://github.com/llama-farm/llamafarm/commit/5d3c6a9f08ddcc20df85da184a524f0c7d072cc1))
+* **designer:** hide package button for now ([6e344f8](https://github.com/llama-farm/llamafarm/commit/6e344f83dd98559b77cc7a7ee4abe92dc4806216))
+* **designer:** hide versions card and versions page ([3c88d7a](https://github.com/llama-farm/llamafarm/commit/3c88d7a8a6a84b2fb963e236fecabbbb807ed350))
+* **designer:** hook up prompt sets to new config format ([bc28460](https://github.com/llama-farm/llamafarm/commit/bc28460e62c8c7f1d7a49c73214a7db1893ab527))
+* **designer:** loading state for project switching and shorter auto-response ([7871ac0](https://github.com/llama-farm/llamafarm/commit/7871ac0fcf719f29b72d0f3eb928ccdc7ce62ab3))
+* **designer:** persist default model and robust config updates\n\n- Persist default model via updateProject\n- Handle deleting default model and clear runtime.default_model\n- Add optimistic rollback for add/toggle/clear/delete UI state\n- Harden config-&gt;InferenceModel mapping with fallbacks\n- Replace Docker-only base_url with localhost for local models\n\nfix(dashboard): guard default model display without any-cast\n\nchore(a11y): tie labels to inputs in model dialog ([cdf2eeb](https://github.com/llama-farm/llamafarm/commit/cdf2eebc9abcfe0944d35a28c31d6c19a9fb7b54))
+* **designer:** polish markdown render to have less spacing in responses ([72ec926](https://github.com/llama-farm/llamafarm/commit/72ec926952908ed8b63838ce1ff57a5ec2572032))
+* **designer:** Project information in designer ([0bd89ba](https://github.com/llama-farm/llamafarm/commit/0bd89ba03faa4e779f7e8bbe4578a98b73d13916))
+* **designer:** re-hook models count to the dashboard count + write function for model prompt sets ([9d7daa1](https://github.com/llama-farm/llamafarm/commit/9d7daa1e45294633c40f42b138141754552d9e2f))
+* **designer:** remove @codemirror/lint from vite config - package not installed ([57fa504](https://github.com/llama-farm/llamafarm/commit/57fa504020b0e4648aaf3d269b8d347224282337))
+* **designer:** remove ajv and ajv-formats from vite config - packages not installed or used ([0064070](https://github.com/llama-farm/llamafarm/commit/006407034ae3ee3d36eb561970465830ffa6b28d))
+* **designer:** remove prompt IDs ([790c632](https://github.com/llama-farm/llamafarm/commit/790c632adf0e4c1b4d0f35cb0f2434a561c6edcf))
+* **designer:** remove session ids ([bf048d7](https://github.com/llama-farm/llamafarm/commit/bf048d71830155df4069b9c60164599d624b723a))
+* **designer:** resolve TypeScript build errors in Models.tsx ([252f3e0](https://github.com/llama-farm/llamafarm/commit/252f3e0994d9d5001ad3af25b2196e969a97ec29)), closes [#372](https://github.com/llama-farm/llamafarm/issues/372)
+* **designer:** revert destructive color for accessibility compliance ([f4f7cb9](https://github.com/llama-farm/llamafarm/commit/f4f7cb9a07246bf25b55ae8c555bb164f5c99fb8))
+* **designer:** slim down this PR (maybe) ([2a9bc60](https://github.com/llama-farm/llamafarm/commit/2a9bc6008f434b0b0cca57506a0bca48f5f589e0))
+* **designer:** sourcery comments and quodo comments and remove session stuff ([262215a](https://github.com/llama-farm/llamafarm/commit/262215a0911779277041d2e2fd70309bcdc2aaed))
+* **designer:** update sample projects to match new config standard ([#373](https://github.com/llama-farm/llamafarm/issues/373)) ([3d99e03](https://github.com/llama-farm/llamafarm/commit/3d99e03437435a06453569f092d640cff66c272a))
+* **docs:** designer updates + FDA example ([#386](https://github.com/llama-farm/llamafarm/issues/386)) ([3842ae1](https://github.com/llama-farm/llamafarm/commit/3842ae1ccbfa11afc84a6da68025f6a20fa8618c))
+* **e2e:** add runtime field to CLI config struct ([a648d2a](https://github.com/llama-farm/llamafarm/commit/a648d2ada24b92de0eda0046b91b314f115cf9c7)), closes [#372](https://github.com/llama-farm/llamafarm/issues/372)
+* fixed test and build errors ([8b44134](https://github.com/llama-farm/llamafarm/commit/8b4413474ba56455f093f57d099011cfcb5e3761))
+* OllamaEmbedder respects configured dimension from llamafarm.yaml ([#338](https://github.com/llama-farm/llamafarm/issues/338)) ([ab15fc8](https://github.com/llama-farm/llamafarm/commit/ab15fc8a739b21c5da7bfeed1594ee2552f3a453))
+* RAG worker Ollama connection in Docker environments ([#347](https://github.com/llama-farm/llamafarm/issues/347)) ([043c55e](https://github.com/llama-farm/llamafarm/commit/043c55e356b8b0802bd7c93c487791bd709e911d))
+* **server:** remove localhost address in seed project ([8b0ab07](https://github.com/llama-farm/llamafarm/commit/8b0ab0772fd1477139b3d0be415488eab9b9e7ae))
+* url rewriting logic ([#342](https://github.com/llama-farm/llamafarm/issues/342)) ([c1a2721](https://github.com/llama-farm/llamafarm/commit/c1a272106056462e97ef32b79340d758d1ec23d8))
+* use typed structs for config serialization in CLI init command ([#384](https://github.com/llama-farm/llamafarm/issues/384)) ([529f76a](https://github.com/llama-farm/llamafarm/commit/529f76a9b4008e31ace40de7adf1cccac667bab9))
+
+
+### Miscellaneous Chores
+
+* release 0.0.10 ([5981f3b](https://github.com/llama-farm/llamafarm/commit/5981f3b54c63a461187813e7dea39c513f77bfa6))
+
 ## [0.0.9](https://github.com/llama-farm/llamafarm/compare/v0.0.8...v0.0.9) (2025-10-20)
 
 

@@ -1,5 +1,8 @@
 {
-  "root": "rag/",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "rag",
+  "projectType": "application",
+  "sourceRoot": "rag",
   "targets": {
     "start": {
       "executor": "nx:run-commands",

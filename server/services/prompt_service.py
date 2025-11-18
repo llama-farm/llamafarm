@@ -5,7 +5,6 @@ supporting named prompt sets with per-model selection.
 """
 
 import sys
-from functools import lru_cache
 from pathlib import Path
 
 from core.logging import FastAPIStructLogger
@@ -14,7 +13,7 @@ from core.logging import FastAPIStructLogger
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
-from config.datamodel import LlamaFarmConfig, Model, Message  # noqa: E402
+from config.datamodel import LlamaFarmConfig, Model, PromptMessage  # noqa: E402
 
 logger = FastAPIStructLogger(__name__)
 
@@ -23,7 +22,7 @@ class PromptService:
     """Service for resolving prompts for models."""
 
     @staticmethod
-    def get_prompt_sets(config: LlamaFarmConfig) -> dict[str, list[Message]]:
+    def get_prompt_sets(config: LlamaFarmConfig) -> dict[str, list[PromptMessage]]:
         """
         Convert config.prompts (list of NamedPromptSet) to a dict.
 
@@ -38,7 +37,7 @@ class PromptService:
     @staticmethod
     def resolve_prompts_for_model(
         config: LlamaFarmConfig, model: Model
-    ) -> list[Message]:
+    ) -> list[PromptMessage]:
         """
         Resolve which prompts to use for a specific model.
 
@@ -47,10 +46,10 @@ class PromptService:
         2. Otherwise, stack all prompts in definition order
 
         Note on caching: This method is intentionally NOT cached using @lru_cache because:
-        1. Message objects are Pydantic models and not hashable
+        1. PromptMessage objects are Pydantic models and not hashable
         2. The operation is lightweight (dict lookup + list concatenation)
         3. Config objects are already cached at the project level
-        4. Caching would require serializing/deserializing Message objects, which is slower
+        4. Caching would require serializing/deserializing PromptMessage objects, which is slower
            than the actual operation
 
         For performance optimization, consider caching at the ProjectChatOrchestrator level
@@ -88,7 +87,7 @@ class PromptService:
                     )
                     merged.extend(messages_in_set)
                 else:
-                    available_sets = ', '.join(sorted(prompt_sets.keys()))
+                    available_sets = ", ".join(sorted(prompt_sets.keys()))
                     error_msg = (
                         f"Model '{model.name}' references non-existent prompt set '{pset_name}'. "
                         f"Available prompt sets: {available_sets}"

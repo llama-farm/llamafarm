@@ -11,6 +11,17 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+// Config file constants (searched in this order)
+var (
+	// SupportedLlamaFarmConfigFiles lists all supported llamafarm config file names
+	SupportedLlamaFarmConfigFiles = []string{
+		"llamafarm.yaml",
+		"llamafarm.yml",
+		"llamafarm.toml",
+		"llamafarm.json",
+	}
+)
+
 // LoadConfig loads a llamafarm config file from the specified directory
 func LoadConfig(configDir string) (*LlamaFarmConfig, error) {
 	// configDir should always be a directory path
@@ -93,7 +104,7 @@ func IsConfigFile(filePath string) bool {
 	return false
 }
 
-// SaveConfig saves a llamafarm.yaml configuration file
+// SaveConfig saves a llamafarm.yaml configuration file using atomic writes
 func SaveConfig(config *LlamaFarmConfig, configPath string) error {
 	// If no path specified, save to llamafarm.yaml in current directory
 	if configPath == "" {
@@ -112,15 +123,69 @@ func SaveConfig(config *LlamaFarmConfig, configPath string) error {
 		}
 	}
 
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	// Use atomic write: write to temp file, then rename
+	if err := atomicWriteFile(configPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	return nil
 }
 
+// atomicWriteFile writes data to a file atomically by writing to a temp file
+// and then renaming it. This prevents readers from seeing partial writes.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	// Create temp file in the same directory as the target file
+	// to ensure it's on the same filesystem (required for atomic rename)
+	dir := filepath.Dir(path)
+	tmpFile, err := os.CreateTemp(dir, ".llamafarm-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	// Clean up temp file on error
+	var renamed bool
+	defer func() {
+		if tmpFile != nil {
+			tmpFile.Close()
+		}
+		// Always remove temp file if rename didn't succeed
+		if !renamed {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	// Write data to temp file
+	if _, err := tmpFile.Write(data); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+
+	// Sync to ensure data is written to disk
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp file: %w", err)
+	}
+
+	// Close the temp file
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	// Set permissions on temp file
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return fmt.Errorf("failed to set permissions on temp file: %w", err)
+	}
+
+	// Atomically rename temp file to target file
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("failed to rename temp file to target: %w", err)
+	}
+	renamed = true
+
+	return nil
+}
+
 // FindDatasetByName finds a dataset by name in the configuration
-func (c *LlamaFarmConfig) FindDatasetByName(name string) (*Dataset, int) {
+func (c *LlamaFarmConfig) FindDatasetByName(name string) (*LlamaFarmConfigDatasetsElem, int) {
 	for i, dataset := range c.Datasets {
 		if dataset.Name == name {
 			return &dataset, i
@@ -130,7 +195,7 @@ func (c *LlamaFarmConfig) FindDatasetByName(name string) (*Dataset, int) {
 }
 
 // AddDataset adds a new dataset to the configuration
-func (c *LlamaFarmConfig) AddDataset(dataset Dataset) error {
+func (c *LlamaFarmConfig) AddDataset(dataset LlamaFarmConfigDatasetsElem) error {
 	// Check if dataset with same name already exists
 	if existing, _ := c.FindDatasetByName(dataset.Name); existing != nil {
 		return fmt.Errorf("dataset with name '%s' already exists", dataset.Name)
@@ -199,13 +264,15 @@ func GetServerConfig(configPath string, serverURL string, namespace string, proj
 	// Extract from config if not provided via flags
 	if config != nil && (finalNamespace == "" || finalProject == "") {
 		projectInfo, err := config.GetProjectInfo()
-		if err == nil {
-			if finalNamespace == "" {
-				finalNamespace = projectInfo.Namespace
-			}
-			if finalProject == "" {
-				finalProject = projectInfo.Project
-			}
+		if err != nil {
+			// Don't silently ignore config errors - return them so users know what's wrong
+			return nil, fmt.Errorf("failed to extract project info from config: %w", err)
+		}
+		if finalNamespace == "" {
+			finalNamespace = projectInfo.Namespace
+		}
+		if finalProject == "" {
+			finalProject = projectInfo.Project
 		}
 	}
 

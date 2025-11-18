@@ -1,6 +1,7 @@
 import { apiClient } from './client'
 
 export type VersionCheckResponse = {
+  current_version?: string
   latest_version: string
   name?: string
   release_notes?: string

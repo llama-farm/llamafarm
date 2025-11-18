@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["api", "core", "agents", "services", "background"]
+packages = ["api", "core", "agents", "services"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -20,13 +20,15 @@ dependencies = [
   "fastapi>=0.116.1",
   "pre-commit>=4.2.0",
   "pydantic-settings>=2.10.1",
-  "ruff>=0.12.7",
+  "ruff>=0.14.3",
   "uvicorn>=0.35.0",
   "openai>=1.0.0",
   "instructor>=1.0.0",
-  "urllib3==1.26.20",
+  "urllib3>=2.0.0",
   "six>=1.16.0",
-  "requests>=2.25.0",
+  "requests>=2.32.5,<3.0.0",
+  "httpx>=0.25.0",
+  "mcp>=1.2.0",
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
@@ -37,7 +39,13 @@ dependencies = [
   # Fix dotenv parsing
   "python-dotenv>=1.0.0",
   "llamafarm-config",
+  "llamafarm-common",
   "types-requests>=2.31.0.6",
+  "fastapi-mcp>=0.4.0",
+  "ollama>=0.6.0",
+  "huggingface-hub>=1.0.1",
+  # Windows-specific dependencies
+  "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -53,22 +61,19 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+# Ruff configuration is shared across all Python components
+# See ../ruff.toml for the actual configuration
 
 [tool.ruff]
-line-length = 88         # Match Black's default
-target-version = "py311"
-
-# Enable auto-fixes
-fix = true
-
-# Select rulesets (examples: E for pycodestyle, F for pyflakes, I for isort, B for bugbear)
-lint.select = ["E", "F", "I", "B", "UP", "SIM"]
-
-# Exclude some files
-exclude = ["migrations", ".venv", "venv", "build", "dist"]
+# Import shared configuration
+extend = "../ruff.toml"
 
 [tool.uv.sources]
 llamafarm-config = { path = "../config", editable = true }
+llamafarm-common = { path = "../common", editable = true }
 
 # Optional: treat warnings as errors
 # force-exclude = true

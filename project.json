@@ -20,6 +20,29 @@
       "options": {
         "command": "cd config && bash ../runtimes/lemonade/start-all.sh"
       }
+    },
+    "pack": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "command": "bash scripts/package-source.sh ${VERSION:-unknown} dist"
+      },
+      "dependsOn": [
+        "cli:generate-types",
+        "designer:build"
+      ],
+      "inputs": [
+        "{workspaceRoot}/scripts/package-source.sh",
+        "{workspaceRoot}/server/**/*",
+        "{workspaceRoot}/rag/**/*",
+        "{workspaceRoot}/common/**/*",
+        "{workspaceRoot}/config/**/*",
+        "{workspaceRoot}/runtimes/universal/**/*",
+        "{workspaceRoot}/designer/dist/**/*"
+      ],
+      "outputs": [
+        "{workspaceRoot}/dist"
+      ]
     }
   }
 }

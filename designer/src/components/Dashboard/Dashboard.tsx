@@ -1,7 +1,6 @@
 import FontIcon from '../../common/FontIcon'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mode } from '../ModeToggle'
 import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -10,6 +9,9 @@ import { useProject } from '../../hooks/useProjects'
 // import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets } from '../../hooks/useDatasets'
+import { useModeWithReset } from '../../hooks/useModeWithReset'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
 
 const Dashboard = () => {
   const navigate = useNavigate()
@@ -17,17 +19,9 @@ const Dashboard = () => {
   const activeProject = useActiveProject()
 
   // All state declarations first
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
+  const [showValidationDetails, setShowValidationDetails] = useState(false)
   const [projectName, setProjectName] = useState<string>('Dashboard')
-  const [versions, setVersions] = useState<
-    Array<{
-      id: string
-      name: string
-      description: string
-      date: string
-      isCurrent?: boolean
-    }>
-  >([])
   // Datasets list for Data card
   const { data: apiDatasets, isLoading: isDatasetsLoading } = useListDatasets(
     activeProject?.namespace || '',
@@ -41,31 +35,21 @@ const Dashboard = () => {
     activeProject?.project || '',
     !!activeProject?.namespace && !!activeProject?.project
   )
+  const projectConfig = (projectDetail as any)?.project?.config as ProjectConfig | undefined
+  const getRootLocation = useCallback(
+    () => ({ type: 'root' as const }),
+    []
+  )
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getRootLocation,
+  })
 
   const { brief } = useMemo(() => {
     const cfg = (projectDetail?.project?.config || {}) as Record<string, any>
     const project_brief = (cfg?.project_brief || {}) as Record<string, any>
-    // Fallback to localStorage cache if server-side brief not present yet
-    if (!project_brief || Object.keys(project_brief).length === 0) {
-      try {
-        const ns = activeProject?.namespace || ''
-        const pid = activeProject?.project || ''
-        if (ns && pid) {
-          const briefKey = `lf_project_brief_${ns}_${pid}`
-          const cached = localStorage.getItem(briefKey)
-          if (cached) {
-            const parsed = JSON.parse(cached)
-            return {
-              brief: {
-                what: parsed?.what || '',
-                goals: parsed?.goals || '',
-                audience: parsed?.audience || '',
-              },
-            }
-          }
-        }
-      } catch {}
-    }
     return {
       brief: {
         what: project_brief?.what || '',
@@ -73,9 +57,10 @@ const Dashboard = () => {
         audience: project_brief?.audience || '',
       },
     }
-  }, [projectDetail, activeProject?.namespace, activeProject?.project])
+  }, [projectDetail])
 
   const datasets = useMemo(() => {
+    // Only return datasets from the API, no localStorage fallback
     if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
       return apiDatasets.datasets.map(dataset => ({
         id: dataset.name,
@@ -83,21 +68,28 @@ const Dashboard = () => {
         lastRun: new Date(),
       }))
     }
-    try {
-      const stored = localStorage.getItem('lf_demo_datasets')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((d: any) => ({
-            id: d.id || d.name,
-            name: d.name || d.id,
-            lastRun: d.lastRun || new Date(),
-          }))
-        }
-      }
-    } catch {}
     return [] as Array<{ id: string; name: string; lastRun: string | Date }>
   }, [apiDatasets])
+
+  // Calculate dashboard stats
+  const filesProcessed = useMemo(() => {
+    if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
+      return apiDatasets.datasets.reduce((sum, dataset) => {
+        return sum + (dataset.files?.length || 0)
+      }, 0)
+    }
+    return 0
+  }, [apiDatasets])
+
+  const databaseCount = useMemo(() => {
+    const databases = projectDetail?.project?.config?.rag?.databases
+    return Array.isArray(databases) ? databases.length : 0
+  }, [projectDetail])
+
+  const modelsCount = useMemo(() => {
+    const models = projectDetail?.project?.config?.runtime?.models
+    return Array.isArray(models) ? models.length : 0
+  }, [projectDetail])
 
   // Shared modal hook
   const projectModal = useProjectModalContext()
@@ -121,68 +113,36 @@ const Dashboard = () => {
       window.removeEventListener('lf-active-project', handler as EventListener)
   }, [])
 
-  // Keep default project model in sync (listen for updates)
-  const [defaultModelName, setDefaultModelName] = useState<string>(() => {
-    try {
-      const raw = localStorage.getItem('lf_default_project_model')
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        return parsed?.name || 'TinyLlama'
-      }
-    } catch {}
-    return 'TinyLlama'
-  })
+  // Listen for project deletions and redirect to home if current project was deleted
   useEffect(() => {
-    const load = () => {
-      try {
-        const raw = localStorage.getItem('lf_default_project_model')
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          setDefaultModelName(parsed?.name || 'TinyLlama')
-        }
-      } catch {}
+    const handleProjectDeleted = (event: Event) => {
+      const deletedProjectName = (event as CustomEvent<string>).detail
+      if (deletedProjectName === projectName) {
+        // Current project was deleted, redirect to home
+        navigate('/')
+      }
     }
-    const handler = () => load()
     window.addEventListener(
-      'lf:defaultProjectModelUpdated',
-      handler as EventListener
+      'lf-project-deleted',
+      handleProjectDeleted as EventListener
     )
-    window.addEventListener('storage', handler)
-    return () => {
+    return () =>
       window.removeEventListener(
-        'lf:defaultProjectModelUpdated',
-        handler as EventListener
+        'lf-project-deleted',
+        handleProjectDeleted as EventListener
       )
-      window.removeEventListener('storage', handler)
-    }
-  }, [])
+  }, [projectName, navigate])
 
-  // Load and keep versions list in sync with Versions page/localStorage
-  useEffect(() => {
-    const load = () => {
-      try {
-        const raw = localStorage.getItem('lf_versions')
-        if (raw) {
-          const arr = JSON.parse(raw)
-          if (Array.isArray(arr)) setVersions(arr)
-          else setVersions([])
-        } else setVersions([])
-      } catch {
-        setVersions([])
-      }
+  // Get default model name from config
+  const defaultModelName = useMemo(() => {
+    const config = projectDetail?.project?.config
+    const runtime = (config && (config as Record<string, any>).runtime) || null
+    const def = runtime && (runtime as Record<string, any>).default_model
+    if (!def || typeof def !== 'string' || def.trim().length === 0) {
+      return 'No model configured'
     }
-    load()
-    const onUpdate = () => load()
-    window.addEventListener('lf_versions_updated', onUpdate as EventListener)
-    window.addEventListener('storage', onUpdate)
-    return () => {
-      window.removeEventListener(
-        'lf_versions_updated',
-        onUpdate as EventListener
-      )
-      window.removeEventListener('storage', onUpdate)
-    }
-  }, [])
+    return def
+  }, [projectDetail])
 
   return (
     <>
@@ -203,11 +163,79 @@ const Dashboard = () => {
               </button>
             )}
           </div>
-          <PageActions mode={mode} onModeChange={setMode} />
+          <PageActions mode={mode} onModeChange={handleModeChange} />
         </div>
+
+        {/* Validation Error Banner */}
+        {projectDetail?.project?.validation_error &&
+          (() => {
+            // Parse actual error count from validation messages
+            const errorText = projectDetail.project.validation_error
+            let errorCount = 1 // Default to 1 if we can't parse
+
+            // Try to extract error count from patterns like "5 validation errors" or "(and 3 more errors)"
+            const countMatch = errorText.match(
+              /(\d+)\s+(?:validation\s+)?errors?/i
+            )
+            if (countMatch) {
+              errorCount = parseInt(countMatch[1], 10)
+            } else {
+              // Count semicolon-separated error messages as individual errors
+              const parts = errorText
+                .split(';')
+                .filter(s => s.trim().length > 0)
+              if (parts.length > 1) {
+                errorCount = parts.length
+              }
+            }
+
+            return (
+              <div className="mb-4 rounded-lg border border-red-600 bg-red-50 dark:bg-red-950/20">
+                <button
+                  onClick={() =>
+                    setShowValidationDetails(!showValidationDetails)
+                  }
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-red-100 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <FontIcon
+                      type="alert-triangle"
+                      className="w-5 h-5 text-red-600"
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-red-100 bg-red-600 rounded-full px-2.5 py-0.5 font-semibold">
+                        {errorCount} {errorCount === 1 ? 'error' : 'errors'}
+                      </span>
+                      <span className="text-sm font-semibold text-red-900 dark:text-red-100">
+                        Configuration validation{' '}
+                        {errorCount === 1 ? 'issue' : 'issues'} detected
+                      </span>
+                    </div>
+                  </div>
+                  <FontIcon
+                    type={showValidationDetails ? 'chevron-up' : 'chevron-down'}
+                    className="w-5 h-5 text-red-600"
+                  />
+                </button>
+                {showValidationDetails && (
+                  <div className="px-4 pb-4 pt-2 border-t border-red-200 dark:border-red-900">
+                    <pre className="text-xs text-red-800 dark:text-red-200 whitespace-pre-wrap font-mono bg-red-100 dark:bg-red-950/40 p-3 rounded overflow-x-auto">
+                      {projectDetail.project.validation_error}
+                    </pre>
+                    <div className="mt-3 text-xs text-red-700 dark:text-red-300">
+                      <strong>Note:</strong> You can still view and edit this
+                      project, but some features may not work correctly until
+                      the validation errors are fixed.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
         {mode !== 'designer' ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-6">
-            <ConfigEditor className="h-full" />
+            <ConfigEditor className="h-full" initialPointer={configPointer} />
           </div>
         ) : (
           <>
@@ -260,8 +288,12 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
-            <DataCards />
-            <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <DataCards
+              filesProcessed={filesProcessed}
+              databaseCount={databaseCount}
+              modelsCount={modelsCount}
+            />
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               {/* Data (1/3) */}
               <div className="flex flex-col min-w-0 overflow-hidden">
                 <div className="flex flex-row gap-2 items-center h-[40px] px-2 rounded-tl-lg rounded-tr-lg justify-between bg-card border-b border-border">
@@ -348,56 +380,6 @@ const Dashboard = () => {
                       onClick={() => navigate('/chat/models')}
                     >
                       Go to models
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Project versions (1/3) */}
-              <div className="min-w-0 overflow-hidden">
-                <div className="flex flex-row gap-2 items-center justify-between h-[40px] px-2 rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
-                  <span className="text-foreground pl-2">Project versions</span>
-                </div>
-                <div className="p-6 flex flex-col min-h-[260px] justify-between rounded-b-lg bg-card">
-                  <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
-                    {versions.length === 0 ? (
-                      <div className="text-xs text-muted-foreground">
-                        No versions yet
-                      </div>
-                    ) : (
-                      versions.slice(0, 10).map((v, index) => (
-                        <div
-                          key={`${v.id}_${index}`}
-                          className="flex flex-col mb-2"
-                        >
-                          <div className="flex flex-row gap-2 items-center justify-between">
-                            <div className="text-foreground flex items-center gap-2">
-                              <span>{v.name}</span>
-                              {v.isCurrent ? (
-                                <span className="px-2 py-0.5 rounded-2xl text-[10px] border border-teal-200 text-teal-700 bg-teal-50 dark:border-teal-800 dark:text-teal-300 dark:bg-teal-900/30">
-                                  current
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {v.date}
-                            </div>
-                          </div>
-                          {v.description ? (
-                            <div className="text-xs text-muted-foreground">
-                              {v.description}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="w-full flex justify-center items-center mt-4">
-                    <button
-                      className="w-full rounded-lg py-1 border flex flex-row items-center justify-center border-input text-primary hover:bg-accent/20"
-                      onClick={() => navigate('/chat/versions')}
-                    >
-                      View all versions
                     </button>
                   </div>
                 </div>

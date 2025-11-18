@@ -1,22 +1,22 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
-import type { Mode } from '../ModeToggle'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
+import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from '../ui/dropdown-menu'
-import { defaultStrategies } from '../Rag/strategies'
 import type { RagStrategy } from '../Rag/strategies'
-import { getStoredSet, setStoredSet } from '../../utils/storage'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
   DialogTrigger,
   DialogClose,
@@ -26,7 +26,6 @@ import ImportSampleDatasetModal from './ImportSampleDatasetModal'
 import { useImportExampleDataset } from '../../hooks/useExamples'
 import PageActions from '../common/PageActions'
 import { Input } from '../ui/input'
-import { Textarea } from '../ui/textarea'
 import { Badge } from '../ui/badge'
 import { useToast } from '../ui/toast'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -35,24 +34,32 @@ import {
   useListDatasets,
   useCreateDataset,
   useDeleteDataset,
+  useAvailableStrategies,
 } from '../../hooks/useDatasets'
-import type { UIFile } from '../../types/datasets'
+import { uploadFileToDataset } from '../../api/datasets'
+import { useProject } from '../../hooks/useProjects'
+import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
+import { useConfigPointer } from '../../hooks/useConfigPointer'
+import type { ProjectConfig } from '../../types/config'
+import { isValidFile } from '../../utils/fileValidation'
 
-type RawFile = UIFile
+// Batch size for uploads to prevent overwhelming the backend
+const UPLOAD_BATCH_SIZE = 3
 
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
-  const [isDropped, setIsDropped] = useState(false)
-  const [rawFiles, setRawFiles] = useState<RawFile[]>(() => {
-    try {
-      const stored = localStorage.getItem('lf_raw_files')
-      return stored ? (JSON.parse(stored) as RawFile[]) : []
-    } catch {
-      return []
-    }
-  })
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [mode, setMode] = useState<Mode>('designer')
+  const [mode, setMode] = useModeWithReset('designer')
+
+  // File drag-and-drop state management
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [isSelectDatasetModalOpen, setIsSelectDatasetModalOpen] =
+    useState(false)
+  const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadingFileCount, setUploadingFileCount] = useState(0)
+  const activeUploadControllersRef = useRef<AbortController[]>([])
+  const [isTransitioningToCreate, setIsTransitioningToCreate] = useState(false)
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -61,11 +68,54 @@ const Data = () => {
   // Get current active project for API calls
   const activeProject = useActiveProject()
 
-  // Use React Query hooks for datasets with localStorage fallback
+  // Cleanup effect: abort all active upload controllers on unmount
+  useEffect(() => {
+    return () => {
+      // Abort all active upload network requests when component unmounts
+      activeUploadControllersRef.current.forEach(controller => {
+        try {
+          controller.abort()
+        } catch (err) {
+          // Ignore errors from already aborted controllers
+          console.debug('Controller aborted on unmount:', err)
+        }
+      })
+    }
+  }, []) // Empty dependency array - only run cleanup on unmount
+
+  // File type mapping for parser creation (centralized to avoid duplication)
+  const fileTypeMapping = useMemo(
+    () => [
+      { type: 'PDF', parser: 'PDFParser_LlamaIndex', extensions: ['*.pdf'] },
+      {
+        type: 'Docx',
+        parser: 'DOCXParser_LlamaIndex',
+        extensions: ['*.docx'],
+      },
+      { type: 'Text', parser: 'TEXTParser_LlamaIndex', extensions: ['*.txt'] },
+      { type: 'CSV', parser: 'CSVParser_Pandas', extensions: ['*.csv'] },
+      {
+        type: 'Markdown',
+        parser: 'MARKDOWNParser_LlamaIndex',
+        extensions: ['*.md', '*.markdown'],
+      },
+    ],
+    []
+  )
+
+  // Load project config to get strategies (source of truth)
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+
+  // Use React Query hooks for datasets
   const {
     data: apiDatasets,
     isLoading: isDatasetsLoading,
     error: datasetsError,
+    refetch: refetchDatasets,
   } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
@@ -75,104 +125,81 @@ const Data = () => {
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
 
-  // Local demo datasets change counter (forces recompute when we mutate localStorage)
-  const [localDatasetsVersion, setLocalDatasetsVersion] = useState(0)
+  // Custom upload mutation with proper AbortSignal handling
+  const uploadMutation = useMutation({
+    mutationFn: async ({
+      namespace,
+      project,
+      dataset,
+      file,
+      signal,
+    }: {
+      namespace: string
+      project: string
+      dataset: string
+      file: File
+      signal?: AbortSignal
+    }) => {
+      // Use the API service which properly handles the signal
+      return await uploadFileToDataset(
+        namespace,
+        project,
+        dataset,
+        file,
+        signal
+      )
+    },
+    onError: error => {
+      // Don't show error toast for aborted uploads
+      if (
+        (error instanceof Error && error.name === 'AbortError') ||
+        (error as any)?.code === 'ERR_CANCELED'
+      ) {
+        return
+      }
+      // Error toasts for actual failures are handled in handleDatasetSelect
+    },
+  })
 
-  // Convert API datasets to UI format; provide demo fallback if none
+  // Fetch available strategies and databases from API
+  const { data: availableOptions } = useAvailableStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
+
+  // Hook for managing data processing strategies
+  const strategies = useDataProcessingStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || ''
+  )
+
+  const projectConfig = (projectResp as any)?.project?.config as
+    | ProjectConfig
+    | undefined
+  const getDatasetsLocation = useCallback(
+    () => ({ type: 'datasets' as const }),
+    []
+  )
+  const { configPointer, handleModeChange } = useConfigPointer({
+    mode,
+    setMode,
+    config: projectConfig,
+    getLocation: getDatasetsLocation,
+  })
+
+  // Convert API datasets to UI format - only show real datasets from the API
   const datasets = useMemo(() => {
-    const apiList = (apiDatasets?.datasets || []).map(dataset => ({
+    // Only return datasets from the API, no localStorage, no placeholders
+    return (apiDatasets?.datasets || []).map(dataset => ({
       id: dataset.name,
       name: dataset.name,
-      // No rag_strategy on datasets; server provides data_processing_strategy/database
-      database: (dataset as any).database,
-      processingStrategy: (() => {
-        const strategy = (dataset as any).data_processing_strategy
-        if (!strategy) {
-          try {
-            console.warn(
-              `Warning: 'data_processing_strategy' is missing for dataset '${dataset.name}'. Defaulting to 'default'.`
-            )
-          } catch {}
-          return 'default'
-        }
-        return strategy
-      })(),
-      files: Array.isArray((dataset as any).details?.files_metadata)
-        ? (dataset as any).details.files_metadata
-        : (dataset as any).files,
-      lastRun: new Date(),
-      embedModel: 'text-embedding-3-large',
-      // Estimate chunk count numerically for display
-      numChunks: Array.isArray((dataset as any).details?.files_metadata)
-        ? Math.max(
-            0,
-            ((dataset as any).details.files_metadata.length || 0) * 100
-          )
-        : Array.isArray((dataset as any).files)
-          ? Math.max(
-              0,
-              (Array.isArray((dataset as any).files)
-                ? (dataset as any).files.length
-                : 0) * 100
-            )
-          : 0,
-      processedPercent: 100,
-      version: 'v1',
-      description: '',
+      database: dataset.database,
+      data_processing_strategy: dataset.data_processing_strategy,
+      files: dataset.details?.files_metadata || [],
+      // Only show fields that actually come from the API
     }))
-
-    // Load locally persisted demo/imported datasets
-    let localList: any[] = []
-    try {
-      const stored = localStorage.getItem('lf_demo_datasets')
-      const parsed = stored ? JSON.parse(stored) : []
-      if (Array.isArray(parsed)) localList = parsed
-    } catch {}
-
-    // If no API datasets, fall back to local list or seed demo entries
-    if (apiList.length === 0) {
-      if (localList.length > 0) return localList
-      const demo = [
-        {
-          id: 'demo-arxiv',
-          name: 'arxiv-papers',
-          database: 'main_database',
-          processingStrategy: 'universal_processor',
-          files: [],
-          lastRun: new Date(),
-          embedModel: 'text-embedding-3-large',
-          numChunks: 12800,
-          processedPercent: 100,
-          version: 'v1',
-          description: 'Demo dataset of academic PDFs',
-        },
-        {
-          id: 'demo-handbook',
-          name: 'company-handbook',
-          database: 'main_database',
-          processingStrategy: 'universal_processor',
-          files: [],
-          lastRun: new Date(),
-          embedModel: 'text-embedding-3-large',
-          numChunks: 4200,
-          processedPercent: 100,
-          version: 'v2',
-          description: 'Demo employee handbook and policies',
-        },
-      ]
-      try {
-        localStorage.setItem('lf_demo_datasets', JSON.stringify(demo))
-      } catch {}
-      return demo
-    }
-
-    // Merge API and local lists when API returns entries, keeping API as source of truth
-    const mergedById = new Map<string, any>()
-    for (const ds of apiList) mergedById.set(ds.id, ds)
-    for (const ds of localList)
-      if (!mergedById.has(ds.id)) mergedById.set(ds.id, ds)
-    return Array.from(mergedById.values())
-  }, [apiDatasets, localDatasetsVersion])
+  }, [apiDatasets])
 
   // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
   const hasRedirectedFromQuery = useRef(false)
@@ -188,18 +215,10 @@ const Data = () => {
     }
   }, [location.search, datasets, navigate])
 
-  // Map of fileKey -> array of dataset ids
-  const [fileAssignments] = useState<Record<string, string[]>>(() => {
-    try {
-      const stored = localStorage.getItem('lf_file_assignments')
-      return stored ? (JSON.parse(stored) as Record<string, string[]>) : {}
-    } catch {
-      return {}
-    }
-  })
+  // Map of fileKey -> array of dataset ids (transient UI state)
+  // const [fileAssignments] = useState<Record<string, string[]>>({})
 
   // Processing strategies state management ----------------------------------
-  const [metaTick, setMetaTick] = useState(0)
   const [strategyEditOpen, setStrategyEditOpen] = useState(false)
   const [strategyEditId, setStrategyEditId] = useState<string>('')
   const [strategyEditName, setStrategyEditName] = useState('')
@@ -208,94 +227,43 @@ const Data = () => {
   const [strategyCreateName, setStrategyCreateName] = useState('')
   const [strategyCreateDescription, setStrategyCreateDescription] = useState('')
   const [strategyCopyFromId, setStrategyCopyFromId] = useState('')
+  const [strategyCreateFileTypes, setStrategyCreateFileTypes] = useState<
+    Set<string>
+  >(new Set())
 
-  // Validate that an object is a well-formed RagStrategy
-  const isValidRagStrategy = (s: any): s is RagStrategy => {
-    return (
-      !!s &&
-      typeof s.id === 'string' &&
-      typeof s.name === 'string' &&
-      typeof s.description === 'string' &&
-      typeof s.isDefault === 'boolean' &&
-      typeof s.datasetsUsing === 'number'
-    )
-  }
-
-  const getCustomStrategies = (): RagStrategy[] => {
-    try {
-      const raw = localStorage.getItem('lf_custom_strategies')
-      if (!raw) return []
-      const arr = JSON.parse(raw) as RagStrategy[]
-      if (!Array.isArray(arr)) return []
-      return arr.filter(isValidRagStrategy)
-    } catch {
+  // Load strategies from config (source of truth - NO hardcoding)
+  const displayStrategies = useMemo((): RagStrategy[] => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) {
+      // Return empty array if config not loaded yet
       return []
     }
-  }
 
-  const saveCustomStrategies = (list: RagStrategy[]) => {
-    try {
-      localStorage.setItem('lf_custom_strategies', JSON.stringify(list))
-    } catch {}
-  }
+    const configStrategies = projectConfig.rag.data_processing_strategies || []
 
-  const addCustomStrategy = (s: RagStrategy) => {
-    const list = getCustomStrategies()
-    const exists = list.some(x => x.id === s.id)
-    if (exists) {
-      toast({ message: 'Strategy id already exists', variant: 'destructive' })
-      return
-    }
-    list.push(s)
-    saveCustomStrategies(list)
-    setMetaTick(t => t + 1)
-  }
-
-  const removeCustomStrategy = (id: string) => {
-    const list = getCustomStrategies().filter(s => s.id !== id)
-    saveCustomStrategies(list)
-  }
-
-  const getDeletedSet = (): Set<string> => getStoredSet('lf_strategy_deleted')
-  const saveDeletedSet = (s: Set<string>) =>
-    setStoredSet('lf_strategy_deleted', s)
-
-  const markDeleted = (id: string) => {
-    const set = getDeletedSet()
-    set.add(id)
-    saveDeletedSet(set)
-    setMetaTick(t => t + 1)
-  }
-
-  // Derive display strategies with local overrides
-  const displayStrategies = useMemo(() => {
-    const deleted = getDeletedSet()
-    const all = [...defaultStrategies, ...getCustomStrategies()]
-    return all
-      .filter(s => !deleted.has(s.id))
-      .map(s => {
-        let { name, description } = s
-        try {
-          const n = localStorage.getItem(`lf_strategy_name_override_${s.id}`)
-          if (typeof n === 'string' && n.trim().length > 0) {
-            name = n.trim()
-          }
-          const d = localStorage.getItem(`lf_strategy_description_${s.id}`)
-          if (typeof d === 'string' && d.trim().length > 0) {
-            description = d.trim()
-          }
-        } catch {}
-        return { ...s, name, description }
-      })
-  }, [metaTick])
+    // Convert config strategies to UI format
+    return configStrategies.map(
+      (strategy: any) =>
+        ({
+          id: `processing-${strategy.name.replace(/_/g, '-')}`, // Convert snake_case to kebab-case
+          name: strategy.name
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (c: string) => c.toUpperCase()),
+          description: strategy.description || '',
+          isDefault: false, // All strategies are equal - no hardcoded defaults
+          datasetsUsing: 0, // Will be calculated from datasetsByStrategyName
+          configName: strategy.name, // Store original config name for API calls
+        }) as RagStrategy
+    )
+  }, [projectResp])
 
   // Build mapping of strategy name -> dataset names
   const datasetsByStrategyName = useMemo(() => {
     const map = new Map<string, string[]>()
 
-    // Use the datasets from the useMemo above
+    // Use the datasets from API
     for (const d of datasets) {
-      const strategyName = (d as any).processingStrategy
+      const strategyName = (d as any).data_processing_strategy
       const datasetName = d.name
       if (typeof strategyName === 'string' && typeof datasetName === 'string') {
         const arr = map.get(strategyName) || []
@@ -305,92 +273,67 @@ const Data = () => {
     }
 
     return map
-  }, [datasets, metaTick])
+  }, [datasets])
 
-  const getParsersCount = (sid: string): number => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_parsers_${sid}`)
-      if (!raw) return 7 // default seed
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr.length : 7
-    } catch {
-      return 7
-    }
+  const getParsersCount = (strategyName: string): number => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) return 0
+
+    const strategy = projectConfig.rag.data_processing_strategies.find(
+      (s: any) => s.name === strategyName
+    )
+    return strategy?.parsers?.length || 0
   }
 
-  const getExtractorsCount = (sid: string): number => {
-    try {
-      const raw = localStorage.getItem(`lf_strategy_extractors_${sid}`)
-      if (!raw) return 8 // default seed
-      const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr.length : 8
-    } catch {
-      return 8
-    }
+  const getExtractorsCount = (strategyName: string): number => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig?.rag?.data_processing_strategies) return 0
+
+    const strategy = projectConfig.rag.data_processing_strategies.find(
+      (s: any) => s.name === strategyName
+    )
+    return strategy?.extractors?.length || 0
   }
 
-  // Refresh on processing changes (parsers/extractors add/edit/delete)
-  useEffect(() => {
-    const handler = (_e: Event) => {
-      setMetaTick(t => t + 1)
-    }
-    try {
-      window.addEventListener('lf:processingUpdated', handler as EventListener)
-    } catch {}
-    return () => {
-      try {
-        window.removeEventListener(
-          'lf:processingUpdated',
-          handler as EventListener
-        )
-      } catch {}
-    }
-  }, [])
-
-  // (initial state is loaded from localStorage)
-
-  // Persist data when it changes
-  useEffect(() => {
-    try {
-      localStorage.setItem('lf_raw_files', JSON.stringify(rawFiles))
-    } catch {}
-  }, [rawFiles])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        'lf_file_assignments',
-        JSON.stringify(fileAssignments)
-      )
-    } catch {}
-  }, [fileAssignments])
-
-  // Dataset persistence is handled in the setDatasets function for localStorage fallback
+  // rawFiles and fileAssignments are transient UI state - no persistence needed
 
   // Create dataset dialog state
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [newDatasetName, setNewDatasetName] = useState('')
-  const [newDatasetDescription, setNewDatasetDescription] = useState('')
   const [newDatasetDatabase, setNewDatasetDatabase] = useState('')
   const [
     newDatasetDataProcessingStrategy,
     setNewDatasetDataProcessingStrategy,
   ] = useState('')
 
+  // Set default values when dialog opens and options are available
+  useEffect(() => {
+    if (isCreateOpen && availableOptions) {
+      if (
+        !newDatasetDataProcessingStrategy &&
+        availableOptions.data_processing_strategies?.[0]
+      ) {
+        setNewDatasetDataProcessingStrategy(
+          availableOptions.data_processing_strategies[0]
+        )
+      }
+      if (!newDatasetDatabase && availableOptions.databases?.[0]) {
+        setNewDatasetDatabase(availableOptions.databases[0])
+      }
+    }
+  }, [
+    isCreateOpen,
+    availableOptions,
+    newDatasetDataProcessingStrategy,
+    newDatasetDatabase,
+  ])
+
   // Simple edit modal state
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editDatasetId, setEditDatasetId] = useState<string>('')
-  const [editName, setEditName] = useState('')
-  const [editDescription, setEditDescription] = useState('')
+  // Edit dataset removed - API doesn't support updating datasets
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
   const [confirmDeleteName, setConfirmDeleteName] = useState<string>('')
-
-  // Ensure setters are considered used even in builds that elide menu handlers
-  useEffect(() => {
-    // no-op referencing setters to satisfy strict noUnusedLocals in some CI builds
-  }, [setConfirmDeleteId, setConfirmDeleteName])
 
   const handleCreateDataset = async () => {
     const name = newDatasetName.trim()
@@ -405,19 +348,27 @@ const Data = () => {
     }
 
     try {
-      await createDatasetMutation.mutateAsync({
+      const response = await createDatasetMutation.mutateAsync({
         namespace: activeProject.namespace,
         project: activeProject.project,
         name,
         data_processing_strategy: newDatasetDataProcessingStrategy || 'default',
         database: newDatasetDatabase || 'default',
       })
+
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
-      setNewDatasetDescription('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
+
+      // If we should upload files after creating, use the newly created dataset
+      // Note: In this system, dataset name serves as the unique identifier (ID)
+      if (shouldUploadAfterCreate && response?.dataset?.name) {
+        const datasetId = response.dataset.name
+        const datasetName = response.dataset.name
+        handleDatasetSelect(datasetId, datasetName)
+      }
     } catch (error) {
       console.error('Failed to create dataset:', error)
       toast({
@@ -429,6 +380,9 @@ const Data = () => {
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    e.stopPropagation()
+    // Set the drop effect to allow dropping
+    e.dataTransfer.dropEffect = 'copy'
     setIsDragging(true)
   }, [])
 
@@ -436,69 +390,483 @@ const Data = () => {
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDropped(true)
-
-    setTimeout(() => {
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
       setIsDragging(false)
-      setIsDropped(false)
-    }, 1000)
 
-    const files = Array.from(e.dataTransfer.files)
-    setTimeout(() => {
-      const converted: RawFile[] = files.map(f => ({
-        id: `${f.name}:${f.size}:${f.lastModified}`,
-        name: f.name,
-        size: f.size,
-        lastModified: f.lastModified,
-        type: f.type,
-      }))
-      setRawFiles(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const deduped = converted.filter(r => !existingIds.has(r.id))
-        return [...prev, ...deduped]
-      })
-    }, 4000)
+      const files = Array.from(e.dataTransfer.files)
 
-    // console.log('Dropped files:', files)
-  }, [])
+      if (files.length === 0) {
+        return
+      }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      // Comprehensive file validation with extension, MIME type, and content verification
+      const validationResults = await Promise.all(
+        files.map(async file => ({
+          file,
+          validation: await isValidFile(file),
+        }))
+      )
+
+      const validFiles = validationResults
+        .filter(result => result.validation.valid)
+        .map(result => result.file)
+
+      const invalidFiles = validationResults.filter(
+        result => !result.validation.valid
+      )
+
+      if (validFiles.length === 0) {
+        const reasons = invalidFiles
+          .map(r => `${r.file.name}: ${r.validation.reason}`)
+          .join('; ')
+        toast({
+          message: `No valid files to upload. ${reasons}`,
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (invalidFiles.length > 0) {
+        const reasons = invalidFiles
+          .slice(0, 3)
+          .map(r => `${r.file.name}: ${r.validation.reason}`)
+        const message =
+          invalidFiles.length <= 3
+            ? reasons.join('; ')
+            : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+
+        toast({
+          message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
+          variant: 'default',
+        })
+      }
+
+      setPendingFiles(validFiles)
+      setIsSelectDatasetModalOpen(true)
+    },
+    [toast]
+  )
+
+  // Upload files in batches with cancellation support
+  const uploadFilesInBatches = useCallback(
+    async (
+      files: File[],
+      datasetId: string,
+      namespace: string,
+      project: string,
+      batchSize: number = UPLOAD_BATCH_SIZE
+    ) => {
+      const results = []
+      let cancelled = false
+
+      for (let i = 0; i < files.length; i += batchSize) {
+        // CHECK FOR CANCELLATION AT START OF EACH BATCH
+        if (cancelled) {
+          // Add cancelled results for remaining files
+          const remainingFiles = files.slice(i)
+          remainingFiles.forEach(file => {
+            results.push({
+              file: file.name,
+              success: false,
+              error: new Error('Cancelled'),
+              cancelled: true,
+            })
+          })
+          break
+        }
+
+        const batch = files.slice(i, i + batchSize)
+        const batchResults = await Promise.all(
+          batch.map(async file => {
+            const controller = new AbortController()
+            activeUploadControllersRef.current.push(controller)
+
+            try {
+              const result = await uploadMutation.mutateAsync({
+                namespace,
+                project,
+                dataset: datasetId,
+                file,
+                signal: controller.signal,
+              })
+              return {
+                file: file.name,
+                success: true,
+                result,
+                skipped: result.skipped || false,
+              }
+            } catch (error) {
+              // Check if this is an abort/cancellation error
+              if (
+                (error instanceof Error && error.name === 'AbortError') ||
+                (error as any)?.code === 'ERR_CANCELED' ||
+                (error as any)?.message?.includes('cancel')
+              ) {
+                cancelled = true // Set flag to stop processing more batches
+                return {
+                  file: file.name,
+                  success: false,
+                  error,
+                  cancelled: true,
+                }
+              }
+              return { file: file.name, success: false, error }
+            } finally {
+              activeUploadControllersRef.current =
+                activeUploadControllersRef.current.filter(c => c !== controller)
+            }
+          })
+        )
+
+        results.push(...batchResults)
+
+        // Check if any upload in this batch was cancelled
+        if (batchResults.some(r => (r as any).cancelled)) {
+          cancelled = true
+          // Add cancelled results for remaining files
+          const remainingFiles = files.slice(i + batchSize)
+          remainingFiles.forEach(file => {
+            results.push({
+              file: file.name,
+              success: false,
+              error: new Error('Cancelled'),
+              cancelled: true,
+            })
+          })
+          break
+        }
+      }
+
+      return results
+    },
+    [uploadMutation]
+  )
+
+  // Handle file upload to selected dataset
+  const handleDatasetSelect = useCallback(
+    async (datasetId: string, datasetName: string) => {
+      if (!activeProject || pendingFiles.length === 0) {
+        return
+      }
+
+      const fileCount = pendingFiles.length // Store count before clearing
+      setUploadingFileCount(fileCount)
+      setIsUploading(true)
+      setIsSelectDatasetModalOpen(false)
+
+      const { namespace, project } = activeProject
+
+      try {
+        // Upload all files to the selected dataset in batches
+        const results = await uploadFilesInBatches(
+          pendingFiles,
+          datasetId,
+          namespace,
+          project
+        )
+
+        const cancelled = results.some(r => (r as any).cancelled)
+        const failures = results.filter(
+          r => !r.success && !(r as any).cancelled
+        )
+        const successes = results.filter(r => r.success && !(r as any).skipped)
+        const skipped = results.filter(r => r.success && (r as any).skipped)
+
+        // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
+        if (cancelled) {
+          return
+        }
+
+        // Show appropriate toast based on results
+        if (failures.length > 0 && successes.length > 0) {
+          // Partial success: some uploads succeeded, some failed
+          const skippedMsg =
+            skipped.length > 0 ? `, skipped ${skipped.length} duplicate(s)` : ''
+          toast({
+            message: `Uploaded ${successes.length} of ${fileCount} file(s)${skippedMsg}. Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (failures.length > 0 && skipped.length > 0) {
+          // All files either failed or were skipped
+          toast({
+            message: `Upload failed for ${failures.length} file(s), skipped ${skipped.length} duplicate(s). Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (failures.length > 0) {
+          // All files failed
+          toast({
+            message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (skipped.length > 0 && successes.length === 0) {
+          // All files were duplicates
+          toast({
+            message: `All ${skipped.length} file(s) were already in ${datasetName}`,
+            variant: 'default',
+            icon: 'alert-triangle',
+          })
+        } else if (skipped.length > 0) {
+          // Some successes with some skipped
+          toast({
+            message: `Uploaded ${successes.length} file(s) to ${datasetName}, skipped ${skipped.length} duplicate(s)`,
+            variant: 'default',
+          })
+        } else {
+          // All files succeeded
+          toast({
+            message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
+            variant: 'default',
+          })
+        }
+
+        // Navigate to the dataset view to see uploaded files (only if some succeeded)
+        if (successes.length > 0) {
+          // Explicitly refetch to ensure fresh data before navigating
+          await refetchDatasets()
+          navigate(`/chat/data/${datasetId}`)
+        }
+      } catch (error) {
+        console.error('Upload failed:', error)
+        // Check if error is due to cancellation
+        if (
+          (error as any)?.code === 'ERR_CANCELED' ||
+          (error as any)?.message?.includes('cancel')
+        ) {
+          // Cancellation toast already shown, just return
+          return
+        }
+        toast({
+          message:
+            error instanceof Error ? error.message : 'Failed to upload files',
+          variant: 'destructive',
+        })
+      } finally {
+        setPendingFiles([])
+        activeUploadControllersRef.current = []
+        setIsUploading(false)
+        setShouldUploadAfterCreate(false)
+        setUploadingFileCount(0)
+        // Reset file input to allow reselecting the same files
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      }
+    },
+    [
+      activeProject,
+      pendingFiles,
+      uploadFilesInBatches,
+      toast,
+      navigate,
+      refetchDatasets,
+    ]
+  )
+
+  // Note: Auto-upload logic now handled directly in handleCreateDataset
+  // No need for fragile useEffect watching datasets.length
+
+  // Cancel file upload and reset state
+  const handleCancelUpload = useCallback(() => {
+    // Abort all active upload network requests
+    activeUploadControllersRef.current.forEach(controller => {
+      try {
+        controller.abort()
+      } catch (err) {
+        // Ignore errors from already aborted controllers
+        console.debug('Controller already aborted:', err)
+      }
+    })
+    activeUploadControllersRef.current = []
+
+    // Clear all state
+    setPendingFiles([])
+    setIsSelectDatasetModalOpen(false)
+    setShouldUploadAfterCreate(false)
+    setIsUploading(false)
+    setUploadingFileCount(0)
+
+    // Show cancellation toast
+    toast({
+      message: 'Upload cancelled - all active uploads have been stopped',
+      variant: 'default',
+    })
+  }, [toast]) // Removed activeUploadControllers from dependency array since using ref
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : []
     if (files.length === 0) return
 
-    setIsDropped(true)
-
-    setTimeout(() => {
-      const converted: RawFile[] = files.map(f => ({
-        id: `${f.name}:${f.size}:${f.lastModified}`,
-        name: f.name,
-        size: f.size,
-        lastModified: f.lastModified,
-        type: f.type,
+    // Apply the same comprehensive validation as drag-and-drop
+    const validationResults = await Promise.all(
+      files.map(async file => ({
+        file,
+        validation: await isValidFile(file),
       }))
-      setRawFiles(prev => {
-        const existingIds = new Set(prev.map(r => r.id))
-        const deduped = converted.filter(r => !existingIds.has(r.id))
-        return [...prev, ...deduped]
+    )
+
+    const validFiles = validationResults
+      .filter(result => result.validation.valid)
+      .map(result => result.file)
+
+    const invalidFiles = validationResults.filter(
+      result => !result.validation.valid
+    )
+
+    if (validFiles.length === 0) {
+      const reasons = invalidFiles
+        .map(r => `${r.file.name}: ${r.validation.reason}`)
+        .join('; ')
+      toast({
+        message: `No valid files selected. ${reasons}`,
+        variant: 'destructive',
       })
-      setIsDropped(false)
-    }, 4000)
-
-    // console.log('Selected files:', files)
-  }
-
-  const formatLastRun = (d: Date) => {
-    if (!(d instanceof Date) || isNaN(d.getTime())) {
-      return '-'
+      // Reset the input
+      e.target.value = ''
+      return
     }
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: '2-digit',
-    }).format(d)
+
+    if (invalidFiles.length > 0) {
+      const reasons = invalidFiles
+        .slice(0, 3)
+        .map(r => `${r.file.name}: ${r.validation.reason}`)
+      const message =
+        invalidFiles.length <= 3
+          ? reasons.join('; ')
+          : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+
+      toast({
+        message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
+        variant: 'default',
+      })
+    }
+
+    // Reset the input for next selection
+    e.target.value = ''
+
+    // Open dataset selection modal with validated files
+    setPendingFiles(validFiles)
+    setIsSelectDatasetModalOpen(true)
   }
+
+  // Render modal for selecting destination dataset for dropped files
+  const renderSelectDatasetModal = () => (
+    <Dialog
+      open={isSelectDatasetModalOpen}
+      onOpenChange={open => {
+        // Don't clear state if we're transitioning to create dialog
+        if (!open && isTransitioningToCreate) {
+          setIsTransitioningToCreate(false)
+          setIsSelectDatasetModalOpen(open)
+          return
+        }
+
+        setIsSelectDatasetModalOpen(open)
+        if (!open) {
+          // Only clear if user is actually cancelling (not transitioning)
+          setPendingFiles([])
+          setShouldUploadAfterCreate(false)
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Files to Dataset</DialogTitle>
+          <DialogDescription>
+            {pendingFiles.length === 1
+              ? `Where would you like to add "${pendingFiles[0].name}"?`
+              : `Where would you like to add ${pendingFiles.length} files?`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {/* Create new dataset with dropped files */}
+          <button
+            onClick={() => {
+              setIsTransitioningToCreate(true)
+              setShouldUploadAfterCreate(true)
+              setIsSelectDatasetModalOpen(false)
+              setIsCreateOpen(true)
+            }}
+            className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/5 transition-colors"
+          >
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <svg
+                className="w-5 h-5 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </div>
+            <div className="text-left">
+              <div className="font-medium">Create New Dataset</div>
+              <div className="text-sm text-muted-foreground">
+                Start a new dataset with{' '}
+                {pendingFiles.length === 1 ? 'this file' : 'these files'}
+              </div>
+            </div>
+          </button>
+
+          {/* Select from existing datasets */}
+          {datasets && datasets.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground px-1">
+                Or add to existing dataset:
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {datasets.map(dataset => (
+                  <button
+                    key={dataset.id}
+                    onClick={() =>
+                      handleDatasetSelect(dataset.id, dataset.name)
+                    }
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-accent hover:border-accent-foreground/20 transition-colors text-left"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 rounded bg-accent flex items-center justify-center">
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{dataset.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {dataset.files?.length || 0} files
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleCancelUpload}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 
   return (
     <div
@@ -511,7 +879,7 @@ const Data = () => {
         <h2 className="text-2xl ">
           {mode === 'designer' ? 'Data' : 'Config editor'}
         </h2>
-        <PageActions mode={mode} onModeChange={setMode} />
+        <PageActions mode={mode} onModeChange={handleModeChange} />
       </div>
       <input
         type="file"
@@ -520,417 +888,459 @@ const Data = () => {
         multiple
         onChange={handleFileSelect}
       />
-      <div className="w-full flex flex-col flex-1 min-h-0">
-        {mode === 'designer' && (
-          <>
-            {/* Processing strategies section */}
-            <div className="flex items-center justify-between mt-0 mb-3">
-              <div>
-                <div className="font-medium">Processing strategies</div>
-                <div className="h-1" />
-                <div className="text-xs text-muted-foreground">
-                  Processing strategies are applied to datasets.
+      <div className="w-full flex-1 min-h-0 flex flex-col">
+        {mode === 'designer' ? (
+          <div className="flex-1 min-h-0 w-full overflow-auto">
+            <div className="flex flex-col min-h-full">
+              {/* Processing strategies section */}
+              <div className="flex items-center justify-between mt-0 mb-3">
+                <div>
+                  <div className="font-medium">Processing strategies</div>
+                  <div className="h-1" />
+                  <div className="text-xs text-muted-foreground">
+                    Processing strategies are applied to datasets.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setStrategyCreateName('')
+                      setStrategyCreateDescription('')
+                      setStrategyCopyFromId('')
+                      setStrategyCreateOpen(true)
+                    }}
+                  >
+                    Create new
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setStrategyCreateName('')
-                    setStrategyCreateDescription('')
-                    setStrategyCopyFromId('')
-                    setStrategyCreateOpen(true)
-                  }}
-                >
-                  Create new
-                </Button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-8">
+                {displayStrategies.map(s => {
+                  const assigned =
+                    datasetsByStrategyName.get(s.configName || '') || []
+                  return (
+                    <div
+                      key={s.id}
+                      className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${displayStrategies.length === 1 ? 'md:col-span-2' : ''}`}
+                      onClick={() => navigate(`/chat/data/strategies/${s.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/chat/data/strategies/${s.id}`)
+                        }
+                      }}
+                    >
+                      <div className="absolute top-2 right-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <FontIcon type="overflow" className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-[12rem] w-[12rem]"
+                          >
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                setStrategyEditId(s.id)
+                                setStrategyEditName(s.name)
+                                setStrategyEditDescription(s.description)
+                                setStrategyEditOpen(true)
+                              }}
+                            >
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                setStrategyCreateName(`${s.name} (copy)`)
+                                setStrategyCreateDescription(s.description)
+                                setStrategyCopyFromId(s.id)
+                                setStrategyCreateOpen(true)
+                              }}
+                            >
+                              Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={e => {
+                                e.stopPropagation()
+
+                                // Prevent deleting default strategy
+                                if (s.isDefault) {
+                                  toast({
+                                    message: 'Cannot delete default strategy',
+                                    variant: 'destructive',
+                                  })
+                                  return
+                                }
+
+                                const ok = confirm(
+                                  'Delete this processing strategy?'
+                                )
+                                if (!ok) return
+
+                                const projectConfig = (projectResp as any)
+                                  ?.project?.config
+                                if (!projectConfig || !s.configName) {
+                                  toast({
+                                    message: 'Unable to delete strategy',
+                                    variant: 'destructive',
+                                  })
+                                  return
+                                }
+
+                                strategies.deleteStrategy.mutate(
+                                  {
+                                    strategyName: s.configName,
+                                    projectConfig,
+                                  },
+                                  {
+                                    onSuccess: () => {
+                                      toast({
+                                        message: 'Strategy deleted',
+                                        variant: 'default',
+                                      })
+                                    },
+                                    onError: (error: any) => {
+                                      toast({
+                                        message:
+                                          error.message ||
+                                          'Failed to delete strategy',
+                                        variant: 'destructive',
+                                      })
+                                    },
+                                  }
+                                )
+                              }}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <div className="text-sm font-medium">{s.name}</div>
+                      <div className="text-xs text-primary text-left w-fit">
+                        {s.description ||
+                          'Unified processor for PDFs, Word docs, CSVs, Markdown, and text files.'}
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                        {assigned.slice(0, 4).map(name => (
+                          <Badge
+                            key={name}
+                            variant="default"
+                            size="sm"
+                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                          >
+                            {name}
+                          </Badge>
+                        ))}
+                        {assigned.length > 4 ? (
+                          <Badge
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            +{assigned.length - 4}
+                          </Badge>
+                        ) : null}
+                        {assigned.length === 0 ? (
+                          <Badge
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            No datasets yet
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <div className="text-xs text-muted-foreground">
+                          {getParsersCount(s.configName || '')} parsers •{' '}
+                          {getExtractorsCount(s.configName || '')} extractors
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="px-3 h-7"
+                          onClick={e => {
+                            e.stopPropagation()
+                            navigate(`/chat/data/strategies/${s.id}`)
+                          }}
+                        >
+                          Configure
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-8">
-              {displayStrategies.map(s => {
-                const assigned = datasetsByStrategyName.get(s.name) || []
-                return (
-                  <div
-                    key={s.id}
-                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 hover:cursor-pointer transition-colors ${displayStrategies.length === 1 ? 'md:col-span-2' : ''}`}
-                    onClick={() => navigate(`/chat/data/strategies/${s.id}`)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        navigate(`/chat/data/strategies/${s.id}`)
+              {/* End processing strategies section */}
+
+              {/* Divider */}
+              <div className="border-t border-border mb-6"></div>
+
+              {/* Datasets section */}
+              <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
+                <div className="font-medium">Datasets</div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsImportOpen(true)}
+                  >
+                    Import sample dataset
+                  </Button>
+                  <Dialog
+                    open={isCreateOpen}
+                    onOpenChange={open => {
+                      // Prevent closing dialog during mutation
+                      if (!createDatasetMutation.isPending) {
+                        setIsCreateOpen(open)
+                        if (
+                          !open &&
+                          shouldUploadAfterCreate &&
+                          pendingFiles.length > 0
+                        ) {
+                          // User cancelled dataset creation with pending files - go back to select modal
+                          setIsSelectDatasetModalOpen(true)
+                          // Keep pendingFiles and shouldUploadAfterCreate intact
+                        } else if (!open) {
+                          // Normal close without pending files, clear everything
+                          setNewDatasetName('')
+                          setNewDatasetDatabase('')
+                          setNewDatasetDataProcessingStrategy('')
+                          setPendingFiles([])
+                          setShouldUploadAfterCreate(false)
+                        }
                       }
                     }}
                   >
-                    <div className="absolute top-2 right-2">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <FontIcon type="overflow" className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          className="min-w-[12rem] w-[12rem]"
-                        >
-                          <DropdownMenuItem
-                            onClick={e => {
-                              e.stopPropagation()
-                              setStrategyEditId(s.id)
-                              setStrategyEditName(s.name)
-                              setStrategyEditDescription(s.description)
-                              setStrategyEditOpen(true)
-                            }}
-                          >
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={e => {
-                              e.stopPropagation()
-                              setStrategyCreateName(`${s.name} (copy)`)
-                              setStrategyCreateDescription(s.description)
-                              setStrategyCopyFromId(s.id)
-                              setStrategyCreateOpen(true)
-                            }}
-                          >
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={e => {
-                              e.stopPropagation()
-                              const ok = confirm(
-                                'Delete this processing strategy?'
+                    <DialogTrigger asChild>
+                      <Button variant="default" size="sm">
+                        Create new
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>New dataset</DialogTitle>
+                      </DialogHeader>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Name
+                          </label>
+                          <Input
+                            autoFocus
+                            value={newDatasetName}
+                            onChange={e => setNewDatasetName(e.target.value)}
+                            placeholder="Enter dataset name"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Data Processing Strategy
+                          </label>
+                          <select
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            value={newDatasetDataProcessingStrategy}
+                            onChange={e =>
+                              setNewDatasetDataProcessingStrategy(
+                                e.target.value
                               )
-                              if (!ok) return
-                              try {
-                                removeCustomStrategy(s.id)
-                                const set = getDeletedSet()
-                                set.add(s.id)
-                                saveDeletedSet(set)
-                                setMetaTick(t => t + 1)
-                              } catch {}
-                            }}
+                            }
                           >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-
-                    <div className="text-sm font-medium">{s.name}</div>
-                    <div className="text-xs text-primary text-left w-fit">
-                      {s.description ||
-                        'Unified processor for PDFs, Word docs, CSVs, Markdown, and text files.'}
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                      {assigned.slice(0, 4).map(name => (
-                        <Badge
-                          key={name}
-                          variant="default"
-                          size="sm"
-                          className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
-                        >
-                          {name}
-                        </Badge>
-                      ))}
-                      {assigned.length > 4 ? (
-                        <Badge
-                          variant="secondary"
-                          size="sm"
-                          className="rounded-xl"
-                        >
-                          +{assigned.length - 4}
-                        </Badge>
-                      ) : null}
-                      {assigned.length === 0 ? (
-                        <Badge
-                          variant="secondary"
-                          size="sm"
-                          className="rounded-xl"
-                        >
-                          No datasets yet
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <div className="text-xs text-muted-foreground">
-                        {getParsersCount(s.id)} parsers •{' '}
-                        {getExtractorsCount(s.id)} extractors
+                            <option value="">Select a strategy...</option>
+                            {availableOptions?.data_processing_strategies?.map(
+                              strategy => (
+                                <option key={strategy} value={strategy}>
+                                  {strategy}
+                                </option>
+                              )
+                            )}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-muted-foreground">
+                            Database
+                          </label>
+                          <select
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            value={newDatasetDatabase}
+                            onChange={e =>
+                              setNewDatasetDatabase(e.target.value)
+                            }
+                          >
+                            <option value="">Select a database...</option>
+                            {availableOptions?.databases?.map(database => (
+                              <option key={database} value={database}>
+                                {database}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="px-3 h-7"
-                        onClick={e => {
-                          e.stopPropagation()
-                          navigate(`/chat/data/strategies/${s.id}`)
-                        }}
-                      >
-                        Configure
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {/* End processing strategies section */}
-
-            {/* Divider */}
-            <div className="border-t border-border mb-6"></div>
-
-            {/* Datasets section */}
-            <div className="mb-2 flex flex-row gap-2 justify-between items-end flex-shrink-0">
-              <div className="font-medium">Datasets</div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setIsImportOpen(true)}
-                >
-                  Import sample dataset
-                </Button>
-                <Dialog
-                  open={isCreateOpen}
-                  onOpenChange={open => {
-                    // Prevent closing dialog during mutation
-                    if (!createDatasetMutation.isPending) {
-                      setIsCreateOpen(open)
-                    }
-                  }}
-                >
-                  <DialogTrigger asChild>
-                    <Button variant="default" size="sm">
-                      Create new
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>New dataset</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
-                          Name
-                        </label>
-                        <Input
-                          autoFocus
-                          value={newDatasetName}
-                          onChange={e => setNewDatasetName(e.target.value)}
-                          placeholder="Enter dataset name"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
-                          Description
-                        </label>
-                        <Textarea
-                          value={newDatasetDescription}
-                          onChange={e =>
-                            setNewDatasetDescription(e.target.value)
+                      <DialogFooter>
+                        <DialogClose
+                          asChild
+                          disabled={createDatasetMutation.isPending}
+                        >
+                          <Button variant="secondary">Cancel</Button>
+                        </DialogClose>
+                        <Button
+                          onClick={handleCreateDataset}
+                          disabled={
+                            !newDatasetName.trim() ||
+                            !newDatasetDataProcessingStrategy.trim() ||
+                            !newDatasetDatabase.trim() ||
+                            createDatasetMutation.isPending
                           }
-                          placeholder="Optional description"
-                          rows={3}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
-                          Data Processing Strategy
-                        </label>
-                        <Input
-                          value={newDatasetDataProcessingStrategy}
-                          onChange={e =>
-                            setNewDatasetDataProcessingStrategy(e.target.value)
-                          }
-                          placeholder="e.g., PDF Simple, Markdown"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-muted-foreground">
-                          Database
-                        </label>
-                        <Input
-                          value={newDatasetDatabase}
-                          onChange={e => setNewDatasetDatabase(e.target.value)}
-                          placeholder="e.g., default_db"
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <DialogClose
-                        asChild
-                        disabled={createDatasetMutation.isPending}
-                      >
-                        <Button variant="secondary">Cancel</Button>
-                      </DialogClose>
-                      <Button
-                        onClick={handleCreateDataset}
-                        disabled={
-                          !newDatasetName.trim() ||
-                          !newDatasetDataProcessingStrategy.trim() ||
-                          !newDatasetDatabase.trim() ||
-                          createDatasetMutation.isPending
-                        }
-                      >
-                        {createDatasetMutation.isPending
-                          ? 'Creating...'
-                          : 'Create'}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-          </>
-        )}
-        {mode !== 'designer' ? (
-          <div className="flex-1 min-h-0 overflow-hidden pb-6">
-            <ConfigEditor className="h-full" />
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-auto pb-6">
-            {isDragging ? (
-              <div
-                className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
-              >
-                <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
-                  {isDropped ? (
-                    <Loader />
-                  ) : (
-                    <FontIcon
-                      type="upload"
-                      className="w-10 h-10 text-blue-200 dark:text-white"
-                    />
-                  )}
-                  <div className="text-xl text-foreground">Drop data here</div>
+                        >
+                          {createDatasetMutation.isPending
+                            ? 'Creating...'
+                            : 'Create'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
-                <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
-                  You can upload PDFs, explore various list formats, or draw
-                  inspiration from other data sources to enhance your project
-                  with LlaMaFarm.
-                </p>
               </div>
-            ) : (
-              <div>
-                {mode === 'designer' && isDatasetsLoading ? (
-                  <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                    <Loader size={32} className="mr-2" />
-                    Loading datasets...
-                  </div>
-                ) : mode === 'designer' && datasets.length <= 0 ? (
-                  <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
-                    {datasetsError
-                      ? 'Unable to load datasets. Using local storage.'
-                      : 'No datasets found. Create one to get started.'}
+              <div className="flex-1 min-h-0 pb-6">
+                {isDragging ? (
+                  <div
+                    className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
+                  >
+                    <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
+                      <FontIcon
+                        type="upload"
+                        className="w-10 h-10 text-blue-200 dark:text-white"
+                      />
+                      <div className="text-xl text-foreground">
+                        Drop data here
+                      </div>
+                    </div>
+                    <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
+                      You can upload PDFs, explore various list formats, or draw
+                      inspiration from other data sources to enhance your
+                      project with LlaMaFarm.
+                    </p>
                   </div>
                 ) : (
-                  mode === 'designer' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-2 mb-6">
-                      {datasets.map(ds => (
-                        <div
-                          key={ds.id}
-                          className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                          onClick={() => navigate(`/chat/data/${ds.id}`)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              navigate(`/chat/data/${ds.id}`)
-                            }
-                          }}
-                        >
-                          <div className="absolute right-3 top-3">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                                  onClick={e => e.stopPropagation()}
-                                  aria-label="Dataset actions"
+                  <div>
+                    {isDatasetsLoading ? (
+                      <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                        <Loader size={32} className="mr-2" />
+                        Loading datasets...
+                      </div>
+                    ) : datasets.length <= 0 ? (
+                      <div className="w-full mb-6 flex items-center justify-center rounded-lg py-4 text-primary text-center bg-primary/10">
+                        {datasetsError
+                          ? 'Unable to load datasets. Using local storage.'
+                          : 'No datasets found. Create one to get started.'}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-2 mb-6">
+                        {datasets.map(ds => (
+                          <div
+                            key={ds.id}
+                            className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
+                            onClick={() => navigate(`/chat/data/${ds.id}`)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                navigate(`/chat/data/${ds.id}`)
+                              }
+                            }}
+                          >
+                            <div className="absolute right-3 top-3">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                                    onClick={e => e.stopPropagation()}
+                                    aria-label="Dataset actions"
+                                  >
+                                    <FontIcon
+                                      type="overflow"
+                                      className="w-4 h-4"
+                                    />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="min-w-[10rem] w-[10rem]"
                                 >
-                                  <FontIcon
-                                    type="overflow"
-                                    className="w-4 h-4"
-                                  />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="min-w-[10rem] w-[10rem]"
-                              >
-                                <DropdownMenuItem
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    // open simple edit modal
-                                    setEditDatasetId(ds.id)
-                                    setEditName(ds.name)
-                                    setEditDescription(ds.description || '')
-                                    setIsEditOpen(true)
-                                  }}
+                                  {/* Edit removed - API doesn't support updating datasets */}
+                                  <DropdownMenuItem
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      navigate(`/chat/data/${ds.id}`)
+                                    }}
+                                  >
+                                    View
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      setConfirmDeleteId(ds.id)
+                                      setConfirmDeleteName(ds.name)
+                                      setIsConfirmDeleteOpen(true)
+                                    }}
+                                  >
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                            <div className="text-sm font-medium">{ds.name}</div>
+                            <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
+                              {ds.database && (
+                                <Badge
+                                  variant="default"
+                                  size="sm"
+                                  className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
                                 >
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    navigate(`/chat/data/${ds.id}`)
-                                  }}
-                                >
-                                  View
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    setConfirmDeleteId(ds.id)
-                                    setConfirmDeleteName(ds.name)
-                                    setIsConfirmDeleteOpen(true)
-                                  }}
-                                >
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                          <div className="text-sm font-medium">{ds.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Last run on {formatLastRun(ds.lastRun)}
-                          </div>
-                          <div className="flex flex-row gap-2 items-center flex-wrap">
-                            {(ds as any).database && (
+                                  {ds.database}
+                                </Badge>
+                              )}
                               <Badge
                                 variant="default"
                                 size="sm"
-                                className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                                className="rounded-xl"
                               >
-                                {(ds as any).database}
+                                {ds.data_processing_strategy}
                               </Badge>
-                            )}
-                            <Badge
-                              variant="default"
-                              size="sm"
-                              className="rounded-xl"
-                            >
-                              {(ds as any).processingStrategy || 'default'}
-                            </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-2">
+                              {ds.files.length}{' '}
+                              {ds.files.length === 1 ? 'file' : 'files'}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {ds.numChunks.toLocaleString()} chunks •{' '}
-                            {ds.processedPercent}% processed • {ds.version}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                )}
+                        ))}
+                      </div>
+                    )}
 
-                {/* Project-level raw files UI removed: files now only exist within datasets. */}
+                    {/* Project-level raw files UI removed: files now only exist within datasets. */}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 overflow-hidden pb-6">
+            <ConfigEditor className="h-full" initialPointer={configPointer} />
           </div>
         )}
       </div>
@@ -974,38 +1384,11 @@ const Data = () => {
                 variant: 'destructive',
               })
             } catch {}
-            // Local fallback to make import work without server: persist into demo datasets
-            try {
-              const raw = localStorage.getItem('lf_demo_datasets')
-              const arr = raw ? JSON.parse(raw) : []
-              const newEntry = {
-                id: name,
-                name,
-                files: [],
-                lastRun: new Date(),
-                embedModel: 'text-embedding-3-large',
-                numChunks: 0,
-                processedPercent: 0,
-                version: 'v1',
-                description: 'Imported sample dataset (local)',
-              }
-              const exists =
-                Array.isArray(arr) && arr.some((d: any) => d.id === name)
-              const updated = exists ? arr : [...arr, newEntry]
-              localStorage.setItem('lf_demo_datasets', JSON.stringify(updated))
-              setLocalDatasetsVersion(v => v + 1)
-              setIsImportOpen(false)
-              toast({
-                message: `Dataset "${name}" imported (local)`,
-                variant: 'default',
-              })
-              navigate(`/chat/data?dataset=${encodeURIComponent(name)}`)
-            } catch {
-              toast({
-                message: 'Failed to import dataset',
-                variant: 'destructive',
-              })
-            }
+            // Import failed - show error (no localStorage fallback)
+            toast({
+              message: 'Failed to import dataset',
+              variant: 'destructive',
+            })
           }
         }}
       />
@@ -1031,28 +1414,10 @@ const Data = () => {
                 setIsConfirmDeleteOpen(false)
                 if (!id) return
                 if (!activeProject?.namespace || !activeProject?.project) {
-                  // No active project: perform local deletion fallback
-                  try {
-                    const raw = localStorage.getItem('lf_demo_datasets')
-                    const arr = raw ? JSON.parse(raw) : []
-                    const updated = Array.isArray(arr)
-                      ? arr.filter((d: any) => d.id !== id)
-                      : []
-                    localStorage.setItem(
-                      'lf_demo_datasets',
-                      JSON.stringify(updated)
-                    )
-                    setLocalDatasetsVersion(v => v + 1)
-                    toast({
-                      message: 'Dataset deleted (local)',
-                      variant: 'default',
-                    })
-                  } catch {
-                    toast({
-                      message: 'Failed to delete dataset',
-                      variant: 'destructive',
-                    })
-                  }
+                  toast({
+                    message: 'No active project selected',
+                    variant: 'destructive',
+                  })
                   return
                 }
                 try {
@@ -1064,86 +1429,14 @@ const Data = () => {
                   toast({ message: 'Dataset deleted', variant: 'default' })
                 } catch (err) {
                   console.error('Delete failed', err)
-                  // Local fallback removal
-                  try {
-                    const raw = localStorage.getItem('lf_demo_datasets')
-                    const arr = raw ? JSON.parse(raw) : []
-                    const updated = Array.isArray(arr)
-                      ? arr.filter((d: any) => d.id !== id)
-                      : []
-                    localStorage.setItem(
-                      'lf_demo_datasets',
-                      JSON.stringify(updated)
-                    )
-                    setLocalDatasetsVersion(v => v + 1)
-                    toast({
-                      message: 'Dataset deleted (local)',
-                      variant: 'default',
-                    })
-                  } catch {
-                    toast({
-                      message: 'Failed to delete dataset',
-                      variant: 'destructive',
-                    })
-                  }
+                  toast({
+                    message: 'Failed to delete dataset',
+                    variant: 'destructive',
+                  })
                 }
               }}
             >
               Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit dataset dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit dataset</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">Name</label>
-              <Input
-                autoFocus
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                placeholder="Dataset name"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">
-                Description
-              </label>
-              <Textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <Button
-              onClick={() => {
-                const id = editDatasetId.trim()
-                const name = editName.trim()
-                if (!id || !name) return
-                try {
-                  localStorage.setItem(`lf_dataset_name_${id}`, name)
-                  localStorage.setItem(
-                    `lf_dataset_description_${id}`,
-                    editDescription
-                  )
-                } catch {}
-                setIsEditOpen(false)
-              }}
-              disabled={!editName.trim()}
-            >
-              Save
             </Button>
           </div>
         </DialogContent>
@@ -1187,23 +1480,52 @@ const Data = () => {
               className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm"
               onClick={() => {
                 if (!strategyEditId) return
+
+                const strategy = displayStrategies.find(
+                  s => s.id === strategyEditId
+                )
+                if (!strategy || strategy.isDefault) {
+                  toast({
+                    message: strategy?.isDefault
+                      ? 'Cannot delete default strategy'
+                      : 'Strategy not found',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
                 const ok = confirm(
                   'Are you sure you want to delete this strategy?'
                 )
-                if (ok) {
-                  try {
-                    localStorage.removeItem(
-                      `lf_strategy_name_override_${strategyEditId}`
-                    )
-                    localStorage.removeItem(
-                      `lf_strategy_description_${strategyEditId}`
-                    )
-                  } catch {}
-                  removeCustomStrategy(strategyEditId)
-                  markDeleted(strategyEditId)
-                  setStrategyEditOpen(false)
-                  toast({ message: 'Strategy deleted', variant: 'default' })
+                if (!ok) return
+
+                const projectConfig = (projectResp as any)?.project?.config
+                if (!projectConfig || !strategy.configName) {
+                  toast({
+                    message: 'Unable to delete strategy',
+                    variant: 'destructive',
+                  })
+                  return
                 }
+
+                strategies.deleteStrategy.mutate(
+                  {
+                    strategyName: strategy.configName,
+                    projectConfig,
+                  },
+                  {
+                    onSuccess: () => {
+                      setStrategyEditOpen(false)
+                      toast({ message: 'Strategy deleted', variant: 'default' })
+                    },
+                    onError: (error: any) => {
+                      toast({
+                        message: error.message || 'Failed to delete strategy',
+                        variant: 'destructive',
+                      })
+                    },
+                  }
+                )
               }}
               type="button"
             >
@@ -1222,18 +1544,58 @@ const Data = () => {
                 onClick={() => {
                   if (!strategyEditId || strategyEditName.trim().length === 0)
                     return
-                  try {
-                    localStorage.setItem(
-                      `lf_strategy_name_override_${strategyEditId}`,
-                      strategyEditName.trim()
-                    )
-                    localStorage.setItem(
-                      `lf_strategy_description_${strategyEditId}`,
-                      strategyEditDescription
-                    )
-                  } catch {}
-                  setStrategyEditOpen(false)
-                  setMetaTick(t => t + 1)
+
+                  const strategy = displayStrategies.find(
+                    s => s.id === strategyEditId
+                  )
+                  if (!strategy || !strategy.configName) {
+                    toast({
+                      message: 'Strategy not found',
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+
+                  const projectConfig = (projectResp as any)?.project?.config
+                  if (!projectConfig) {
+                    toast({
+                      message: 'Unable to update strategy',
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+
+                  // Convert UI name back to snake_case for config
+                  const newConfigName = strategyEditName
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\s+/g, '_')
+
+                  strategies.updateStrategy.mutate(
+                    {
+                      strategyName: strategy.configName,
+                      updates: {
+                        name: newConfigName,
+                        description: strategyEditDescription,
+                      },
+                      projectConfig,
+                    },
+                    {
+                      onSuccess: () => {
+                        setStrategyEditOpen(false)
+                        toast({
+                          message: 'Strategy updated',
+                          variant: 'default',
+                        })
+                      },
+                      onError: (error: any) => {
+                        toast({
+                          message: error.message || 'Failed to update strategy',
+                          variant: 'destructive',
+                        })
+                      },
+                    }
+                  )
                 }}
                 disabled={strategyEditName.trim().length === 0}
                 type="button"
@@ -1276,8 +1638,40 @@ const Data = () => {
               />
             </div>
             <div>
+              <label className="text-xs text-muted-foreground mb-2 block">
+                What type of files do you plan on uploading?
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {fileTypeMapping.map(({ type }) => {
+                  const isSelected = strategyCreateFileTypes.has(type)
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        const newSet = new Set(strategyCreateFileTypes)
+                        if (isSelected) {
+                          newSet.delete(type)
+                        } else {
+                          newSet.add(type)
+                        }
+                        setStrategyCreateFileTypes(newSet)
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-input hover:bg-accent hover:text-accent-foreground'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
               <label className="text-xs text-muted-foreground">
-                Copy from existing
+                Copy from existing (optional)
               </label>
               <select
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
@@ -1318,64 +1712,169 @@ const Data = () => {
           <DialogFooter className="flex items-center justify-between gap-2">
             <button
               className="px-3 py-2 rounded-md text-sm text-primary hover:underline"
-              onClick={() => setStrategyCreateOpen(false)}
+              onClick={() => {
+                setStrategyCreateOpen(false)
+                setStrategyCreateName('')
+                setStrategyCreateDescription('')
+                setStrategyCopyFromId('')
+                setStrategyCreateFileTypes(new Set())
+              }}
               type="button"
             >
               Cancel
             </button>
             <button
-              className={`px-3 py-2 rounded-md text-sm ${strategyCreateName.trim().length > 0 ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
-              onClick={() => {
-                const name = strategyCreateName.trim()
-                if (name.length === 0) return
-                const slugify = (str: string) =>
-                  str
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, '')
-                const baseId = `custom-${slugify(name)}`
-                const existingIds = new Set(
-                  [...defaultStrategies, ...getCustomStrategies()].map(
-                    s => s.id
-                  )
+              className={`px-3 py-2 rounded-md text-sm ${strategyCreateName.trim().length > 0 && !strategies.isUpdating ? 'bg-primary text-primary-foreground hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-primary text-primary-foreground'}`}
+              onClick={async () => {
+                const displayName = strategyCreateName.trim()
+                if (displayName.length === 0) return
+
+                // Convert display name to snake_case for config
+                const strategyName = displayName
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '_')
+                  .replace(/^_+|_+$/g, '')
+
+                if (!projectResp) {
+                  toast({
+                    message: 'Project config not loaded',
+                    variant: 'destructive',
+                  })
+                  return
+                }
+
+                const projectConfig = (projectResp as any)?.project?.config
+
+                // Get parsers from copyFrom strategy, selected file types, or use defaults
+                const copyFrom = displayStrategies.find(
+                  s => s.id === strategyCopyFromId
                 )
-                let newId = baseId
-                if (existingIds.has(newId)) {
-                  newId = `${baseId}-${Date.now()}`
+                let parsers: any[] = []
+                let extractors: any[] = [] // Always start with no extractors
+
+                if (copyFrom && projectConfig) {
+                  // Find the source strategy in config
+                  const sourceStrategy =
+                    projectConfig.rag?.data_processing_strategies?.find(
+                      (s: any) =>
+                        s.name ===
+                        copyFrom.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+                    )
+                  if (sourceStrategy) {
+                    parsers = sourceStrategy.parsers || []
+                    // Don't copy extractors - let user add them manually
+                  }
                 }
-                const newStrategy: RagStrategy = {
-                  id: newId,
-                  name,
-                  description: strategyCreateDescription,
-                  isDefault: false,
-                  datasetsUsing: 0,
+
+                // If no copy source but file types selected, create parsers from file types
+                if (parsers.length === 0 && strategyCreateFileTypes.size > 0) {
+                  parsers = Array.from(strategyCreateFileTypes).map(
+                    fileType => {
+                      const mapping = fileTypeMapping.find(
+                        m => m.type === fileType
+                      )
+                      return {
+                        type: mapping?.parser || 'PDFParser_LlamaIndex',
+                        config: {},
+                        file_include_patterns: mapping?.extensions || ['*.pdf'],
+                        priority: 50,
+                      }
+                    }
+                  )
                 }
-                addCustomStrategy(newStrategy)
+
+                // If no copy source and no file types selected, create with a default parser
+                if (parsers.length === 0) {
+                  parsers = [
+                    {
+                      type: 'PDFParser_LlamaIndex',
+                      config: {},
+                      file_include_patterns: ['*.pdf'],
+                      priority: 50,
+                    },
+                  ]
+                }
+
                 try {
-                  localStorage.setItem(
-                    `lf_strategy_name_override_${newId}`,
-                    name
-                  )
-                  localStorage.setItem(
-                    `lf_strategy_description_${newId}`,
-                    strategyCreateDescription
-                  )
-                } catch {}
-                setStrategyCreateOpen(false)
-                setStrategyCreateName('')
-                setStrategyCreateDescription('')
-                setStrategyCopyFromId('')
-                setMetaTick(t => t + 1)
-                toast({ message: 'Strategy created', variant: 'default' })
+                  // Build strategy object, only including valid fields
+                  const description =
+                    strategyCreateDescription.trim() || displayName
+                  const strategy: any = {
+                    name: strategyName,
+                    parsers,
+                  }
+
+                  // Only include description if it meets the 10 character minimum (schema requirement)
+                  if (description.length >= 10) {
+                    strategy.description = description
+                  }
+
+                  // Only include extractors if there are any
+                  if (extractors.length > 0) {
+                    strategy.extractors = extractors
+                  }
+
+                  await strategies.createStrategy.mutateAsync({
+                    strategy,
+                    projectConfig,
+                  })
+
+                  setStrategyCreateOpen(false)
+                  setStrategyCreateName('')
+                  setStrategyCreateDescription('')
+                  setStrategyCopyFromId('')
+                  setStrategyCreateFileTypes(new Set())
+                  toast({
+                    message: 'Strategy created successfully',
+                    variant: 'default',
+                  })
+                } catch (error) {
+                  console.error('Failed to create strategy:', error)
+                  toast({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to create strategy',
+                    variant: 'destructive',
+                  })
+                }
               }}
-              disabled={strategyCreateName.trim().length === 0}
+              disabled={
+                strategyCreateName.trim().length === 0 || strategies.isUpdating
+              }
               type="button"
             >
-              Create
+              {strategies.isUpdating ? 'Creating...' : 'Create'}
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* File drop dataset selection modal */}
+      {renderSelectDatasetModal()}
+
+      {/* Upload progress overlay */}
+      {isUploading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border rounded-lg p-6 shadow-lg flex flex-col items-center gap-4 max-w-sm">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <div className="text-center">
+              <div className="font-medium">Uploading Files...</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                {uploadingFileCount}{' '}
+                {uploadingFileCount === 1 ? 'file' : 'files'}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleCancelUpload}
+              className="mt-2"
+            >
+              Cancel Upload
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

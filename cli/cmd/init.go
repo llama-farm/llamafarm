@@ -5,20 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"llamafarm-cli/cmd/config"
 	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
+
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 )
 
 // CreateProjectResponse represents the server response when creating a project.
 // It contains the created project and its configuration under project.config.
 type CreateProjectResponse struct {
 	Project struct {
-		Config map[string]interface{} `json:"config"`
+		Config config.LlamaFarmConfig `json:"config"`
 	} `json:"project"`
 }
 
@@ -31,7 +33,7 @@ var initCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Print("Initializing a new LlamaFarm project")
 		// Determine target directory
-		cwd := getEffectiveCWD()
+		cwd := utils.GetEffectiveCWD()
 		projectDir := cwd
 		if len(args) > 0 {
 			projectDir = args[0]
@@ -61,16 +63,10 @@ var initCmd = &cobra.Command{
 		}
 
 		// Ensure server is available (auto-start locally if needed)
-		base := serverURL
-		if base == "" {
-			base = "http://localhost:8000"
-		}
-		factory := GetServiceConfigFactory()
-		config := factory.ServerOnly(base)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverURL, "server")
 
 		// Build URL
-		url := buildServerURL(base, fmt.Sprintf("/v1/projects/%s", ns))
+		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
 
 		// Prepare payload
 		type createProjectRequest struct {
@@ -103,7 +99,7 @@ var initCmd = &cobra.Command{
 		req.Header.Set("Content-Type", "application/json")
 
 		// Execute
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error contacting server: %v\n", err)
 			os.Exit(1)
@@ -111,7 +107,7 @@ var initCmd = &cobra.Command{
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, prettyServerError(resp, respBody))
+			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, utils.PrettyServerError(resp, respBody))
 			os.Exit(1)
 		}
 
@@ -122,14 +118,8 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		yamlBytes, err := yaml.Marshal(createResp.Project.Config)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to convert project.config to YAML: %v\n", err)
-			os.Exit(1)
-		}
-
 		yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
-		if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
+		if err := config.SaveConfig(&createResp.Project.Config, yamlPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
 			os.Exit(1)
 		}

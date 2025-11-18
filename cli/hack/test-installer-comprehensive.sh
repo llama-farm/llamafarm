@@ -73,6 +73,26 @@ build_test_binaries() {
     rm -rf "$test_dir"
     mkdir -p "$test_dir"
 
+    # Generate types first
+    info "Generating types..."
+    cd config
+    uv run python generate_types.py || error "Failed to generate Python types"
+
+    # Copy schema and generate Go types
+    mkdir -p ../cli/cmd/config
+    cp schema.yaml ../cli/cmd/config/ || error "Failed to copy schema.yaml"
+
+    # Install go-jsonschema if needed
+    if ! command -v go-jsonschema >/dev/null 2>&1; then
+        info "Installing go-jsonschema..."
+        go install github.com/atombender/go-jsonschema@latest || error "Failed to install go-jsonschema"
+    fi
+
+    # Generate Go types
+    cd ../cli/cmd/config
+    sh generate-types.sh || error "Failed to generate Go types"
+    cd ../../..
+
     cd cli
 
     # Build for multiple architectures to test different scenarios
@@ -91,7 +111,7 @@ build_test_binaries() {
         local out_name="lf-${goos}-${goarch}"
 
         GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=${TEST_VERSION}'" \
+            -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=${TEST_VERSION}'" \
             -o "../$test_dir/${out_name}" .
 
         chmod +x "../$test_dir/${out_name}"

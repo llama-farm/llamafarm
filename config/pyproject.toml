@@ -1,49 +1,48 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
-packages = ["config"]
+[tool.setuptools]
+# Package the current directory contents as the 'config' module
+packages = ["config", "config.helpers"]
+package-dir = { "config" = "." }
 
 [project]
 name = "llamafarm-config"
 version = "0.1.0"
 description = "Configuration loader for LlamaFarm with JSON schema validation"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = [
-    "jsonref>=1.1.0",
-    "jsonschema>=4.23.0",
-    "jsonschema-path>=0.3.4",
-    "PyYAML>=6.0",
-    "tomli>=2.0.0; python_version<'3.11'",
+  "jsonref>=1.1.0",
+  "jsonschema>=4.23.0",
+  "jsonschema-path>=0.3.4",
+  "PyYAML>=6.0",
+  "tomli>=2.0.0; python_version<'3.11'",
 ]
 
 [dependency-groups]
 dev = [
-    "datamodel-code-generator>=0.27.3",
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "mypy>=1.0.0",
-    "ruff>=0.12.7",
-    "jsonref>=1.1.0",
+  "datamodel-code-generator>=0.27.3",
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "mypy>=1.0.0",
+  "ruff>=0.14.3",
+  "jsonref>=1.1.0",
 ]
 
 [project.scripts]
 generate-types = "config.generate_types:main"
 
+# Ruff configuration is shared across all Python components
+# See ../ruff.toml for the actual configuration
+
 [tool.ruff]
-line-length = 100
-target-version = "py311"
+# Import shared configuration
+extend = "../ruff.toml"
 
-# Enable auto-fixes
-fix = true
-
-# Select rulesets (examples: E for pycodestyle, F for pyflakes, I for isort, B for bugbear)
-lint.select = ["E", "F", "I", "B", "UP", "SIM"]
-
-# Exclude some files
-exclude = ["migrations", ".venv", "venv", "build", "dist", "datamodel.py"]
+# Component-specific exclusions (in addition to shared config)
+extend-exclude = ["datamodel.py"] # Generated file
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

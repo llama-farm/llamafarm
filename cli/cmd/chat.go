@@ -5,8 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"llamafarm-cli/cmd/config"
-
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -128,7 +129,7 @@ Examples:
 			proj = strings.TrimSpace(parts[1])
 		}
 
-		cwd := getEffectiveCWD()
+		cwd := utils.GetEffectiveCWD()
 
 		StartConfigWatcherForCommand()
 
@@ -152,7 +153,7 @@ Examples:
 			SessionProject:   proj,
 			Temperature:      temperature,
 			MaxTokens:        maxTokens,
-			HTTPClient:       getHTTPClient(),
+			HTTPClient:       utils.GetHTTPClient(),
 			Model:            runModel,
 			// RAG settings - RAG is enabled by default unless --no-rag is used
 			RAGEnabled:           !runNoRAG,
@@ -172,17 +173,14 @@ Examples:
 			return
 		}
 
-		// Ensure server is up (auto-start locally if needed)
-		// Using the new factory pattern to automatically inherit CLI context
-		factory := GetServiceConfigFactory()
-		var config *ServiceOrchestrationConfig
+		// Ensure required services are running
 		if runNoRAG {
-			config = factory.ChatNoRAG(serverURL) // Server only, completely ignore RAG
+			// Only need server for non-RAG requests
+			orchestrator.EnsureServicesOrExit(serverURL, "server", "universal-runtime")
 		} else {
-			config = factory.RAGCommand(serverURL) // Wait for both server and RAG
+			// RAG enabled - explicitly ensure all three services
+			orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 		}
-		// Ensure health checks reflect project context before contacting server
-		EnsureServicesWithConfig(config)
 		resp, err := sendChatRequest(messages, ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

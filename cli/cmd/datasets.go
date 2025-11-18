@@ -14,8 +14,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"llamafarm-cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -80,20 +82,19 @@ var datasetsListCmd = &cobra.Command{
 	Short:   "List all datasets on the server for the selected project",
 	Long:    `Lists datasets from the LlamaFarm server scoped by namespace/project.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
-		// Resolve server and routing
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		// Load config first to ensure it's valid before starting watcher
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Ensure server is up (auto-start locally if needed)
-		factory := GetServiceConfigFactory()
-		config := factory.ServerOnly(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
+
+		// Ensure required services are running
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=false", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
@@ -101,7 +102,7 @@ var datasetsListCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
 			os.Exit(1)
 		}
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
 			os.Exit(1)
@@ -113,7 +114,7 @@ var datasetsListCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Error (%d), and body read failed: %v\n", resp.StatusCode, readErr)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Error (%d): %s\n", resp.StatusCode, prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Error (%d): %s\n", resp.StatusCode, utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 
@@ -151,14 +152,16 @@ Examples:
   lf datasets create -s text_processing -b main_database my-pdfs ./pdfs/*.pdf`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		// Load config first to ensure it's valid before starting watcher
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		datasetName := args[0]
 		// 1) Validate required parameters
@@ -172,9 +175,7 @@ Examples:
 		}
 
 		// 2) Validate strategies and databases exist in project config
-		factory := GetServiceConfigFactory()
-		config := factory.ServerOnly(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
 		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -195,7 +196,7 @@ Examples:
 			os.Exit(1)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
 			os.Exit(1)
@@ -207,7 +208,7 @@ Examples:
 				fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Failed to create dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 		var created createDatasetResponse
@@ -216,6 +217,11 @@ Examples:
 			os.Exit(1)
 		}
 		fmt.Printf("✅ Created dataset '%s' (strategy: %s, database: %s)\n", created.Dataset.Name, created.Dataset.DataProcessingStrategy, created.Dataset.Database)
+
+		// Ensure config is synced after creation so next commands see the new dataset
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after dataset creation: %v", err))
+		}
 
 		// 4) Optionally upload files if provided
 		filePaths := args[1:]
@@ -233,15 +239,31 @@ Examples:
 			filesToUpload = append(filesToUpload, matches...)
 		}
 		uploaded := 0
+		skipped := 0
+		failed := 0
 		for _, fp := range filesToUpload {
-			if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, fp); err != nil {
-				fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", fp, err)
+			result := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, fp)
+			if result.err != nil {
+				fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", fp, result.err)
+				failed++
 				continue
 			}
-			fmt.Printf("   📤 Uploaded: %s\n", fp)
-			uploaded++
+			if result.skipped {
+				fmt.Printf("   ⏭️  Skipped: %s (already in dataset)\n", fp)
+				skipped++
+			} else {
+				fmt.Printf("   📤 Uploaded: %s\n", fp)
+				uploaded++
+			}
 		}
-		fmt.Printf("   Done. Uploaded %d/%d file(s).\n", uploaded, len(filesToUpload))
+		fmt.Printf("   Done. Uploaded %d", uploaded)
+		if skipped > 0 {
+			fmt.Printf(", skipped %d duplicate(s)", skipped)
+		}
+		if failed > 0 {
+			fmt.Printf(", failed %d", failed)
+		}
+		fmt.Printf(" out of %d file(s).\n", len(filesToUpload))
 	},
 }
 
@@ -253,26 +275,26 @@ var datasetsDeleteCommand = &cobra.Command{
 	Long:    `Deletes a dataset from the LlamaFarm server for the selected project.`,
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		// Load config first to ensure it's valid before starting watcher
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
+
 		datasetName := args[0]
 		// Ensure server is up
-		factory := GetServiceConfigFactory()
-		config := factory.ServerOnly(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
 			os.Exit(1)
 		}
-		resp, err := getHTTPClient().Do(req)
+		resp, err := utils.GetHTTPClient().Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error sending request: %v\n", err)
 			os.Exit(1)
@@ -284,7 +306,7 @@ var datasetsDeleteCommand = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d), and body read failed: %v\n", datasetName, resp.StatusCode, readErr)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Failed to remove dataset '%s' (%d): %s\n", datasetName, resp.StatusCode, utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 		fmt.Printf("✅ Successfully removed dataset '%s'\n", datasetName)
@@ -315,14 +337,16 @@ Examples:
   lf datasets upload my-docs ./docs/ *.pdf README.md   # Mixed sources`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		// Load config first to ensure it's valid before starting watcher
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		datasetName := args[0]
 		inPaths := args[1:]
@@ -343,15 +367,14 @@ Examples:
 		fmt.Printf("Found %d files to upload\n", len(files))
 
 		// Ensure server is up
-		factory := GetServiceConfigFactory()
-		config := factory.ServerOnly(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
 
 		// Upload in batches with progress display
 		const batchSize = 10
 		totalBatches := (len(files) + batchSize - 1) / batchSize
 
 		uploaded := 0
+		skipped := 0
 		failed := 0
 
 		for batchNum := 0; batchNum < totalBatches; batchNum++ {
@@ -373,13 +396,19 @@ Examples:
 					}
 				}
 
-				if err := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f); err != nil {
-					fmt.Fprintf(os.Stderr, "   ❌ Failed: %s (%v)\n", relPath, err)
+				result := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f)
+				if result.err != nil {
+					fmt.Fprintf(os.Stderr, "   ❌ Failed: %s (%v)\n", relPath, result.err)
 					failed++
 					continue
 				}
-				fmt.Printf("   ✅ Uploaded: %s\n", relPath)
-				uploaded++
+				if result.skipped {
+					fmt.Printf("   ⏭️  Skipped: %s (already in dataset)\n", relPath)
+					skipped++
+				} else {
+					fmt.Printf("   ✅ Uploaded: %s\n", relPath)
+					uploaded++
+				}
 			}
 		}
 
@@ -387,8 +416,16 @@ Examples:
 		fmt.Printf("\n📊 Final Summary:\n")
 		fmt.Printf("   Total files: %d\n", len(files))
 		fmt.Printf("   ✅ Successful: %d\n", uploaded)
+		if skipped > 0 {
+			fmt.Printf("   ⏭️  Skipped (duplicates): %d\n", skipped)
+		}
 		if failed > 0 {
 			fmt.Printf("   ❌ Failed: %d\n", failed)
+		}
+
+		// Ensure config is synced after uploads (server updates file list in config)
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after uploads: %v", err))
 		}
 	},
 }
@@ -400,21 +437,26 @@ var datasetsProcessCmd = &cobra.Command{
 	Long:  `Process all uploaded files in the dataset into the vector database using the configured data processing strategy and embeddings.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Start config watcher for this command
-		StartConfigWatcherForCommand()
-
-		serverCfg, err := config.GetServerConfig(getEffectiveCWD(), serverURL, namespace, projectID)
+		// Load config first to ensure it's valid before starting watcher
+		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
+		// Start config watcher AFTER we've successfully loaded the config
+		// This prevents race conditions where the watcher syncs files before we read them
+		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
+
+		// Ensure config is synced BEFORE processing (server may have updated it)
+		if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config before processing: %v", err))
+		}
+
 		datasetName := args[0]
 
 		// Ensure server and RAG are up (process command needs RAG for ingestion)
-		factory := GetServiceConfigFactory()
-		config := factory.RAGCommand(serverCfg.URL)
-		EnsureServicesWithConfig(config)
+		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server", "rag", "universal-runtime")
 
 		// Call the process endpoint
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process",
@@ -432,7 +474,7 @@ var datasetsProcessCmd = &cobra.Command{
 		} else {
 			fmt.Printf("Processing dataset '%s' (this may take several minutes)\n", datasetName)
 		}
-		resp, err := getHTTPClientWithTimeout(0).Do(req)
+		resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 		stopProgress()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error processing dataset: %v\n", err)
@@ -447,7 +489,7 @@ var datasetsProcessCmd = &cobra.Command{
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", prettyServerError(resp, body))
+			fmt.Fprintf(os.Stderr, "Error: %s\n", utils.PrettyServerError(resp, body))
 			os.Exit(1)
 		}
 
@@ -492,7 +534,7 @@ var datasetsProcessCmd = &cobra.Command{
 			// Show both filename and hash for clarity
 			identifier := ""
 			if d.Filename != "" {
-				identifier = fmt.Sprintf("%s", d.Filename)
+				identifier = d.Filename
 				if len(d.Hash) > 12 {
 					identifier += fmt.Sprintf(" [%s...]", d.Hash[:12])
 				}
@@ -611,6 +653,11 @@ var datasetsProcessCmd = &cobra.Command{
 		if result.FailedFiles > 0 {
 			fmt.Printf("   ❌ Failed: %d\n", result.FailedFiles)
 		}
+
+		// Exit with non-zero code if any files failed
+		if result.FailedFiles > 0 {
+			os.Exit(1)
+		}
 	},
 }
 
@@ -698,7 +745,7 @@ func validateStrategiesAndDatabases(serverURL, namespace, project, dataProcessin
 		return nil
 	}
 
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
 		// If we can't validate, continue anyway (graceful degradation)
 		fmt.Printf("⚠️  Warning: Could not validate strategies: %v\n", err)
@@ -908,11 +955,16 @@ func expandPathsToFiles(paths []string) ([]string, error) {
 	return allFiles, nil
 }
 
-func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) error {
+type uploadResult struct {
+	skipped bool
+	err     error
+}
+
+func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) uploadResult {
 	// Open file
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	defer file.Close()
 
@@ -921,34 +973,44 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 	writer := multipart.NewWriter(&buf)
 	part, err := writer.CreateFormFile("file", filepath.Base(path))
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	if _, err := io.Copy(part, file); err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	if err := writer.Close(); err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 
 	// Build request
 	url := buildServerURL(server, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/data", namespace, project, dataset))
 	req, err := http.NewRequest("POST", url, &buf)
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := getHTTPClientWithTimeout(0).Do(req)
+	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 	if err != nil {
-		return err
+		return uploadResult{err: err}
 	}
 	defer resp.Body.Close()
 	body, readErr := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if readErr != nil {
-			return fmt.Errorf("%s", readErr.Error())
+			return uploadResult{err: fmt.Errorf("%s", readErr.Error())}
 		}
-		return fmt.Errorf("%s", prettyServerError(resp, body))
+		return uploadResult{err: fmt.Errorf("%s", utils.PrettyServerError(resp, body))}
 	}
-	return nil
+
+	// Parse response to check if file was skipped
+	var uploadResp struct {
+		Skipped bool `json:"skipped"`
+	}
+	if err := json.Unmarshal(body, &uploadResp); err != nil {
+		// If we can't parse the response, assume it was successful (backwards compatibility)
+		return uploadResult{skipped: false, err: nil}
+	}
+
+	return uploadResult{skipped: uploadResp.Skipped, err: nil}
 }

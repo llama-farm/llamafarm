@@ -1,19 +1,18 @@
 package cmd
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io"
-	"llamafarm-cli/cmd/config"
-	uitk "llamafarm-cli/internal/tui"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
+
+	uitk "github.com/llamafarm/cli/internal/tui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -22,6 +21,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
 	"github.com/google/uuid"
+	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/orchestrator"
+	"github.com/llamafarm/cli/cmd/utils"
+	"github.com/llamafarm/cli/cmd/version"
 )
 
 var (
@@ -48,6 +51,73 @@ func renderMarkdown(content string, width int) string {
 	return content
 }
 
+// renderToolCall renders a tool call as a styled bordered block
+func renderToolCall(content string, width int) string {
+	// Parse tool call: [TOOL_CALL]name|id|arguments
+	parts := strings.SplitN(strings.TrimPrefix(content, "[TOOL_CALL]"), "|", 3)
+	if len(parts) < 3 {
+		return content // Fallback if format is wrong
+	}
+
+	toolName := parts[0]
+	toolID := parts[1]
+	toolArgs := parts[2]
+
+	// Parse arguments JSON for pretty display
+	var args map[string]any
+	if err := json.Unmarshal([]byte(toolArgs), &args); err != nil {
+		// If not valid JSON, show raw
+		args = map[string]any{"raw": toolArgs}
+	}
+
+	// Build content
+	var contentLines []string
+	contentLines = append(contentLines, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")).Render("🔧 Tool Call"))
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Tool: ")+toolName)
+	// Truncate long IDs
+	displayID := toolID
+	if len(displayID) > 12 {
+		displayID = displayID[:12] + "..."
+	}
+	contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("ID: ")+displayID)
+
+	if len(args) > 0 {
+		contentLines = append(contentLines, "")
+		contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Arguments:"))
+		for k, v := range args {
+			// Truncate long values
+			valStr := fmt.Sprintf("%v", v)
+			if len(valStr) > 60 {
+				valStr = valStr[:60] + "..."
+			}
+			contentLines = append(contentLines, fmt.Sprintf("  %s: %v",
+				lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Render(k),
+				valStr))
+		}
+	}
+
+	blockContent := strings.Join(contentLines, "\n")
+
+	// Calculate box width (limit to terminal width)
+	boxWidth := width - 10
+	if boxWidth < 40 {
+		boxWidth = 40
+	}
+	if boxWidth > 80 {
+		boxWidth = 80
+	}
+
+	// Create styled box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("86")).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	return "\n" + boxStyle.Render(blockContent) + "\n"
+}
+
 const gap = "\n\n"
 
 // overrides provided by dev command
@@ -65,13 +135,14 @@ var chatCtx = &ChatSessionContext{
 	SessionProject:   projectID,
 	Temperature:      temperature,
 	MaxTokens:        maxTokens,
-	HTTPClient:       getHTTPClient(),
+	HTTPClient:       utils.GetHTTPClient(),
+	RAGEnabled:       true, // RAG is enabled by default
 }
 
 // fetchAvailableModels is now defined in models_shared.go
 
 // runChatSessionTUI starts the Bubble Tea TUI for chat.
-func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, serverHealth *HealthPayload) {
+func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo) {
 	// Update session context with project info first
 	if projectInfo != nil {
 		chatCtx.SessionNamespace = projectInfo.Namespace
@@ -82,7 +153,7 @@ func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, server
 		}
 	}
 	chatCtx.ServerURL = serverURL
-	chatCtx.HTTPClient = getHTTPClient()
+	chatCtx.HTTPClient = utils.GetHTTPClient()
 	chatCtx.SessionMode = mode
 
 	// Load existing session context to restore session ID if available
@@ -91,26 +162,26 @@ func runChatSessionTUI(mode SessionMode, projectInfo *config.ProjectInfo, server
 	if chatCtx.SessionMode == SessionModeDev {
 		if existingContext, err := readSessionContext(chatCtx); err == nil && existingContext != nil {
 			chatCtx.SessionID = existingContext.SessionID
-			logDebug(fmt.Sprintf("Restored dev mode session ID: %s", chatCtx.SessionID))
+			utils.LogDebug(fmt.Sprintf("Restored dev mode session ID: %s", chatCtx.SessionID))
 		}
 	} else if chatCtx.SessionMode == SessionModeProject {
 		if existingContext, err := readSessionContext(chatCtx); err == nil && existingContext != nil {
 			chatCtx.SessionID = existingContext.SessionID
-			logDebug(fmt.Sprintf("Restored project mode session ID: %s", chatCtx.SessionID))
+			utils.LogDebug(fmt.Sprintf("Restored project mode session ID: %s", chatCtx.SessionID))
 		}
 	}
 
-	m := newChatModel(projectInfo, serverHealth)
-	p := tea.NewProgram(m)
+	m := newChatModel(projectInfo)
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.program = p
 
 	// Enable TUI mode for output routing
-	SetTUIMode(p)
-	defer ClearTUIMode()
+	utils.SetTUIMode(p)
+	defer utils.ClearTUIMode()
 
 	if _, err := p.Run(); err != nil {
 		// Use the output API instead of direct stderr write
-		OutputError("Error running TUI: %v\n", err)
+		utils.OutputError("Error running TUI: %v\n", err)
 	}
 }
 
@@ -135,7 +206,7 @@ type ModeContext struct {
 
 type chatModel struct {
 	transcript     string
-	serverHealth   *HealthPayload
+	serverHealth   *orchestrator.HealthPayload
 	projectInfo    *config.ProjectInfo
 	spin           spinner.Model
 	messages       []Message
@@ -171,6 +242,16 @@ type chatModel struct {
 	menuActive bool
 	// Controller decouples data/state updates from the UI model
 	controller *Controller
+	// Track first render to ensure initial scroll to bottom
+	isFirstRender bool
+	// Track if we just started a new response (should auto-scroll)
+	justStartedResponse bool
+	// Track tool calls during streaming
+	pendingToolCalls []*ToolCall
+	// Cancel function for active stream
+	cancelStream func()
+	// Track if user intentionally cancelled (to suppress error messages)
+	intentionallyCancelled bool
 }
 
 // removed: old bottom menu state
@@ -180,15 +261,13 @@ type (
 )
 
 type responseMsg struct{ content string }
+type toolCallMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
 
-type designerReadyMsg struct{ url string }
-type designerErrorMsg struct{ err error }
-type serverHealthMsg struct{ health *HealthPayload }
-type modeSwitchMsg struct{ mode ChatMode }
+type serverHealthMsg struct{ health *orchestrator.HealthPayload }
 
-func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) chatModel {
+func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	var devMessages []Message
 
 	ta := textarea.New()
@@ -236,16 +315,32 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 			devHistory = fetchSessionHistory(chatCtx.ServerURL, "llamafarm", "project_seed", devSessionID)
 			for _, msg := range devHistory.Messages {
 				if msg.Role == "user" {
-					devUserChatMessages = append(devUserChatMessages, msg.Content.ChatMessage)
+					devUserChatMessages = append(devUserChatMessages, msg.Content)
 				}
-				devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content.ChatMessage})
+
+				// Handle messages with content and/or tool calls
+				if msg.Content != "" {
+					devMessages = append(devMessages, Message{Role: msg.Role, Content: msg.Content})
+				}
+				if len(msg.ToolCalls) > 0 {
+					for _, tc := range msg.ToolCalls {
+						if tc.Function.Name != "" {
+							// Format as tool call marker for proper rendering
+							toolCallContent := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+							devMessages = append(devMessages, Message{Role: "assistant", Content: toolCallContent})
+						}
+					}
+				}
 			}
-			logDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
+			utils.LogDebug(fmt.Sprintf("Restored DEV history (session %s): %d messages", devSessionID, len(devHistory.Messages)))
 		}
 		if len(devMessages) == 0 {
 			devMessages = append(devMessages, Message{Role: "client", Content: "Send a message or type '/help' for commands."})
 		}
 	}
+
+	sm, _ := orchestrator.NewServiceManager(chatCtx.ServerURL)
+	serverHealth, _ := sm.GetServerHealth()
 
 	// Fetch initial greeting for project_seed (disabled)
 	// if greeting := fetchInitialGreeting(chatCtx); greeting != "" {
@@ -283,20 +378,33 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		}
 		if existingContext, err := readSessionContext(projectChatCtx); err == nil && existingContext != nil {
 			projectSessionID = existingContext.SessionID
-			logDebug(fmt.Sprintf("Restored project mode session ID: %s", projectSessionID))
+			utils.LogDebug(fmt.Sprintf("Restored project mode session ID: %s", projectSessionID))
 		} else {
 			// Create new session for project mode
 			projectSessionID = uuid.New().String()
-			logDebug(fmt.Sprintf("Created new project mode session ID: %s", projectSessionID))
+			utils.LogDebug(fmt.Sprintf("Created new project mode session ID: %s", projectSessionID))
 		}
 
 		// Fetch and render project session history using the project's namespace/project
 		projHist := fetchSessionHistory(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project, projectSessionID)
 		for _, msg := range projHist.Messages {
 			if msg.Role == "user" {
-				projectHistory = append(projectHistory, msg.Content.ChatMessage)
+				projectHistory = append(projectHistory, msg.Content)
 			}
-			projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content.ChatMessage})
+
+			// Handle messages with content and/or tool calls
+			if msg.Content != "" {
+				projectMessages = append(projectMessages, Message{Role: msg.Role, Content: msg.Content})
+			}
+			if len(msg.ToolCalls) > 0 {
+				for _, tc := range msg.ToolCalls {
+					if tc.Function.Name != "" {
+						// Format as tool call marker for proper rendering
+						toolCallContent := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+						projectMessages = append(projectMessages, Message{Role: "assistant", Content: toolCallContent})
+					}
+				}
+			}
 		}
 	} else {
 		// No project info, still create a session ID for future use
@@ -313,7 +421,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 	var availableModels []ModelInfo
 	var availableDatabases *DatabasesResponse
 	var availableDatasets []DatasetBrief
-	var availablePrompts []config.Prompt
+	var availablePrompts []config.LlamaFarmConfigPromptsElem
 	var currentModel string
 	var currentDatabase string
 	var currentStrategy string
@@ -339,7 +447,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		// Fetch dataset names for commands menu
 		availableDatasets = fetchAvailableDatasets(chatCtx.ServerURL, projectInfo.Namespace, projectInfo.Project)
 		// Load prompts from project config file on disk (best effort)
-		if cfg, err := config.LoadConfig(getEffectiveCWD()); err == nil && cfg != nil {
+		if cfg, err := config.LoadConfig(utils.GetEffectiveCWD()); err == nil && cfg != nil {
 			availablePrompts = cfg.Prompts
 		}
 		if availableDatabases != nil && len(availableDatabases.Databases) > 0 {
@@ -387,8 +495,9 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		initialHistory = projectHistory
 	}
 
-	// Initialize viewport content with initial mode messages
+	// Initialize viewport content with initial mode messages and scroll to bottom
 	vp.SetContent(renderChatContent(chatModel{messages: initialMessages}))
+	vp.GotoBottom()
 
 	// Initialize overlay Quick Menu and toast
 	menuCfg := &uitk.Config{}
@@ -397,7 +506,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		menuCfg.Namespace = projectInfo.Namespace
 	}
 	// Attach CLI version for menu header
-	menuCfg.Version = formatVersionForDisplay(Version)
+	menuCfg.Version = version.FormatVersionForDisplay(version.CurrentVersion)
 	qm := uitk.NewQuickMenuModel(menuCfg)
 
 	// Populate menu with real configuration data
@@ -493,7 +602,8 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		printing:           false,
 		history:            initialHistory,
 		histIndex:          len(initialHistory),
-		designerStatus:     "starting…",
+		designerStatus:     "ready",
+		designerURL:        chatCtx.ServerURL,
 		textarea:           ta,
 		viewport:           vp,
 		width:              width,
@@ -508,6 +618,7 @@ func newChatModel(projectInfo *config.ProjectInfo, serverHealth *HealthPayload) 
 		quickMenu:          qm,
 		toast:              toast,
 		controller:         ctrl,
+		isFirstRender:      true,
 	}
 }
 
@@ -575,17 +686,18 @@ func (m *chatModel) switchMode(newMode ChatMode) {
 	// Save session context for the new mode
 	_ = writeSessionContext(chatCtx, chatCtx.SessionID)
 
-	config := &ServiceOrchestrationConfig{
-		ServerURL:   serverURL,
-		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional, // Start async, don't wait
-		},
-		DefaultTimeout: 45 * time.Second,
-	}
-	health, _ := checkServerHealth(serverURL)
-	m.serverHealth = FilterHealthForOptionalServices(health, config, chatCtx.SessionMode)
+	// config := &orchestrator.ServiceOrchestrationConfig{
+	// 	ServerURL:   serverURL,
+	// 	PrintStatus: true,
+	// 	ServiceNeeds: map[string]orchestrator.ServiceRequirement{
+	// 		"universal-runtime": orchestrator.ServiceOptional, // Start async, don't wait
+	// 		"server":            orchestrator.ServiceRequired,
+	// 		"rag":               orchestrator.ServiceOptional, // Start async, don't wait
+	// 	},
+	// 	DefaultTimeout: 45 * time.Second,
+	// }
+	// health, _ := orchestrator.CheckServerHealth(serverURL)
+	// m.serverHealth = FilterHealthForOptionalServices(health, config, chatCtx.SessionMode)
 
 	// Return switch message
 	chatMsg := ""
@@ -779,33 +891,15 @@ func (m *chatModel) isValidStrategy(name string) bool {
 }
 
 func (m chatModel) Init() tea.Cmd {
-	// Kick off spinner and designer background start
-	startDesigner := func() tea.Msg {
-		// Determine preferred port and forced
-		pref := 7724
-		forced := false
-		if designerPreferredPort > 0 {
-			pref = designerPreferredPort
-			forced = designerForced
-		} else if v := strings.TrimSpace(os.Getenv("LF_DESIGNER_PORT")); v != "" {
-			if p, err := strconv.Atoi(v); err == nil && p > 0 {
-				pref = p
-				forced = true
-			}
-		}
-		url, err := StartDesignerInBackground(context.Background(), DesignerLaunchOptions{PreferredPort: pref, Forced: forced})
-		if err != nil {
-			return designerErrorMsg{err: err}
-		}
-		return designerReadyMsg{url: url}
-	}
-	return tea.Batch(m.spin.Tick, startDesigner, updateServerHealthCmd(m))
+	// Kick off spinner and server health check
+	return tea.Batch(m.spin.Tick, updateServerHealthCmd(m))
 }
 
 func updateServerHealthCmd(m chatModel) tea.Cmd {
 	return func() tea.Msg {
-		health, _ := checkServerHealth(serverURL)
-		return serverHealthMsg{health: health}
+		// health, _ := orchestrator.CheckServerHealth(serverURL)
+		// return serverHealthMsg{health: health}
+		return serverHealthMsg{health: nil}
 	}
 }
 
@@ -838,7 +932,27 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea, tiCmd = m.textarea.Update(msg)
 	}
 
-	m.viewport, vpCmd = m.viewport.Update(msg)
+	// Only pass non-keyboard events to viewport to prevent interference with textarea
+	// Viewport should handle mouse events and window size, but not keyboard input
+	shouldUpdateViewport := true
+	if _, ok := msg.(tea.KeyMsg); ok {
+		// Don't pass keyboard events to viewport - they're for textarea input
+		// This prevents spacebar triggering page-down, etc.
+		shouldUpdateViewport = false
+	}
+
+	// Track viewport position before update to detect user scrolling
+	wasAtBottomBeforeUpdate := m.viewport.AtBottom()
+
+	if shouldUpdateViewport {
+		m.viewport, vpCmd = m.viewport.Update(msg)
+	}
+
+	// If viewport was at bottom but user scrolled up (via mouse), stop auto-scrolling
+	// This allows breaking free from following streaming responses
+	if wasAtBottomBeforeUpdate && !m.viewport.AtBottom() && m.printing {
+		m.justStartedResponse = false
+	}
 
 	// Route all messages to toast
 	m.toast, cmd = m.toast.Update(msg)
@@ -855,7 +969,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	footerHeight := lipgloss.Height(renderChatInput(m))
 
 	if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
-		logDebug(fmt.Sprintf("Checking latest server health. Last: %v", m.serverHealth))
+		utils.LogDebug(fmt.Sprintf("Checking latest server health. Last: %v", m.serverHealth))
 		cmds = append(cmds, updateServerHealthCmd(m))
 	}
 
@@ -879,6 +993,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(newWidth)
 		m.width = msg.Width
 		m.termHeight = msg.Height
+
+		// On first render, ensure content is fully loaded before scrolling to bottom
+		if m.isFirstRender {
+			m.isFirstRender = false
+			// Compute transcript and set viewport content first
+			m.transcript = computeTranscript(m)
+			m.setViewportContent()
+			// Now scroll to bottom with fully loaded content
+			m.viewport.GotoBottom()
+		}
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -919,7 +1043,22 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// removed cmd+r menu opener
 
 		case "esc":
-			// No-op here; overlay handles its own ESC
+			// If overlay is active, let it handle ESC
+			if m.quickMenu.IsActive() {
+				return m, tea.Batch(cmds...)
+			}
+			// Cancel active stream if one is in progress
+			if (m.thinking || m.printing) && m.cancelStream != nil {
+				m.intentionallyCancelled = true // Mark as intentional to suppress context.Canceled errors
+				m.cancelStream()
+				m.cancelStream = nil
+				m.thinking = false
+				m.printing = false
+				m.streamCh = nil
+				m.justStartedResponse = false
+				m.messages = append(m.messages, Message{Role: "client", Content: "⚠️ Operation aborted"})
+				m.refreshViewportBottom()
+			}
 			return m, tea.Batch(cmds...)
 
 		case "up":
@@ -928,7 +1067,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 			// Navigate history
-			logDebug(fmt.Sprintf("Up arrow pressed. Current history: %+v", m.history))
+			utils.LogDebug(fmt.Sprintf("Up arrow pressed. Current history: %+v", m.history))
 			if m.histIndex > 0 {
 				m.histIndex--
 				m.textarea.SetValue(m.history[m.histIndex])
@@ -960,343 +1099,48 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 
-			lower := strings.ToLower(msg)
-			// Slash commands
-			if strings.HasPrefix(lower, "/") {
-				fields := strings.Fields(lower)
-				cmd := fields[0]
-				switch cmd {
-				case "/help":
-					m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models"})
-					m.textarea.SetValue("")
-				case "/mode":
-					if len(fields) < 2 {
-						m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /mode [dev|project]"})
-						m.textarea.SetValue("")
-						return m, nil
-					}
-					modeArg := fields[1]
-					var newMode ChatMode
-					switch modeArg {
-					case "dev":
-						newMode = ModeDev
-					case "project":
-						newMode = ModeProject
-					default:
-						m.messages = append(m.messages, Message{Role: "client", Content: "Unknown mode. Use: /mode [dev|project]"})
-						m.textarea.SetValue("")
-						return m, nil
-					}
-					if newMode == m.currentMode {
-						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Already in %s mode", modeArg)})
-						m.textarea.SetValue("")
-						return m, nil
-					}
-					m.switchMode(newMode)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-				case "/model":
-					if m.currentMode != ModeProject {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: "Model switching only available in PROJECT mode. Use Ctrl+T to switch.",
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					if len(fields) < 2 {
-						// Show current model and available models
-						var msg strings.Builder
-						msg.WriteString(fmt.Sprintf("Current model: %s\n\nAvailable models:", m.currentModel))
-						for _, model := range m.availableModels {
-							marker := ""
-							if model.Name == m.currentModel {
-								marker = " (current)"
-							}
-							msg.WriteString(fmt.Sprintf("\n  • %s - %s%s", model.Name, model.Description, marker))
-						}
-						msg.WriteString("\n\nUsage: /model <name> or press Ctrl+K to cycle")
-						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
-						m.textarea.SetValue("")
-						break
-					}
-
-					modelName := fields[1]
-					if !m.isValidModel(modelName) {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: fmt.Sprintf("Unknown model '%s'. Type '/model' to see available models.", modelName),
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					m.switchModel(modelName)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-				case "/launch":
-					if len(fields) < 2 {
-						m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /launch <component>. Components: designer"})
-						m.textarea.SetValue("")
-						break
-					}
-					target := fields[1]
-					if target != "designer" {
-						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown component '%s'. Try: /launch designer", target)})
-						m.textarea.SetValue("")
-						break
-					}
-					if strings.TrimSpace(m.designerURL) == "" || m.designerStatus != "ready" {
-						m.messages = append(m.messages, Message{Role: "client", Content: "Designer is not running yet."})
-						m.textarea.SetValue("")
-						break
-					}
-					m.textarea.SetValue("")
-					return m, openURL(m.designerURL)
-				case "/exit", "/quit":
-					m.status = "👋 You have left the pasture. Safe travels, little llama!"
-					return m, tea.Quit
-				case "/clear":
-					// Get current mode context
-					ctx := m.getCurrentModeContext()
-
-					// Delete server-side session for current mode
-					if ctx.SessionID != "" {
-						// Determine namespace/project for current mode
-						var namespace, projectID string
-						if m.currentMode == ModeDev {
-							namespace = "llamafarm"
-							projectID = "project_seed"
-						} else if m.projectInfo != nil {
-							namespace = m.projectInfo.Namespace
-							projectID = m.projectInfo.Project
-						}
-
-						if namespace != "" && projectID != "" {
-							deleteURL := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s",
-								strings.TrimSuffix(chatCtx.ServerURL, "/"),
-								namespace,
-								projectID,
-								ctx.SessionID)
-							req, err := http.NewRequest("DELETE", deleteURL, nil)
-							if err == nil {
-								resp, err := chatCtx.HTTPClient.Do(req)
-								if err == nil {
-									resp.Body.Close()
-									logDebug(fmt.Sprintf("Deleted server session %s", ctx.SessionID))
-								}
-							}
-						}
-
-						// Generate new session ID for current mode
-						ctx.SessionID = uuid.New().String()
-
-						// Update global chatCtx session ID
-						chatCtx.SessionID = ctx.SessionID
-
-						// Save new session context
-						_ = writeSessionContext(chatCtx, ctx.SessionID)
-						logDebug(fmt.Sprintf("Created new dev mode session ID: %s", ctx.SessionID))
-					}
-
-					// Clear local state for current mode
-					ctx.Messages = []Message{{Role: "client", Content: "Session cleared. New session started."}}
-					ctx.History = []string{}
-
-					// Update model state
-					m.transcript = ""
-					m.messages = ctx.Messages
-					m.history = ctx.History
-					m.textarea.SetValue("")
-					m.setViewportContent()
-					m.thinking = false
-					m.printing = false
-				case "/menu":
-					// Back-compat: open the new overlay and hint about Tab
-					m.quickMenu.Open()
-					if m.termHeight > 0 {
-						var setSize tea.Cmd
-						m.quickMenu, setSize = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: m.termHeight})
-						if setSize != nil {
-							// ignore setSize here; the menu will render with size in View()
-						}
-					}
-					m.messages = append(m.messages, Message{Role: "client", Content: "Opening Quick Menu."})
-					m.textarea.SetValue("")
-					return m, nil
-				case "/database":
-					if m.currentMode != ModeProject {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: "Database switching only available in PROJECT mode. Use Ctrl+T to switch.",
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					if len(fields) < 2 {
-						// Show available databases
-						var msg strings.Builder
-						msg.WriteString("Current database: ")
-						if m.currentDatabase != "" {
-							msg.WriteString(m.currentDatabase)
-						} else {
-							msg.WriteString("(none)")
-						}
-						msg.WriteString("\n\nAvailable databases:")
-
-						if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
-							for _, db := range m.availableDatabases.Databases {
-								marker := ""
-								if db.Name == m.currentDatabase {
-									marker = " (current)"
-								} else if db.IsDefault {
-									marker = " (default)"
-								}
-								msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", db.Name, db.Type, marker))
-							}
-							msg.WriteString("\n\nUsage: /database <name> or press Tab to open Quick Menu")
-						} else {
-							msg.WriteString("\n  No databases configured")
-						}
-
-						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
-						m.textarea.SetValue("")
-						break
-					}
-
-					dbName := fields[1]
-					if !m.isValidDatabase(dbName) {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: fmt.Sprintf("Unknown database '%s'. Type '/database' to see available databases.", dbName),
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					m.switchDatabase(dbName)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-
-				case "/strategy":
-					if m.currentMode != ModeProject {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: "Strategy switching only available in PROJECT mode. Use Ctrl+T to switch.",
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					if len(fields) < 2 {
-						// Show available strategies for current database
-						var msg strings.Builder
-						msg.WriteString("Current strategy: ")
-						if m.currentStrategy != "" {
-							msg.WriteString(m.currentStrategy)
-						} else {
-							msg.WriteString("(none)")
-						}
-						msg.WriteString(fmt.Sprintf("\nDatabase: %s", m.currentDatabase))
-						msg.WriteString("\n\nAvailable strategies:")
-
-						if m.availableDatabases != nil {
-							for _, db := range m.availableDatabases.Databases {
-								if db.Name == m.currentDatabase {
-									if len(db.RetrievalStrategies) > 0 {
-										for _, strategy := range db.RetrievalStrategies {
-											marker := ""
-											if strategy.Name == m.currentStrategy {
-												marker = " (current)"
-											} else if strategy.IsDefault {
-												marker = " (default)"
-											}
-											msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", strategy.Name, strategy.Type, marker))
-										}
-										msg.WriteString("\n\nUsage: /strategy <name> or press Tab to open Quick Menu")
-									} else {
-										msg.WriteString("\n  No strategies configured for this database")
-									}
-									break
-								}
-							}
-						}
-
-						m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
-						m.textarea.SetValue("")
-						break
-					}
-
-					strategyName := fields[1]
-					if !m.isValidStrategy(strategyName) {
-						m.messages = append(m.messages, Message{
-							Role:    "client",
-							Content: fmt.Sprintf("Unknown strategy '%s' for database '%s'. Type '/strategy' to see available strategies.", strategyName, m.currentDatabase),
-						})
-						m.textarea.SetValue("")
-						break
-					}
-
-					m.switchStrategy(strategyName)
-					m.textarea.SetValue("")
-					m.refreshViewportBottom()
-
-				default:
-					m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. All commands must start with '/'. Type '/help' for available commands.", cmd)})
-					m.textarea.SetValue("")
+			// Process command or message using shared handler
+			wasCommand, cmd := m.processCommandOrMessage(msg)
+			if wasCommand {
+				if cmd != nil {
+					return m, cmd
 				}
-				return m, nil
+				m.refreshViewportBottom()
+				break
 			}
 
-			m.history = append(m.history, msg)
-			m.histIndex = len(m.history)
-			m.messages = append(m.messages, Message{Role: "user", Content: msg})
-			m.textarea.SetValue("")
-			m.thinking = true
-			m.printing = true
-			// Update chatCtx with current selections (PROJECT mode)
-			if m.currentMode == ModeProject {
-				if m.currentModel != "" {
-					chatCtx.Model = m.currentModel
-				}
-				if m.currentDatabase != "" {
-					chatCtx.RAGDatabase = m.currentDatabase
-					chatCtx.RAGEnabled = true
-				}
-				if m.currentStrategy != "" {
-					chatCtx.RAGRetrievalStrategy = m.currentStrategy
-				}
-			}
-			// Start channel-based streaming - important for showing progress
-			chunks, errs, _ := startChatStream(m.messages, chatCtx)
-			ch := make(chan tea.Msg, 32)
-			m.streamCh = ch
-			go func() {
-				var builder strings.Builder
-				for {
-					select {
-					case s, ok := <-chunks:
-						logDebug(fmt.Sprintf("STREAM CHUNK: %v", s))
-						if !ok {
-							logDebug(fmt.Sprintf("CHANNEL CLOSED: %v", builder.String()))
-							ch <- responseMsg{content: builder.String()}
-							ch <- streamDone{}
-							close(ch)
-							return
-						}
-						builder.WriteString(s)
-						ch <- responseMsg{content: builder.String()}
-					case e, ok := <-errs:
-						if ok && e != nil {
-							logDebug(fmt.Sprintf("STREAM ERROR: %v", e))
-							ch <- errorMsg{err: e}
-						}
-					}
-				}
-			}()
-			cmds = append(cmds, listen(m.streamCh), thinkingCmd())
+			// Regular message - start chat stream
+			cmds = append(cmds, m.startChatStreamForMessage(msg))
+		}
+
+	case toolCallMsg:
+		// Skip processing tool call if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping toolCallMsg due to intentional cancellation")
+			break
+		}
+
+		// Tool calls are added as separate assistant messages
+		utils.LogDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
+		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
+
+		// Parse and store tool call for potential execution
+		if tc, err := ParseToolCallMessage(msg.content); err == nil {
+			m.pendingToolCalls = append(m.pendingToolCalls, tc)
+			utils.LogDebug(fmt.Sprintf("Stored tool call: %s (ID: %s)", tc.Name, tc.ID))
+		} else {
+			utils.LogDebug(fmt.Sprintf("Failed to parse tool call: %v", err))
+		}
+
+		// Auto-scroll to show tool call
+		if m.justStartedResponse || m.viewport.AtBottom() {
+			m.refreshViewportBottom()
+		} else {
+			m.setViewportContent()
+		}
+
+		if m.streamCh != nil {
+			cmds = append(cmds, listen(m.streamCh))
 		}
 
 	case responseMsg:
@@ -1305,13 +1149,36 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 
-		logDebug(fmt.Sprintf("RESPONSE MSG: %v", msg.content))
+		// Skip processing response if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping responseMsg due to intentional cancellation")
+			break
+		}
+
+		utils.LogDebug(fmt.Sprintf("RESPONSE MSG: %v", msg.content))
 		m.thinking = false
 		m.printing = true
-		if len(m.messages) == 0 || (len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") {
+
+		// Check if viewport is at bottom before updating content
+		wasAtBottom := m.viewport.AtBottom()
+
+		// Check if last message is a tool call (don't update it, create new message)
+		lastIsToolCall := false
+		if len(m.messages) > 0 {
+			lastMsg := m.messages[len(m.messages)-1]
+			lastIsToolCall = lastMsg.Role == "assistant" && strings.HasPrefix(lastMsg.Content, "[TOOL_CALL]")
+		}
+
+		if len(m.messages) == 0 ||
+			(len(m.messages) > 0 && m.messages[len(m.messages)-1].Role != "assistant") ||
+			lastIsToolCall {
+			// Create new message if:
+			// - No messages yet
+			// - Last message is not assistant (it's user/client/error)
+			// - Last message is a tool call (don't overwrite it)
 			m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
 		} else {
-			// Update last assistant line
+			// Update last assistant message (it's regular streaming content)
 			if len(m.messages) > 0 {
 				m.messages[len(m.messages)-1] = Message{Role: "assistant", Content: msg.content}
 			} else {
@@ -1319,7 +1186,16 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		m.setViewportContent()
+		// Auto-scroll during streaming if:
+		// 1. This is a fresh response (just sent a message), OR
+		// 2. Viewport was already at bottom (following along)
+		// This allows users to scroll up to read previous messages, but ensures
+		// new responses are visible when you just sent a message
+		if m.justStartedResponse || wasAtBottom {
+			m.refreshViewportBottom()
+		} else {
+			m.setViewportContent()
+		}
 
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
@@ -1328,7 +1204,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorMsg:
 		m.thinking = false
 		m.err = msg.err
-		m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
+		// Don't show error if user intentionally cancelled and this is a context cancellation error
+		if !(m.intentionallyCancelled && strings.Contains(msg.err.Error(), "context canceled")) {
+			m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
+		}
+		m.justStartedResponse = false    // Reset flag on error
+		m.cancelStream = nil             // Clear cancel function on error
+		m.intentionallyCancelled = false // Reset cancellation flag
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
 		}
@@ -1341,19 +1223,105 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamDone:
 		if len(m.messages) > 0 {
-			logDebug(fmt.Sprintf("STREAM DONE: %v", m.messages[len(m.messages)-1]))
+			utils.LogDebug(fmt.Sprintf("STREAM DONE: %v", m.messages[len(m.messages)-1]))
 		} else {
-			logDebug("STREAM DONE: no messages")
+			utils.LogDebug("STREAM DONE: no messages")
 		}
 		m.printing = false
 		m.streamCh = nil
+		m.cancelStream = nil             // Clear cancel function when stream completes
+		m.intentionallyCancelled = false // Reset cancellation flag
+		m.justStartedResponse = false    // Reset flag after streaming is complete
 
-	case designerReadyMsg:
-		m.designerStatus = "ready"
-		m.designerURL = msg.url
+		// Check if there are any CLI tools to execute
+		if len(m.pendingToolCalls) > 0 {
+			utils.LogDebug(fmt.Sprintf("Processing %d pending tool calls", len(m.pendingToolCalls)))
 
-	case designerErrorMsg:
-		m.designerStatus = fmt.Sprintf("error: %v", msg.err)
+			// Execute CLI tools and collect results
+			var toolResults []Message
+			for _, tc := range m.pendingToolCalls {
+				if strings.HasPrefix(tc.Name, "cli.") {
+					utils.LogDebug(fmt.Sprintf("Executing CLI tool: %s", tc.Name))
+
+					// Execute the tool
+					if toolResult, err := ExecuteToolCall(tc, chatCtx); err != nil {
+						// Tool execution failed - send error as tool result
+
+						errMsg := fmt.Sprintf("Tool execution failed: %v", err)
+						utils.LogDebug(errMsg)
+						toolResults = append(toolResults, Message{
+							Role:       "tool",
+							Content:    errMsg,
+							ToolCallID: tc.ID,
+						})
+						// Also show error to user
+						m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("❌ %s", errMsg)})
+					} else if toolResult != nil {
+						// Tool executed successfully
+						utils.LogDebug(fmt.Sprintf("Tool executed successfully: %s", toolResult.Content))
+						toolResults = append(toolResults, *toolResult)
+						// Show success to user
+						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("✅ %s", toolResult.Content)})
+					}
+				}
+			}
+
+			// Clear pending tool calls
+			m.pendingToolCalls = nil
+
+			// If we have tool results, send them back to continue the conversation
+			if len(toolResults) > 0 {
+				utils.LogDebug(fmt.Sprintf("Sending %d tool results back to API", len(toolResults)))
+				m.messages = append(m.messages, toolResults...)
+				m.setViewportContent()
+				m.refreshViewportBottom()
+
+				// Start a new stream with the tool results
+				m.thinking = true
+				m.printing = true
+				m.justStartedResponse = true
+				chunks, errs, _ := startChatStream(m.messages, chatCtx)
+				ch := make(chan tea.Msg, 32)
+				m.streamCh = ch
+				go func() {
+					var builder strings.Builder
+					for {
+						select {
+						case s, ok := <-chunks:
+							utils.LogDebug(fmt.Sprintf("TOOL RESPONSE CHUNK: %v", s))
+							if !ok {
+								utils.LogDebug(fmt.Sprintf("TOOL RESPONSE DONE: %v", builder.String()))
+								ch <- responseMsg{content: builder.String()}
+								ch <- streamDone{}
+								close(ch)
+								return
+							}
+							// Check if this chunk is a tool call
+							if strings.HasPrefix(s, "[TOOL_CALL]") {
+								// Send any accumulated content first
+								if builder.Len() > 0 {
+									ch <- responseMsg{content: builder.String()}
+								}
+								// Send tool call as separate message
+								ch <- toolCallMsg{content: s}
+								// Reset builder for subsequent content
+								builder.Reset()
+							} else {
+								// Regular content - accumulate and send
+								builder.WriteString(s)
+								ch <- responseMsg{content: builder.String()}
+							}
+						case e, ok := <-errs:
+							if ok && e != nil {
+								utils.LogDebug(fmt.Sprintf("TOOL RESPONSE ERROR: %v", e))
+								ch <- errorMsg{err: e}
+							}
+						}
+					}
+				}()
+				cmds = append(cmds, tea.Batch(listen(m.streamCh), thinkingCmd()))
+			}
+		}
 
 	case serverHealthMsg:
 		// Delegate to controller to update state and emit a unified StateUpdateMsg
@@ -1370,7 +1338,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Update Help tab summary when health updates
 		if m.serverHealth != nil {
-			m.quickMenu.RAGHealthSummary = formatRAGHealthSummary(m.serverHealth)
+			// m.quickMenu.RAGHealthSummary = formatRAGHealthSummary(m.serverHealth)
 		}
 		if strings.TrimSpace(msg.Notice) != "" {
 			m.messages = append(m.messages, Message{Role: "client", Content: msg.Notice})
@@ -1428,11 +1396,26 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case uitk.ExecuteCommandMsg:
-		// For now, just echo the command and toast; future: wire to runner
-		m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("$ %s", msg.Command)})
-		cmds = append(cmds, tea.Printf("Executing: %s", msg.Command))
-		// Show toast confirmation
-		cmds = append(cmds, func() tea.Msg { return uitk.ShowToastMsg{Message: "Running: " + msg.Command} })
+		// Echo the command in the chat
+		commandStr := strings.TrimSpace(msg.Command)
+		m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("$ %s", commandStr)})
+
+		// Special-case: run upgrade inside the current process
+		if strings.HasPrefix(commandStr, "lf version upgrade") {
+			cmds = append(cmds, func() tea.Msg {
+				if err := version.PerformUpgrade(version.UpgradeOpts{}); err != nil {
+					return uitk.ShowToastMsg{Message: "Upgrade failed: " + err.Error()}
+				}
+				return uitk.ShowToastMsg{Message: "Upgrade completed successfully"}
+			})
+			// Ensure menu closes to avoid inconsistent UI state
+			m.quickMenu.Close()
+			break
+		}
+
+		// Default: just show a toast for now
+		cmds = append(cmds, tea.Printf("Executing: %s", commandStr))
+		cmds = append(cmds, func() tea.Msg { return uitk.ShowToastMsg{Message: "Running: " + commandStr} })
 		m.quickMenu.Close()
 
 		if m.serverHealth != nil && m.serverHealth.Status != "healthy" {
@@ -1453,21 +1436,32 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.textarea.SetValue(msg.Text)
 		if msg.AutoSend {
-			// Emulate Enter key handling: add message, clear input, and trigger processing
+			// Directly process the command/message
 			m.err = nil
 			val := strings.TrimSpace(msg.Text)
-			if val != "" {
-				m.messages = append(m.messages, Message{Role: "client", Content: val})
-				m.textarea.SetValue("")
-				return m, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyEnter} }
+			if val == "" || m.thinking {
+				break
 			}
+
+			// Process command or message using shared logic
+			wasCommand, cmd := m.processCommandOrMessage(val)
+			if wasCommand {
+				if cmd != nil {
+					return m, cmd
+				}
+				m.refreshViewportBottom()
+				break
+			}
+
+			// Regular message - start chat stream
+			cmds = append(cmds, m.startChatStreamForMessage(val))
 		}
 
-	case TUIMessageMsg:
+	case utils.TUIMessageMsg:
 		// Handle output messages routed through the messaging API
-		formattedContent := FormatMessage(msg.Message)
+		formattedContent := utils.FormatMessage(msg.Message)
 
-		if msg.Message.Type == ProgressMessage {
+		if msg.Message.Type == utils.ProgressMessage {
 			// For progress messages, find and remove the most recent progress message,
 			// then add the updated progress message at the bottom (most recent position)
 			// This keeps progress updates always visible at the bottom of the chat
@@ -1492,10 +1486,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// For non-progress messages, add normally
 			m.messages = append(m.messages, Message{Role: "client", Content: formattedContent})
 		}
+		m.transcript = computeTranscript(m)
+		m.refreshViewportBottom()
+		return m, tea.Batch(cmds...)
 	}
 
 	m.transcript = computeTranscript(m)
-	m.refreshViewportBottom()
+	m.setViewportContent()
 
 	return m, tea.Batch(cmds...)
 }
@@ -1503,7 +1500,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func listen(ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		msg, ok := <-ch
-		logDebug(fmt.Sprintf("LISTEN MSG: %v", msg))
+		utils.LogDebug(fmt.Sprintf("LISTEN MSG: %v", msg))
 		if !ok {
 			fmt.Println("LISTEN DONE")
 			return streamDone{}
@@ -1512,14 +1509,14 @@ func listen(ch <-chan tea.Msg) tea.Cmd {
 	}
 }
 
-func renderServerStatusProblems(health *HealthPayload) string {
+func renderServerStatusProblems(health *orchestrator.HealthPayload) string {
 	var b strings.Builder
 
 	if health == nil {
 		return ""
 	}
 
-	prettyPrintHealthProblems(&b, *health)
+	// prettyPrintHealthProblems(&b, *health)
 
 	return b.String()
 }
@@ -1536,11 +1533,16 @@ func computeTranscript(m chatModel) string {
 			var line string
 			switch message.Role {
 			case "assistant":
-				// Render Markdown content with ANSI styling
-				renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
-				// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
-				labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
-				line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
+				// Check if this contains a tool call marker
+				if strings.HasPrefix(message.Content, "[TOOL_CALL]") {
+					line = renderToolCall(message.Content, m.width)
+				} else {
+					// Render Markdown content with ANSI styling
+					renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
+					// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
+					labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
+					line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
+				}
 			case "user":
 				style := baseStyle.Foreground(lipgloss.Color("#ccc"))
 				line = style.Bold(true).Render("> ") + style.Render(message.Content)
@@ -1567,64 +1569,6 @@ func computeTranscriptKey(m chatModel) string {
 	io.WriteString(h, msg.Role)
 	io.WriteString(h, msg.Content)
 	return fmt.Sprintf("%x", h.Sum64())
-}
-
-// formatRAGHealthSummary builds a compact health line from the server health payload.
-// It uses the existing /health API response and extracts:
-// - RAG overall status
-// - Task system status
-// - Memory usage in MB
-func formatRAGHealthSummary(h *HealthPayload) string {
-	if h == nil {
-		return "RAG: UNKNOWN  |  Task System: UNKNOWN  |  Memory: N/A"
-	}
-	rag := findRAGComponent(h)
-	if rag == nil {
-		return "RAG: UNKNOWN  |  Task System: UNKNOWN  |  Memory: N/A"
-	}
-
-	ragStatus := strings.ToUpper(strings.TrimSpace(rag.Status))
-
-	taskStatus := "UNKNOWN"
-	memoryText := "N/A"
-
-	if rag.Details != nil {
-		// Extract task system status
-		if checksRaw, ok := rag.Details["checks"]; ok {
-			if checks, ok := checksRaw.(map[string]interface{}); ok {
-				if tsRaw, ok := checks["task_system"]; ok {
-					if ts, ok := tsRaw.(map[string]interface{}); ok {
-						if st, ok := ts["status"].(string); ok && strings.TrimSpace(st) != "" {
-							taskStatus = strings.ToUpper(st)
-						}
-					}
-				}
-			}
-		}
-		// Extract memory usage (MB)
-		if metricsRaw, ok := rag.Details["metrics"]; ok {
-			if metrics, ok := metricsRaw.(map[string]interface{}); ok {
-				if memVal, ok := metrics["memory_mb"]; ok {
-					switch v := memVal.(type) {
-					case float64:
-						memoryText = fmt.Sprintf("%.0f MB", v)
-					case float32:
-						memoryText = fmt.Sprintf("%.0f MB", v)
-					case int:
-						memoryText = fmt.Sprintf("%d MB", v)
-					case int64:
-						memoryText = fmt.Sprintf("%d MB", v)
-					case string:
-						memoryText = v + " MB"
-					default:
-						memoryText = fmt.Sprintf("%v MB", v)
-					}
-				}
-			}
-		}
-	}
-
-	return fmt.Sprintf("RAG: %s  |  Task System: %s  |  Memory: %s", ragStatus, taskStatus, memoryText)
 }
 
 func renderChatContent(m chatModel) string {
@@ -1674,7 +1618,7 @@ func renderChatInput(m chatModel) string {
 	} else {
 		modeHint = "Ctrl+T: dev help | Ctrl+K: cycle models"
 	}
-	helpText := fmt.Sprintf("/help for commands | Up/Down: history | %s", modeHint)
+	helpText := fmt.Sprintf("/help for commands | Up/Down: history | Esc: cancel | %s", modeHint)
 
 	b.WriteString("\n")
 	wrappedHelp := lipgloss.NewStyle().Faint(true).Width(m.width - 2).Render(helpText)
@@ -1742,7 +1686,7 @@ func renderInfoBar(m chatModel) string {
 	}
 
 	// Server status (just icon + simple host)
-	statusIcon := iconForStatus(func() string {
+	statusIcon := utils.IconForStatus(func() string {
 		if m.serverHealth != nil {
 			return m.serverHealth.Status
 		}
@@ -1824,6 +1768,366 @@ func (m chatModel) View() string {
 
 func thinkingCmd() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+// processCommandOrMessage processes a slash command or returns false for regular messages.
+// Returns (wasCommand bool, cmd tea.Cmd). If wasCommand is true, cmd may be nil or a tea.Cmd to execute.
+func (m *chatModel) processCommandOrMessage(msg string) (wasCommand bool, cmd tea.Cmd) {
+	lower := strings.ToLower(msg)
+	// Slash commands
+	if strings.HasPrefix(lower, "/") {
+		fields := strings.Fields(lower)
+		cmdName := fields[0]
+		switch cmdName {
+		case "/help":
+			m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models\n  Esc - Cancel current operation"})
+			m.textarea.SetValue("")
+		case "/mode":
+			if len(fields) < 2 {
+				m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /mode [dev|project]"})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			modeArg := fields[1]
+			var newMode ChatMode
+			switch modeArg {
+			case "dev":
+				newMode = ModeDev
+			case "project":
+				newMode = ModeProject
+			default:
+				m.messages = append(m.messages, Message{Role: "client", Content: "Unknown mode. Use: /mode [dev|project]"})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			if newMode == m.currentMode {
+				m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Already in %s mode", modeArg)})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			m.switchMode(newMode)
+			m.textarea.SetValue("")
+		case "/model":
+			if m.currentMode != ModeProject {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: "Model switching only available in PROJECT mode. Use Ctrl+T to switch.",
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			if len(fields) < 2 {
+				// Show current model and available models
+				var msg strings.Builder
+				msg.WriteString(fmt.Sprintf("Current model: %s\n\nAvailable models:", m.currentModel))
+				for _, model := range m.availableModels {
+					marker := ""
+					if model.Name == m.currentModel {
+						marker = " (current)"
+					}
+					msg.WriteString(fmt.Sprintf("\n  • %s - %s%s", model.Name, model.Description, marker))
+				}
+				msg.WriteString("\n\nUsage: /model <name> or press Ctrl+K to cycle")
+				m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			modelName := fields[1]
+			if !m.isValidModel(modelName) {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: fmt.Sprintf("Unknown model '%s'. Type '/model' to see available models.", modelName),
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			m.switchModel(modelName)
+			m.textarea.SetValue("")
+		case "/launch":
+			if len(fields) < 2 {
+				m.messages = append(m.messages, Message{Role: "client", Content: "Usage: /launch <component>. Components: designer"})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			target := fields[1]
+			if target != "designer" {
+				m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown component '%s'. Try: /launch designer", target)})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+			// Designer is served by the server at root URL
+			m.textarea.SetValue("")
+			return true, openURL(chatCtx.ServerURL)
+		case "/exit", "/quit":
+			m.status = "👋 You have left the pasture. Safe travels, little llama!"
+			return true, tea.Quit
+		case "/clear":
+			// Get current mode context
+			ctx := m.getCurrentModeContext()
+
+			// Delete server-side session for current mode
+			if ctx.SessionID != "" {
+				// Determine namespace/project for current mode
+				var namespace, projectID string
+				if m.currentMode == ModeDev {
+					namespace = "llamafarm"
+					projectID = "project_seed"
+				} else if m.projectInfo != nil {
+					namespace = m.projectInfo.Namespace
+					projectID = m.projectInfo.Project
+				}
+
+				if namespace != "" && projectID != "" {
+					deleteURL := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s",
+						strings.TrimSuffix(chatCtx.ServerURL, "/"),
+						namespace,
+						projectID,
+						ctx.SessionID)
+					req, err := http.NewRequest("DELETE", deleteURL, nil)
+					if err == nil {
+						resp, err := chatCtx.HTTPClient.Do(req)
+						if err == nil {
+							resp.Body.Close()
+							utils.LogDebug(fmt.Sprintf("Deleted server session %s", ctx.SessionID))
+						}
+					}
+				}
+
+				// Generate new session ID for current mode
+				ctx.SessionID = uuid.New().String()
+
+				// Update global chatCtx session ID
+				chatCtx.SessionID = ctx.SessionID
+
+				// Save new session context
+				_ = writeSessionContext(chatCtx, ctx.SessionID)
+				utils.LogDebug(fmt.Sprintf("Created new dev mode session ID: %s", ctx.SessionID))
+			}
+
+			// Clear local state for current mode
+			ctx.Messages = []Message{{Role: "client", Content: "Session cleared. New session started."}}
+			ctx.History = []string{}
+
+			// Update model state
+			m.transcript = ""
+			m.messages = ctx.Messages
+			m.history = ctx.History
+			m.textarea.SetValue("")
+			m.setViewportContent()
+			m.thinking = false
+			m.printing = false
+		case "/database":
+			if m.currentMode != ModeProject {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: "Database switching only available in PROJECT mode. Use Ctrl+T to switch.",
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			if len(fields) < 2 {
+				// Show available databases
+				var msg strings.Builder
+				msg.WriteString("Current database: ")
+				if m.currentDatabase != "" {
+					msg.WriteString(m.currentDatabase)
+				} else {
+					msg.WriteString("(none)")
+				}
+				msg.WriteString("\n\nAvailable databases:")
+
+				if m.availableDatabases != nil && len(m.availableDatabases.Databases) > 0 {
+					for _, db := range m.availableDatabases.Databases {
+						marker := ""
+						if db.Name == m.currentDatabase {
+							marker = " (current)"
+						} else if db.IsDefault {
+							marker = " (default)"
+						}
+						msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", db.Name, db.Type, marker))
+					}
+					msg.WriteString("\n\nUsage: /database <name> or press Tab to open Quick Menu")
+				} else {
+					msg.WriteString("\n  No databases configured")
+				}
+
+				m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			dbName := fields[1]
+			if !m.isValidDatabase(dbName) {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: fmt.Sprintf("Unknown database '%s'. Type '/database' to see available databases.", dbName),
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			m.switchDatabase(dbName)
+			m.textarea.SetValue("")
+		case "/strategy":
+			if m.currentMode != ModeProject {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: "Strategy switching only available in PROJECT mode. Use Ctrl+T to switch.",
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			if len(fields) < 2 {
+				// Show available strategies for current database
+				var msg strings.Builder
+				msg.WriteString("Current strategy: ")
+				if m.currentStrategy != "" {
+					msg.WriteString(m.currentStrategy)
+				} else {
+					msg.WriteString("(none)")
+				}
+				msg.WriteString(fmt.Sprintf("\nDatabase: %s", m.currentDatabase))
+				msg.WriteString("\n\nAvailable strategies:")
+
+				if m.availableDatabases != nil {
+					for _, db := range m.availableDatabases.Databases {
+						if db.Name == m.currentDatabase {
+							if len(db.RetrievalStrategies) > 0 {
+								for _, strategy := range db.RetrievalStrategies {
+									marker := ""
+									if strategy.Name == m.currentStrategy {
+										marker = " (current)"
+									} else if strategy.IsDefault {
+										marker = " (default)"
+									}
+									msg.WriteString(fmt.Sprintf("\n  • %s [%s]%s", strategy.Name, strategy.Type, marker))
+								}
+								msg.WriteString("\n\nUsage: /strategy <name> or press Tab to open Quick Menu")
+							} else {
+								msg.WriteString("\n  No strategies configured for this database")
+							}
+							break
+						}
+					}
+				}
+
+				m.messages = append(m.messages, Message{Role: "client", Content: msg.String()})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			strategyName := fields[1]
+			if !m.isValidStrategy(strategyName) {
+				m.messages = append(m.messages, Message{
+					Role:    "client",
+					Content: fmt.Sprintf("Unknown strategy '%s' for database '%s'. Type '/strategy' to see available strategies.", strategyName, m.currentDatabase),
+				})
+				m.textarea.SetValue("")
+				return true, nil
+			}
+
+			m.switchStrategy(strategyName)
+			m.textarea.SetValue("")
+		case "/menu":
+			// Back-compat: open the new overlay and hint about Tab
+			m.quickMenu.Open()
+			if m.termHeight > 0 {
+				var setSize tea.Cmd
+				m.quickMenu, setSize = m.quickMenu.Update(tea.WindowSizeMsg{Width: m.width, Height: m.termHeight})
+				if setSize != nil {
+					// ignore setSize here; the menu will render with size in View()
+				}
+			}
+			// Check for updates and reflect status in the menu
+			if info, err := version.MaybeCheckForUpgrade(true); err == nil && info != nil {
+				if info.UpdateAvailable {
+					m.quickMenu.SetUpdateAvailable(info.LatestVersion)
+				} else {
+					m.quickMenu.SetUpToDate()
+				}
+			}
+			m.textarea.SetValue("")
+		default:
+			m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("Unknown command '%s'. All commands must start with '/'. Type '/help' for available commands.", cmdName)})
+			m.textarea.SetValue("")
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// startChatStreamForMessage starts a chat stream for a regular (non-command) message.
+func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
+	m.history = append(m.history, msg)
+	m.histIndex = len(m.history)
+	m.messages = append(m.messages, Message{Role: "user", Content: msg})
+	m.textarea.SetValue("")
+	m.thinking = true
+	m.printing = true
+	m.justStartedResponse = true     // Mark that we're starting a new response
+	m.intentionallyCancelled = false // Reset cancellation flag for new request
+	// Scroll to bottom when user sends a message - ensures they see the response
+	m.refreshViewportBottom()
+	// Update chatCtx with current selections (PROJECT mode)
+	if m.currentMode == ModeProject {
+		if m.currentModel != "" {
+			chatCtx.Model = m.currentModel
+		}
+		if m.currentDatabase != "" {
+			chatCtx.RAGDatabase = m.currentDatabase
+			chatCtx.RAGEnabled = true
+		}
+		if m.currentStrategy != "" {
+			chatCtx.RAGRetrievalStrategy = m.currentStrategy
+		}
+	}
+	// Start channel-based streaming - important for showing progress
+	chunks, errs, cancel := startChatStream(m.messages, chatCtx)
+	m.cancelStream = cancel // Store cancel function so Escape key can abort
+	ch := make(chan tea.Msg, 32)
+	m.streamCh = ch
+	go func() {
+		var builder strings.Builder
+		for {
+			select {
+			case s, ok := <-chunks:
+				utils.LogDebug(fmt.Sprintf("STREAM CHUNK: %v", s))
+				if !ok {
+					utils.LogDebug(fmt.Sprintf("CHANNEL CLOSED: %v", builder.String()))
+					ch <- responseMsg{content: builder.String()}
+					ch <- streamDone{}
+					close(ch)
+					return
+				}
+				// Check if this chunk is a tool call
+				if strings.HasPrefix(s, "[TOOL_CALL]") {
+					// Send any accumulated content first
+					if builder.Len() > 0 {
+						ch <- responseMsg{content: builder.String()}
+					}
+					// Send tool call as separate message
+					ch <- toolCallMsg{content: s}
+					// Reset builder for subsequent content
+					builder.Reset()
+				} else {
+					// Regular content - accumulate and send
+					builder.WriteString(s)
+					ch <- responseMsg{content: builder.String()}
+				}
+			case e, ok := <-errs:
+				if ok && e != nil {
+					utils.LogDebug(fmt.Sprintf("STREAM ERROR: %v", e))
+					ch <- errorMsg{err: e}
+				}
+			}
+		}
+	}()
+	return tea.Batch(listen(m.streamCh), thinkingCmd())
 }
 
 func openURL(url string) tea.Cmd {

@@ -1,9 +1,10 @@
 """LlamaIndex text parser with advanced chunking capabilities."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, Optional
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.text.llamaindex_parser")
 
 
@@ -44,13 +45,13 @@ class TextParser_LlamaIndex:
 
         try:
             # Try importing LlamaIndex components
+            from llama_index.core import Document as LlamaDocument
             from llama_index.core.node_parser import (
+                CodeSplitter,
+                SemanticSplitterNodeParser,
                 SentenceSplitter,
                 TokenTextSplitter,
-                SemanticSplitterNodeParser,
-                CodeSplitter,
             )
-            from llama_index.core import Document as LlamaDocument
         except ImportError:
             return ProcessingResult(
                 documents=[],

@@ -1,0 +1,42 @@
+parsers:
+  - name: MsgParser
+    display_name: MSG Parser (extract-msg)
+    tool: extract-msg
+    version: 1.0.0
+    description: Microsoft Outlook MSG file parser using extract-msg library
+
+    supported_extensions:
+      - .msg
+
+    mime_types:
+      - application/vnd.ms-outlook
+      - application/octet-stream
+
+    capabilities:
+      - text_extraction
+      - metadata_extraction
+      - attachment_extraction
+      - chunking
+      - email_parsing
+      - header_extraction
+      - body_extraction
+
+    dependencies:
+      required:
+        - msg-parser
+        - llama-index
+      optional:
+        - chardet # Better encoding detection
+        - python-magic # MIME type detection
+
+    default_config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: email_sections # email_sections, sentences, paragraphs, characters
+      extract_metadata: true
+      extract_attachments: true
+      extract_headers: true
+      include_attachment_content: false # Whether to include attachment content in chunks
+      clean_text: true
+      preserve_formatting: false
+      encoding: utf-8

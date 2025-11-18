@@ -8,6 +8,9 @@ on:
 permissions:
     contents: read
 
+env:
+  NX_NO_CLOUD: true
+
 jobs:
   build:
     name: Conventional Commits

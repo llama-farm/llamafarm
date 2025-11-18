@@ -46,6 +46,11 @@ export interface EditorToolbarProps {
   activeProject: { project: string; namespace: string } | null
   readOnly?: boolean
   onRefresh?: () => void
+  onSave?: () => void
+  onDiscard?: () => void
+  isDirty?: boolean
+  isSaving?: boolean
+  saveError?: string | null
 }
 
 export interface EditorContentProps {

@@ -21,6 +21,12 @@ def search_with_rag_database(
     top_k: int = 5,
     retrieval_strategy: str | None = None,
     score_threshold: float | None = None,
+    metadata_filters: dict[str, Any] | None = None,
+    distance_metric: str | None = None,
+    hybrid_alpha: float | None = None,
+    rerank_model: str | None = None,
+    query_expansion: bool | None = None,
+    max_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Search directly against a RAG database via Celery task.
@@ -32,13 +38,33 @@ def search_with_rag_database(
         query: Search query string
         top_k: Maximum number of results to return
         retrieval_strategy: Optional retrieval strategy name
+        score_threshold: Minimum similarity score filter
+        metadata_filters: Filter results by metadata fields
+        distance_metric: Distance metric to use for similarity calculation
+        hybrid_alpha: Hybrid alpha for hybrid retrieval
+        rerank_model: Rerank model to use for reranking
+        query_expansion: Enable query expansion
+        max_tokens: Maximum tokens to generate for each result
 
     Returns:
         List of search results as dictionaries
     """
     task = signature(
         "rag.search_with_database",
-        args=[project_dir, database, query, top_k, retrieval_strategy, score_threshold],
+        args=[
+            project_dir,
+            database,
+            query,
+            top_k,
+            retrieval_strategy,
+            score_threshold,
+            metadata_filters,
+            distance_metric,
+            hybrid_alpha,
+            rerank_model,
+            query_expansion,
+            max_tokens,
+        ],
         app=app,
     )
     result = task.apply_async()
@@ -48,20 +74,40 @@ def search_with_rag_database(
     poll_interval = 0.5
     waited = 0.0
 
+    # Poll with error handling for Windows filesystem backend
     while waited < timeout:
-        if result.status not in ("PENDING", "STARTED"):
-            break
+        try:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+        except Exception:
+            # If we can't access status, wait and try again
+            time.sleep(poll_interval)
+            waited += poll_interval
+            continue
         time.sleep(poll_interval)
         waited += poll_interval
 
-    if result.status == "SUCCESS":
-        return result.result
-    elif result.status == "FAILURE":
+    # Safely get final status and result
+    try:
+        final_status = result.status
+    except Exception as e:
+        raise Exception(f"Failed to get task status: {e}")
+
+    if final_status == "SUCCESS":
+        try:
+            return result.result
+        except Exception as e:
+            raise Exception(f"Failed to get task result: {e}")
+    elif final_status == "FAILURE":
         # Get the exception info and raise it without using result.get()
-        if hasattr(result, "traceback") and result.traceback:
-            raise Exception(f"Task failed: {result.traceback}")
-        else:
-            raise Exception(f"Task failed with status: {result.status}")
+        try:
+            if hasattr(result, "traceback") and result.traceback:
+                raise Exception(f"Task failed: {result.traceback}")
+            else:
+                raise Exception(f"Task failed with status: {final_status}")
+        except Exception as e:
+            raise Exception(f"Task failed but couldn't get error details: {e}")
     else:
         return []  # Return empty list on timeout or other status
 
@@ -108,28 +154,48 @@ async def ingest_file_with_rag(
     waited = 0
 
     # Always use polling approach to avoid any result.get() issues
+    # Poll with error handling for Windows filesystem backend
     while True:
-        status = result.status
-        if status not in ("PENDING", "STARTED"):
-            break
+        try:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+        except Exception:
+            # If we can't access status, wait and try again
+            if waited >= max_wait:
+                break
+            time.sleep(poll_interval)
+            waited += poll_interval
+            continue
         if waited >= max_wait:
             break
         time.sleep(poll_interval)
         waited += poll_interval
 
     # Get the result without using result.get() to avoid the error
-    if result.status == "SUCCESS":
-        return result.result
-    elif result.status == "FAILURE":
+    try:
+        final_status = result.status
+    except Exception as e:
+        return False, {"error": f"Failed to get task status: {e}"}
+
+    if final_status == "SUCCESS":
+        try:
+            return result.result
+        except Exception as e:
+            return False, {"error": f"Failed to get task result: {e}"}
+    elif final_status == "FAILURE":
         # Get the exception info and raise it without using result.get()
-        if hasattr(result, "traceback") and result.traceback:
-            raise Exception(f"Task failed: {result.traceback}")
-        else:
-            raise Exception(f"Task failed with status: {result.status}")
+        try:
+            if hasattr(result, "traceback") and result.traceback:
+                raise Exception(f"Task failed: {result.traceback}")
+            else:
+                raise Exception(f"Task failed with status: {final_status}")
+        except Exception as e:
+            raise Exception(f"Task failed but couldn't get error details: {e}")
     else:
         # Timeout or other status
         return False, {
-            "error": f"Task timed out or failed with status: {result.status}"
+            "error": f"Task timed out or failed with status: {final_status}"
         }
 
 
@@ -168,20 +234,56 @@ def handle_rag_query(
     poll_interval = 1
     waited = 0
 
+    # Poll with error handling for Windows filesystem backend
     while waited < timeout:
-        if result.status not in ("PENDING", "STARTED"):
-            break
+        try:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+        except Exception:
+            # If we can't access status, wait and try again
+            time.sleep(poll_interval)
+            waited += poll_interval
+            continue
         time.sleep(poll_interval)
         waited += poll_interval
 
-    if result.status == "SUCCESS":
-        return result.result
-    elif result.status == "FAILURE":
+    # Safely get final status and result
+    try:
+        final_status = result.status
+    except Exception as e:
+        return {
+            "query": query,
+            "database": database,
+            "results": [],
+            "total_results": 0,
+            "retrieval_strategy": retrieval_strategy,
+            "context": context,
+            "error": f"Failed to get task status: {e}",
+        }
+
+    if final_status == "SUCCESS":
+        try:
+            return result.result
+        except Exception as e:
+            return {
+                "query": query,
+                "database": database,
+                "results": [],
+                "total_results": 0,
+                "retrieval_strategy": retrieval_strategy,
+                "context": context,
+                "error": f"Failed to get task result: {e}",
+            }
+    elif final_status == "FAILURE":
         # Get the exception info and raise it without using result.get()
-        if hasattr(result, "traceback") and result.traceback:
-            raise Exception(f"Task failed: {result.traceback}")
-        else:
-            raise Exception(f"Task failed with status: {result.status}")
+        try:
+            if hasattr(result, "traceback") and result.traceback:
+                raise Exception(f"Task failed: {result.traceback}")
+            else:
+                raise Exception(f"Task failed with status: {final_status}")
+        except Exception as e:
+            raise Exception(f"Task failed but couldn't get error details: {e}")
     else:
         # Return empty result on timeout or other status
         return {
@@ -191,7 +293,7 @@ def handle_rag_query(
             "total_results": 0,
             "retrieval_strategy": retrieval_strategy,
             "context": context,
-            "error": f"Task timed out or failed: {result.status}",
+            "error": f"Task timed out or failed: {final_status}",
         }
 
 
@@ -222,29 +324,63 @@ def get_rag_health(
     poll_interval = 0.5
     waited = 0.0
 
+    # Poll with error handling for Windows filesystem backend
     while waited < timeout:
-        if result.status not in ("PENDING", "STARTED"):
-            break
+        try:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+        except Exception:
+            # If we can't access status, wait and try again
+            time.sleep(poll_interval)
+            waited += poll_interval
+            continue
         time.sleep(poll_interval)
         waited += poll_interval
 
-    if result.status == "SUCCESS":
-        return result.result
-    elif result.status == "FAILURE":
+    # Safely get final status and result
+    try:
+        final_status = result.status
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "message": f"Failed to get health check task status: {e}",
+            "database": database,
+            "checks": {},
+            "metrics": {},
+            "errors": [f"Status access error: {e}"],
+        }
+
+    if final_status == "SUCCESS":
+        try:
+            return result.result
+        except Exception as e:
+            return {
+                "status": "degraded",
+                "message": f"Failed to get health check result: {e}",
+                "database": database,
+                "checks": {},
+                "metrics": {},
+                "errors": [f"Result access error: {e}"],
+            }
+    elif final_status == "FAILURE":
         # Get the exception info and raise it without using result.get()
-        if hasattr(result, "traceback") and result.traceback:
-            raise Exception(f"Health check task failed: {result.traceback}")
-        else:
-            raise Exception(f"Health check task failed with status: {result.status}")
+        try:
+            if hasattr(result, "traceback") and result.traceback:
+                raise Exception(f"Health check task failed: {result.traceback}")
+            else:
+                raise Exception(f"Health check task failed with status: {final_status}")
+        except Exception as e:
+            raise Exception(f"Health check task failed but couldn't get error details: {e}")
     else:
         # Return degraded status on timeout or other status
         return {
             "status": "degraded",
-            "message": f"Health check timed out or failed: {result.status}",
+            "message": f"Health check timed out or failed: {final_status}",
             "database": database,
             "checks": {},
             "metrics": {},
-            "errors": [f"Health check task status: {result.status}"],
+            "errors": [f"Health check task status: {final_status}"],
         }
 
 
@@ -282,19 +418,39 @@ def batch_search(
     poll_interval = 1
     waited = 0
 
+    # Poll with error handling for Windows filesystem backend
     while waited < timeout:
-        if result.status not in ("PENDING", "STARTED"):
-            break
+        try:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+        except Exception:
+            # If we can't access status, wait and try again
+            time.sleep(poll_interval)
+            waited += poll_interval
+            continue
         time.sleep(poll_interval)
         waited += poll_interval
 
-    if result.status == "SUCCESS":
-        return result.result
-    elif result.status == "FAILURE":
+    # Safely get final status and result
+    try:
+        final_status = result.status
+    except Exception as e:
+        raise Exception(f"Failed to get task status: {e}")
+
+    if final_status == "SUCCESS":
+        try:
+            return result.result
+        except Exception as e:
+            raise Exception(f"Failed to get task result: {e}")
+    elif final_status == "FAILURE":
         # Get the exception info and raise it without using result.get()
-        if hasattr(result, "traceback") and result.traceback:
-            raise Exception(f"Task failed: {result.traceback}")
-        else:
-            raise Exception(f"Task failed with status: {result.status}")
+        try:
+            if hasattr(result, "traceback") and result.traceback:
+                raise Exception(f"Task failed: {result.traceback}")
+            else:
+                raise Exception(f"Task failed with status: {final_status}")
+        except Exception as e:
+            raise Exception(f"Task failed but couldn't get error details: {e}")
     else:
         return []  # Return empty list on timeout or other status

@@ -66,6 +66,22 @@ test_cli_build() {
         error "CLI directory not found"
     fi
 
+    # Generate types first
+    info "Generating types..."
+    cd config
+    uv run python generate_types.py || error "Failed to generate Python types"
+
+    # Install go-jsonschema if needed
+    if ! command -v go-jsonschema >/dev/null 2>&1; then
+        info "Installing go-jsonschema..."
+        go install github.com/atombender/go-jsonschema@latest || error "Failed to install go-jsonschema"
+    fi
+
+    # Generate Go types
+    cd ../cli/cmd/config
+    sh generate-types.sh || error "Failed to generate Go types"
+    cd ../../..
+
     cd cli
 
     # Test go mod tidy
@@ -76,7 +92,8 @@ test_cli_build() {
     fi
 
     # Test basic build
-    if go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-quick-1.0.0'" -o ../dist/lf-test .; then
+    go generate -v ./...
+    if go build -ldflags="-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-quick-1.0.0'" -o ../dist/lf-test .; then
         success "CLI build successful"
     else
         error "CLI build failed"
@@ -98,13 +115,13 @@ test_cli_build() {
     # Test cross-compilation (quick test)
     info "Testing cross-compilation..."
 
-    if GOOS=linux GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o ../dist/lf-linux .; then
+    if GOOS=linux GOARCH=amd64 go build -ldflags="-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-cross'" -o ../dist/lf-linux .; then
         success "Linux cross-compilation works"
     else
         error "Linux cross-compilation failed"
     fi
 
-    if GOOS=windows GOARCH=amd64 go build -ldflags="-X 'llamafarm-cli/cmd.Version=test-cross'" -o ../dist/lf-windows.exe .; then
+    if GOOS=windows GOARCH=amd64 go build -ldflags="-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-cross'" -o ../dist/lf-windows.exe .; then
         success "Windows cross-compilation works"
     else
         error "Windows cross-compilation failed"

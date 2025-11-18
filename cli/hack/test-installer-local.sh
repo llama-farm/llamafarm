@@ -52,6 +52,22 @@ create_test_artifacts() {
     info "Creating test release artifacts..."
 
     mkdir -p "$TEST_DIR"
+    # Generate types first
+    info "Generating types..."
+    cd config
+    uv run python generate_types.py || error "Failed to generate Python types"
+
+    # Install go-jsonschema if needed
+    if ! command -v go-jsonschema >/dev/null 2>&1; then
+        info "Installing go-jsonschema..."
+        go install github.com/atombender/go-jsonschema@latest || error "Failed to install go-jsonschema"
+    fi
+
+    # Generate Go types
+    cd ../cli/cmd/config
+    sh generate-types.sh || error "Failed to generate Go types"
+    cd ../../..
+
     cd "$CLI_DIR"
 
     # Build for multiple platforms
@@ -75,7 +91,7 @@ create_test_artifacts() {
         fi
 
         GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=$TEST_VERSION'" \
+            -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=$TEST_VERSION'" \
             -o "$binary_name" .
 
         # Create archive

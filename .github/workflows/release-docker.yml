@@ -1,9 +1,9 @@
 name: Release - Docker images
 
 on:
-  release:
-    types:
-      - published
+  # release:
+  #   types:
+  #     - published
   workflow_dispatch:
     inputs:
       version:
@@ -14,6 +14,9 @@ on:
 permissions:
   contents: read
   packages: read
+
+env:
+  NX_NO_CLOUD: true
 
 jobs:
   tag-docker-images:
@@ -54,7 +57,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
 
           # Services to retag
-          SERVICES=(designer server rag)
+          SERVICES=(designer server rag runtime)
 
           # Wait for all Docker images to be available
           echo "Waiting for Docker images to be built and pushed..."

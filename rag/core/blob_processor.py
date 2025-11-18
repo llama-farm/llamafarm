@@ -71,7 +71,7 @@ class BlobProcessor:
             if not config.type:
                 continue
 
-            parser_type = config.type.value
+            parser_type = config.type
             try:
                 parser_class = self._get_parser_class(parser_type)
                 # Pass the parser type name and config
@@ -116,12 +116,7 @@ class BlobProcessor:
 
     def _get_parser_class(self, parser_type: str) -> type:
         """
-        Dynamically discover and load parser class by type name.
-
-        This follows the convention:
-        - Parser type: PDFParser_LlamaIndex
-        - Module path: components.parsers.pdf.llamaindex_parser
-        - Class name: PDFParser_LlamaIndex
+        Get parser class using the enhanced ToolAwareParserFactory.
 
         Args:
             parser_type: Name of the parser type (e.g., "PDFParser_LlamaIndex")
@@ -129,126 +124,17 @@ class BlobProcessor:
         Returns:
             Parser class
         """
-        import importlib
-        from pathlib import Path
+        from components.parsers.parser_factory import ToolAwareParserFactory
 
-        # Try to dynamically discover the parser module
-        # Parse the parser type name: {Type}Parser_{Implementation}
-        if "_" in parser_type:
-            parts = parser_type.split("_")
-            # Handle both TypeParser_Implementation and Type_Parser_Implementation
-            if "Parser" in parts[0]:
-                # Format: PDFParser_LlamaIndex
-                parser_category = parts[0].replace("Parser", "").lower()  # pdf
-                implementation = "_".join(parts[1:]).lower()  # llamaindex
-            else:
-                # Format: PDF_Parser_LlamaIndex (less common)
-                parser_category = parts[0].lower()  # pdf
-                implementation = (
-                    "_".join(parts[2:]).lower() if len(parts) > 2 else "default"
-                )
-        else:
-            # No underscore, assume it's a simple parser name
-            parser_category = parser_type.replace("Parser", "").lower()
-            implementation = "default"
+        # Use the enhanced factory to load the parser class
+        if parser_class := ToolAwareParserFactory.load_parser_class(parser_type):
+            return parser_class
 
-        # Build potential module paths to try
-        potential_paths = [
-            f"components.parsers.{parser_category}.{implementation}_parser",
-            f"components.parsers.{parser_category}.{parser_category}_parser",
-            f"components.parsers.{parser_type.lower()}",
-            f"components.parsers.{parser_category}.parser",
-        ]
-
-        # Also check if there's a direct mapping based on file structure
-        parsers_dir = Path(__file__).parent.parent / "components" / "parsers"
-        if parsers_dir.exists():
-            # Look for matching directories
-            for category_dir in parsers_dir.iterdir():
-                if (
-                    category_dir.is_dir()
-                    and parser_category in category_dir.name.lower()
-                ):
-                    # Look for implementation files
-                    for py_file in category_dir.glob("*_parser.py"):
-                        if implementation in py_file.stem.lower():
-                            module_name = (
-                                f"components.parsers.{category_dir.name}.{py_file.stem}"
-                            )
-                            potential_paths.insert(0, module_name)
-
-        # Try to import from potential paths
-        for module_path in potential_paths:
-            try:
-                logger.debug(f"Trying to import parser from: {module_path}")
-                module = importlib.import_module(module_path)
-
-                # Try to get the class with the exact name first
-                if hasattr(module, parser_type):
-                    parser_class = getattr(module, parser_type)
-                    logger.debug(
-                        f"Successfully loaded {parser_type} from {module_path}"
-                    )
-                    return parser_class
-
-                # Try variations of the class name
-                for attr_name in dir(module):
-                    if attr_name.lower() == parser_type.lower():
-                        parser_class = getattr(module, attr_name)
-                        logger.debug(
-                            f"Successfully loaded {attr_name} from {module_path}"
-                        )
-                        return parser_class
-
-            except (ImportError, AttributeError) as e:
-                logger.debug(f"Could not load from {module_path}: {e}")
-                continue
-
-        # If we couldn't find the parser, log a warning and return mock
+        logger.error(f"Parser {parser_type} not found - falling back to mock parser")
         logger.warning(
-            f"Could not dynamically load parser {parser_type}, using mock parser"
+            f"Mock parser fallback may cause silent processing failures for {parser_type}"
         )
-
-        class MockParser(BaseParser):
-            def __init__(self, config):
-                self.config = config
-
-            def _load_metadata(self):
-                from components.parsers.base.base_parser import ParserConfig
-
-                return ParserConfig(
-                    name=parser_type,
-                    display_name=parser_type,
-                    version="1.0",
-                    supported_extensions=[],
-                    mime_types=[],
-                    capabilities=[],
-                    dependencies={},
-                    default_config={},
-                )
-
-            def parse(self, source):
-                # Mock implementation
-                return None
-
-            def can_parse(self, file_path):
-                return True
-
-            def parse_blob(self, blob_data, metadata):
-                # Simple text extraction for testing
-                try:
-                    content = blob_data.decode("utf-8", errors="ignore")
-                except:
-                    content = str(blob_data)[:1000]
-
-                return [
-                    Document(
-                        content=content[:1000],  # Limit for testing
-                        metadata={**metadata, "parser": parser_type},
-                    )
-                ]
-
-        return MockParser
+        return ToolAwareParserFactory.create_mock_parser(parser_type)
 
     def _get_extractor_class(self, extractor_type: str) -> type:
         """
@@ -323,7 +209,7 @@ class BlobProcessor:
 
             except (ImportError, AttributeError) as e:
                 extractor_load_errors.append(f"Could not load from {module_path}: {e}")
-                logger.debug(f"Could not load from {module_path}: {e}")
+                logger.debug(f"Could not load parser from {module_path}: {e}")
                 continue
 
         # If we couldn't find the extractor, log a warning and return mock
@@ -403,14 +289,14 @@ class BlobProcessor:
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
         logger.debug(
-            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type.value if p[0].type else None for p in matching_parsers]}"
+            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type or None for p in matching_parsers]}"
         )
 
         if not matching_parsers:
             logger.warning(f"No parser found for file: {filename}")
             # Try with the lowest priority text parser as ultimate fallback
             for config, parser in self.parsers:
-                if config.type and config.type.value == "TextParser_Python":
+                if config.type and config.type == "TextParser_Python":
                     matching_parsers = [(config, parser)]
                     break
 
@@ -423,7 +309,7 @@ class BlobProcessor:
                 )
                 continue
 
-            parser_type = config.type.value
+            parser_type = config.type
             try:
                 logger.debug(
                     f"Attempting to parse {filename} with {parser_type} (priority: {config.priority})"

@@ -10,13 +10,18 @@ import {
   filterProjectsBySearch,
   getProjectsList,
 } from './utils/projectConstants'
+import {
+  getModelNames,
+  formatLastModified,
+  parseTimestamp
+} from './utils/projectHelpers'
 import { getCurrentNamespace } from './utils/namespaceUtils'
-import { encodeMessageForUrl } from './utils/homePageUtils'
 import projectService from './api/projectService'
 import { mergeProjectConfig } from './utils/projectConfigUtils'
 import {
   sanitizeProjectName,
   checkForDuplicateName,
+  validateProjectName,
 } from './utils/projectValidation'
 import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
@@ -24,14 +29,16 @@ import { Textarea } from './components/ui/textarea'
 
 function Home() {
   // Form state
+  const [projectName, setProjectName] = useState('')
   const [what, setWhat] = useState('')
-  const [goals, setGoals] = useState('')
-  const [audience, setAudience] = useState('')
   const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>(
     'local'
   )
+  const [projectNameError, setProjectNameError] = useState<string | null>(null)
+  const [generalError, setGeneralError] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'a-z' | 'z-a' | 'model'>('newest')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
   const [fakeProgress, setFakeProgress] = useState(0)
@@ -53,17 +60,66 @@ function Home() {
     [projectsResponse]
   )
 
+  // Get full project objects from API with precomputed sort keys
+  // Uses namespace+name as key to avoid potential collisions
+  const fullProjects = useMemo(() => {
+    const apiProjects = projectsResponse?.projects || []
+    return new Map(
+      apiProjects.map(p => {
+        const key = `${p.namespace}/${p.name}`
+        return [key, {
+          ...p,
+          // Precompute sort keys for performance
+          _sortTimestamp: parseTimestamp(p.last_modified),
+          _sortModels: getModelNames(p.config)
+        }]
+      })
+    )
+  }, [projectsResponse])
+
   // Shared modal hook
   const projectModal = useProjectModalContext()
 
   // create-form scroll handler no longer used (buttons removed)
 
-  const filteredProjectNames = useMemo(() => {
-    return filterProjectsBySearch(
+  const filteredAndSortedProjectNames = useMemo(() => {
+    // First, filter by search
+    const filtered = filterProjectsBySearch(
       projectsList.map(name => ({ name })),
       search
     ).map(item => item.name)
-  }, [projectsList, search])
+
+    // Get current namespace for key lookup
+    const currentNamespace = namespace
+
+    // Then sort based on sortBy selection (inline immediately returned variable)
+    return [...filtered].sort((a, b) => {
+      // Use namespace+name composite key for lookup
+      const projectA = fullProjects.get(`${currentNamespace}/${a}`)
+      const projectB = fullProjects.get(`${currentNamespace}/${b}`)
+
+      switch (sortBy) {
+        case 'newest':
+          // Use precomputed timestamps
+          return (projectB?._sortTimestamp || 0) - (projectA?._sortTimestamp || 0)
+        case 'oldest':
+          // Use precomputed timestamps
+          return (projectA?._sortTimestamp || 0) - (projectB?._sortTimestamp || 0)
+        case 'a-z':
+          return a.localeCompare(b)
+        case 'z-a':
+          return b.localeCompare(a)
+        case 'model': {
+          // Use precomputed model lists
+          const modelA = projectA?._sortModels?.[0] || 'zzz'
+          const modelB = projectB?._sortModels?.[0] || 'zzz'
+          return modelA.localeCompare(modelB)
+        }
+        default:
+          return 0
+      }
+    })
+  }, [projectsList, search, sortBy, fullProjects, namespace])
 
   // No-op: pills removed
 
@@ -98,172 +154,66 @@ function Home() {
     }
   }, [isCreatingProject])
 
-  const summarizeWhatToSlug = (text: string): string => {
-    const stopwords = new Set([
-      'the',
-      'a',
-      'an',
-      'and',
-      'or',
-      'for',
-      'to',
-      'with',
-      'of',
-      'on',
-      'in',
-      'into',
-      'by',
-      'from',
-      'about',
-      'this',
-      'that',
-      'these',
-      'those',
-      'is',
-      'am',
-      'are',
-      'be',
-      'being',
-      'been',
-      'it',
-      'its',
-      'my',
-      'our',
-      'your',
-      'their',
-      'his',
-      'her',
-      'as',
-      'at',
-      'we',
-      'i',
-      'you',
-      'they',
-      'what',
-      'which',
-      'who',
-      'whom',
-      'will',
-      'can',
-      'could',
-      'should',
-      'would',
-      'may',
-      'might',
-      'just',
-      'like',
-      'make',
-      'makes',
-      'made',
-      'build',
-      'building',
-      'create',
-      'creating',
-      'new',
-      'project',
-    ])
-    const tokens = text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean)
-      .filter(t => t.length > 2 && !stopwords.has(t))
-    const unique: string[] = []
-    for (const t of tokens) {
-      if (!unique.includes(t)) unique.push(t)
-    }
-    const picked = unique.slice(0, 3)
-    return picked.join('-') || 'project'
-  }
-
-  const composeInitialMessage = (): string => {
-    const parts: string[] = []
-    if (what.trim()) parts.push(`What: ${what.trim()}`)
-    if (goals.trim()) parts.push(`Goals: ${goals.trim()}`)
-    if (audience.trim()) parts.push(`Users: ${audience.trim()}`)
-    if (deployment)
-      parts.push(
-        `Deployment: ${deployment === 'local' ? 'Local machine' : deployment === 'cloud' ? 'Cloud' : 'Not sure'}`
-      )
-    return parts.join('\n')
-  }
-
-  const hasAnyInput =
-    what.trim().length > 0 ||
-    goals.trim().length > 0 ||
-    audience.trim().length > 0
+  const hasAnyInput = projectName.trim().length > 0
 
   const handleCreateProject = async () => {
     const MIN_LOADING_MS = 3000
-    // Autogenerate project name from "what" or generic fallback
-    const baseFromWhat = summarizeWhatToSlug(what || goals || audience || '')
-    let desiredName = sanitizeProjectName(baseFromWhat).replace(/\s+/g, '-')
-
-    // Ensure uniqueness optimistically against current list
-    let finalName = desiredName
-    const allNames = projectsList
-    if (checkForDuplicateName(finalName, allNames)) {
-      const suffix = Date.now().toString().slice(-3)
-      finalName = `${finalName}-${suffix}`
+    
+    // Validate and sanitize project name
+    const sanitizedName = sanitizeProjectName(projectName)
+    const validation = validateProjectName(sanitizedName)
+    
+    if (!validation.isValid) {
+      setProjectNameError(validation.error || 'Invalid project name')
+      return
     }
 
+    // Check for duplicate name
+    if (checkForDuplicateName(sanitizedName, projectsList)) {
+      setProjectNameError('A project with this name already exists')
+      return
+    }
+
+    setProjectNameError(null)
+    setGeneralError(null)
     setIsCreatingProject(true)
     const startedAt = performance.now()
+    
     try {
       // 1) Create the project
       const created = await projectService.createProject(namespace, {
-        name: finalName,
+        name: sanitizedName,
         config_template: 'default',
       })
 
-      // 2) Save brief answers into config
-      const brief = {
-        what: what || undefined,
-        goals: goals || undefined,
-        audience: audience || undefined,
-        deployment,
-      }
-      const mergedConfig = mergeProjectConfig(created.project.config || {}, {
-        project_brief: brief,
-      })
-      try {
-        await projectService.updateProject(namespace, created.project.name, {
-          config: mergedConfig,
+      // 2) Save optional "what" description and deployment into config if provided
+      if (what.trim() || deployment) {
+        const brief: { what?: string; deployment?: string } = {}
+        if (what.trim()) brief.what = what.trim()
+        if (deployment) brief.deployment = deployment
+        
+        const mergedConfig = mergeProjectConfig(created.project.config || {}, {
+          project_brief: brief,
         })
-      } catch (e) {
-        // Notify the user that config update failed, but project was created
         try {
-          window.alert(
-            'Project was created, but saving project details failed. Some information may not be saved.'
-          )
-        } catch {}
-        console.error('Failed to update project config:', e)
+          await projectService.updateProject(namespace, created.project.name, {
+            config: mergedConfig,
+          })
+        } catch (e) {
+          console.error('Failed to update project config:', e)
+          // Non-critical, continue anyway
+        }
       }
 
-      // Also persist brief locally for resilience against schema mismatches or offline use
-      try {
-        const briefKey = `lf_project_brief_${namespace}_${created.project.name}`
-        localStorage.setItem(briefKey, JSON.stringify(brief))
-      } catch {}
-
-      // 3) Activate and navigate with initial message
+      // 3) Activate and navigate to dashboard
       localStorage.setItem('activeProject', created.project.name)
-      // Optimistically update caches so it appears in dropdowns/lists immediately
+      
+      // Optimistically update caches
       try {
-        queryClient.setQueryData(
-          projectKeys.detail(namespace, created.project.name),
-          {
-            project: {
-              namespace,
-              name: created.project.name,
-              config: mergedConfig,
-            },
-          }
-        )
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
       } catch {}
 
-      // Also persist in local fallback list used elsewhere
+      // Persist in local fallback list
       try {
         const raw = localStorage.getItem('lf_custom_projects')
         const arr: string[] = raw ? JSON.parse(raw) : []
@@ -274,7 +224,8 @@ function Home() {
           )
         }
       } catch {}
-      // Ensure the fun loading overlay is visible for at least MIN_LOADING_MS
+      
+      // Ensure the loading overlay is visible for at least MIN_LOADING_MS
       const elapsed = performance.now() - startedAt
       if (elapsed < MIN_LOADING_MS) {
         await new Promise(resolve =>
@@ -282,14 +233,11 @@ function Home() {
         )
       }
 
-      const initialMessage = composeInitialMessage()
-      const encoded = encodeMessageForUrl(initialMessage)
-      navigate(`/chat/dashboard?initialMessage=${encoded}`)
+      navigate('/chat/dashboard')
     } catch (error) {
       console.error('❌ Failed to create project:', error)
-      alert(
-        `Failed to create project: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      setGeneralError(`Failed to create project: ${errorMessage}`)
     } finally {
       setIsCreatingProject(false)
     }
@@ -338,14 +286,26 @@ function Home() {
 
   // React to project deletions fired from the modal to update UI immediately
   useEffect(() => {
-    const onDeleted = () => {
-      // Invalidate local derived list by forcing a refilter
-      setSearch(s => s + '')
+    const onDeleted = (event: Event) => {
+      const deletedProjectName = (event as CustomEvent<string>).detail
+      // Force refetch of projects list to ensure UI is updated
+      queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
+      
+      // Clear active project if it was the one deleted
+      try {
+        const active = localStorage.getItem('activeProject')
+        if (active === deletedProjectName) {
+          localStorage.removeItem('activeProject')
+          window.dispatchEvent(
+            new CustomEvent<string>('lf-active-project', { detail: '' })
+          )
+        }
+      } catch {}
     }
     window.addEventListener('lf-project-deleted' as any, onDeleted as any)
     return () =>
       window.removeEventListener('lf-project-deleted' as any, onDeleted as any)
-  }, [])
+  }, [namespace, queryClient])
 
   return (
     <div className="min-h-screen flex flex-col items-stretch px-4 sm:px-6 lg:px-8 pt-24 md:pt-28 pb-8 bg-background">
@@ -356,43 +316,47 @@ function Home() {
           </p>
 
           <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-foreground">
-            Tell us about your new project
+            Create a new project
           </h1>
         </div>
         <div id="home-create-form" className="max-w-3xl mx-auto">
+          {generalError && (
+            <div className="mb-4 text-red-600 bg-red-100 border border-red-300 rounded p-3 text-sm">
+              {generalError}
+            </div>
+          )}
           <div className="rounded-lg border p-4 sm:p-5 bg-card border-input shadow-sm relative">
             <div className="grid gap-4 text-left">
               <div className="grid gap-2.5">
-                <Label htmlFor="what">What are you building?</Label>
+                <Label htmlFor="projectName">Project name</Label>
+                <Input
+                  id="projectName"
+                  value={projectName}
+                  onChange={e => {
+                    setProjectName(e.target.value)
+                    if (projectNameError) setProjectNameError(null)
+                    if (generalError) setGeneralError(null)
+                  }}
+                  placeholder="my-project"
+                  disabled={isCreatingProject}
+                  className={projectNameError ? 'border-destructive' : ''}
+                />
+                {projectNameError && (
+                  <p className="text-xs text-destructive">{projectNameError}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
+                </p>
+              </div>
+
+              <div className="grid gap-2.5">
+                <Label htmlFor="what">What are you building? (optional)</Label>
                 <Textarea
                   id="what"
                   value={what}
                   onChange={e => setWhat(e.target.value)}
                   placeholder="A customer support chatbot, inventory system, data dashboard..."
                   className="min-h-[72px]"
-                  disabled={isCreatingProject}
-                />
-              </div>
-
-              <div className="grid gap-2.5">
-                <Label htmlFor="goals">What do you hope to achieve?</Label>
-                <Textarea
-                  id="goals"
-                  value={goals}
-                  onChange={e => setGoals(e.target.value)}
-                  placeholder="Reduce response times, automate tasks, improve satisfaction..."
-                  className="min-h-[72px]"
-                  disabled={isCreatingProject}
-                />
-              </div>
-
-              <div className="grid gap-2.5">
-                <Label htmlFor="audience">Who will use this?</Label>
-                <Input
-                  id="audience"
-                  value={audience}
-                  onChange={e => setAudience(e.target.value)}
-                  placeholder="Support team, end customers, internal employees..."
                   disabled={isCreatingProject}
                 />
               </div>
@@ -446,10 +410,10 @@ function Home() {
                       ? 'Creating project...'
                       : hasAnyInput
                         ? 'Create new project'
-                        : 'Fill at least one field to create a project'
+                        : 'Enter a project name to create'
                   }
                 >
-                  {isCreatingProject ? 'Creating…' : 'Create new project'}
+                  {isCreatingProject ? 'Creating…' : 'Create project'}
                 </button>
               </div>
             </div>
@@ -485,11 +449,11 @@ function Home() {
           </div>
         </div>
 
-        <p className="max-w-2xl mx-auto text-xs sm:text-sm leading-relaxed text-foreground/80">
-          {isCreatingProject
-            ? 'Creating your project and setting up the chat environment...'
-            : 'Provide at least one detail above (what, goals, or users) to create your project.'}
-        </p>
+        {isCreatingProject && (
+          <p className="max-w-2xl mx-auto text-xs sm:text-sm leading-relaxed text-foreground/80">
+            Creating your project and setting up the dashboard...
+          </p>
+        )}
         {/* Your projects removed here to place outside the narrow container */}
       </div>
 
@@ -521,57 +485,109 @@ function Home() {
           {/* New project button removed per design */}
         </div>
 
-        {/* Search */}
-        <div className="mb-4 w-full flex items-center bg-card rounded-lg px-3 py-2 border border-input">
-          <FontIcon type="search" className="w-4 h-4 text-foreground" />
-          <input
-            className="w-full bg-transparent border-none focus:outline-none px-2 text-sm text-foreground"
-            placeholder="Search projects"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+        {/* Search and Sort */}
+        <div className="mb-4 flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 flex items-center bg-card rounded-lg px-3 py-2 border border-input">
+            <FontIcon type="search" className="w-4 h-4 text-foreground" />
+            <input
+              className="w-full bg-transparent border-none focus:outline-none px-2 text-sm text-foreground"
+              placeholder="Search projects"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="px-3 py-2 rounded-lg border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as any)}
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="a-z">A-Z</option>
+            <option value="z-a">Z-A</option>
+            <option value="model">By Model</option>
+          </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-8">
-          {filteredProjectNames.map(name => (
-            <div
-              key={name}
-              className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer flex flex-col"
-              onClick={() => openProject(name)}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex flex-col flex-1 min-w-0">
-                  <div className="text-base text-foreground line-clamp-2 break-words">
-                    {name}
+          {filteredAndSortedProjectNames.map(name => {
+            const project = fullProjects.get(`${namespace}/${name}`)
+            const modelNames = project?._sortModels || []
+            const hasValidationError = project?.validation_error
+
+            // Show first 2 models, then "+N" for additional
+            const visibleModels = modelNames.slice(0, 2)
+            const additionalCount = modelNames.length - 2
+
+            return (
+              <div
+                key={name}
+                className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer flex flex-col"
+                onClick={() => openProject(name)}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="text-base text-foreground line-clamp-2 break-words">
+                      {name}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {visibleModels.length > 0 ? (
+                        <>
+                          {visibleModels.map((model, idx) => (
+                            <span
+                              key={idx}
+                              className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5"
+                            >
+                              {model}
+                            </span>
+                          ))}
+                          {additionalCount > 0 && (
+                            <span
+                              className="text-xs text-primary-foreground bg-primary/70 rounded-xl px-3 py-0.5"
+                              title={modelNames.slice(2).join(', ')}
+                            >
+                              +{additionalCount}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-foreground/60 bg-muted rounded-xl px-3 py-0.5">
+                          No model
+                        </span>
+                      )}
+                      {hasValidationError && (
+                        <span
+                          className="text-xs text-red-100 bg-red-600 rounded-xl px-3 py-0.5"
+                          title={hasValidationError}
+                        >
+                          Validation Error
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-foreground/60 mt-2">
+                      {formatLastModified(project?.last_modified)}
+                    </div>
                   </div>
-                  <div className="mt-3">
-                    <span className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5">
-                      TinyLama
-                    </span>
-                  </div>
-                  <div className="text-xs text-foreground/60 mt-2">
-                    Last edited on N/A
-                  </div>
+                  <FontIcon
+                    type="arrow-right"
+                    className="w-5 h-5 text-primary shrink-0 ml-2"
+                  />
                 </div>
-                <FontIcon
-                  type="arrow-right"
-                  className="w-5 h-5 text-primary shrink-0 ml-2"
-                />
+                <div className="mt-auto pt-4 flex justify-end">
+                  <button
+                    className="flex items-center gap-1 text-primary hover:opacity-80"
+                    onClick={e => {
+                      e.stopPropagation()
+                      projectModal.openEditModal(name)
+                    }}
+                  >
+                    <FontIcon type="edit" className="w-5 h-5 text-primary" />
+                    <span className="text-sm">Edit</span>
+                  </button>
+                </div>
               </div>
-              <div className="mt-auto pt-4 flex justify-end">
-                <button
-                  className="flex items-center gap-1 text-primary hover:opacity-80"
-                  onClick={e => {
-                    e.stopPropagation()
-                    projectModal.openEditModal(name)
-                  }}
-                >
-                  <FontIcon type="edit" className="w-5 h-5 text-primary" />
-                  <span className="text-sm">Edit</span>
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

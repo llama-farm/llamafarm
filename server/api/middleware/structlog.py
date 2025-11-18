@@ -44,10 +44,10 @@ class StructLogMiddleware:
             info["start_time"] = time.perf_counter_ns()
             await self.app(scope, receive, inner_send)
         except Exception as e:
+            # exception() automatically includes exc_info=True for stack traces
             app_logger.exception(
                 "An unhandled exception was caught by last resort middleware",
                 exception_class=e.__class__.__name__,
-                exc_info=e,
             )
             info["status_code"] = 500
             response = JSONResponse(
@@ -55,6 +55,7 @@ class StructLogMiddleware:
                 content={
                     "error": "Internal Server Error",
                     "message": "An unexpected error occurred.",
+                    "request_id": correlation_id.get(),
                 },
             )
             await response(scope, receive, send)
@@ -63,7 +64,7 @@ class StructLogMiddleware:
             client_host, client_port = scope["client"]
             http_method = scope["method"]
             http_version = scope["http_version"]
-            url = get_path_with_query_string(scope) # type: ignore
+            url = get_path_with_query_string(scope)  # type: ignore
 
             # Recreate the Uvicorn access log format, but add all parameters as structured information
             access_logger.info(
@@ -78,4 +79,3 @@ class StructLogMiddleware:
                 network={"client": {"ip": client_host, "port": client_port}},
                 duration=process_time,
             )
-

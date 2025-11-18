@@ -1,0 +1,19 @@
+# Pre-commit hooks for LlamaFarm monorepo
+# NOTE: Hooks only run on STAGED files by default (not all files in the repo)
+repos:
+  # Ruff for all Python components
+  # Version synced with dev-dependencies in pyproject.toml files
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.3
+    hooks:
+      # Run ruff linter with auto-fix on staged Python files
+      - id: ruff
+        name: ruff check (Python components)
+        args: [--fix]
+        files: ^(server|rag|config|runtimes/universal)/.*\.py$
+        
+      # Run ruff formatter on staged Python files
+      - id: ruff-format
+        name: ruff format (Python components)
+        files: ^(server|rag|config|runtimes/universal)/.*\.py$
+

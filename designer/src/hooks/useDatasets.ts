@@ -5,6 +5,7 @@ import {
   DatasetActionRequest,
   FileDeleteParams,
 } from '../types/datasets'
+import { projectKeys } from './useProjects'
 
 export const DEFAULT_DATASET_LIST_STALE_TIME = 600_000 // 10 minutes
 
@@ -20,6 +21,31 @@ export const datasetKeys = {
   details: () => [...datasetKeys.all, 'detail'] as const,
   detail: (namespace: string, project: string, dataset: string) =>
     [...datasetKeys.details(), namespace, project, dataset] as const,
+  strategies: (namespace: string, project: string) =>
+    [...datasetKeys.all, 'strategies', namespace, project] as const,
+}
+
+/**
+ * Hook to fetch available strategies and databases for a project
+ * @param namespace - The namespace containing the project
+ * @param project - The project to fetch strategies for
+ * @param options - Additional query options
+ * @returns Query result with available strategies and databases
+ */
+export function useAvailableStrategies(
+  namespace: string,
+  project: string,
+  options?: {
+    enabled?: boolean
+    staleTime?: number
+  }
+) {
+  return useQuery({
+    queryKey: datasetKeys.strategies(namespace, project),
+    queryFn: () => datasetService.getAvailableStrategies(namespace, project),
+    enabled: options?.enabled !== false && !!namespace && !!project,
+    staleTime: options?.staleTime ?? DEFAULT_DATASET_LIST_STALE_TIME,
+  })
 }
 
 /**
@@ -66,6 +92,10 @@ export function useCreateDataset() {
       queryClient.invalidateQueries({
         queryKey: datasetKeys.list(variables.namespace, variables.project),
       })
+      // Also invalidate the project config so ConfigEditor shows the new dataset
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.detail(variables.namespace, variables.project),
+      })
     },
   })
 }
@@ -88,6 +118,10 @@ export function useDeleteDataset() {
       // Invalidate and refetch the datasets list
       queryClient.invalidateQueries({
         queryKey: datasetKeys.list(variables.namespace, variables.project),
+      })
+      // Also invalidate the project config so ConfigEditor shows the new dataset
+      queryClient.invalidateQueries({
+        queryKey: projectKeys.detail(variables.namespace, variables.project),
       })
     },
   })
@@ -158,12 +192,14 @@ export function useUploadFileToDataset() {
       project: string
       dataset: string
       file: File
+      signal?: AbortSignal
     }) =>
       datasetService.uploadFileToDataset(
         data.namespace,
         data.project,
         data.dataset,
-        data.file
+        data.file,
+        data.signal
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh file counts
@@ -261,7 +297,15 @@ export function useTaskStatus(
     queryKey: ['task-status', namespace, project, taskId],
     queryFn: () => datasetService.getTaskStatus(namespace, project, taskId!),
     enabled: !!taskId && !!namespace && !!project && options?.enabled !== false,
-    refetchInterval: options?.refetchInterval || 2000, // Poll every 2 seconds by default
+    refetchInterval: (query) => {
+      // Stop polling if task completed or failed
+      const data = query.state.data as any
+      if (data?.state === 'SUCCESS' || data?.state === 'FAILURE') {
+        return false
+      }
+      return options?.refetchInterval || 2000 // Poll every 2 seconds by default
+    },
+    refetchIntervalInBackground: true, // Continue polling even when tab is not focused
     staleTime: 0, // Always consider stale to ensure fresh polling
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes after unmount
   })
@@ -285,6 +329,33 @@ export function useReIngestDataset() {
         data.project,
         data.dataset,
         { action_type: 'ingest' }
+      ),
+    onSuccess: (_, variables) => {
+      // Invalidate datasets list to refresh any status changes
+      queryClient.invalidateQueries({
+        queryKey: datasetKeys.list(variables.namespace, variables.project),
+      })
+    },
+  })
+}
+
+/**
+ * Hook to process a dataset (async processing with task tracking)
+ * @returns Mutation for processing datasets
+ */
+export function useProcessDataset() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: {
+      namespace: string
+      project: string
+      dataset: string
+    }) =>
+      datasetService.processDataset(
+        data.namespace,
+        data.project,
+        data.dataset
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh any status changes
@@ -339,6 +410,7 @@ export function useDeleteDatasetFile() {
  * Default export with all dataset hooks
  */
 export default {
+  useAvailableStrategies,
   useListDatasets,
   useCreateDataset,
   useDeleteDataset,

@@ -3,13 +3,18 @@ import shutil
 from pathlib import Path
 
 import uvicorn
+from fastapi_mcp import FastApiMCP
+from llamafarm_common.pidfile import write_pid
 
 from api.main import llama_farm_api
 from core.logging import setup_logging
 from core.settings import settings
 
 # Configure logging FIRST, before anything else
-setup_logging(settings.LOG_JSON_FORMAT, settings.LOG_LEVEL)
+setup_logging(settings.LOG_JSON_FORMAT, settings.LOG_LEVEL, settings.LOG_FILE)
+
+# Write PID file for service discovery
+write_pid("server")
 
 # Create the data directory if it doesn't exist
 os.makedirs(settings.lf_data_dir, exist_ok=True)
@@ -22,13 +27,24 @@ shutil.copytree(seed_source, seed_dest, dirs_exist_ok=True)
 
 app = llama_farm_api()
 
+mcp = FastApiMCP(
+    app,
+    include_tags=["mcp"],
+)
+
+mcp.mount_http(
+    mount_path="/mcp",
+)
+
+
 if __name__ == "__main__":
     uvicorn.run(
         "server.main:app",
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.RELOAD,
-        reload_dirs=["../"],
+        # Limit reload scanning to the server app directory only
+        reload_dirs=[str(Path(__file__).parent.resolve())],
         log_config=None,  # Disable uvicorn's log config (handled in setup_logging)
         access_log=False,  # Disable uvicorn access logs (handled by StructLogMiddleware)
     )

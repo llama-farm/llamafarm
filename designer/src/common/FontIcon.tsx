@@ -3,12 +3,14 @@ import { lazy, Suspense, useCallback } from 'react'
 const Add = lazy(() => import('../assets/icons/Add'))
 const ArrowFilled = lazy(() => import('../assets/icons/ArrowFilled'))
 const ArrowRight = lazy(() => import('../assets/icons/ArrowRight'))
+const BuildAssistant = lazy(() => import('../assets/icons/BuildAssistant'))
 const ChevronDown = lazy(() => import('../assets/icons/ChevronDown'))
 const CheckmarkFilled = lazy(() => import('../assets/icons/CheckmarkFilled'))
 const CheckmarkOutline = lazy(() => import('../assets/icons/CheckmarkOutline'))
 const Close = lazy(() => import('../assets/icons/Close'))
 const ClosePanel = lazy(() => import('../assets/icons/ClosePanel'))
 const Code = lazy(() => import('../assets/icons/Code'))
+const Copy = lazy(() => import('../assets/icons/Copy'))
 const Dashboard = lazy(() => import('../assets/icons/Dashboard'))
 const ToolsAlt = lazy(() => import('../assets/icons/ToolsAlt'))
 const Data = lazy(() => import('../assets/icons/Data'))
@@ -39,11 +41,15 @@ const Folder = lazy(() => import('../assets/icons/Folder'))
 
 type FontIconTypes =
   | 'add'
+  | 'alert-triangle'
   | 'arrow-filled'
   | 'arrow-right'
+  | 'build-assistant'
   | 'chevron-down'
+  | 'chevron-up'
   | 'checkmark-filled'
   | 'checkmark-outline'
+  | 'copy'
   | 'close'
   | 'close-panel'
   | 'code'
@@ -53,11 +59,13 @@ type FontIconTypes =
   | 'edit'
   | 'fade'
   | 'integration'
+  | 'loading'
   | 'moon-filled'
   | 'open-panel'
   | 'prompt'
   | 'model'
   | 'recently-viewed'
+  | 'save'
   | 'search'
   | 'sun'
   | 'test'
@@ -94,18 +102,30 @@ const FontIcon: React.FC<FontIconProps> = ({
     switch (type) {
       case 'add':
         return <Add />
+      case 'alert-triangle':
+        return <Info /> // Use Info icon for alert-triangle
       case 'arrow-filled':
         return <ArrowFilled />
       case 'arrow-right':
         return <ArrowRight />
+      case 'build-assistant':
+        return <BuildAssistant />
       case 'chevron-down':
         return <ChevronDown />
+      case 'chevron-up':
+        return (
+          <div style={{ transform: 'rotate(180deg)' }}>
+            <ChevronDown />
+          </div>
+        ) // Rotate chevron-down for chevron-up
       case 'checkmark-filled':
         return <CheckmarkFilled />
       case 'checkmark-outline':
         return <CheckmarkOutline />
       case 'close':
         return <Close />
+      case 'copy':
+        return <Copy />
       case 'close-panel':
         return <ClosePanel />
       case 'code':
@@ -122,6 +142,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Fade />
       case 'integration':
         return <Integration />
+      case 'loading':
+        return <RecentlyViewed /> // Use RecentlyViewed icon for loading (with animate-spin in className)
       case 'moon-filled':
         return <MoonFilled />
       case 'open-panel':
@@ -132,6 +154,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Model />
       case 'recently-viewed':
         return <RecentlyViewed />
+      case 'save':
+        return <CheckmarkFilled /> // Use CheckmarkFilled icon for save
       case 'search':
         return <Search />
       case 'sun':

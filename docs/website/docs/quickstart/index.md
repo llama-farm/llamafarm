@@ -54,8 +54,19 @@ lf start
 - Spins up the FastAPI server and RAG worker via Docker.
 - Starts a config watcher and opens the interactive dev chat TUI.
 - Shows health diagnostics for Ollama, Celery, and the rag-service.
+- Launches the Designer web UI at `http://localhost:7724` for visual project management.
 
-Hit `Ctrl+C` to exit the chat UI when you’re done.
+Hit `Ctrl+C` to exit the chat UI when you're done.
+
+:::tip Use the Designer Web UI
+Prefer a visual interface? Open `http://localhost:7724` in your browser to access the Designer, where you can manage projects, upload datasets, configure models, and test prompts—all without touching the command line.
+
+**Note:** The Designer port differs based on how you start LlamaFarm:
+- **CLI (`lf start`)**: Port 7724
+- **Docker Compose**: Port 3123
+
+See the [Designer documentation](../designer/index.md) for details.
+:::
 
 ### Running Services Manually (no Docker auto-start)
 If you want to control each service yourself (useful when hacking on code), launch them with Nx from the repository root:
@@ -129,6 +140,7 @@ For stateless testing, clear dev history by removing `.llamafarm/projects/<names
 
 ## 11. Next Steps
 
+- [Designer Web UI](../designer/index.md) — visual interface for managing projects.
 - [Configuration Guide](../configuration/index.md) — deep dive into `llamafarm.yaml`.
 - [RAG Guide](../rag/index.md) — strategies, parsers, and retrieval.
 - [Extending LlamaFarm](../extending/index.md) — add new providers, stores, or parsers.

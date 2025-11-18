@@ -1,32 +1,21 @@
 """OpenAI runtime provider implementation."""
 
-import sys
 import time
-from pathlib import Path
 
-import instructor
 import requests
-from openai import AsyncOpenAI
+
+from agents.base.clients.client import LFAgentClient
+from agents.base.clients.openai import LFAgentClientOpenAI
 
 from .base import RuntimeProvider
 from .health import HealthCheckResult
 
-# Add repo root to path for config imports
-repo_root = Path(__file__).parent.parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-from config.datamodel import PromptFormat  # noqa: E402
-
 openai_base_url = "https://api.openai.com/v1"
+openai_api_key = ""
 
 
 class OpenAIProvider(RuntimeProvider):
     """OpenAI API provider implementation."""
-
-    @property
-    def _default_instructor_mode(self) -> instructor.Mode:
-        """Return the default instructor mode for this runtime."""
-        return instructor.Mode.TOOLS
 
     @property
     def _base_url(self) -> str:
@@ -38,16 +27,17 @@ class OpenAIProvider(RuntimeProvider):
         """Get API key for OpenAI."""
         return self._model_config.api_key or ""
 
-    def get_client(self) -> instructor.client.AsyncInstructor | AsyncOpenAI:
+    def get_client(self) -> LFAgentClient:
         """Get OpenAI client with optional instructor wrapping."""
-        client = AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
+        cfg_copy = self._model_config.model_copy()
+        if not cfg_copy.base_url:
+            cfg_copy.base_url = self._base_url
+        if not cfg_copy.api_key:
+            cfg_copy.api_key = self._api_key
+        client = LFAgentClientOpenAI(
+            model_config=cfg_copy,
         )
 
-        if self._model_config.prompt_format == PromptFormat.structured:
-            mode = self._instructor_mode
-            return instructor.from_openai(client, mode=mode)
         return client
 
     def check_health(self) -> HealthCheckResult:

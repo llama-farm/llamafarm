@@ -4,15 +4,8 @@ export type RagStrategy = {
   description: string
   isDefault: boolean
   datasetsUsing: number
+  configName?: string // Original config name for API calls (e.g., "universal_processor")
 }
 
-export const defaultStrategies: RagStrategy[] = [
-  {
-    id: 'processing-universal',
-    name: 'Universal Processor',
-    description:
-      'Unified processor for PDFs, Word docs, CSVs, Markdown, and text files',
-    isDefault: true,
-    datasetsUsing: 2,
-  },
-]
+// No hardcoded strategies - everything comes from config
+export const defaultStrategies: RagStrategy[] = []

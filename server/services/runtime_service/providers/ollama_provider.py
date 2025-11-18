@@ -1,31 +1,19 @@
 """Ollama runtime provider implementation."""
 
-import sys
 import time
-from pathlib import Path
 
-import instructor
 import requests
-from openai import AsyncOpenAI
 
+from agents.base.clients.client import LFAgentClient
+from agents.base.clients.ollama import LFAgentClientOllama
 from core.settings import settings
 
 from .base import RuntimeProvider
 from .health import HealthCheckResult
 
-# Add repo root to path for config imports
-repo_root = Path(__file__).parent.parent.parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-from config.datamodel import PromptFormat  # noqa: E402
-
 
 class OllamaProvider(RuntimeProvider):
     """Ollama local runtime provider implementation."""
-
-    @property
-    def _default_instructor_mode(self) -> instructor.Mode:
-        return instructor.Mode.MD_JSON
 
     @property
     def _base_url(self) -> str:
@@ -37,16 +25,17 @@ class OllamaProvider(RuntimeProvider):
         """Get API key for Ollama (usually not required)."""
         return self._model_config.api_key or settings.ollama_api_key
 
-    def get_client(self) -> instructor.client.AsyncInstructor | AsyncOpenAI:
+    def get_client(self) -> LFAgentClient:
         """Get Ollama client with optional instructor wrapping."""
-        client = AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-        )
+        cfg_copy = self._model_config.model_copy()
+        if not cfg_copy.base_url:
+            cfg_copy.base_url = self._base_url
+        if not cfg_copy.api_key:
+            cfg_copy.api_key = self._api_key
 
-        if self._model_config.prompt_format == PromptFormat.structured:
-            mode = self._instructor_mode
-            return instructor.from_openai(client, mode=mode)
+        client = LFAgentClientOllama(
+            model_config=cfg_copy,
+        )
         return client
 
     def check_health(self) -> HealthCheckResult:

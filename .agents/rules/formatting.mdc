@@ -1,0 +1,16 @@
+---
+alwaysApply: true
+---
+
+# Formatting rules to follow
+Always adhere to these formatting rules when modifying files with the specified content type
+
+## YAML
+- Prefer no quotes for strings
+- Use double quotes for strings if necessary
+  
+## Javascript
+- Use single quotes for strings unless otherwise required
+
+## TypeScript
+- Use single quotes for strings unless otherwise required

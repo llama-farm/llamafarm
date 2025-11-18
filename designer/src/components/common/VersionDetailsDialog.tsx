@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useUpgradeAvailability } from '@/hooks/useUpgradeAvailability'
-import { getInjectedImageTag } from '@/utils/versionUtils'
 
 type Props = {
   open: boolean
@@ -23,18 +22,6 @@ export function VersionDetailsDialog({
 }: Props) {
   const { currentVersion, latestVersion, upgradeAvailable } =
     useUpgradeAvailability()
-  const [effectiveVersion, setEffectiveVersion] = useState<string | null>(null)
-
-  useEffect(() => {
-    let isMounted = true
-    const tag = getInjectedImageTag()
-    if (isMounted) {
-      setEffectiveVersion(tag ? tag : null)
-    }
-    return () => {
-      isMounted = false
-    }
-  }, [])
 
   const status = useMemo(() => {
     if (upgradeAvailable && latestVersion) {
@@ -56,7 +43,7 @@ export function VersionDetailsDialog({
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Current</span>
             <span className="font-mono text-foreground">
-              v{effectiveVersion || currentVersion}
+              {currentVersion ? `v${currentVersion}` : '—'}
             </span>
           </div>
           <div className="pt-1">

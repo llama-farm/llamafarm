@@ -38,6 +38,14 @@ const config: Config = {
     locales: ['en'],
   },
 
+  // Google Tag Manager - loaded via external scripts for security and CSP compatibility
+  scripts: [
+    {
+      src: '/gtm-init.js',
+      async: true,
+    },
+  ],
+
   presets: [
     [
       'classic',
@@ -142,7 +150,7 @@ const config: Config = {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
     },
-  } satisfies Preset.ThemeConfig,
+  },
 }
 
 export default config

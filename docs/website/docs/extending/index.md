@@ -13,7 +13,7 @@ LlamaFarm is designed to be extended. This guide shows how to add new runtime pr
 2. **Regenerate types**:
    ```bash
    cd config
-   ./generate-types.sh
+   uv run python generate_types.py
    cd ..
    ```
 3. **Implement routing**:

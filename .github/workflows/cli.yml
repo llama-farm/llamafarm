@@ -2,13 +2,13 @@ name: Build CLI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-    paths:
-      - 'cli/**'
-      - 'config/schema.yaml'
-      - '.github/workflows/cli**'
+    branches: [main]
+
+env:
+  NX_VERSION: 21
+  NX_NO_CLOUD: true
 
 jobs:
   build-cli:
@@ -43,7 +43,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.4'
+          go-version: "1.24.4"
           cache-dependency-path: cli/go.sum
 
       - name: Cache Go modules
@@ -52,14 +52,9 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('cli/go.sum') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-go-${{ hashFiles('cli/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Copy schema.yaml to CLI config
-        run: |
-          mkdir -p cli/cmd/config
-          cp config/schema.yaml cli/cmd/config/
+            ${{ runner.os }}-${{ runner.arch }}-go-
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -67,25 +62,24 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
 
-      - name: Generate Python datamodels
-        working-directory: config
-        run: |
-          echo "Generating datamodels from schema..."
-          ./generate-types.sh
-          echo "✓ Datamodel generation complete"
-
-      - name: Validate datamodel generation
-        working-directory: config
-        run: |
-          if [ ! -f "datamodel.py" ] || [ ! -s "datamodel.py" ]; then
-            echo "❌ Error: datamodel.py not generated or is empty"
-            exit 1
-          fi
-          echo "✓ Datamodel validation passed"
+      - name: Install Node.js (for Nx)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Install dependencies
         working-directory: cli
         run: go mod download
+
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Install Nx CLI
+        run: |
+          npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
+
+      - name: Run generate-types (compiles schema and generates Go types)
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli
 
       - name: Create dist directory
         run: mkdir -p dist
@@ -104,8 +98,8 @@ jobs:
             VERSION=${GITHUB_SHA::8}
           fi
 
-          # Build with version info
-          go build -ldflags "-s -w -X llamafarm-cli/cmd.Version=${VERSION}" -o ../dist/${{ matrix.output }} .
+          # Build with version info (schema compilation and type generation already done by generate-types)
+          go build -ldflags "-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=${VERSION}'" -o ../dist/${{ matrix.output }} .
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
@@ -138,3 +132,84 @@ jobs:
           name: checksums
           path: dist/checksums.txt
           retention-days: 30
+
+  pack:
+    name: Package Distribution Archive
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Nx CLI
+        run: |
+          npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+          cache-dependency-path: cli/go.sum
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+          python-version: "3.12"
+
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Generate types
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli
+
+      - name: Build designer
+        run: |
+          cd designer
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          # Verify build output
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: Designer build failed - dist/index.html not found" >&2
+            exit 1
+          fi
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+            # For branches, use branch name and short SHA
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            VERSION="${BRANCH_NAME}-${GITHUB_SHA::8}"
+          elif [[ "${GITHUB_REF}" == refs/pull/* ]]; then
+            # For PRs, use PR number and short SHA
+            PR_NUMBER=$(echo "$GITHUB_REF" | sed 's/refs\/pull\/\(.*\)\/merge/\1/')
+            VERSION="pr${PR_NUMBER}-${GITHUB_SHA::8}"
+          else
+            VERSION="${GITHUB_SHA::8}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Using version: ${VERSION}"
+
+      - name: Package distribution archive
+        run: |
+          VERSION=${{ steps.version.outputs.version }} npx nx@${{ env.NX_VERSION }} pack
+
+      - name: Upload distribution archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-archive-${{ steps.version.outputs.version }}
+          path: |
+            dist/llamafarm-dist-${{ steps.version.outputs.version }}.tar.gz
+            dist/llamafarm-dist-${{ steps.version.outputs.version }}.tar.gz.sha256
+          retention-days: 7
+          if-no-files-found: error

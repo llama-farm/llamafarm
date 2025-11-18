@@ -13,13 +13,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/llamafarm/cli/cmd/utils"
 	"gopkg.in/yaml.v2"
 )
 
 // Message represents a single chat message
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string `json:"role"`
+	Content    string `json:"content"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
 // ChatRequest represents the request payload for the chat API
@@ -85,7 +87,7 @@ type ChatSessionContext struct {
 	Temperature      float64
 	MaxTokens        int
 	Streaming        bool
-	HTTPClient       HTTPClient
+	HTTPClient       utils.HTTPClient
 	Model            string
 	// RAG fields
 	RAGEnabled           bool
@@ -107,7 +109,8 @@ func newDefaultContextFromGlobals() *ChatSessionContext {
 		Temperature:      temperature,
 		MaxTokens:        maxTokens,
 		Streaming:        streaming,
-		HTTPClient:       getHTTPClient(),
+		HTTPClient:       utils.GetHTTPClient(),
+		RAGEnabled:       true, // RAG is enabled by default
 	}
 }
 
@@ -116,7 +119,7 @@ func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 		return "", fmt.Errorf("session context is nil")
 	}
 
-	lfDataDir, err := getLFDataDir()
+	lfDataDir, err := utils.GetLFDataDir()
 	if err != nil {
 		return "", err
 	}
@@ -284,11 +287,11 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 			sessionID = ""
 		} else {
 			if existingContext, err := readSessionContext(ctx); err != nil {
-				logDebug(fmt.Sprintf("Failed to read session context: %v", err))
+				utils.LogDebug(fmt.Sprintf("Failed to read session context: %v", err))
 			} else if existingContext != nil && existingContext.SessionID != "" {
 				ctx.SessionID = existingContext.SessionID
 				sessionID = existingContext.SessionID
-				logDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
+				utils.LogDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
 			}
 		}
 
@@ -331,7 +334,7 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 		}
 
 		jsonData, err := json.Marshal(request)
-		logDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))
+		utils.LogDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))
 		if err != nil {
 			errCh <- fmt.Errorf("failed to marshal request: %w", err)
 			return
@@ -354,9 +357,11 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 		} else if ctx.SessionMode == SessionModeStateless {
 			req.Header.Set("X-No-Session", "true")
 		}
-		logDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
-		logHeaders("request", req.Header)
-		logDebug(fmt.Sprintf("  -> body: %s", req.Body))
+		utils.LogDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
+		utils.LogHeaders("request", req.Header)
+
+		// Log and restore request body
+		req.Body = utils.LogBodyContent(req.Body, "request body")
 
 		hc := &http.Client{Timeout: 0, Transport: &http.Transport{DisableCompression: true, IdleConnTimeout: 0}}
 		resp, err := hc.Do(req)
@@ -371,12 +376,12 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 				errCh <- fmt.Errorf("server returned error %d and body read failed: %v", resp.StatusCode, readErr)
 				return
 			}
-			errCh <- fmt.Errorf("server returned error %d: %s", resp.StatusCode, prettyServerError(resp, body))
+			errCh <- fmt.Errorf("server returned error %d: %s", resp.StatusCode, utils.PrettyServerError(resp, body))
 			return
 		}
 
-		logDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
-		logHeaders("response", resp.Header)
+		utils.LogDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
+		utils.LogHeaders("response", resp.Header)
 		if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
 			if ctx.SessionMode == SessionModeStateless {
 				ctx.SessionID = ""
@@ -385,15 +390,24 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 				ctx.SessionID = sessionIDHeader
 				sessionID = sessionIDHeader
 				if err := writeSessionContext(ctx, sessionIDHeader); err != nil {
-					logDebug(fmt.Sprintf("Failed to write session context: %v", err))
+					utils.LogDebug(fmt.Sprintf("Failed to write session context: %v", err))
 				}
 			}
 		}
 
 		reader := bufio.NewReader(resp.Body)
+
+		// Track accumulated tool calls by index
+		toolCallAccumulator := make(map[int]struct {
+			ID        string
+			Type      string
+			Name      string
+			Arguments strings.Builder
+		})
+
 		for {
 			line, err := reader.ReadString('\n')
-			logDebug(fmt.Sprintf("STREAM LINE: %v", line))
+			utils.LogDebug(fmt.Sprintf("STREAM LINE: %v", line))
 			if err != nil {
 				if err == io.EOF {
 					break
@@ -415,9 +429,19 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 			var chunk struct {
 				Choices []struct {
 					Delta struct {
-						Role    string `json:"role,omitempty"`
-						Content string `json:"content,omitempty"`
+						Role      string `json:"role,omitempty"`
+						Content   string `json:"content,omitempty"`
+						ToolCalls []struct {
+							Index    int    `json:"index"`
+							ID       string `json:"id,omitempty"`
+							Type     string `json:"type,omitempty"`
+							Function struct {
+								Name      string `json:"name,omitempty"`
+								Arguments string `json:"arguments,omitempty"`
+							} `json:"function"`
+						} `json:"tool_calls,omitempty"`
 					} `json:"delta"`
+					FinishReason string `json:"finish_reason,omitempty"`
 				} `json:"choices"`
 			}
 			if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
@@ -426,11 +450,64 @@ func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string
 			if len(chunk.Choices) == 0 {
 				continue
 			}
-			delta := chunk.Choices[0].Delta
-			if delta.Content != "" {
-				logDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
-				outCh <- delta.Content
+			choice := chunk.Choices[0]
+			delta := choice.Delta
+
+			// Accumulate tool call chunks
+			if len(delta.ToolCalls) > 0 {
+				for _, tc := range delta.ToolCalls {
+					if !strings.HasPrefix(tc.Function.Name, "cli.") {
+						// Use special marker [TOOL_CALL] so TUI can style it
+						toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
+						utils.LogDebug(fmt.Sprintf("Tool call detected: %s", tc.Function.Name))
+						outCh <- toolMsg
+						continue
+					}
+
+					accumulated := toolCallAccumulator[tc.Index]
+
+					// Update fields if present in this chunk
+					if tc.ID != "" {
+						accumulated.ID = tc.ID
+					}
+					if tc.Type != "" {
+						accumulated.Type = tc.Type
+					}
+					if tc.Function.Name != "" {
+						accumulated.Name = tc.Function.Name
+						utils.LogDebug(fmt.Sprintf("Tool call started: %s (index: %d)", tc.Function.Name, tc.Index))
+					}
+					if tc.Function.Arguments != "" {
+						accumulated.Arguments.WriteString(tc.Function.Arguments)
+						utils.LogDebug(fmt.Sprintf("Tool arguments chunk (index %d): %s", tc.Index, tc.Function.Arguments))
+					}
+
+					// Only add the tool call to the accumulator if it is one that we can handle in the CLI
+					toolCallAccumulator[tc.Index] = accumulated
+				}
 			}
+
+			// Check if streaming finished with tool_calls
+			if choice.FinishReason == "tool_calls" {
+				utils.LogDebug(fmt.Sprintf("Tool calls complete, emitting %d tool call(s)", len(toolCallAccumulator)))
+				// Emit all accumulated tool calls
+				for idx, tc := range toolCallAccumulator {
+					toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Name, tc.ID, tc.Arguments.String())
+					utils.LogDebug(fmt.Sprintf("Emitting complete tool call %d: %s with args: %s", idx, tc.Name, tc.Arguments.String()))
+					outCh <- toolMsg
+				}
+				// Clear accumulator after emitting
+				toolCallAccumulator = make(map[int]struct {
+					ID        string
+					Type      string
+					Name      string
+					Arguments strings.Builder
+				})
+			}
+
+			// Send content if present
+			utils.LogDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
+			outCh <- delta.Content
 		}
 	}()
 
@@ -455,7 +532,7 @@ func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
 		}
 		// Legacy fallback: CWD/.llamafarm/context.yaml
 		if strings.TrimSpace(contextFile) == "" {
-			cwd := getEffectiveCWD()
+			cwd := utils.GetEffectiveCWD()
 			contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
 		}
 	} else {
@@ -487,7 +564,7 @@ func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
 		return nil, nil
 	}
 
-	logDebug(fmt.Sprintf("readSessionContext: returning context from path %s: %+v", contextFile, context))
+	utils.LogDebug(fmt.Sprintf("readSessionContext: returning context from path %s: %+v", contextFile, context))
 
 	return &context, nil
 }
@@ -537,19 +614,20 @@ type SessionHistory struct {
 }
 
 type SessionHistoryMessage struct {
-	Role    string                       `json:"role"`
-	Content SessionHistoryMessageContent `json:"content"`
-}
-
-type SessionHistoryMessageContent struct {
-	ChatMessage string `json:"chat_message"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	ToolCalls []struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	} `json:"tool_calls,omitempty"`
 }
 
 type SessionHistoryResponse struct {
-	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
+	Messages []SessionHistoryMessage `json:"messages"`
 }
 
 // fetchSessionHistory retrieves the chat history for a session from the server.
@@ -563,40 +641,34 @@ func fetchSessionHistory(serverURL, namespace, projectID, sessionID string) Sess
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to create request: %v", err))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to create request: %v", err))
 		return SessionHistory{}
 	}
-	resp, err := getHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to send request: %v", err))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to send request: %v", err))
 		return SessionHistory{}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to get history: %d", resp.StatusCode))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to get history: %d", resp.StatusCode))
 		return SessionHistory{}
 	}
 
 	var result SessionHistoryResponse
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to read body: %v", err))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to read body: %v", err))
 		return SessionHistory{}
 	}
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&result); err != nil {
-		logDebug(fmt.Sprintf("fetchSessionHistory: failed to decode history: %v, %s", err, string(body)))
+		utils.LogDebug(fmt.Sprintf("fetchSessionHistory: failed to decode history: %v, %s", err, string(body)))
 		return SessionHistory{}
 	}
-	var messages []SessionHistoryMessage
-	for _, msg := range result.Messages {
-		var content SessionHistoryMessageContent
-		if err := json.Unmarshal([]byte(msg.Content), &content); err != nil {
-			logDebug(fmt.Sprintf("fetchSessionHistory: failed to unmarshal content: %v", err))
-			continue
-		}
-		messages = append(messages, SessionHistoryMessage{Role: msg.Role, Content: content})
-	}
 
-	return SessionHistory{Messages: messages}
+	// Return the messages directly - they already have all fields including tool_calls
+	return SessionHistory{
+		Messages: result.Messages,
+	}
 }

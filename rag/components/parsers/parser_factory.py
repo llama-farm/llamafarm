@@ -186,7 +186,16 @@ class ToolAwareParserFactory:
                 except Exception as e:
                     logger.error(f"Failed to load parser from {parser_file}: {e}")
 
+        # Fallback to dynamic discovery using blob_processor logic
+        logger.debug(f"Trying dynamic discovery for parser {parser_name}")
+        if parser_class := cls._dynamic_parser_discovery(parser_name):
+            cls._parser_classes[parser_name] = parser_class
+            return parser_class
+
         logger.error(f"Could not find implementation for parser {parser_name}")
+        logger.warning(
+            f"Parser {parser_name} will fall back to mock implementation - this may cause silent failures"
+        )
         return None
 
     @classmethod
@@ -214,9 +223,10 @@ class ToolAwareParserFactory:
             if parser_class:
                 return parser_class(name=parser_name, config=config)
             else:
-                raise ValueError(
-                    f"Parser {parser_name} not found or could not be loaded"
-                )
+                # Create mock parser as fallback
+                logger.warning(f"Parser {parser_name} not found, creating mock parser")
+                mock_class = cls.create_mock_parser(parser_name)
+                return mock_class(name=parser_name, config=config)
 
         # If file_type and/or tool provided, find matching parser
         if file_type:
@@ -289,6 +299,7 @@ class ToolAwareParserFactory:
             ".markdown": "markdown",
             ".html": "website",
             ".htm": "website",
+            ".msg": "msg",
         }
 
         file_type = extension_map.get(extension)
@@ -336,6 +347,175 @@ class ToolAwareParserFactory:
 
         return status
 
+    @classmethod
+    def _dynamic_parser_discovery(cls, parser_type: str) -> Optional[type]:
+        """
+        Dynamically discover and load parser class by type name using blob_processor logic.
+
+        This follows the convention:
+        - Parser type: PDFParser_LlamaIndex
+        - Module path: components.parsers.pdf.llamaindex_parser
+        - Class name: PDFParser_LlamaIndex
+
+        Args:
+            parser_type: Name of the parser type (e.g., "PDFParser_LlamaIndex")
+
+        Returns:
+            Parser class or None
+        """
+        parser_category, implementation = cls._parse_parser_type_name(parser_type)
+        potential_paths = cls._build_potential_module_paths(
+            parser_category, implementation, parser_type
+        )
+
+        # Try to import from potential paths
+        for module_path in potential_paths:
+            if parser_class := cls._try_import_parser_from_module(
+                module_path, parser_type
+            ):
+                return parser_class
+
+        logger.warning(
+            f"Dynamic parser discovery failed for {parser_type} - no matching implementation found"
+        )
+        return None
+
+    @classmethod
+    def _parse_parser_type_name(cls, parser_type: str) -> tuple[str, str]:
+        """Parse parser type name into category and implementation."""
+        if "_" in parser_type:
+            parts = parser_type.split("_")
+            # Handle both TypeParser_Implementation and Type_Parser_Implementation
+            if "Parser" in parts[0]:
+                # Format: PDFParser_LlamaIndex
+                parser_category = parts[0].replace("Parser", "").lower()  # pdf
+                implementation = "_".join(parts[1:]).lower()  # llamaindex
+            else:
+                # Format: PDF_Parser_LlamaIndex (less common)
+                parser_category = parts[0].lower()  # pdf
+                implementation = (
+                    "_".join(parts[2:]).lower() if len(parts) > 2 else "default"
+                )
+        else:
+            # No underscore, assume it's a simple parser name
+            parser_category = parser_type.lower().replace("parser", "")
+            implementation = "default"
+
+        return parser_category, implementation
+
+    @classmethod
+    def _build_potential_module_paths(
+        cls, parser_category: str, implementation: str, parser_type: str
+    ) -> list[str]:
+        """Build potential module paths to try for parser discovery."""
+        from pathlib import Path
+
+        # Build potential module paths to try
+        potential_paths = [
+            f"components.parsers.{parser_category}.{implementation}_parser",
+            f"components.parsers.{parser_category}.{parser_category}_parser",
+            f"components.parsers.{parser_type.lower()}",
+            f"components.parsers.{parser_category}.parser",
+        ]
+
+        # Also check if there's a direct mapping based on file structure
+        parsers_dir = Path(__file__).parent
+        if parsers_dir.exists():
+            # Look for matching directories
+            for category_dir in parsers_dir.iterdir():
+                if (
+                    category_dir.is_dir()
+                    and parser_category in category_dir.name.lower()
+                ):
+                    # Look for implementation files
+                    for py_file in category_dir.glob("*_parser.py"):
+                        if implementation in py_file.stem.lower():
+                            module_name = (
+                                f"components.parsers.{category_dir.name}.{py_file.stem}"
+                            )
+                            potential_paths.insert(0, module_name)
+
+        return potential_paths
+
+    @classmethod
+    def _try_import_parser_from_module(
+        cls, module_path: str, parser_type: str
+    ) -> Optional[type]:
+        """Try to import parser class from a specific module path."""
+        import importlib
+
+        try:
+            logger.debug(f"Trying to import parser from: {module_path}")
+            module = importlib.import_module(module_path)
+
+            # Try to get the class with the exact name first
+            if hasattr(module, parser_type):
+                parser_class = getattr(module, parser_type)
+                logger.debug(f"Successfully loaded {parser_type} from {module_path}")
+                return parser_class
+
+            # Try variations of the class name
+            for attr_name in dir(module):
+                if attr_name.lower() == parser_type.lower():
+                    parser_class = getattr(module, attr_name)
+                    logger.debug(f"Successfully loaded {attr_name} from {module_path}")
+                    return parser_class
+
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"Could not load from {module_path}: {e}")
+
+        return None
+
+    @classmethod
+    def create_mock_parser(cls, parser_type: str) -> type:
+        """Create a mock parser for testing or fallback purposes."""
+        logger.warning(
+            f"Creating mock parser for {parser_type} - this indicates a missing parser implementation"
+        )
+
+        from components.parsers.base.base_parser import BaseParser, ParserConfig
+        from core.base import Document, ProcessingResult
+
+        class MockParser(BaseParser):
+            def __init__(self, name: str | None = None, config: dict | None = None):
+                self.name = name or parser_type
+                self.config = config or {}
+
+            def _load_metadata(self):
+                return ParserConfig(
+                    name=parser_type,
+                    display_name=parser_type,
+                    version="1.0",
+                    supported_extensions=[],
+                    mime_types=[],
+                    capabilities=[],
+                    dependencies={},
+                    default_config={},
+                )
+
+            def parse(self, source):
+                # Mock implementation
+                return ProcessingResult(documents=[], errors=[])
+
+            def can_parse(self, file_path):
+                return True
+
+            def parse_blob(self, blob_data, metadata):
+                # Simple text extraction for testing
+                try:
+                    content = blob_data.decode("utf-8", errors="ignore")
+                except Exception:
+                    content = str(blob_data)[:1000]
+
+                return [
+                    Document(
+                        content=content[:1000],  # Limit for testing
+                        metadata={**metadata, "parser": parser_type},
+                    )
+                ]
+
+        return MockParser
+
 
 # Backward compatibility wrapper
 class ParserFactory:
@@ -352,6 +532,7 @@ class ParserFactory:
             "docx": ("docx", None),
             "markdown": ("markdown", "Python"),
             "web": ("website", None),
+            "msg": ("msg", "extract-msg"),
         }
 
         if name in legacy_mapping:

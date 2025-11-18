@@ -11,7 +11,7 @@ required:
 properties:
   version:
     type: string
-    enum: ["v1"]
+    enum: [v1]
     default: v1
     description: Config version, must be "v1"
   name:
@@ -26,6 +26,7 @@ properties:
     type: array
     description: List of named prompt sets
     items:
+      title: PromptSet
       type: object
       required:
         - name
@@ -34,21 +35,26 @@ properties:
         name:
           type: string
           pattern: "^[a-z][a-z0-9_]*$"
-          description: "Unique prompt set identifier"
+          description: Unique prompt set identifier
         messages:
           type: array
-          description: "List of messages in this prompt set"
+          description: List of messages in this prompt set
           items:
             type: object
+            title: PromptMessage
             required:
+              - role
               - content
             properties:
               role:
                 type: string
-                description: 'Message role (e.g., "system", "user", "assistant")'
+                description: 'Message role (e.g., "system", "user", "assistant", "tool")'
               content:
                 type: string
-                description: "Message content"
+                description: Message content
+              tool_call_id:
+                type: string
+                description: Tool call ID
           default: []
     default: []
 
@@ -89,11 +95,11 @@ properties:
     properties:
       default_model:
         type: string
-        description: "Name of the default model to use (references a model name in the models list). If not specified, uses first model."
+        description: Name of the default model to use (references a model name in the models list). If not specified, uses first model.
 
       models:
         type: array
-        description: "List of model configurations for multi-model support"
+        description: List of model configurations for multi-model support
         items:
           type: object
           required:
@@ -103,42 +109,124 @@ properties:
           properties:
             name:
               type: string
-              description: "Model identifier (unique name)"
+              description: Model identifier (unique name)
             description:
               type: string
-              description: "Human-readable description of this model configuration"
+              description: Human-readable description of this model configuration
             provider:
               type: string
-              enum: [openai, ollama, lemonade]
-              description: "Runtime provider for this model"
+              enum: [openai, ollama, lemonade, universal]
+              description: Runtime provider for this model
             model:
               type: string
-              description: "Model name or ID"
+              description: Model name or ID
             base_url:
               type: string
-              description: "Base URL for the provider"
+              description: Base URL for the provider
             api_key:
               type: string
-              description: "API key for the provider"
+              description: API key for the provider
             instructor_mode:
               type: string
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
-            prompt_format:
-              type: string
-              enum: [structured, unstructured]
-              description: "Prompt formatting pipeline (structured uses Instructor; unstructured sends freeform prompts)"
             model_api_parameters:
               type: object
-              description: "Additional parameters passed to the API provider"
-              additionalProperties: true
-            provider_config:
-              type: object
-              description: "Provider-specific configuration (e.g., lemonade settings, ollama options)"
-              default: {}
+              description: Additional parameters passed to the API provider
               additionalProperties: true
             prompts:
               type: array
-              description: "List of prompt set names to use for this model (merged in order)"
+              description: List of prompt set names to use for this model (merged in order)
               items:
                 type: string
               default: []
+            mcp_servers:
+              type: array
+              description: List of MCP server names to use for this model (omit to use all servers, empty list for none)
+              items:
+                type: string
+            tool_call_strategy:
+              type: string
+              enum: [native_api, prompt_based]
+              description: |
+                Strategy to use for tool calls. `native_api` uses native tool calling through the client
+                library (e.g. setting the `tools` parameter on the chat completions OpenAI request);
+                `prompt_based` uses system prompting to inject tool definitions and instructions to guide
+                any model to use tools. This is universal, but may not be as effective as native tool calling.
+                Use `prompt_based` for models that do not support native tool calling.
+              default: native_api
+            tools:
+              type: array
+              description: List of tools to use for this model
+              items:
+                $ref: "#/definitions/Tool"
+              default: []
+
+  mcp:
+    type: object
+    description: Model Context Protocol (MCP) client configuration
+    properties:
+      servers:
+        type: array
+        description: List of MCP Servers available to the project during inference
+        items:
+          type: object
+          required:
+            - name
+            - transport
+          properties:
+            name:
+              type: string
+              description: MCP server identifier
+            transport:
+              type: string
+              enum: [stdio, http, sse]
+              description: Connection transport to the MCP server
+            # stdio transport
+            command:
+              type: string
+              description: Command/binary to launch the MCP server (stdio)
+            args:
+              type: array
+              description: Optional args for the stdio command
+              items:
+                type: string
+            env:
+              type: object
+              description: Environment variables for the stdio command
+              additionalProperties:
+                type: string
+            # http transport
+            base_url:
+              type: string
+              description: Base URL of the MCP server (http)
+            headers:
+              type: object
+              description: HTTP headers for the MCP server
+              additionalProperties:
+                type: string
+              example:
+                Authorization: Bearer ${env:MCP_SERVER_TOKEN}
+
+definitions:
+  Tool:
+    type: object
+    required:
+      - type
+      - name
+      - description
+      - parameters
+    properties:
+      type:
+        type: string
+        enum: [function]
+        description: Type of tool
+      name:
+        type: string
+        description: Name of the tool
+      description:
+        type: string
+        description: Description of the tool
+      parameters:
+        type: object
+        description: Parameters of the tool
+        additionalProperties: true

@@ -26,6 +26,15 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Designer Web UI',
+      link: { type: 'doc', id: 'designer/index' },
+      items: [
+        { type: 'doc', id: 'designer/features', label: 'Features' },
+        { type: 'doc', id: 'designer/development', label: 'Development' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'CLI Reference',
       link: { type: 'doc', id: 'cli/index' },
       items: [
@@ -75,6 +84,14 @@ const sidebars: SidebarsConfig = {
       label: 'Deployment',
       link: { type: 'doc', id: 'deployment/index' },
       items: [],
+    },
+    {
+      type: 'category',
+      label: 'Industry Use Cases',
+      link: { type: 'doc', id: 'use-cases/index' },
+      items: [
+        { type: 'doc', id: 'use-cases/pharmaceutical-fda', label: 'Pharmaceutical & FDA' },
+      ],
     },
     {
       type: 'category',

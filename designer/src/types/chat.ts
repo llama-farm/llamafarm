@@ -1,6 +1,6 @@
 /**
  * Chat API Types - aligned with server/api/routers/inference/models.py
- * 
+ *
  * This file contains types for backend communication and external chat service integration.
  * These types should remain stable and aligned with the API contract.
  */
@@ -15,7 +15,7 @@ export interface BaseMessage {
 /**
  * Chat message structure for API communication
  * Used in requests/responses to the chat inference service
- * 
+ *
  * @example
  * const message: ChatMessage = {
  *   role: 'user',
@@ -24,7 +24,9 @@ export interface BaseMessage {
  */
 export interface ChatMessage extends BaseMessage {
   /** Message role for API - must match backend expectations */
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  /** Tool call ID for tool messages */
+  tool_call_id?: string
 }
 
 /**
@@ -46,6 +48,12 @@ export interface ChatRequest {
   frequency_penalty?: number | null
   presence_penalty?: number | null
   logit_bias?: Record<string, number>
+  // LlamaFarm-specific RAG parameters
+  rag_enabled?: boolean | null
+  database?: string | null
+  rag_retrieval_strategy?: string | null
+  rag_top_k?: number | null
+  rag_score_threshold?: number | null
 }
 
 /**
@@ -99,14 +107,20 @@ export class ChatApiError extends Error {
 }
 
 export class NetworkError extends Error {
-  constructor(message: string, public originalError: Error) {
+  constructor(
+    message: string,
+    public originalError: Error
+  ) {
     super(message)
     this.name = 'NetworkError'
   }
 }
 
 export class ValidationError extends Error {
-  constructor(message: string, public validationErrors: any) {
+  constructor(
+    message: string,
+    public validationErrors: any
+  ) {
     super(message)
     this.name = 'ValidationError'
   }
@@ -128,6 +142,15 @@ export interface ChatStreamChunk {
     delta: {
       role?: string
       content?: string
+      tool_calls?: Array<{
+        index?: number
+        id?: string
+        type?: string
+        function?: {
+          name?: string
+          arguments?: string
+        }
+      }>
     }
     finish_reason: string | null
   }>
@@ -158,3 +181,45 @@ export interface StreamingChatOptions {
   signal?: AbortSignal
 }
 
+/**
+ * Health response interface (imported conceptually from healthService to avoid circular deps)
+ */
+export interface HealthResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy'
+  summary: string
+  components: Array<{
+    name: string
+    status: 'healthy' | 'degraded' | 'unhealthy'
+    message: string
+    latency_ms?: number
+    details?: Record<string, any>
+  }>
+  seeds: Array<{
+    name: string
+    status: 'healthy' | 'degraded' | 'unhealthy'
+    message: string
+    latency_ms?: number
+    runtime?: {
+      provider: string
+      model: string
+      host?: string
+    }
+  }>
+  timestamp: number
+}
+
+/**
+ * Classified error with recovery information
+ * Used to provide better error messages and actionable recovery steps
+ */
+export interface ClassifiedError {
+  type: 'server_down' | 'degraded' | 'timeout' | 'validation' | 'unknown'
+  title: string
+  message: string
+  originalError: Error
+  healthStatus?: HealthResponse
+  recoveryCommands?: Array<{
+    description: string
+    command: string
+  }>
+}

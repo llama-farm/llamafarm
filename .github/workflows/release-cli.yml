@@ -16,6 +16,7 @@ permissions:
 
 env:
   BINARY_NAME: lf
+  NX_NO_CLOUD: true
 
 jobs:
   build-cli:
@@ -45,10 +46,31 @@ jobs:
             echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Copy schema.yaml to CLI config
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Generate types (compile schema and generate Go types)
         run: |
-          mkdir -p cli/cmd/config
-          cp config/schema.yaml cli/cmd/config/
+          # Compile schema (this also copies dereferenced schema to cli/cmd/config/schema.json)
+          cd config
+          uv run python compile_schema.py
+
+          # Verify the dereferenced schema was copied
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
+
+          # Generate Go types
+          cd ../cli/cmd/config
+          sh generate-types.sh
 
       - name: Build binary
         id: build
@@ -65,7 +87,7 @@ jobs:
           fi
 
           # Build the binary
-          go build -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=${{ steps.version.outputs.version }}'" -o "${BINARY_NAME}" .
+          go build -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=${{ steps.version.outputs.version }}'" -o "${BINARY_NAME}" .
 
           # SHA the binary
           sha256sum "${BINARY_NAME}" > "${BINARY_NAME}.sha256"
@@ -179,6 +201,68 @@ jobs:
           version: ${{ steps.version.outputs.version }}
           release-tag: ${{ steps.version.outputs.release_tag }}
           token: ${{ secrets.WINGET_TOKEN }}
+
+  pack:
+    name: Package Distribution Archive
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Nx CLI
+        run: npm install -g nx && nx init --useDotNxInstallation --interactive=false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+          cache-dependency-path: cli/go.sum
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+          python-version: "3.12"
+
+      - name: Build designer
+        run: |
+          cd designer
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          # Verify build output
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: Designer build failed - dist/index.html not found" >&2
+            exit 1
+          fi
+
+      - name: Package distribution archive
+        run: |
+          VERSION=${{ steps.version.outputs.version }} nx pack
+
+      - name: Upload distribution archive
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          files: |
+            dist/llamafarm-dist-${{ steps.version.outputs.version }}.tar.gz
+            dist/llamafarm-dist-${{ steps.version.outputs.version }}.tar.gz.sha256
+          fail_on_unmatched_files: true
+          append_body: true
 
   test-cli-install:
     name: Test Installation Script

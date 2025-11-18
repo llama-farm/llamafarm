@@ -10,7 +10,7 @@ set -e
 LEMONADE_PORT="${LEMONADE_PORT:-11534}"
 LEMONADE_HOST="${LEMONADE_HOST:-127.0.0.1}"
 LEMONADE_BACKEND="${LEMONADE_BACKEND:-onnx}"  # Default to ONNX (works on all systems)
-LEMONADE_CONTEXT_SIZE="${LEMONADE_CONTEXT_SIZE:-32768}"  # Default context size
+LEMONADE_CONTEXT_SIZE="${LEMONADE_CONTEXT_SIZE:-65536}"  # Default context size (doubled)
 LEMONADE_MODEL="${LEMONADE_MODEL:-}"  # Optional: pre-load a specific model
 
 # Try to read config from project llamafarm.yaml if available
@@ -253,7 +253,7 @@ fi
 # Build lemonade-server-dev command
 # Using serve subcommand (NOT run - serve is the correct command)
 # Note: PyPI package provides lemonade-server-dev, installer provides lemonade-server
-LEMONADE_CMD="uv run lemonade-server-dev serve --port $LEMONADE_PORT --host $LEMONADE_HOST --no-tray"
+LEMONADE_CMD="uv run lemonade-server-dev serve --port $LEMONADE_PORT --host $LEMONADE_HOST --ctx-size $LEMONADE_CONTEXT_SIZE --no-tray"
 
 # Configure backend-specific options
 case "$LEMONADE_BACKEND" in

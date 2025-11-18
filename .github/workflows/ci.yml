@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  NX_NO_CLOUD: true
+
 jobs:
   # Test Go CLI component
   test-cli:
@@ -38,11 +41,6 @@ jobs:
         working-directory: cli
         run: go mod download
 
-      - name: Copy schema.yaml to CLI config
-        run: |
-          mkdir -p cli/cmd/config
-          cp config/schema.yaml cli/cmd/config/
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -53,7 +51,7 @@ jobs:
         working-directory: config
         run: |
           echo "Generating datamodels from schema..."
-          ./generate-types.sh
+          uv run python generate_types.py
           echo "✓ Datamodel generation complete"
 
       - name: Validate datamodel generation
@@ -64,6 +62,22 @@ jobs:
             exit 1
           fi
           echo "✓ Datamodel validation passed"
+          # Verify that compile_schema.py copied the dereferenced schema to cli/cmd/config
+          if [ ! -f "../cli/cmd/config/schema.json" ]; then
+            echo "❌ Error: schema.json not copied to cli/cmd/config by compile_schema.py"
+            exit 1
+          fi
+          echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
+
+      - name: Install go-jsonschema
+        run: go install github.com/atombender/go-jsonschema@latest
+
+      - name: Generate Go types
+        run: |
+          # Generate Go types from schema
+          cd cli/cmd/config
+          sh generate-types.sh
+          echo "✓ Go types generation complete"
 
       - name: Build CLI
         working-directory: cli
@@ -78,6 +92,12 @@ jobs:
           ./cover2lcov -in coverage.out -out coverage.lcov
           go build ./tools/coverreport
           ./coverreport -in coverage.out -format=markdown > coverage.md
+
+      - name: Run binary upgrade integration tests
+        working-directory: cli
+        run: |
+          # Run Go-based integration tests
+          go test -v -run TestUpgradeIntegration ./cmd/version/...
 
       - name: Publish CLI coverage to job summary
         run: |
@@ -116,7 +136,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
-        component: ["config", "rag", "server"]
+        component: ["config", "rag", "server", "runtimes/universal"]
         exclude:
           # Server requires Python 3.12+
           - component: server
@@ -141,7 +161,7 @@ jobs:
         working-directory: config
         run: |
           echo "Generating datamodels for ${{ matrix.component }} component tests..."
-          ./generate-types.sh
+          uv run python generate_types.py
           echo "✓ Datamodel generation complete"
 
       - name: Verify datamodel was generated
@@ -165,6 +185,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ matrix.component }}
+        env:
+          # For universal runtime, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
+          UV_EXTRA_INDEX_URL: ${{ matrix.component == 'runtimes/universal' && 'https://download.pytorch.org/whl/cpu' || '' }}
         run: |
           if [ -f "uv.lock" ]; then
             uv sync --all-extras
@@ -208,38 +231,3 @@ jobs:
         if: steps.check-tests.outputs.has_tests == 'false'
         run: |
           echo "No tests found for ${{ matrix.component }}, skipping test execution"
-
-  # Build verification job
-  build-verification:
-    name: Build Verification
-    runs-on: ubuntu-latest
-    needs: [test-cli, test-python]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Verify all Python components can be built
-        run: |
-          for component in config rag server; do
-            echo "Building $component..."
-            cd $component
-            if [ -f "uv.lock" ]; then
-              uv sync
-            else
-              uv pip install -e .
-            fi
-            cd ..
-          done
-
-      - name: Integration test placeholder
-        run: |
-          echo "All components built successfully!"
-          echo "Future: Add integration tests here"

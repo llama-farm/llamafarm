@@ -64,6 +64,7 @@ def rag_health_check_task(self) -> dict[str, Any]:
         "timestamp": int(start_time),
         "task_id": self.request.id,
         "worker_id": getattr(self.request, "hostname", "unknown"),
+        "pid": os.getpid(),
         "checks": {},
         "metrics": {},
         "errors": [],
@@ -162,6 +163,7 @@ def rag_health_check_task(self) -> dict[str, Any]:
             "timestamp": int(start_time),
             "task_id": self.request.id,
             "worker_id": getattr(self.request, "hostname", "unknown"),
+            "pid": os.getpid(),
             "checks": {},
             "metrics": {"check_duration_ms": int((time.time() - start_time) * 1000)},
             "errors": [f"Health check exception: {str(e)}"],
@@ -431,5 +433,6 @@ def rag_ping_task(self) -> dict[str, Any]:
         "timestamp": int(start_time),
         "task_id": self.request.id,
         "worker_id": getattr(self.request, "hostname", "unknown"),
+        "pid": os.getpid(),
         "latency_ms": int((time.time() - start_time) * 1000),
     }

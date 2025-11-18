@@ -14,7 +14,7 @@ Utilities for loading, validating, and working with `llamafarm.yaml`.
 | `schema.yaml` | JSON Schema for the project config (`version`, `runtime`, `prompts`, `rag`, `datasets`). |
 | `datamodel.py` | **Auto-generated** Pydantic models consumed by Python components. |
 | `cli/cmd/config/types.go` | Hand-written Go structs consumed by the CLI. |
-| `generate-types.sh` | Script that regenerates Python datamodels from the schema. |
+| `generate_types.py` | Script that regenerates Python datamodels from the schema. |
 
 ## Datamodel Generation
 
@@ -28,14 +28,14 @@ The `datamodel.py` file is **auto-generated** from `schema.yaml` and should not 
 ### How to regenerate locally:
 ```bash
 cd config
-./generate-types.sh
+uv run python generate_types.py
 ```
 
 ### CI/CD:
 Datamodels are automatically generated during CI builds. The `datamodel.py` file is not committed to git and will be in your `.gitignore`.
 
 ### Troubleshooting:
-- **Import errors**: Run `./generate-types.sh` to regenerate
+- **Import errors**: Run `uv run python generate_types.py` to regenerate
 - **Generation fails**: Check that `schema.yaml` is valid YAML
 - **CI fails**: Ensure all schema references are valid
 

@@ -1,8 +1,17 @@
 import os
-import sys
+import shutil
+from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel
+from config import (  # noqa: E402
+    ConfigError,
+    generate_base_config,
+    load_config,
+    load_config_dict,
+    save_config,
+)
+from config.datamodel import LlamaFarmConfig  # noqa: E402
+from pydantic import BaseModel, ValidationError
 
 from api.errors import (
     ConfigTemplateNotFoundError,
@@ -14,16 +23,6 @@ from api.errors import (
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-from config import (  # noqa: E402
-    ConfigError,
-    generate_base_config,
-    load_config,
-    save_config,
-)
-from config.datamodel import LlamaFarmConfig  # noqa: E402
-
 logger = FastAPIStructLogger()
 
 RESERVED_NAMESPACES = ["llamafarm"]
@@ -32,7 +31,26 @@ RESERVED_NAMESPACES = ["llamafarm"]
 class Project(BaseModel):
     namespace: str
     name: str
-    config: LlamaFarmConfig
+    config: LlamaFarmConfig | dict
+    validation_error: str | None = None
+    last_modified: datetime | None = None
+
+
+class ProjectWithConfigDict(BaseModel):
+    """
+    Project representation that always includes the raw config dict.
+    Used by API route handlers to safely handle projects with validation errors.
+
+    - config_dict: Raw configuration dictionary (always present)
+    - config: Validated LlamaFarmConfig instance (None if validation failed)
+    - validation_error: Error message if config validation failed
+    """
+    namespace: str
+    name: str
+    config_dict: dict
+    config: LlamaFarmConfig | None = None
+    validation_error: str | None = None
+    last_modified: datetime | None = None
 
 
 class ProjectService:
@@ -62,6 +80,30 @@ class ProjectService:
                 "Invalid namespace or project_id: path traversal detected"
             )
         return norm_path
+
+    @classmethod
+    def get_project_last_modified(cls, project_dir: str) -> datetime | None:
+        """
+        Get the last modified timestamp of the project's config file.
+        This works in both local and containerized environments as long as
+        the project directory is mounted.
+        """
+        try:
+            # Look for config files in order of preference
+            config_files = ["llamafarm.yaml", "llamafarm.yml", "llamafarm.toml", "llamafarm.json"]
+            for config_file in config_files:
+                config_path = os.path.join(project_dir, config_file)
+                if os.path.isfile(config_path):
+                    mtime = os.path.getmtime(config_path)
+                    return datetime.fromtimestamp(mtime)
+            return None
+        except (OSError, ValueError) as e:
+            logger.warning(
+                "Failed to get last modified time",
+                project_dir=project_dir,
+                error=str(e),
+            )
+            return None
 
     @classmethod
     def create_project(
@@ -117,9 +159,23 @@ class ProjectService:
         return absolute_path
 
     @classmethod
-    def list_projects(cls, namespace: str) -> list[Project]:
+    def list_projects_safe(cls, namespace: str) -> list[ProjectWithConfigDict]:
+        """
+        List all projects in a namespace, always returning raw config dict.
+
+        This method is designed for API route handlers that need to display
+        projects even if they have validation errors. It returns ProjectWithConfigDict
+        objects that always include the raw config dict and optionally include
+        a validated LlamaFarmConfig instance.
+
+        Returns:
+            List of ProjectWithConfigDict instances with:
+            - config_dict: Always present, raw configuration
+            - config: LlamaFarmConfig instance if validation succeeded, None otherwise
+            - validation_error: Error message if validation failed
+        """
         namespace_dir = cls.get_namespace_dir(namespace)
-        logger.info(f"Listing projects in {namespace_dir}")
+        logger.info(f"Listing projects (safe) in {namespace_dir}")
 
         dirs: list[str]
         try:
@@ -140,20 +196,62 @@ class ProjectService:
                 )
                 continue
 
-            # Attempt to load project config; skip if invalid/missing
+            validation_error_msg = None
+            config_dict = None
+            validated_config = None
+
             try:
-                cfg = load_config(
+                # Try to load and validate config
+                validated_config = load_config(
                     directory=project_path,
                     validate=False,
                 )
-            except ConfigError as e:
+                # Also get the dict version
+                config_dict = validated_config.model_dump(mode="json", exclude_none=True)
+            except ValidationError as e:
+                # Config file exists but has validation errors
                 logger.warning(
-                    "Skipping project without valid config",
+                    "Project has validation errors",
+                    entry=project_name,
+                    error=str(e),
+                )
+                # Extract structured error messages from Pydantic validation errors
+                if hasattr(e, "errors") and callable(e.errors):
+                    error_details = []
+                    for err in e.errors():
+                        loc = ".".join(str(x) for x in err.get("loc", []))
+                        msg = err.get("msg", "validation error")
+                        error_details.append(f"{loc}: {msg}")
+                    validation_error_msg = "; ".join(error_details[:5])  # Limit to first 5 errors
+                    if len(e.errors()) > 5:
+                        validation_error_msg += f" (and {len(e.errors()) - 5} more errors)"
+                else:
+                    validation_error_msg = f"Config validation failed: {str(e)}"
+
+                # Load as raw dict even if validation failed
+                try:
+                    config_dict = load_config_dict(
+                        directory=project_path,
+                        validate=False,
+                    )
+                except Exception as dict_load_error:
+                    # If we can't even load as dict, skip this project
+                    logger.error(
+                        "Failed to load project config even as dict",
+                        entry=project_name,
+                        error=str(dict_load_error),
+                    )
+                    continue
+            except ConfigError as e:
+                # Config file is missing or malformed - skip
+                logger.warning(
+                    "Skipping project without valid config file",
                     entry=project_name,
                     error=str(e),
                 )
                 continue
             except OSError as e:
+                # Filesystem error - skip
                 logger.warning(
                     "Skipping project due to filesystem error",
                     entry=project_name,
@@ -161,17 +259,67 @@ class ProjectService:
                 )
                 continue
 
-            projects.append(
-                Project(
-                    namespace=namespace,
-                    name=project_name,
-                    config=cfg,
+            if config_dict is not None:
+                # Get last modified timestamp
+                last_modified = cls.get_project_last_modified(project_path)
+
+                projects.append(
+                    ProjectWithConfigDict(
+                        namespace=namespace,
+                        name=project_name,
+                        config_dict=config_dict,
+                        config=validated_config,
+                        validation_error=validation_error_msg,
+                        last_modified=last_modified,
+                    )
                 )
-            )
         return projects
 
     @classmethod
-    def get_project(cls, namespace: str, project_id: str) -> Project:
+    def list_projects(cls, namespace: str) -> list[Project]:
+        """
+        List all projects in a namespace that have valid configurations.
+
+        This method calls list_projects_safe() and filters to only include
+        projects with successfully validated configs. This reduces code duplication
+        while preserving the existing behavior for internal server logic.
+
+        For API routes that need to handle invalid configs, use list_projects_safe().
+        """
+        safe_projects = cls.list_projects_safe(namespace)
+        projects = []
+
+        for safe_project in safe_projects:
+            # Only include projects where validation succeeded
+            if safe_project.config is not None:
+                projects.append(
+                    Project(
+                        namespace=safe_project.namespace,
+                        name=safe_project.name,
+                        config=safe_project.config,
+                        validation_error=None,
+                        last_modified=safe_project.last_modified,
+                    )
+                )
+
+        return projects
+
+    @classmethod
+    def get_project_safe(cls, namespace: str, project_id: str) -> ProjectWithConfigDict:
+        """
+        Get a project, always returning raw config dict.
+
+        This method is designed for API route handlers that need to display
+        projects even if they have validation errors. It returns a ProjectWithConfigDict
+        that always includes the raw config dict and optionally includes a validated
+        LlamaFarmConfig instance.
+
+        Returns:
+            ProjectWithConfigDict with:
+            - config_dict: Always present, raw configuration
+            - config: LlamaFarmConfig instance if validation succeeded, None otherwise
+            - validation_error: Error message if validation failed
+        """
         project_dir = cls.get_project_dir(namespace, project_id)
         # Validate project directory exists (and is a directory)
         if not os.path.isdir(project_dir):
@@ -183,7 +331,10 @@ class ProjectService:
             )
             raise ProjectNotFoundError(namespace, project_id)
 
-        # Ensure a config file exists inside the directory
+        validation_error_msg = None
+        config_dict = None
+        validated_config = None
+
         try:
             from config.helpers.loader import find_config_file
 
@@ -201,8 +352,50 @@ class ProjectService:
                     message="No configuration file found in project directory",
                 )
 
-            # Attempt to load config (do not validate here; align with list_projects)
-            cfg = load_config(directory=project_dir, validate=False)
+            # Attempt to load and validate config
+            validated_config = load_config(directory=project_dir, validate=False)
+            # Also get the dict version
+            config_dict = validated_config.model_dump(mode="json", exclude_none=True)
+        except ValidationError as e:
+            # Config file exists but has validation errors
+            logger.warning(
+                "Project has validation errors, loading as dict",
+                namespace=namespace,
+                project_id=project_id,
+                error=str(e),
+            )
+            # Extract structured error messages from Pydantic validation errors
+            if hasattr(e, "errors") and callable(e.errors):
+                error_details = []
+                for err in e.errors():
+                    loc = ".".join(str(x) for x in err.get("loc", []))
+                    msg = err.get("msg", "validation error")
+                    error_details.append(f"{loc}: {msg}")
+                validation_error_msg = "; ".join(error_details[:5])  # Limit to first 5 errors
+                if len(e.errors()) > 5:
+                    validation_error_msg += f" (and {len(e.errors()) - 5} more errors)"
+            else:
+                validation_error_msg = f"Config validation failed: {str(e)}"
+
+            # Load as raw dict even if validation failed
+            try:
+                config_dict = load_config_dict(
+                    directory=project_dir,
+                    validate=False,
+                )
+            except Exception as dict_load_error:
+                # If we can't even load as dict, raise error
+                logger.error(
+                    "Failed to load project config even as dict",
+                    namespace=namespace,
+                    project_id=project_id,
+                    error=str(dict_load_error),
+                )
+                raise ProjectConfigError(
+                    namespace,
+                    project_id,
+                    message="Failed to load project configuration",
+                ) from dict_load_error
         except ProjectConfigError:
             # bubble our structured error
             raise
@@ -229,10 +422,46 @@ class ProjectService:
             )
             raise
 
-        return Project(
+        # Get last modified timestamp
+        last_modified = cls.get_project_last_modified(project_dir)
+
+        return ProjectWithConfigDict(
             namespace=namespace,
             name=project_id,
-            config=cfg,
+            config_dict=config_dict,
+            config=validated_config,
+            validation_error=validation_error_msg,
+            last_modified=last_modified,
+        )
+
+    @classmethod
+    def get_project(cls, namespace: str, project_id: str) -> Project:
+        """
+        Get a project with validated configuration.
+
+        This method calls get_project_safe() and only returns if validation succeeded.
+        Raises ProjectConfigError if the config has validation errors.
+        This reduces code duplication while preserving the existing behavior for
+        internal server logic.
+
+        For API routes that need to handle invalid configs, use get_project_safe().
+        """
+        safe_project = cls.get_project_safe(namespace, project_id)
+
+        # Only return if validation succeeded, otherwise raise error
+        if safe_project.config is None:
+            raise ProjectConfigError(
+                namespace,
+                project_id,
+                message=safe_project.validation_error or "Configuration validation failed",
+            )
+
+        return Project(
+            namespace=safe_project.namespace,
+            name=safe_project.name,
+            config=safe_project.config,
+            validation_error=None,
+            last_modified=safe_project.last_modified,
         )
 
     @classmethod
@@ -275,3 +504,107 @@ class ProjectService:
         cfg_model = LlamaFarmConfig(**config_dict)
 
         return cls.save_config(namespace, project_id, cfg_model)
+
+    @classmethod
+    def delete_project(cls, namespace: str, project_id: str) -> Project:
+        """
+        Delete a project and all its associated resources.
+
+        This removes the entire project directory including:
+        - Configuration files (llamafarm.yaml)
+        - All datasets and data files
+        - Vector stores (Chroma DBs, etc.)
+        - Chat sessions
+        - All other project-specific data
+
+        Args:
+            namespace: The namespace of the project
+            project_id: The ID of the project to delete
+
+        Returns:
+            Project: The deleted project information
+
+        Raises:
+            ProjectNotFoundError: If the project doesn't exist
+            PermissionError: If there are permission issues deleting the directory
+            OSError: If there are filesystem errors during deletion
+        """
+        # Step 1: Validate project exists and get its configuration
+        logger.info(
+            "Starting project deletion",
+            namespace=namespace,
+            project_id=project_id,
+        )
+
+        # This will raise ProjectNotFoundError if project doesn't exist
+        # Use get_project_safe to allow deleting projects with invalid configs
+        safe_project = cls.get_project_safe(namespace, project_id)
+
+        # Step 2: Store project info for response (before deletion)
+        # Create a copy to return after deletion
+        # Use validated config if available, otherwise use raw dict
+        project_copy = Project(
+            namespace=safe_project.namespace,
+            name=safe_project.name,
+            config=safe_project.config if safe_project.config is not None else safe_project.config_dict,
+            validation_error=safe_project.validation_error,
+            last_modified=safe_project.last_modified,
+        )
+
+        # Step 3: Delete the entire project directory
+        project_path = Path(cls.get_project_dir(namespace, project_id))
+
+        if project_path.exists():
+            try:
+                # Use shutil.rmtree to recursively delete the entire directory
+                shutil.rmtree(project_path, ignore_errors=False)
+
+                logger.info(
+                    "Successfully deleted project directory",
+                    namespace=namespace,
+                    project_id=project_id,
+                    project_dir=str(project_path),
+                )
+
+            except PermissionError as e:
+                logger.error(
+                    "Permission denied when deleting project directory",
+                    namespace=namespace,
+                    project_id=project_id,
+                    project_dir=str(project_path),
+                    error=str(e),
+                )
+                raise PermissionError(
+                    f"Permission denied when deleting project "
+                    f"{namespace}/{project_id}: {str(e)}"
+                ) from e
+
+            except OSError as e:
+                logger.error(
+                    "Filesystem error when deleting project directory",
+                    namespace=namespace,
+                    project_id=project_id,
+                    project_dir=str(project_path),
+                    error=str(e),
+                )
+                raise OSError(
+                    f"Failed to delete project directory "
+                    f"{namespace}/{project_id}: {str(e)}"
+                ) from e
+        else:
+            # Log warning but don't fail - project exists in config but dir is gone
+            logger.warning(
+                "Project directory does not exist",
+                namespace=namespace,
+                project_id=project_id,
+                project_dir=str(project_path),
+            )
+
+        # Step 4: Return deleted project info
+        logger.info(
+            "Project deletion completed successfully",
+            namespace=namespace,
+            project_id=project_id,
+        )
+
+        return project_copy

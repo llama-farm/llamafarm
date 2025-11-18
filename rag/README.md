@@ -38,7 +38,7 @@ The ingestion pipeline is driven by the `rag` section of `llamafarm.yaml` (see `
 - **Data processing strategies** specifying parsers, extractors, metadata processors.
 - **Datasets** referencing a processing strategy + database pair.
 
-Update `rag/schema.yaml` when adding new parsers, extractors, or stores, then regenerate types via `config/generate-types.sh`.
+Update `rag/schema.yaml` when adding new parsers, extractors, or stores, then regenerate types via `config/generate_types.py`.
 
 ## Tests
 ```bash
@@ -146,4 +146,3 @@ Those ensure strategies defined in the templates and schema remain valid.
 
 ## Documentation
 User-facing instructions for ingestion, queries, and extending RAG live in `docs/website/docs/rag/index.md`.
-
