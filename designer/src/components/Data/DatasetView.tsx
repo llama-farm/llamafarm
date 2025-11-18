@@ -364,16 +364,16 @@ function DatasetView() {
         typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
       const size =
         typeof fileObj === 'object' &&
-          fileObj !== null &&
-          'size' in fileObj &&
-          fileObj.size !== undefined
+        fileObj !== null &&
+        'size' in fileObj &&
+        fileObj.size !== undefined
           ? fileObj.size
           : 'unknown'
       const lastModified =
         typeof fileObj === 'object' &&
-          fileObj !== null &&
-          'lastModified' in fileObj &&
-          fileObj.lastModified !== undefined
+        fileObj !== null &&
+        'lastModified' in fileObj &&
+        fileObj.lastModified !== undefined
           ? fileObj.lastModified
           : 'unknown'
       return {
@@ -601,10 +601,10 @@ function DatasetView() {
               prev.map((s, i) =>
                 i === idx
                   ? {
-                    ...s,
-                    status: 'error',
-                    error: error?.message || 'Upload failed',
-                  }
+                      ...s,
+                      status: 'error',
+                      error: error?.message || 'Upload failed',
+                    }
                   : s
               )
             )
@@ -725,9 +725,63 @@ function DatasetView() {
       setCurrentTaskId(null)
       setProcessingFailure(null) // Clear any previous failures
 
-      // Store the processing result
+      // Store the processing result - merge with previous results to maintain history
       if (taskStatus.result) {
-        setProcessingResult(taskStatus.result)
+        setProcessingResult(prevResult => {
+          if (!prevResult) {
+            // No previous result, just use the new one
+            return taskStatus.result
+          }
+
+          // Merge the new results with the old ones
+          const oldDetails = prevResult.details || []
+          const newDetails = taskStatus.result.details || []
+
+          // Create a map of file hashes to their latest processing details
+          const detailsMap = new Map()
+
+          // Add old details first
+          oldDetails.forEach((detail: FileProcessingDetail) => {
+            const hash = detail.file_hash || detail.hash
+            if (hash) {
+              detailsMap.set(hash, detail)
+            }
+          })
+
+          // Override/add with new details
+          newDetails.forEach((detail: FileProcessingDetail) => {
+            const hash = detail.file_hash || detail.hash
+            if (hash) {
+              detailsMap.set(hash, detail)
+            }
+          })
+
+          // Combine into array
+          const mergedDetails = Array.from(detailsMap.values())
+
+          // Recalculate counts from merged details
+          const processedCount = mergedDetails.filter(
+            d => d.success === true
+          ).length
+          const failedCount = mergedDetails.filter(
+            d => d.success === false && !d.details?.status?.includes('skipped')
+          ).length
+          const skippedCount = mergedDetails.filter(d => {
+            const detailsObj = d.details || {}
+            const resultObj = detailsObj.result || {}
+            return (
+              resultObj.status === 'skipped' || detailsObj.status === 'skipped'
+            )
+          }).length
+
+          return {
+            ...taskStatus.result,
+            processed_files: processedCount,
+            failed_files: failedCount,
+            skipped_files: skippedCount,
+            details: mergedDetails,
+          }
+        })
       }
 
       toast({
@@ -780,12 +834,80 @@ function DatasetView() {
       }
 
       // Keep partial results to show what succeeded and what failed
-      let recalculatedPartialResults = null
+      let recalculatedPartialResults: ProcessDatasetResponse | null = null
       if (partialResults) {
         // Recalculate counts from details to ensure accuracy
         recalculatedPartialResults =
           recalculateCountsFromDetails(partialResults)
-        setProcessingResult(recalculatedPartialResults)
+
+        // Merge with previous results to maintain history
+        setProcessingResult(prevResult => {
+          if (!prevResult || !recalculatedPartialResults) {
+            return recalculatedPartialResults
+          }
+
+          // Merge the new results with the old ones
+          const oldDetails = prevResult.details || []
+          const newDetails = recalculatedPartialResults.details || []
+
+          // Create a map of file hashes to their latest processing details
+          const detailsMap = new Map()
+
+          // Add old details first
+          oldDetails.forEach((detail: FileProcessingDetail) => {
+            const hash = detail.file_hash || detail.hash
+            if (hash) {
+              detailsMap.set(hash, detail)
+            }
+          })
+
+          // Override/add with new details
+          newDetails.forEach((detail: FileProcessingDetail) => {
+            const hash = detail.file_hash || detail.hash
+            if (hash) {
+              detailsMap.set(hash, detail)
+            }
+          })
+
+          // Combine into array
+          const mergedDetails = Array.from(detailsMap.values())
+
+          // Recalculate counts from merged details
+          const processedCount = mergedDetails.filter(
+            d => d.success === true
+          ).length
+          const failedCount = mergedDetails.filter(
+            d => d.success === false && !d.details?.status?.includes('skipped')
+          ).length
+          const skippedCount = mergedDetails.filter(d => {
+            const detailsObj = d.details || {}
+            const resultObj = detailsObj.result || {}
+            return (
+              resultObj.status === 'skipped' || detailsObj.status === 'skipped'
+            )
+          }).length
+
+          return {
+            message:
+              recalculatedPartialResults?.message ||
+              prevResult.message ||
+              'Processing complete',
+            processed_files: processedCount,
+            failed_files: failedCount,
+            skipped_files: skippedCount,
+            strategy:
+              recalculatedPartialResults?.strategy ||
+              prevResult.strategy ||
+              null,
+            database:
+              recalculatedPartialResults?.database ||
+              prevResult.database ||
+              null,
+            task_id:
+              recalculatedPartialResults?.task_id || prevResult.task_id || null,
+            details: mergedDetails,
+          }
+        })
       }
 
       const errorMessage = taskStatus.error || 'Unknown error occurred'
@@ -812,9 +934,10 @@ function DatasetView() {
       setIsResultsOpen(true)
 
       toast({
-        message: hasPartialResults
-          ? `⚠️ Processing completed with ${recalculatedPartialResults.failed_files} error(s). ${recalculatedPartialResults.processed_files} file(s) processed successfully.`
-          : `❌ Processing failed: ${errorMessage}`,
+        message:
+          hasPartialResults && recalculatedPartialResults
+            ? `⚠️ Processing completed with ${recalculatedPartialResults.failed_files} error(s). ${recalculatedPartialResults.processed_files} file(s) processed successfully.`
+            : `❌ Processing failed: ${errorMessage}`,
         variant: hasPartialResults ? 'default' : 'destructive',
       })
     }
@@ -835,20 +958,21 @@ function DatasetView() {
 
   const handleSaveEdit = () => {
     if (!dataset || !datasetId) return
-    
+
     // Validate dataset name
-    const existingDatasetNames = datasetsResponse?.datasets?.map((d: any) => d.name) || []
+    const existingDatasetNames =
+      datasetsResponse?.datasets?.map((d: any) => d.name) || []
     const validation = validateDatasetNameWithDuplicateCheck(
       editName,
       existingDatasetNames,
       dataset.name // Allow keeping the same name
     )
-    
+
     if (!validation.isValid) {
       setEditNameError(validation.error || 'Invalid dataset name')
       return
     }
-    
+
     // Note: Dataset name/description updates are local-only until backend supports PATCH endpoint
     const updatedDataset = {
       ...dataset,
@@ -1077,7 +1201,7 @@ function DatasetView() {
                     </div>
                     <p className="text-xs text-muted-foreground max-w-[640px] mb-3">
                       {dataset?.description &&
-                        dataset.description.trim().length > 0
+                      dataset.description.trim().length > 0
                         ? dataset.description
                         : 'Add a short description so teammates know what this dataset is for.'}
                     </p>
@@ -1090,18 +1214,21 @@ function DatasetView() {
                           <span className="text-sm text-muted-foreground">
                             Database:
                           </span>
-                        <Badge
-                          variant="default"
-                          size="sm"
-                          className={`rounded-xl ${getDatabaseColor((currentApiDataset as any).database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
-                          onClick={() => {
-                            // Navigate with database query parameter for reliable tab selection
-                            const databaseName = (currentApiDataset as any).database
-                            navigate(`/chat/databases?database=${encodeURIComponent(databaseName)}`)
-                          }}
-                        >
-                          {(currentApiDataset as any).database}
-                        </Badge>
+                          <Badge
+                            variant="default"
+                            size="sm"
+                            className={`rounded-xl ${getDatabaseColor((currentApiDataset as any).database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
+                            onClick={() => {
+                              // Navigate with database query parameter for reliable tab selection
+                              const databaseName = (currentApiDataset as any)
+                                .database
+                              navigate(
+                                `/chat/databases?database=${encodeURIComponent(databaseName)}`
+                              )
+                            }}
+                          >
+                            {(currentApiDataset as any).database}
+                          </Badge>
                         </div>
                       )}
 
@@ -1148,38 +1275,12 @@ function DatasetView() {
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <FontIcon
                             type="chevron-down"
-                            className={`w-4 h-4 flex-shrink-0 transition-transform ${isResultsOpen ? '' : '-rotate-90'
-                              }`}
+                            className={`w-4 h-4 flex-shrink-0 transition-transform ${
+                              isResultsOpen ? '' : '-rotate-90'
+                            }`}
                           />
                           Last Processing Results
                         </div>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            setProcessingResult(null)
-                            setProcessingFailure(null)
-                            setCurrentTaskId(null) // Stop polling the task
-                            if (
-                              activeProject?.namespace &&
-                              activeProject?.project &&
-                              datasetId
-                            ) {
-                              clearDatasetResult(
-                                activeProject.namespace,
-                                activeProject.project,
-                                datasetId
-                              )
-                              clearDatasetTaskId(
-                                activeProject.namespace,
-                                activeProject.project,
-                                datasetId
-                              )
-                            }
-                          }}
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          Clear
-                        </button>
                       </div>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -1263,7 +1364,7 @@ function DatasetView() {
                                         fileResult.file_hash
                                       const isHashFilename =
                                         displayFilename ===
-                                        fileResult.file_hash ||
+                                          fileResult.file_hash ||
                                         !result.filename
 
                                       // Get file extension for icon
@@ -1414,71 +1515,71 @@ function DatasetView() {
                                               {/* Parser info */}
                                               {(details.parser ||
                                                 result.parsers_used?.length >
-                                                0) && (
-                                                  <div>
-                                                    <span className="font-medium text-foreground">
-                                                      Parser:
-                                                    </span>{' '}
-                                                    <span className="font-mono text-xs">
-                                                      {result.parsers_used?.join(
-                                                        ', '
-                                                      ) || details.parser}
-                                                    </span>
-                                                  </div>
-                                                )}
+                                                  0) && (
+                                                <div>
+                                                  <span className="font-medium text-foreground">
+                                                    Parser:
+                                                  </span>{' '}
+                                                  <span className="font-mono text-xs">
+                                                    {result.parsers_used?.join(
+                                                      ', '
+                                                    ) || details.parser}
+                                                  </span>
+                                                </div>
+                                              )}
 
                                               {/* Embedder */}
                                               {(details.embedder ||
                                                 result.embedder) && (
-                                                  <div>
-                                                    <span className="font-medium text-foreground">
-                                                      Embedder:
-                                                    </span>{' '}
-                                                    <span className="font-mono text-xs">
-                                                      {result.embedder ||
-                                                        details.embedder}
-                                                    </span>
-                                                  </div>
-                                                )}
+                                                <div>
+                                                  <span className="font-medium text-foreground">
+                                                    Embedder:
+                                                  </span>{' '}
+                                                  <span className="font-mono text-xs">
+                                                    {result.embedder ||
+                                                      details.embedder}
+                                                  </span>
+                                                </div>
+                                              )}
 
                                               {/* Extractors - inline */}
                                               {(details.extractors?.length >
                                                 0 ||
                                                 result.extractors_applied
                                                   ?.length > 0) && (
-                                                  <div className="flex items-center gap-1.5">
-                                                    <span className="font-medium text-foreground">
-                                                      Extractors:
-                                                    </span>
-                                                    <div className="inline-flex flex-wrap gap-1">
-                                                      {(
-                                                        result.extractors_applied ||
-                                                        details.extractors ||
-                                                        []
-                                                      ).map(
-                                                        (
-                                                          ext: string,
-                                                          i: number
-                                                        ) => (
-                                                          <Badge
-                                                            key={i}
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="rounded font-mono text-[10px] px-1.5 py-0"
-                                                          >
-                                                            {ext}
-                                                          </Badge>
-                                                        )
-                                                      )}
-                                                    </div>
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="font-medium text-foreground">
+                                                    Extractors:
+                                                  </span>
+                                                  <div className="inline-flex flex-wrap gap-1">
+                                                    {(
+                                                      result.extractors_applied ||
+                                                      details.extractors ||
+                                                      []
+                                                    ).map(
+                                                      (
+                                                        ext: string,
+                                                        i: number
+                                                      ) => (
+                                                        <Badge
+                                                          key={i}
+                                                          variant="outline"
+                                                          size="sm"
+                                                          className="rounded font-mono text-[10px] px-1.5 py-0"
+                                                        >
+                                                          {ext}
+                                                        </Badge>
+                                                      )
+                                                    )}
                                                   </div>
-                                                )}
+                                                </div>
+                                              )}
                                             </div>
 
                                             {/* Document IDs if stored */}
                                             {result.document_ids &&
                                               result.document_ids.length >
-                                              0 && (
+                                                0 && (
                                                 <div className="text-muted-foreground ml-5">
                                                   <span className="font-medium text-foreground">
                                                     Document IDs:
@@ -1616,18 +1717,28 @@ function DatasetView() {
                             onChange={e => {
                               const newName = e.target.value
                               setEditName(newName)
-                              
+
                               // Validate on change for real-time feedback
-                              const existingDatasetNames = datasetsResponse?.datasets?.map((d: any) => d.name) || []
-                              const validation = validateDatasetNameWithDuplicateCheck(
-                                newName,
-                                existingDatasetNames,
-                                dataset?.name || null // Allow keeping the same name
+                              const existingDatasetNames =
+                                datasetsResponse?.datasets?.map(
+                                  (d: any) => d.name
+                                ) || []
+                              const validation =
+                                validateDatasetNameWithDuplicateCheck(
+                                  newName,
+                                  existingDatasetNames,
+                                  dataset?.name || null // Allow keeping the same name
+                                )
+                              setEditNameError(
+                                validation.isValid
+                                  ? null
+                                  : validation.error || 'Invalid dataset name'
                               )
-                              setEditNameError(validation.isValid ? null : (validation.error || 'Invalid dataset name'))
                             }}
                             placeholder="Dataset name"
-                            className={editNameError ? 'border-destructive' : ''}
+                            className={
+                              editNameError ? 'border-destructive' : ''
+                            }
                           />
                           {editNameError && (
                             <p className="text-xs text-destructive mt-1">
@@ -1738,7 +1849,7 @@ function DatasetView() {
                               {taskStatus.meta?.progress
                                 ? `Processing ${taskStatus.meta.progress}%`
                                 : taskStatus.meta?.current &&
-                                  taskStatus.meta?.total
+                                    taskStatus.meta?.total
                                   ? `Processing ${Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)}%`
                                   : 'Processing...'}
                             </>
@@ -1895,35 +2006,48 @@ function DatasetView() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          className="gap-1.5"
-                          disabled={
-                            processMutation.isPending || !!currentTaskId
-                          }
-                        >
-                          {processMutation.isPending
-                            ? 'Starting...'
-                            : currentTaskId && taskStatus
-                              ? 'Processing...'
-                              : 'Process data'}
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="opacity-60"
-                          >
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                          </svg>
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="sm"
+                                className="gap-1.5"
+                                disabled={
+                                  processMutation.isPending ||
+                                  !!currentTaskId ||
+                                  files.length === 0
+                                }
+                              >
+                                {processMutation.isPending
+                                  ? 'Starting...'
+                                  : currentTaskId && taskStatus
+                                    ? 'Processing...'
+                                    : 'Process data'}
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="opacity-60"
+                                >
+                                  <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          {files.length === 0 && (
+                            <TooltipContent>
+                              Upload files before processing
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                       <DropdownMenuContent align="end" className="w-[200px]">
                         <DropdownMenuItem
                           onClick={async () => {
@@ -1935,13 +2059,9 @@ function DatasetView() {
                               return
 
                             try {
-                              // Clear previous results from state and localStorage
-                              setProcessingResult(null)
-                              clearDatasetResult(
-                                activeProject.namespace,
-                                activeProject.project,
-                                datasetId
-                              )
+                              // Don't clear previous results - keep them so already processed files still show as processed
+                              // Only clear failures since we're starting a new job
+                              setProcessingFailure(null)
 
                               const result = await processMutation.mutateAsync({
                                 namespace: activeProject.namespace,
@@ -2155,11 +2275,11 @@ function DatasetView() {
                   accept={
                     fileTypeFilter
                       ? fileTypeFilter
-                        .split(',')
-                        .map(s => s.trim())
-                        .filter(Boolean)
-                        .map(ext => (ext.startsWith('.') ? ext : `.${ext}`))
-                        .join(',')
+                          .split(',')
+                          .map(s => s.trim())
+                          .filter(Boolean)
+                          .map(ext => (ext.startsWith('.') ? ext : `.${ext}`))
+                          .join(',')
                       : undefined
                   }
                   onChange={async e => {
@@ -2270,7 +2390,8 @@ function DatasetView() {
                         Drag and drop files here
                       </div>
                       <div className="text-sm text-muted-foreground mb-4 max-w-[400px]">
-                        Upload PDFs, CSVs, or other documents to add them to this dataset
+                        Upload PDFs, CSVs, or other documents to add them to
+                        this dataset
                       </div>
                       <Button
                         variant="outline"
@@ -2350,13 +2471,14 @@ function DatasetView() {
                                           }))
                                         }, 1500)
                                       }}
-                                      className={`text-xs text-left ${copyStatus?.[f.id] === 'Copied!'
-                                        ? 'text-green-600'
-                                        : copyStatus?.[f.id] ===
-                                          'Failed to copy'
-                                          ? 'text-red-600'
-                                          : 'text-blue-600 hover:text-blue-800'
-                                        }`}
+                                      className={`text-xs text-left ${
+                                        copyStatus?.[f.id] === 'Copied!'
+                                          ? 'text-green-600'
+                                          : copyStatus?.[f.id] ===
+                                              'Failed to copy'
+                                            ? 'text-red-600'
+                                            : 'text-blue-600 hover:text-blue-800'
+                                      }`}
                                       title="Click to copy full hash"
                                     >
                                       {copyStatus?.[f.id] || 'Copy full hash'}
@@ -2384,23 +2506,23 @@ function DatasetView() {
                                   <div className="flex items-center gap-6">
                                     {fileUploadStatuses.find(s => s.id === f.id)
                                       ?.status === 'uploading' && (
-                                        <div className="flex items-center gap-1 text-muted-foreground">
-                                          <FontIcon
-                                            type="fade"
-                                            className="w-4 h-4"
-                                          />
-                                          <span className="text-xs">
-                                            Processing
-                                          </span>
-                                        </div>
-                                      )}
+                                      <div className="flex items-center gap-1 text-muted-foreground">
+                                        <FontIcon
+                                          type="fade"
+                                          className="w-4 h-4"
+                                        />
+                                        <span className="text-xs">
+                                          Processing
+                                        </span>
+                                      </div>
+                                    )}
                                     {fileUploadStatuses.find(s => s.id === f.id)
                                       ?.status === 'success' && (
-                                        <FontIcon
-                                          type="checkmark-outline"
-                                          className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                                        />
-                                      )}
+                                      <FontIcon
+                                        type="checkmark-outline"
+                                        className="w-4 h-4 text-teal-600 dark:text-teal-400"
+                                      />
+                                    )}
                                     <button
                                       className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
                                       onClick={() =>
@@ -2416,7 +2538,7 @@ function DatasetView() {
                                       title="Delete file"
                                     >
                                       {f.fullHash &&
-                                        isFileDeleting(f.fullHash) ? (
+                                      isFileDeleting(f.fullHash) ? (
                                         <span className="text-xs">...</span>
                                       ) : (
                                         <FontIcon
