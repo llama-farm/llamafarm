@@ -43,6 +43,7 @@ import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { isValidFile } from '../../utils/fileValidation'
 import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
+import { getDatabaseColor } from '../../utils/databaseColors'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
@@ -201,6 +202,12 @@ const Data = () => {
       // Only show fields that actually come from the API
     }))
   }, [apiDatasets])
+
+  // Extract databases from project config for color assignment
+  const databases = useMemo(() => {
+    const ragDatabases = (projectResp as any)?.project?.config?.rag?.databases
+    return Array.isArray(ragDatabases) ? ragDatabases : []
+  }, [projectResp])
 
   // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
   const hasRedirectedFromQuery = useRef(false)
@@ -918,6 +925,7 @@ const Data = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
+                    variant="secondary"
                     size="sm"
                     onClick={() => {
                       setStrategyCreateName('')
@@ -1054,7 +1062,7 @@ const Data = () => {
                             key={name}
                             variant="default"
                             size="sm"
-                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                            className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
                           >
                             {name}
                           </Badge>
@@ -1143,7 +1151,7 @@ const Data = () => {
                   >
                     <DialogTrigger asChild>
                       <Button variant="default" size="sm">
-                        Create new
+                        Create new dataset
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
@@ -1352,7 +1360,7 @@ const Data = () => {
                                 <Badge
                                   variant="default"
                                   size="sm"
-                                  className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                                  className={`rounded-xl ${getDatabaseColor(ds.database, databases)}`}
                                 >
                                   {ds.database}
                                 </Badge>
@@ -1360,7 +1368,7 @@ const Data = () => {
                               <Badge
                                 variant="default"
                                 size="sm"
-                                className="rounded-xl"
+                                className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
                               >
                                 {ds.data_processing_strategy}
                               </Badge>

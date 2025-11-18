@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
+import { getDatabaseColor } from '../../utils/databaseColors'
 import {
   Tooltip,
   TooltipContent,
@@ -107,6 +108,12 @@ function DatasetView() {
       refetchDatasets()
     }
   }, []) // Empty deps - only run on mount
+
+  // Extract databases from project config for color assignment
+  const databases = useMemo(() => {
+    const ragDatabases = (projectResp as any)?.project?.config?.rag?.databases
+    return Array.isArray(ragDatabases) ? ragDatabases : []
+  }, [projectResp])
 
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
@@ -1053,14 +1060,14 @@ function DatasetView() {
                           <span className="text-sm text-muted-foreground">
                             Database:
                           </span>
-                          <Badge
-                            variant="default"
-                            size="sm"
-                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900 cursor-pointer hover:opacity-80 transition-opacity"
-                            onClick={() => navigate('/chat/databases')}
-                          >
-                            {(currentApiDataset as any).database}
-                          </Badge>
+                        <Badge
+                          variant="default"
+                          size="sm"
+                          className={`rounded-xl ${getDatabaseColor((currentApiDataset as any).database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
+                          onClick={() => navigate('/chat/databases')}
+                        >
+                          {(currentApiDataset as any).database}
+                        </Badge>
                         </div>
                       )}
 
@@ -1072,7 +1079,7 @@ function DatasetView() {
                         <Badge
                           variant="default"
                           size="sm"
-                          className="rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
+                          className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() =>
                             navigate(`/chat/data/strategies/${currentStrategy}`)
                           }
