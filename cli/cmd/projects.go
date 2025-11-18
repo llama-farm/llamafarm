@@ -60,7 +60,9 @@ var projectsListCmd = &cobra.Command{
 		}
 
 		// Ensure server is up (auto-start locally if needed)
-		orchestrator.EnsureServicesOrExit(serverURL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverURL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
 		// Build request
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
@@ -132,7 +134,9 @@ This operation is irreversible and will delete all project data.`,
 		}
 
 		// Ensure server is running
-		orchestrator.EnsureServicesOrExit(serverURL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverURL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
 		// Handle confirmation (follow rag_manage.go pattern)
 		force, _ := cmd.Flags().GetBool("force")

@@ -94,7 +94,9 @@ var datasetsListCmd = &cobra.Command{
 		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		// Ensure required services are running
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=false", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
@@ -175,7 +177,9 @@ Examples:
 		}
 
 		// 2) Validate strategies and databases exist in project config
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -287,7 +291,9 @@ var datasetsDeleteCommand = &cobra.Command{
 
 		datasetName := args[0]
 		// Ensure server is up
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
@@ -367,7 +373,9 @@ Examples:
 		fmt.Printf("Found %d files to upload\n", len(files))
 
 		// Ensure server is up
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
 		// Upload in batches with progress display
 		const batchSize = 10
@@ -456,7 +464,9 @@ var datasetsProcessCmd = &cobra.Command{
 		datasetName := args[0]
 
 		// Ensure server and RAG are up (process command needs RAG for ingestion)
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		// Call the process endpoint
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/process",

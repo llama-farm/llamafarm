@@ -14,7 +14,7 @@ type CLIContext struct {
 	OllamaHost         string
 	ServerStartTimeout time.Duration
 	OverrideCwd        string
-	NoAutoStart        bool
+	AutoStart          bool
 }
 
 // NewCLIContext creates a new CLIContext with default values.
@@ -25,7 +25,7 @@ func NewCLIContext() *CLIContext {
 		OllamaHost:         "http://localhost:11434",
 		ServerStartTimeout: 45 * time.Second,
 		OverrideCwd:        "",
-		NoAutoStart:        false,
+		AutoStart:          true,
 	}
 }
 
@@ -38,7 +38,7 @@ func GetCLIContext() *CLIContext {
 		OllamaHost:         ollamaHost,
 		ServerStartTimeout: serverStartTimeout,
 		OverrideCwd:        utils.OverrideCwd,
-		NoAutoStart:        false, // Feature removed - always false for now
+		AutoStart:          autoStart,
 	}
 }
 
@@ -62,6 +62,7 @@ func (f *ServiceConfigFactory) StartCommand(serverURL string) *orchestrator.Serv
 			"rag":    orchestrator.ServiceOptional,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
+		AutoStart:       f.ctx.AutoStart,
 	}
 }
 
@@ -75,6 +76,7 @@ func (f *ServiceConfigFactory) RAGCommand(serverURL string) *orchestrator.Servic
 			"rag":    orchestrator.ServiceRequired,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
+		AutoStart:       f.ctx.AutoStart,
 	}
 }
 
@@ -87,6 +89,7 @@ func (f *ServiceConfigFactory) ChatNoRAG(serverURL string) *orchestrator.Service
 			"server": orchestrator.ServiceRequired,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
+		AutoStart:       f.ctx.AutoStart,
 	}
 }
 
@@ -100,6 +103,7 @@ func (f *ServiceConfigFactory) ServerOnly(serverURL string) *orchestrator.Servic
 			"rag":    orchestrator.ServiceOptional,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
+		AutoStart:       f.ctx.AutoStart,
 	}
 }
 
