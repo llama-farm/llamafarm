@@ -41,9 +41,10 @@ class RAGContextProvider(BaseDynamicContextProvider):
             citation_str = ", ".join(citation_parts)
 
             chunk_text = (
-                f"Source {source_counter}: {citation_str}\n"
-                f"{item.content}\n"
-                f"{'-' * 80}"
+                f"<chunk>\n"
+                f"  <chunk_name>Source {source_counter}: {citation_str}</chunk_name>\n"
+                f"  <chunk_content>{item.content}</chunk_content>\n"
+                f"</chunk>"
             )
             formatted_chunks.append(chunk_text)
             source_counter += 1
