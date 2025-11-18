@@ -44,9 +44,172 @@ import type { ProjectConfig } from '../../types/config'
 import { isValidFile } from '../../utils/fileValidation'
 import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
 import { getDatabaseColor } from '../../utils/databaseColors'
+import {
+  loadDatasetTaskId,
+  clearDatasetTaskId,
+} from '../../utils/datasetStorage'
+import { useTaskStatus } from '../../hooks/useDatasets'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
+
+// Component for individual dataset card with processing status tracking
+const DatasetCard = ({
+  dataset,
+  activeProject,
+  databases,
+  onNavigate,
+  onDelete,
+}: {
+  dataset: any
+  activeProject: any
+  databases: any[]
+  onNavigate: (id: string) => void
+  onDelete: (id: string, name: string) => void
+}) => {
+  // Check if this dataset has an active processing task
+  const taskId = loadDatasetTaskId(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    dataset.name
+  )
+
+  // Poll task status if task exists
+  const { data: taskStatus } = useTaskStatus(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    taskId,
+    {
+      enabled: !!taskId && !!activeProject,
+      refetchInterval: 2000,
+    }
+  )
+
+  // Clear task ID when processing completes
+  useEffect(() => {
+    if (
+      taskStatus &&
+      (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE')
+    ) {
+      clearDatasetTaskId(
+        activeProject?.namespace || '',
+        activeProject?.project || '',
+        dataset.name
+      )
+    }
+  }, [taskStatus, activeProject, dataset.name])
+
+  // Calculate processing percentage
+  const isProcessing =
+    taskStatus &&
+    taskStatus.state !== 'SUCCESS' &&
+    taskStatus.state !== 'FAILURE'
+  const processingPercent = useMemo(() => {
+    if (!isProcessing || !taskStatus) return 0
+
+    if (taskStatus.meta?.progress) {
+      return taskStatus.meta.progress
+    }
+
+    if (taskStatus.meta?.current && taskStatus.meta?.total) {
+      return Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)
+    }
+
+    return 0
+  }, [isProcessing, taskStatus])
+
+  return (
+    <div
+      key={dataset.id}
+      className={`w-full bg-card rounded-lg border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors ${
+        isProcessing ? 'border-[#1e3a8a] dark:border-white' : 'border-border'
+      }`}
+      onClick={() => onNavigate(dataset.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onNavigate(dataset.id)
+        }
+      }}
+    >
+      <div className="absolute right-3 top-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+              onClick={e => e.stopPropagation()}
+              aria-label="Dataset actions"
+            >
+              <FontIcon type="overflow" className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem] w-[10rem]">
+            <DropdownMenuItem
+              onClick={e => {
+                e.stopPropagation()
+                onNavigate(dataset.id)
+              }}
+            >
+              View
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={e => {
+                e.stopPropagation()
+                onDelete(dataset.id, dataset.name)
+              }}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="text-sm font-medium">{dataset.name}</div>
+      <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
+        {dataset.database && (
+          <Badge
+            variant="default"
+            size="sm"
+            className={`rounded-xl ${getDatabaseColor(dataset.database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
+            onClick={e => {
+              e.stopPropagation()
+              onNavigate(
+                `/chat/databases?database=${encodeURIComponent(dataset.database)}`
+              )
+            }}
+          >
+            {dataset.database}
+          </Badge>
+        )}
+        <Badge
+          variant="default"
+          size="sm"
+          className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
+        >
+          {dataset.data_processing_strategy}
+        </Badge>
+      </div>
+      <div className="text-xs text-muted-foreground mt-2">
+        {dataset.files.length} {dataset.files.length === 1 ? 'file' : 'files'}
+      </div>
+
+      {/* Processing percentage badge */}
+      {isProcessing && (
+        <div className="absolute bottom-3 right-3">
+          <Badge
+            variant="secondary"
+            size="sm"
+            className="rounded-xl bg-primary/10 text-primary border border-primary/20"
+          >
+            Processing {processingPercent}%...
+          </Badge>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
@@ -1300,91 +1463,25 @@ const Data = () => {
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-2 mb-6">
                         {datasets.map(ds => (
-                          <div
+                          <DatasetCard
                             key={ds.id}
-                            className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                            onClick={() => navigate(`/chat/data/${ds.id}`)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                navigate(`/chat/data/${ds.id}`)
+                            dataset={ds}
+                            activeProject={activeProject}
+                            databases={databases}
+                            onNavigate={(id: string) => {
+                              // Handle navigation to dataset or databases page
+                              if (id.startsWith('/')) {
+                                navigate(id)
+                              } else {
+                                navigate(`/chat/data/${id}`)
                               }
                             }}
-                          >
-                            <div className="absolute right-3 top-3">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                                    onClick={e => e.stopPropagation()}
-                                    aria-label="Dataset actions"
-                                  >
-                                    <FontIcon
-                                      type="overflow"
-                                      className="w-4 h-4"
-                                    />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  align="end"
-                                  className="min-w-[10rem] w-[10rem]"
-                                >
-                                  {/* Edit removed - API doesn't support updating datasets */}
-                                  <DropdownMenuItem
-                                    onClick={e => {
-                                      e.stopPropagation()
-                                      navigate(`/chat/data/${ds.id}`)
-                                    }}
-                                  >
-                                    View
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={e => {
-                                      e.stopPropagation()
-                                      setConfirmDeleteId(ds.id)
-                                      setConfirmDeleteName(ds.name)
-                                      setIsConfirmDeleteOpen(true)
-                                    }}
-                                  >
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                            <div className="text-sm font-medium">{ds.name}</div>
-                            <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
-                              {ds.database && (
-                                <Badge
-                                  variant="default"
-                                  size="sm"
-                                  className={`rounded-xl ${getDatabaseColor(ds.database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
-                                  onClick={e => {
-                                    e.stopPropagation() // Prevent card click from navigating to dataset detail
-                                    // Navigate with database query parameter for reliable tab selection
-                                    navigate(
-                                      `/chat/databases?database=${encodeURIComponent(ds.database)}`
-                                    )
-                                  }}
-                                >
-                                  {ds.database}
-                                </Badge>
-                              )}
-                              <Badge
-                                variant="default"
-                                size="sm"
-                                className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
-                              >
-                                {ds.data_processing_strategy}
-                              </Badge>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-2">
-                              {ds.files.length}{' '}
-                              {ds.files.length === 1 ? 'file' : 'files'}
-                            </div>
-                          </div>
+                            onDelete={(id: string, name: string) => {
+                              setConfirmDeleteId(id)
+                              setConfirmDeleteName(name)
+                              setIsConfirmDeleteOpen(true)
+                            }}
+                          />
                         ))}
                       </div>
                     )}
