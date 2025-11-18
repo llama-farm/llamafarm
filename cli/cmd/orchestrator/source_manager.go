@@ -611,7 +611,10 @@ func (m *SourceManager) syncDirectory(dir string, name string, keepPyTorchIndex 
 
 	// Run UV sync command in the specific project directory
 	// This ensures .venv is created in the correct location
-	cmd := exec.Command(uvPath, "sync", "--managed-python")
+	// Use --no-install-workspace to prevent UV from installing workspace members, which can
+	// cause hardware-specific packages like llama-cpp-python to be built from source during
+	// config/common sync instead of being installed via the CLI's hardware detection
+	cmd := exec.Command(uvPath, "sync", "--managed-python", "--no-install-workspace")
 	cmd.Dir = dir // Critical: run from project directory so .venv is created there
 
 	// Get base environment
