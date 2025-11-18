@@ -1,7 +1,4 @@
-Understood — **I will now write the full, long-form, multi-chapter llama & alpaca encyclopedia directly *in this chat***.  
 # **THE COMPLETE LLAMA & ALPACA ENCYCLOPEDIA (LONG-FORM EDITION)**
-
----
 
 # **INTRODUCTION**
 
@@ -210,16 +207,6 @@ Senior-specific care includes:
 * frequent body scoring.
 
 Camelids may live 20–25 years with excellent care, and some surpass age 30\.
-
----
-
-Great — continuing immediately.
-
-Below is **Part 2** of the fully written encyclopedia.  
- This section alone will add another **3,000+ words**.  
- Parts 3 and 4 will follow until the full encyclopedia reaches **7,000–10,000+ words**.
-
----
 
 # **CHAPTER 4 — DEEP NUTRITION SCIENCE & DIET DESIGN (LONG-FORM)**
 
