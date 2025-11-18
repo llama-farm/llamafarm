@@ -3,6 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,8 +44,8 @@ class TestGetGgufMetadata:
 class TestGetAvailableMemory:
     """Tests for get_available_memory function."""
 
-    @patch("torch.cuda.is_available")
-    @patch("torch.cuda.get_device_properties")
+    @patch("utils.context_calculator.torch.cuda.is_available")
+    @patch("utils.context_calculator.torch.cuda.get_device_properties")
     def test_cuda_memory_detection(self, mock_props, mock_available):
         """Test CUDA memory detection."""
         mock_available.return_value = True
@@ -55,26 +56,31 @@ class TestGetAvailableMemory:
         memory = get_available_memory("cuda")
         assert memory == 8 * 1024**3
 
-    @patch("psutil.virtual_memory")
+    @patch("utils.context_calculator.psutil.virtual_memory")
     def test_cpu_memory_detection(self, mock_vm):
         """Test CPU memory detection."""
-        mock_mem = MagicMock()
-        mock_mem.available = 16 * 1024**3  # 16GB available
-        mock_mem.total = 32 * 1024**3  # 32GB total
+        # Use SimpleNamespace to avoid MagicMock formatting issues in logging
+        mock_mem = SimpleNamespace(
+            available=16 * (1024**3),  # 16GB available
+            total=32 * (1024**3),  # 32GB total
+        )
         mock_vm.return_value = mock_mem
 
         memory = get_available_memory("cpu")
-        assert memory == 16 * 1024**3
+        assert memory == 16 * (1024**3)
 
-    @patch("psutil.virtual_memory")
+    @patch("utils.context_calculator.psutil.virtual_memory")
     def test_mps_memory_detection(self, mock_vm):
         """Test MPS (Apple Silicon) memory detection."""
-        mock_mem = MagicMock()
-        mock_mem.available = 12 * 1024**3  # 12GB available
+        # Use SimpleNamespace to avoid MagicMock formatting issues in logging
+        mock_mem = SimpleNamespace(
+            available=12 * (1024**3),  # 12GB available
+            total=12 * (1024**3),  # Need total for logging
+        )
         mock_vm.return_value = mock_mem
 
         memory = get_available_memory("mps")
-        assert memory == 12 * 1024**3
+        assert memory == 12 * (1024**3)
 
 
 class TestComputeMaxContext:
@@ -227,8 +233,8 @@ class TestGetDefaultContextSize:
     ):
         """Test that excessive config value is capped with warning."""
         mock_metadata.return_value = {
-            "file_size_bytes": 6 * 1024**3,  # 6GB model
-            "file_size_mb": 6144,
+            "file_size_bytes": 7 * 1024**3,  # 7GB model
+            "file_size_mb": 7168,
         }
         mock_memory.return_value = 8 * 1024**3  # 8GB available
         mock_config.return_value = {
@@ -243,8 +249,10 @@ class TestGetDefaultContextSize:
             config_n_ctx=32768,  # User requested 32k but won't fit
         )
 
-        # Should be capped to computed maximum
-        assert n_ctx < 32768
+        # Should be capped to computed maximum (less than or equal to)
+        # With 7GB model and 8GB available at 0.8 factor, computed max will be small
+        assert n_ctx <= 32768
+        assert n_ctx < 32768  # Should be less than requested
         assert n_ctx >= 512
         assert len(warnings) > 0
         assert "exceeds computed maximum" in warnings[0]
