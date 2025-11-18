@@ -2227,8 +2227,24 @@ function DatasetView() {
                 </div>
                 <div className="rounded-md border border-input bg-background p-0 text-xs">
                   {files.length === 0 ? (
-                    <div className="p-3 text-muted-foreground">
-                      No files assigned yet.
+                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                      <FontIcon
+                        type="upload"
+                        className="w-10 h-10 text-blue-200 dark:text-white mb-4"
+                      />
+                      <div className="text-base font-medium text-foreground mb-2">
+                        Drag and drop files here
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-4 max-w-[400px]">
+                        Upload PDFs, CSVs, or other documents to add them to this dataset
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Upload files
+                      </Button>
                     </div>
                   ) : (
                     <div>
