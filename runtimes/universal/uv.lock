@@ -1412,80 +1412,6 @@ wheels = [
 ]
 
 [[package]]
-name = "transformers-runtime"
-version = "1.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "accelerate" },
-    { name = "diffusers" },
-    { name = "einops" },
-    { name = "fastapi" },
-    { name = "gguf" },
-    { name = "llama-cpp-python" },
-    { name = "llamafarm-common" },
-    { name = "openai" },
-    { name = "pillow" },
-    { name = "psutil" },
-    { name = "pydantic" },
-    { name = "python-multipart" },
-    { name = "pyyaml" },
-    { name = "structlog" },
-    { name = "torch" },
-    { name = "transformers" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-xformers = [
-    { name = "xformers" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "numpy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-timeout" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "accelerate", specifier = ">=0.25.0" },
-    { name = "diffusers", specifier = ">=0.25.0" },
-    { name = "einops", specifier = ">=0.8.1" },
-    { name = "fastapi", specifier = ">=0.104.0" },
-    { name = "gguf", specifier = ">=0.17.1" },
-    { name = "llama-cpp-python", specifier = ">=0.2.0" },
-    { name = "llamafarm-common", editable = "../../common" },
-    { name = "openai", specifier = ">=1.0.0" },
-    { name = "pillow", specifier = ">=10.0.0" },
-    { name = "psutil", specifier = ">=5.9.0" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "python-multipart" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "structlog", specifier = ">=24.0.0" },
-    { name = "torch", specifier = ">=2.0.0" },
-    { name = "transformers", specifier = ">=4.35.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
-    { name = "xformers", marker = "extra == 'xformers'", specifier = ">=0.0.22" },
-]
-provides-extras = ["xformers"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "httpx", specifier = ">=0.24.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
-    { name = "pytest", specifier = ">=7.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.21.0" },
-    { name = "pytest-cov", specifier = ">=4.0.0" },
-    { name = "pytest-timeout", specifier = ">=2.1.0" },
-    { name = "ruff", specifier = ">=0.14.3" },
-]
-
-[[package]]
 name = "triton"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1518,6 +1444,82 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/e3/70399cb7dd41c10ac53367ae42139cf4b1ca5f36bb3dc6c9d33acdb43655/typing_inspection-0.4.2.tar.gz", hash = "sha256:ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464", size = 75949, upload-time = "2025-10-01T02:14:41.687Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl", hash = "sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7", size = 14611, upload-time = "2025-10-01T02:14:40.154Z" },
+]
+
+[[package]]
+name = "universal-runtime"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "accelerate" },
+    { name = "diffusers" },
+    { name = "einops" },
+    { name = "fastapi" },
+    { name = "gguf" },
+    { name = "llamafarm-common" },
+    { name = "openai" },
+    { name = "pillow" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "structlog" },
+    { name = "transformers" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+gpu = [
+    { name = "llama-cpp-python" },
+    { name = "torch" },
+]
+xformers = [
+    { name = "xformers" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-timeout" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "accelerate", specifier = ">=0.25.0" },
+    { name = "diffusers", specifier = ">=0.25.0" },
+    { name = "einops", specifier = ">=0.8.1" },
+    { name = "fastapi", specifier = ">=0.104.0" },
+    { name = "gguf", specifier = ">=0.17.1" },
+    { name = "llama-cpp-python", marker = "extra == 'gpu'", specifier = ">=0.3.0" },
+    { name = "llamafarm-common", editable = "../../common" },
+    { name = "openai", specifier = ">=1.0.0" },
+    { name = "pillow", specifier = ">=10.0.0" },
+    { name = "psutil", specifier = ">=5.9.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "python-multipart" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "structlog", specifier = ">=24.0.0" },
+    { name = "torch", marker = "extra == 'gpu'", specifier = ">=2.0.0" },
+    { name = "transformers", specifier = ">=4.35.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
+    { name = "xformers", marker = "extra == 'xformers'", specifier = ">=0.0.22" },
+]
+provides-extras = ["gpu", "xformers"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.24.0" },
+    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "pytest", specifier = ">=7.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.21.0" },
+    { name = "pytest-cov", specifier = ">=4.0.0" },
+    { name = "pytest-timeout", specifier = ">=2.1.0" },
+    { name = "ruff", specifier = ">=0.14.3" },
 ]
 
 [[package]]
