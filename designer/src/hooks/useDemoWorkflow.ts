@@ -1,5 +1,5 @@
 /**
- * Hook for orchestrating demo app creation workflow
+ * Hook for orchestrating demo project creation workflow
  * Handles: config fetch, project creation, file upload, dataset processing
  */
 

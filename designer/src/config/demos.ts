@@ -1,5 +1,5 @@
 /**
- * Demo app configurations
+ * Demo project configurations
  * Each demo is fully self-contained with config and files
  */
 

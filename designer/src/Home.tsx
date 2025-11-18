@@ -324,7 +324,7 @@ function Home() {
           </h1>
         </div>
 
-        {/* Demo App Button */}
+        {/* Demo Project Button */}
         <div className="max-w-3xl mx-auto">
           <button
             onClick={() => demoModal.openModal()}
@@ -334,7 +334,7 @@ function Home() {
               <div className="text-5xl">🚀</div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-foreground mb-1">
-                  Try a Demo App
+                  Try a Demo Project
                 </h3>
                 <p className="text-sm text-muted-foreground">
                   Explore LlamaFarm with a pre-configured AI assistant. Ready in 30 seconds.

@@ -1,5 +1,5 @@
 /**
- * Demo App Creation Modal
+ * Demo Project Creation Modal
  * Beautiful, educational workflow showing API calls in real-time
  */
 
@@ -374,11 +374,11 @@ export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
     <Dialog open={isOpen} onOpenChange={canClose ? handleClose : undefined}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Demo App</DialogTitle>
+          <DialogTitle>Create Demo Project</DialogTitle>
           <DialogDescription>
             {!selectedDemo
               ? 'Choose a pre-configured demo to explore LlamaFarm capabilities'
-              : 'Watch your demo app being created in real-time'}
+              : 'Watch your demo project being created in real-time'}
           </DialogDescription>
         </DialogHeader>
 
