@@ -42,6 +42,7 @@ export interface ProcessingResult {
 export interface UseDemoWorkflowReturn {
   // State
   currentStep: DemoStep
+  lastValidStep: DemoStep
   progress: number
   error: string | null
   apiCalls: ApiCall[]
@@ -59,11 +60,20 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
   const queryClient = useQueryClient()
 
   const [currentStep, setCurrentStep] = useState<DemoStep>('idle')
+  const [lastValidStep, setLastValidStep] = useState<DemoStep>('idle')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [apiCalls, setApiCalls] = useState<ApiCall[]>([])
   const [projectName, setProjectName] = useState<string | null>(null)
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null)
+
+  // Wrapper to update both currentStep and lastValidStep (except for error state)
+  const updateStep = (step: DemoStep) => {
+    setCurrentStep(step)
+    if (step !== 'error') {
+      setLastValidStep(step)
+    }
+  }
 
   const addApiCall = useCallback((call: Omit<ApiCall, 'id' | 'timestamp'>) => {
     const newCall: ApiCall = {
@@ -83,6 +93,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
   const reset = useCallback(() => {
     setCurrentStep('idle')
+    setLastValidStep('idle')
     setProgress(0)
     setError(null)
     setApiCalls([])
@@ -102,7 +113,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
       try {
         // Step 1: Fetch demo config (10%)
-        setCurrentStep('fetching_config')
+        updateStep('fetching_config')
         setProgress(10)
 
         const configCallId = addApiCall({
@@ -147,7 +158,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         setProjectName(newProjectName)
 
         // Step 3: Create project (30%)
-        setCurrentStep('creating_project')
+        updateStep('creating_project')
         setProgress(30)
 
         const createCallId = addApiCall({
@@ -192,7 +203,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         setProgress(55)
 
         // Step 5: Upload files (60-80%)
-        setCurrentStep('uploading_files')
+        updateStep('uploading_files')
 
         const fileCount = demo.files.length
         for (let i = 0; i < fileCount; i++) {
@@ -235,7 +246,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         setProgress(80)
 
         // Step 6: Process dataset (90%)
-        setCurrentStep('processing_dataset')
+        updateStep('processing_dataset')
         setProgress(90)
 
         const processCallId = addApiCall({
@@ -307,7 +318,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         })
 
         // Mark as completed
-        setCurrentStep('completed')
+        updateStep('completed')
 
         // Set as active project
         localStorage.setItem('activeProject', newProjectName)
@@ -329,6 +340,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
   return {
     currentStep,
+    lastValidStep,
     progress,
     error,
     apiCalls,

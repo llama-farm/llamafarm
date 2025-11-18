@@ -64,7 +64,15 @@ function DemoSelector({ onSelect }: { onSelect: (demo: DemoConfig) => void }) {
   )
 }
 
-function StepIndicator({ step, currentStep }: { step: DemoStep; currentStep: DemoStep }) {
+function StepIndicator({
+  step,
+  currentStep,
+  lastValidStep
+}: {
+  step: DemoStep
+  currentStep: DemoStep
+  lastValidStep: DemoStep
+}) {
   const steps: DemoStep[] = [
     'fetching_config',
     'creating_project',
@@ -83,10 +91,12 @@ function StepIndicator({ step, currentStep }: { step: DemoStep; currentStep: Dem
     error: 'Error'
   }
 
-  const currentIndex = steps.indexOf(currentStep)
+  // When error occurs, use lastValidStep to determine progress
+  const effectiveCurrentStep = currentStep === 'error' ? lastValidStep : currentStep
+  const currentIndex = steps.indexOf(effectiveCurrentStep)
   const stepIndex = steps.indexOf(step)
 
-  const isActive = step === currentStep
+  const isActive = step === effectiveCurrentStep
   const isCompleted = stepIndex < currentIndex || currentStep === 'completed'
   const isError = currentStep === 'error' && isActive
 
@@ -187,6 +197,7 @@ function ApiCallItem({ call }: { call: ApiCall }) {
 function WorkflowProgress({
   demo,
   currentStep,
+  lastValidStep,
   progress,
   error,
   apiCalls,
@@ -195,6 +206,7 @@ function WorkflowProgress({
 }: {
   demo: DemoConfig
   currentStep: DemoStep
+  lastValidStep: DemoStep
   progress: number
   error: string | null
   apiCalls: ApiCall[]
@@ -243,7 +255,7 @@ function WorkflowProgress({
         <h5 className="text-sm font-medium text-foreground">Steps</h5>
         <div className="space-y-1">
           {steps.map(step => (
-            <StepIndicator key={step} step={step} currentStep={currentStep} />
+            <StepIndicator key={step} step={step} currentStep={currentStep} lastValidStep={lastValidStep} />
           ))}
         </div>
       </div>
@@ -340,7 +352,7 @@ function WorkflowProgress({
 
 export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
   const [selectedDemo, setSelectedDemo] = useState<DemoConfig | null>(null)
-  const { currentStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
+  const { currentStep, lastValidStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
     useDemoWorkflow()
 
   const handleSelectDemo = (demo: DemoConfig) => {
@@ -377,6 +389,7 @@ export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
             <WorkflowProgress
               demo={selectedDemo}
               currentStep={currentStep}
+              lastValidStep={lastValidStep}
               progress={progress}
               error={error}
               apiCalls={apiCalls}
