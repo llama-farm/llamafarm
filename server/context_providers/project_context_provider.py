@@ -1,7 +1,10 @@
 import json
 from atomic_agents.context import BaseDynamicContextProvider
 
+from core.logging import FastAPIStructLogger
 from services.project_service import ProjectService
+
+logger = FastAPIStructLogger(__name__)
 
 
 class ProjectContextProvider(BaseDynamicContextProvider):
@@ -11,12 +14,13 @@ class ProjectContextProvider(BaseDynamicContextProvider):
         self._name = name
 
     def get_info(self) -> str:
-        current_config = ProjectService.get_project(self._namespace, self._name)
-        if isinstance(current_config.config, dict):
-            config_json = json.dumps(current_config.config)
-        else:
-            config_json = current_config.config.model_dump_json()
-        return f"""
+        try:
+            current_config = ProjectService.get_project(self._namespace, self._name)
+            if isinstance(current_config.config, dict):
+                config_json = json.dumps(current_config.config)
+            else:
+                config_json = current_config.config.model_dump_json()
+            return f"""
         ## PROJECT CONTEXT
         You are interacting with a specific LlamaFarm project.
         The current project's namespace is provided within a <namespace></namespace> XML tag.
@@ -27,3 +31,11 @@ class ProjectContextProvider(BaseDynamicContextProvider):
         <name>{current_config.name}</name>
         <project_config>{config_json}</project_config>
         """
+        except Exception:
+            # Gracefully degrade if project doesn't exist (e.g., deleted but still in X-Active-Project header)
+            logger.warning(
+                f"Failed to load project context for {self._namespace}/{self._name}. "
+                "Project may have been deleted. Continuing without project context.",
+                exc_info=True,
+            )
+            return ""
