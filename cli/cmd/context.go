@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"time"
+
+	"github.com/llamafarm/cli/cmd/orchestrator"
+	"github.com/llamafarm/cli/cmd/utils"
 )
 
 type CLIContext struct {
@@ -34,8 +37,8 @@ func GetCLIContext() *CLIContext {
 		ServerURL:          serverURL,
 		OllamaHost:         ollamaHost,
 		ServerStartTimeout: serverStartTimeout,
-		OverrideCwd:        overrideCwd,
-		NoAutoStart:        noAutoStart,
+		OverrideCwd:        utils.OverrideCwd,
+		NoAutoStart:        false, // Feature removed - always false for now
 	}
 }
 
@@ -50,57 +53,53 @@ func NewServiceConfigFactory(ctx *CLIContext) *ServiceConfigFactory {
 }
 
 // StartCommand creates config for lf start - Server required, RAG optional (background)
-func (f *ServiceConfigFactory) StartCommand(serverURL string) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
+func (f *ServiceConfigFactory) StartCommand(serverURL string) *orchestrator.ServiceOrchestrationConfig {
+	return &orchestrator.ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional,
+		ServiceNeeds: map[string]orchestrator.ServiceRequirement{
+			"server": orchestrator.ServiceRequired,
+			"rag":    orchestrator.ServiceOptional,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		NoAutoStart:    f.ctx.NoAutoStart,
 	}
 }
 
 // RAGCommand creates config for RAG commands - Both server and RAG required
-func (f *ServiceConfigFactory) RAGCommand(serverURL string) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
+func (f *ServiceConfigFactory) RAGCommand(serverURL string) *orchestrator.ServiceOrchestrationConfig {
+	return &orchestrator.ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceRequired,
+		ServiceNeeds: map[string]orchestrator.ServiceRequirement{
+			"server": orchestrator.ServiceRequired,
+			"rag":    orchestrator.ServiceRequired,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		NoAutoStart:    f.ctx.NoAutoStart,
 	}
 }
 
 // ChatNoRAG creates config for lf chat --no-rag - Only server
-func (f *ServiceConfigFactory) ChatNoRAG(serverURL string) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
+func (f *ServiceConfigFactory) ChatNoRAG(serverURL string) *orchestrator.ServiceOrchestrationConfig {
+	return &orchestrator.ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
+		ServiceNeeds: map[string]orchestrator.ServiceRequirement{
+			"server": orchestrator.ServiceRequired,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		NoAutoStart:    f.ctx.NoAutoStart,
 	}
 }
 
 // ServerOnly creates config for server-only commands - Server required, RAG optional (background)
-func (f *ServiceConfigFactory) ServerOnly(serverURL string) *ServiceOrchestrationConfig {
-	return &ServiceOrchestrationConfig{
+func (f *ServiceConfigFactory) ServerOnly(serverURL string) *orchestrator.ServiceOrchestrationConfig {
+	return &orchestrator.ServiceOrchestrationConfig{
 		ServerURL:   serverURL,
 		PrintStatus: true,
-		ServiceNeeds: map[string]ServiceRequirement{
-			"server": ServiceRequired,
-			"rag":    ServiceOptional,
+		ServiceNeeds: map[string]orchestrator.ServiceRequirement{
+			"server": orchestrator.ServiceRequired,
+			"rag":    orchestrator.ServiceOptional,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		NoAutoStart:    f.ctx.NoAutoStart,
 	}
 }
 
