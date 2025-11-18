@@ -153,7 +153,7 @@ class ProjectChatService:
             async for chunk in chat_agent.run_async_stream(
                 messages=messages,
                 tools=tools,
-                extra_params=extra_params if extra_params else None,
+                extra_params=extra_params or None,
             ):
                 yield chunk
         except Exception:

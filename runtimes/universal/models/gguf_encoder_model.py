@@ -138,6 +138,10 @@ class GGUFEncoderModel(BaseModel):
         """
         assert self.llama is not None, "Model not loaded. Call load() first."
 
+        # Short-circuit for empty input to avoid numpy.AxisError during normalization
+        if not texts:
+            return []
+
         # Run embedding generation in thread pool (blocking call)
         loop = asyncio.get_running_loop()
 
@@ -175,9 +179,13 @@ class GGUFEncoderModel(BaseModel):
                 embeddings = embeddings_array.tolist()
 
             return embeddings
+        except RuntimeError:
+            # Re-raise errors from _generate_embeddings() with their original message
+            raise
         except Exception as e:
-            logger.error(f"Error processing embedding results: {e}", exc_info=True)
-            raise ValueError(f"Unexpected embedding result structure: {e}") from e
+            # Handle errors from normalization or other processing steps
+            logger.error(f"Error during embedding post-processing: {e}", exc_info=True)
+            raise RuntimeError(f"Failed to process embeddings: {e}") from e
 
     async def generate(self, *args, **kwargs):
         """Not applicable for encoder models."""

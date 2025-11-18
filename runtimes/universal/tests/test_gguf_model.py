@@ -4,7 +4,11 @@ import pytest
 import os
 from unittest.mock import Mock, patch, MagicMock
 from models.gguf_language_model import GGUFLanguageModel
-from utils.model_format import detect_model_format, get_gguf_file_path, clear_format_cache
+from utils.model_format import (
+    detect_model_format,
+    get_gguf_file_path,
+    clear_format_cache,
+)
 
 
 class TestModelFormatDetection:
@@ -25,8 +29,10 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model.gguf", "config.json"]
 
-        with patch('utils.model_format.HfApi', return_value=mock_api):
-            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+        with patch("utils.model_format.HfApi", return_value=mock_api):
+            with patch(
+                "utils.model_format.snapshot_download", return_value=str(model_dir)
+            ):
                 format_type = detect_model_format("test/model")
                 assert format_type == "gguf"
 
@@ -45,8 +51,10 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["config.json", "pytorch_model.bin"]
 
-        with patch('utils.model_format.HfApi', return_value=mock_api):
-            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+        with patch("utils.model_format.HfApi", return_value=mock_api):
+            with patch(
+                "utils.model_format.snapshot_download", return_value=str(model_dir)
+            ):
                 format_type = detect_model_format("test/model")
                 assert format_type == "transformers"
 
@@ -63,8 +71,10 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model.gguf"]
 
-        with patch('utils.model_format.HfApi', return_value=mock_api) as mock_hf_api:
-            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+        with patch("utils.model_format.HfApi", return_value=mock_api) as mock_hf_api:
+            with patch(
+                "utils.model_format.snapshot_download", return_value=str(model_dir)
+            ):
                 # First call should trigger API call
                 format1 = detect_model_format("test/model")
                 assert format1 == "gguf"
@@ -86,10 +96,12 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model-q4_k_m.gguf"]
 
-        with patch('utils.model_format.HfApi', return_value=mock_api):
-            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+        with patch("utils.model_format.HfApi", return_value=mock_api):
+            with patch(
+                "utils.model_format.snapshot_download", return_value=str(model_dir)
+            ):
                 gguf_path = get_gguf_file_path("test/model")
-                assert gguf_path.endswith('.gguf')
+                assert gguf_path.endswith(".gguf")
                 assert os.path.exists(gguf_path)
 
     def test_get_gguf_file_path_not_found(self, tmp_path):
@@ -102,9 +114,13 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["config.json"]
 
-        with patch('utils.model_format.HfApi', return_value=mock_api):
-            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
-                with pytest.raises(FileNotFoundError, match="No GGUF files found in model repository"):
+        with patch("utils.model_format.HfApi", return_value=mock_api):
+            with patch(
+                "utils.model_format.snapshot_download", return_value=str(model_dir)
+            ):
+                with pytest.raises(
+                    FileNotFoundError, match="No GGUF files found in model repository"
+                ):
                     get_gguf_file_path("test/model")
 
     def test_get_gguf_file_path_multiple_files(self, tmp_path):
@@ -118,10 +134,12 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model-q4.gguf", "model-q8.gguf"]
 
-        with patch('utils.model_format.HfApi', return_value=mock_api):
-            with patch('utils.model_format.snapshot_download', return_value=str(model_dir)):
+        with patch("utils.model_format.HfApi", return_value=mock_api):
+            with patch(
+                "utils.model_format.snapshot_download", return_value=str(model_dir)
+            ):
                 gguf_path = get_gguf_file_path("test/model")
-                assert gguf_path.endswith('.gguf')
+                assert gguf_path.endswith(".gguf")
                 assert os.path.exists(gguf_path)
 
 
@@ -149,7 +167,7 @@ class TestGGUFLanguageModel:
         model = GGUFLanguageModel("test/model", "cpu")
         messages = [
             {"role": "system", "content": "You are helpful"},
-            {"role": "user", "content": "Hello"}
+            {"role": "user", "content": "Hello"},
         ]
         prompt = model.format_messages(messages)
         assert "System: You are helpful" in prompt
@@ -163,7 +181,7 @@ class TestGGUFLanguageModel:
             {"role": "system", "content": "You are helpful"},
             {"role": "user", "content": "What is 2+2?"},
             {"role": "assistant", "content": "2+2 equals 4"},
-            {"role": "user", "content": "Thanks"}
+            {"role": "user", "content": "Thanks"},
         ]
         prompt = model.format_messages(messages)
         assert "System: You are helpful" in prompt
@@ -186,9 +204,14 @@ class TestGGUFLanguageModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch('models.gguf_language_model.get_gguf_file_path', return_value=str(gguf_file)):
-            with patch('models.gguf_language_model.get_default_context_size', return_value=(2048, [])):
-                with patch('models.gguf_language_model.Llama', return_value=mock_llama):
+        with patch(
+            "models.gguf_language_model.get_gguf_file_path", return_value=str(gguf_file)
+        ):
+            with patch(
+                "models.gguf_language_model.get_default_context_size",
+                return_value=(2048, []),
+            ):
+                with patch("models.gguf_language_model.Llama", return_value=mock_llama):
                     await model.load()
                     assert model.llama is not None
 
@@ -206,14 +229,21 @@ class TestGGUFLanguageModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch('models.gguf_language_model.get_gguf_file_path', return_value=str(gguf_file)):
-            with patch('models.gguf_language_model.get_default_context_size', return_value=(2048, [])):
-                with patch('models.gguf_language_model.Llama', return_value=mock_llama) as mock_llama_cls:
+        with patch(
+            "models.gguf_language_model.get_gguf_file_path", return_value=str(gguf_file)
+        ):
+            with patch(
+                "models.gguf_language_model.get_default_context_size",
+                return_value=(2048, []),
+            ):
+                with patch(
+                    "models.gguf_language_model.Llama", return_value=mock_llama
+                ) as mock_llama_cls:
                     await model.load()
                     assert model.llama is not None
                     # Verify that n_gpu_layers=-1 was passed for GPU
                     call_kwargs = mock_llama_cls.call_args[1]
-                    assert call_kwargs['n_gpu_layers'] == -1
+                    assert call_kwargs["n_gpu_layers"] == -1
 
     @pytest.mark.asyncio
     async def test_generate_not_loaded(self):
@@ -235,13 +265,16 @@ class TestGGUFLanguageModel:
 
         # Mock llama instance that returns generation result
         mock_llama = MagicMock()
-        mock_llama.return_value = {
-            'choices': [{'text': 'Hello! How can I help?'}]
-        }
+        mock_llama.return_value = {"choices": [{"text": "Hello! How can I help?"}]}
 
-        with patch('models.gguf_language_model.get_gguf_file_path', return_value=str(gguf_file)):
-            with patch('models.gguf_language_model.get_default_context_size', return_value=(2048, [])):
-                with patch('models.gguf_language_model.Llama', return_value=mock_llama):
+        with patch(
+            "models.gguf_language_model.get_gguf_file_path", return_value=str(gguf_file)
+        ):
+            with patch(
+                "models.gguf_language_model.get_default_context_size",
+                return_value=(2048, []),
+            ):
+                with patch("models.gguf_language_model.Llama", return_value=mock_llama):
                     await model.load()
                     result = await model.generate("Hi", max_tokens=10)
                     assert result == "Hello! How can I help?"
@@ -254,6 +287,34 @@ class TestGGUFLanguageModel:
         with pytest.raises(AssertionError, match="Model not loaded"):
             async for _ in model.generate_stream("Hello"):
                 pass
+
+    @pytest.mark.asyncio
+    async def test_generate_stream_exception_in_thread(self, caplog):
+        """Test generate_stream handles exception from llama-cpp-python gracefully."""
+        import logging
+
+        model = GGUFLanguageModel("test/model", "cpu")
+
+        # Mock the llama instance
+        mock_llama = Mock()
+        model.llama = mock_llama
+
+        # Simulate llama-cpp-python raising an exception during streaming
+        def raise_exception(*args, **kwargs):
+            raise RuntimeError("Simulated llama-cpp-python error")
+
+        mock_llama.side_effect = raise_exception
+
+        with caplog.at_level(logging.ERROR):
+            gen = model.generate_stream("Hi", max_tokens=10)
+            with pytest.raises(RuntimeError, match="Simulated llama-cpp-python error"):
+                # Exhaust the generator to trigger the exception
+                async for _ in gen:
+                    pass
+            # Verify that an error was logged
+            assert any(
+                "Simulated llama-cpp-python error" in r.message for r in caplog.records
+            )
 
 
 @pytest.mark.integration
