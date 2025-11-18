@@ -52,6 +52,7 @@ import {
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import { getDatabaseColor } from '../../utils/databaseColors'
 
 // Maximum priority value as defined in rag/schema.yaml
 const MAX_PRIORITY = 1000
@@ -103,8 +104,8 @@ function StrategyView() {
   const allDatasets = useMemo(() => {
     if (datasetsResp?.datasets && datasetsResp.datasets.length > 0) {
       return datasetsResp.datasets.map(d => {
-        const { name } = d
-        let ragStrategy = (d as any).rag_strategy as string | undefined
+        const { name, database, data_processing_strategy } = d
+        let ragStrategy = data_processing_strategy
         // Overlay local per-dataset override if present
         try {
           const storedName = localStorage.getItem(
@@ -114,13 +115,18 @@ function StrategyView() {
             ragStrategy = storedName
           }
         } catch {}
-        return { name, rag_strategy: ragStrategy }
+        return { name, database, rag_strategy: ragStrategy }
       })
     }
     // Local fallback: minimal name + strategy from localStorage, if present
     try {
       const raw = localStorage.getItem('lf_datasets')
-      if (!raw) return [] as { name: string; rag_strategy?: string }[]
+      if (!raw)
+        return [] as {
+          name: string
+          database?: string
+          rag_strategy?: string
+        }[]
       const arr = JSON.parse(raw)
       if (!Array.isArray(arr)) return []
       return arr
@@ -130,11 +136,19 @@ function StrategyView() {
           const storedName = localStorage.getItem(
             `lf_dataset_strategy_name_${name}`
           )
-          return { name, rag_strategy: storedName || 'auto' }
+          return {
+            name,
+            database: d.database,
+            rag_strategy: storedName || 'auto',
+          }
         })
-        .filter(Boolean) as { name: string; rag_strategy?: string }[]
+        .filter(Boolean) as {
+        name: string
+        database?: string
+        rag_strategy?: string
+      }[]
     } catch {
-      return [] as { name: string; rag_strategy?: string }[]
+      return [] as { name: string; database?: string; rag_strategy?: string }[]
     }
   }, [datasetsResp])
 
@@ -199,7 +213,9 @@ function StrategyView() {
     return found?.description || ''
   }, [strategyId])
 
-  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const projectConfig = (projectResp as any)?.project?.config as
+    | ProjectConfig
+    | undefined
   const getStrategyLocation = useCallback(() => {
     if (actualStrategyName) {
       return {
@@ -216,7 +232,6 @@ function StrategyView() {
     getLocation: getStrategyLocation,
   })
 
-
   // RAG Strategy hook for parser/extractor updates - use ACTUAL name from config
   const ragStrategy = useRagStrategy(
     activeProject?.namespace || '',
@@ -229,11 +244,18 @@ function StrategyView() {
 
   // Datasets using this strategy (from API) -----------------------------------
   const assignedDatasets = useMemo(() => {
-    if (!allDatasets || !actualStrategyName) return [] as string[]
+    if (!allDatasets || !actualStrategyName)
+      return [] as Array<{ name: string; database?: string }>
     return allDatasets
       .filter(d => d.rag_strategy === actualStrategyName)
-      .map(d => d.name)
+      .map(d => ({ name: d.name, database: d.database }))
   }, [allDatasets, actualStrategyName])
+
+  // Get databases from config for color assignment
+  const databases = useMemo(() => {
+    const projectConfig = (projectResp as any)?.project?.config
+    return projectConfig?.rag?.databases || []
+  }, [projectResp])
 
   const canReprocess =
     assignedDatasets.length > 0 && needsReprocess && !reIngestMutation.isPending
@@ -247,7 +269,7 @@ function StrategyView() {
   useEffect(() => {
     if (!isManageOpen) return
     // Initialize selection from currently assigned
-    setSelectedDatasets(new Set(assignedDatasets))
+    setSelectedDatasets(new Set(assignedDatasets.map(d => d.name)))
   }, [isManageOpen, assignedDatasets])
 
   const toggleDataset = (name: string) => {
@@ -1292,16 +1314,28 @@ function StrategyView() {
                 </>
               ) : (
                 <>
-                  {assignedDatasets.map(u => (
+                  {assignedDatasets.slice(0, 3).map(ds => (
                     <Badge
-                      key={u}
+                      key={ds.name}
                       variant="default"
                       size="sm"
-                      className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                      className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() =>
+                        navigate(`/chat/data/${encodeURIComponent(ds.name)}`)
+                      }
                     >
-                      {u}
+                      {ds.name}
                     </Badge>
                   ))}
+                  {assignedDatasets.length > 3 && (
+                    <Badge
+                      variant="default"
+                      size="sm"
+                      className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
+                    >
+                      +{assignedDatasets.length - 3}
+                    </Badge>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -1341,24 +1375,24 @@ function StrategyView() {
                   if (!activeProject?.namespace || !activeProject?.project)
                     return
                   const failures: string[] = []
-                  for (const n of assignedDatasets) {
+                  for (const ds of assignedDatasets) {
                     try {
                       await reIngestMutation.mutateAsync({
                         namespace: activeProject.namespace!,
                         project: activeProject.project!,
-                        dataset: n,
+                        dataset: ds.name,
                       })
                       toast({
-                        message: `Reprocessing ${n}…`,
+                        message: `Reprocessing ${ds.name}…`,
                         variant: 'default',
                       })
                     } catch (e) {
-                      console.error('Failed to start reprocessing', n, e)
+                      console.error('Failed to start reprocessing', ds.name, e)
                       toast({
-                        message: `Failed to start reprocessing ${n}`,
+                        message: `Failed to start reprocessing ${ds.name}`,
                         variant: 'destructive',
                       })
-                      failures.push(n)
+                      failures.push(ds.name)
                     }
                   }
                   if (failures.length === 0) {
