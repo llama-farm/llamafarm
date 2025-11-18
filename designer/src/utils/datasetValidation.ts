@@ -129,7 +129,7 @@ export const validateAllDatasetNames = (
       })
     }
     
-    seenNames.push(datasetName!)
+    seenNames.push(datasetName!.trim())
   }
   
   return {
