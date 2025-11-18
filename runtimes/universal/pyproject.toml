@@ -31,13 +31,19 @@ dev = [
   "pytest-timeout>=2.1.0",
   "httpx>=0.24.0",
   "numpy>=1.24.0",
+  # For testing: torch and llama-cpp-python will use CPU wheels via UV_EXTRA_INDEX_URL in CI
+  "torch>=2.0.0",
+  "llama-cpp-python>=0.3.0",
 ]
 
 [project.optional-dependencies]
 # Hardware-accelerated packages installed separately via CLI based on detected hardware
 # These are not installed during 'uv sync' to avoid compilation dependencies
+# Note: torch and llama-cpp-python are now in dev group for testing
 gpu = ["torch>=2.0.0", "llama-cpp-python>=0.3.0"]
-xformers = ["xformers>=0.0.22"]
+# xformers is GPU-only and must be installed manually when needed:
+#   uv pip install xformers
+# (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
 
 [build-system]
 requires = ["hatchling"]

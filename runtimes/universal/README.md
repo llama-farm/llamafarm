@@ -572,11 +572,14 @@ The `pyproject.toml` constraint (`requires-python = ">=3.11,<3.14"`) ensures onl
 
 ### Optional: Install xformers (for Diffusion optimization)
 
+**GPU-only** - xformers requires CUDA and is not available for CPU-only installations.
+
 ```bash
+# Only install on CUDA-enabled systems
 uv pip install xformers
 ```
 
-This significantly speeds up Stable Diffusion models on CUDA GPUs.
+This significantly speeds up Stable Diffusion models on CUDA GPUs. xformers is installed manually (not via extras) to avoid lockfile conflicts with CPU-only PyTorch builds used in CI/testing.
 
 ---
 

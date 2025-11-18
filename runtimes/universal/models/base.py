@@ -2,11 +2,11 @@
 Base model class for all HuggingFace models (transformers & diffusers).
 """
 
-from abc import ABC, abstractmethod
-from typing import Optional, Any, Dict
-import torch
 import logging
+from abc import ABC, abstractmethod
+from typing import Any, Optional
 
+import torch
 from transformers import PreTrainedTokenizerBase
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class BaseModel(ABC):
 
         logger.info(f"Model unloaded: {self.model_id}")
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
         return {
             "model_id": self.model_id,
