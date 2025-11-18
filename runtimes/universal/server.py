@@ -203,9 +203,14 @@ async def load_language(
                                 Only downloads the specified quantization to save disk space.
     """
 
-    # Include n_ctx in cache key for GGUF models so different context sizes are cached separately
+    # Include n_ctx and quantization in cache key for GGUF models so different configurations are cached separately
     # Use "auto" for None to allow automatic context size computation
-    cache_key = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}"
+    # Use "default" for None quantization to use Q4_K_M default
+    # Transformers are obviously not quantized, so just ignore in that case
+    quant_key = (
+        preferred_quantization if preferred_quantization is not None else "default"
+    )
+    cache_key = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key}"
     if cache_key not in _models:
         async with _model_load_lock:
             # Double-check if model was loaded while waiting for the lock
@@ -260,7 +265,12 @@ async def load_encoder(
     """
     # Detect model format for proper caching and loading
     model_format = detect_model_format(model_id)
-    cache_key = f"encoder:{task}:{model_format}:{model_id}"
+    # Include quantization in cache key for GGUF models so different quantizations are cached separately
+    # Use "default" for None quantization to use Q4_K_M default
+    quant_key = (
+        preferred_quantization if preferred_quantization is not None else "default"
+    )
+    cache_key = f"encoder:{task}:{model_format}:{model_id}:quant{quant_key}"
 
     if cache_key not in _models:
         async with _model_load_lock:
