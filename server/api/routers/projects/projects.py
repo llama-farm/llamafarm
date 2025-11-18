@@ -377,6 +377,7 @@ class ChatRequest(BaseModel):
     temperature: float | None = None
     tool_choice: str | dict | None = None
     tools: list[ChatCompletionToolParam] | None = None
+    # tools: dict | None = None
     top_logprobs: int | None = None
     top_p: float | None = None
     user: str | None = None

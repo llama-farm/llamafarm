@@ -143,19 +143,15 @@ Examples:
 		ns = serverCfg.Namespace
 		proj = serverCfg.Project
 
-		// Construct context for request (without contacting server yet)
-		ctx := &ChatSessionContext{
-			ServerURL:        serverURL,
-			Namespace:        ns,
-			ProjectID:        proj,
-			SessionMode:      SessionModeStateless,
-			SessionNamespace: ns,
-			SessionProject:   proj,
-			Temperature:      temperature,
-			MaxTokens:        maxTokens,
-			HTTPClient:       utils.GetHTTPClient(),
-			Model:            runModel,
-			// RAG settings - RAG is enabled by default unless --no-rag is used
+		// Construct configuration for ChatManager
+		cfg := &ChatConfig{
+			ServerURL:            serverURL,
+			Namespace:            ns,
+			ProjectID:            proj,
+			SessionMode:          SessionModeStateless,
+			SessionNamespace:     ns,
+			SessionProject:       proj,
+			Model:                runModel,
 			RAGEnabled:           !runNoRAG,
 			RAGDatabase:          runRAGDatabase,
 			RAGRetrievalStrategy: runRetrievalStrategy,
@@ -163,13 +159,22 @@ Examples:
 			RAGScoreThreshold:    runRAGScoreThreshold,
 		}
 
+		// Create ChatManager
+		mgr, err := NewChatManager(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating chat manager: %v\n", err)
+			os.Exit(1)
+		}
+
 		messages := []Message{{Role: "user", Content: input}}
 
 		if dryRun {
-			if err := printRunCurlCommand(messages, ctx); err != nil {
+			curlCmd, err := mgr.BuildCurlCommand(messages)
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error generating curl command: %v\n", err)
 				os.Exit(1)
 			}
+			fmt.Println(curlCmd)
 			return
 		}
 
@@ -181,7 +186,9 @@ Examples:
 			// RAG enabled - explicitly ensure all three services
 			orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
 		}
-		resp, err := sendChatRequest(messages, ctx)
+
+		// Send message and get response
+		resp, err := mgr.SendMessages(messages)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -206,13 +213,4 @@ func init() {
 	chatCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the equivalent curl command instead of executing the request")
 
 	rootCmd.AddCommand(chatCmd)
-}
-
-func printRunCurlCommand(messages []Message, ctx *ChatSessionContext) error {
-	curlCmd, err := buildChatCurl(messages, ctx)
-	if err != nil {
-		return err
-	}
-	fmt.Println(curlCmd)
-	return nil
 }
