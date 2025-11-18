@@ -49,6 +49,57 @@ func renderMarkdown(content string, width int) string {
 	return content
 }
 
+// renderAssistantContent processes assistant message content, applying gray styling to <think> tags
+func renderAssistantContent(content string, width int) string {
+	// Check if content contains <think> tags
+	if !strings.Contains(content, "<think>") && !strings.Contains(content, "</think>") {
+		// No think tags, render normally
+		return renderMarkdown(content, width)
+	}
+
+	// Parse and style content with think tags
+	var result strings.Builder
+	grayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+
+	// Simple state machine to track if we're inside a think tag
+	inThinkTag := false
+	remainder := content
+
+	for len(remainder) > 0 {
+		if inThinkTag {
+			// Look for closing tag
+			if idx := strings.Index(remainder, "</think>"); idx >= 0 {
+				// Content inside think tag - render in gray
+				thinkContent := remainder[:idx]
+				result.WriteString(grayStyle.Render(thinkContent))
+				remainder = remainder[idx+8:] // Skip past </think>
+				inThinkTag = false
+			} else {
+				// No closing tag found, render rest in gray
+				result.WriteString(grayStyle.Render(remainder))
+				remainder = ""
+			}
+		} else {
+			// Look for opening tag
+			if idx := strings.Index(remainder, "<think>"); idx >= 0 {
+				// Content before think tag - render normally
+				beforeThink := remainder[:idx]
+				if beforeThink != "" {
+					result.WriteString(renderMarkdown(beforeThink, width))
+				}
+				remainder = remainder[idx+7:] // Skip past <think>
+				inThinkTag = true
+			} else {
+				// No opening tag found, render rest normally
+				result.WriteString(renderMarkdown(remainder, width))
+				remainder = ""
+			}
+		}
+	}
+
+	return result.String()
+}
+
 // renderToolCall renders a tool call as a styled bordered block
 func renderToolCall(toolCall ToolCallItem, width int) string {
 	// Parse arguments JSON for pretty display
@@ -1608,8 +1659,8 @@ func computeTranscript(m chatModel) string {
 						line += renderToolCall(toolCall, m.width)
 					}
 				} else if message.Content != "" {
-					// Render Markdown content with ANSI styling
-					renderedContent := renderMarkdown(message.Content, m.width-len(m.getAssistantLabel())-4)
+					// Render content with think tag support
+					renderedContent := renderAssistantContent(message.Content, m.width-len(m.getAssistantLabel())-4)
 					// Don't use lipgloss.Render on the rendered content to preserve ANSI codes
 					labelStyle := baseStyle.Foreground(lipgloss.Color("11"))
 					line = labelStyle.Render(m.getAssistantLabel()) + " " + renderedContent + "\n"
