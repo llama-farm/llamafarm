@@ -1360,7 +1360,14 @@ const Data = () => {
                                 <Badge
                                   variant="default"
                                   size="sm"
-                                  className={`rounded-xl ${getDatabaseColor(ds.database, databases)}`}
+                                  className={`rounded-xl ${getDatabaseColor(ds.database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
+                                  onClick={e => {
+                                    e.stopPropagation() // Prevent card click from navigating to dataset detail
+                                    // Navigate with database query parameter for reliable tab selection
+                                    navigate(
+                                      `/chat/databases?database=${encodeURIComponent(ds.database)}`
+                                    )
+                                  }}
                                 >
                                   {ds.database}
                                 </Badge>

@@ -47,7 +47,11 @@ import {
   useDeleteDatasetFile,
   useDeleteDataset,
 } from '../../hooks/useDatasets'
-import { DatasetFile } from '../../types/datasets'
+import {
+  DatasetFile,
+  ProcessDatasetResponse,
+  FileProcessingDetail,
+} from '../../types/datasets'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
@@ -117,7 +121,8 @@ function DatasetView() {
 
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
-  const [processingResult, setProcessingResult] = useState<any>(null)
+  const [processingResult, setProcessingResult] =
+    useState<ProcessDatasetResponse | null>(null)
   const [processingFailure, setProcessingFailure] = useState<{
     error: string
     timestamp: Date
@@ -893,6 +898,31 @@ function DatasetView() {
     setShowDeleteConfirmation(false)
   }
 
+  // Helper function to get processing status for a file
+  const getFileProcessingStatus = (fileHash: string | undefined): boolean => {
+    if (!fileHash || !processingResult?.details) {
+      return false // Not processed if no hash or no processing data
+    }
+
+    const fileDetail = processingResult.details.find(
+      (detail: FileProcessingDetail) =>
+        detail.file_hash === fileHash || detail.hash === fileHash
+    )
+
+    if (!fileDetail) {
+      return false // Not processed if not in results
+    }
+
+    // Check if file was successfully processed or skipped
+    const detailsObj = fileDetail.details || {}
+    const resultObj = detailsObj.result || {}
+    const isSkipped =
+      resultObj.status === 'skipped' || detailsObj.status === 'skipped'
+    const isProcessed = fileDetail.success === true
+
+    return isProcessed || isSkipped
+  }
+
   const handleDeleteFile = (fileHash: string) => {
     if (!activeProject?.namespace || !activeProject?.project || !datasetId)
       return
@@ -1064,7 +1094,11 @@ function DatasetView() {
                           variant="default"
                           size="sm"
                           className={`rounded-xl ${getDatabaseColor((currentApiDataset as any).database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
-                          onClick={() => navigate('/chat/databases')}
+                          onClick={() => {
+                            // Navigate with database query parameter for reliable tab selection
+                            const databaseName = (currentApiDataset as any).database
+                            navigate(`/chat/databases?database=${encodeURIComponent(databaseName)}`)
+                          }}
                         >
                           {(currentApiDataset as any).database}
                         </Badge>
@@ -2330,10 +2364,22 @@ function DatasetView() {
                                   )}
                                 </div>
                                 <div className="w-1/2 flex items-center justify-between gap-4">
-                                  <div className="text-xs text-muted-foreground">
-                                    {f.size === 'unknown' || f.fullHash
-                                      ? 'N/A'
-                                      : `${Math.ceil(f.size / 1024)} KB`}
+                                  <div className="text-xs flex items-center gap-1.5">
+                                    {getFileProcessingStatus(f.fullHash) ? (
+                                      <>
+                                        <FontIcon
+                                          type="checkmark-outline"
+                                          className="w-3.5 h-3.5 text-green-600 dark:text-green-400"
+                                        />
+                                        <span className="text-green-600 dark:text-green-400 font-medium">
+                                          Processed
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        Not Processed
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-6">
                                     {fileUploadStatuses.find(s => s.id === f.id)
