@@ -191,7 +191,8 @@ jobs:
         run: |
           if [ -f "uv.lock" ]; then
             # Install main + dev dependencies only (skip optional extras that may have platform requirements)
-            uv sync --group dev
+            # Use --frozen to avoid re-resolving dependencies from extras that aren't being installed
+            uv sync --group dev --frozen
           else
             echo "No uv.lock found, attempting to install from pyproject.toml"
             uv pip install -e .
