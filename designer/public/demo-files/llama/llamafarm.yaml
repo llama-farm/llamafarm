@@ -1,0 +1,223 @@
+version: v1
+name: demo-app
+namespace: default
+
+# =============================================================================
+# RUNTIME CONFIGURATION - Ollama with fast, lightweight model
+# =============================================================================
+runtime:
+  models:
+    - name: default
+      description: "Fast Ollama model for demo - Llama & Alpaca expert"
+      provider: ollama
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1
+
+# =============================================================================
+# PROMPTS CONFIGURATION - Llama & Alpaca Encyclopedia Expert
+# =============================================================================
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are an expert on llamas and alpacas (South American camelids) with deep knowledge of:
+          - Breeding, husbandry, and care
+          - Fiber production and processing
+          - Nutrition and health management
+          - Behavior and training
+          - Veterinary care and emergency response
+
+          Your expertise comes from a comprehensive encyclopedia covering evolution, anatomy,
+          life stages, nutrition, diseases, parasites, breeding, behavior, training, fiber science,
+          medical emergencies, facilities, senior care, and future research.
+
+          When answering questions:
+          - Provide detailed, accurate information based on the knowledge base
+          - Cite specific chapters or sections when relevant (e.g., "According to Chapter 4 on Nutrition...")
+          - Use technical terminology when appropriate, but explain it clearly
+          - Give practical, actionable advice for camelid owners and breeders
+          - If information isn't in the knowledge base, state that clearly
+          - Be thorough but organized - use bullet points and headings for complex topics
+
+          Always prioritize animal welfare and evidence-based practices based on the documents provided. 
+
+# =============================================================================
+# DATASETS CONFIGURATION - Llama encyclopedia demo dataset
+# =============================================================================
+datasets:
+  - name: llama_encyclopedia
+    database: llama_knowledge_db
+    data_processing_strategy: markdown_encyclopedia_processor
+    files: []
+
+# =============================================================================
+# RAG CONFIGURATION - Optimized for structured markdown documents
+# =============================================================================
+rag:
+  default_database: llama_knowledge_db
+
+  # =============================================================================
+  # DATABASE CONFIGURATION - ChromaDB optimized for encyclopedic content
+  # =============================================================================
+  databases:
+    - name: "llama_knowledge_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/llama_knowledge_db"
+        distance_function: "cosine"
+        collection_name: "llama_encyclopedia"
+
+      # Embedding configuration - high quality embeddings
+      default_embedding_strategy: "semantic_embeddings"
+      embedding_strategies:
+        - name: "semantic_embeddings"
+          type: "OllamaEmbedder"
+          priority: 0
+          config:
+            model: nomic-embed-text
+            dimension: 768
+            batch_size: 32
+            timeout: 90
+            auto_pull: true
+
+      # Retrieval configuration - semantic search with high recall
+      default_retrieval_strategy: "comprehensive_search"
+      retrieval_strategies:
+        - name: "comprehensive_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 12
+          default: true
+
+        - name: "precise_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 5
+
+  # =============================================================================
+  # DATA PROCESSING STRATEGY - Optimized for markdown encyclopedia
+  # =============================================================================
+  data_processing_strategies:
+    - name: "markdown_encyclopedia_processor"
+      description: "Markdown processor optimized for structured encyclopedic content with chapter/section hierarchy"
+
+      parsers:
+        # Primary: Python markdown parser with section-based chunking
+        - type: "MarkdownParser_Python"
+          file_include_patterns:
+            - "*.md"
+            - "*.markdown"
+            - "*.mdown"
+            - "*.mkd"
+            - "README*"
+          priority: 10
+          config:
+            chunk_size: 1200
+            chunk_strategy: "sections"  # Split by markdown sections/headings
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+
+        # Fallback: Python text parser for other text files
+        - type: "TextParser_Python"
+          file_include_patterns:
+            - "*.txt"
+            - "*.text"
+          priority: 50
+          config:
+            chunk_size: 1000
+            chunk_overlap: 150
+            chunk_strategy: "paragraphs"
+            encoding: "utf-8"
+            clean_text: true
+            extract_metadata: true
+
+      # Metadata extractors optimized for encyclopedic content
+      extractors:
+        # Extract document structure (chapters, sections)
+        - type: "HeadingExtractor"
+          file_include_patterns: ["*.md", "*.markdown"]
+          priority: 5
+          config:
+            max_level: 6
+            include_hierarchy: true
+            extract_outline: true
+            min_heading_length: 3
+
+        # Extract content statistics for search optimization
+        - type: "ContentStatisticsExtractor"
+          file_include_patterns: ["*"]
+          priority: 10
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+            include_language: true
+
+        # Extract key terms and concepts
+        - type: "KeywordExtractor"
+          file_include_patterns: ["*"]
+          priority: 20
+          config:
+            algorithm: "yake"
+            max_keywords: 20
+            min_keyword_length: 3
+            language: "en"
+            max_ngram_size: 3
+            deduplication_threshold: 0.9
+
+        # Extract entities (animals, breeds, diseases, locations)
+        - type: "EntityExtractor"
+          file_include_patterns: ["*"]
+          priority: 30
+          config:
+            entity_types:
+              - "PERSON"
+              - "ORG"
+              - "GPE"
+              - "DATE"
+              - "PRODUCT"
+              - "EVENT"
+              - "PERCENT"
+              - "MONEY"
+              - "FAC"
+              - "LOC"
+            use_fallback: true
+            min_entity_length: 2
+            merge_entities: true
+            confidence_threshold: 0.6
+
+        # Extract links and references
+        - type: "LinkExtractor"
+          file_include_patterns: ["*.md", "*.markdown"]
+          priority: 40
+          config:
+            extract_urls: true
+            extract_emails: true
+            extract_domains: true
+            validate_urls: false
+
+        # Extract patterns (measurements, dosages, temperatures, etc.)
+        - type: "PatternExtractor"
+          file_include_patterns: ["*"]
+          priority: 50
+          config:
+            predefined_patterns:
+              - "email"
+              - "phone"
+              - "url"
+              - "version"
+            custom_patterns:
+              - name: "measurement"
+                pattern: "\\d+[-–]?\\d*\\s*(inches?|feet|ft|pounds?|lbs?|kg|grams?|g|years?|months?|days?|hours?|minutes?|°F|°C|degrees?)"
+                description: "Measurements and units (height, weight, temperature, time)"
+              - name: "percentage"
+                pattern: "\\d+[-–]?\\d*\\s*%"
+                description: "Percentages (fiber content, protein levels, etc.)"
+              - name: "age_range"
+                pattern: "\\d+[-–]\\d+\\s*(years?|months?|weeks?|days?)"
+                description: "Age ranges"
+            deduplicate_matches: true
