@@ -162,7 +162,9 @@ function Databases() {
     } catch {}
     // Clear URL param after initial load so manual tab switching doesn't conflict
     if (searchParams.has('database')) {
-      setSearchParams({}, { replace: true })
+      const newParams = new URLSearchParams(searchParams)
+      newParams.delete('database')
+      setSearchParams(newParams, { replace: true })
     }
   }, [activeDatabase, ACTIVE_DB_KEY, searchParams, setSearchParams])
 

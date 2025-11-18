@@ -32,12 +32,12 @@ export function getDatabaseColor(
 
   // Map index to color classes
   const colors = [
-    'bg-teal-300 text-dark dark:bg-teal-400 dark:text-slate-900', // 0: teal
-    'bg-sky-300 text-dark dark:bg-sky-400 dark:text-slate-900', // 1: sky
-    'bg-indigo-300 text-dark dark:bg-indigo-400 dark:text-slate-900', // 2: indigo
-    'bg-purple-300 text-dark dark:bg-purple-400 dark:text-slate-900', // 3: purple
-    'bg-fuchsia-300 text-dark dark:bg-fuchsia-400 dark:text-slate-900', // 4: fuchsia
-    'bg-emerald-300 text-dark dark:bg-emerald-400 dark:text-slate-900', // 5: emerald
+    'bg-teal-300 text-slate-900 dark:bg-teal-400 dark:text-slate-900', // 0: teal
+    'bg-sky-300 text-slate-900 dark:bg-sky-400 dark:text-slate-900', // 1: sky
+    'bg-indigo-300 text-slate-900 dark:bg-indigo-400 dark:text-slate-900', // 2: indigo
+    'bg-purple-300 text-slate-900 dark:bg-purple-400 dark:text-slate-900', // 3: purple
+    'bg-fuchsia-300 text-slate-900 dark:bg-fuchsia-400 dark:text-slate-900', // 4: fuchsia
+    'bg-emerald-300 text-slate-900 dark:bg-emerald-400 dark:text-slate-900', // 5: emerald
   ]
 
   return colors[colorIndex]

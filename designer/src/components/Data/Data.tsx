@@ -934,7 +934,7 @@ const Data = () => {
                       setStrategyCreateOpen(true)
                     }}
                   >
-                    Create new
+                    Create new processing strategy
                   </Button>
                 </div>
               </div>

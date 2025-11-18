@@ -52,7 +52,6 @@ import {
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
-import { getDatabaseColor } from '../../utils/databaseColors'
 
 // Maximum priority value as defined in rag/schema.yaml
 const MAX_PRIORITY = 1000
@@ -244,18 +243,11 @@ function StrategyView() {
 
   // Datasets using this strategy (from API) -----------------------------------
   const assignedDatasets = useMemo(() => {
-    if (!allDatasets || !actualStrategyName)
-      return [] as Array<{ name: string; database?: string }>
+    if (!allDatasets || !actualStrategyName) return [] as string[]
     return allDatasets
       .filter(d => d.rag_strategy === actualStrategyName)
-      .map(d => ({ name: d.name, database: d.database }))
+      .map(d => d.name)
   }, [allDatasets, actualStrategyName])
-
-  // Get databases from config for color assignment
-  const databases = useMemo(() => {
-    const projectConfig = (projectResp as any)?.project?.config
-    return projectConfig?.rag?.databases || []
-  }, [projectResp])
 
   const canReprocess =
     assignedDatasets.length > 0 && needsReprocess && !reIngestMutation.isPending
@@ -269,7 +261,7 @@ function StrategyView() {
   useEffect(() => {
     if (!isManageOpen) return
     // Initialize selection from currently assigned
-    setSelectedDatasets(new Set(assignedDatasets.map(d => d.name)))
+    setSelectedDatasets(new Set(assignedDatasets))
   }, [isManageOpen, assignedDatasets])
 
   const toggleDataset = (name: string) => {
@@ -1314,17 +1306,19 @@ function StrategyView() {
                 </>
               ) : (
                 <>
-                  {assignedDatasets.slice(0, 3).map(ds => (
+                  {assignedDatasets.slice(0, 3).map(datasetName => (
                     <Badge
-                      key={ds.name}
+                      key={datasetName}
                       variant="default"
                       size="sm"
                       className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground cursor-pointer hover:opacity-80 transition-opacity"
                       onClick={() =>
-                        navigate(`/chat/data/${encodeURIComponent(ds.name)}`)
+                        navigate(
+                          `/chat/data/${encodeURIComponent(datasetName)}`
+                        )
                       }
                     >
-                      {ds.name}
+                      {datasetName}
                     </Badge>
                   ))}
                   {assignedDatasets.length > 3 && (
@@ -1375,24 +1369,28 @@ function StrategyView() {
                   if (!activeProject?.namespace || !activeProject?.project)
                     return
                   const failures: string[] = []
-                  for (const ds of assignedDatasets) {
+                  for (const datasetName of assignedDatasets) {
                     try {
                       await reIngestMutation.mutateAsync({
                         namespace: activeProject.namespace!,
                         project: activeProject.project!,
-                        dataset: ds.name,
+                        dataset: datasetName,
                       })
                       toast({
-                        message: `Reprocessing ${ds.name}…`,
+                        message: `Reprocessing ${datasetName}…`,
                         variant: 'default',
                       })
                     } catch (e) {
-                      console.error('Failed to start reprocessing', ds.name, e)
+                      console.error(
+                        'Failed to start reprocessing',
+                        datasetName,
+                        e
+                      )
                       toast({
-                        message: `Failed to start reprocessing ${ds.name}`,
+                        message: `Failed to start reprocessing ${datasetName}`,
                         variant: 'destructive',
                       })
-                      failures.push(ds.name)
+                      failures.push(datasetName)
                     }
                   }
                   if (failures.length === 0) {

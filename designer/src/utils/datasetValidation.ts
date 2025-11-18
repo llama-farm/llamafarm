@@ -82,3 +82,59 @@ export const validateDatasetNameWithDuplicateCheck = (
   return { isValid: true }
 }
 
+export interface DatasetValidationError {
+  index: number
+  name: string
+  error: string
+}
+
+export interface AllDatasetsValidationResult {
+  isValid: boolean
+  errors: DatasetValidationError[]
+}
+
+/**
+ * Validates an array of datasets for name format and duplicates
+ * Consolidates validation logic for bulk dataset validation
+ * @param datasets - Array of dataset objects with name property
+ * @returns Validation result with array of errors (if any)
+ */
+export const validateAllDatasetNames = (
+  datasets: Array<{ name?: string }>
+): AllDatasetsValidationResult => {
+  const errors: DatasetValidationError[] = []
+  const seenNames: string[] = []
+  
+  for (let i = 0; i < datasets.length; i++) {
+    const dataset = datasets[i]
+    const datasetName = dataset?.name
+    
+    // Validate individual dataset name format (including empty/missing names)
+    const validation = validateDatasetName(datasetName || '')
+    if (!validation.isValid) {
+      errors.push({
+        index: i,
+        name: datasetName || '(empty)',
+        error: validation.error || 'Invalid dataset name'
+      })
+      continue // Skip duplicate check if name is invalid
+    }
+    
+    // Check for duplicates (case-insensitive)
+    if (checkForDuplicateDatasetName(datasetName!, seenNames)) {
+      errors.push({
+        index: i,
+        name: datasetName!,
+        error: 'Duplicate dataset name'
+      })
+    }
+    
+    seenNames.push(datasetName!)
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  }
+}
+

@@ -24,7 +24,7 @@ import { useConfigStructure } from '../../hooks/useConfigStructure'
 import type { TOCNode } from '../../types/config-toc'
 import { normalisePointer, parentPointer } from '../../utils/configNavigation'
 import { findSearchMatches, type SearchMatch } from '../../utils/searchUtils'
-import { validateDatasetName, checkForDuplicateDatasetName } from '../../utils/datasetValidation'
+import { validateAllDatasetNames } from '../../utils/datasetValidation'
 
 // Lazy load the CodeMirror editor
 const CodeMirrorEditor = lazy(
@@ -348,31 +348,13 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
 
       // Validate dataset names before saving
       if (configObj?.datasets && Array.isArray(configObj.datasets)) {
-        const datasetNames: string[] = []
-        const validationErrors: string[] = []
-
-        for (let i = 0; i < configObj.datasets.length; i++) {
-          const dataset = configObj.datasets[i]
-          const datasetName = dataset?.name
-
-          if (datasetName) {
-            // Validate individual dataset name
-            const validation = validateDatasetName(datasetName)
-            if (!validation.isValid) {
-              validationErrors.push(`Dataset #${i + 1} (${datasetName}): ${validation.error}`)
-            }
-
-            // Check for duplicates
-            if (checkForDuplicateDatasetName(datasetName, datasetNames)) {
-              validationErrors.push(`Dataset #${i + 1}: Duplicate dataset name "${datasetName}"`)
-            }
-
-            datasetNames.push(datasetName)
-          }
-        }
-
-        if (validationErrors.length > 0) {
-          const errorMsg = `Dataset validation failed:\n${validationErrors.join('\n')}`
+        const validation = validateAllDatasetNames(configObj.datasets)
+        
+        if (!validation.isValid) {
+          const errorMessages = validation.errors.map(err => 
+            `Dataset #${err.index + 1} (${err.name}): ${err.error}`
+          )
+          const errorMsg = `Dataset validation failed:\n${errorMessages.join('\n')}`
           setSaveError(errorMsg)
           return { success: false, error: errorMsg }
         }
