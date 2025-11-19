@@ -584,9 +584,9 @@ function Home() {
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <button
               className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
-              onClick={() => navigate('/samples')}
+              onClick={() => demoModal.openModal()}
             >
-              Explore sample projects
+              Explore demo projects
             </button>
             {/* New project button removed per design */}
           </div>
@@ -595,9 +595,9 @@ function Home() {
         <div className="md:hidden mb-4 flex items-center justify-between gap-3">
           <button
             className="flex-1 px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
-            onClick={() => navigate('/samples')}
+            onClick={() => demoModal.openModal()}
           >
-            Explore sample projects
+            Explore demo projects
           </button>
           {/* New project button removed per design */}
         </div>
