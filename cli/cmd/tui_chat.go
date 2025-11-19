@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -124,7 +125,17 @@ func renderToolCall(toolCall ToolCallItem, width int) string {
 	if len(args) > 0 {
 		contentLines = append(contentLines, "")
 		contentLines = append(contentLines, lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("Arguments:"))
-		for k, v := range args {
+
+		// Sort keys to ensure deterministic ordering (prevents flickering during streaming)
+		keys := make([]string, 0, len(args))
+		for k := range args {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		// Iterate over sorted keys
+		for _, k := range keys {
+			v := args[k]
 			// Truncate long values
 			valStr := fmt.Sprintf("%v", v)
 			if len(valStr) > 60 {

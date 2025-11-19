@@ -95,3 +95,48 @@ func TestRenderAssistantContentPreservesNonThinkContent(t *testing.T) {
 	}
 }
 
+func TestRenderToolCallDeterministicOrdering(t *testing.T) {
+	// Create a tool call with multiple arguments
+	toolCall := ToolCallItem{
+		ID:   "test_call_123",
+		Type: "function",
+		Function: ToolCallFunction{
+			Name:      "test_function",
+			Arguments: `{"zebra": "last", "apple": "first", "middle": "second", "banana": "third"}`,
+		},
+	}
+
+	// Render the tool call multiple times
+	results := make([]string, 10)
+	for i := 0; i < 10; i++ {
+		results[i] = renderToolCall(toolCall, 100)
+	}
+
+	// All results should be identical (deterministic)
+	firstResult := results[0]
+	for i, result := range results {
+		if result != firstResult {
+			t.Errorf("renderToolCall() produced different output on iteration %d.\nExpected: %s\nGot: %s", i, firstResult, result)
+		}
+	}
+
+	// Verify alphabetical ordering of keys (apple, banana, middle, zebra)
+	if !strings.Contains(firstResult, "apple") {
+		t.Error("renderToolCall() should contain 'apple' argument")
+	}
+	
+	// Check that 'apple' appears before 'zebra' in the output
+	appleIdx := strings.Index(firstResult, "apple")
+	zebraIdx := strings.Index(firstResult, "zebra")
+	if appleIdx >= zebraIdx {
+		t.Errorf("renderToolCall() should show arguments in alphabetical order (apple before zebra)")
+	}
+	
+	// Check that 'banana' appears before 'middle'
+	bananaIdx := strings.Index(firstResult, "banana")
+	middleIdx := strings.Index(firstResult, "middle")
+	if bananaIdx >= middleIdx {
+		t.Errorf("renderToolCall() should show arguments in alphabetical order (banana before middle)")
+	}
+}
+
