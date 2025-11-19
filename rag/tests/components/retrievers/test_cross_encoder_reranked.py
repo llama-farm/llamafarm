@@ -248,7 +248,7 @@ class TestCrossEncoderRerankedStrategy:
             project_dir=mock_project_dir,
         )
 
-        with pytest.raises(ValueError, match="Model 'nonexistent_model' not found"):
+        with pytest.raises(ValueError, match="Model configuration not resolved for 'nonexistent_model'"):
             strategy._initialize_reranker()
 
     def test_retrieve_requires_query_text(
