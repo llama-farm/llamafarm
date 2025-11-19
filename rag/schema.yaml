@@ -1657,6 +1657,14 @@ definitions:
             description: Cross-encoder reranking strategy using Ollama models (GGUF)
           config:
             $ref: "#/definitions/retrievalStrategies/crossEncoderRerankedConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: MultiTurnRAGStrategy
+            description: Multi-turn RAG with query decomposition for complex queries
+          config:
+            $ref: "#/definitions/retrievalStrategies/multiTurnRAGConfig"
   retrievalStrategies:
     basicSimilarityConfig:
       type: object
@@ -1900,6 +1908,81 @@ definitions:
           maximum: 10000
           description: "Maximum characters per document for reranking (to avoid token limits)"
 
+    multiTurnRAGConfig:
+      type: object
+      additionalProperties: false
+      description: Multi-turn RAG with query decomposition for complex queries
+      properties:
+        model_name:
+          type: string
+          description: "Name of the model from runtime.models to use for query decomposition (e.g., 'default')"
+          example: "default"
+        max_sub_queries:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 5
+          description: "Maximum number of sub-queries to generate from decomposition"
+        complexity_threshold:
+          type: integer
+          default: 50
+          minimum: 20
+          maximum: 200
+          description: "Minimum query length (characters) to trigger decomposition"
+        min_query_length:
+          type: integer
+          default: 20
+          minimum: 10
+          maximum: 100
+          description: "Minimum length for each sub-query"
+        base_strategy:
+          type: string
+          enum: [BasicSimilarityStrategy, MetadataFilteredStrategy]
+          default: BasicSimilarityStrategy
+          description: "Base retrieval strategy to use for each sub-query"
+        base_strategy_config:
+          type: object
+          default: {}
+          description: "Configuration for the base strategy"
+          additionalProperties: true
+        sub_query_top_k:
+          type: integer
+          default: 10
+          minimum: 5
+          maximum: 50
+          description: "Number of results to retrieve per sub-query"
+        final_top_k:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+          description: "Number of results to return after merging and deduplication"
+        enable_reranking:
+          type: boolean
+          default: false
+          description: "Enable reranking for each sub-query (slower but more accurate)"
+        reranker_strategy:
+          type: string
+          default: CrossEncoderRerankedStrategy
+          description: "Reranking strategy to use if reranking is enabled"
+        reranker_config:
+          type: object
+          default: {}
+          description: "Configuration for the reranking strategy"
+          additionalProperties: true
+        dedup_similarity_threshold:
+          type: number
+          default: 0.95
+          minimum: 0.5
+          maximum: 1.0
+          description: "Similarity threshold for deduplication (0-1, higher = stricter)"
+        max_workers:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 10
+          description: "Maximum parallel workers for sub-query retrieval"
+
   # NEW SCHEMA DEFINITIONS
   databaseDefinition:
     type: object
@@ -1981,6 +2064,7 @@ definitions:
                   RerankedStrategy,
                   HybridUniversalStrategy,
                   CrossEncoderRerankedStrategy,
+                  MultiTurnRAGStrategy,
                 ]
               description: Retrieval type
             config:

@@ -141,11 +141,13 @@ class BaseAPI:
     def _resolve_model_references(self, strategy_config: dict[str, Any]) -> dict[str, Any]:
         """Resolve model references in strategy config.
 
-        For strategies that reference models by name (e.g., CrossEncoderRerankedStrategy),
+        For strategies that reference models by name (e.g., CrossEncoderRerankedStrategy, MultiTurnRAGStrategy),
         this looks up the model in runtime.models and adds the resolved base_url and model ID.
         """
-        # Check if this is a Cross Encoder strategy that needs model resolution
-        if strategy_config.get("type") == "CrossEncoderRerankedStrategy":
+        strategy_type = strategy_config.get("type")
+
+        # Strategies that need model resolution
+        if strategy_type in ["CrossEncoderRerankedStrategy", "MultiTurnRAGStrategy"]:
             config = strategy_config.get("config", {})
             model_name = config.get("model_name")
 
@@ -161,6 +163,24 @@ class BaseAPI:
                     # Add resolved model details to the config
                     config["model_base_url"] = model_config.base_url
                     config["model_id"] = model_config.model
+
+            # For MultiTurnRAGStrategy, also resolve the reranker model if present
+            if strategy_type == "MultiTurnRAGStrategy" and config.get("enable_reranking"):
+                reranker_config = config.get("reranker_config", {})
+                reranker_model_name = reranker_config.get("model_name")
+
+                if reranker_model_name and hasattr(self.config, "runtime") and hasattr(self.config.runtime, "models"):
+                    # Find the reranker model in runtime.models
+                    reranker_model_config = None
+                    for model in self.config.runtime.models:
+                        if model.name == reranker_model_name:
+                            reranker_model_config = model
+                            break
+
+                    if reranker_model_config:
+                        # Add resolved model details to the reranker config
+                        reranker_config["model_base_url"] = reranker_model_config.base_url
+                        reranker_config["model_id"] = reranker_model_config.model
 
         return strategy_config
 

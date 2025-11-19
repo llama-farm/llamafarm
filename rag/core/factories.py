@@ -127,6 +127,7 @@ from components.retrievers.metadata_filtered.metadata_filtered import (
 from components.retrievers.multi_query.multi_query import MultiQueryStrategy
 from components.retrievers.reranked.reranked import RerankedStrategy
 from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import CrossEncoderRerankedStrategy
+from components.retrievers.multi_turn.multi_turn import MultiTurnRAGStrategy
 
 
 class ComponentFactory:
@@ -268,6 +269,7 @@ class RetrievalStrategyFactory(ComponentFactory):
         "MultiQueryStrategy": MultiQueryStrategy,
         "RerankedStrategy": RerankedStrategy,
         "CrossEncoderRerankedStrategy": CrossEncoderRerankedStrategy,
+        "MultiTurnRAGStrategy": MultiTurnRAGStrategy,
     }
 
 
