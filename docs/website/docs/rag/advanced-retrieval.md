@@ -62,17 +62,45 @@ rag:
           default: true
 ```
 
-### Recommended Models
+### Recommended Reranking Models
 
-Pull via Ollama:
+#### Model Comparison
 
+| Model | Size | Speed | Accuracy | Languages | Best For |
+|-------|------|-------|----------|-----------|----------|
+| **bge-reranker-v2-m3** | ~2GB | Medium | Highest | 100+ | Production, multilingual |
+| **bce-reranker-base** | ~400MB | Fast | High | English, Chinese | Good balance, tested |
+| **nomic-embed-text** | ~550MB | Very Fast | Medium | English | Lightweight alternative |
+
+#### Detailed Model Info
+
+**qllama/bge-reranker-v2-m3 (Recommended for Production)**
 ```bash
-# Best for production (multilingual, high accuracy)
 ollama pull qllama/bge-reranker-v2-m3:q4_k_m
+```
+- **Strengths:** Best accuracy, multilingual (100+ languages), state-of-the-art
+- **Weaknesses:** Slower than alternatives, larger model
+- **Use when:** Quality is critical, multilingual support needed
+- **Performance:** ~50-100 docs/sec
 
-# Good balance (smaller, faster)
+**qllama/bce-reranker-base_v1 (Recommended for Most Use Cases)**
+```bash
 ollama pull qllama/bce-reranker-base_v1:q4_k_m
 ```
+- **Strengths:** Good accuracy, fast, smaller size, well-tested
+- **Weaknesses:** English/Chinese only
+- **Use when:** Need balance of speed and accuracy
+- **Performance:** ~200-400 docs/sec
+
+**nomic-embed-text (Lightweight Alternative)**
+```bash
+ollama pull nomic-embed-text
+```
+- **Strengths:** Very fast, small, good for prototyping
+- **Weaknesses:** Lower accuracy than dedicated rerankers
+- **Use when:** Speed is critical, acceptable to trade some accuracy
+- **Performance:** ~400+ docs/sec
+- **Note:** This is an embedding model, not a dedicated reranker
 
 ### Configuration Options
 
@@ -87,14 +115,93 @@ ollama pull qllama/bce-reranker-base_v1:q4_k_m
 | `relevance_threshold` | 0.0 | Minimum score to include |
 | `max_chars_per_doc` | 1000 | Truncate long documents |
 
+### Complete Example Configuration
+
+Here's a full `llamafarm.yaml` example with cross-encoder reranking:
+
+```yaml
+version: v1
+name: my-project
+namespace: default
+
+runtime:
+  default_model: default
+  models:
+    - name: default
+      provider: ollama
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1
+
+    # Reranker model for CrossEncoderRerankedStrategy
+    - name: reranker
+      description: Cross-encoder model for semantic reranking
+      provider: openai
+      model: qllama/bce-reranker-base_v1:q4_k_m
+      base_url: http://localhost:11434/v1
+
+rag:
+  databases:
+    - name: main_database
+      type: ChromaStore
+      config:
+        collection_name: documents
+        distance_function: cosine
+        port: 8000
+
+      # Embedding strategy
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text
+            dimension: 768
+            batch_size: 16
+          priority: 0
+
+      # Retrieval strategies
+      retrieval_strategies:
+        # Basic search (fast)
+        - name: basic_search
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 10
+          default: false
+
+        # Reranked search (accurate)
+        - name: reranked_search
+          type: CrossEncoderRerankedStrategy
+          config:
+            model_name: reranker
+            initial_k: 30
+            final_k: 5
+            base_strategy: BasicSimilarityStrategy
+            base_strategy_config:
+              distance_metric: cosine
+            batch_size: 16
+            normalize_scores: true
+            relevance_threshold: 0.0
+            max_chars_per_doc: 1000
+          default: true
+
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: reranked_search
+```
+
 ### Usage
 
 ```bash
-# Query with reranking (if set as default)
+# Pull the reranker model
+ollama pull qllama/bce-reranker-base_v1:q4_k_m
+
+# Query with reranking (uses default strategy)
 lf rag query --database main_database "What are the differences between llama and alpaca fibers?"
 
 # Explicitly specify strategy
 lf rag query --database main_database --retrieval-strategy reranked_search "your question"
+
+# Use basic search for speed
+lf rag query --database main_database --retrieval-strategy basic_search "simple question"
 ```
 
 ## Multi-Turn RAG
@@ -189,19 +296,45 @@ Queries are considered complex if they:
 
 ### Recommended Models
 
-**Query Decomposition:**
-```bash
-# Good balance: speed vs. format adherence
-ollama pull gemma3:1b
+#### Query Decomposition Models
 
-# Alternative (faster, smaller)
+| Model | Size | Speed | Format Adherence | Best For |
+|-------|------|-------|------------------|----------|
+| **gemma3:1b** | ~1.3GB | Fast | Excellent | Recommended - best balance |
+| **qwen3:1.7B** | ~1.7GB | Medium | Good | Alternative option |
+| **gemma3:3b** | ~3GB | Slower | Excellent | High accuracy needs |
+
+**gemma3:1b (Recommended)**
+```bash
+ollama pull gemma3:1b
+```
+- **Strengths:** Excellent at following XML format, good decomposition quality
+- **Weaknesses:** Slightly larger than alternatives
+- **Use when:** Need reliable query decomposition (default choice)
+- **Tested:** Works well with temperature 0.3
+
+**qwen3:1.7B (Alternative)**
+```bash
 ollama pull qwen3:1.7B
 ```
+- **Strengths:** Fast, good balance
+- **Weaknesses:** Can struggle with format adherence at very small sizes
+- **Use when:** Need maximum speed
+- **Note:** Use qwen3:1.7B or larger (not 0.6B)
 
-**Reranking (optional but recommended):**
+#### Reranking Models (Optional but Recommended)
+
+For best results, enable reranking with one of:
+
 ```bash
+# Recommended: Good balance
 ollama pull qllama/bce-reranker-base_v1:q4_k_m
+
+# Best accuracy: Multilingual
+ollama pull qllama/bge-reranker-v2-m3:q4_k_m
 ```
+
+See [Cross-Encoder Reranking Models](#recommended-reranking-models) above for detailed comparison.
 
 ### Configuration Options
 
@@ -216,6 +349,108 @@ ollama pull qllama/bce-reranker-base_v1:q4_k_m
 | `enable_reranking` | `false` | Enable reranking per sub-query |
 | `max_workers` | 3 | Parallel workers for sub-queries |
 | `dedup_similarity_threshold` | 0.95 | Deduplication threshold |
+
+### Complete Example Configuration
+
+Here's a full `llamafarm.yaml` example with multi-turn RAG and reranking:
+
+```yaml
+version: v1
+name: my-project
+namespace: default
+
+runtime:
+  default_model: default
+  models:
+    - name: default
+      provider: ollama
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1
+
+    # Query decomposition model for MultiTurnRAGStrategy
+    - name: query_decomposer
+      description: Small fast model for query decomposition
+      provider: openai
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1
+
+    # Reranker model for CrossEncoderRerankedStrategy
+    - name: reranker
+      description: Cross-encoder model for semantic reranking
+      provider: openai
+      model: qllama/bce-reranker-base_v1:q4_k_m
+      base_url: http://localhost:11434/v1
+
+rag:
+  databases:
+    - name: main_database
+      type: ChromaStore
+      config:
+        collection_name: documents
+        distance_function: cosine
+        port: 8000
+
+      # Embedding strategy
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text
+            dimension: 768
+            batch_size: 16
+          priority: 0
+
+      # Retrieval strategies
+      retrieval_strategies:
+        # Basic search (fastest)
+        - name: basic_search
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 10
+          default: false
+
+        # Multi-turn RAG with reranking (best for complex queries)
+        - name: multi_turn_search
+          type: MultiTurnRAGStrategy
+          config:
+            model_name: query_decomposer
+            max_sub_queries: 3
+            complexity_threshold: 50
+            min_query_length: 20
+            base_strategy: BasicSimilarityStrategy
+            base_strategy_config:
+              distance_metric: cosine
+            sub_query_top_k: 10
+            final_top_k: 5
+            # Enable reranking for each sub-query
+            enable_reranking: true
+            reranker_strategy: CrossEncoderRerankedStrategy
+            reranker_config:
+              model_name: reranker
+              initial_k: 15
+              final_k: 10
+              base_strategy: BasicSimilarityStrategy
+              base_strategy_config:
+                distance_metric: cosine
+              batch_size: 16
+              normalize_scores: true
+              relevance_threshold: 0.0
+              max_chars_per_doc: 1000
+            dedup_similarity_threshold: 0.95
+            max_workers: 3
+          default: true
+
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: multi_turn_search
+```
+
+**Key Configuration Points:**
+- `query_decomposer` model: Uses gemma3:1b for reliable XML format adherence
+- `reranker` model: Uses bce-reranker for good balance of speed/accuracy
+- `enable_reranking: true`: Each sub-query gets reranked for best results
+- `complexity_threshold: 50`: Queries shorter than 50 chars use simple retrieval
+- `max_workers: 3`: Process up to 3 sub-queries in parallel
 
 ### Usage
 
