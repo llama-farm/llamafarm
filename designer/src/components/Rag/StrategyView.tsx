@@ -103,8 +103,8 @@ function StrategyView() {
   const allDatasets = useMemo(() => {
     if (datasetsResp?.datasets && datasetsResp.datasets.length > 0) {
       return datasetsResp.datasets.map(d => {
-        const { name } = d
-        let ragStrategy = (d as any).rag_strategy as string | undefined
+        const { name, database, data_processing_strategy } = d
+        let ragStrategy = data_processing_strategy
         // Overlay local per-dataset override if present
         try {
           const storedName = localStorage.getItem(
@@ -114,13 +114,18 @@ function StrategyView() {
             ragStrategy = storedName
           }
         } catch {}
-        return { name, rag_strategy: ragStrategy }
+        return { name, database, rag_strategy: ragStrategy }
       })
     }
     // Local fallback: minimal name + strategy from localStorage, if present
     try {
       const raw = localStorage.getItem('lf_datasets')
-      if (!raw) return [] as { name: string; rag_strategy?: string }[]
+      if (!raw)
+        return [] as {
+          name: string
+          database?: string
+          rag_strategy?: string
+        }[]
       const arr = JSON.parse(raw)
       if (!Array.isArray(arr)) return []
       return arr
@@ -130,11 +135,19 @@ function StrategyView() {
           const storedName = localStorage.getItem(
             `lf_dataset_strategy_name_${name}`
           )
-          return { name, rag_strategy: storedName || 'auto' }
+          return {
+            name,
+            database: d.database,
+            rag_strategy: storedName || 'auto',
+          }
         })
-        .filter(Boolean) as { name: string; rag_strategy?: string }[]
+        .filter(Boolean) as {
+        name: string
+        database?: string
+        rag_strategy?: string
+      }[]
     } catch {
-      return [] as { name: string; rag_strategy?: string }[]
+      return [] as { name: string; database?: string; rag_strategy?: string }[]
     }
   }, [datasetsResp])
 
@@ -199,7 +212,9 @@ function StrategyView() {
     return found?.description || ''
   }, [strategyId])
 
-  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const projectConfig = (projectResp as any)?.project?.config as
+    | ProjectConfig
+    | undefined
   const getStrategyLocation = useCallback(() => {
     if (actualStrategyName) {
       return {
@@ -215,7 +230,6 @@ function StrategyView() {
     config: projectConfig,
     getLocation: getStrategyLocation,
   })
-
 
   // RAG Strategy hook for parser/extractor updates - use ACTUAL name from config
   const ragStrategy = useRagStrategy(
@@ -1292,16 +1306,30 @@ function StrategyView() {
                 </>
               ) : (
                 <>
-                  {assignedDatasets.map(u => (
+                  {assignedDatasets.slice(0, 3).map(datasetName => (
                     <Badge
-                      key={u}
+                      key={datasetName}
                       variant="default"
                       size="sm"
-                      className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                      className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() =>
+                        navigate(
+                          `/chat/data/${encodeURIComponent(datasetName)}`
+                        )
+                      }
                     >
-                      {u}
+                      {datasetName}
                     </Badge>
                   ))}
+                  {assignedDatasets.length > 3 && (
+                    <Badge
+                      variant="default"
+                      size="sm"
+                      className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
+                    >
+                      +{assignedDatasets.length - 3}
+                    </Badge>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -1341,24 +1369,28 @@ function StrategyView() {
                   if (!activeProject?.namespace || !activeProject?.project)
                     return
                   const failures: string[] = []
-                  for (const n of assignedDatasets) {
+                  for (const datasetName of assignedDatasets) {
                     try {
                       await reIngestMutation.mutateAsync({
                         namespace: activeProject.namespace!,
                         project: activeProject.project!,
-                        dataset: n,
+                        dataset: datasetName,
                       })
                       toast({
-                        message: `Reprocessing ${n}…`,
+                        message: `Reprocessing ${datasetName}…`,
                         variant: 'default',
                       })
                     } catch (e) {
-                      console.error('Failed to start reprocessing', n, e)
+                      console.error(
+                        'Failed to start reprocessing',
+                        datasetName,
+                        e
+                      )
                       toast({
-                        message: `Failed to start reprocessing ${n}`,
+                        message: `Failed to start reprocessing ${datasetName}`,
                         variant: 'destructive',
                       })
-                      failures.push(n)
+                      failures.push(datasetName)
                     }
                   }
                   if (failures.length === 0) {

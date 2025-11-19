@@ -337,6 +337,7 @@ const Test = () => {
       localStorage.setItem('lf_gen_defaults', JSON.stringify(gen))
     } catch {}
   }, [gen])
+
   // Persist RAG settings
   useEffect(() => {
     if (typeof window === 'undefined') return

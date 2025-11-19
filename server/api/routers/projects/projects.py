@@ -399,10 +399,19 @@ async def chat(
     response: Response,
     session_id: str | None = Header(None, alias="X-Session-ID"),
     x_no_session: str | None = Header(None, alias="X-No-Session"),
+    x_active_project: str | None = Header(None, alias="X-Active-Project"),
 ):
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
+
+    # Parse active project from header (format: "namespace/project")
+    active_project_namespace = None
+    active_project_name = None
+    if x_active_project:
+        parts = x_active_project.split("/", 1)
+        if len(parts) == 2 and parts[0] and parts[1]:
+            active_project_namespace, active_project_name = parts
 
     now = time.time()
     stateless = x_no_session is not None
@@ -412,6 +421,8 @@ async def chat(
             project_config=project_config,
             project_dir=project_dir,
             model_name=request.model,
+            active_project_namespace=active_project_namespace,
+            active_project_name=active_project_name,
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -435,6 +446,8 @@ async def chat(
                     project_dir=project_dir,
                     model_name=request.model,
                     session_id=session_id,
+                    active_project_namespace=active_project_namespace,
+                    active_project_name=active_project_name,
                 )
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(
