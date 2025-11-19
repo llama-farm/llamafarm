@@ -286,6 +286,8 @@ func EnsureServicesOrExit(serverURL string, serviceNames ...string) {
 func (sm *ServiceManager) EnsureServicesWithConfig(config *ServiceOrchestrationConfig, serviceNames ...string) error {
 	// If auto-start is disabled, check health but don't start services
 	if !config.AutoStart {
+		var unhealthyServices []string
+
 		for _, serviceName := range serviceNames {
 			serviceDef, exists := ServiceGraph[serviceName]
 			if !exists {
@@ -293,8 +295,12 @@ func (sm *ServiceManager) EnsureServicesWithConfig(config *ServiceOrchestrationC
 			}
 
 			if !sm.isServiceHealthy(serviceDef) {
-				return fmt.Errorf("service '%s' is not running and auto-start is disabled (use --auto-start to enable automatic startup)", serviceName)
+				unhealthyServices = append(unhealthyServices, serviceName)
 			}
+		}
+
+		if len(unhealthyServices) > 0 {
+			return fmt.Errorf("services not running and auto-start is disabled: %s (use --auto-start to enable automatic startup)", strings.Join(unhealthyServices, ", "))
 		}
 
 		if config.PrintStatus {
