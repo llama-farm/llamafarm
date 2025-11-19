@@ -139,7 +139,6 @@ embeddings = [
   "openai>=1.0.0",
   "cohere>=4.32.0",
   "transformers>=4.53.0",
-  "torch>=2.0.0",
 ]
 
 # LlamaIndex parsers and advanced document processing

@@ -59,8 +59,9 @@ def get_gguf_metadata(gguf_path: str) -> dict:
 
         max_key_length = max(len(key) for key in reader.fields)
         for key, field in reader.fields.items():
-            value = field.parts[field.data[0]]
-            logger.debug(f"{key:<{max_key_length}}: {value}")
+            if field.data:
+                value = field.parts[field.data[0]]
+                logger.debug(f"{key:<{max_key_length}}: {value}")
 
         # Try to get context length from metadata fields
         # Common field names or substrings for context length
@@ -72,7 +73,7 @@ def get_gguf_metadata(gguf_path: str) -> dict:
 
         # Check if any field key contains one of our target strings
         for key, field in reader.fields.items():
-            if any(target in key for target in context_field_names):
+            if any(target in key for target in context_field_names) and field.data:
                 # Extract the value from the field parts
                 n_ctx_train = field.parts[field.data[0]]
                 if n_ctx_train:

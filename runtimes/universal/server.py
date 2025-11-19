@@ -200,6 +200,25 @@ def get_device():
     return _current_device
 
 
+def _make_language_cache_key(
+    model_id: str, n_ctx: int | None = None, preferred_quantization: str | None = None
+) -> str:
+    """Generate a cache key for a causal language model.
+
+    Args:
+        model_id: HuggingFace model identifier
+        n_ctx: Optional context window size for GGUF models
+        preferred_quantization: Optional quantization preference for GGUF models
+
+    Returns:
+        A unique cache key string that identifies this specific model configuration
+    """
+    quant_key = (
+        preferred_quantization if preferred_quantization is not None else "default"
+    )
+    return f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key}"
+
+
 async def load_language(
     model_id: str, n_ctx: int | None = None, preferred_quantization: str | None = None
 ):
@@ -223,10 +242,7 @@ async def load_language(
     # Use "auto" for None to allow automatic context size computation
     # Use "default" for None quantization to use Q4_K_M default
     # Transformers are obviously not quantized, so just ignore in that case
-    quant_key = (
-        preferred_quantization if preferred_quantization is not None else "default"
-    )
-    cache_key = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key}"
+    cache_key = _make_language_cache_key(model_id, n_ctx, preferred_quantization)
     if cache_key not in _models:
         async with _model_load_lock:
             # Double-check if model was loaded while waiting for the lock
@@ -262,6 +278,29 @@ async def load_language(
     return _models[cache_key]
 
 
+def _make_encoder_cache_key(
+    model_id: str,
+    task: str,
+    model_format: str,
+    preferred_quantization: str | None = None,
+) -> str:
+    """Generate a cache key for an encoder model.
+
+    Args:
+        model_id: HuggingFace model identifier
+        task: Model task - "embedding" or "classification"
+        model_format: Model format - "gguf" or "transformers"
+        preferred_quantization: Optional quantization preference for GGUF models
+
+    Returns:
+        A unique cache key string that identifies this specific model configuration
+    """
+    quant_key = (
+        preferred_quantization if preferred_quantization is not None else "default"
+    )
+    return f"encoder:{task}:{model_format}:{model_id}:quant{quant_key}"
+
+
 async def load_encoder(
     model_id: str, task: str = "embedding", preferred_quantization: str | None = None
 ):
@@ -283,10 +322,9 @@ async def load_encoder(
     model_format = detect_model_format(model_id)
     # Include quantization in cache key for GGUF models so different quantizations are cached separately
     # Use "default" for None quantization to use Q4_K_M default
-    quant_key = (
-        preferred_quantization if preferred_quantization is not None else "default"
+    cache_key = _make_encoder_cache_key(
+        model_id, task, model_format, preferred_quantization
     )
-    cache_key = f"encoder:{task}:{model_format}:{model_id}:quant{quant_key}"
 
     if cache_key not in _models:
         async with _model_load_lock:

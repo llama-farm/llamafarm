@@ -8,6 +8,7 @@ This test verifies that:
 """
 
 import pytest
+from server import _make_language_cache_key, _make_encoder_cache_key
 
 
 class TestCacheKeys:
@@ -15,22 +16,13 @@ class TestCacheKeys:
 
     def test_load_language_cache_key_includes_quantization(self):
         """Test that different quantizations result in different cache keys."""
-        # Import the function we're testing
-        # We'll test the cache key generation logic directly
-        from server import load_language
-
         # Test case 1: Same model, different quantizations should have different keys
         model_id = "unsloth/Qwen3-1.7B-GGUF"
         n_ctx = 8192
 
-        # Simulate cache key generation (from line 209-210 in server.py)
-        quant1 = "Q4_K_M"
-        quant_key1 = quant1 if quant1 is not None else "default"
-        cache_key1 = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key1}"
-
-        quant2 = "Q8_0"
-        quant_key2 = quant2 if quant2 is not None else "default"
-        cache_key2 = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key2}"
+        # Use actual production cache key generation
+        cache_key1 = _make_language_cache_key(model_id, n_ctx, "Q4_K_M")
+        cache_key2 = _make_language_cache_key(model_id, n_ctx, "Q8_0")
 
         # Cache keys should be different
         assert cache_key1 != cache_key2
@@ -43,18 +35,13 @@ class TestCacheKeys:
         quant = "Q4_K_M"
 
         # Test case 2: Same model, different context sizes should have different keys
-        n_ctx1 = 8192
-        quant_key1 = quant if quant is not None else "default"
-        cache_key1 = f"language:{model_id}:ctx{n_ctx1 if n_ctx1 is not None else 'auto'}:quant{quant_key1}"
-
-        n_ctx2 = 16384
-        quant_key2 = quant if quant is not None else "default"
-        cache_key2 = f"language:{model_id}:ctx{n_ctx2 if n_ctx2 is not None else 'auto'}:quant{quant_key2}"
+        cache_key1 = _make_language_cache_key(model_id, 8192, quant)
+        cache_key2 = _make_language_cache_key(model_id, 16384, quant)
 
         # Cache keys should be different
         assert cache_key1 != cache_key2
-        assert cache_key1 == f"language:{model_id}:ctx{n_ctx1}:quant{quant}"
-        assert cache_key2 == f"language:{model_id}:ctx{n_ctx2}:quant{quant}"
+        assert cache_key1 == f"language:{model_id}:ctx8192:quant{quant}"
+        assert cache_key2 == f"language:{model_id}:ctx16384:quant{quant}"
 
     def test_load_language_cache_key_none_quantization(self):
         """Test that None quantization uses 'default' in cache key."""
@@ -62,9 +49,7 @@ class TestCacheKeys:
         n_ctx = 8192
 
         # Test case 3: None quantization should use "default"
-        quant = None
-        quant_key = quant if quant is not None else "default"
-        cache_key = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key}"
+        cache_key = _make_language_cache_key(model_id, n_ctx, None)
 
         assert cache_key == f"language:{model_id}:ctx{n_ctx}:quantdefault"
 
@@ -75,13 +60,8 @@ class TestCacheKeys:
         model_format = "gguf"
 
         # Test case 4: Same encoder model, different quantizations should have different keys
-        quant1 = "Q4_K_M"
-        quant_key1 = quant1 if quant1 is not None else "default"
-        cache_key1 = f"encoder:{task}:{model_format}:{model_id}:quant{quant_key1}"
-
-        quant2 = "Q8_0"
-        quant_key2 = quant2 if quant2 is not None else "default"
-        cache_key2 = f"encoder:{task}:{model_format}:{model_id}:quant{quant_key2}"
+        cache_key1 = _make_encoder_cache_key(model_id, task, model_format, "Q4_K_M")
+        cache_key2 = _make_encoder_cache_key(model_id, task, model_format, "Q8_0")
 
         # Cache keys should be different
         assert cache_key1 != cache_key2
@@ -95,9 +75,7 @@ class TestCacheKeys:
         model_format = "gguf"
 
         # Test case 5: None quantization should use "default"
-        quant = None
-        quant_key = quant if quant is not None else "default"
-        cache_key = f"encoder:{task}:{model_format}:{model_id}:quant{quant_key}"
+        cache_key = _make_encoder_cache_key(model_id, task, model_format, None)
 
         assert cache_key == f"encoder:{task}:{model_format}:{model_id}:quantdefault"
 
@@ -108,11 +86,8 @@ class TestCacheKeys:
         quant = "Q4_K_M"
 
         # Test case 6: Same configuration should produce same cache key
-        quant_key1 = quant if quant is not None else "default"
-        cache_key1 = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key1}"
-
-        quant_key2 = quant if quant is not None else "default"
-        cache_key2 = f"language:{model_id}:ctx{n_ctx if n_ctx is not None else 'auto'}:quant{quant_key2}"
+        cache_key1 = _make_language_cache_key(model_id, n_ctx, quant)
+        cache_key2 = _make_language_cache_key(model_id, n_ctx, quant)
 
         # Cache keys should be identical
         assert cache_key1 == cache_key2
