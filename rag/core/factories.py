@@ -126,6 +126,7 @@ from components.retrievers.metadata_filtered.metadata_filtered import (
 )
 from components.retrievers.multi_query.multi_query import MultiQueryStrategy
 from components.retrievers.reranked.reranked import RerankedStrategy
+from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import CrossEncoderRerankedStrategy
 
 
 class ComponentFactory:
@@ -266,6 +267,7 @@ class RetrievalStrategyFactory(ComponentFactory):
         "MetadataFilteredStrategy": MetadataFilteredStrategy,
         "MultiQueryStrategy": MultiQueryStrategy,
         "RerankedStrategy": RerankedStrategy,
+        "CrossEncoderRerankedStrategy": CrossEncoderRerankedStrategy,
     }
 
 
@@ -309,6 +311,6 @@ def create_extractor_from_config(extractor_config: dict[str, Any]):
     return create_component_from_config(extractor_config, ExtractorFactory)
 
 
-def create_retrieval_strategy_from_config(strategy_config: dict[str, Any]):
+def create_retrieval_strategy_from_config(strategy_config: dict[str, Any], project_dir: Path | None = None):
     """Create a retrieval strategy from configuration."""
-    return create_component_from_config(strategy_config, RetrievalStrategyFactory)
+    return create_component_from_config(strategy_config, RetrievalStrategyFactory, project_dir)

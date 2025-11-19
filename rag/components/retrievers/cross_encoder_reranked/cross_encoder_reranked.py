@@ -1,8 +1,7 @@
-"""Cross-encoder reranking strategy using Ollama models."""
+"""Cross-encoder reranking strategy using models from runtime config."""
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import yaml
 
 from components.retrievers.base import RetrievalStrategy, RetrievalResult
 from core.base import Document
@@ -13,18 +12,18 @@ logger = RAGStructLogger("rag.components.retrievers.cross_encoder_reranked")
 
 class CrossEncoderRerankedStrategy(RetrievalStrategy):
     """
-    Cross-encoder reranking strategy using Ollama models (GGUF format).
+    Cross-encoder reranking strategy using models from runtime.models config.
 
     This strategy performs initial retrieval using a base strategy, then uses
-    a cross-encoder model served via Ollama to compute precise relevance scores
-    by jointly encoding the query and each document.
+    a cross-encoder model to compute precise relevance scores by jointly
+    encoding the query and each document.
 
     Cross-encoders are 10-100x faster than LLM-based reranking and often
     more accurate for relevance scoring.
 
-    Supported via Ollama (GGUF models):
+    Recommended models:
     - bge-reranker-v2-m3 (Best for production, multilingual)
-    - nomic-embed-text (Fast alternative)
+    - bce-reranker-base (Good quantized option)
 
     Use Cases:
     - Simple, focused questions requiring accurate ranking
@@ -47,7 +46,9 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         config = config or {}
 
         # Configuration
-        self.model_name = config.get("model_name", "reranker")
+        self.model_name = config.get("model_name", "reranker")  # Name from runtime.models
+        self.model_base_url = config.get("model_base_url")  # Resolved by RAGManager
+        self.model_id = config.get("model_id")  # Resolved by RAGManager
         self.initial_k = config.get("initial_k", 30)
         self.final_k = config.get("final_k", 10)
         self.base_strategy_name = config.get("base_strategy", "BasicSimilarityStrategy")
@@ -60,8 +61,6 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         # Model state
         self._base_strategy: Optional[RetrievalStrategy] = None
         self._reranker_client = None
-        self._model_config = None
-        self._project_config = None
 
     def _initialize_base_strategy(self):
         """Lazy initialization of base strategy."""
@@ -90,52 +89,34 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         logger.info(f"Initialized base strategy: {self.base_strategy_name}")
 
     def _initialize_reranker(self):
-        """Initialize the cross-encoder reranking model from runtime.models."""
+        """Initialize the cross-encoder reranking model."""
         if self._reranker_client is not None:
             return
 
-        if not self.project_dir:
-            raise ValueError("project_dir is required to load model configuration")
-
-        # Load project config
-        from config.datamodel import LlamaFarmConfig
-
-        config_path = self.project_dir / "llamafarm.yaml"
-        if not config_path.exists():
-            raise FileNotFoundError(f"Configuration not found: {config_path}")
-
-        with open(config_path) as f:
-            raw_config = yaml.safe_load(f)
-
-        self._project_config = LlamaFarmConfig(**raw_config)
-
-        # Get model configuration by name
-        model_config = None
-        for model in self._project_config.runtime.models:
-            if model.name == self.model_name:
-                model_config = model
-                break
-
-        if not model_config:
-            available = ", ".join([m.name for m in self._project_config.runtime.models])
+        if not self.model_base_url or not self.model_id:
             raise ValueError(
-                f"Model '{self.model_name}' not found in runtime.models. "
-                f"Available: {available}"
+                f"Model configuration not resolved for '{self.model_name}'. "
+                "Ensure the model exists in runtime.models."
             )
 
-        self._model_config = model_config
+        # Create OpenAI client with the resolved model config
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise ImportError(
+                "openai package is required for cross-encoder reranking. "
+                "Install with: pip install openai"
+            )
 
-        # Get runtime provider (Ollama)
-        from services.runtime_service import RuntimeService
-
-        provider = RuntimeService.get_provider(model_config)
-        self._reranker_client = provider.get_client()
+        self._reranker_client = OpenAI(
+            base_url=self.model_base_url,
+            api_key="dummy",  # OpenAI-compatible endpoints may not require real key
+        )
 
         logger.info(
-            f"Initialized reranker via Ollama",
+            f"Initialized cross-encoder reranker",
             model_name=self.model_name,
-            model_id=model_config.model,
-            provider=model_config.provider.value,
+            base_url=self.model_base_url,
         )
 
     def retrieve(
@@ -220,7 +201,6 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
                 "strategy": self.name,
                 "version": "1.0.0",
                 "model_name": self.model_name,
-                "model_id": self._model_config.model if self._model_config else None,
                 "base_strategy": self.base_strategy_name,
                 "initial_retrieved": len(initial_result.documents),
                 "candidates_reranked": len(reranked_docs),
@@ -235,9 +215,9 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         documents: List[Document],
     ) -> List[tuple[Document, float]]:
         """
-        Rerank documents using cross-encoder model via Ollama.
+        Rerank documents using cross-encoder model.
 
-        This uses Ollama's embedding API to compute similarity scores
+        This uses the embedding API to compute similarity scores
         between the query and each document. The embeddings API with
         reranker models provides relevance scores.
 
@@ -262,14 +242,14 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         query_text: str,
         documents: List[Document],
     ) -> List[tuple[Document, float]]:
-        """Rerank a batch of documents using Ollama embeddings API."""
+        """Rerank a batch of documents using embeddings API."""
 
         results = []
 
         try:
             # Get query embedding
             query_response = self._reranker_client.embeddings.create(
-                model=self._model_config.model,
+                model=self.model_id,
                 input=query_text,
             )
             query_embedding = query_response.data[0].embedding
@@ -281,7 +261,7 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
 
                 # Get document embedding
                 doc_response = self._reranker_client.embeddings.create(
-                    model=self._model_config.model,
+                    model=self.model_id,
                     input=content,
                 )
                 doc_embedding = doc_response.data[0].embedding
@@ -386,5 +366,5 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
                 "high_throughput",
                 "cost_effective_reranking",
             ],
-            "notes": f"Cross-encoder via Ollama: {self.model_name} - optimized for reranking",
+            "notes": f"Cross-encoder reranking using model: {self.model_name}",
         }

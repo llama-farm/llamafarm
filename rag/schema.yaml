@@ -1980,6 +1980,7 @@ definitions:
                   MultiQueryStrategy,
                   RerankedStrategy,
                   HybridUniversalStrategy,
+                  CrossEncoderRerankedStrategy,
                 ]
               description: Retrieval type
             config:

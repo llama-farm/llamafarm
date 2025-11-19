@@ -138,6 +138,32 @@ class BaseAPI:
             )
         return database_config
 
+    def _resolve_model_references(self, strategy_config: dict[str, Any]) -> dict[str, Any]:
+        """Resolve model references in strategy config.
+
+        For strategies that reference models by name (e.g., CrossEncoderRerankedStrategy),
+        this looks up the model in runtime.models and adds the resolved base_url and model ID.
+        """
+        # Check if this is a Cross Encoder strategy that needs model resolution
+        if strategy_config.get("type") == "CrossEncoderRerankedStrategy":
+            config = strategy_config.get("config", {})
+            model_name = config.get("model_name")
+
+            if model_name and hasattr(self.config, "runtime") and hasattr(self.config.runtime, "models"):
+                # Find the model in runtime.models
+                model_config = None
+                for model in self.config.runtime.models:
+                    if model.name == model_name:
+                        model_config = model
+                        break
+
+                if model_config:
+                    # Add resolved model details to the config
+                    config["model_base_url"] = model_config.base_url
+                    config["model_id"] = model_config.model
+
+        return strategy_config
+
     def _build_traditional_config(self, database_config: Database) -> dict[str, Any]:
         """Build traditional RAG config format from database config."""
         traditional_config: dict[str, Any] = {}
@@ -243,6 +269,8 @@ class BaseAPI:
                     "type": strategy.type.value,
                     "config": strategy.config,
                 }
+                # Resolve model references
+                strategy_config = self._resolve_model_references(strategy_config)
                 return create_retrieval_strategy_from_config(strategy_config)
 
         # If not found, return the default strategy
@@ -267,8 +295,14 @@ class BaseAPI:
 
             # Initialize retrieval strategy
             if "retrieval_strategy" in self.rag_config:
+                strategy_config = self.rag_config["retrieval_strategy"]
+
+                # Resolve model references for strategies that need them
+                strategy_config = self._resolve_model_references(strategy_config)
+
                 self.retrieval_strategy = create_retrieval_strategy_from_config(
-                    self.rag_config["retrieval_strategy"]
+                    strategy_config,
+                    project_dir=self.project_dir
                 )
             else:
                 # Fallback to basic universal strategy
@@ -320,6 +354,7 @@ class DatabaseSearchAPI(BaseAPI):
             query_embedding=query_embedding,
             vector_store=self.vector_store,
             top_k=top_k,
+            query_text=query,  # Pass original query text for strategies that need it
             **kwargs,
         )
 
