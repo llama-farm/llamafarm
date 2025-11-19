@@ -380,7 +380,7 @@ const Test = () => {
       {/* Settings bar (designer mode only) */}
       {mode === 'designer' && (
         <div className="mb-4 flex flex-col xl:flex-row xl:flex-wrap items-stretch xl:items-start gap-3">
-          <div className="flex-1 xl:min-w-[480px] rounded-xl bg-muted/30 border border-border px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 h-auto sm:h-11 py-2 sm:py-0">
+          <div className="flex-1 xl:min-w-[480px] rounded-xl bg-muted/30 border border-border px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 min-h-11 py-2 sm:py-0">
             {/* Toggles group - no wrapping to prevent awkward breaks */}
             <div className="flex flex-nowrap items-center gap-3 text-xs min-w-0 overflow-x-auto w-full">
               <label className="inline-flex items-center gap-2 flex-shrink-0">
