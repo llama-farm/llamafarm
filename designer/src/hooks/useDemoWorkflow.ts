@@ -110,7 +110,13 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
   const startDemo = useCallback(
     async (demo: DemoConfig, namespace: string) => {
+      // Always reset state completely before starting
       reset()
+
+      // Force refresh the projects list to get accurate numbering
+      await queryClient.invalidateQueries({
+        queryKey: projectKeys.list(namespace),
+      })
 
       try {
         // Step 1: Fetch demo config (10%)
@@ -143,11 +149,22 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         setProgress(20)
 
         // Step 2: Generate unique project name
-        // Find highest demo-{n} number
+        // Fetch fresh project list (we invalidated cache at start)
+        await new Promise(resolve => setTimeout(resolve, 500)) // Small delay to ensure cache is cleared
         const existingProjects = await projectService.listProjects(namespace)
+
+        console.log(
+          `📋 Found ${existingProjects.projects.length} existing projects`
+        )
+
         const demoProjects = existingProjects.projects
           .map(p => p.name)
           .filter(name => name.startsWith(`${demo.name}-`))
+
+        console.log(
+          `📋 Found ${demoProjects.length} existing demo projects:`,
+          demoProjects
+        )
 
         const numbers = demoProjects
           .map(name => {
@@ -158,6 +175,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1
         const newProjectName = `${demo.name}-${nextNumber}`
+
+        console.log(`✨ Creating new demo project: ${newProjectName}`)
         setProjectName(newProjectName)
 
         // Step 3: Create project (30%)
@@ -250,6 +269,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         setProgress(80)
 
+        // Small delay to ensure backend is ready (file metadata written, etc.)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
         // Step 6: Process dataset (90%)
         updateStep('processing_dataset')
         setProgress(90)
@@ -262,6 +284,20 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         })
 
         const processStart = Date.now()
+        console.log(
+          `🚀 Starting dataset processing for project: ${newProjectName}, dataset: ${demo.datasetName}`
+        )
+
+        // Verify project exists before processing
+        try {
+          await projectService.getProject(namespace, newProjectName)
+        } catch (err) {
+          console.error('Project verification failed:', err)
+          throw new Error(
+            `Project ${newProjectName} was created but cannot be found. Please try again.`
+          )
+        }
+
         const processResult = await datasetService.processDataset(
           namespace,
           newProjectName,
@@ -271,6 +307,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Poll for completion
         let taskResult: any = null
         if (processResult.task_id) {
+          console.log(
+            `📋 Received task ID: ${processResult.task_id} for project: ${newProjectName}`
+          )
           let completed = false
           let attempts = 0
           const maxAttempts = 60 // 2 minutes max
@@ -284,11 +323,41 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
               processResult.task_id
             )
 
+            console.log(
+              `📊 Task ${processResult.task_id} status: ${taskStatus.state} (attempt ${attempts + 1}/${maxAttempts})`
+            )
+
             if (taskStatus.state === 'SUCCESS') {
               completed = true
               taskResult = taskStatus.result
             } else if (taskStatus.state === 'FAILURE') {
-              throw new Error('Dataset processing failed')
+              // Extract detailed error message from task response
+              console.error('Dataset processing failed:', {
+                error: taskStatus.error,
+                traceback: taskStatus.traceback,
+                result: taskStatus.result,
+              })
+
+              // Provide user-friendly error message
+              let errorMsg = 'Dataset processing failed'
+              if (taskStatus.error) {
+                // Check for common error patterns
+                if (
+                  taskStatus.error.includes('not found') ||
+                  taskStatus.error.includes('deleted')
+                ) {
+                  errorMsg =
+                    'Project was deleted or is unavailable. This may be due to a stale background task. Please try again.'
+                } else {
+                  // Truncate very long errors for display
+                  errorMsg =
+                    taskStatus.error.length > 200
+                      ? taskStatus.error.substring(0, 200) + '...'
+                      : taskStatus.error
+                }
+              }
+
+              throw new Error(errorMsg)
             }
 
             // Update progress during processing (90-98%)
@@ -299,7 +368,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           }
 
           if (!completed) {
-            throw new Error('Dataset processing timed out')
+            throw new Error(
+              'Dataset processing timed out - the server may still be processing in the background. Please check the RAG page.'
+            )
           }
         }
 

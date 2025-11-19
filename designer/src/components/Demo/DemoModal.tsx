@@ -13,7 +13,7 @@ import {
 } from '../ui/dialog'
 import { AVAILABLE_DEMOS, DemoConfig } from '../../config/demos'
 import { useDemoWorkflow, DemoStep, ApiCall, ProcessingResult } from '../../hooks/useDemoWorkflow'
-import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
+import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 
 interface DemoModalProps {
   isOpen: boolean
@@ -57,68 +57,6 @@ function DemoSelector({ onSelect }: { onSelect: (demo: DemoConfig) => void }) {
           </button>
         ))}
       </div>
-    </div>
-  )
-}
-
-function StepIndicator({
-  step,
-  currentStep,
-  lastValidStep
-}: {
-  step: DemoStep
-  currentStep: DemoStep
-  lastValidStep: DemoStep
-}) {
-  const steps: DemoStep[] = [
-    'fetching_config',
-    'creating_project',
-    'uploading_files',
-    'processing_dataset',
-    'completed'
-  ]
-
-  const stepLabels: Record<DemoStep, string> = {
-    idle: 'Ready',
-    fetching_config: 'Fetching Configuration',
-    creating_project: 'Creating Project',
-    uploading_files: 'Uploading Files',
-    processing_dataset: 'Processing Dataset',
-    completed: 'Completed',
-    error: 'Error'
-  }
-
-  // When error occurs, use lastValidStep to determine progress
-  const effectiveCurrentStep = currentStep === 'error' ? lastValidStep : currentStep
-  const currentIndex = steps.indexOf(effectiveCurrentStep)
-  const stepIndex = steps.indexOf(step)
-
-  const isActive = step === effectiveCurrentStep
-  const isCompleted = stepIndex < currentIndex || currentStep === 'completed'
-  const isError = currentStep === 'error' && isActive
-
-  return (
-    <div className="flex items-center gap-2">
-      {isCompleted ? (
-        <CheckCircle2 className="w-4 h-4 text-green-500" />
-      ) : isError ? (
-        <XCircle className="w-4 h-4 text-destructive" />
-      ) : isActive ? (
-        <Loader2 className="w-4 h-4 text-primary animate-spin" />
-      ) : (
-        <Circle className="w-4 h-4 text-muted-foreground/50" />
-      )}
-      <span
-        className={`text-sm ${
-          isActive
-            ? 'text-primary font-medium'
-            : isCompleted
-            ? 'text-green-600'
-            : 'text-muted-foreground'
-        }`}
-      >
-        {stepLabels[step]}
-      </span>
     </div>
   )
 }
@@ -223,7 +161,6 @@ function CopyableQuestion({ question, index }: { question: string; index: number
 function WorkflowProgress({
   demo,
   currentStep,
-  lastValidStep,
   progress,
   error,
   apiCalls,
@@ -234,7 +171,6 @@ function WorkflowProgress({
 }: {
   demo: DemoConfig
   currentStep: DemoStep
-  lastValidStep: DemoStep
   progress: number
   error: string | null
   apiCalls: ApiCall[]
@@ -260,6 +196,21 @@ function WorkflowProgress({
 
   // Failure state
   if (isError) {
+    // Determine if this is a dataset processing error and provide helpful context
+    const isDatasetError = error?.toLowerCase().includes('dataset') || 
+                          error?.toLowerCase().includes('processing')
+    
+    const isProjectDeletedError = error?.toLowerCase().includes('not found') ||
+                                  error?.toLowerCase().includes('deleted') ||
+                                  error?.toLowerCase().includes('stale')
+    
+    let helpText = null
+    if (isProjectDeletedError) {
+      helpText = "This usually happens when there are background tasks from recently deleted projects. Simply click 'Try Again' to create a fresh demo project."
+    } else if (isDatasetError) {
+      helpText = "Check if the RAG worker is running properly. You can also try refreshing the page."
+    }
+
     return (
       <div className="space-y-4">
         {/* Error header */}
@@ -268,7 +219,14 @@ function WorkflowProgress({
             <XCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-semibold text-destructive mb-1">Creation Failed</p>
-              <p className="text-sm text-destructive/90">{error}</p>
+              <p className="text-sm text-destructive/90 mb-2">{error}</p>
+              {helpText && (
+                <div className="mt-3 pt-3 border-t border-destructive/20">
+                  <p className="text-xs text-muted-foreground">
+                    💡 <span className="font-medium">What to do:</span> {helpText}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -429,7 +387,7 @@ function WorkflowProgress({
 
 export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoModalProps & { autoStartDemoId?: string | null }) {
   const [selectedDemo, setSelectedDemo] = useState<DemoConfig | null>(null)
-  const { currentStep, lastValidStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
+  const { currentStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
     useDemoWorkflow()
 
   // Auto-start demo if provided
@@ -509,7 +467,6 @@ export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoM
             <WorkflowProgress
               demo={selectedDemo}
               currentStep={currentStep}
-              lastValidStep={lastValidStep}
               progress={progress}
               error={error}
               apiCalls={apiCalls}

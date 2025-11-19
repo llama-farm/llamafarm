@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
 
-from celery import Task, signature, group
+from celery import Task, group, signature
 
 from core.celery import app
 from core.logging import FastAPIStructLogger
@@ -14,14 +14,22 @@ logger = FastAPIStructLogger(__name__)
 @app.task(bind=True)
 def process_dataset_task(self: Task, namespace: str, project: str, dataset: str):
     logger.info("Processing dataset task started")
-    project_config = ProjectService.get_project(namespace, project).config
+    
+    # Check if project still exists (it may have been deleted)
+    try:
+        project_obj = ProjectService.get_project(namespace, project)
+        project_config = project_obj.config
+    except Exception as e:
+        error_msg = f"Cannot process dataset - project '{project}' not found or inaccessible. It may have been deleted."
+        logger.warning(error_msg, namespace=namespace, project=project, error=str(e))
+        raise ValueError(error_msg) from e
 
     # Get the dataset config
     dataset_config = next(
         (ds for ds in (project_config.datasets or []) if ds.name == dataset), None
     )
     if not dataset_config:
-        raise ValueError(f"Dataset {dataset} not found")
+        raise ValueError(f"Dataset {dataset} not found in project {project}")
 
     # Get the RAG strategy for the dataset
     ds_data_processing_strategy_name = dataset_config.data_processing_strategy
