@@ -13,7 +13,7 @@ import {
 import {
   getModelNames,
   formatLastModified,
-  parseTimestamp
+  parseTimestamp,
 } from './utils/projectHelpers'
 import { getCurrentNamespace } from './utils/namespaceUtils'
 import projectService from './api/projectService'
@@ -43,7 +43,9 @@ function Home() {
   const [generalError, setGeneralError] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'a-z' | 'z-a' | 'model'>('newest')
+  const [sortBy, setSortBy] = useState<
+    'newest' | 'oldest' | 'a-z' | 'z-a' | 'model'
+  >('newest')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
   const [fakeProgress, setFakeProgress] = useState(0)
@@ -72,12 +74,15 @@ function Home() {
     return new Map(
       apiProjects.map(p => {
         const key = `${p.namespace}/${p.name}`
-        return [key, {
-          ...p,
-          // Precompute sort keys for performance
-          _sortTimestamp: parseTimestamp(p.last_modified),
-          _sortModels: getModelNames(p.config)
-        }]
+        return [
+          key,
+          {
+            ...p,
+            // Precompute sort keys for performance
+            _sortTimestamp: parseTimestamp(p.last_modified),
+            _sortModels: getModelNames(p.config),
+          },
+        ]
       })
     )
   }, [projectsResponse])
@@ -106,10 +111,14 @@ function Home() {
       switch (sortBy) {
         case 'newest':
           // Use precomputed timestamps
-          return (projectB?._sortTimestamp || 0) - (projectA?._sortTimestamp || 0)
+          return (
+            (projectB?._sortTimestamp || 0) - (projectA?._sortTimestamp || 0)
+          )
         case 'oldest':
           // Use precomputed timestamps
-          return (projectA?._sortTimestamp || 0) - (projectB?._sortTimestamp || 0)
+          return (
+            (projectA?._sortTimestamp || 0) - (projectB?._sortTimestamp || 0)
+          )
         case 'a-z':
           return a.localeCompare(b)
         case 'z-a':
@@ -163,11 +172,11 @@ function Home() {
 
   const handleCreateProject = async () => {
     const MIN_LOADING_MS = 3000
-    
+
     // Validate and sanitize project name
     const sanitizedName = sanitizeProjectName(projectName)
     const validation = validateProjectName(sanitizedName)
-    
+
     if (!validation.isValid) {
       setProjectNameError(validation.error || 'Invalid project name')
       return
@@ -183,7 +192,7 @@ function Home() {
     setGeneralError(null)
     setIsCreatingProject(true)
     const startedAt = performance.now()
-    
+
     try {
       // 1) Create the base project
       await projectService.createProject(namespace, {
@@ -196,13 +205,19 @@ function Home() {
         const brief: { what?: string; deployment?: string } = {}
         if (what.trim()) brief.what = what.trim()
         if (deployment) brief.deployment = deployment
-        
+
         // Get current config
-        const currentProject = await projectService.getProject(namespace, sanitizedName)
-        
-        const mergedConfig = mergeProjectConfig(currentProject.project.config || {}, {
-          project_brief: brief,
-        })
+        const currentProject = await projectService.getProject(
+          namespace,
+          sanitizedName
+        )
+
+        const mergedConfig = mergeProjectConfig(
+          currentProject.project.config || {},
+          {
+            project_brief: brief,
+          }
+        )
         try {
           await projectService.updateProject(namespace, sanitizedName, {
             config: mergedConfig,
@@ -215,7 +230,7 @@ function Home() {
 
       // 3) Activate and navigate to dashboard
       localStorage.setItem('activeProject', sanitizedName)
-      
+
       // Optimistically update caches
       try {
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
@@ -232,7 +247,7 @@ function Home() {
           )
         }
       } catch {}
-      
+
       // Ensure the loading overlay is visible for at least MIN_LOADING_MS
       const elapsed = performance.now() - startedAt
       if (elapsed < MIN_LOADING_MS) {
@@ -244,7 +259,8 @@ function Home() {
       navigate('/chat/dashboard')
     } catch (error) {
       console.error('❌ Failed to create project:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       setGeneralError(`Failed to create project: ${errorMessage}`)
     } finally {
       setIsCreatingProject(false)
@@ -307,7 +323,7 @@ function Home() {
       const deletedProjectName = (event as CustomEvent<string>).detail
       // Force refetch of projects list to ensure UI is updated
       queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
-      
+
       // Clear active project if it was the one deleted
       try {
         const active = localStorage.getItem('activeProject')
@@ -340,13 +356,15 @@ function Home() {
         {/* Split Screen Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           {/* Left Side: Quick Start Demo */}
-          <div className="rounded-xl border-2 border-border bg-card p-6 flex flex-col">
+          <div className="rounded-xl border-2 border-primary/40 bg-card p-6 flex flex-col relative">
+            {/* Center Recommended Tag */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-md text-xs font-semibold">
+              Recommended
+            </div>
+
             <div className="mb-4 text-center">
-              <h2 className="text-xl font-semibold text-foreground mb-1 flex items-center justify-center gap-2">
+              <h2 className="text-xl font-semibold text-foreground mb-1">
                 Quick start demo
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                  Recommended
-                </span>
               </h2>
               <p className="text-sm text-muted-foreground">
                 Learn LlamaFarm by exploring a pre-configured project.
@@ -355,20 +373,20 @@ function Home() {
 
             {/* Llama Demo Card */}
             {AVAILABLE_DEMOS[0] && (
-              <div className="mb-4 rounded-lg border border-input bg-accent/50 p-4">
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="text-4xl">{AVAILABLE_DEMOS[0].icon}</div>
-                  <div className="flex-1 text-left">
-                    <h3 className="font-semibold text-foreground mb-1">
-                      {AVAILABLE_DEMOS[0].displayName}
+              <div className="mb-6 rounded-lg border border-input bg-accent/50 p-6">
+                <div className="flex flex-col items-center text-center gap-3">
+                  <div className="text-5xl">{AVAILABLE_DEMOS[0].icon}</div>
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-semibold text-foreground text-base">
+                      Llama & Alpaca Care
                     </h3>
-                    <span className="inline-block px-2 py-0.5 rounded-md text-xs bg-primary/10 text-primary mb-2">
-                      Demo project
-                    </span>
                     <p className="text-sm text-muted-foreground">
-                      {AVAILABLE_DEMOS[0].description}
+                      Chat with an encyclopedia about llama and alpaca care.
                     </p>
                   </div>
+                  <span className="px-2 py-0.5 rounded-md text-xs bg-primary/10 text-primary">
+                    Demo project
+                  </span>
                 </div>
               </div>
             )}
@@ -383,7 +401,7 @@ function Home() {
               </button>
               <button
                 onClick={() => demoModal.openModal()}
-                className="w-full text-primary hover:opacity-80 text-sm font-medium transition-opacity"
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground hover:bg-accent/20 font-medium transition-colors"
               >
                 Explore more demo projects
               </button>
@@ -435,15 +453,20 @@ function Home() {
                     className={projectNameError ? 'border-destructive' : ''}
                   />
                   {projectNameError && (
-                    <p className="text-xs text-destructive">{projectNameError}</p>
+                    <p className="text-xs text-destructive">
+                      {projectNameError}
+                    </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
+                    Only letters, numbers, underscores (_), and hyphens (-)
+                    allowed. No spaces.
                   </p>
                 </div>
 
                 <div className="grid gap-2.5">
-                  <Label htmlFor="what">What are you building? (optional)</Label>
+                  <Label htmlFor="what">
+                    What are you building? (optional)
+                  </Label>
                   <Textarea
                     id="what"
                     value={what}
@@ -457,7 +480,7 @@ function Home() {
                 <div className="grid gap-2.5">
                   <Label>Where do you plan to deploy this?</Label>
                   <div className="flex flex-row gap-3">
-                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                    <label className="flex-1 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 h-10 hover:bg-accent/20 cursor-pointer">
                       <input
                         type="radio"
                         name="deploy"
@@ -468,7 +491,7 @@ function Home() {
                       />
                       <span className="text-sm">Local</span>
                     </label>
-                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                    <label className="flex-1 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 h-10 hover:bg-accent/20 cursor-pointer">
                       <input
                         type="radio"
                         name="deploy"
@@ -479,7 +502,7 @@ function Home() {
                       />
                       <span className="text-sm">Cloud</span>
                     </label>
-                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                    <label className="flex-1 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 h-10 hover:bg-accent/20 cursor-pointer">
                       <input
                         type="radio"
                         name="deploy"
