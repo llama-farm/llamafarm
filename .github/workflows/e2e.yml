@@ -43,8 +43,6 @@ jobs:
     env:
       # Use the current branch/ref being tested instead of main
       LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
-      # Use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages in CI
-      UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
 

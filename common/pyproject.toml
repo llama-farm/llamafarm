@@ -11,6 +11,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["llamafarm_common"]
-
-[tool.uv]
-dev-dependencies = []
