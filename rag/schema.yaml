@@ -1857,7 +1857,7 @@ definitions:
     crossEncoderRerankedConfig:
       type: object
       additionalProperties: false
-      description: Cross-encoder reranking configuration using Ollama models (GGUF)
+      description: Cross-encoder reranking configuration using Universal Runtime with HuggingFace models
       required:
         - model_name
       properties:
@@ -1865,10 +1865,6 @@ definitions:
           type: string
           description: "Name of the model from runtime.models to use for reranking (e.g., 'reranker')"
           example: "reranker"
-        api_key:
-          type: string
-          description: "Optional API key for authentication. Defaults to OPENAI_API_KEY env var or 'not-needed' for local endpoints like Ollama"
-          default: null
         initial_k:
           type: integer
           default: 30
@@ -1897,22 +1893,12 @@ definitions:
           minimum: 0.0
           maximum: 1.0
           description: "Minimum relevance score (0-1) to include a result"
-        batch_size:
+        timeout:
           type: integer
-          default: 32
-          minimum: 1
-          maximum: 128
-          description: "Number of documents to rerank per batch"
-        normalize_scores:
-          type: boolean
-          default: true
-          description: "Normalize scores to 0-1 range using min-max normalization"
-        max_chars_per_doc:
-          type: integer
-          default: 1000
-          minimum: 100
-          maximum: 10000
-          description: "Maximum characters per document for reranking (to avoid token limits)"
+          default: 60
+          minimum: 10
+          maximum: 300
+          description: "Request timeout in seconds for reranking API calls"
 
     multiTurnRAGConfig:
       type: object

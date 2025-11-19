@@ -193,7 +193,13 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
             # Prepare request
             doc_texts = [doc.content for doc in documents]
 
-            url = f"{self.model_base_url}/v1/rerank"
+            # Construct URL - add /v1 if not already present
+            base_url = self.model_base_url.rstrip('/')
+            if base_url.endswith('/v1'):
+                url = f"{base_url}/rerank"
+            else:
+                url = f"{base_url}/v1/rerank"
+
             payload = {
                 "model": self.model_id,
                 "query": query_text,

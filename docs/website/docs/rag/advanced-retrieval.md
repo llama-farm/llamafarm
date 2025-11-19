@@ -26,16 +26,21 @@ Cross-encoder reranking improves retrieval accuracy by reranking initial candida
 
 ### Configuration
 
-Add a reranker model to your runtime configuration:
+Add a reranker model to your runtime configuration using Universal Runtime:
 
 ```yaml
 runtime:
   models:
     - name: reranker
-      description: Cross-encoder model for semantic reranking
-      provider: openai
-      model: qllama/bce-reranker-base_v1:q4_k_m
-      base_url: http://localhost:11434/v1
+      description: Fast cross-encoder for document reranking (HuggingFace model via Universal Runtime)
+      provider: universal
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto
+        dtype: auto
+        trust_remote_code: true
+        model_type: reranking
 ```
 
 Then configure the retrieval strategy in your database:
@@ -55,52 +60,51 @@ rag:
             base_strategy: BasicSimilarityStrategy
             base_strategy_config:
               distance_metric: cosine
-            batch_size: 16
-            normalize_scores: true
             relevance_threshold: 0.0
-            max_chars_per_doc: 1000
+            timeout: 60
           default: true
 ```
 
 ### Recommended Reranking Models
 
+These HuggingFace cross-encoder models are automatically downloaded when first used via Universal Runtime:
+
 #### Model Comparison
 
 | Model | Size | Speed | Accuracy | Languages | Best For |
 |-------|------|-------|----------|-----------|----------|
-| **bge-reranker-v2-m3** | ~2GB | Medium | Highest | 100+ | Production, multilingual |
-| **bce-reranker-base** | ~400MB | Fast | High | English, Chinese | Good balance, tested |
-| **nomic-embed-text** | ~550MB | Very Fast | Medium | English | Lightweight alternative |
+| **ms-marco-MiniLM-L-6-v2** | ~90MB | Very Fast | High | English | Default, best balance |
+| **bge-reranker-v2-m3** | ~560MB | Medium | Highest | 100+ | Production, multilingual |
+| **bge-reranker-base** | ~280MB | Fast | High | 100+ | Good balance |
 
 #### Detailed Model Info
 
-**qllama/bge-reranker-v2-m3 (Recommended for Production)**
-```bash
-ollama pull qllama/bge-reranker-v2-m3:q4_k_m
+**cross-encoder/ms-marco-MiniLM-L-6-v2 (Recommended Default)**
+```yaml
+model: cross-encoder/ms-marco-MiniLM-L-6-v2
+```
+- **Strengths:** Very small (~90MB), fast, excellent accuracy, widely used
+- **Weaknesses:** English only
+- **Use when:** Need fast, accurate reranking with minimal overhead (default choice)
+- **Performance:** ~300-500 docs/sec
+
+**BAAI/bge-reranker-v2-m3 (Recommended for Multilingual)**
+```yaml
+model: BAAI/bge-reranker-v2-m3
 ```
 - **Strengths:** Best accuracy, multilingual (100+ languages), state-of-the-art
-- **Weaknesses:** Slower than alternatives, larger model
+- **Weaknesses:** Larger size, slightly slower
 - **Use when:** Quality is critical, multilingual support needed
-- **Performance:** ~50-100 docs/sec
+- **Performance:** ~100-200 docs/sec
 
-**qllama/bce-reranker-base_v1 (Recommended for Most Use Cases)**
-```bash
-ollama pull qllama/bce-reranker-base_v1:q4_k_m
+**BAAI/bge-reranker-base (Good Balance)**
+```yaml
+model: BAAI/bge-reranker-base
 ```
-- **Strengths:** Good accuracy, fast, smaller size, well-tested
-- **Weaknesses:** English/Chinese only
-- **Use when:** Need balance of speed and accuracy
-- **Performance:** ~200-400 docs/sec
-
-**nomic-embed-text (Lightweight Alternative)**
-```bash
-ollama pull nomic-embed-text
-```
-- **Strengths:** Very fast, small, good for prototyping
-- **Weaknesses:** Lower accuracy than dedicated rerankers
-- **Use when:** Speed is critical, acceptable to trade some accuracy
-- **Performance:** ~400+ docs/sec
-- **Note:** This is an embedding model, not a dedicated reranker
+- **Strengths:** Good accuracy, multilingual, medium size
+- **Weaknesses:** Slower than MiniLM
+- **Use when:** Need multilingual support with reasonable speed
+- **Performance:** ~150-300 docs/sec
 
 ### Configuration Options
 
@@ -110,10 +114,8 @@ ollama pull nomic-embed-text
 | `initial_k` | 30 | Number of candidates before reranking |
 | `final_k` | 10 | Number of results after reranking |
 | `base_strategy` | `BasicSimilarityStrategy` | Initial retrieval strategy |
-| `batch_size` | 32 | Reranking batch size |
-| `normalize_scores` | `true` | Normalize scores to 0-1 range |
-| `relevance_threshold` | 0.0 | Minimum score to include |
-| `max_chars_per_doc` | 1000 | Truncate long documents |
+| `relevance_threshold` | 0.0 | Minimum score to include (0-1 range, auto-normalized) |
+| `timeout` | 60 | Request timeout in seconds |
 
 ### Complete Example Configuration
 
@@ -134,10 +136,15 @@ runtime:
 
     # Reranker model for CrossEncoderRerankedStrategy
     - name: reranker
-      description: Cross-encoder model for semantic reranking
-      provider: openai
-      model: qllama/bce-reranker-base_v1:q4_k_m
-      base_url: http://localhost:11434/v1
+      description: Fast cross-encoder for document reranking (HuggingFace model via Universal Runtime)
+      provider: universal
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto
+        dtype: auto
+        trust_remote_code: true
+        model_type: reranking
 
 rag:
   databases:
@@ -178,10 +185,8 @@ rag:
             base_strategy: BasicSimilarityStrategy
             base_strategy_config:
               distance_metric: cosine
-            batch_size: 16
-            normalize_scores: true
             relevance_threshold: 0.0
-            max_chars_per_doc: 1000
+            timeout: 60
           default: true
 
       default_embedding_strategy: default_embeddings
@@ -190,10 +195,9 @@ rag:
 
 ### Usage
 
-```bash
-# Pull the reranker model
-ollama pull qllama/bce-reranker-base_v1:q4_k_m
+The reranker model is automatically downloaded from HuggingFace when first used:
 
+```bash
 # Query with reranking (uses default strategy)
 lf rag query --database main_database "What are the differences between llama and alpaca fibers?"
 
@@ -271,7 +275,7 @@ rag:
               model_name: reranker
               initial_k: 15
               final_k: 10
-              batch_size: 16
+              timeout: 60
             dedup_similarity_threshold: 0.95
             max_workers: 3            # Parallel sub-query retrieval
           default: true
@@ -324,15 +328,10 @@ ollama pull qwen3:1.7B
 
 #### Reranking Models (Optional but Recommended)
 
-For best results, enable reranking with one of:
+For best results, enable reranking using Universal Runtime with HuggingFace models (automatically downloaded):
 
-```bash
-# Recommended: Good balance
-ollama pull qllama/bce-reranker-base_v1:q4_k_m
-
-# Best accuracy: Multilingual
-ollama pull qllama/bge-reranker-v2-m3:q4_k_m
-```
+- **Recommended:** `cross-encoder/ms-marco-MiniLM-L-6-v2` (~90MB, very fast)
+- **Best accuracy:** `BAAI/bge-reranker-v2-m3` (~560MB, multilingual)
 
 See [Cross-Encoder Reranking Models](#recommended-reranking-models) above for detailed comparison.
 
@@ -376,10 +375,15 @@ runtime:
 
     # Reranker model for CrossEncoderRerankedStrategy
     - name: reranker
-      description: Cross-encoder model for semantic reranking
-      provider: openai
-      model: qllama/bce-reranker-base_v1:q4_k_m
-      base_url: http://localhost:11434/v1
+      description: Fast cross-encoder for document reranking (HuggingFace model via Universal Runtime)
+      provider: universal
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto
+        dtype: auto
+        trust_remote_code: true
+        model_type: reranking
 
 rag:
   databases:
@@ -540,13 +544,13 @@ lf rag query --database main_database --retrieval-strategy reranked_search "focu
    - Lower `final_k` = faster LLM processing
    - Good defaults: `initial_k: 30`, `final_k: 5`
 
-2. **Batch size:**
-   - Larger batches = faster (up to a point)
-   - Default `32` works well for most models
+2. **Model selection:**
+   - Use `cross-encoder/ms-marco-MiniLM-L-6-v2` for best speed/size tradeoff
+   - Use `BAAI/bge-reranker-v2-m3` when accuracy is critical or multilingual support needed
 
-3. **Document truncation:**
-   - `max_chars_per_doc: 1000` prevents token limit errors
-   - Adjust based on your documents and model
+3. **Timeout adjustment:**
+   - Default `60` seconds works for most cases
+   - Increase if processing very large document sets
 
 ### Multi-Turn RAG
 
@@ -574,20 +578,24 @@ lf rag query --database main_database --retrieval-strategy reranked_search "focu
 ValueError: Model 'reranker' not found in runtime.models
 ```
 
-**Solution:** Ensure the model exists in `runtime.models` and the name matches:
+**Solution:** Ensure the model exists in `runtime.models` with `provider: universal` and the name matches:
 ```yaml
 runtime:
   models:
     - name: reranker  # Must match model_name in strategy config
-      model: qllama/bce-reranker-base_v1:q4_k_m
+      provider: universal
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        model_type: reranking
 ```
 
 **Problem:** Reranking is slow
 
 **Solution:**
 - Reduce `initial_k` (fewer candidates to rerank)
-- Increase `batch_size` (more efficient batching)
-- Use a smaller model (e.g., bce-reranker vs bge-reranker-v2-m3)
+- Use a smaller, faster model (e.g., `cross-encoder/ms-marco-MiniLM-L-6-v2` instead of `BAAI/bge-reranker-v2-m3`)
+- Increase `timeout` if getting timeout errors with large document sets
 
 ### Multi-Turn Issues
 
