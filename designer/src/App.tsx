@@ -84,6 +84,7 @@ function DemoModalRoot() {
       isOpen={demoModal.isOpen}
       onClose={demoModal.closeModal}
       namespace={namespace}
+      autoStartDemoId={demoModal.autoStartDemoId}
     />
   )
 }

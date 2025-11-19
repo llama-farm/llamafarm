@@ -3,7 +3,7 @@
  * Beautiful, educational workflow showing API calls in real-time
  */
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -350,10 +350,20 @@ function WorkflowProgress({
   )
 }
 
-export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
+export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoModalProps & { autoStartDemoId?: string | null }) {
   const [selectedDemo, setSelectedDemo] = useState<DemoConfig | null>(null)
   const { currentStep, lastValidStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
     useDemoWorkflow()
+
+  // Auto-start demo if provided
+  React.useEffect(() => {
+    if (isOpen && autoStartDemoId && !selectedDemo && currentStep === 'idle') {
+      const demo = AVAILABLE_DEMOS.find(d => d.id === autoStartDemoId)
+      if (demo) {
+        handleSelectDemo(demo)
+      }
+    }
+  }, [isOpen, autoStartDemoId, selectedDemo, currentStep])
 
   const handleSelectDemo = (demo: DemoConfig) => {
     setSelectedDemo(demo)

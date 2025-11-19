@@ -27,6 +27,7 @@ import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
 import { useDemoModal } from './contexts/DemoModalContext'
+import { AVAILABLE_DEMOS } from './config/demos'
 
 function Home() {
   // Demo modal context
@@ -34,7 +35,6 @@ function Home() {
 
   // Form state
   const [projectName, setProjectName] = useState('')
-  const [copyFromProject, setCopyFromProject] = useState<string>('none')
   const [what, setWhat] = useState('')
   const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>(
     'local'
@@ -191,38 +191,13 @@ function Home() {
         config_template: 'default',
       })
 
-      // 2) If copying from existing, update with source config
-      if (copyFromProject !== 'none') {
-        try {
-          // Fetch source project
-          const sourceProject = await projectService.getProject(namespace, copyFromProject)
-          
-          // Clone config and update name/namespace
-          const clonedConfig = JSON.parse(JSON.stringify(sourceProject.project.config))
-          clonedConfig.name = sanitizedName
-          clonedConfig.namespace = namespace
-          
-          // Clear datasets (config only, no data)
-          clonedConfig.datasets = []
-          
-          // Update new project with cloned config
-          await projectService.updateProject(namespace, sanitizedName, {
-            config: clonedConfig,
-          })
-        } catch (e) {
-          console.error('Failed to copy configuration:', e)
-          // Non-critical - project was created, just with default config
-          setGeneralError('Project created but failed to copy configuration. Using default settings.')
-        }
-      }
-
-      // 3) Save optional "what" description and deployment
+      // 2) Save optional "what" description and deployment
       if (what.trim() || deployment) {
         const brief: { what?: string; deployment?: string } = {}
         if (what.trim()) brief.what = what.trim()
         if (deployment) brief.deployment = deployment
         
-        // Get current config (either default or cloned)
+        // Get current config
         const currentProject = await projectService.getProject(namespace, sanitizedName)
         
         const mergedConfig = mergeProjectConfig(currentProject.project.config || {}, {
@@ -238,7 +213,7 @@ function Home() {
         }
       }
 
-      // 4) Activate and navigate to dashboard
+      // 3) Activate and navigate to dashboard
       localStorage.setItem('activeProject', sanitizedName)
       
       // Optimistically update caches
@@ -279,6 +254,15 @@ function Home() {
   const openProject = (name: string) => {
     localStorage.setItem('activeProject', name)
     navigate('/chat/dashboard')
+  }
+
+  // Start the llama demo directly - modal will auto-start it and show progress
+  const handleStartLlamaDemo = () => {
+    const llamaDemo = AVAILABLE_DEMOS[0] // First demo is Llama & Alpaca
+    if (llamaDemo) {
+      // Open modal with auto-start demo ID
+      demoModal.openModal(llamaDemo.id)
+    }
   }
 
   // Listen for header-triggered create intent and scroll (run once on mount)
@@ -341,8 +325,8 @@ function Home() {
   }, [namespace, queryClient])
 
   return (
-    <div className="min-h-screen flex flex-col items-stretch px-4 sm:px-6 lg:px-8 pt-24 md:pt-28 pb-8 bg-background">
-      <div className="max-w-4xl w-full mx-auto text-center space-y-8">
+    <div className="min-h-screen flex flex-col items-stretch pt-24 md:pt-28 pb-8 bg-background">
+      <div className="max-w-6xl w-full mx-auto px-6 text-center space-y-8">
         <div className="space-y-4">
           <p className="text-sm font-medium tracking-wide text-foreground/80">
             Welcome to LlamaFarm 🦙
@@ -353,202 +337,209 @@ function Home() {
           </h1>
         </div>
 
-        {/* Demo Project Button */}
-        <div className="max-w-3xl mx-auto">
-          <button
-            onClick={() => demoModal.openModal()}
-            className="w-full group relative flex items-center justify-between gap-4 rounded-xl border-2 border-primary bg-gradient-to-r from-primary/5 to-primary/10 p-6 text-left transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/20"
-          >
-            <div className="flex items-start gap-4">
-              <div className="text-5xl">🚀</div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-foreground mb-1">
-                  Try a Demo Project
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Explore LlamaFarm with a pre-configured AI assistant. Ready in 30 seconds.
-                </p>
-              </div>
-            </div>
-            <FontIcon
-              type="arrow-right"
-              className="w-6 h-6 text-primary shrink-0 transition-transform group-hover:translate-x-1"
-            />
-          </button>
-        </div>
-
-        <div className="max-w-3xl mx-auto text-center">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-muted"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                or create from scratch
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div id="home-create-form" className="max-w-3xl mx-auto">
-          {generalError && (
-            <div className="mb-4 text-red-600 bg-red-100 border border-red-300 rounded p-3 text-sm">
-              {generalError}
-            </div>
-          )}
-          <div className="rounded-lg border p-4 sm:p-5 bg-card border-input shadow-sm relative">
-            <div className="grid gap-4 text-left">
-              <div className="grid gap-2.5">
-                <Label htmlFor="projectName">Project name</Label>
-                <Input
-                  id="projectName"
-                  value={projectName}
-                  onChange={e => {
-                    setProjectName(e.target.value)
-                    if (projectNameError) setProjectNameError(null)
-                    if (generalError) setGeneralError(null)
-                  }}
-                  placeholder="my-project"
-                  disabled={isCreatingProject}
-                  className={projectNameError ? 'border-destructive' : ''}
-                />
-                {projectNameError && (
-                  <p className="text-xs text-destructive">{projectNameError}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
-                </p>
-              </div>
-
-              {/* Copy from existing project */}
-              <div className="grid gap-2.5">
-                <Label htmlFor="copyFrom">Copy configuration from (optional)</Label>
-                <select
-                  id="copyFrom"
-                  className="w-full bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none cursor-pointer"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                    backgroundPosition: 'right 0.75rem center',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundSize: '1.5em 1.5em',
-                  }}
-                  value={copyFromProject}
-                  onChange={(e) => setCopyFromProject(e.target.value)}
-                  disabled={isCreatingProject}
-                >
-                  <option value="none">Create from scratch</option>
-                  {filteredAndSortedProjectNames.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-                {copyFromProject !== 'none' && (
-                  <p className="text-xs text-muted-foreground">
-                    Configuration will be copied from{' '}
-                    <span className="font-medium">{copyFromProject}</span>
-                    {' '}(runtime, prompts, RAG settings)
-                  </p>
-                )}
-              </div>
-
-              <div className="grid gap-2.5">
-                <Label htmlFor="what">What are you building? (optional)</Label>
-                <Textarea
-                  id="what"
-                  value={what}
-                  onChange={e => setWhat(e.target.value)}
-                  placeholder="A customer support chatbot, inventory system, data dashboard..."
-                  className="min-h-[72px]"
-                  disabled={isCreatingProject}
-                />
-              </div>
-
-              <div className="grid gap-2.5">
-                <Label>Where do you plan to deploy this?</Label>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 hover:bg-accent/20">
-                    <input
-                      type="radio"
-                      name="deploy"
-                      className="h-4 w-4"
-                      checked={deployment === 'local'}
-                      onChange={() => setDeployment('local')}
-                      disabled={isCreatingProject}
-                    />
-                    <span className="text-sm">Local machine</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 hover:bg-accent/20">
-                    <input
-                      type="radio"
-                      name="deploy"
-                      className="h-4 w-4"
-                      checked={deployment === 'cloud'}
-                      onChange={() => setDeployment('cloud')}
-                      disabled={isCreatingProject}
-                    />
-                    <span className="text-sm">Cloud</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 hover:bg-accent/20">
-                    <input
-                      type="radio"
-                      name="deploy"
-                      className="h-4 w-4"
-                      checked={deployment === 'unsure'}
-                      onChange={() => setDeployment('unsure')}
-                      disabled={isCreatingProject}
-                    />
-                    <span className="text-sm">Not sure</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <button
-                  onClick={handleCreateProject}
-                  disabled={isCreatingProject || !hasAnyInput}
-                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label={
-                    isCreatingProject
-                      ? 'Creating project...'
-                      : hasAnyInput
-                        ? 'Create new project'
-                        : 'Enter a project name to create'
-                  }
-                >
-                  {isCreatingProject ? 'Creating…' : 'Create project'}
-                </button>
-              </div>
+        {/* Split Screen Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          {/* Left Side: Quick Start Demo */}
+          <div className="rounded-xl border-2 border-border bg-card p-6 flex flex-col">
+            <div className="mb-4 text-center">
+              <h2 className="text-xl font-semibold text-foreground mb-1 flex items-center justify-center gap-2">
+                Quick start demo
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                  Recommended
+                </span>
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Learn LlamaFarm by exploring a pre-configured project.
+              </p>
             </div>
 
-            {isCreatingProject && (
-              <div className="absolute inset-0 rounded-lg bg-background/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-4">
-                <div className="w-9 h-9 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <div className="text-sm font-serif text-foreground text-center px-4">
-                  {loadingMessages[loadingMsgIndex]}
-                </div>
-                <div className="w-56 h-2 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-primary/70 transition-all duration-200"
-                    style={{ width: `${fakeProgress}%` }}
-                  />
-                </div>
-                <div className="flex items-center gap-1 mt-1">
-                  <span
-                    className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                    style={{ animationDelay: '0ms' }}
-                  />
-                  <span
-                    className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                    style={{ animationDelay: '150ms' }}
-                  />
-                  <span
-                    className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                    style={{ animationDelay: '300ms' }}
-                  />
+            {/* Llama Demo Card */}
+            {AVAILABLE_DEMOS[0] && (
+              <div className="mb-4 rounded-lg border border-input bg-accent/50 p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="text-4xl">{AVAILABLE_DEMOS[0].icon}</div>
+                  <div className="flex-1 text-left">
+                    <h3 className="font-semibold text-foreground mb-1">
+                      {AVAILABLE_DEMOS[0].displayName}
+                    </h3>
+                    <span className="inline-block px-2 py-0.5 rounded-md text-xs bg-primary/10 text-primary mb-2">
+                      Demo project
+                    </span>
+                    <p className="text-sm text-muted-foreground">
+                      {AVAILABLE_DEMOS[0].description}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
+
+            {/* Action Buttons */}
+            <div className="space-y-3 mt-auto">
+              <button
+                onClick={handleStartLlamaDemo}
+                className="w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 font-medium transition-opacity"
+              >
+                Start
+              </button>
+              <button
+                onClick={() => demoModal.openModal()}
+                className="w-full text-primary hover:opacity-80 text-sm font-medium transition-opacity"
+              >
+                Explore more demo projects
+              </button>
+            </div>
+          </div>
+
+          {/* OR Divider */}
+          <div className="lg:hidden text-center">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-background px-3 py-1 text-foreground font-medium">
+                  OR
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Custom Project */}
+          <div className="rounded-xl border-2 border-border bg-card p-6 flex flex-col">
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold text-foreground mb-1">
+                Custom project
+              </h2>
+            </div>
+
+            {/* Custom Project Form */}
+            <div id="home-create-form" className="flex-1 flex flex-col">
+              {generalError && (
+                <div className="mb-4 text-red-600 bg-red-100 border border-red-300 rounded p-3 text-sm">
+                  {generalError}
+                </div>
+              )}
+              <div className="grid gap-4 text-left flex-1 relative">
+                <div className="grid gap-2.5">
+                  <Label htmlFor="projectName">Project name</Label>
+                  <Input
+                    id="projectName"
+                    value={projectName}
+                    onChange={e => {
+                      setProjectName(e.target.value)
+                      if (projectNameError) setProjectNameError(null)
+                      if (generalError) setGeneralError(null)
+                    }}
+                    placeholder="my-project"
+                    disabled={isCreatingProject}
+                    className={projectNameError ? 'border-destructive' : ''}
+                  />
+                  {projectNameError && (
+                    <p className="text-xs text-destructive">{projectNameError}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
+                  </p>
+                </div>
+
+                <div className="grid gap-2.5">
+                  <Label htmlFor="what">What are you building? (optional)</Label>
+                  <Textarea
+                    id="what"
+                    value={what}
+                    onChange={e => setWhat(e.target.value)}
+                    placeholder="A customer support chatbot, inventory system, data dashboard..."
+                    className="min-h-[72px]"
+                    disabled={isCreatingProject}
+                  />
+                </div>
+
+                <div className="grid gap-2.5">
+                  <Label>Where do you plan to deploy this?</Label>
+                  <div className="flex flex-row gap-3">
+                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deploy"
+                        className="h-4 w-4"
+                        checked={deployment === 'local'}
+                        onChange={() => setDeployment('local')}
+                        disabled={isCreatingProject}
+                      />
+                      <span className="text-sm">Local</span>
+                    </label>
+                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deploy"
+                        className="h-4 w-4"
+                        checked={deployment === 'cloud'}
+                        onChange={() => setDeployment('cloud')}
+                        disabled={isCreatingProject}
+                      />
+                      <span className="text-sm">Cloud</span>
+                    </label>
+                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 hover:bg-accent/20 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deploy"
+                        className="h-4 w-4"
+                        checked={deployment === 'unsure'}
+                        onChange={() => setDeployment('unsure')}
+                        disabled={isCreatingProject}
+                      />
+                      <span className="text-sm">Not sure</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-1 mt-auto">
+                  <button
+                    onClick={handleCreateProject}
+                    disabled={isCreatingProject || !hasAnyInput}
+                    className="w-full px-6 py-3 rounded-lg bg-muted text-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-opacity"
+                    aria-label={
+                      isCreatingProject
+                        ? 'Creating project...'
+                        : hasAnyInput
+                          ? 'Create new project'
+                          : 'Enter a project name to create'
+                    }
+                  >
+                    {isCreatingProject ? 'Creating…' : 'Create project'}
+                  </button>
+                </div>
+
+                {isCreatingProject && (
+                  <div className="absolute inset-0 rounded-lg bg-background/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-4">
+                    <div className="w-9 h-9 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <div className="text-sm font-serif text-foreground text-center px-4">
+                      {loadingMessages[loadingMsgIndex]}
+                    </div>
+                    <div className="w-56 h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-primary/70 transition-all duration-200"
+                        style={{ width: `${fakeProgress}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span
+                        className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                        style={{ animationDelay: '0ms' }}
+                      />
+                      <span
+                        className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                        style={{ animationDelay: '150ms' }}
+                      />
+                      <span
+                        className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                        style={{ animationDelay: '300ms' }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
