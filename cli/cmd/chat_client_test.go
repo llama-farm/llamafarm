@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,56 +11,73 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func TestBuildChatAPIURL(t *testing.T) {
-	ctx := &ChatSessionContext{ServerURL: "http://localhost:8000"}
-	var got string
-	// Inference path when no ns/project
-	_, err := buildChatAPIURL(ctx)
-	if err == nil {
-		t.Fatalf("expected error, got %v", err)
+func TestChatManager_BuildCurlCommand(t *testing.T) {
+	// Test that ChatManager can build proper curl command
+	cfg := &ChatConfig{
+		ServerURL:   "http://localhost:8000",
+		Namespace:   "org",
+		ProjectID:   "proj",
+		SessionMode: SessionModeStateless,
+		RAGEnabled:  false,
 	}
 
-	// Project-scoped path when ns/project provided
-	ctx.Namespace = "org"
-	ctx.ProjectID = "proj"
-	got, err = buildChatAPIURL(ctx)
+	mgr, err := NewChatManager(cfg)
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("failed to create manager: %v", err)
 	}
-	want := "http://localhost:8000/v1/projects/org/proj/chat/completions"
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
+
+	messages := []Message{{Role: "user", Content: "test"}}
+	curlCmd, err := mgr.BuildCurlCommand(messages)
+	if err != nil {
+		t.Fatalf("failed to build curl: %v", err)
+	}
+
+	// Verify the URL is in the curl command
+	if !strings.Contains(curlCmd, "http://localhost:8000/v1/projects/org/proj/chat/completions") {
+		t.Fatalf("curl command doesn't contain expected URL: %s", curlCmd)
+	}
+
+	// Verify it's a POST request
+	if !strings.Contains(curlCmd, "curl -X POST") {
+		t.Fatalf("curl command doesn't contain POST method: %s", curlCmd)
 	}
 }
 
-func TestNewDefaultContextFromGlobals(t *testing.T) {
-	serverURL = "http://localhost:8000"
-	namespace = "ns"
-	projectID = "proj"
-	sessionID = "sess"
-	temperature = 0.5
-	maxTokens = 123
-	streaming = true
+func TestChatManager_Creation(t *testing.T) {
+	// Test that ChatManager can be created with proper config
+	cfg := &ChatConfig{
+		ServerURL:        "http://localhost:8000",
+		Namespace:        "ns",
+		ProjectID:        "proj",
+		SessionMode:      SessionModeProject,
+		SessionNamespace: "ns",
+		SessionProject:   "proj",
+		Temperature:      0.5,
+		MaxTokens:        123,
+		RAGEnabled:       true,
+	}
 
-	ctx := newDefaultContextFromGlobals()
-	if ctx.ServerURL != serverURL || ctx.Namespace != namespace || ctx.ProjectID != projectID || ctx.SessionID != sessionID || ctx.Temperature != temperature || ctx.MaxTokens != maxTokens || ctx.Streaming != streaming {
-		t.Fatalf("context not initialized from globals correctly")
+	mgr, err := NewChatManager(cfg)
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
 	}
-	if ctx.HTTPClient == nil {
-		t.Fatalf("expected HTTPClient set")
+
+	gotCfg := mgr.GetConfig()
+	if gotCfg.ServerURL != cfg.ServerURL {
+		t.Fatalf("expected ServerURL %s, got %s", cfg.ServerURL, gotCfg.ServerURL)
 	}
-	if ctx.SessionMode != SessionModeProject {
-		t.Fatalf("expected session mode SessionModeProject, got %v", ctx.SessionMode)
+	if gotCfg.Namespace != cfg.Namespace {
+		t.Fatalf("expected Namespace %s, got %s", cfg.Namespace, gotCfg.Namespace)
 	}
-	if ctx.SessionNamespace != namespace || ctx.SessionProject != projectID {
-		t.Fatalf("expected session namespace/project to mirror globals")
+	if gotCfg.ProjectID != cfg.ProjectID {
+		t.Fatalf("expected ProjectID %s, got %s", cfg.ProjectID, gotCfg.ProjectID)
 	}
-	if !ctx.RAGEnabled {
-		t.Fatalf("expected RAGEnabled to be true by default, got false")
+	if !gotCfg.RAGEnabled {
+		t.Fatalf("expected RAGEnabled to be true, got false")
 	}
 }
 
-func TestWriteSessionContext(t *testing.T) {
+func TestChatManager_SessionPersistence(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "llamafarm_test")
 	if err != nil {
@@ -68,7 +85,7 @@ func TestWriteSessionContext(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Set LF_DATA_DIR to our temp directory (GetLFDataDir checks this env var)
+	// Set LF_DATA_DIR to our temp directory
 	origLFDataDir := os.Getenv("LF_DATA_DIR")
 	os.Setenv("LF_DATA_DIR", filepath.Join(tempDir, ".llamafarm"))
 	defer func() {
@@ -79,25 +96,37 @@ func TestWriteSessionContext(t *testing.T) {
 		}
 	}()
 
-	// Change to temp directory
-	originalCwd, _ := os.Getwd()
-	defer os.Chdir(originalCwd)
-	os.Chdir(tempDir)
-
-	// Test writing session context
-	testSessionID := "test-session-123"
-	ctx := &ChatSessionContext{SessionMode: SessionModeProject, Namespace: "test", ProjectID: "test"}
-	err = writeSessionContext(ctx, testSessionID)
-	if err != nil {
-		t.Fatalf("failed to write session context: %v", err)
+	// Create ChatManager and set a session ID
+	cfg := &ChatConfig{
+		ServerURL:        "http://localhost:8000",
+		Namespace:        "test",
+		ProjectID:        "test",
+		SessionMode:      SessionModeProject,
+		SessionNamespace: "test",
+		SessionProject:   "test",
 	}
 
-	// Verify projects directory and context file were created at the expected path
+	mgr, err := NewChatManager(cfg)
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
+	}
+
+	// Set a session ID
+	testSessionID := "test-session-123"
+	err = mgr.SetSessionID(testSessionID)
+	if err != nil {
+		t.Fatalf("failed to set session ID: %v", err)
+	}
+
+	// Verify the session ID was stored
+	gotSessionID := mgr.GetSessionID()
+	if gotSessionID != testSessionID {
+		t.Fatalf("expected session ID %q, got %q", testSessionID, gotSessionID)
+	}
+
+	// Verify the context file was written
 	lfDir, _ := utils.GetLFDataDir()
 	base := filepath.Join(lfDir, "projects", "test", "test", "cli", "context")
-	if _, err := os.Stat(base); os.IsNotExist(err) {
-		t.Fatalf("projects/test/test/cli/context directory was not created")
-	}
 	contextFile := filepath.Join(base, "context.yaml")
 	if _, err := os.Stat(contextFile); os.IsNotExist(err) {
 		t.Fatalf("context.yaml file was not created at %s", contextFile)
@@ -109,7 +138,6 @@ func TestWriteSessionContext(t *testing.T) {
 		t.Fatalf("failed to read context file: %v", err)
 	}
 
-	// Parse the YAML content
 	var contextData map[string]interface{}
 	if err := yaml.Unmarshal(content, &contextData); err != nil {
 		t.Fatalf("failed to parse YAML: %v", err)
@@ -120,7 +148,7 @@ func TestWriteSessionContext(t *testing.T) {
 		t.Fatalf("expected session_id %q, got %q", testSessionID, contextData["session_id"])
 	}
 
-	// Verify timestamp exists and is a valid RFC3339 timestamp
+	// Verify timestamp exists
 	timestampStr, ok := contextData["timestamp"].(string)
 	if !ok {
 		t.Fatalf("timestamp not found or not a string")
@@ -129,9 +157,20 @@ func TestWriteSessionContext(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, timestampStr); err != nil {
 		t.Fatalf("timestamp not in RFC3339 format: %v", err)
 	}
+
+	// Create a new manager and verify it loads the existing session
+	mgr2, err := NewChatManager(cfg)
+	if err != nil {
+		t.Fatalf("failed to create second manager: %v", err)
+	}
+
+	got2SessionID := mgr2.GetSessionID()
+	if got2SessionID != testSessionID {
+		t.Fatalf("expected second manager to load session ID %q, got %q", testSessionID, got2SessionID)
+	}
 }
 
-func TestReadSessionContext(t *testing.T) {
+func TestChatManager_ClearSession(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "llamafarm_test")
 	if err != nil {
@@ -139,7 +178,7 @@ func TestReadSessionContext(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Set LF_DATA_DIR to our temp directory (GetLFDataDir checks this env var)
+	// Set LF_DATA_DIR to our temp directory
 	origLFDataDir := os.Getenv("LF_DATA_DIR")
 	os.Setenv("LF_DATA_DIR", filepath.Join(tempDir, ".llamafarm"))
 	defer func() {
@@ -150,74 +189,54 @@ func TestReadSessionContext(t *testing.T) {
 		}
 	}()
 
-	// Test reading non-existent context file
-	ctx := &ChatSessionContext{SessionMode: SessionModeProject, Namespace: "test", ProjectID: "test"}
-	context, err := readSessionContext(ctx)
+	// Create ChatManager with a session
+	cfg := &ChatConfig{
+		ServerURL:        "http://localhost:8000",
+		Namespace:        "test",
+		ProjectID:        "test",
+		SessionMode:      SessionModeProject,
+		SessionNamespace: "test",
+		SessionProject:   "test",
+	}
+
+	mgr, err := NewChatManager(cfg)
 	if err != nil {
-		t.Fatalf("expected no error for non-existent file, got: %v", err)
-	}
-	if context != nil {
-		t.Fatalf("expected nil context for non-existent file, got: %v", context)
+		t.Fatalf("failed to create manager: %v", err)
 	}
 
-	// Create a valid context file at the expected session path
-	sessionPath, err := ctx.sessionFilePath()
+	// Set initial session ID
+	initialSessionID := "test-session-initial"
+	err = mgr.SetSessionID(initialSessionID)
 	if err != nil {
-		t.Fatalf("failed to compute session file path: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(sessionPath), 0755); err != nil {
-		t.Fatalf("failed to create context dir: %v", err)
+		t.Fatalf("failed to set session ID: %v", err)
 	}
 
-	contextFile := sessionPath
-	testSessionID := "test-session-456"
-	testTimestamp := "2024-01-15T10:30:45Z"
-	yamlContent := fmt.Sprintf("session_id: %s\ntimestamp: %s\n", testSessionID, testTimestamp)
-
-	if err := os.WriteFile(contextFile, []byte(yamlContent), 0644); err != nil {
-		t.Fatalf("failed to write test context file: %v", err)
+	if mgr.GetSessionID() != initialSessionID {
+		t.Fatalf("expected initial session ID %q, got %q", initialSessionID, mgr.GetSessionID())
 	}
 
-	// Test reading valid context file
-	context, err = readSessionContext(ctx)
+	// Clear the session
+	err = mgr.ClearSession()
 	if err != nil {
-		t.Fatalf("expected no error for valid file, got: %v", err)
-	}
-	if context == nil {
-		t.Fatalf("expected context to be non-nil")
-	}
-	if context.SessionID != testSessionID {
-		t.Fatalf("expected session_id %q, got %q", testSessionID, context.SessionID)
-	}
-	if context.Timestamp != testTimestamp {
-		t.Fatalf("expected timestamp %q, got %q", testTimestamp, context.Timestamp)
+		t.Fatalf("failed to clear session: %v", err)
 	}
 
-	// Test reading invalid YAML
-	invalidYamlContent := "invalid: yaml: content: [\n"
-	if err := os.WriteFile(contextFile, []byte(invalidYamlContent), 0644); err != nil {
-		t.Fatalf("failed to write invalid test context file: %v", err)
+	// Verify a new session ID was created
+	newSessionID := mgr.GetSessionID()
+	if newSessionID == "" {
+		t.Fatalf("expected new session ID after clear, got empty string")
+	}
+	if newSessionID == initialSessionID {
+		t.Fatalf("expected different session ID after clear, got same ID: %q", newSessionID)
 	}
 
-	context, err = readSessionContext(ctx)
-	if err == nil {
-		t.Fatalf("expected error for invalid YAML, got nil")
-	}
-	if context != nil {
-		t.Fatalf("expected nil context for invalid YAML, got: %v", context)
-	}
-
-	// Test reading file with empty session ID
-	emptySessionYaml := "session_id: \"\"\ntimestamp: 2024-01-15T10:30:45Z\n"
-	if err := os.WriteFile(contextFile, []byte(emptySessionYaml), 0644); err != nil {
-		t.Fatalf("failed to write empty session test file: %v", err)
-	}
-
-	context, err = readSessionContext(ctx)
+	// Verify the new session ID was persisted
+	mgr2, err := NewChatManager(cfg)
 	if err != nil {
-		t.Fatalf("expected no error for empty session ID, got: %v", err)
+		t.Fatalf("failed to create second manager: %v", err)
 	}
-	if context != nil {
-		t.Fatalf("expected nil context for empty session ID, got: %v", context)
+
+	if mgr2.GetSessionID() != newSessionID {
+		t.Fatalf("expected second manager to load new session ID %q, got %q", newSessionID, mgr2.GetSessionID())
 	}
 }

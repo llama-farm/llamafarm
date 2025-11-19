@@ -442,6 +442,7 @@ export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoM
     }
   }, [isOpen, autoStartDemoId, selectedDemo, currentStep])
 
+
   const handleSelectDemo = (demo: DemoConfig) => {
     setSelectedDemo(demo)
     startDemo(demo, namespace)
@@ -491,6 +492,7 @@ export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoM
   }
 
   const { title, description } = getModalContent()
+
 
   return (
     <Dialog open={isOpen} onOpenChange={canClose ? handleClose : undefined}>
