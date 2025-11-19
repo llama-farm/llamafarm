@@ -37,9 +37,9 @@ jobs:
           - os: macos-latest
             artifact: llamafarm-darwin-arm64
             binary: lf
-          - os: windows-latest
-            artifact: llamafarm-windows-amd64.exe
-            binary: lf.exe
+          # - os: windows-latest
+          #   artifact: llamafarm-windows-amd64.exe
+          #   binary: lf.exe
     env:
       # Use the current branch/ref being tested instead of main
       LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}

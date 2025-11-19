@@ -35,7 +35,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "{workspaceRoot}/config",
-        "command": "bash generate-types.sh"
+        "command": "uv run python generate_types.py"
       },
       "cache": true,
       "inputs": [

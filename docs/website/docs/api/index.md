@@ -913,6 +913,39 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/query \
   }'
 ```
 
+### List RAG Databases
+
+List all configured RAG databases and their associated strategies for a project.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/databases`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Response:**
+```json
+{
+  "databases": [
+    {
+      "name": "main_db",
+      "type": "ChromaStore",
+      "strategies": ["universal_processor", "custom_strategy"]
+    },
+    {
+      "name": "research_db",
+      "type": "ChromaStore",
+      "strategies": ["universal_processor"]
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases
+```
+
 ### Check RAG Health
 
 Get health status of the RAG system and databases.
@@ -1282,6 +1315,57 @@ For long-running operations (dataset processing):
 1. Use `async_processing=true` to get immediate response
 2. Poll the task endpoint to check status
 3. Retrieve final results when `state` is `SUCCESS`
+
+---
+
+## MCP (Model Context Protocol) Compatible Endpoints
+
+LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI agents to interact with LlamaFarm programmatically. The following endpoints are tagged with `mcp` for easy discovery by MCP clients:
+
+### MCP-Compatible Operations
+
+**Project Management:**
+- `GET /v1/projects/{namespace}` - List projects (operation ID: `projects_list`)
+- `POST /v1/projects/{namespace}` - Create project (operation ID: `project_create`)
+- `GET /v1/projects/{namespace}/{project}` - Get project (operation ID: `project_get`)
+- `PUT /v1/projects/{namespace}/{project}` - Update project (operation ID: `project_update`)
+- `DELETE /v1/projects/{namespace}/{project}` - Delete project (operation ID: `project_delete`)
+
+**Model Management:**
+- `GET /v1/projects/{namespace}/{project}/models` - List models (operation ID: `models_list`)
+
+**Dataset Operations:**
+- `GET /v1/projects/{namespace}/{project}/datasets` - List datasets (operation ID: `dataset_list`)
+- `GET /v1/projects/{namespace}/{project}/datasets/strategies` - List strategies (operation ID: `dataset_strategies_list`)
+- `POST /v1/projects/{namespace}/{project}/datasets` - Create dataset (operation ID: `dataset_create`)
+- `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}` - Delete dataset (operation ID: `dataset_delete`)
+- `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/actions` - Dataset actions (operation ID: `dataset_actions`)
+- `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data` - Upload data (operation ID: `dataset_data_upload`)
+
+**RAG Operations:**
+- `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG (operation ID: `rag_query`)
+
+**Task Management:**
+- `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get task status (operation ID: `task_get`)
+
+### Using LlamaFarm with MCP Servers
+
+You can configure LlamaFarm projects to expose tools through MCP servers, giving AI agents access to filesystems, databases, APIs, and custom business logic. See the MCP section in the [Introduction](../intro.md#the-power-of-mcp-model-context-protocol) for configuration examples.
+
+**Example: AI Agent with LlamaFarm MCP Tools**
+
+```python
+# AI agent can use LlamaFarm endpoints as tools
+# through MCP protocol
+{
+  "tool": "llamafarm_rag_query",
+  "arguments": {
+    "query": "What are the clinical trial requirements?",
+    "database": "fda_db",
+    "top_k": 5
+  }
+}
+```
 
 ---
 

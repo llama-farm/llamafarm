@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProject } from '../../hooks/useProjects'
+import { useDatabaseManager } from '../../hooks/useDatabaseManager'
+import { useToast } from '../ui/toast'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 // removed unused imports
@@ -15,16 +18,24 @@ import {
   STRATEGY_DESCRIPTIONS,
   type StrategyType,
 } from '../../utils/strategyCatalog'
+import { parseMetadataFilters, validateStrategyName } from '../../utils/security'
 
 function AddRetrievalStrategy() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { toast } = useToast()
   const activeProject = useActiveProject()
-  const projectKey = useMemo(() => {
-    const ns = activeProject?.namespace || 'global'
-    const proj = activeProject?.project || 'global'
-    return `${ns}__${proj}`
-  }, [activeProject?.namespace, activeProject?.project])
+  
+  // Get project config and database manager
+  const { data: projectResp } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+  const databaseManager = useDatabaseManager(
+    activeProject?.namespace || '',
+    activeProject?.project || ''
+  )
 
   // Get the database from URL query params (defaults to main_database if not provided)
   const database = searchParams.get('database') || 'main_database'
@@ -32,6 +43,8 @@ function AddRetrievalStrategy() {
   // New retrieval name and default toggle
   const [name, setName] = useState('New retrieval strategy')
   const [makeDefault, setMakeDefault] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Selected type + settings state
   const [selectedType, setSelectedType] = useState<StrategyType | null>(null)
@@ -173,126 +186,202 @@ function AddRetrievalStrategy() {
 
   // Ensure default checked when first retrieval
   useEffect(() => {
+    if (projectResp && database) {
+      const projectConfig = (projectResp as any)?.project?.config
+      const db = projectConfig?.rag?.databases?.find((d: any) => d.name === database)
+      const hasStrategies = db?.retrieval_strategies?.length > 0
+      setMakeDefault(!hasStrategies)
+    }
+  }, [projectResp, database])
+
+  // Validation function
+  const validateStrategy = (): string[] => {
+    const errors: string[] = []
+    
+    if (!selectedType) {
+      errors.push('Please select a strategy type')
+    }
+    
+    // Validate strategy name with security checks
+    const nameError = validateStrategyName(name)
+    if (nameError) {
+      errors.push(nameError)
+    }
+    
+    // Type-specific validation
+    if (selectedType === 'BasicSimilarityStrategy') {
+      const topK = Number(basicTopK)
+      if (isNaN(topK) || topK < 1 || topK > 1000) {
+        errors.push('Top K must be between 1 and 1000')
+      }
+      if (basicScoreThreshold.trim() && (Number(basicScoreThreshold) < 0 || Number(basicScoreThreshold) > 1)) {
+        errors.push('Score threshold must be between 0 and 1')
+      }
+    } else if (selectedType === 'MetadataFilteredStrategy') {
+      const topK = Number(mfTopK)
+      if (isNaN(topK) || topK < 1 || topK > 1000) {
+        errors.push('Top K must be between 1 and 1000')
+      }
+    } else if (selectedType === 'MultiQueryStrategy') {
+      const numQueries = Number(mqNumQueries)
+      if (isNaN(numQueries) || numQueries < 2 || numQueries > 10) {
+        errors.push('Number of queries must be between 2 and 10')
+      }
+    } else if (selectedType === 'RerankedStrategy') {
+      const initialK = Number(rrInitialK)
+      const finalK = Number(rrFinalK)
+      if (isNaN(initialK) || initialK < 1 || initialK > 1000) {
+        errors.push('Initial K must be between 1 and 1000')
+      }
+      if (isNaN(finalK) || finalK < 1 || finalK > initialK) {
+        errors.push('Final K must be between 1 and Initial K')
+      }
+    } else if (selectedType === 'HybridUniversalStrategy' && hybStrategies.length < 2) {
+      errors.push('At least 2 sub-strategies are required for hybrid approach')
+    }
+    
+    return errors
+  }
+
+  // Save handler - updated to use project config
+  const onSave = async () => {
     try {
-      const raw = localStorage.getItem(
-        `lf_ui_${projectKey}_db_${database}_retrievals`
+      setIsSaving(true)
+      setError(null)
+
+      // Validate
+      const validationErrors = validateStrategy()
+      if (validationErrors.length > 0) {
+        setError(validationErrors.join(', '))
+        setIsSaving(false)
+        return
+      }
+
+      // Get current project config
+      const projectConfig = (projectResp as any)?.project?.config
+      if (!projectConfig) {
+        throw new Error('Project config not loaded')
+      }
+
+      // Find the database
+      const currentDb = projectConfig.rag?.databases?.find(
+        (db: any) => db.name === database
       )
-      const list = raw ? JSON.parse(raw) : []
-      if (!Array.isArray(list) || list.length === 0) setMakeDefault(true)
-    } catch {}
-  }, [projectKey, database])
+      
+      if (!currentDb) {
+        throw new Error(`Database ${database} not found in configuration`)
+      }
 
-  // Save handler
-  const onSave = () => {
-    if (!selectedType) return
-    // generate id
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-    const baseId = `ret-${slug || Date.now()}`
-    const raw = localStorage.getItem(
-      `lf_ui_${projectKey}_db_${database}_retrievals`
-    )
-    const list = raw ? JSON.parse(raw) : []
-    const exists =
-      Array.isArray(list) && list.some((e: any) => e?.id === baseId)
-    const id = exists ? `${baseId}-${Date.now()}` : baseId
+      // Check if name already exists
+      const existingStrategy = currentDb.retrieval_strategies?.find(
+        (s: any) => s.name === name.trim()
+      )
+      if (existingStrategy) {
+        throw new Error(`A retrieval strategy with name "${name.trim()}" already exists`)
+      }
 
-    // Add list entry
-    const entry = {
-      id,
-      name: name.trim() || id,
-      isDefault: Array.isArray(list) && list.length === 0 ? true : false,
-      enabled: true,
+      // Build config from current state
+      let config: Record<string, unknown> = {}
+      switch (selectedType) {
+        case 'BasicSimilarityStrategy':
+          config = {
+            top_k: Number(basicTopK),
+            distance_metric: basicDistance,
+            score_threshold:
+              basicScoreThreshold.trim() === ''
+                ? null
+                : Number(basicScoreThreshold),
+          }
+          break
+        case 'MetadataFilteredStrategy': {
+          // Use secure parsing to sanitize filter keys and values
+          const filters = parseMetadataFilters(mfFilters)
+          config = {
+            top_k: Number(mfTopK),
+            filters,
+            filter_mode: mfFilterMode,
+            fallback_multiplier: Number(mfFallbackMultiplier),
+          }
+          break
+        }
+        case 'MultiQueryStrategy': {
+          const weights = parseWeightsList(mqQueryWeights, Number(mqNumQueries))
+          config = {
+            num_queries: Number(mqNumQueries),
+            top_k: Number(mqTopK),
+            aggregation_method: mqAggregation,
+            query_weights: weights,
+          }
+          break
+        }
+        case 'RerankedStrategy':
+          config = {
+            initial_k: Number(rrInitialK),
+            final_k: Number(rrFinalK),
+            rerank_factors: {
+              similarity_weight: Number(rrSimW),
+              recency_weight: Number(rrRecencyW),
+              length_weight: Number(rrLengthW),
+              metadata_weight: Number(rrMetaW),
+            },
+            normalize_scores: rrNormalize === 'Enabled',
+          }
+          break
+        case 'HybridUniversalStrategy': {
+          const strategies = hybStrategies.map(s => ({
+            type: s.type,
+            weight: Number(s.weight),
+            config: s.config || getDefaultConfigForType(s.type),
+          }))
+          config = {
+            strategies,
+            combination_method: hybCombination,
+            final_k: Number(hybFinalK),
+          }
+          break
+        }
+      }
+
+      // Build the new strategy (note: 'default' field is used in config, not 'isDefault')
+      const newStrategy = {
+        name: name.trim(),
+        type: selectedType,
+        config,
+      }
+
+      // Add to existing strategies
+      const updatedStrategies = [
+        ...(currentDb.retrieval_strategies || []),
+        newStrategy,
+      ]
+
+      // Determine default strategy name (no 'default' field on strategy objects)
+      const defaultStrategyName = makeDefault || updatedStrategies.length === 1
+        ? newStrategy.name
+        : currentDb.default_retrieval_strategy
+
+      // Update database configuration
+      await databaseManager.updateDatabase.mutateAsync({
+        oldName: database,
+        updates: {
+          retrieval_strategies: updatedStrategies,
+          default_retrieval_strategy: defaultStrategyName,
+        },
+        projectConfig,
+      })
+
+      toast({
+        message: `Retrieval strategy "${name.trim()}" created successfully`,
+        variant: 'default',
+      })
+
+      navigate('/chat/databases')
+    } catch (error: any) {
+      console.error('Failed to create retrieval strategy:', error)
+      setError(error.message || 'Failed to create strategy')
+    } finally {
+      setIsSaving(false)
     }
-    const nextList = Array.isArray(list) ? [...list, entry] : [entry]
-    // If makeDefault checked, enforce uniqueness
-    const finalList = makeDefault
-      ? nextList.map((r: any) => ({ ...r, isDefault: r.id === id }))
-      : nextList
-    localStorage.setItem(
-      `lf_ui_${projectKey}_db_${database}_retrievals`,
-      JSON.stringify(finalList)
-    )
-
-    // Build config from current state like the edit page
-    let config: Record<string, unknown> = {}
-    switch (selectedType) {
-      case 'BasicSimilarityStrategy':
-        config = {
-          top_k: Number(basicTopK),
-          distance_metric: basicDistance,
-          score_threshold:
-            basicScoreThreshold.trim() === ''
-              ? null
-              : Number(basicScoreThreshold),
-        }
-        break
-      case 'MetadataFilteredStrategy': {
-        const filters: Record<string, unknown> = {}
-        for (const { key, value } of mfFilters) {
-          if (!key.trim()) continue
-          const raw = value.trim()
-          if (raw.includes(','))
-            filters[key] = raw.split(',').map(v => v.trim())
-          else if (raw === 'true' || raw === 'false')
-            filters[key] = raw === 'true'
-          else if (!Number.isNaN(Number(raw))) filters[key] = Number(raw)
-          else filters[key] = raw
-        }
-        config = {
-          top_k: Number(mfTopK),
-          filters,
-          filter_mode: mfFilterMode,
-          fallback_multiplier: Number(mfFallbackMultiplier),
-        }
-        break
-      }
-      case 'MultiQueryStrategy': {
-        const weights = parseWeightsList(mqQueryWeights, Number(mqNumQueries))
-        config = {
-          num_queries: Number(mqNumQueries),
-          top_k: Number(mqTopK),
-          aggregation_method: mqAggregation,
-          query_weights: weights,
-        }
-        break
-      }
-      case 'RerankedStrategy':
-        config = {
-          initial_k: Number(rrInitialK),
-          final_k: Number(rrFinalK),
-          rerank_factors: {
-            similarity_weight: Number(rrSimW),
-            recency_weight: Number(rrRecencyW),
-            length_weight: Number(rrLengthW),
-            metadata_weight: Number(rrMetaW),
-          },
-          normalize_scores: rrNormalize === 'Enabled',
-        }
-        break
-      case 'HybridUniversalStrategy': {
-        const strategies = hybStrategies.map(s => ({
-          type: s.type,
-          weight: Number(s.weight),
-          config: s.config || getDefaultConfigForType(s.type),
-        }))
-        config = {
-          strategies,
-          combination_method: hybCombination,
-          final_k: Number(hybFinalK),
-        }
-        break
-      }
-    }
-    const payload = { type: selectedType, config }
-    localStorage.setItem(
-      `lf_ui_${projectKey}_db_${database}_retrieval_${id}`,
-      JSON.stringify(payload)
-    )
-
-    navigate('/chat/databases')
   }
 
   return (
@@ -314,17 +403,24 @@ function AddRetrievalStrategy() {
             variant="outline"
             size="sm"
             onClick={() => navigate('/chat/databases')}
+            disabled={isSaving}
           >
             Cancel
           </Button>
           <Button
             onClick={onSave}
-            disabled={!selectedType || name.trim().length === 0}
+            disabled={isSaving || !selectedType || name.trim().length === 0}
           >
-            Save strategy
+            {isSaving ? 'Saving...' : 'Save strategy'}
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-2 rounded-md text-sm">
+          {error}
+        </div>
+      )}
 
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

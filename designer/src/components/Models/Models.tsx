@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -26,11 +26,13 @@ import { useCachedModels } from '../../hooks/useModels'
 import modelService from '../../api/modelService'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { PromptSetSelector } from './PromptSetSelector'
+import { ModelSelector } from './ModelSelector'
 import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
 import { CustomDownloadDialog } from './CustomDownloadDialog'
 import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import { useToast } from '../ui/toast'
 
 interface TabBarProps {
   activeTab: string
@@ -74,21 +76,64 @@ interface ModelCardProps {
   model: InferenceModel
   onMakeDefault?: () => void
   onDelete?: () => void
+  onRename?: (newName: string) => void
   promptSetNames: string[]
   selectedPromptSets: string[]
   onTogglePromptSet: (name: string, checked: boolean | string) => void
   onClearPromptSets: () => void
+  availableProjectModels: Array<{ identifier: string; name: string }>
+  availableDeviceModels: Array<{ identifier: string; name: string }>
+  onModelChange: (newModelIdentifier: string) => void
 }
 
 function ModelCard({
   model,
   onMakeDefault,
   onDelete,
+  onRename,
   promptSetNames,
   selectedPromptSets,
   onTogglePromptSet,
   onClearPromptSets,
+  availableProjectModels,
+  availableDeviceModels,
+  onModelChange,
 }: ModelCardProps) {
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editedName, setEditedName] = useState(model.name)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isEditingName && inputRef.current) {
+      inputRef.current.focus()
+      // Place cursor at the beginning
+      inputRef.current.setSelectionRange(0, 0)
+    }
+  }, [isEditingName])
+
+  const handleSaveName = () => {
+    const trimmedName = editedName.trim()
+    if (trimmedName && trimmedName !== model.name && onRename) {
+      onRename(trimmedName)
+    } else {
+      setEditedName(model.name)
+    }
+    setIsEditingName(false)
+  }
+
+  const handleCancelEdit = () => {
+    setEditedName(model.name)
+    setIsEditingName(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveName()
+    } else if (e.key === 'Escape') {
+      handleCancelEdit()
+    }
+  }
+
   return (
     <div className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative">
       <div className="absolute top-2 right-2">
@@ -114,14 +159,39 @@ function ModelCard({
         </DropdownMenu>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 md:items-center gap-3 w-full">
-        <div>
-          <div className="text-sm text-muted-foreground mb-1">
+      <div className="grid grid-cols-1 md:grid-cols-2 md:items-center gap-6 w-full">
+        <div className="pr-4">
+          <div className="text-sm text-muted-foreground mb-2">
             {model.modelIdentifier || model.name}
           </div>
 
           <div className="flex items-center gap-2 mb-2">
-            <div className="text-lg font-medium">{model.name}</div>
+            <div className="flex-1 min-w-0">
+              {isEditingName ? (
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  onBlur={handleSaveName}
+                  onKeyDown={handleKeyDown}
+                  className="w-full text-lg font-medium bg-background border border-input rounded px-1 py-0 focus:outline-none focus:ring-1 focus:ring-ring min-h-[28px]"
+                />
+              ) : (
+                <div className="flex items-center gap-1.5 group">
+                  <div className="text-lg font-medium min-h-[28px] flex items-center">{model.name}</div>
+                  {onRename && (
+                    <button
+                      onClick={() => setIsEditingName(true)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-accent/30 rounded"
+                      aria-label="Rename model"
+                    >
+                      <FontIcon type="edit" className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             {model.isDefault && (
               <div className="text-[10px] leading-4 rounded-xl px-2 py-0.5 bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900">
                 Default
@@ -152,8 +222,21 @@ function ModelCard({
             </div>
           ) : null}
         </div>
-        {/* Prompt sets multi-select column */}
-        <div className="mt-3 md:mt-0 md:justify-self-end w-full md:pl-4 mr-6 md:mr-8">
+        {/* Model selector and Prompt sets multi-select column */}
+        <div className="mt-3 md:mt-0 md:justify-self-end w-full md:pl-4 mr-6 md:mr-8 flex flex-col gap-3">
+          <ModelSelector
+            currentModelIdentifier={model.modelIdentifier || model.name}
+            availableProjectModels={availableProjectModels.map(m => ({
+              ...m,
+              source: 'project' as const,
+            }))}
+            availableDeviceModels={availableDeviceModels.map(m => ({
+              ...m,
+              source: 'disk' as const,
+            }))}
+            onModelChange={onModelChange}
+            label="Model"
+          />
           <PromptSetSelector
             promptSetNames={promptSetNames}
             selectedPromptSets={selectedPromptSets}
@@ -171,31 +254,43 @@ function ProjectInferenceModels({
   models,
   onMakeDefault,
   onDelete,
+  onRename,
   getSelected,
   promptSetNames,
   onToggle,
   onClear,
+  availableProjectModels,
+  availableDeviceModels,
+  onModelChange,
 }: {
   models: InferenceModel[]
   onMakeDefault: (id: string) => void
   onDelete: (id: string) => void
+  onRename: (id: string, newName: string) => void
   getSelected: (id: string) => string[]
   promptSetNames: string[]
   onToggle: (id: string, name: string, checked: boolean | string) => void
   onClear: (id: string) => void
+  availableProjectModels: Array<{ identifier: string; name: string }>
+  availableDeviceModels: Array<{ identifier: string; name: string }>
+  onModelChange: (modelId: string, newModelIdentifier: string) => void
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6">
-      {models.map(m => (
+      {models.map((m, index) => (
         <ModelCard
-          key={m.id}
+          key={`${m.modelIdentifier}-${index}`}
           model={m}
           onMakeDefault={() => onMakeDefault(m.id)}
           onDelete={() => onDelete(m.id)}
+          onRename={(newName) => onRename(m.id, newName)}
           promptSetNames={promptSetNames}
           selectedPromptSets={getSelected(m.id)}
           onTogglePromptSet={(name, checked) => onToggle(m.id, name, checked)}
           onClearPromptSets={() => onClear(m.id)}
+          availableProjectModels={availableProjectModels}
+          availableDeviceModels={availableDeviceModels}
+          onModelChange={(newModelIdentifier) => onModelChange(m.id, newModelIdentifier)}
         />
       ))}
     </div>
@@ -1505,11 +1600,15 @@ const Models = () => {
     !!activeProject?.namespace && !!activeProject?.project
   )
   const updateProject = useUpdateProject()
+  const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('project')
   const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [modelToDelete, setModelToDelete] = useState<string | null>(null)
+
+  // Fetch cached models from device
+  const { data: cachedModelsResponse } = useCachedModels()
 
   // Background download state (shared across component)
   const [showBackgroundDownload, setShowBackgroundDownload] = useState(false)
@@ -1883,6 +1982,182 @@ const Models = () => {
     }
   }
 
+  const handleModelChange = async (modelId: string, newModelIdentifier: string) => {
+    if (
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !projectResponse?.project?.config
+    )
+      return
+
+    // Optimistically update local state
+    const prevModels = [...projectModels]
+    setProjectModels(prev =>
+      prev.map(m =>
+        m.id === modelId
+          ? { ...m, modelIdentifier: newModelIdentifier }
+          : m
+      )
+    )
+
+    const currentConfig = projectResponse.project.config
+    const runtimeModels = currentConfig.runtime?.models || []
+
+    const updatedModels = runtimeModels.map((model: any) => {
+      if (model.name === modelId) {
+        return {
+          ...model,
+          model: newModelIdentifier,
+        }
+      }
+      return model
+    })
+
+    const nextConfig = {
+      ...currentConfig,
+      runtime: {
+        ...currentConfig.runtime,
+        models: updatedModels,
+      },
+    }
+
+    try {
+      await updateProject.mutateAsync({
+        namespace: activeProject.namespace,
+        projectId: activeProject.project,
+        request: { config: nextConfig },
+      })
+      toast({
+        message: 'Model updated successfully',
+        variant: 'default',
+      })
+    } catch (error) {
+      console.error('Failed to update model identifier:', error)
+      toast({
+        message: 'Failed to update model. Please try again.',
+        variant: 'destructive',
+      })
+      // Rollback on failure
+      setProjectModels(prevModels)
+    }
+  }
+
+  const handleRename = async (modelId: string, newName: string) => {
+    if (
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !projectResponse?.project?.config
+    )
+      return
+
+    // Validate input
+    const trimmedName = newName.trim()
+    
+    // Check for empty name
+    if (!trimmedName) {
+      toast({
+        message: 'Model name cannot be empty',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    // Check for duplicate name
+    if (projectModels.some(m => m.id === trimmedName && m.id !== modelId)) {
+      toast({
+        message: 'A model with this name already exists',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    // Check for length (reasonable limit)
+    if (trimmedName.length > 100) {
+      toast({
+        message: 'Model name must be 100 characters or less',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Optimistically update local state
+    const prevModels = [...projectModels]
+    const prevModelSetMap = { ...modelSetMap }
+    
+    setProjectModels(prev =>
+      prev.map(m =>
+        m.id === modelId
+          ? { ...m, name: trimmedName, id: trimmedName }
+          : m
+      )
+    )
+
+    // Update modelSetMap to use new name as key
+    if (modelSetMap[modelId]) {
+      const newMap = { ...modelSetMap }
+      newMap[trimmedName] = newMap[modelId]
+      delete newMap[modelId]
+      setModelSetMap(newMap)
+    }
+
+    const currentConfig = projectResponse.project.config
+    const runtimeModels = currentConfig.runtime?.models || []
+    const wasDefault = currentConfig.runtime?.default_model === modelId
+
+    const updatedModels = runtimeModels.map((model: any) => {
+      if (model.name === modelId) {
+        return {
+          ...model,
+          name: trimmedName,
+        }
+      }
+      return model
+    })
+
+    const nextConfig = {
+      ...currentConfig,
+      runtime: {
+        ...currentConfig.runtime,
+        models: updatedModels,
+        // Update default_model if this was the default
+        default_model: wasDefault ? trimmedName : currentConfig.runtime?.default_model,
+      },
+    }
+
+    try {
+      await updateProject.mutateAsync({
+        namespace: activeProject.namespace,
+        projectId: activeProject.project,
+        request: { config: nextConfig },
+      })
+      toast({
+        message: 'Model renamed successfully',
+        variant: 'default',
+      })
+    } catch (error) {
+      console.error('Failed to rename model:', error)
+      toast({
+        message: 'Failed to rename model. Please try again.',
+        variant: 'destructive',
+      })
+      // Rollback on failure
+      setProjectModels(prevModels)
+      setModelSetMap(prevModelSetMap)
+    }
+  }
+
+  // Prepare available models for the selector
+  const availableProjectModels = projectModels.map(m => ({
+    identifier: m.modelIdentifier || m.name,
+    name: m.name,
+  }))
+
+  const availableDeviceModels =
+    cachedModelsResponse?.data.map(cachedModel => ({
+      identifier: cachedModel.name,
+      name: cachedModel.name,
+    })) || []
+
   return (
     <div
       className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-32' : ''}`}
@@ -1937,10 +2212,14 @@ const Models = () => {
                 models={projectModels}
                 onMakeDefault={makeDefault}
                 onDelete={deleteModel}
+                onRename={handleRename}
                 getSelected={getSelectedFor}
                 promptSetNames={promptSetNames}
                 onToggle={toggleFor}
                 onClear={clearFor}
+                availableProjectModels={availableProjectModels}
+                availableDeviceModels={availableDeviceModels}
+                onModelChange={handleModelChange}
               />
             ))}
           {activeTab === 'manage' && (

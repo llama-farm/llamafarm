@@ -117,7 +117,7 @@ sudo mv lf /usr/local/bin/
 ```
 - Dev mode: `go run main.go [command]`.
 - Tests: `go test ./...`.
-- After schema changes (local or forked), regenerate Go types via `config/generate-types.sh` to keep `config_types.go` aligned.
+- After schema changes (local or forked), regenerate Go types via `config/generate_types.py` to keep `config_types.go` aligned.
 
 ---
 
@@ -147,7 +147,7 @@ sudo mv lf /usr/local/bin/
 Whenever `config/schema.yaml` or `rag/schema.yaml` changes (in upstream or your fork), regenerate types:
 ```bash
 cd config
-./generate-types.sh
+uv run python generate_types.py
 ```
 - Updates Pydantic models (`datamodel.py`) and Go types (`types.go`).
 - After regenerating, adjust server/CLI logic and documentation to use new fields.
@@ -157,7 +157,7 @@ cd config
 ## 9. Extending the System
 ### Runtime Providers (adding new provider)
 1. Add enum value in `config/schema.yaml` (`runtime.provider`).
-2. Regenerate types via `config/generate-types.sh`.
+2. Regenerate types via `config/generate_types.py`.
 3. Update runtime selection code:
    - Server side: relevant runtime service (e.g., `server/services/runtime_service.py`).
    - CLI side: resolver mapping config to runtime parameters.
@@ -299,7 +299,7 @@ lf rag export --help  # may be hidden/advanced
 cd cli && go build -o lf main.go
 
 # Regenerate config & RAG types after schema edits
-cd config && ./generate-types.sh
+cd config && uv run python generate_types.py
 
 # Run server tests
 cd server && uv run --group test python -m pytest

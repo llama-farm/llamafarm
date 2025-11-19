@@ -13,6 +13,7 @@ import {
   useProjectModalContext,
 } from './contexts/ProjectModalContext'
 import { ModeResetProvider } from './contexts/ModeContext'
+import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
 import Home from './Home'
 import Chat from './Chat'
 import Data from './components/Data/Data'
@@ -31,11 +32,15 @@ import AddEmbeddingStrategy from './components/Rag/AddEmbeddingStrategy'
 import RetrievalMethod from './components/Rag/RetrievalMethod'
 // @ts-ignore - component is TSX local file
 import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
+import EditRetrievalStrategy from './components/Rag/EditRetrievalStrategy'
 // Projects standalone page removed; Home now hosts projects section
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
 import { MobileViewProvider } from './contexts/MobileViewContext'
 import NotFound from './components/NotFound'
+import { DemoModalProvider, useDemoModal } from './contexts/DemoModalContext'
+import { DemoModal } from './components/Demo/DemoModal'
+import { getCurrentNamespace } from './utils/namespaceUtils'
 
 // Redirect component for dynamic routes from /rag to /databases
 function RagRedirect({ path }: { path: string }) {
@@ -70,6 +75,19 @@ function ProjectModalRoot() {
   )
 }
 
+function DemoModalRoot() {
+  const demoModal = useDemoModal()
+  const namespace = getCurrentNamespace()
+
+  return (
+    <DemoModal
+      isOpen={demoModal.isOpen}
+      onClose={demoModal.closeModal}
+      namespace={namespace}
+    />
+  )
+}
+
 function App() {
   const location = useLocation()
   const isHome = location.pathname === '/'
@@ -78,12 +96,14 @@ function App() {
     <main className="h-screen w-full">
       <ToastProvider>
         <ProjectModalProvider>
-          <ModeResetProvider>
-            <MobileViewProvider>
-              <Header currentVersion={currentVersion} />
-              {isHome ? <HomeUpgradeBanner /> : null}
-              <div className="h-full w-full">
-                <Routes>
+          <DemoModalProvider>
+            <ModeResetProvider>
+              <MobileViewProvider>
+                <UnsavedChangesProvider>
+                <Header currentVersion={currentVersion} />
+                {isHome ? <HomeUpgradeBanner /> : null}
+                <div className="h-full w-full">
+                  <Routes>
                   <Route path="/" element={<Home />} />
                   {/* Redirect '/projects' to Home; Home will scroll to projects */}
                   <Route path="/projects" element={<Home />} />
@@ -150,7 +170,23 @@ function App() {
                       element={<AddRetrievalStrategy />}
                     />
                     <Route
+                      path="add-embedding-strategy"
+                      element={<AddEmbeddingStrategy />}
+                    />
+                    <Route
+                      path="add-retrieval-strategy"
+                      element={<AddRetrievalStrategy />}
+                    />
+                    <Route
+                      path="edit-retrieval-strategy"
+                      element={<EditRetrievalStrategy />}
+                    />
+                    <Route
                       path="databases/:strategyId/change-embedding"
+                      element={<ChangeEmbeddingModel />}
+                    />
+                    <Route
+                      path="change-embedding-model"
                       element={<ChangeEmbeddingModel />}
                     />
                     <Route
@@ -167,8 +203,11 @@ function App() {
                 </Routes>
               </div>
               <ProjectModalRoot />
+              <DemoModalRoot />
+              </UnsavedChangesProvider>
             </MobileViewProvider>
           </ModeResetProvider>
+          </DemoModalProvider>
         </ProjectModalProvider>
       </ToastProvider>
     </main>

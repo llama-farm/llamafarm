@@ -217,9 +217,12 @@ class DatasetService:
         project: str,
         dataset: str,
         file: MetadataFileContent,
-    ):
+    ) -> bool:
         """
         Add a file to a dataset
+        
+        Returns:
+            bool: True if file was added, False if it was skipped (duplicate)
         """
         project_config = ProjectService.load_config(namespace, project)
         existing_datasets = project_config.datasets or []
@@ -229,9 +232,21 @@ class DatasetService:
         )
         if dataset_to_update is None:
             raise DatasetNotFoundError(dataset)
+        
+        # Check if file already exists in dataset (duplicate detection)
+        if file.hash in dataset_to_update.files:
+            logger.info(
+                "File already exists in dataset, skipping",
+                dataset=dataset,
+                filename=file.original_file_name,
+                hash=file.hash,
+            )
+            return False
+        
         dataset_to_update.files.append(file.hash)
         project_config.datasets = existing_datasets
         ProjectService.save_config(namespace, project, project_config)
+        return True
 
     @classmethod
     def remove_file_from_dataset(

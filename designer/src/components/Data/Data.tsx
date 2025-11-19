@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -15,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
   DialogTrigger,
   DialogClose,
@@ -34,15 +36,195 @@ import {
   useDeleteDataset,
   useAvailableStrategies,
 } from '../../hooks/useDatasets'
+import { uploadFileToDataset } from '../../api/datasets'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import { isValidFile } from '../../utils/fileValidation'
+import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
+import { getDatabaseColor } from '../../utils/databaseColors'
+import {
+  loadDatasetTaskId,
+  clearDatasetTaskId,
+} from '../../utils/datasetStorage'
+import { useTaskStatus } from '../../hooks/useDatasets'
+
+// Batch size for uploads to prevent overwhelming the backend
+const UPLOAD_BATCH_SIZE = 3
+
+// Component for individual dataset card with processing status tracking
+const DatasetCard = ({
+  dataset,
+  activeProject,
+  databases,
+  onNavigate,
+  onDelete,
+}: {
+  dataset: any
+  activeProject: any
+  databases: any[]
+  onNavigate: (id: string) => void
+  onDelete: (id: string, name: string) => void
+}) => {
+  // Check if this dataset has an active processing task
+  const taskId = loadDatasetTaskId(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    dataset.name
+  )
+
+  // Poll task status if task exists
+  const { data: taskStatus } = useTaskStatus(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    taskId,
+    {
+      enabled: !!taskId && !!activeProject,
+      refetchInterval: 2000,
+    }
+  )
+
+  // Clear task ID when processing completes
+  useEffect(() => {
+    if (
+      taskStatus &&
+      (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE')
+    ) {
+      clearDatasetTaskId(
+        activeProject?.namespace || '',
+        activeProject?.project || '',
+        dataset.name
+      )
+    }
+  }, [taskStatus, activeProject, dataset.name])
+
+  // Calculate processing percentage
+  const isProcessing =
+    taskStatus &&
+    taskStatus.state !== 'SUCCESS' &&
+    taskStatus.state !== 'FAILURE'
+  const processingPercent = useMemo(() => {
+    if (!isProcessing || !taskStatus) return 0
+
+    if (taskStatus.meta?.progress) {
+      return taskStatus.meta.progress
+    }
+
+    if (taskStatus.meta?.current && taskStatus.meta?.total) {
+      return Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)
+    }
+
+    return 0
+  }, [isProcessing, taskStatus])
+
+  return (
+    <div
+      key={dataset.id}
+      className={`w-full bg-card rounded-lg border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors ${
+        isProcessing ? 'border-[#1e3a8a] dark:border-white' : 'border-border'
+      }`}
+      onClick={() => onNavigate(dataset.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onNavigate(dataset.id)
+        }
+      }}
+    >
+      <div className="absolute right-3 top-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+              onClick={e => e.stopPropagation()}
+              aria-label="Dataset actions"
+            >
+              <FontIcon type="overflow" className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem] w-[10rem]">
+            <DropdownMenuItem
+              onClick={e => {
+                e.stopPropagation()
+                onNavigate(dataset.id)
+              }}
+            >
+              View
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={e => {
+                e.stopPropagation()
+                onDelete(dataset.id, dataset.name)
+              }}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="text-sm font-medium">{dataset.name}</div>
+      <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
+        {dataset.database && (
+          <Badge
+            variant="default"
+            size="sm"
+            className={`rounded-xl ${getDatabaseColor(dataset.database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
+            onClick={e => {
+              e.stopPropagation()
+              onNavigate(
+                `/chat/databases?database=${encodeURIComponent(dataset.database)}`
+              )
+            }}
+          >
+            {dataset.database}
+          </Badge>
+        )}
+        <Badge
+          variant="default"
+          size="sm"
+          className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
+        >
+          {dataset.data_processing_strategy}
+        </Badge>
+      </div>
+      <div className="text-xs text-muted-foreground mt-2">
+        {dataset.files.length} {dataset.files.length === 1 ? 'file' : 'files'}
+      </div>
+
+      {/* Processing percentage badge */}
+      {isProcessing && (
+        <div className="absolute bottom-3 right-3">
+          <Badge
+            variant="secondary"
+            size="sm"
+            className="rounded-xl bg-primary/10 text-primary border border-primary/20"
+          >
+            Processing {processingPercent}%...
+          </Badge>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
-  const [isDropped, setIsDropped] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useModeWithReset('designer')
+
+  // File drag-and-drop state management
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [isSelectDatasetModalOpen, setIsSelectDatasetModalOpen] =
+    useState(false)
+  const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadingFileCount, setUploadingFileCount] = useState(0)
+  const activeUploadControllersRef = useRef<AbortController[]>([])
+  const [isTransitioningToCreate, setIsTransitioningToCreate] = useState(false)
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -50,6 +232,21 @@ const Data = () => {
 
   // Get current active project for API calls
   const activeProject = useActiveProject()
+
+  // Cleanup effect: abort all active upload controllers on unmount
+  useEffect(() => {
+    return () => {
+      // Abort all active upload network requests when component unmounts
+      activeUploadControllersRef.current.forEach(controller => {
+        try {
+          controller.abort()
+        } catch (err) {
+          // Ignore errors from already aborted controllers
+          console.debug('Controller aborted on unmount:', err)
+        }
+      })
+    }
+  }, []) // Empty dependency array - only run cleanup on unmount
 
   // File type mapping for parser creation (centralized to avoid duplication)
   const fileTypeMapping = useMemo(
@@ -83,6 +280,7 @@ const Data = () => {
     data: apiDatasets,
     isLoading: isDatasetsLoading,
     error: datasetsError,
+    refetch: refetchDatasets,
   } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
@@ -91,6 +289,42 @@ const Data = () => {
   const createDatasetMutation = useCreateDataset()
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
+
+  // Custom upload mutation with proper AbortSignal handling
+  const uploadMutation = useMutation({
+    mutationFn: async ({
+      namespace,
+      project,
+      dataset,
+      file,
+      signal,
+    }: {
+      namespace: string
+      project: string
+      dataset: string
+      file: File
+      signal?: AbortSignal
+    }) => {
+      // Use the API service which properly handles the signal
+      return await uploadFileToDataset(
+        namespace,
+        project,
+        dataset,
+        file,
+        signal
+      )
+    },
+    onError: error => {
+      // Don't show error toast for aborted uploads
+      if (
+        (error instanceof Error && error.name === 'AbortError') ||
+        (error as any)?.code === 'ERR_CANCELED'
+      ) {
+        return
+      }
+      // Error toasts for actual failures are handled in handleDatasetSelect
+    },
+  })
 
   // Fetch available strategies and databases from API
   const { data: availableOptions } = useAvailableStrategies(
@@ -105,8 +339,13 @@ const Data = () => {
     activeProject?.project || ''
   )
 
-  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
-  const getDatasetsLocation = useCallback(() => ({ type: 'datasets' as const }), [])
+  const projectConfig = (projectResp as any)?.project?.config as
+    | ProjectConfig
+    | undefined
+  const getDatasetsLocation = useCallback(
+    () => ({ type: 'datasets' as const }),
+    []
+  )
   const { configPointer, handleModeChange } = useConfigPointer({
     mode,
     setMode,
@@ -126,6 +365,12 @@ const Data = () => {
       // Only show fields that actually come from the API
     }))
   }, [apiDatasets])
+
+  // Extract databases from project config for color assignment
+  const databases = useMemo(() => {
+    const ragDatabases = (projectResp as any)?.project?.config?.rag?.databases
+    return Array.isArray(ragDatabases) ? ragDatabases : []
+  }, [projectResp])
 
   // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
   const hasRedirectedFromQuery = useRef(false)
@@ -232,6 +477,7 @@ const Data = () => {
     newDatasetDataProcessingStrategy,
     setNewDatasetDataProcessingStrategy,
   ] = useState('')
+  const [datasetNameError, setDatasetNameError] = useState<string | null>(null)
 
   // Set default values when dialog opens and options are available
   useEffect(() => {
@@ -265,6 +511,18 @@ const Data = () => {
     const name = newDatasetName.trim()
     if (!name) return
 
+    // Validate dataset name
+    const existingDatasetNames = datasets?.map(d => d.name) || []
+    const validation = validateDatasetNameWithDuplicateCheck(
+      name,
+      existingDatasetNames
+    )
+
+    if (!validation.isValid) {
+      setDatasetNameError(validation.error || 'Invalid dataset name')
+      return
+    }
+
     if (!activeProject?.namespace || !activeProject?.project) {
       toast({
         message: 'No active project selected',
@@ -274,18 +532,28 @@ const Data = () => {
     }
 
     try {
-      await createDatasetMutation.mutateAsync({
+      const response = await createDatasetMutation.mutateAsync({
         namespace: activeProject.namespace,
         project: activeProject.project,
         name,
         data_processing_strategy: newDatasetDataProcessingStrategy || 'default',
         database: newDatasetDatabase || 'default',
       })
+
       toast({ message: 'Dataset created successfully', variant: 'default' })
       setIsCreateOpen(false)
       setNewDatasetName('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
+      setDatasetNameError(null)
+
+      // If we should upload files after creating, use the newly created dataset
+      // Note: In this system, dataset name serves as the unique identifier (ID)
+      if (shouldUploadAfterCreate && response?.dataset?.name) {
+        const datasetId = response.dataset.name
+        const datasetName = response.dataset.name
+        handleDatasetSelect(datasetId, datasetName)
+      }
     } catch (error) {
       console.error('Failed to create dataset:', error)
       toast({
@@ -297,6 +565,9 @@ const Data = () => {
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
+    e.stopPropagation()
+    // Set the drop effect to allow dropping
+    e.dataTransfer.dropEffect = 'copy'
     setIsDragging(true)
   }, [])
 
@@ -304,27 +575,483 @@ const Data = () => {
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDropped(true)
-
-    setTimeout(() => {
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
       setIsDragging(false)
-      setIsDropped(false)
-    }, 1000)
 
-    // File drop handling removed - files are now uploaded directly to datasets
-  }, [])
+      const files = Array.from(e.dataTransfer.files)
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (files.length === 0) {
+        return
+      }
+
+      // Comprehensive file validation with extension, MIME type, and content verification
+      const validationResults = await Promise.all(
+        files.map(async file => ({
+          file,
+          validation: await isValidFile(file),
+        }))
+      )
+
+      const validFiles = validationResults
+        .filter(result => result.validation.valid)
+        .map(result => result.file)
+
+      const invalidFiles = validationResults.filter(
+        result => !result.validation.valid
+      )
+
+      if (validFiles.length === 0) {
+        const reasons = invalidFiles
+          .map(r => `${r.file.name}: ${r.validation.reason}`)
+          .join('; ')
+        toast({
+          message: `No valid files to upload. ${reasons}`,
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (invalidFiles.length > 0) {
+        const reasons = invalidFiles
+          .slice(0, 3)
+          .map(r => `${r.file.name}: ${r.validation.reason}`)
+        const message =
+          invalidFiles.length <= 3
+            ? reasons.join('; ')
+            : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+
+        toast({
+          message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
+          variant: 'default',
+        })
+      }
+
+      setPendingFiles(validFiles)
+      setIsSelectDatasetModalOpen(true)
+    },
+    [toast]
+  )
+
+  // Upload files in batches with cancellation support
+  const uploadFilesInBatches = useCallback(
+    async (
+      files: File[],
+      datasetId: string,
+      namespace: string,
+      project: string,
+      batchSize: number = UPLOAD_BATCH_SIZE
+    ) => {
+      const results = []
+      let cancelled = false
+
+      for (let i = 0; i < files.length; i += batchSize) {
+        // CHECK FOR CANCELLATION AT START OF EACH BATCH
+        if (cancelled) {
+          // Add cancelled results for remaining files
+          const remainingFiles = files.slice(i)
+          remainingFiles.forEach(file => {
+            results.push({
+              file: file.name,
+              success: false,
+              error: new Error('Cancelled'),
+              cancelled: true,
+            })
+          })
+          break
+        }
+
+        const batch = files.slice(i, i + batchSize)
+        const batchResults = await Promise.all(
+          batch.map(async file => {
+            const controller = new AbortController()
+            activeUploadControllersRef.current.push(controller)
+
+            try {
+              const result = await uploadMutation.mutateAsync({
+                namespace,
+                project,
+                dataset: datasetId,
+                file,
+                signal: controller.signal,
+              })
+              return {
+                file: file.name,
+                success: true,
+                result,
+                skipped: result.skipped || false,
+              }
+            } catch (error) {
+              // Check if this is an abort/cancellation error
+              if (
+                (error instanceof Error && error.name === 'AbortError') ||
+                (error as any)?.code === 'ERR_CANCELED' ||
+                (error as any)?.message?.includes('cancel')
+              ) {
+                cancelled = true // Set flag to stop processing more batches
+                return {
+                  file: file.name,
+                  success: false,
+                  error,
+                  cancelled: true,
+                }
+              }
+              return { file: file.name, success: false, error }
+            } finally {
+              activeUploadControllersRef.current =
+                activeUploadControllersRef.current.filter(c => c !== controller)
+            }
+          })
+        )
+
+        results.push(...batchResults)
+
+        // Check if any upload in this batch was cancelled
+        if (batchResults.some(r => (r as any).cancelled)) {
+          cancelled = true
+          // Add cancelled results for remaining files
+          const remainingFiles = files.slice(i + batchSize)
+          remainingFiles.forEach(file => {
+            results.push({
+              file: file.name,
+              success: false,
+              error: new Error('Cancelled'),
+              cancelled: true,
+            })
+          })
+          break
+        }
+      }
+
+      return results
+    },
+    [uploadMutation]
+  )
+
+  // Handle file upload to selected dataset
+  const handleDatasetSelect = useCallback(
+    async (datasetId: string, datasetName: string) => {
+      if (!activeProject || pendingFiles.length === 0) {
+        return
+      }
+
+      const fileCount = pendingFiles.length // Store count before clearing
+      setUploadingFileCount(fileCount)
+      setIsUploading(true)
+      setIsSelectDatasetModalOpen(false)
+
+      const { namespace, project } = activeProject
+
+      try {
+        // Upload all files to the selected dataset in batches
+        const results = await uploadFilesInBatches(
+          pendingFiles,
+          datasetId,
+          namespace,
+          project
+        )
+
+        const cancelled = results.some(r => (r as any).cancelled)
+        const failures = results.filter(
+          r => !r.success && !(r as any).cancelled
+        )
+        const successes = results.filter(r => r.success && !(r as any).skipped)
+        const skipped = results.filter(r => r.success && (r as any).skipped)
+
+        // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
+        if (cancelled) {
+          return
+        }
+
+        // Show appropriate toast based on results
+        if (failures.length > 0 && successes.length > 0) {
+          // Partial success: some uploads succeeded, some failed
+          const skippedMsg =
+            skipped.length > 0 ? `, skipped ${skipped.length} duplicate(s)` : ''
+          toast({
+            message: `Uploaded ${successes.length} of ${fileCount} file(s)${skippedMsg}. Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (failures.length > 0 && skipped.length > 0) {
+          // All files either failed or were skipped
+          toast({
+            message: `Upload failed for ${failures.length} file(s), skipped ${skipped.length} duplicate(s). Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (failures.length > 0) {
+          // All files failed
+          toast({
+            message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
+            variant: 'destructive',
+          })
+        } else if (skipped.length > 0 && successes.length === 0) {
+          // All files were duplicates
+          toast({
+            message: `All ${skipped.length} file(s) were already in ${datasetName}`,
+            variant: 'default',
+            icon: 'alert-triangle',
+          })
+        } else if (skipped.length > 0) {
+          // Some successes with some skipped
+          toast({
+            message: `Uploaded ${successes.length} file(s) to ${datasetName}, skipped ${skipped.length} duplicate(s)`,
+            variant: 'default',
+          })
+        } else {
+          // All files succeeded
+          toast({
+            message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
+            variant: 'default',
+          })
+        }
+
+        // Navigate to the dataset view to see uploaded files (only if some succeeded)
+        if (successes.length > 0) {
+          // Explicitly refetch to ensure fresh data before navigating
+          await refetchDatasets()
+          navigate(`/chat/data/${datasetId}`)
+        }
+      } catch (error) {
+        console.error('Upload failed:', error)
+        // Check if error is due to cancellation
+        if (
+          (error as any)?.code === 'ERR_CANCELED' ||
+          (error as any)?.message?.includes('cancel')
+        ) {
+          // Cancellation toast already shown, just return
+          return
+        }
+        toast({
+          message:
+            error instanceof Error ? error.message : 'Failed to upload files',
+          variant: 'destructive',
+        })
+      } finally {
+        setPendingFiles([])
+        activeUploadControllersRef.current = []
+        setIsUploading(false)
+        setShouldUploadAfterCreate(false)
+        setUploadingFileCount(0)
+        // Reset file input to allow reselecting the same files
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      }
+    },
+    [
+      activeProject,
+      pendingFiles,
+      uploadFilesInBatches,
+      toast,
+      navigate,
+      refetchDatasets,
+    ]
+  )
+
+  // Note: Auto-upload logic now handled directly in handleCreateDataset
+  // No need for fragile useEffect watching datasets.length
+
+  // Cancel file upload and reset state
+  const handleCancelUpload = useCallback(() => {
+    // Abort all active upload network requests
+    activeUploadControllersRef.current.forEach(controller => {
+      try {
+        controller.abort()
+      } catch (err) {
+        // Ignore errors from already aborted controllers
+        console.debug('Controller already aborted:', err)
+      }
+    })
+    activeUploadControllersRef.current = []
+
+    // Clear all state
+    setPendingFiles([])
+    setIsSelectDatasetModalOpen(false)
+    setShouldUploadAfterCreate(false)
+    setIsUploading(false)
+    setUploadingFileCount(0)
+
+    // Show cancellation toast
+    toast({
+      message: 'Upload cancelled - all active uploads have been stopped',
+      variant: 'default',
+    })
+  }, [toast]) // Removed activeUploadControllers from dependency array since using ref
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : []
     if (files.length === 0) return
 
-    setIsDropped(true)
-    setTimeout(() => setIsDropped(false), 1000)
+    // Apply the same comprehensive validation as drag-and-drop
+    const validationResults = await Promise.all(
+      files.map(async file => ({
+        file,
+        validation: await isValidFile(file),
+      }))
+    )
 
-    // console.log('Selected files:', files)
+    const validFiles = validationResults
+      .filter(result => result.validation.valid)
+      .map(result => result.file)
+
+    const invalidFiles = validationResults.filter(
+      result => !result.validation.valid
+    )
+
+    if (validFiles.length === 0) {
+      const reasons = invalidFiles
+        .map(r => `${r.file.name}: ${r.validation.reason}`)
+        .join('; ')
+      toast({
+        message: `No valid files selected. ${reasons}`,
+        variant: 'destructive',
+      })
+      // Reset the input
+      e.target.value = ''
+      return
+    }
+
+    if (invalidFiles.length > 0) {
+      const reasons = invalidFiles
+        .slice(0, 3)
+        .map(r => `${r.file.name}: ${r.validation.reason}`)
+      const message =
+        invalidFiles.length <= 3
+          ? reasons.join('; ')
+          : `${reasons.join('; ')}... and ${invalidFiles.length - 3} more`
+
+      toast({
+        message: `${invalidFiles.length} invalid file(s) were rejected. ${message}`,
+        variant: 'default',
+      })
+    }
+
+    // Reset the input for next selection
+    e.target.value = ''
+
+    // Open dataset selection modal with validated files
+    setPendingFiles(validFiles)
+    setIsSelectDatasetModalOpen(true)
   }
+
+  // Render modal for selecting destination dataset for dropped files
+  const renderSelectDatasetModal = () => (
+    <Dialog
+      open={isSelectDatasetModalOpen}
+      onOpenChange={open => {
+        // Don't clear state if we're transitioning to create dialog
+        if (!open && isTransitioningToCreate) {
+          setIsTransitioningToCreate(false)
+          setIsSelectDatasetModalOpen(open)
+          return
+        }
+
+        setIsSelectDatasetModalOpen(open)
+        if (!open) {
+          // Only clear if user is actually cancelling (not transitioning)
+          setPendingFiles([])
+          setShouldUploadAfterCreate(false)
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Files to Dataset</DialogTitle>
+          <DialogDescription>
+            {pendingFiles.length === 1
+              ? `Where would you like to add "${pendingFiles[0].name}"?`
+              : `Where would you like to add ${pendingFiles.length} files?`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {/* Create new dataset with dropped files */}
+          <button
+            onClick={() => {
+              setIsTransitioningToCreate(true)
+              setShouldUploadAfterCreate(true)
+              setIsSelectDatasetModalOpen(false)
+              setIsCreateOpen(true)
+            }}
+            className="w-full flex items-center gap-3 p-4 rounded-lg border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/5 transition-colors"
+          >
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <svg
+                className="w-5 h-5 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </div>
+            <div className="text-left">
+              <div className="font-medium">Create New Dataset</div>
+              <div className="text-sm text-muted-foreground">
+                Start a new dataset with{' '}
+                {pendingFiles.length === 1 ? 'this file' : 'these files'}
+              </div>
+            </div>
+          </button>
+
+          {/* Select from existing datasets */}
+          {datasets && datasets.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground px-1">
+                Or add to existing dataset:
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {datasets.map(dataset => (
+                  <button
+                    key={dataset.id}
+                    onClick={() =>
+                      handleDatasetSelect(dataset.id, dataset.name)
+                    }
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-accent hover:border-accent-foreground/20 transition-colors text-left"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 rounded bg-accent flex items-center justify-center">
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{dataset.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {dataset.files?.length || 0} files
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleCancelUpload}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 
   return (
     <div
@@ -361,6 +1088,7 @@ const Data = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
+                    variant="secondary"
                     size="sm"
                     onClick={() => {
                       setStrategyCreateName('')
@@ -369,7 +1097,7 @@ const Data = () => {
                       setStrategyCreateOpen(true)
                     }}
                   >
-                    Create new
+                    Create new processing strategy
                   </Button>
                 </div>
               </div>
@@ -497,7 +1225,7 @@ const Data = () => {
                             key={name}
                             variant="default"
                             size="sm"
-                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                            className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
                           >
                             {name}
                           </Badge>
@@ -564,18 +1292,29 @@ const Data = () => {
                       // Prevent closing dialog during mutation
                       if (!createDatasetMutation.isPending) {
                         setIsCreateOpen(open)
-                        if (!open) {
-                          // Reset form when closing
+                        if (
+                          !open &&
+                          shouldUploadAfterCreate &&
+                          pendingFiles.length > 0
+                        ) {
+                          // User cancelled dataset creation with pending files - go back to select modal
+                          setIsSelectDatasetModalOpen(true)
+                          // Keep pendingFiles and shouldUploadAfterCreate intact
+                        } else if (!open) {
+                          // Normal close without pending files, clear everything
                           setNewDatasetName('')
                           setNewDatasetDatabase('')
                           setNewDatasetDataProcessingStrategy('')
+                          setDatasetNameError(null)
+                          setPendingFiles([])
+                          setShouldUploadAfterCreate(false)
                         }
                       }
                     }}
                   >
                     <DialogTrigger asChild>
                       <Button variant="default" size="sm">
-                        Create new
+                        Create new dataset
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
@@ -590,9 +1329,34 @@ const Data = () => {
                           <Input
                             autoFocus
                             value={newDatasetName}
-                            onChange={e => setNewDatasetName(e.target.value)}
+                            onChange={e => {
+                              const newName = e.target.value
+                              setNewDatasetName(newName)
+
+                              // Validate on change for real-time feedback
+                              const existingDatasetNames =
+                                datasets?.map(d => d.name) || []
+                              const validation =
+                                validateDatasetNameWithDuplicateCheck(
+                                  newName,
+                                  existingDatasetNames
+                                )
+                              setDatasetNameError(
+                                validation.isValid
+                                  ? null
+                                  : validation.error || 'Invalid dataset name'
+                              )
+                            }}
                             placeholder="Enter dataset name"
+                            className={
+                              datasetNameError ? 'border-destructive' : ''
+                            }
                           />
+                          {datasetNameError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {datasetNameError}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1">
                           <label className="text-xs text-muted-foreground">
@@ -624,7 +1388,9 @@ const Data = () => {
                           <select
                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             value={newDatasetDatabase}
-                            onChange={e => setNewDatasetDatabase(e.target.value)}
+                            onChange={e =>
+                              setNewDatasetDatabase(e.target.value)
+                            }
                           >
                             <option value="">Select a database...</option>
                             {availableOptions?.databases?.map(database => (
@@ -648,6 +1414,7 @@ const Data = () => {
                             !newDatasetName.trim() ||
                             !newDatasetDataProcessingStrategy.trim() ||
                             !newDatasetDatabase.trim() ||
+                            !!datasetNameError ||
                             createDatasetMutation.isPending
                           }
                         >
@@ -666,20 +1433,18 @@ const Data = () => {
                     className={`w-full h-full flex flex-col items-center justify-center border border-dashed rounded-lg p-4 gap-2 transition-colors border-input`}
                   >
                     <div className="flex flex-col items-center justify-center gap-4 text-center my-[56px] text-primary">
-                      {isDropped ? (
-                        <Loader />
-                      ) : (
-                        <FontIcon
-                          type="upload"
-                          className="w-10 h-10 text-blue-200 dark:text-white"
-                        />
-                      )}
-                      <div className="text-xl text-foreground">Drop data here</div>
+                      <FontIcon
+                        type="upload"
+                        className="w-10 h-10 text-blue-200 dark:text-white"
+                      />
+                      <div className="text-xl text-foreground">
+                        Drop data here
+                      </div>
                     </div>
                     <p className="max-w-[527px] text-sm text-muted-foreground text-center mb-10">
                       You can upload PDFs, explore various list formats, or draw
-                      inspiration from other data sources to enhance your project
-                      with LlaMaFarm.
+                      inspiration from other data sources to enhance your
+                      project with LlaMaFarm.
                     </p>
                   </div>
                 ) : (
@@ -698,84 +1463,25 @@ const Data = () => {
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-2 mb-6">
                         {datasets.map(ds => (
-                          <div
+                          <DatasetCard
                             key={ds.id}
-                            className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                            onClick={() => navigate(`/chat/data/${ds.id}`)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                navigate(`/chat/data/${ds.id}`)
+                            dataset={ds}
+                            activeProject={activeProject}
+                            databases={databases}
+                            onNavigate={(id: string) => {
+                              // Handle navigation to dataset or databases page
+                              if (id.startsWith('/')) {
+                                navigate(id)
+                              } else {
+                                navigate(`/chat/data/${id}`)
                               }
                             }}
-                          >
-                            <div className="absolute right-3 top-3">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                                    onClick={e => e.stopPropagation()}
-                                    aria-label="Dataset actions"
-                                  >
-                                    <FontIcon
-                                      type="overflow"
-                                      className="w-4 h-4"
-                                    />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  align="end"
-                                  className="min-w-[10rem] w-[10rem]"
-                                >
-                                  {/* Edit removed - API doesn't support updating datasets */}
-                                  <DropdownMenuItem
-                                    onClick={e => {
-                                      e.stopPropagation()
-                                      navigate(`/chat/data/${ds.id}`)
-                                    }}
-                                  >
-                                    View
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={e => {
-                                      e.stopPropagation()
-                                      setConfirmDeleteId(ds.id)
-                                      setConfirmDeleteName(ds.name)
-                                      setIsConfirmDeleteOpen(true)
-                                    }}
-                                  >
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                            <div className="text-sm font-medium">{ds.name}</div>
-                            <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
-                              {ds.database && (
-                                <Badge
-                                  variant="default"
-                                  size="sm"
-                                  className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
-                                >
-                                  {ds.database}
-                                </Badge>
-                              )}
-                              <Badge
-                                variant="default"
-                                size="sm"
-                                className="rounded-xl"
-                              >
-                                {ds.data_processing_strategy}
-                              </Badge>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-2">
-                              {ds.files.length}{' '}
-                              {ds.files.length === 1 ? 'file' : 'files'}
-                            </div>
-                          </div>
+                            onDelete={(id: string, name: string) => {
+                              setConfirmDeleteId(id)
+                              setConfirmDeleteName(name)
+                              setIsConfirmDeleteOpen(true)
+                            }}
+                          />
                         ))}
                       </div>
                     )}
@@ -1297,6 +2003,32 @@ const Data = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* File drop dataset selection modal */}
+      {renderSelectDatasetModal()}
+
+      {/* Upload progress overlay */}
+      {isUploading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card border rounded-lg p-6 shadow-lg flex flex-col items-center gap-4 max-w-sm">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <div className="text-center">
+              <div className="font-medium">Uploading Files...</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                {uploadingFileCount}{' '}
+                {uploadingFileCount === 1 ? 'file' : 'files'}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleCancelUpload}
+              className="mt-2"
+            >
+              Cancel Upload
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

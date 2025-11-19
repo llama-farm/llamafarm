@@ -7,6 +7,7 @@
 # - config/ (configuration schema and types)
 # - runtimes/universal/ (universal runtime)
 # - designer/dist/ (built designer static files)
+# - ruff.toml (code formatting configuration)
 
 set -e
 
@@ -33,6 +34,15 @@ REQUIRED_DIRS=("server" "rag" "common" "config" "runtimes/universal" "designer/d
 for dir in "${REQUIRED_DIRS[@]}"; do
     if [ ! -d "$dir" ]; then
         echo "Error: Required directory not found: $dir" >&2
+        exit 1
+    fi
+done
+
+# Verify required files exist
+REQUIRED_FILES=("ruff.toml")
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ ! -f "$file" ]; then
+        echo "Error: Required file not found: $file" >&2
         exit 1
     fi
 done
@@ -81,6 +91,10 @@ rsync -a "${RSYNC_EXCLUDE[@]}" runtimes/universal/ "$SOURCE_DIR/runtimes/univers
 echo "Copying designer/dist/..."
 mkdir -p "$SOURCE_DIR/designer"
 rsync -a "${RSYNC_EXCLUDE[@]}" designer/dist/ "$SOURCE_DIR/designer/dist/"
+
+# Copy root-level configuration files needed for builds
+echo "Copying ruff.toml..."
+cp ruff.toml "$SOURCE_DIR/ruff.toml"
 
 # Create the archive
 echo "Creating archive: $ARCHIVE_PATH"

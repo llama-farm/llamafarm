@@ -144,7 +144,7 @@ Reference docs: `docs/website/docs/configuration/index.md` and `docs/website/doc
 When you change `config/schema.yaml` or `rag/schema.yaml`:
 ```bash
 cd config
-./generate-types.sh
+uv run python generate_types.py
 ```
 Outputs:
 - `config/datamodel.py` (Pydantic models)
@@ -155,7 +155,7 @@ Update the CLI/server code to handle new fields, then adjust docs accordingly.
 ## 6. Extending Components
 ### Runtime Providers
 1. Add provider enum value in `config/schema.yaml` (`runtime.provider`).
-2. Regenerate types (`config/generate-types.sh`).
+2. Regenerate types (`config/generate_types.py`).
 3. Update runtime selection logic:
    - Server: `server/services/runtime_service.py` (or relevant module).
    - CLI: wherever runtime resolution occurs (e.g., `cli/cmd/config/types.go` consumers).

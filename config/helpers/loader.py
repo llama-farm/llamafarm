@@ -476,6 +476,13 @@ def save_config(
 
     # Validate configuration before saving
     config_dict = config.model_dump(mode="json", exclude_none=True)
+    
+    # Run custom validators for constraints beyond JSON Schema
+    from config.validators import validate_llamafarm_config
+    try:
+        validate_llamafarm_config(config_dict)
+    except ValueError as e:
+        raise ConfigError(f"Configuration validation failed: {e}") from e
 
     # Create backup if requested and file exists
     backup_path = None

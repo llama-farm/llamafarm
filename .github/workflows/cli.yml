@@ -99,7 +99,7 @@ jobs:
           fi
 
           # Build with version info (schema compilation and type generation already done by generate-types)
-          go build -ldflags "-s -w -X llamafarm-cli/cmd.Version=${VERSION}" -o ../dist/${{ matrix.output }} .
+          go build -ldflags "-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=${VERSION}'" -o ../dist/${{ matrix.output }} .
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4

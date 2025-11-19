@@ -137,23 +137,50 @@ export default function TestChat({
   const fallbackDefaultName: string | undefined = cfgDefaultName
   const [selectedModel, setSelectedModel] = useState<string | undefined>(() => {
     if (typeof window === 'undefined') return undefined
-    return localStorage.getItem('lf_testchat_selected_model') || undefined
+
+    // Load from localStorage but validate it exists in current config
+    const savedModel = localStorage.getItem('lf_testchat_selected_model')
+    if (savedModel) {
+      // Check if this model exists in the unified models list
+      // Note: unifiedModels might not be populated yet during initial render
+      // so we'll validate again in the useEffect below
+      return savedModel
+    }
+    return undefined
   })
+
+  // Validate selected model and set default if needed
   useEffect(() => {
-    if (!selectedModel) {
+    // Build list of valid model names from current config
+    const validModelNames = unifiedModels.map(m => m.name)
+
+    if (!selectedModel || !validModelNames.includes(selectedModel)) {
+      // Selected model is invalid or doesn't exist - fall back to default
       const apiDefaultName = (defaultModel as any)?.name
-      if (apiDefaultName) {
+      if (apiDefaultName && validModelNames.includes(apiDefaultName)) {
         setSelectedModel(apiDefaultName)
-      } else if (fallbackDefaultName) {
+      } else if (fallbackDefaultName && validModelNames.includes(fallbackDefaultName)) {
         setSelectedModel(fallbackDefaultName)
+      } else if (validModelNames.length > 0) {
+        // Use first available model as last resort
+        setSelectedModel(validModelNames[0])
+      } else {
+        // No valid models available, clear selection
+        setSelectedModel(undefined)
       }
     }
-  }, [(defaultModel as any)?.name, fallbackDefaultName, selectedModel])
+  }, [(defaultModel as any)?.name, fallbackDefaultName, selectedModel, unifiedModels])
+
+  // Persist valid model selection to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined' && selectedModel) {
-      localStorage.setItem('lf_testchat_selected_model', selectedModel)
+      // Only save if it's a valid model
+      const validModelNames = unifiedModels.map(m => m.name)
+      if (validModelNames.includes(selectedModel)) {
+        localStorage.setItem('lf_testchat_selected_model', selectedModel)
+      }
     }
-  }, [selectedModel])
+  }, [selectedModel, unifiedModels])
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -224,8 +251,15 @@ export default function TestChat({
   const projectChatError =
     projectChatStreamingMessage.error ||
     projectChatStreamingSession.sessionError
-  const combinedError =
-    error || (projectChatError ? projectChatError.message : null)
+  const combinedError = (() => {
+    if (error) {
+      return typeof error === 'string' ? error : error.message
+    }
+    if (projectChatError) {
+      return typeof projectChatError === 'string' ? projectChatError : projectChatError.message
+    }
+    return null
+  })()
 
   // Combined canSend state
   const combinedCanSend = canSend && !isProjectChatLoading
@@ -948,6 +982,17 @@ export function TestChatMessage({
         .slice(0, message.content.indexOf('<think>'))
         .trim()
     }
+  }
+
+  // Remove raw <tool_call> XML tags from display (handled as separate messages)
+  if (isAssistant && typeof contentWithoutThinking === 'string') {
+    // Remove complete tool_call blocks
+    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+    // Remove unclosed tool_call tags (streaming in progress)
+    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*$/g, '')
+    // Remove orphaned closing tags
+    contentWithoutThinking = contentWithoutThinking.replace(/<\/tool_call>/g, '')
+    contentWithoutThinking = contentWithoutThinking.trim()
   }
 
   // Load persisted thumb for this message

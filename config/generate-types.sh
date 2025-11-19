@@ -13,6 +13,7 @@ uv run datamodel-codegen \
     --use-standard-collections \
     --use-title-as-name \
     --formatters=ruff-format \
+    --set-default-enum-member \
     --class-name=LlamaFarmConfig
 echo "✅ Python types generated"
 echo ""

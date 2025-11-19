@@ -55,7 +55,7 @@ create_test_artifacts() {
     # Generate types first
     info "Generating types..."
     cd config
-    ./generate-types.sh || error "Failed to generate Python types"
+    uv run python generate_types.py || error "Failed to generate Python types"
 
     # Install go-jsonschema if needed
     if ! command -v go-jsonschema >/dev/null 2>&1; then
@@ -91,7 +91,7 @@ create_test_artifacts() {
         fi
 
         GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X 'llamafarm-cli/cmd.Version=$TEST_VERSION'" \
+            -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=$TEST_VERSION'" \
             -o "$binary_name" .
 
         # Create archive

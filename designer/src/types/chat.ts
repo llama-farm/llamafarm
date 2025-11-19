@@ -180,3 +180,46 @@ export interface StreamingChatOptions {
   onComplete?: StreamCompleteHandler
   signal?: AbortSignal
 }
+
+/**
+ * Health response interface (imported conceptually from healthService to avoid circular deps)
+ */
+export interface HealthResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy'
+  summary: string
+  components: Array<{
+    name: string
+    status: 'healthy' | 'degraded' | 'unhealthy'
+    message: string
+    latency_ms?: number
+    details?: Record<string, any>
+  }>
+  seeds: Array<{
+    name: string
+    status: 'healthy' | 'degraded' | 'unhealthy'
+    message: string
+    latency_ms?: number
+    runtime?: {
+      provider: string
+      model: string
+      host?: string
+    }
+  }>
+  timestamp: number
+}
+
+/**
+ * Classified error with recovery information
+ * Used to provide better error messages and actionable recovery steps
+ */
+export interface ClassifiedError {
+  type: 'server_down' | 'degraded' | 'timeout' | 'validation' | 'unknown'
+  title: string
+  message: string
+  originalError: Error
+  healthStatus?: HealthResponse
+  recoveryCommands?: Array<{
+    description: string
+    command: string
+  }>
+}

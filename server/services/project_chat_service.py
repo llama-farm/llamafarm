@@ -1,8 +1,11 @@
 import asyncio
+import contextlib
 import time
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
+
+from agents.base.types import ToolDefinition
 
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 from observability.event_logger import EventLogger
@@ -15,6 +18,7 @@ from openai.types.completion_usage import CompletionUsage
 from agents.base.agent import LFAgent
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
 from agents.base.history import (
+    LFChatCompletionMessageParam,
     LFChatCompletionUserMessageParam,
 )
 from agents.chat_orchestrator import ChatOrchestratorAgent
@@ -91,10 +95,10 @@ class ProjectChatService:
         )
 
     async def _create_echo_stream(
-        self, message: str, model_name: str
+        self, messages: list[LFChatCompletionMessageParam], model_name: str
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Create a streaming echo response that mirrors the input message."""
-        echo_content = f"[ECHO MODE] {message}"
+        echo_content = f"[ECHO MODE] {messages}"
         chunk_id = f"chatcmpl-{uuid.uuid4()}"
         created_time = int(time.time())
         # Simulate streaming by yielding chunks
@@ -142,29 +146,20 @@ class ProjectChatService:
     def _log_event(self, event_logger: EventLogger | None, event_name: str, data: dict):
         """Log event if logger exists."""
         if event_logger:
-            try:
+            with contextlib.suppress(Exception):
                 event_logger.log_event(event_name, data)
-            except Exception:
-                # Ignore logging errors
-                pass
 
     def _complete_event(self, event_logger: EventLogger | None):
         """Complete event if logger exists."""
         if event_logger:
-            try:
+            with contextlib.suppress(Exception):
                 event_logger.complete_event()
-            except Exception:
-                # Ignore logging errors
-                pass
 
     def _fail_event(self, event_logger: EventLogger | None, error: str):
         """Fail event if logger exists."""
         if event_logger:
-            try:
+            with contextlib.suppress(Exception):
                 event_logger.fail_event(error)
-            except Exception:
-                # Ignore logging errors
-                pass
 
     async def _perform_rag_with_logging(
         self,
@@ -195,18 +190,20 @@ class ProjectChatService:
             rag_score_threshold=rag_score_threshold,
         )
 
+        if not rag_params.rag_enabled:
+            return
+
         # Log RAG query start if enabled
-        if rag_params.rag_enabled:
-            self._log_event(
-                event_logger,
-                "rag_query_start",
-                {
-                    "database": rag_params.database,
-                    "query": message,
-                    "top_k": rag_params.rag_top_k,
-                    "retrieval_strategy": rag_params.retrieval_strategy,
-                },
-            )
+        self._log_event(
+            event_logger,
+            "rag_query_start",
+            {
+                "database": rag_params.database,
+                "query": message,
+                "top_k": rag_params.rag_top_k,
+                "retrieval_strategy": rag_params.retrieval_strategy,
+            },
+        )
 
         # Perform RAG search using existing helper
         await self._perform_rag_search_and_add_to_context(
@@ -274,7 +271,8 @@ class ProjectChatService:
         project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: ChatOrchestratorAgent,
-        message: str,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -286,7 +284,7 @@ class ProjectChatService:
             logger.info(
                 "Echo mode enabled - returning echo response instead of invoking model"
             )
-            return self._create_echo_completion(message, chat_agent.model_name)
+            return self._create_echo_completion(messages, chat_agent.model_name)
 
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
@@ -296,61 +294,51 @@ class ProjectChatService:
             event_logger,
             "request_received",
             {
-                "message_length": len(message),
+                "message_length": len(messages),
                 "model": chat_agent.model_name,
                 "rag_enabled": rag_enabled,
             },
         )
 
+        latest_user_message = next(
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
+        )
+
+        if latest_user_message:
+            try:
+                # Perform RAG search with event logging
+                await self._perform_rag_with_logging(
+                    event_logger,
+                    chat_agent,
+                    project_dir,
+                    project_config,
+                    messages,
+                    rag_enabled=rag_enabled,
+                    database=database,
+                    retrieval_strategy=retrieval_strategy,
+                    rag_top_k=rag_top_k,
+                    rag_score_threshold=rag_score_threshold,
+                )
+            except Exception as e:
+                self._fail_event(event_logger, str(e))
+                raise
+
         try:
-            # Perform RAG search with event logging
-            await self._perform_rag_with_logging(
-                event_logger,
-                chat_agent,
-                project_dir,
-                project_config,
-                message,
-                rag_enabled=rag_enabled,
-                database=database,
-                retrieval_strategy=retrieval_strategy,
-                rag_top_k=rag_top_k,
-                rag_score_threshold=rag_score_threshold,
-            )
-
-            user_input = LFChatCompletionUserMessageParam(role="user", content=message)
-
-            result = await chat_agent.run_async(user_input=user_input)
-
-            # Log response (handle both dict and object responses)
-            if hasattr(result, "choices"):
-                response_content = (
-                    result.choices[0].message.content if result.choices else ""
-                )
-                finish_reason = (
-                    result.choices[0].finish_reason if result.choices else "unknown"
-                )
-            else:
-                # Handle dict response (from tests)
-                choices = result.get("choices", [])
-                response_content = (
-                    choices[0].get("message", {}).get("content", "") if choices else ""
-                )
-                finish_reason = (
-                    choices[0].get("finish_reason", "unknown") if choices else "unknown"
-                )
+            response = await chat_agent.run_async(messages=messages, tools=tools)
 
             self._log_event(
                 event_logger,
                 "response_generated",
-                {
-                    "response_length": len(response_content),
-                    "finish_reason": finish_reason,
-                },
+                response.model_dump_json(),
             )
 
             self._complete_event(event_logger)
-            return result
-
+            return response
         except Exception as e:
             self._fail_event(event_logger, str(e))
             raise
@@ -361,7 +349,8 @@ class ProjectChatService:
         project_dir: str,
         project_config: LlamaFarmConfig,
         chat_agent: LFAgent,
-        message: str,
+        messages: list[LFChatCompletionMessageParam],
+        tools: list[ToolDefinition] | None = None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -375,7 +364,9 @@ class ProjectChatService:
             logger.info(
                 "Echo mode enabled - returning echo stream instead of invoking model"
             )
-            async for chunk in self._create_echo_stream(message, chat_agent.model_name):
+            async for chunk in self._create_echo_stream(
+                messages, chat_agent.model_name
+            ):
                 yield chunk
             return
 
@@ -387,20 +378,28 @@ class ProjectChatService:
             event_logger,
             "request_received",
             {
-                "message_length": len(message),
+                "message_length": len(messages),
                 "model": chat_agent.model_name,
                 "rag_enabled": rag_enabled,
             },
         )
 
-        try:
-            # Perform RAG search with event logging
+        latest_user_message = next(
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
+        )
+
+        if latest_user_message:
             await self._perform_rag_with_logging(
                 event_logger,
                 chat_agent,
                 project_dir,
                 project_config,
-                message,
+                latest_user_message.get("content", ""),
                 rag_enabled=rag_enabled,
                 database=database,
                 retrieval_strategy=retrieval_strategy,
@@ -408,44 +407,22 @@ class ProjectChatService:
                 rag_score_threshold=rag_score_threshold,
             )
 
-            user_input = LFChatCompletionUserMessageParam(role="user", content=message)
-
-            logger.info("Running async stream")
-            stream_completed_normally = False
-            event_failed = False
-            try:
-                async for chunk in chat_agent.run_async_stream(user_input=user_input):
-                    yield chunk
-                # If we reach here, the stream completed normally
-                stream_completed_normally = True
-            except Exception:
-                # Mark event as failed so finally block doesn't complete it
-                # The outer exception handler will call _fail_event()
-                event_failed = True
-                raise
-            finally:
-                # Always complete the event if it hasn't failed, even if generator is abandoned
-                # This ensures observability data is written to disk
-                if not event_failed and stream_completed_normally:
-                    # Log stream complete only if it completed normally
-                    self._log_event(
-                        event_logger,
-                        "stream_complete",
-                        {
-                            "finish_reason": "stop",
-                        },
-                    )
-                    # Complete event if stream ended without exception
-                    # (normal completion or abandonment)
-                    self._complete_event(event_logger)
-
-        except Exception as e:
-            self._fail_event(event_logger, str(e))
-            logger.error(
-                "Model call failed",
-                exc_info=True,
-            )
+        logger.info("Running async stream")
+        event_failed = False
+        try:
+            async for chunk in chat_agent.run_async_stream(
+                messages=messages, tools=tools
+            ):
+                yield chunk
+        except Exception:
+            event_failed = True
             raise
+        finally:
+            if event_failed:
+                self._fail_event(event_logger, "stream_failed")
+            else:
+                self._log_event(event_logger, "stream_complete", {})
+                self._complete_event(event_logger)
 
     def _resolve_rag_parameters(
         self,
