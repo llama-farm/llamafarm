@@ -1061,9 +1061,7 @@ export function TestChatMessage({
         }
       >
         {message.isLoading && isAssistant ? (
-          showThinking ? (
-            <TypingDots label="Thinking" />
-          ) : null
+          <TypingDots label="Thinking" />
         ) : message.metadata?.isTest && isUser ? (
           <div className="whitespace-pre-wrap">
             <div className="mb-2">
