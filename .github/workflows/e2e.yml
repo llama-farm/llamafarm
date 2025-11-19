@@ -215,6 +215,49 @@ jobs:
           echo "=== Updated embedding config ==="
           yq '.rag.databases[0].embedding_strategies[0].config | pick(["model", "dimension"])' "$TEST_DIR/llamafarm.yaml"
 
+          # Verify the changes took effect
+          RUNTIME_MODEL=$(yq '.runtime.models[0].model' "$TEST_DIR/llamafarm.yaml")
+          QUANTIZATION=$(yq '.runtime.models[0].model_api_parameters.gguf_quantization' "$TEST_DIR/llamafarm.yaml")
+          if [ "$RUNTIME_MODEL" != "unsloth/Qwen3-0.6B-GGUF" ] || [ "$QUANTIZATION" != "IQ1_S" ]; then
+            echo "❌ Model configuration update failed!"
+            echo "Expected: unsloth/Qwen3-0.6B-GGUF with IQ1_S"
+            echo "Got: $RUNTIME_MODEL with $QUANTIZATION"
+            exit 1
+          fi
+          echo "✓ Model configuration verified"
+
+      - name: Pre-warm models by loading them
+        working-directory: cli
+        shell: bash
+        timeout-minutes: 8
+        env:
+          PYTHONUNBUFFERED: "1"
+          HF_HUB_ENABLE_HF_TRANSFER: "1" # Use faster download method
+        run: |
+          echo "Pre-warming models (downloading and loading)..."
+          echo "Model: unsloth/Qwen3-0.6B-GGUF (IQ1_S quantization)"
+          echo "Expected size: ~50-100MB"
+          echo ""
+
+          # Use a simple query to trigger model loading
+          # The --no-rag flag means we only need to load the language model, not embeddings yet
+          START_TIME=$(date +%s)
+          if ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "hi" 2>&1 | tee /tmp/prewarm.log; then
+            END_TIME=$(date +%s)
+            DURATION=$((END_TIME - START_TIME))
+            echo ""
+            echo "✓ Models successfully pre-warmed in ${DURATION}s"
+          else
+            echo ""
+            echo "❌ Model pre-warming failed!"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            echo ""
+            echo "Last 50 lines of output:"
+            tail -50 /tmp/prewarm.log
+            exit 1
+          fi
+
       # ============================================================
       # Data Ingestion Test
       # ============================================================
