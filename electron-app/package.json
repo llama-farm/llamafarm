@@ -45,7 +45,7 @@
     },
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.png",
+      "icon": "build/icon.icns",
       "target": [
         {
           "target": "dmg",
@@ -56,7 +56,8 @@
           "arch": ["x64", "arm64"]
         }
       ],
-      "identity": null
+      "identity": null,
+      "darkModeSupport": true
     },
     "win": {
       "target": ["nsis", "portable"],

@@ -18,8 +18,6 @@ export class MenuManager {
               submenu: [
                 { role: 'about' as const },
                 { type: 'separator' as const },
-                { role: 'services' as const },
-                { type: 'separator' as const },
                 { role: 'hide' as const },
                 { role: 'hideOthers' as const },
                 { role: 'unhide' as const },
