@@ -1649,6 +1649,14 @@ definitions:
             description: Retrieval strategy type identifier
           config:
             $ref: "#/definitions/retrievalStrategies/hybridUniversalConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: CrossEncoderRerankedStrategy
+            description: Cross-encoder reranking strategy using Ollama models (GGUF)
+          config:
+            $ref: "#/definitions/retrievalStrategies/crossEncoderRerankedConfig"
   retrievalStrategies:
     basicSimilarityConfig:
       type: object
@@ -1838,6 +1846,59 @@ definitions:
           minimum: 1
           maximum: 1000
           description: Final number of results
+    crossEncoderRerankedConfig:
+      type: object
+      additionalProperties: false
+      description: Cross-encoder reranking configuration using Ollama models (GGUF)
+      properties:
+        model_name:
+          type: string
+          description: "Name of the model from runtime.models to use for reranking (e.g., 'reranker')"
+          example: "reranker"
+        initial_k:
+          type: integer
+          default: 30
+          minimum: 10
+          maximum: 100
+          description: "Number of initial candidates to retrieve before reranking"
+        final_k:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+          description: "Number of results to return after reranking"
+        base_strategy:
+          type: string
+          enum: [BasicSimilarityStrategy, MetadataFilteredStrategy]
+          default: BasicSimilarityStrategy
+          description: "Base retrieval strategy to use for initial retrieval"
+        base_strategy_config:
+          type: object
+          default: {}
+          description: "Configuration for the base strategy"
+          additionalProperties: true
+        relevance_threshold:
+          type: number
+          default: 0.0
+          minimum: 0.0
+          maximum: 1.0
+          description: "Minimum relevance score (0-1) to include a result"
+        batch_size:
+          type: integer
+          default: 32
+          minimum: 1
+          maximum: 128
+          description: "Number of documents to rerank per batch"
+        normalize_scores:
+          type: boolean
+          default: true
+          description: "Normalize scores to 0-1 range using min-max normalization"
+        max_chars_per_doc:
+          type: integer
+          default: 1000
+          minimum: 100
+          maximum: 10000
+          description: "Maximum characters per document for reranking (to avoid token limits)"
 
   # NEW SCHEMA DEFINITIONS
   databaseDefinition:
