@@ -1,5 +1,6 @@
-"""Cross-encoder reranking strategy using models from runtime config."""
+"""Cross-encoder reranked retrieval strategy."""
 
+import requests
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -12,26 +13,20 @@ logger = RAGStructLogger("rag.components.retrievers.cross_encoder_reranked")
 
 class CrossEncoderRerankedStrategy(RetrievalStrategy):
     """
-    Cross-encoder reranking strategy using models from runtime.models config.
+    Cross-encoder reranking strategy for accurate document ranking.
 
-    This strategy performs initial retrieval using a base strategy, then uses
-    a cross-encoder model to compute precise relevance scores by jointly
-    encoding the query and each document.
+    This strategy performs proper cross-encoder reranking where query and
+    document are jointly encoded (not independently like bi-encoders).
 
-    Cross-encoders are 10-100x faster than LLM-based reranking and often
-    more accurate for relevance scoring.
+    Uses the Universal Runtime's /v1/rerank endpoint with HuggingFace
+    cross-encoder models for fast, accurate reranking.
 
-    Recommended models:
-    - bge-reranker-v2-m3 (Best for production, multilingual)
-    - bce-reranker-base (Good quantized option)
+    Best for:
+    - Production deployments requiring fast reranking
+    - When accuracy is critical (cross-encoders outperform bi-encoders)
+    - Local/on-prem deployments (no external API calls)
 
-    Use Cases:
-    - Simple, focused questions requiring accurate ranking
-    - Production systems requiring fast, accurate reranking
-    - High-throughput retrieval pipelines
-    - Cost-sensitive deployments (local compute only)
-
-    Performance: Fast (50-400 docs/sec depending on model)
+    Performance: Fast (50-400 docs/sec depending on model and hardware)
     Complexity: Medium
     Accuracy: Very High
     """
@@ -46,21 +41,18 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         config = config or {}
 
         # Configuration
-        self.model_name = config.get("model_name", "reranker")  # Name from runtime.models
+        self.model_name = config.get("model_name")  # Name from runtime.models
         self.model_base_url = config.get("model_base_url")  # Resolved by RAGManager
-        self.model_id = config.get("model_id")  # Resolved by RAGManager
+        self.model_id = config.get("model_id")  # HuggingFace model ID
         self.initial_k = config.get("initial_k", 30)
         self.final_k = config.get("final_k", 10)
         self.base_strategy_name = config.get("base_strategy", "BasicSimilarityStrategy")
         self.base_strategy_config = config.get("base_strategy_config", {})
         self.relevance_threshold = config.get("relevance_threshold", 0.0)
-        self.batch_size = config.get("batch_size", 32)
-        self.normalize_scores = config.get("normalize_scores", True)
-        self.max_chars_per_doc = config.get("max_chars_per_doc", 1000)
+        self.timeout = config.get("timeout", 60)  # Request timeout in seconds
 
         # Model state
         self._base_strategy: Optional[RetrievalStrategy] = None
-        self._reranker_client = None
 
     def _initialize_base_strategy(self):
         """Lazy initialization of base strategy."""
@@ -88,37 +80,6 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
 
         logger.info(f"Initialized base strategy: {self.base_strategy_name}")
 
-    def _initialize_reranker(self):
-        """Initialize the cross-encoder reranking model."""
-        if self._reranker_client is not None:
-            return
-
-        if not self.model_base_url or not self.model_id:
-            raise ValueError(
-                f"Model configuration not resolved for '{self.model_name}'. "
-                "Ensure the model exists in runtime.models."
-            )
-
-        # Create OpenAI client with the resolved model config
-        try:
-            from openai import OpenAI
-        except ImportError:
-            raise ImportError(
-                "openai package is required for cross-encoder reranking. "
-                "Install with: pip install openai"
-            )
-
-        self._reranker_client = OpenAI(
-            base_url=self.model_base_url,
-            api_key="dummy",  # OpenAI-compatible endpoints may not require real key
-        )
-
-        logger.info(
-            f"Initialized cross-encoder reranker",
-            model_name=self.model_name,
-            base_url=self.model_base_url,
-        )
-
     def retrieve(
         self,
         query_embedding: List[float],
@@ -128,7 +89,7 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         **kwargs,
     ) -> RetrievalResult:
         """
-        Retrieve and rerank documents using cross-encoder.
+        Retrieve and rerank documents using Universal Runtime cross-encoder.
 
         Args:
             query_embedding: The embedded query vector
@@ -141,11 +102,16 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
             RetrievalResult with reranked documents
         """
         if not query_text:
-            raise ValueError("query_text is required for cross-encoder reranking")
+            raise ValueError("query_text is required for reranking")
 
-        # Initialize components
+        if not self.model_base_url or not self.model_id:
+            raise ValueError(
+                f"Model configuration not resolved for '{self.model_name}'. "
+                "Ensure the model exists in runtime.models."
+            )
+
+        # Initialize base strategy
         self._initialize_base_strategy()
-        self._initialize_reranker()
 
         # Step 1: Initial retrieval
         logger.info(f"Performing initial retrieval with {self.base_strategy_name}")
@@ -165,15 +131,16 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
                     "strategy": self.name,
                     "version": "1.0.0",
                     "model_name": self.model_name,
+                    "model_id": self.model_id,
                     "initial_retrieved": 0,
                 },
             )
 
-        # Step 2: Cross-encoder reranking
+        # Step 2: Rerank using Universal Runtime
         logger.info(
-            f"Reranking {len(initial_result.documents)} documents with {self.model_name}"
+            f"Reranking {len(initial_result.documents)} documents with {self.model_id}"
         )
-        reranked_docs = self._rerank_with_cross_encoder(
+        reranked_docs = self._rerank_with_universal_runtime(
             query_text=query_text,
             documents=initial_result.documents,
         )
@@ -192,7 +159,7 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         for i, (doc, score) in enumerate(final_docs):
             doc.metadata["reranker_score"] = score
             doc.metadata["rerank_position"] = i + 1
-            doc.metadata["reranker_model"] = self.model_name
+            doc.metadata["reranker_model"] = self.model_id
 
         return RetrievalResult(
             documents=documents,
@@ -201,120 +168,99 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
                 "strategy": self.name,
                 "version": "1.0.0",
                 "model_name": self.model_name,
-                "base_strategy": self.base_strategy_name,
+                "model_id": self.model_id,
+                "base_url": self.model_base_url,
                 "initial_retrieved": len(initial_result.documents),
-                "candidates_reranked": len(reranked_docs),
-                "threshold_filtered": len(filtered_docs),
-                "final_count": len(documents),
+                "after_reranking": len(filtered_docs),
+                "final_count": len(final_docs),
             },
         )
 
-    def _rerank_with_cross_encoder(
+    def _rerank_with_universal_runtime(
         self,
         query_text: str,
         documents: List[Document],
     ) -> List[tuple[Document, float]]:
         """
-        Rerank documents using cross-encoder model.
+        Rerank documents using Universal Runtime's /v1/rerank endpoint.
 
-        This uses the embedding API to compute similarity scores
-        between the query and each document. The embeddings API with
-        reranker models provides relevance scores.
+        Normalizes cross-encoder logits to 0-1 range for intuitive thresholding.
 
         Returns:
             List of (document, score) tuples sorted by relevance
         """
-        results = []
-
-        # Process in batches
-        for i in range(0, len(documents), self.batch_size):
-            batch = documents[i : i + self.batch_size]
-            batch_results = self._rerank_batch(query_text, batch)
-            results.extend(batch_results)
-
-        # Sort by relevance score (descending)
-        results.sort(key=lambda x: x[1], reverse=True)
-
-        return results
-
-    def _rerank_batch(
-        self,
-        query_text: str,
-        documents: List[Document],
-    ) -> List[tuple[Document, float]]:
-        """Rerank a batch of documents using embeddings API."""
-
-        results = []
-
         try:
-            # Get query embedding
-            query_response = self._reranker_client.embeddings.create(
-                model=self.model_id,
-                input=query_text,
+            # Prepare request
+            doc_texts = [doc.content for doc in documents]
+
+            url = f"{self.model_base_url}/v1/rerank"
+            payload = {
+                "model": self.model_id,
+                "query": query_text,
+                "documents": doc_texts,
+                "return_documents": False,  # We already have the documents
+            }
+
+            # Call Universal Runtime
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=self.timeout,
             )
-            query_embedding = query_response.data[0].embedding
+            response.raise_for_status()
 
-            # Get document embeddings and compute scores
-            for doc in documents:
-                # Truncate content to avoid token limits
-                content = doc.content[: self.max_chars_per_doc]
+            result = response.json()
 
-                # Get document embedding
-                doc_response = self._reranker_client.embeddings.create(
-                    model=self.model_id,
-                    input=content,
-                )
-                doc_embedding = doc_response.data[0].embedding
+            # Map results back to documents and collect raw scores
+            raw_scores = []
+            doc_map = []
+            for item in result["data"]:
+                doc_idx = item["index"]
+                raw_score = item["relevance_score"]
+                raw_scores.append(raw_score)
+                doc_map.append((documents[doc_idx], raw_score))
 
-                # Compute cosine similarity
-                score = self._cosine_similarity(query_embedding, doc_embedding)
-                results.append((doc, score))
+            # Normalize scores to 0-1 range using min-max normalization
+            # This makes threshold filtering intuitive (0.0 = keep relevant docs)
+            if raw_scores:
+                min_score = min(raw_scores)
+                max_score = max(raw_scores)
+                score_range = max_score - min_score
+
+                if score_range > 0:
+                    # Normalize to 0-1 range
+                    reranked = [
+                        (doc, (score - min_score) / score_range)
+                        for doc, score in doc_map
+                    ]
+                else:
+                    # All scores are identical, give them 0.5
+                    reranked = [(doc, 0.5) for doc, _ in doc_map]
+            else:
+                reranked = []
+
+            logger.info(
+                f"Successfully reranked {len(reranked)} documents",
+                raw_score_range=f"{min(raw_scores):.2f} to {max(raw_scores):.2f}" if raw_scores else "N/A",
+                normalized_top_score=reranked[0][1] if reranked else None
+            )
+
+            return reranked
+
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout calling Universal Runtime rerank endpoint")
+            # Fallback: return documents with neutral scores
+            return [(doc, 0.5) for doc in documents]
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error calling Universal Runtime: {e}", exc_info=True)
+            # Fallback: return documents with neutral scores
+            return [(doc, 0.5) for doc in documents]
 
         except Exception as e:
-            logger.error(f"Error during reranking batch: {e}", exc_info=True)
+            logger.error(f"Unexpected error during reranking: {e}", exc_info=True)
             # Fallback: return documents with neutral scores
-            results = [(doc, 0.5) for doc in documents]
-
-        # Normalize scores if requested
-        if self.normalize_scores and results:
-            results = self._normalize_results(results)
-
-        return results
-
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """Compute cosine similarity between two vectors."""
-        import math
-
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
-        magnitude1 = math.sqrt(sum(a * a for a in vec1))
-        magnitude2 = math.sqrt(sum(b * b for b in vec2))
-
-        if magnitude1 == 0 or magnitude2 == 0:
-            return 0.0
-
-        return dot_product / (magnitude1 * magnitude2)
-
-    def _normalize_results(
-        self, results: List[tuple[Document, float]]
-    ) -> List[tuple[Document, float]]:
-        """Normalize scores to 0-1 range using min-max normalization."""
-        if not results:
-            return results
-
-        scores = [score for _, score in results]
-        min_score = min(scores)
-        max_score = max(scores)
-
-        if max_score - min_score < 1e-6:
-            # All scores are identical
-            return [(doc, 0.5) for doc, _ in results]
-
-        normalized = []
-        for doc, score in results:
-            norm_score = (score - min_score) / (max_score - min_score)
-            normalized.append((doc, norm_score))
-
-        return normalized
+            return [(doc, 0.5) for doc in documents]
 
     def supports_vector_store(self, vector_store_type: str) -> bool:
         """Universal support - works with any vector store."""
@@ -322,11 +268,13 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
 
     def validate_config(self) -> bool:
         """Validate configuration."""
-        if self.initial_k < 1 or self.final_k < 1:
+        if self.initial_k < 1:
             return False
-        if self.batch_size < 1:
+        if self.final_k < 1:
             return False
-        if self.relevance_threshold < 0 or self.relevance_threshold > 1:
+        if not self.model_id:
+            return False
+        if not self.model_base_url:
             return False
         return True
 
@@ -337,19 +285,22 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
             "properties": {
                 "model_name": {
                     "type": "string",
-                    "description": "Name of model from runtime.models to use",
+                    "description": "Name of model from runtime.models to use for reranking",
                 },
-                "initial_k": {"type": "integer", "minimum": 10, "default": 30},
-                "final_k": {"type": "integer", "minimum": 1, "default": 10},
+                "initial_k": {"type": "integer", "minimum": 10, "maximum": 100, "default": 30},
+                "final_k": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
                 "base_strategy": {
                     "type": "string",
                     "enum": ["BasicSimilarityStrategy", "MetadataFilteredStrategy"],
                     "default": "BasicSimilarityStrategy",
                 },
-                "relevance_threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                "batch_size": {"type": "integer", "minimum": 1, "default": 32},
-                "normalize_scores": {"type": "boolean", "default": True},
-                "max_chars_per_doc": {"type": "integer", "minimum": 100, "default": 1000},
+                "relevance_threshold": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.0,
+                },
+                "timeout": {"type": "integer", "minimum": 10, "maximum": 300, "default": 60},
             },
         }
 
@@ -357,14 +308,14 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         """Get performance characteristics."""
         return {
             "speed": "fast",
-            "memory_usage": "low-medium",
+            "memory_usage": "medium",
             "complexity": "medium",
             "accuracy": "very_high",
             "best_for": [
-                "simple_questions",
-                "production_systems",
+                "production_deployments",
+                "accurate_reranking",
+                "local_inference",
                 "high_throughput",
-                "cost_effective_reranking",
             ],
-            "notes": f"Cross-encoder reranking using model: {self.model_name}",
+            "notes": f"Universal Runtime cross-encoder reranking with model: {self.model_id}",
         }

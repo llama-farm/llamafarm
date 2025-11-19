@@ -375,6 +375,7 @@ class DatabaseSearchAPI(BaseAPI):
             vector_store=self.vector_store,
             top_k=top_k,
             query_text=query,  # Pass original query text for strategies that need it
+            embedder=self.embedder,  # Pass embedder for strategies that need to embed sub-queries
             **kwargs,
         )
 

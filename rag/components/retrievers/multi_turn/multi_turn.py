@@ -46,6 +46,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         self.model_name = config.get("model_name")  # LLM for query decomposition
         self.model_base_url = config.get("model_base_url")  # Resolved by RAGManager
         self.model_id = config.get("model_id")  # Resolved by RAGManager
+        self.api_key = config.get("api_key")  # Optional, for endpoints requiring auth
 
         # Query decomposition settings
         self.max_sub_queries = config.get("max_sub_queries", 3)
@@ -141,9 +142,14 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
                 "Install with: pip install openai"
             )
 
+        # Use configured API key, environment variable, or placeholder
+        # Ollama and many local endpoints don't require authentication
+        import os
+        api_key = self.api_key or os.environ.get("OPENAI_API_KEY", "not-needed")
+
         self._llm_client = OpenAI(
             base_url=self.model_base_url,
-            api_key="dummy",
+            api_key=api_key,
         )
 
         logger.info(
@@ -250,15 +256,29 @@ Always use <question> tags. Be direct."""
     def _retrieve_for_subquery(
         self,
         sub_query: str,
-        query_embedding: List[float],
+        embedder,
         vector_store,
         **kwargs
     ) -> Tuple[str, RetrievalResult]:
-        """Retrieve documents for a single sub-query."""
+        """
+        Retrieve documents for a single sub-query.
+
+        Args:
+            sub_query: The decomposed sub-query text
+            embedder: Embedder instance to embed the sub-query
+            vector_store: Vector store to search
+            **kwargs: Additional arguments passed to strategies
+
+        Returns:
+            Tuple of (sub_query, RetrievalResult)
+        """
         try:
-            # Use base strategy for retrieval
+            # Embed the sub-query (critical fix: each sub-query needs its own embedding)
+            sub_query_embedding = embedder.embed_text(sub_query)
+
+            # Use base strategy for retrieval with sub-query embedding
             result = self._base_strategy.retrieve(
-                query_embedding=query_embedding,
+                query_embedding=sub_query_embedding,
                 vector_store=vector_store,
                 top_k=self.sub_query_top_k,
                 **kwargs
@@ -267,10 +287,11 @@ Always use <question> tags. Be direct."""
             # Optionally rerank results
             if self.enable_reranking and self._reranker_strategy:
                 result = self._reranker_strategy.retrieve(
-                    query_embedding=query_embedding,
+                    query_embedding=sub_query_embedding,
                     vector_store=vector_store,
                     top_k=self.sub_query_top_k,
                     query_text=sub_query,
+                    embedder=embedder,  # Pass embedder along
                     **kwargs
                 )
 
@@ -280,22 +301,62 @@ Always use <question> tags. Be direct."""
             logger.error(f"Retrieval failed for sub-query: {sub_query}", exc_info=True)
             return (sub_query, RetrievalResult(documents=[], scores=[]))
 
+    def _content_similarity(self, text1: str, text2: str) -> float:
+        """
+        Compute content similarity between two texts using simple n-gram overlap.
+
+        This is a lightweight similarity metric that doesn't require embeddings.
+        For more accurate similarity, consider using embeddings, but that would
+        be much slower.
+
+        Args:
+            text1: First text
+            text2: Second text
+
+        Returns:
+            Similarity score between 0 and 1
+        """
+        # Tokenize into words (simple whitespace split)
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+
+        # Handle empty texts
+        if not words1 or not words2:
+            return 0.0
+
+        # Jaccard similarity
+        intersection = len(words1 & words2)
+        union = len(words1 | words2)
+
+        if union == 0:
+            return 0.0
+
+        return intersection / union
+
     def _merge_and_deduplicate(
         self,
-        results: List[Tuple[str, RetrievalResult]]
+        results: List[Tuple[str, RetrievalResult]],
+        top_k: int
     ) -> RetrievalResult:
         """
         Merge results from multiple sub-queries and remove duplicates.
 
         Deduplication strategy:
         - Use document ID for exact matches
-        - Use content similarity for near-duplicates
+        - Use content similarity for near-duplicates (configurable threshold)
+
+        Args:
+            results: List of (sub_query, RetrievalResult) tuples
+            top_k: Number of final results to return (respects caller's request)
+
+        Returns:
+            RetrievalResult with deduplicated documents
         """
         all_docs: List[Document] = []
         all_scores: List[float] = []
         seen_ids: Set[str] = set()
 
-        # Collect all documents with their scores
+        # Collect all documents with their scores (ID-based deduplication)
         for sub_query, result in results:
             for doc, score in zip(result.documents, result.scores):
                 if doc.id not in seen_ids:
@@ -303,13 +364,42 @@ Always use <question> tags. Be direct."""
                     all_docs.append(doc)
                     all_scores.append(score)
 
-        # Sort by score (descending) and take top_k
+        # Content-based deduplication (near-duplicate detection)
+        if len(all_docs) > 1 and self.dedup_similarity_threshold < 1.0:
+            deduplicated_docs = []
+            deduplicated_scores = []
+
+            for i, (doc, score) in enumerate(zip(all_docs, all_scores)):
+                is_duplicate = False
+
+                # Check against already selected documents
+                for existing_doc in deduplicated_docs:
+                    similarity = self._content_similarity(doc.content, existing_doc.content)
+
+                    if similarity >= self.dedup_similarity_threshold:
+                        is_duplicate = True
+                        logger.debug(
+                            f"Document {doc.id} is near-duplicate (similarity: {similarity:.3f})"
+                        )
+                        break
+
+                if not is_duplicate:
+                    deduplicated_docs.append(doc)
+                    deduplicated_scores.append(score)
+
+            all_docs = deduplicated_docs
+            all_scores = deduplicated_scores
+
+        # Sort by score (descending) and take top_k (respects caller's request)
         if all_docs:
+            # Use min of caller's top_k and configured final_top_k
+            effective_top_k = min(top_k, self.final_top_k)
+
             sorted_pairs = sorted(
                 zip(all_docs, all_scores),
                 key=lambda x: x[1],
                 reverse=True
-            )[:self.final_top_k]
+            )[:effective_top_k]
 
             final_docs = [doc for doc, _ in sorted_pairs]
             final_scores = [score for _, score in sorted_pairs]
@@ -326,6 +416,7 @@ Always use <question> tags. Be direct."""
                 "sub_queries_count": len(results),
                 "total_retrieved": len(all_docs),
                 "final_count": len(final_docs),
+                "dedup_threshold": self.dedup_similarity_threshold,
             }
         )
 
@@ -394,12 +485,28 @@ Always use <question> tags. Be direct."""
         # Step 3: Parallel retrieval for sub-queries
         logger.info(f"Retrieving for {len(sub_queries)} sub-queries in parallel")
 
+        # Extract embedder from kwargs (required for sub-query embedding)
+        embedder = kwargs.pop("embedder", None)  # Remove from kwargs to avoid duplicate argument
+        if not embedder:
+            logger.warning("No embedder provided, falling back to base strategy with original embedding")
+            # Fallback: use base strategy with original embedding
+            result = self._base_strategy.retrieve(
+                query_embedding=query_embedding,
+                vector_store=vector_store,
+                top_k=top_k,
+                **kwargs
+            )
+            result.strategy_metadata["strategy"] = self.name
+            result.strategy_metadata["decomposed"] = False
+            result.strategy_metadata["fallback_reason"] = "no_embedder"
+            return result
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
                 executor.submit(
                     self._retrieve_for_subquery,
                     sub_query,
-                    query_embedding,
+                    embedder,
                     vector_store,
                     **kwargs
                 )
@@ -410,7 +517,7 @@ Always use <question> tags. Be direct."""
 
         # Step 4: Merge and deduplicate
         logger.info("Merging and deduplicating results")
-        final_result = self._merge_and_deduplicate(results)
+        final_result = self._merge_and_deduplicate(results, top_k)
         final_result.strategy_metadata["decomposed"] = True
         final_result.strategy_metadata["sub_queries"] = sub_queries
 

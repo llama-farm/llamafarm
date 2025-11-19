@@ -1,4 +1,4 @@
-"""Cross-encoder reranking strategy."""
+"""Cross-encoder reranked retrieval strategy."""
 
 from .cross_encoder_reranked import CrossEncoderRerankedStrategy
 

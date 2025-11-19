@@ -195,7 +195,7 @@ class TestMultiTurnRAGStrategy:
             ),
         ]
 
-        merged = strategy._merge_and_deduplicate(results)
+        merged = strategy._merge_and_deduplicate(results, top_k=5)
 
         # Should have 3 unique documents (doc1, doc2, doc3)
         assert len(merged.documents) <= strategy.final_top_k
@@ -288,6 +288,7 @@ class TestMultiTurnRAGStrategy:
                 vector_store=mock_vector_store,
                 top_k=5,
                 query_text="What are the differences between llama and alpaca fibers?",
+                embedder=Mock(),  # Add embedder for new requirement
             )
 
             # Should decompose and merge

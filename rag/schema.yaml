@@ -1858,11 +1858,17 @@ definitions:
       type: object
       additionalProperties: false
       description: Cross-encoder reranking configuration using Ollama models (GGUF)
+      required:
+        - model_name
       properties:
         model_name:
           type: string
           description: "Name of the model from runtime.models to use for reranking (e.g., 'reranker')"
           example: "reranker"
+        api_key:
+          type: string
+          description: "Optional API key for authentication. Defaults to OPENAI_API_KEY env var or 'not-needed' for local endpoints like Ollama"
+          default: null
         initial_k:
           type: integer
           default: 30
@@ -1912,11 +1918,17 @@ definitions:
       type: object
       additionalProperties: false
       description: Multi-turn RAG with query decomposition for complex queries
+      required:
+        - model_name
       properties:
         model_name:
           type: string
           description: "Name of the model from runtime.models to use for query decomposition (e.g., 'default')"
           example: "default"
+        api_key:
+          type: string
+          description: "Optional API key for authentication. Defaults to OPENAI_API_KEY env var or 'not-needed' for local endpoints like Ollama"
+          default: null
         max_sub_queries:
           type: integer
           default: 3
