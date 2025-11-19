@@ -101,25 +101,6 @@ type ToolCall struct {
 	Arguments string
 }
 
-// ParseToolCallMessage parses a [TOOL_CALL] formatted message
-// Format: [TOOL_CALL]name|id|arguments
-func ParseToolCallMessage(msg string) (*ToolCall, error) {
-	if !strings.HasPrefix(msg, "[TOOL_CALL]") {
-		return nil, fmt.Errorf("not a tool call message")
-	}
-
-	parts := strings.SplitN(strings.TrimPrefix(msg, "[TOOL_CALL]"), "|", 3)
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid tool call format")
-	}
-
-	return &ToolCall{
-		Name:      parts[0],
-		ID:        parts[1],
-		Arguments: parts[2],
-	}, nil
-}
-
 // ExecuteToolCall executes a tool call if it's a CLI tool and returns the result message
 func ExecuteToolCall(tc *ToolCall, ctx *ChatSessionContext) (*Message, error) {
 	// Check if this is a CLI tool

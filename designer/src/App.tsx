@@ -38,6 +38,9 @@ import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
 import { MobileViewProvider } from './contexts/MobileViewContext'
 import NotFound from './components/NotFound'
+import { DemoModalProvider, useDemoModal } from './contexts/DemoModalContext'
+import { DemoModal } from './components/Demo/DemoModal'
+import { getCurrentNamespace } from './utils/namespaceUtils'
 
 // Redirect component for dynamic routes from /rag to /databases
 function RagRedirect({ path }: { path: string }) {
@@ -72,6 +75,19 @@ function ProjectModalRoot() {
   )
 }
 
+function DemoModalRoot() {
+  const demoModal = useDemoModal()
+  const namespace = getCurrentNamespace()
+
+  return (
+    <DemoModal
+      isOpen={demoModal.isOpen}
+      onClose={demoModal.closeModal}
+      namespace={namespace}
+    />
+  )
+}
+
 function App() {
   const location = useLocation()
   const isHome = location.pathname === '/'
@@ -80,9 +96,10 @@ function App() {
     <main className="h-screen w-full">
       <ToastProvider>
         <ProjectModalProvider>
-          <ModeResetProvider>
-            <MobileViewProvider>
-              <UnsavedChangesProvider>
+          <DemoModalProvider>
+            <ModeResetProvider>
+              <MobileViewProvider>
+                <UnsavedChangesProvider>
                 <Header currentVersion={currentVersion} />
                 {isHome ? <HomeUpgradeBanner /> : null}
                 <div className="h-full w-full">
@@ -186,9 +203,11 @@ function App() {
                 </Routes>
               </div>
               <ProjectModalRoot />
+              <DemoModalRoot />
               </UnsavedChangesProvider>
             </MobileViewProvider>
           </ModeResetProvider>
+          </DemoModalProvider>
         </ProjectModalProvider>
       </ToastProvider>
     </main>

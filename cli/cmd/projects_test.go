@@ -27,22 +27,35 @@ func TestSendChatRequestStream_SSE(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(sseHandler))
 	defer ts.Close()
 
-	// Point globals to test server
-	serverURL = ts.URL
-	sessionID = ""
-	namespace = "llamafarm"
-	projectID = "project-seed"
+	// Create ChatManager with test server
+	cfg := &ChatConfig{
+		ServerURL:        ts.URL,
+		Namespace:        "llamafarm",
+		ProjectID:        "project-seed",
+		SessionMode:      SessionModeProject,
+		SessionNamespace: "llamafarm",
+		SessionProject:   "project-seed",
+		RAGEnabled:       false,
+	}
 
-	// Prepare messages
+	mgr, err := NewChatManager(cfg)
+	if err != nil {
+		t.Fatalf("failed to create manager: %v", err)
+	}
+
+	// Prepare messages and send
 	msgs := []Message{{Role: "user", Content: "hi"}}
-	got, err := sendChatRequest(msgs, nil)
+	got, err := mgr.SendMessages(msgs)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if got != "Hello world" {
 		t.Fatalf("unexpected assembled text: %q", got)
 	}
-	if sessionID != "test-session" {
-		t.Fatalf("expected sessionID to be 'test-session', got %q", sessionID)
+
+	// Verify session ID was set from response header
+	gotSessionID := mgr.GetSessionID()
+	if gotSessionID != "test-session" {
+		t.Fatalf("expected sessionID to be 'test-session', got %q", gotSessionID)
 	}
 }

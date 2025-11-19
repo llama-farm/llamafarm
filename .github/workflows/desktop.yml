@@ -1,0 +1,176 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  NX_NO_CLOUD: true
+
+jobs:
+  build-designer:
+    name: Build Designer UI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: designer/package-lock.json
+
+      - name: Install Designer dependencies
+        working-directory: designer
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+      - name: Build Designer
+        working-directory: designer
+        run: |
+          npm run build
+          # Verify build output
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: Designer build failed - dist/index.html not found" >&2
+            exit 1
+          fi
+          echo "✅ Designer built successfully"
+
+      - name: Upload Designer build
+        uses: actions/upload-artifact@v4
+        with:
+          name: designer-dist
+          path: designer/dist/
+          retention-days: 7
+
+  build-macos:
+    name: Build macOS Desktop App
+    needs: build-designer
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            output_suffix: ""
+          - arch: arm64
+            output_suffix: "-arm64"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Designer build
+        uses: actions/download-artifact@v4
+        with:
+          name: designer-dist
+          path: designer/dist/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: electron-app/package-lock.json
+
+      - name: Install Electron app dependencies
+        working-directory: electron-app
+        run: npm ci || npm install
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ "${GITHUB_REF}" == refs/pull/* ]]; then
+            PR_NUMBER=$(echo "$GITHUB_REF" | sed 's/refs\/pull\/\(.*\)\/merge/\1/')
+            VERSION="0.0.0-pr${PR_NUMBER}.${GITHUB_SHA::8}"
+          else
+            VERSION="0.0.0-${GITHUB_SHA::8}"
+          fi
+          VERSION_NO_V="${VERSION#v}"
+          echo "version=${VERSION_NO_V}" >> $GITHUB_OUTPUT
+          echo "Using version: ${VERSION_NO_V}"
+
+      - name: Update app version
+        working-directory: electron-app
+        run: |
+          # Update version in package.json
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${{ steps.version.outputs.version }}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "✅ Updated app version to ${{ steps.version.outputs.version }}"
+
+      - name: Build Electron app (unsigned for PR testing)
+        working-directory: electron-app
+        env:
+          # SECURITY: Disable signing for PR builds to prevent exposing secrets to forks
+          # Only release workflow (release-desktop.yml) should sign builds
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          echo "Building unsigned Electron app for ${{ matrix.arch }}..."
+          echo "Note: PR builds are unsigned for security (prevents exposing secrets to forks)"
+          npm run build
+
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            npx electron-builder --mac --arm64
+          else
+            npx electron-builder --mac --x64
+          fi
+          echo "✅ Electron app built successfully (unsigned)"
+
+      - name: List build artifacts
+        working-directory: electron-app
+        run: |
+          echo "Build artifacts in release/${{ steps.version.outputs.version }}:"
+          ls -lh "release/${{ steps.version.outputs.version }}/" || echo "No artifacts found"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llamafarm-desktop-macos-${{ matrix.arch }}-${{ steps.version.outputs.version }}
+          path: |
+            electron-app/release/${{ steps.version.outputs.version }}/*.dmg
+            electron-app/release/${{ steps.version.outputs.version }}/*${{ matrix.output_suffix }}-mac.zip
+          retention-days: 30
+          if-no-files-found: warn
+
+  create-checksums:
+    name: Create Checksums
+    runs-on: ubuntu-latest
+    needs: build-macos
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          pattern: llamafarm-desktop-macos-*
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          cd dist/
+          if ls *.dmg 1> /dev/null 2>&1; then
+            sha256sum *.dmg > checksums.txt
+            echo "=== Checksums ==="
+            cat checksums.txt
+          else
+            echo "No DMG files found to checksum"
+          fi
+
+      - name: Upload checksums
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: dist/checksums.txt
+          retention-days: 30
+          if-no-files-found: ignore

@@ -78,6 +78,9 @@ dependencies = [
   "docx2txt>=0.9",
   "spacy>=3.8.7",
   "msg-parser[rtf]>=1.2.0",
+  # LlamaIndex parsers (essential for advanced document processing)
+  "llama-index-core>=0.9.0",
+  "llama-index-readers-file>=0.1.0",
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
 ]

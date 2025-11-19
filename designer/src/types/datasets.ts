@@ -210,6 +210,77 @@ export class DatasetNetworkError extends DatasetError {
 }
 
 /**
+ * Details about a single file's processing result
+ */
+export interface FileProcessingDetail {
+  /** File hash identifier */
+  hash?: string
+  /** Alternative hash field name */
+  file_hash?: string
+  /** Original filename */
+  filename?: string
+  /** Whether processing was successful */
+  success: boolean
+  /** Processing status: processed, skipped, or failed */
+  status?: string
+  /** Parser used for this file */
+  parser?: string | null
+  /** Extractors applied to this file */
+  extractors?: string[]
+  /** Number of chunks created */
+  chunks?: number | null
+  /** Chunk size used */
+  chunk_size?: number | null
+  /** Embedder used */
+  embedder?: string | null
+  /** Error message if failed */
+  error?: string | null
+  /** Reason for skipped status */
+  reason?: string | null
+  /** Nested details object (some APIs use this structure) */
+  details?: {
+    status?: string
+    filename?: string
+    error?: string
+    reason?: string
+    result?: {
+      status?: string
+      filename?: string
+      reason?: string
+      document_count?: number
+      stored_count?: number
+      skipped_count?: number
+      parsers_used?: string[]
+      embedder?: string
+      extractors_applied?: string[]
+      document_ids?: string[]
+    }
+  }
+}
+
+/**
+ * Response from processing a dataset
+ */
+export interface ProcessDatasetResponse {
+  /** Status message */
+  message: string
+  /** Number of files successfully processed */
+  processed_files: number
+  /** Number of files skipped (e.g., duplicates) */
+  skipped_files: number
+  /** Number of files that failed processing */
+  failed_files: number
+  /** Data processing strategy used */
+  strategy?: string | null
+  /** Database used */
+  database?: string | null
+  /** Detailed results for each file */
+  details: FileProcessingDetail[]
+  /** Task ID for async processing */
+  task_id?: string | null
+}
+
+/**
  * Frontend-specific Dataset type with additional UI properties
  * This extends the API Dataset type with local state management fields
  */

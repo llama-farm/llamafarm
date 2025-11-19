@@ -26,10 +26,15 @@ import {
 import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
+import { useDemoModal } from './contexts/DemoModalContext'
 
 function Home() {
+  // Demo modal context
+  const demoModal = useDemoModal()
+
   // Form state
   const [projectName, setProjectName] = useState('')
+  const [copyFromProject, setCopyFromProject] = useState<string>('none')
   const [what, setWhat] = useState('')
   const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>(
     'local'
@@ -180,33 +185,61 @@ function Home() {
     const startedAt = performance.now()
     
     try {
-      // 1) Create the project
-      const created = await projectService.createProject(namespace, {
+      // 1) Create the base project
+      await projectService.createProject(namespace, {
         name: sanitizedName,
         config_template: 'default',
       })
 
-      // 2) Save optional "what" description and deployment into config if provided
+      // 2) If copying from existing, update with source config
+      if (copyFromProject !== 'none') {
+        try {
+          // Fetch source project
+          const sourceProject = await projectService.getProject(namespace, copyFromProject)
+          
+          // Clone config and update name/namespace
+          const clonedConfig = JSON.parse(JSON.stringify(sourceProject.project.config))
+          clonedConfig.name = sanitizedName
+          clonedConfig.namespace = namespace
+          
+          // Clear datasets (config only, no data)
+          clonedConfig.datasets = []
+          
+          // Update new project with cloned config
+          await projectService.updateProject(namespace, sanitizedName, {
+            config: clonedConfig,
+          })
+        } catch (e) {
+          console.error('Failed to copy configuration:', e)
+          // Non-critical - project was created, just with default config
+          setGeneralError('Project created but failed to copy configuration. Using default settings.')
+        }
+      }
+
+      // 3) Save optional "what" description and deployment
       if (what.trim() || deployment) {
         const brief: { what?: string; deployment?: string } = {}
         if (what.trim()) brief.what = what.trim()
         if (deployment) brief.deployment = deployment
         
-        const mergedConfig = mergeProjectConfig(created.project.config || {}, {
+        // Get current config (either default or cloned)
+        const currentProject = await projectService.getProject(namespace, sanitizedName)
+        
+        const mergedConfig = mergeProjectConfig(currentProject.project.config || {}, {
           project_brief: brief,
         })
         try {
-          await projectService.updateProject(namespace, created.project.name, {
+          await projectService.updateProject(namespace, sanitizedName, {
             config: mergedConfig,
           })
         } catch (e) {
-          console.error('Failed to update project config:', e)
+          console.error('Failed to update project brief:', e)
           // Non-critical, continue anyway
         }
       }
 
-      // 3) Activate and navigate to dashboard
-      localStorage.setItem('activeProject', created.project.name)
+      // 4) Activate and navigate to dashboard
+      localStorage.setItem('activeProject', sanitizedName)
       
       // Optimistically update caches
       try {
@@ -217,10 +250,10 @@ function Home() {
       try {
         const raw = localStorage.getItem('lf_custom_projects')
         const arr: string[] = raw ? JSON.parse(raw) : []
-        if (!arr.includes(created.project.name)) {
+        if (!arr.includes(sanitizedName)) {
           localStorage.setItem(
             'lf_custom_projects',
-            JSON.stringify([...arr, created.project.name])
+            JSON.stringify([...arr, sanitizedName])
           )
         }
       } catch {}
@@ -319,6 +352,44 @@ function Home() {
             Create a new project
           </h1>
         </div>
+
+        {/* Demo Project Button */}
+        <div className="max-w-3xl mx-auto">
+          <button
+            onClick={() => demoModal.openModal()}
+            className="w-full group relative flex items-center justify-between gap-4 rounded-xl border-2 border-primary bg-gradient-to-r from-primary/5 to-primary/10 p-6 text-left transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/20"
+          >
+            <div className="flex items-start gap-4">
+              <div className="text-5xl">🚀</div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-foreground mb-1">
+                  Try a Demo Project
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Explore LlamaFarm with a pre-configured AI assistant. Ready in 30 seconds.
+                </p>
+              </div>
+            </div>
+            <FontIcon
+              type="arrow-right"
+              className="w-6 h-6 text-primary shrink-0 transition-transform group-hover:translate-x-1"
+            />
+          </button>
+        </div>
+
+        <div className="max-w-3xl mx-auto text-center">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-muted"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                or create from scratch
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div id="home-create-form" className="max-w-3xl mx-auto">
           {generalError && (
             <div className="mb-4 text-red-600 bg-red-100 border border-red-300 rounded p-3 text-sm">
@@ -347,6 +418,38 @@ function Home() {
                 <p className="text-xs text-muted-foreground">
                   Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
                 </p>
+              </div>
+
+              {/* Copy from existing project */}
+              <div className="grid gap-2.5">
+                <Label htmlFor="copyFrom">Copy configuration from (optional)</Label>
+                <select
+                  id="copyFrom"
+                  className="w-full bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none cursor-pointer"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundPosition: 'right 0.75rem center',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundSize: '1.5em 1.5em',
+                  }}
+                  value={copyFromProject}
+                  onChange={(e) => setCopyFromProject(e.target.value)}
+                  disabled={isCreatingProject}
+                >
+                  <option value="none">Create from scratch</option>
+                  {filteredAndSortedProjectNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                {copyFromProject !== 'none' && (
+                  <p className="text-xs text-muted-foreground">
+                    Configuration will be copied from{' '}
+                    <span className="font-medium">{copyFromProject}</span>
+                    {' '}(runtime, prompts, RAG settings)
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-2.5">
@@ -644,6 +747,7 @@ function Home() {
       </div>
       {/* Project edit modal over Home */}
       {/* Modal rendered globally in App */}
+      {/* Demo Modal rendered globally in App via DemoModalRoot */}
     </div>
   )
 }
