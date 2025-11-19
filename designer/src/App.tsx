@@ -9,6 +9,7 @@ import Header from './components/Header'
 import { ToastProvider } from './components/ui/toast'
 import ProjectModal from './components/Project/ProjectModal'
 import CopyProjectModal from './components/Project/CopyProjectModal'
+import DeleteProjectModal from './components/Project/DeleteProjectModal'
 import {
   ProjectModalProvider,
   useProjectModalContext,
@@ -75,7 +76,7 @@ function ProjectModalRoot() {
         initialBrief={initialBrief}
         onClose={modal.closeModal}
         onSave={modal.saveProject}
-        onDelete={modal.modalMode === 'edit' ? modal.deleteProject : undefined}
+        onOpenDelete={modal.modalMode === 'edit' ? modal.openDeleteModal : undefined}
         onCopy={() => modal.openCopyModal()}
         isLoading={modal.isLoading}
         projectError={modal.projectError}
@@ -90,6 +91,13 @@ function ProjectModalRoot() {
         isLoading={modal.isLoading}
         projectError={modal.projectError}
         onNameChange={modal.validateName}
+      />
+      <DeleteProjectModal
+        isOpen={modal.isDeleteModalOpen}
+        projectName={modal.projectName}
+        onClose={modal.closeDeleteModal}
+        onConfirm={modal.deleteProject}
+        isLoading={modal.isLoading}
       />
     </>
   )

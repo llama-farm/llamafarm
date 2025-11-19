@@ -126,7 +126,7 @@ const CopyProjectModal: React.FC<CopyProjectModalProps> = ({
             <Label htmlFor="copyFrom">Copy configuration from</Label>
             <select
               id="copyFrom"
-              className="px-3 py-2 rounded-lg border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+              className="pl-3 pr-10 py-2 rounded-lg border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
               value={selectedSource}
               onChange={e => setSelectedSource(e.target.value)}
               disabled={isLoading}
@@ -137,6 +137,9 @@ const CopyProjectModal: React.FC<CopyProjectModalProps> = ({
                 </option>
               ))}
             </select>
+            <p className="text-xs text-muted-foreground">
+              Configuration will be copied from {selectedSource} (runtime, prompts, RAG settings)
+            </p>
           </div>
         </div>
 

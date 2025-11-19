@@ -43,6 +43,9 @@ export interface UseProjectModalReturn {
   // Copy modal state
   isCopyModalOpen: boolean
   
+  // Delete modal state
+  isDeleteModalOpen: boolean
+  
   // Validation state
   projectError: string | null
 
@@ -56,6 +59,8 @@ export interface UseProjectModalReturn {
   closeModal: () => void
   openCopyModal: () => void
   closeCopyModal: () => void
+  openDeleteModal: () => void
+  closeDeleteModal: () => void
 
   // CRUD operations
   saveProject: (
@@ -86,6 +91,9 @@ export const useProjectModal = ({
   
   // Copy modal state
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false)
+  
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
 
   // API hooks
   const { data: currentProjectResponse, isLoading: isProjectLoading } =
@@ -131,13 +139,27 @@ export const useProjectModal = ({
   }
 
   const openCopyModal = () => {
-    // Source project name is available via projectName state
+    // Close the edit modal first, then open copy modal
+    setIsModalOpen(false)
     setProjectError(null)
     setIsCopyModalOpen(true)
   }
 
   const closeCopyModal = () => {
     setIsCopyModalOpen(false)
+    setProjectError(null)
+    // Don't reopen the edit modal - user can navigate back if needed
+  }
+
+  const openDeleteModal = () => {
+    // Close the edit modal first, then open delete modal
+    setIsModalOpen(false)
+    setProjectError(null)
+    setIsDeleteModalOpen(true)
+  }
+
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false)
     setProjectError(null)
   }
 
@@ -395,7 +417,7 @@ export const useProjectModal = ({
           })
         )
       } catch {}
-      closeModal()
+      closeDeleteModal()
       onSuccess?.('', 'edit') // Empty name indicates deletion
       try {
         navigate('/')
@@ -529,6 +551,9 @@ export const useProjectModal = ({
 
     // Copy modal state
     isCopyModalOpen,
+    
+    // Delete modal state
+    isDeleteModalOpen,
 
     // Loading
     isLoading,
@@ -540,6 +565,8 @@ export const useProjectModal = ({
     closeModal,
     openCopyModal,
     closeCopyModal,
+    openDeleteModal,
+    closeDeleteModal,
 
     // Operations
     saveProject,
