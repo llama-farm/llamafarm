@@ -19,6 +19,16 @@ class ToolAwareParserFactory:
     # Cache for loaded parser classes
     _parser_classes: dict[str, type] = {}
 
+    # Package name to import name mapping for special cases
+    PACKAGE_TO_IMPORT = {
+        "python-docx": "docx",
+        "llama-index-readers-file": "llama_index.readers.file",
+        "beautifulsoup4": "bs4",
+        "opencv-python": "cv2",
+        "pillow": "PIL",
+        "scikit-learn": "sklearn",
+    }
+
     @classmethod
     def discover_parsers(cls) -> dict[str, list[dict[str, Any]]]:
         """Discover all available parsers from configuration files.
@@ -119,19 +129,9 @@ class ToolAwareParserFactory:
         required_deps = deps.get("required", [])
         missing_deps: list[str] = []
 
-        # Package name to import name mapping for special cases
-        PACKAGE_TO_IMPORT = {
-            "python-docx": "docx",
-            "llama-index-readers-file": "llama_index.readers.file",
-            "beautifulsoup4": "bs4",
-            "opencv-python": "cv2",
-            "pillow": "PIL",
-            "scikit-learn": "sklearn",
-        }
-
         for dep in required_deps:
             # Get the import name (may differ from package name)
-            import_name = PACKAGE_TO_IMPORT.get(dep, dep.replace("-", "_"))
+            import_name = cls.PACKAGE_TO_IMPORT.get(dep, dep.replace("-", "_"))
 
             try:
                 # Try to import the dependency
@@ -248,18 +248,8 @@ class ToolAwareParserFactory:
                 required_deps = deps.get("required", [])
                 missing_deps: list[str] = []
 
-                # Package name to import name mapping
-                PACKAGE_TO_IMPORT = {
-                    "python-docx": "docx",
-                    "llama-index-readers-file": "llama_index.readers.file",
-                    "beautifulsoup4": "bs4",
-                    "opencv-python": "cv2",
-                    "pillow": "PIL",
-                    "scikit-learn": "sklearn",
-                }
-
                 for dep in required_deps:
-                    import_name = PACKAGE_TO_IMPORT.get(dep, dep.replace("-", "_"))
+                    import_name = cls.PACKAGE_TO_IMPORT.get(dep, dep.replace("-", "_"))
                     try:
                         __import__(import_name)
                     except ImportError:
