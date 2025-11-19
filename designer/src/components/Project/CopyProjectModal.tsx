@@ -35,8 +35,11 @@ const CopyProjectModal: React.FC<CopyProjectModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setName(`${sourceProjectName}-copy`)
+      const initialName = `${sourceProjectName}-copy`
+      setName(initialName)
       setSelectedSource(sourceProjectName)
+      // Trigger validation on the next tick after state updates
+      setTimeout(() => onNameChange?.(initialName), 0)
     }
   }, [isOpen, sourceProjectName])
 
@@ -54,7 +57,7 @@ const CopyProjectModal: React.FC<CopyProjectModalProps> = ({
     }
   }, [isOpen, isLoading, onClose])
 
-  const isValid = name.trim().length > 0 && !isLoading
+  const isValid = name.trim().length > 0 && !projectError && !isLoading
 
   const handleCancel = (e: React.MouseEvent) => {
     e.preventDefault()
