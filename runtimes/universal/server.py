@@ -155,6 +155,22 @@ async def _cleanup_idle_models() -> None:
 
                 for cache_key in models_to_unload:
                     try:
+                        # Re-check idle time immediately before unloading to handle race conditions
+                        # A concurrent request could have accessed the model after we built the unload list
+                        if cache_key not in _model_last_access:
+                            continue  # Model already removed
+
+                        last_access = _model_last_access[cache_key]
+                        current_idle_time = (
+                            datetime.now() - last_access
+                        ).total_seconds()
+                        if current_idle_time < MODEL_UNLOAD_TIMEOUT:
+                            logger.debug(
+                                f"Skipping unload of {cache_key}: accessed during cleanup "
+                                f"(idle time now {current_idle_time:.1f}s < {MODEL_UNLOAD_TIMEOUT}s)"
+                            )
+                            continue
+
                         model = _models.get(cache_key)
                         if model:
                             logger.info(f"Unloading idle model: {cache_key}")

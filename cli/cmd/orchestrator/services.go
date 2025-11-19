@@ -322,44 +322,6 @@ func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	// Build environment variables
 	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
 
-	// For universal-runtime, auto-detect hardware and set PyTorch index
-	if serviceDef.Name == "universal-runtime" {
-		// Only auto-detect if UV_EXTRA_INDEX_URL is not already set
-		uvIndexFound := false
-		for _, e := range env {
-			if strings.HasPrefix(e, "UV_EXTRA_INDEX_URL=") {
-				value := strings.TrimPrefix(e, "UV_EXTRA_INDEX_URL=")
-				if value != "" && value != "${UV_EXTRA_INDEX_URL}" {
-					uvIndexFound = true
-					utils.LogDebug(fmt.Sprintf("UV_EXTRA_INDEX_URL already set to: %s", value))
-					break
-				}
-			}
-		}
-
-		if !uvIndexFound {
-			// Auto-detect hardware and set appropriate PyTorch index
-			indexURL := GetPyTorchIndexURL()
-			if indexURL != "" {
-				utils.LogDebug(fmt.Sprintf("Setting UV_EXTRA_INDEX_URL=%s for hardware-optimized PyTorch", indexURL))
-				// Update or add UV_EXTRA_INDEX_URL in environment
-				updatedEnv := false
-				for i, e := range env {
-					if strings.HasPrefix(e, "UV_EXTRA_INDEX_URL=") {
-						env[i] = "UV_EXTRA_INDEX_URL=" + indexURL
-						updatedEnv = true
-						break
-					}
-				}
-				if !updatedEnv {
-					env = append(env, "UV_EXTRA_INDEX_URL="+indexURL)
-				}
-			} else {
-				utils.LogDebug("Using default PyPI for GPU-accelerated PyTorch")
-			}
-		}
-	}
-
 	// Build command args - replace "uv" with full path if needed
 	command := serviceDef.Command
 	if command == "uv" {
