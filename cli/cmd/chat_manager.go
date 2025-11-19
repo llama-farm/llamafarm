@@ -519,6 +519,10 @@ func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error
 		req.Header.Set("X-No-Session", "true")
 	}
 
+	if m.config.SessionMode == SessionModeDev {
+		req.Header.Set("X-Active-Project", m.config.SessionProject+"/"+m.config.SessionNamespace)
+	}
+
 	return req, nil
 }
 
