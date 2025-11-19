@@ -184,6 +184,37 @@ jobs:
           echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
           echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
+      - name: Switch to tiny models for fast CI testing
+        shell: bash
+        run: |
+          echo "Switching to tiny models for faster CI execution..."
+          # Install yq if not available
+          if ! command -v yq &> /dev/null; then
+            echo "Installing yq..."
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              brew install yq
+            else
+              sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+              sudo chmod +x /usr/local/bin/yq
+            fi
+          fi
+
+          # Update runtime model and quantization
+          yq -i '.runtime.models[0].model = "unsloth/Qwen3-0.6B-GGUF"' "$TEST_DIR/llamafarm.yaml"
+          yq -i '.runtime.models[0].model_api_parameters.gguf_quantization = "IQ1_S"' "$TEST_DIR/llamafarm.yaml"
+
+          # Update embedding model and dimension
+          yq -i '.rag.databases[0].embedding_strategies[0].config.model = "sentence-transformers/all-MiniLM-L6-v2"' "$TEST_DIR/llamafarm.yaml"
+          yq -i '.rag.databases[0].embedding_strategies[0].config.dimension = 384' "$TEST_DIR/llamafarm.yaml"
+
+          echo "✓ Model configuration updated"
+          echo ""
+          echo "=== Updated runtime config ==="
+          yq '.runtime.models[0]' "$TEST_DIR/llamafarm.yaml"
+          echo ""
+          echo "=== Updated embedding config ==="
+          yq '.rag.databases[0].embedding_strategies[0].config | pick(["model", "dimension"])' "$TEST_DIR/llamafarm.yaml"
+
       # ============================================================
       # Data Ingestion Test
       # ============================================================
