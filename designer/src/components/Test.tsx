@@ -207,7 +207,7 @@ const Test = () => {
   }
 
   const [mode, setMode] = useModeWithReset('designer')
-  
+
   // Get active project and config for unsaved changes checking
   const activeProject = useActiveProject()
   const { data: projectDetail } = useProject(
@@ -215,20 +215,19 @@ const Test = () => {
     activeProject?.project || '',
     !!activeProject
   )
-  const projectConfig = (projectDetail as any)?.project?.config as ProjectConfig | undefined
-  
+  const projectConfig = (projectDetail as any)?.project?.config as
+    | ProjectConfig
+    | undefined
+
   // Use config pointer to handle mode changes with unsaved changes check
-  const getRootLocation = useCallback(
-    () => ({ type: 'root' as const }),
-    []
-  )
+  const getRootLocation = useCallback(() => ({ type: 'root' as const }), [])
   const { configPointer, handleModeChange } = useConfigPointer({
     mode,
     setMode,
     config: projectConfig,
     getLocation: getRootLocation,
   })
-  
+
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [showReferences, setShowReferences] = useState<boolean>(() => {

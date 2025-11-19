@@ -65,7 +65,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
   const [error, setError] = useState<string | null>(null)
   const [apiCalls, setApiCalls] = useState<ApiCall[]>([])
   const [projectName, setProjectName] = useState<string | null>(null)
-  const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null)
+  const [processingResult, setProcessingResult] =
+    useState<ProcessingResult | null>(null)
 
   // Wrapper to update both currentStep and lastValidStep (except for error state)
   const updateStep = (step: DemoStep) => {
@@ -79,7 +80,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
     const newCall: ApiCall = {
       ...call,
       id: Math.random().toString(36).substring(7),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
     setApiCalls(prev => [...prev, newCall])
     return newCall.id
@@ -120,13 +121,15 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'GET',
           endpoint: demo.configPath,
           status: 'pending',
-          description: 'Fetching demo configuration'
+          description: 'Fetching demo configuration',
         })
 
         const configStart = Date.now()
         const configResponse = await fetch(demo.configPath)
         if (!configResponse.ok) {
-          throw new Error(`Failed to fetch config: ${configResponse.statusText}`)
+          throw new Error(
+            `Failed to fetch config: ${configResponse.statusText}`
+          )
         }
         const configText = await configResponse.text()
         const configData = YAML.parse(configText)
@@ -134,7 +137,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         updateApiCall(configCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - configStart
+          duration: Date.now() - configStart,
         })
 
         setProgress(20)
@@ -165,18 +168,18 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'POST',
           endpoint: `/v1/projects/${namespace}`,
           status: 'pending',
-          description: `Creating project: ${newProjectName}`
+          description: `Creating project: ${newProjectName}`,
         })
 
         const createStart = Date.now()
         await projectService.createProject(namespace, {
-          name: newProjectName
+          name: newProjectName,
         })
 
         updateApiCall(createCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - createStart
+          duration: Date.now() - createStart,
         })
 
         setProgress(40)
@@ -186,18 +189,18 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'PUT',
           endpoint: `/v1/projects/${namespace}/${newProjectName}`,
           status: 'pending',
-          description: 'Applying demo configuration'
+          description: 'Applying demo configuration',
         })
 
         const updateStart = Date.now()
         await projectService.updateProject(namespace, newProjectName, {
-          config: configData
+          config: configData,
         })
 
         updateApiCall(updateCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - updateStart
+          duration: Date.now() - updateStart,
         })
 
         setProgress(55)
@@ -215,7 +218,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
             method: 'POST',
             endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/data`,
             status: 'pending',
-            description: `Uploading ${demoFile.filename} (${i + 1}/${fileCount})`
+            description: `Uploading ${demoFile.filename} (${i + 1}/${fileCount})`,
           })
 
           const uploadStart = Date.now()
@@ -226,7 +229,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
             throw new Error(`Failed to fetch file: ${demoFile.filename}`)
           }
           const fileBlob = await fileResponse.blob()
-          const file = new File([fileBlob], demoFile.filename, { type: demoFile.type })
+          const file = new File([fileBlob], demoFile.filename, {
+            type: demoFile.type,
+          })
 
           // Upload to dataset
           await datasetService.uploadFileToDataset(
@@ -239,7 +244,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           updateApiCall(uploadCallId, {
             status: 'success',
             statusCode: 200,
-            duration: Date.now() - uploadStart
+            duration: Date.now() - uploadStart,
           })
         }
 
@@ -253,7 +258,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'POST',
           endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/process`,
           status: 'pending',
-          description: 'Processing dataset (embedding & indexing)'
+          description: 'Processing dataset (embedding & indexing)',
         })
 
         const processStart = Date.now()
@@ -287,7 +292,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
             }
 
             // Update progress during processing (90-98%)
-            const processingProgress = 90 + Math.min(attempts / maxAttempts * 8, 8)
+            const processingProgress =
+              90 + Math.min((attempts / maxAttempts) * 8, 8)
             setProgress(processingProgress)
             attempts++
           }
@@ -300,7 +306,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         updateApiCall(processCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - processStart
+          duration: Date.now() - processStart,
         })
 
         setProgress(100)
@@ -314,7 +320,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           totalFiles,
           totalChunks: 0, // Backend doesn't aggregate this yet
           parsers: [strategy],
-          embedder: null
+          embedder: null,
         })
 
         // Mark as completed
@@ -328,7 +334,6 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         // Navigate to test page immediately - modal will stay open over the chat page
         navigate('/chat/test', { state: { fromDemo: true } })
-
       } catch (err) {
         console.error('Demo creation failed:', err)
         setCurrentStep('error')
@@ -348,6 +353,6 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
     processingResult,
     startDemo,
     reset,
-    navigateToChat
+    navigateToChat,
   }
 }
