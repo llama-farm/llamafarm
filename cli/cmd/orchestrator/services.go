@@ -127,8 +127,8 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "server.py"},
 		Env: map[string]string{
-			"TRANSFORMERS_PORT":       "11540",
-			"TRANSFORMERS_HOST":       "127.0.0.1",
+			"LF_RUNTIME_PORT":         "11540",
+			"LF_RUNTIME_HOST":         "127.0.0.1",
 			"TRANSFORMERS_OUTPUT_DIR": filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
 			"TRANSFORMERS_CACHE_DIR":  filepath.Join("${HOME}", ".cache", "huggingface"),
 			// Device control (empty = inherit from parent environment)
