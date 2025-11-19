@@ -246,6 +246,12 @@ type chatModel struct {
 	isFirstRender bool
 	// Track if we just started a new response (should auto-scroll)
 	justStartedResponse bool
+	// Track tool calls during streaming
+	pendingToolCalls []*ToolCall
+	// Cancel function for active stream
+	cancelStream func()
+	// Track if user intentionally cancelled (to suppress error messages)
+	intentionallyCancelled bool
 }
 
 // removed: old bottom menu state
@@ -259,10 +265,7 @@ type toolCallMsg struct{ content string }
 type errorMsg struct{ err error }
 type tickMsg struct{}
 
-type designerReadyMsg struct{ url string }
-type designerErrorMsg struct{ err error }
 type serverHealthMsg struct{ health *orchestrator.HealthPayload }
-type modeSwitchMsg struct{ mode ChatMode }
 
 func newChatModel(projectInfo *config.ProjectInfo) chatModel {
 	var devMessages []Message
@@ -1040,7 +1043,22 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// removed cmd+r menu opener
 
 		case "esc":
-			// No-op here; overlay handles its own ESC
+			// If overlay is active, let it handle ESC
+			if m.quickMenu.IsActive() {
+				return m, tea.Batch(cmds...)
+			}
+			// Cancel active stream if one is in progress
+			if (m.thinking || m.printing) && m.cancelStream != nil {
+				m.intentionallyCancelled = true // Mark as intentional to suppress context.Canceled errors
+				m.cancelStream()
+				m.cancelStream = nil
+				m.thinking = false
+				m.printing = false
+				m.streamCh = nil
+				m.justStartedResponse = false
+				m.messages = append(m.messages, Message{Role: "client", Content: "⚠️ Operation aborted"})
+				m.refreshViewportBottom()
+			}
 			return m, tea.Batch(cmds...)
 
 		case "up":
@@ -1096,9 +1114,23 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case toolCallMsg:
+		// Skip processing tool call if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping toolCallMsg due to intentional cancellation")
+			break
+		}
+
 		// Tool calls are added as separate assistant messages
 		utils.LogDebug(fmt.Sprintf("TOOL CALL MSG: %v", msg.content))
 		m.messages = append(m.messages, Message{Role: "assistant", Content: msg.content})
+
+		// Parse and store tool call for potential execution
+		if tc, err := ParseToolCallMessage(msg.content); err == nil {
+			m.pendingToolCalls = append(m.pendingToolCalls, tc)
+			utils.LogDebug(fmt.Sprintf("Stored tool call: %s (ID: %s)", tc.Name, tc.ID))
+		} else {
+			utils.LogDebug(fmt.Sprintf("Failed to parse tool call: %v", err))
+		}
 
 		// Auto-scroll to show tool call
 		if m.justStartedResponse || m.viewport.AtBottom() {
@@ -1114,6 +1146,12 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case responseMsg:
 		if m.err != nil {
 			m.err = nil
+			break
+		}
+
+		// Skip processing response if user intentionally cancelled
+		if m.intentionallyCancelled {
+			utils.LogDebug("Skipping responseMsg due to intentional cancellation")
 			break
 		}
 
@@ -1166,8 +1204,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorMsg:
 		m.thinking = false
 		m.err = msg.err
-		m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
-		m.justStartedResponse = false // Reset flag on error
+		// Don't show error if user intentionally cancelled and this is a context cancellation error
+		if !(m.intentionallyCancelled && strings.Contains(msg.err.Error(), "context canceled")) {
+			m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("Error: %v", msg.err)})
+		}
+		m.justStartedResponse = false    // Reset flag on error
+		m.cancelStream = nil             // Clear cancel function on error
+		m.intentionallyCancelled = false // Reset cancellation flag
 		if m.streamCh != nil {
 			cmds = append(cmds, listen(m.streamCh))
 		}
@@ -1186,7 +1229,99 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.printing = false
 		m.streamCh = nil
-		m.justStartedResponse = false // Reset flag after streaming is complete
+		m.cancelStream = nil             // Clear cancel function when stream completes
+		m.intentionallyCancelled = false // Reset cancellation flag
+		m.justStartedResponse = false    // Reset flag after streaming is complete
+
+		// Check if there are any CLI tools to execute
+		if len(m.pendingToolCalls) > 0 {
+			utils.LogDebug(fmt.Sprintf("Processing %d pending tool calls", len(m.pendingToolCalls)))
+
+			// Execute CLI tools and collect results
+			var toolResults []Message
+			for _, tc := range m.pendingToolCalls {
+				if strings.HasPrefix(tc.Name, "cli.") {
+					utils.LogDebug(fmt.Sprintf("Executing CLI tool: %s", tc.Name))
+
+					// Execute the tool
+					if toolResult, err := ExecuteToolCall(tc, chatCtx); err != nil {
+						// Tool execution failed - send error as tool result
+
+						errMsg := fmt.Sprintf("Tool execution failed: %v", err)
+						utils.LogDebug(errMsg)
+						toolResults = append(toolResults, Message{
+							Role:       "tool",
+							Content:    errMsg,
+							ToolCallID: tc.ID,
+						})
+						// Also show error to user
+						m.messages = append(m.messages, Message{Role: "error", Content: fmt.Sprintf("❌ %s", errMsg)})
+					} else if toolResult != nil {
+						// Tool executed successfully
+						utils.LogDebug(fmt.Sprintf("Tool executed successfully: %s", toolResult.Content))
+						toolResults = append(toolResults, *toolResult)
+						// Show success to user
+						m.messages = append(m.messages, Message{Role: "client", Content: fmt.Sprintf("✅ %s", toolResult.Content)})
+					}
+				}
+			}
+
+			// Clear pending tool calls
+			m.pendingToolCalls = nil
+
+			// If we have tool results, send them back to continue the conversation
+			if len(toolResults) > 0 {
+				utils.LogDebug(fmt.Sprintf("Sending %d tool results back to API", len(toolResults)))
+				m.messages = append(m.messages, toolResults...)
+				m.setViewportContent()
+				m.refreshViewportBottom()
+
+				// Start a new stream with the tool results
+				m.thinking = true
+				m.printing = true
+				m.justStartedResponse = true
+				chunks, errs, _ := startChatStream(m.messages, chatCtx)
+				ch := make(chan tea.Msg, 32)
+				m.streamCh = ch
+				go func() {
+					var builder strings.Builder
+					for {
+						select {
+						case s, ok := <-chunks:
+							utils.LogDebug(fmt.Sprintf("TOOL RESPONSE CHUNK: %v", s))
+							if !ok {
+								utils.LogDebug(fmt.Sprintf("TOOL RESPONSE DONE: %v", builder.String()))
+								ch <- responseMsg{content: builder.String()}
+								ch <- streamDone{}
+								close(ch)
+								return
+							}
+							// Check if this chunk is a tool call
+							if strings.HasPrefix(s, "[TOOL_CALL]") {
+								// Send any accumulated content first
+								if builder.Len() > 0 {
+									ch <- responseMsg{content: builder.String()}
+								}
+								// Send tool call as separate message
+								ch <- toolCallMsg{content: s}
+								// Reset builder for subsequent content
+								builder.Reset()
+							} else {
+								// Regular content - accumulate and send
+								builder.WriteString(s)
+								ch <- responseMsg{content: builder.String()}
+							}
+						case e, ok := <-errs:
+							if ok && e != nil {
+								utils.LogDebug(fmt.Sprintf("TOOL RESPONSE ERROR: %v", e))
+								ch <- errorMsg{err: e}
+							}
+						}
+					}
+				}()
+				cmds = append(cmds, tea.Batch(listen(m.streamCh), thinkingCmd()))
+			}
+		}
 
 	case serverHealthMsg:
 		// Delegate to controller to update state and emit a unified StateUpdateMsg
@@ -1483,7 +1618,7 @@ func renderChatInput(m chatModel) string {
 	} else {
 		modeHint = "Ctrl+T: dev help | Ctrl+K: cycle models"
 	}
-	helpText := fmt.Sprintf("/help for commands | Up/Down: history | %s", modeHint)
+	helpText := fmt.Sprintf("/help for commands | Up/Down: history | Esc: cancel | %s", modeHint)
 
 	b.WriteString("\n")
 	wrappedHelp := lipgloss.NewStyle().Faint(true).Width(m.width - 2).Render(helpText)
@@ -1645,7 +1780,7 @@ func (m *chatModel) processCommandOrMessage(msg string) (wasCommand bool, cmd te
 		cmdName := fields[0]
 		switch cmdName {
 		case "/help":
-			m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models"})
+			m.messages = append(m.messages, Message{Role: "client", Content: "Commands:\n  /help - Show this help\n  /mode [dev|project] - Switch mode\n  /model [name] - Switch model (PROJECT mode)\n  /database [name] - Switch RAG database (PROJECT mode)\n  /strategy [name] - Switch retrieval strategy (PROJECT mode)\n  /clear - Clear conversation\n  /launch designer - Open designer\n  /menu - Open Quick Menu\n  /exit - Exit\n  To check version and upgrades run \"lf version\"\n\nHotkeys:\n  Ctrl+T - Toggle DEV/PROJECT mode\n  Ctrl+K - Cycle models\n  Esc - Cancel current operation"})
 			m.textarea.SetValue("")
 		case "/mode":
 			if len(fields) < 2 {
@@ -1934,7 +2069,8 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 	m.textarea.SetValue("")
 	m.thinking = true
 	m.printing = true
-	m.justStartedResponse = true // Mark that we're starting a new response
+	m.justStartedResponse = true     // Mark that we're starting a new response
+	m.intentionallyCancelled = false // Reset cancellation flag for new request
 	// Scroll to bottom when user sends a message - ensures they see the response
 	m.refreshViewportBottom()
 	// Update chatCtx with current selections (PROJECT mode)
@@ -1951,7 +2087,8 @@ func (m *chatModel) startChatStreamForMessage(msg string) tea.Cmd {
 		}
 	}
 	// Start channel-based streaming - important for showing progress
-	chunks, errs, _ := startChatStream(m.messages, chatCtx)
+	chunks, errs, cancel := startChatStream(m.messages, chatCtx)
+	m.cancelStream = cancel // Store cancel function so Escape key can abort
 	ch := make(chan tea.Msg, 32)
 	m.streamCh = ch
 	go func() {

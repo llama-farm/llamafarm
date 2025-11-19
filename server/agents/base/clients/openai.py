@@ -155,7 +155,7 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # For prompt-based strategy, we need to buffer content to detect tool calls
         accumulated_content = ""
-        last_chunk_metadata = None
+        is_in_tool_call = False
 
         async for chunk in response_stream:
             # For native tool calls, pass through immediately
@@ -166,30 +166,58 @@ class LFAgentClientOpenAI(LFAgentClient):
             # Accumulate content
             delta_content = chunk.choices[0].delta.content if chunk.choices else None
             if delta_content:
-                last_chunk_metadata = chunk
                 accumulated_content += delta_content
 
-            # Check if we have a complete tool call pattern
-            tool_call_info = self._detect_tool_call_in_content(accumulated_content)
+            # No complete tool call yet, yield the chunk normally, unless we are
+            # probably in a tool call and are just accumulating the tool call JSON.
+            if not self._detect_probable_tool_call_in_content(accumulated_content):
+                yield chunk
 
-            if tool_call_info and last_chunk_metadata is not None:
-                # We found a complete tool call, create synthetic chunk
-                tool_name, tool_arguments = tool_call_info
-                tool_chunk = self._create_synthetic_tool_call_chunk(
-                    last_chunk_metadata, tool_name, tool_arguments
+            (tool_name, tool_args_json) = self._detect_tool_call_in_content(
+                accumulated_content
+            ) or (None, None)
+
+            if not tool_name:
+                # Continue to accumulate tool call JSON content
+                continue
+
+            if is_in_tool_call:
+                # We have already yielded the first tool call chunk. now just yield the
+                # arguments delta
+                yield self._create_synthetic_tool_call_chunk(
+                    base_chunk=chunk,
+                    tool_arguments=tool_args_json,
                 )
-                yield tool_chunk
-                # Don't yield more content chunks after tool call
+                yield self._create_synthetic_tool_call_chunk(
+                    base_chunk=chunk,
+                    is_finished=True,
+                )
                 break
             else:
-                # No complete tool call yet, yield the chunk normally
-                yield chunk
+                # First tool call chunk should just have the ID and name
+                tool_call_id = f"call_{uuid.uuid4()}"
+                yield self._create_synthetic_tool_call_chunk(
+                    base_chunk=chunk,
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
+                    tool_arguments="",
+                )
+                is_in_tool_call = True
+
+    def _detect_probable_tool_call_in_content(self, content: str) -> bool:
+        """Detect if the content is probably a tool call.
+
+        Returns:
+            True if probable tool call indicated by the presence of an opening
+            <tool_call> tag in the content, False otherwise.
+        """
+        return bool(re.search(r"<tool_call>", content, re.DOTALL))
 
     def _detect_tool_call_in_content(self, content: str) -> tuple[str, str] | None:
         """Detect and extract tool call from accumulated content.
 
         Returns:
-            Tuple of (tool_name, tool_arguments_json) if found, None otherwise.
+            Tuple of (tool_name, tool_arguments_json) if found, None if not found.
         """
         tool_call_match = re.search(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL)
         if not tool_call_match:
@@ -210,20 +238,45 @@ class LFAgentClientOpenAI(LFAgentClient):
 
     def _create_synthetic_tool_call_chunk(
         self,
+        *,
         base_chunk: ChatCompletionChunk,
-        tool_name: str,
-        tool_arguments: str,
+        tool_call_id: str | None = None,
+        tool_name: str | None = None,
+        tool_arguments: str | None = None,
+        is_finished: bool = False,
     ) -> ChatCompletionChunk:
         """Create a synthetic tool call chunk from a content chunk.
 
         Args:
             base_chunk: The chunk to use for metadata (id, timestamp, etc.)
+            tool_call_id: ID of the tool call
             tool_name: Name of the tool being called
             tool_arguments: JSON string of tool arguments
 
         Returns:
             A new ChatCompletionChunk with tool call information
         """
+        delta = (
+            ChoiceDelta()
+            if is_finished
+            else (
+                ChoiceDelta(
+                    role="assistant",
+                    tool_calls=[
+                        ChoiceDeltaToolCall(
+                            index=0,
+                            id=tool_call_id,
+                            type="function",
+                            function=ChoiceDeltaToolCallFunction(
+                                name=tool_name,
+                                arguments=tool_arguments,
+                            ),
+                        )
+                    ],
+                )
+            )
+        )
+
         return ChatCompletionChunk(
             id=base_chunk.id,
             object="chat.completion.chunk",
@@ -234,21 +287,8 @@ class LFAgentClientOpenAI(LFAgentClient):
             choices=[
                 ChoiceChunk(
                     index=0,
-                    delta=ChoiceDelta(
-                        role="assistant",
-                        tool_calls=[
-                            ChoiceDeltaToolCall(
-                                index=0,
-                                id=f"call_{uuid.uuid4()}",
-                                type="function",
-                                function=ChoiceDeltaToolCallFunction(
-                                    name=tool_name,
-                                    arguments=tool_arguments,
-                                ),
-                            )
-                        ],
-                    ),
-                    finish_reason="tool_calls",
+                    delta=delta,
+                    finish_reason="tool_calls" if is_finished else None,
                 ),
             ],
             usage=base_chunk.usage,

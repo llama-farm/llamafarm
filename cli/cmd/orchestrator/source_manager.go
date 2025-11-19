@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/llamafarm/cli/cmd/utils"
-	"github.com/llamafarm/cli/cmd/version"
+	"github.com/llamafarm/cli/internal/buildinfo"
 )
 
 // Environment Variables:
@@ -148,7 +148,7 @@ func (m *SourceManager) GetCurrentCLIVersion() (string, error) {
 	}
 
 	// Use the CLI's actual version (set by build flags during release)
-	cliVersion := strings.TrimSpace(version.CurrentVersion)
+	cliVersion := strings.TrimSpace(buildinfo.CurrentVersion)
 
 	// Development builds (Version = "dev") should use "main" branch
 	if cliVersion == "" || cliVersion == "dev" {

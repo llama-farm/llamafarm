@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
@@ -44,6 +44,7 @@ type Database = {
 
 function Databases() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [mode, setMode] = useModeWithReset('designer')
@@ -123,6 +124,12 @@ function Databases() {
   )
 
   const [activeDatabase, setActiveDatabase] = useState<string>(() => {
+    // Check URL params first (for navigation from dataset views)
+    const urlDatabase = searchParams.get('database')
+    if (urlDatabase) {
+      return urlDatabase
+    }
+    // Fall back to localStorage
     try {
       const stored = localStorage.getItem(ACTIVE_DB_KEY)
       return stored || 'main_database'
@@ -151,12 +158,18 @@ function Databases() {
     getLocation: getDatabaseLocation,
   })
 
-  // Persist active database selection
+  // Persist active database selection and sync URL params
   useEffect(() => {
     try {
       localStorage.setItem(ACTIVE_DB_KEY, activeDatabase)
     } catch {}
-  }, [activeDatabase, ACTIVE_DB_KEY])
+    // Clear URL param after initial load so manual tab switching doesn't conflict
+    if (searchParams.has('database')) {
+      const newParams = new URLSearchParams(searchParams)
+      newParams.delete('database')
+      setSearchParams(newParams, { replace: true })
+    }
+  }, [activeDatabase, ACTIVE_DB_KEY, searchParams, setSearchParams])
 
   // Reload selection when project changes (validate against available list)
   useEffect(() => {

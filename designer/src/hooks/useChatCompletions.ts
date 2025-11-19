@@ -17,6 +17,7 @@ import {
   ChatCompletionResult,
 } from '../api/chatCompletionsService'
 import { ChatRequest, StreamingChatOptions } from '../types/chat'
+import { useActiveProject } from './useActiveProject'
 
 /**
  * Query keys for chat completions
@@ -246,6 +247,7 @@ export function useChatCompletionMessage() {
  */
 export function useStreamingChatCompletionMessage() {
   const queryClient = useQueryClient()
+  const activeProject = useActiveProject()
 
   return useMutation<
     string,
@@ -267,13 +269,32 @@ export function useStreamingChatCompletionMessage() {
       requestOptions,
       streamingOptions,
     }) => {
-      const request = createChatCompletionRequest(message, requestOptions)
+      // For dev chat, disable RAG and pass active project context
+      const isDevChat = namespace === 'llamafarm' && projectId === 'project_seed'
+      let modifiedRequestOptions = requestOptions
+
+      if (isDevChat) {
+        // Disable RAG for dev chat (no RAG database configured)
+        modifiedRequestOptions = {
+          ...requestOptions,
+          rag_enabled: false,
+        }
+      }
+
+      const request = createChatCompletionRequest(message, modifiedRequestOptions)
+
+      // Build active project header value if dev chat and active project exists
+      const activeProjectHeader = isDevChat && activeProject
+        ? `${activeProject.namespace}/${activeProject.project}`
+        : undefined
+
       return await streamChatCompletion(
         namespace,
         projectId,
         request,
         sessionId,
-        streamingOptions
+        streamingOptions,
+        activeProjectHeader
       )
     },
     onSuccess: (sessionId, variables) => {

@@ -30,6 +30,7 @@ import { Textarea } from './components/ui/textarea'
 function Home() {
   // Form state
   const [projectName, setProjectName] = useState('')
+  const [copyFromProject, setCopyFromProject] = useState<string>('none')
   const [what, setWhat] = useState('')
   const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>(
     'local'
@@ -180,33 +181,61 @@ function Home() {
     const startedAt = performance.now()
     
     try {
-      // 1) Create the project
-      const created = await projectService.createProject(namespace, {
+      // 1) Create the base project
+      await projectService.createProject(namespace, {
         name: sanitizedName,
         config_template: 'default',
       })
 
-      // 2) Save optional "what" description and deployment into config if provided
+      // 2) If copying from existing, update with source config
+      if (copyFromProject !== 'none') {
+        try {
+          // Fetch source project
+          const sourceProject = await projectService.getProject(namespace, copyFromProject)
+          
+          // Clone config and update name/namespace
+          const clonedConfig = JSON.parse(JSON.stringify(sourceProject.project.config))
+          clonedConfig.name = sanitizedName
+          clonedConfig.namespace = namespace
+          
+          // Clear datasets (config only, no data)
+          clonedConfig.datasets = []
+          
+          // Update new project with cloned config
+          await projectService.updateProject(namespace, sanitizedName, {
+            config: clonedConfig,
+          })
+        } catch (e) {
+          console.error('Failed to copy configuration:', e)
+          // Non-critical - project was created, just with default config
+          setGeneralError('Project created but failed to copy configuration. Using default settings.')
+        }
+      }
+
+      // 3) Save optional "what" description and deployment
       if (what.trim() || deployment) {
         const brief: { what?: string; deployment?: string } = {}
         if (what.trim()) brief.what = what.trim()
         if (deployment) brief.deployment = deployment
         
-        const mergedConfig = mergeProjectConfig(created.project.config || {}, {
+        // Get current config (either default or cloned)
+        const currentProject = await projectService.getProject(namespace, sanitizedName)
+        
+        const mergedConfig = mergeProjectConfig(currentProject.project.config || {}, {
           project_brief: brief,
         })
         try {
-          await projectService.updateProject(namespace, created.project.name, {
+          await projectService.updateProject(namespace, sanitizedName, {
             config: mergedConfig,
           })
         } catch (e) {
-          console.error('Failed to update project config:', e)
+          console.error('Failed to update project brief:', e)
           // Non-critical, continue anyway
         }
       }
 
-      // 3) Activate and navigate to dashboard
-      localStorage.setItem('activeProject', created.project.name)
+      // 4) Activate and navigate to dashboard
+      localStorage.setItem('activeProject', sanitizedName)
       
       // Optimistically update caches
       try {
@@ -217,10 +246,10 @@ function Home() {
       try {
         const raw = localStorage.getItem('lf_custom_projects')
         const arr: string[] = raw ? JSON.parse(raw) : []
-        if (!arr.includes(created.project.name)) {
+        if (!arr.includes(sanitizedName)) {
           localStorage.setItem(
             'lf_custom_projects',
-            JSON.stringify([...arr, created.project.name])
+            JSON.stringify([...arr, sanitizedName])
           )
         }
       } catch {}
@@ -347,6 +376,38 @@ function Home() {
                 <p className="text-xs text-muted-foreground">
                   Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
                 </p>
+              </div>
+
+              {/* Copy from existing project */}
+              <div className="grid gap-2.5">
+                <Label htmlFor="copyFrom">Copy configuration from (optional)</Label>
+                <select
+                  id="copyFrom"
+                  className="w-full bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none cursor-pointer"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundPosition: 'right 0.75rem center',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundSize: '1.5em 1.5em',
+                  }}
+                  value={copyFromProject}
+                  onChange={(e) => setCopyFromProject(e.target.value)}
+                  disabled={isCreatingProject}
+                >
+                  <option value="none">Create from scratch</option>
+                  {filteredAndSortedProjectNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                {copyFromProject !== 'none' && (
+                  <p className="text-xs text-muted-foreground">
+                    Configuration will be copied from{' '}
+                    <span className="font-medium">{copyFromProject}</span>
+                    {' '}(runtime, prompts, RAG settings)
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-2.5">

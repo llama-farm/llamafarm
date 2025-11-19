@@ -87,33 +87,67 @@ func (u *UnixUpgradeStrategy) upgradeDirectly(current, new string) error {
 func (u *UnixUpgradeStrategy) upgradeWithSudo(current, new string) error {
 	utils.LogDebug("performing upgrade with sudo elevation")
 
-	// Create a temporary script for sudo execution
+	// Step 1: Create backup (with sudo)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	backupPath := current + ".backup." + timestamp
 
-	script := fmt.Sprintf(`
-set -e
-echo "Creating backup..."
-cp "%s" "%s"
-echo "Installing new binary..."
-cp "%s" "%s"
-chmod +x "%s"
-echo "Verifying installation..."
-if "%s" version >/dev/null 2>&1; then
-    echo "Upgrade completed successfully"
-    rm -f "%s"
-else
-    echo "Verification failed, restoring backup..."
-    mv "%s" "%s"
-    exit 1
-fi
-`, current, backupPath, new, current, current, current, backupPath, backupPath, current)
+	utils.OutputProgress("Creating backup...")
+	if err := u.runSudoCommand("cp", current, backupPath); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
 
-	cmd := exec.Command("sudo", "sh", "-c", script)
+	// Step 2: Copy new binary to location (with sudo)
+	utils.OutputProgress("Installing new binary...")
+	if err := u.runSudoCommand("cp", new, current); err != nil {
+		_ = u.restoreBackupWithSudo(backupPath, current) // Best effort restore
+		return fmt.Errorf("failed to copy new binary: %w", err)
+	}
+
+	// Step 3: Set executable permissions (with sudo)
+	utils.OutputProgress("Setting executable permissions...")
+	if err := u.runSudoCommand("chmod", "+x", current); err != nil {
+		_ = u.restoreBackupWithSudo(backupPath, current) // Best effort restore
+		return fmt.Errorf("failed to set executable permissions: %w", err)
+	}
+
+	// Step 4: Verify the installation
+	utils.OutputProgress("Verifying installation...")
+	if err := u.verifyBinary(current); err != nil {
+		utils.OutputError("Verification failed, restoring backup...")
+		if restoreErr := u.restoreBackupWithSudo(backupPath, current); restoreErr != nil {
+			return fmt.Errorf("upgrade verification failed and backup restore failed: %w (original: %v)", restoreErr, err)
+		}
+		return fmt.Errorf("upgrade verification failed, backup restored: %w", err)
+	}
+
+	// Step 5: Cleanup backup (with sudo)
+	utils.OutputProgress("Cleaning up backup...")
+	if err := u.runSudoCommand("rm", "-f", backupPath); err != nil {
+		utils.LogDebug(fmt.Sprintf("failed to cleanup backup %s: %v", backupPath, err))
+		// Non-fatal - continue
+	}
+
+	utils.OutputSuccess("Upgrade completed successfully")
+	return nil
+}
+
+// runSudoCommand executes a command with sudo, forwarding stdout/stderr
+func (u *UnixUpgradeStrategy) runSudoCommand(name string, args ...string) error {
+	cmdArgs := append([]string{name}, args...)
+	cmd := exec.Command("sudo", cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	return cmd.Run()
+}
+
+// restoreBackupWithSudo attempts to restore a backup file using sudo
+// Returns an error if restoration fails
+func (u *UnixUpgradeStrategy) restoreBackupWithSudo(backupPath, targetPath string) error {
+	if err := u.runSudoCommand("mv", backupPath, targetPath); err != nil {
+		utils.LogDebug(fmt.Sprintf("failed to restore backup from %s to %s: %v", backupPath, targetPath, err))
+		return fmt.Errorf("backup restore failed: %w", err)
+	}
+	return nil
 }
 
 func (u *UnixUpgradeStrategy) createBackup(binaryPath string) (string, error) {

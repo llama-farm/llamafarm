@@ -154,6 +154,12 @@ properties:
                 any model to use tools. This is universal, but may not be as effective as native tool calling.
                 Use `prompt_based` for models that do not support native tool calling.
               default: native_api
+            tools:
+              type: array
+              description: List of tools to use for this model
+              items:
+                $ref: "#/definitions/Tool"
+              default: []
 
   mcp:
     type: object
@@ -200,3 +206,27 @@ properties:
                 type: string
               example:
                 Authorization: Bearer ${env:MCP_SERVER_TOKEN}
+
+definitions:
+  Tool:
+    type: object
+    required:
+      - type
+      - name
+      - description
+      - parameters
+    properties:
+      type:
+        type: string
+        enum: [function]
+        description: Type of tool
+      name:
+        type: string
+        description: Name of the tool
+      description:
+        type: string
+        description: Description of the tool
+      parameters:
+        type: object
+        description: Parameters of the tool
+        additionalProperties: true

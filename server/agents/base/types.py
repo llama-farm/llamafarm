@@ -1,7 +1,12 @@
 """Types for LLamaFarm Agent framework."""
 
 from dataclasses import dataclass
+import json
 from typing import Any, Literal
+
+from openai.types.chat import ChatCompletionFunctionToolParam, ChatCompletionToolParam
+
+from config.datamodel import Tool
 
 
 @dataclass
@@ -15,6 +20,28 @@ class ToolDefinition:
     name: str
     description: str
     parameters: dict[str, Any]  # JSON Schema for parameters
+
+    @classmethod
+    def from_openai_tool_dict(cls, tool: dict) -> "ToolDefinition":
+        """Convert dict to ToolDefinition."""
+        function_definition = tool.get("function", {})
+        name = function_definition.get("name", "")
+        description = function_definition.get("description", "")
+        parameters = function_definition.get("parameters", {})
+        if not name or not description or not parameters:
+            raise ValueError("Invalid tool definition")
+        return cls(
+            name=name,
+            description=description,
+            parameters=parameters,
+        )
+
+    @classmethod
+    def from_datamodel_tool(cls, tools: Tool) -> "ToolDefinition":
+        """Convert config tools to ToolDefinition list."""
+        return ToolDefinition(
+            name=tools.name, description=tools.description, parameters=tools.parameters
+        )
 
     @classmethod
     def from_mcp_tool(cls, tool_class: type) -> "ToolDefinition":

@@ -125,6 +125,7 @@ export async function sendChatCompletion(
  * @param request - The chat request payload (stream will be set to true)
  * @param sessionId - Optional session ID for conversation continuity
  * @param options - Streaming options with callbacks
+ * @param activeProject - Optional active project for dev chat context (format: "namespace/project")
  * @returns Promise<string> - The final session ID
  */
 export async function streamChatCompletion(
@@ -132,7 +133,8 @@ export async function streamChatCompletion(
   projectId: string,
   request: ChatRequest,
   sessionId?: string,
-  options: StreamingChatOptions = {}
+  options: StreamingChatOptions = {},
+  activeProject?: string
 ): Promise<string> {
   const { onChunk, onError, onComplete, signal } = options
 
@@ -179,6 +181,11 @@ export async function streamChatCompletion(
     // Add session header if provided
     if (sessionId) {
       headers['X-Session-ID'] = sessionId
+    }
+
+    // Add active project header if provided (for dev chat context)
+    if (activeProject) {
+      headers['X-Active-Project'] = activeProject
     }
 
     // Use fetch directly for streaming instead of axios
