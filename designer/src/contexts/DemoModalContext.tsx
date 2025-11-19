@@ -20,8 +20,7 @@ export function DemoModalProvider({ children }: { children: ReactNode }) {
   
   const closeModal = () => {
     setIsOpen(false)
-    // Reset auto-start after a short delay to allow modal to close smoothly
-    setTimeout(() => setAutoStartDemoId(null), 300)
+    setAutoStartDemoId(null)
   }
 
   return (

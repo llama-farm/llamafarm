@@ -57,7 +57,7 @@ const CopyProjectModal: React.FC<CopyProjectModalProps> = ({
     }
   }, [isOpen, isLoading, onClose])
 
-  const isValid = name.trim().length > 0 && !projectError && !isLoading
+  const isValid = name.trim().length > 0 && !isLoading
 
   const handleCancel = (e: React.MouseEvent) => {
     e.preventDefault()
