@@ -121,7 +121,7 @@ All `lf` commands support these global flags:
 
 | Flag | Description | Use Case |
 | ---- | ----------- | -------- |
-| `--no-auto-start` | Skip automatic service startup | CI/CD pipelines, manual service management, debugging |
+| `--auto-start` | Automatically start services when needed (default: true). Use `--auto-start=false` to disable. | CI/CD pipelines, manual service management, debugging |
 | `--server-url <url>` | Connect to a specific server | Remote deployments, custom ports |
 | `--debug` | Enable verbose debug output | Troubleshooting, development |
 | `--cwd <path>` | Override working directory | Scripting, automation |
@@ -132,8 +132,8 @@ All `lf` commands support these global flags:
 lf start
 
 # In another terminal, run commands without auto-start
-lf chat --no-auto-start "What is LlamaFarm?"
-lf datasets list --no-auto-start
+lf chat --auto-start=false "What is LlamaFarm?"
+lf datasets list --auto-start=false
 ```
 
 ### Common Scenarios
@@ -149,12 +149,12 @@ lf datasets list --no-auto-start
   run: |
     timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
     
-- name: Run tests with --no-auto-start
+- name: Run tests with --auto-start=false
   run: |
-    lf datasets create --no-auto-start -s pdf_ingest -b main_db test-data
-    lf datasets upload --no-auto-start test-data ./test-files/*.pdf
-    lf datasets process --no-auto-start test-data
-    lf rag query --no-auto-start "test query"
+    lf datasets create --auto-start=false -s pdf_ingest -b main_db test-data
+    lf datasets upload --auto-start=false test-data ./test-files/*.pdf
+    lf datasets process --auto-start=false test-data
+    lf rag query --auto-start=false "test query"
 ```
 
 **Development Workflow (Two Terminal Setup)**
@@ -164,9 +164,9 @@ lf start
 # This keeps services running and shows logs
 
 # Terminal 2: Run commands without triggering restarts
-lf chat --no-auto-start "Develop with stable services"
-lf datasets list --no-auto-start
-lf rag stats --no-auto-start
+lf chat --auto-start=false "Develop with stable services"
+lf datasets list --auto-start=false
+lf rag stats --auto-start=false
 
 # Benefits:
 # - Services stay up between commands
@@ -194,7 +194,7 @@ If you see: `Service 'server' is not running and auto-start is disabled`
 3. **Remove the flag to enable auto-start:**
    ```bash
    # Instead of:
-   lf chat --no-auto-start "query"
+   lf chat --auto-start=false "query"
    
    # Use:
    lf chat "query"  # Auto-starts if needed

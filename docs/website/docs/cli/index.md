@@ -19,7 +19,7 @@ lf [command] [flags]
 | `--server-url` | Override the server endpoint (default `http://localhost:8000`). |
 | `--server-start-timeout` | How long to wait for local server startup (default 45s). |
 | `--cwd` | Treat another directory as the working project root. |
-| `--no-auto-start` | Skip automatic starting of services (only connect to already-running services). |
+| `--auto-start` | Automatically start services when needed (default: true). Use `--auto-start=false` to disable. |
 
 Environment helpers:
 - `LLAMAFARM_SESSION_ID` – reuse a session for `lf chat`.
@@ -41,9 +41,9 @@ Environment helpers:
 | [`lf services`](#services-management) | Manage LlamaFarm services (server, RAG worker, universal runtime). |
 | [`lf version`](./lf-version.md) | Print CLI version/build info and check for updates. |
 
-## Service Management with --no-auto-start
+## Service Management with --auto-start
 
-The `--no-auto-start` flag gives you control over when services start. By default, the CLI automatically starts the server and RAG worker when needed. Use this flag to:
+The `--auto-start` flag (default: `true`) gives you control over when services start. By default, the CLI automatically starts the server and RAG worker when needed. Use `--auto-start=false` to:
 
 - **CI/CD pipelines**: Connect to pre-started services without triggering restarts
 - **Manual service management**: Keep services running between commands
@@ -57,9 +57,9 @@ The `--no-auto-start` flag gives you control over when services start. By defaul
 lf start
 
 # Terminal 2: Run commands without triggering restarts
-lf chat --no-auto-start "What is LlamaFarm?"
-lf datasets list --no-auto-start
-lf rag stats --no-auto-start
+lf chat --auto-start=false "What is LlamaFarm?"
+lf datasets list --auto-start=false
+lf rag stats --auto-start=false
 ```
 
 **CI/CD integration:**
@@ -72,19 +72,19 @@ lf rag stats --no-auto-start
   
 - name: Run tests
   run: |
-    lf datasets create --no-auto-start -s pdf_ingest -b main_db test-data
-    lf rag query --no-auto-start "test query"
+    lf datasets create --auto-start=false -s pdf_ingest -b main_db test-data
+    lf rag query --auto-start=false "test query"
 ```
 
 **Error handling:**
-If services are not running and you use `--no-auto-start`, you'll see:
+If services are not running and you use `--auto-start=false`, you'll see:
 ```
-Service 'server' is not running and auto-start is disabled (--no-auto-start).
+Service 'server' is not running and auto-start is disabled (use --auto-start to enable automatic startup).
 
 To start services manually, run:
   lf start
 
-Or remove the --no-auto-start flag to allow automatic startup.
+Or remove the --auto-start=false flag to allow automatic startup.
 ```
 
 ## Troubleshooting CLI Output
