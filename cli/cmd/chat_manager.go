@@ -544,7 +544,7 @@ func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error
 	}
 
 	if cfg.SessionMode == SessionModeDev {
-		req.Header.Set("X-Active-Project", cfg.SessionProject+"/"+cfg.SessionNamespace)
+		req.Header.Set("X-Active-Project", cfg.SessionNamespace+"/"+cfg.SessionProject)
 	}
 
 	return req, nil
