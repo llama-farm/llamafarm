@@ -20,6 +20,7 @@ interface ProjectModalProps {
     details?: { brief?: { what?: string } }
   ) => void
   onDelete?: () => void
+  onCopy?: () => void
   isLoading?: boolean
   projectError?: string | null
   onNameChange?: (name: string) => void
@@ -33,6 +34,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  onCopy,
   isLoading = false,
   projectError = null,
   onNameChange,
@@ -153,7 +155,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row items-center justify-between sm:justify-between gap-2">
+        <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {mode === 'edit' ? (
             confirmingDelete ? (
               <div className="flex items-center gap-2">
@@ -190,12 +192,16 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           )}
           <div className="flex items-center gap-2 ml-auto">
             <button
-              className="px-3 py-2 rounded-md text-sm text-primary hover:underline disabled:opacity-50"
-              onClick={handleCancel}
-              disabled={isLoading}
+              className="px-3 py-2 rounded-md border border-input text-foreground hover:bg-accent/20 text-sm disabled:opacity-50"
+              onClick={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (onCopy) onCopy()
+              }}
+              disabled={isLoading || mode !== 'edit'}
               type="button"
             >
-              Cancel
+              Copy to new project
             </button>
             <button
               className={`px-3 py-2 rounded-md text-sm ${
