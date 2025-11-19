@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,7 +23,8 @@ import (
 // ChatManager centralizes all chat operations and state management.
 // It provides a unified interface for both command-line and TUI chat interactions.
 type ChatManager struct {
-	config     *ChatConfig
+	// Configuration (lock-free reads via atomic.Value)
+	config     atomic.Value // stores *ChatConfig
 	httpClient utils.HTTPClient
 
 	// Session management
@@ -85,9 +87,9 @@ func NewChatManager(cfg *ChatConfig) (*ChatManager, error) {
 	}
 
 	mgr := &ChatManager{
-		config:     cfg,
 		httpClient: utils.GetHTTPClient(),
 	}
+	mgr.config.Store(cfg)
 
 	// Initialize session file path
 	sessionFile, err := mgr.computeSessionFilePath()
@@ -127,7 +129,8 @@ func (m *ChatManager) SendMessages(messages []Message) (string, error) {
 // The handler is called sequentially for each chunk and should return quickly.
 func (m *ChatManager) StreamMessages(messages []Message, handler func(StreamChunk) error) error {
 	// Ensure we have a session ID if not stateless
-	if m.config.SessionMode != SessionModeStateless && m.GetSessionID() == "" {
+	cfg := m.GetConfig()
+	if cfg.SessionMode != SessionModeStateless && m.GetSessionID() == "" {
 		m.sessionMu.Lock()
 		m.sessionID = uuid.New().String()
 		m.sessionMu.Unlock()
@@ -189,10 +192,11 @@ func (m *ChatManager) ClearSession() error {
 
 	// Delete server-side session
 	if oldSessionID != "" {
+		cfg := m.GetConfig()
 		deleteURL := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s",
-			strings.TrimSuffix(m.config.ServerURL, "/"),
-			m.config.Namespace,
-			m.config.ProjectID,
+			strings.TrimSuffix(cfg.ServerURL, "/"),
+			cfg.Namespace,
+			cfg.ProjectID,
 			oldSessionID)
 
 		req, err := http.NewRequest("DELETE", deleteURL, nil)
@@ -220,10 +224,11 @@ func (m *ChatManager) FetchHistory() ([]Message, error) {
 		return nil, nil
 	}
 
+	cfg := m.GetConfig()
 	url := fmt.Sprintf("%s/v1/projects/%s/%s/chat/sessions/%s/history",
-		strings.TrimSuffix(m.config.ServerURL, "/"),
-		m.config.Namespace,
-		m.config.ProjectID,
+		strings.TrimSuffix(cfg.ServerURL, "/"),
+		cfg.Namespace,
+		cfg.ProjectID,
 		sessionID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -287,18 +292,32 @@ func (m *ChatManager) FetchHistory() ([]Message, error) {
 	return messages, nil
 }
 
-// GetConfig returns the current configuration (read-only)
+// GetConfig returns a copy of the current configuration (thread-safe, lock-free)
 func (m *ChatManager) GetConfig() ChatConfig {
-	return *m.config
+	return *m.config.Load().(*ChatConfig)
 }
 
-// UpdateConfig updates specific configuration fields (thread-safe for RAG settings)
+// UpdateConfig updates specific configuration fields (thread-safe)
+// Creates a new config copy with updates applied
 func (m *ChatManager) UpdateConfig(updateFn func(*ChatConfig)) {
-	updateFn(m.config)
+	// Loop until we successfully update (handles rare race with concurrent updates)
+	for {
+		old := m.config.Load().(*ChatConfig)
+		// Create a copy to modify
+		updated := *old
+		updateFn(&updated)
+		// Atomically swap if nothing changed in the meantime
+		if m.config.CompareAndSwap(old, &updated) {
+			return
+		}
+	}
 }
 
 // BuildCurlCommand generates a curl command for debugging
 func (m *ChatManager) BuildCurlCommand(messages []Message) (string, error) {
+	// Capture current config (lock-free read)
+	cfg := m.GetConfig()
+
 	url, err := m.buildChatAPIURL()
 	if err != nil {
 		return "", err
@@ -315,23 +334,23 @@ func (m *ChatManager) BuildCurlCommand(messages []Message) (string, error) {
 	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
 
 	// Include model if specified
-	if m.config.Model != "" {
-		request.Model = &m.config.Model
+	if cfg.Model != "" {
+		request.Model = &cfg.Model
 	}
 
-	if m.config.RAGEnabled {
-		request.RAGEnabled = &m.config.RAGEnabled
-		if m.config.RAGDatabase != "" {
-			request.RAGDatabase = &m.config.RAGDatabase
+	if cfg.RAGEnabled {
+		request.RAGEnabled = &cfg.RAGEnabled
+		if cfg.RAGDatabase != "" {
+			request.RAGDatabase = &cfg.RAGDatabase
 		}
-		if m.config.RAGRetrievalStrategy != "" {
-			request.RAGRetrievalStrategy = &m.config.RAGRetrievalStrategy
+		if cfg.RAGRetrievalStrategy != "" {
+			request.RAGRetrievalStrategy = &cfg.RAGRetrievalStrategy
 		}
-		if m.config.RAGTopK > 0 {
-			request.RAGTopK = &m.config.RAGTopK
+		if cfg.RAGTopK > 0 {
+			request.RAGTopK = &cfg.RAGTopK
 		}
-		if m.config.RAGScoreThreshold > 0 {
-			request.RAGScoreThreshold = &m.config.RAGScoreThreshold
+		if cfg.RAGScoreThreshold > 0 {
+			request.RAGScoreThreshold = &cfg.RAGScoreThreshold
 		}
 	}
 
@@ -415,7 +434,8 @@ func (m *ChatManager) saveSession() error {
 }
 
 func (m *ChatManager) computeSessionFilePath() (string, error) {
-	if m.config.SessionMode == SessionModeStateless {
+	cfg := m.GetConfig()
+	if cfg.SessionMode == SessionModeStateless {
 		return "", nil
 	}
 
@@ -424,20 +444,20 @@ func (m *ChatManager) computeSessionFilePath() (string, error) {
 		return "", err
 	}
 
-	ns := m.config.SessionNamespace
+	ns := cfg.SessionNamespace
 	if strings.TrimSpace(ns) == "" {
-		ns = m.config.Namespace
+		ns = cfg.Namespace
 	}
-	proj := m.config.SessionProject
+	proj := cfg.SessionProject
 	if strings.TrimSpace(proj) == "" {
-		proj = m.config.ProjectID
+		proj = cfg.ProjectID
 	}
 	if strings.TrimSpace(ns) == "" || strings.TrimSpace(proj) == "" {
 		return "", fmt.Errorf("session requires namespace and project")
 	}
 
 	var base string
-	switch m.config.SessionMode {
+	switch cfg.SessionMode {
 	case SessionModeDev:
 		base = filepath.Join(lfDataDir, "projects", ns, proj, "cli", "context", "dev")
 	default:
@@ -448,14 +468,18 @@ func (m *ChatManager) computeSessionFilePath() (string, error) {
 }
 
 func (m *ChatManager) buildChatAPIURL() (string, error) {
-	base := strings.TrimSuffix(m.config.ServerURL, "/")
-	if m.config.Namespace == "" || m.config.ProjectID == "" {
+	cfg := m.GetConfig()
+	base := strings.TrimSuffix(cfg.ServerURL, "/")
+	if cfg.Namespace == "" || cfg.ProjectID == "" {
 		return "", fmt.Errorf("namespace and project id are required to build chat API URL")
 	}
-	return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, m.config.Namespace, m.config.ProjectID), nil
+	return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, cfg.Namespace, cfg.ProjectID), nil
 }
 
 func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error) {
+	// Capture current config (lock-free read)
+	cfg := m.GetConfig()
+
 	url, err := m.buildChatAPIURL()
 	if err != nil {
 		return nil, err
@@ -473,25 +497,25 @@ func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error
 	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
 
 	// Include model if specified
-	if m.config.Model != "" {
-		request.Model = &m.config.Model
+	if cfg.Model != "" {
+		request.Model = &cfg.Model
 	}
 
 	// Always include rag_enabled to let the server know the explicit intent
-	request.RAGEnabled = &m.config.RAGEnabled
+	request.RAGEnabled = &cfg.RAGEnabled
 	// Include additional RAG params only when enabled
-	if m.config.RAGEnabled {
-		if m.config.RAGDatabase != "" {
-			request.RAGDatabase = &m.config.RAGDatabase
+	if cfg.RAGEnabled {
+		if cfg.RAGDatabase != "" {
+			request.RAGDatabase = &cfg.RAGDatabase
 		}
-		if m.config.RAGRetrievalStrategy != "" {
-			request.RAGRetrievalStrategy = &m.config.RAGRetrievalStrategy
+		if cfg.RAGRetrievalStrategy != "" {
+			request.RAGRetrievalStrategy = &cfg.RAGRetrievalStrategy
 		}
-		if m.config.RAGTopK > 0 {
-			request.RAGTopK = &m.config.RAGTopK
+		if cfg.RAGTopK > 0 {
+			request.RAGTopK = &cfg.RAGTopK
 		}
-		if m.config.RAGScoreThreshold > 0 {
-			request.RAGScoreThreshold = &m.config.RAGScoreThreshold
+		if cfg.RAGScoreThreshold > 0 {
+			request.RAGScoreThreshold = &cfg.RAGScoreThreshold
 		}
 	}
 
@@ -515,12 +539,12 @@ func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error
 	sessionID := m.GetSessionID()
 	if sessionID != "" {
 		req.Header.Set("X-Session-ID", sessionID)
-	} else if m.config.SessionMode == SessionModeStateless {
+	} else if cfg.SessionMode == SessionModeStateless {
 		req.Header.Set("X-No-Session", "true")
 	}
 
-	if m.config.SessionMode == SessionModeDev {
-		req.Header.Set("X-Active-Project", m.config.SessionProject+"/"+m.config.SessionNamespace)
+	if cfg.SessionMode == SessionModeDev {
+		req.Header.Set("X-Active-Project", cfg.SessionProject+"/"+cfg.SessionNamespace)
 	}
 
 	return req, nil
@@ -552,7 +576,8 @@ func (m *ChatManager) executeStreamingRequest(ctx context.Context, req *http.Req
 
 	// Update session ID from response header
 	if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
-		if m.config.SessionMode == SessionModeStateless {
+		cfg := m.GetConfig()
+		if cfg.SessionMode == SessionModeStateless {
 			// Don't persist session in stateless mode
 		} else {
 			if err := m.SetSessionID(sessionIDHeader); err != nil {
