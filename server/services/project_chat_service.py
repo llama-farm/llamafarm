@@ -68,10 +68,27 @@ class RAGParameters:
 
 
 class ProjectChatService:
+    def _extract_latest_user_message(
+        self, messages: list[LFChatCompletionMessageParam]
+    ) -> str:
+        """Extract the content from the latest user message in the messages list."""
+        latest_user_message = next(
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
+        )
+        if latest_user_message:
+            return latest_user_message.get("content", "")
+        return ""
+
     def _create_echo_completion(
-        self, message: str, model_name: str
+        self, messages: list[LFChatCompletionMessageParam], model_name: str
     ) -> LFChatCompletion:
         """Create an echo response that mirrors the input message."""
+        message = self._extract_latest_user_message(messages)
         return LFChatCompletion(
             id=f"chatcmpl-{uuid.uuid4()}",
             created=int(time.time()),
@@ -98,7 +115,8 @@ class ProjectChatService:
         self, messages: list[LFChatCompletionMessageParam], model_name: str
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Create a streaming echo response that mirrors the input message."""
-        echo_content = f"[ECHO MODE] {messages}"
+        message = self._extract_latest_user_message(messages)
+        echo_content = f"[ECHO MODE] {message}"
         chunk_id = f"chatcmpl-{uuid.uuid4()}"
         created_time = int(time.time())
         # Simulate streaming by yielding chunks
