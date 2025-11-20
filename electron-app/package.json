@@ -4,6 +4,14 @@
   "description": "LlamaFarm Desktop - Local AI Platform",
   "main": "dist/main/index.js",
   "author": "support@llamafarm.dev",
+  "homepage": "https://llamafarm.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/llama-farm/llamafarm"
+  },
+  "bugs": {
+    "url": "https://github.com/llama-farm/llamafarm/issues"
+  },
   "license": "Apache-2.0",
   "scripts": {
     "dev": "electron-vite dev",
