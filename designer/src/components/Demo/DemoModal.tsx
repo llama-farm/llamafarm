@@ -3,7 +3,7 @@
  * Beautiful, educational workflow showing API calls in real-time
  */
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,7 @@ import {
 } from '../ui/dialog'
 import { AVAILABLE_DEMOS, DemoConfig } from '../../config/demos'
 import { useDemoWorkflow, DemoStep, ApiCall, ProcessingResult } from '../../hooks/useDemoWorkflow'
-import { CheckCircle2, Circle, Loader2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 
 interface DemoModalProps {
   isOpen: boolean
@@ -24,9 +24,6 @@ interface DemoModalProps {
 function DemoSelector({ onSelect }: { onSelect: (demo: DemoConfig) => void }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Choose a demo to instantly create a fully-configured AI assistant with knowledge base:
-      </p>
 
       <div className="grid gap-3">
         {AVAILABLE_DEMOS.map(demo => (
@@ -60,68 +57,6 @@ function DemoSelector({ onSelect }: { onSelect: (demo: DemoConfig) => void }) {
           </button>
         ))}
       </div>
-    </div>
-  )
-}
-
-function StepIndicator({
-  step,
-  currentStep,
-  lastValidStep
-}: {
-  step: DemoStep
-  currentStep: DemoStep
-  lastValidStep: DemoStep
-}) {
-  const steps: DemoStep[] = [
-    'fetching_config',
-    'creating_project',
-    'uploading_files',
-    'processing_dataset',
-    'completed'
-  ]
-
-  const stepLabels: Record<DemoStep, string> = {
-    idle: 'Ready',
-    fetching_config: 'Fetching Configuration',
-    creating_project: 'Creating Project',
-    uploading_files: 'Uploading Files',
-    processing_dataset: 'Processing Dataset',
-    completed: 'Completed',
-    error: 'Error'
-  }
-
-  // When error occurs, use lastValidStep to determine progress
-  const effectiveCurrentStep = currentStep === 'error' ? lastValidStep : currentStep
-  const currentIndex = steps.indexOf(effectiveCurrentStep)
-  const stepIndex = steps.indexOf(step)
-
-  const isActive = step === effectiveCurrentStep
-  const isCompleted = stepIndex < currentIndex || currentStep === 'completed'
-  const isError = currentStep === 'error' && isActive
-
-  return (
-    <div className="flex items-center gap-2">
-      {isCompleted ? (
-        <CheckCircle2 className="w-4 h-4 text-green-500" />
-      ) : isError ? (
-        <XCircle className="w-4 h-4 text-destructive" />
-      ) : isActive ? (
-        <Loader2 className="w-4 h-4 text-primary animate-spin" />
-      ) : (
-        <Circle className="w-4 h-4 text-muted-foreground/50" />
-      )}
-      <span
-        className={`text-sm ${
-          isActive
-            ? 'text-primary font-medium'
-            : isCompleted
-            ? 'text-green-600'
-            : 'text-muted-foreground'
-        }`}
-      >
-        {stepLabels[step]}
-      </span>
     </div>
   )
 }
@@ -194,35 +129,180 @@ function ApiCallItem({ call }: { call: ApiCall }) {
   )
 }
 
+function CopyableQuestion({ question, index }: { question: string; index: number }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(question)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <li>
+      <button
+        onClick={handleCopy}
+        className="w-full group flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:border-primary hover:bg-accent/50 transition-all text-left"
+      >
+        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
+          {index}
+        </span>
+        <span className="flex-1 text-sm text-foreground">{question}</span>
+        {copied ? (
+          <Check className="w-4 h-4 text-green-600 shrink-0" />
+        ) : (
+          <Copy className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        )}
+      </button>
+    </li>
+  )
+}
+
 function WorkflowProgress({
   demo,
   currentStep,
-  lastValidStep,
   progress,
   error,
   apiCalls,
   projectName,
-  processingResult
+  processingResult,
+  onStartChat,
+  onRetry
 }: {
   demo: DemoConfig
   currentStep: DemoStep
-  lastValidStep: DemoStep
   progress: number
   error: string | null
   apiCalls: ApiCall[]
   projectName: string | null
   processingResult: ProcessingResult | null
+  onStartChat: () => void
+  onRetry: () => void
 }) {
-  const steps: DemoStep[] = [
-    'fetching_config',
-    'creating_project',
-    'uploading_files',
-    'processing_dataset',
-    'completed'
-  ]
+  const [showApiCalls, setShowApiCalls] = useState(false)
 
+  const stepLabels: Record<DemoStep, string> = {
+    idle: 'Ready',
+    fetching_config: 'Fetching Configuration',
+    creating_project: 'Creating Project',
+    uploading_files: 'Uploading Files',
+    processing_dataset: 'Processing Dataset',
+    completed: 'Completed',
+    error: 'Error'
+  }
+
+  const isCompleted = currentStep === 'completed'
+  const isError = currentStep === 'error'
+
+  // Failure state
+  if (isError) {
+    // Determine if this is a dataset processing error and provide helpful context
+    const isDatasetError = error?.toLowerCase().includes('dataset') || 
+                          error?.toLowerCase().includes('processing')
+    
+    const isProjectDeletedError = error?.toLowerCase().includes('not found') ||
+                                  error?.toLowerCase().includes('deleted') ||
+                                  error?.toLowerCase().includes('stale')
+    
+    let helpText = null
+    if (isProjectDeletedError) {
+      helpText = "This usually happens when there are background tasks from recently deleted projects. Simply click 'Try Again' to create a fresh demo project."
+    } else if (isDatasetError) {
+      helpText = "Check if the RAG worker is running properly. You can also try refreshing the page."
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Error header */}
+        <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+          <div className="flex items-start gap-3">
+            <XCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-destructive mb-1">Creation Failed</p>
+              <p className="text-sm text-destructive/90 mb-2">{error}</p>
+              {helpText && (
+                <div className="mt-3 pt-3 border-t border-destructive/20">
+                  <p className="text-xs text-muted-foreground">
+                    💡 <span className="font-medium">What to do:</span> {helpText}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="space-y-2">
+          <button
+            onClick={onRetry}
+            className="w-full px-6 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-medium"
+          >
+            Try Again
+          </button>
+          <button
+            onClick={onStartChat}
+            className="w-full px-6 py-3 rounded-lg border border-border bg-card hover:bg-accent transition-colors font-medium"
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Success state
+  if (isCompleted) {
+    return (
+      <div className="space-y-3">
+        {/* Success header - compact */}
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-500/10 border border-green-500/20">
+          <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+          <p className="text-sm font-medium text-green-600">
+            Your project is ready!
+          </p>
+        </div>
+
+        {/* Processing stats - compact */}
+        {processingResult && (
+          <div className="flex items-center gap-4 px-4 py-2 rounded-lg bg-accent/30 border border-accent text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Files Processed:</span>
+              <span className="font-semibold text-foreground">{processingResult.totalFiles}</span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Strategy:</span>
+              <span className="font-medium text-foreground">{processingResult.parsers[0] || 'default'}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Sample questions - copyable */}
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-foreground">
+            Try these sample questions to see professional answers:
+          </p>
+          <ul className="space-y-1.5">
+            {demo.sampleQuestions.slice(0, 4).map((q, i) => (
+              <CopyableQuestion key={i} question={q} index={i + 1} />
+            ))}
+          </ul>
+        </div>
+
+        {/* Start Chatting button - full width */}
+        <button
+          onClick={onStartChat}
+          className="w-full px-6 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-medium"
+        >
+          Start Chatting
+        </button>
+      </div>
+    )
+  }
+
+  // Loading state
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header with demo info */}
       <div className="flex items-start gap-3 p-4 rounded-lg bg-accent/50 border border-accent">
         <div className="text-3xl">{demo.icon}</div>
@@ -236,45 +316,33 @@ function WorkflowProgress({
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Overall Progress</span>
-          <span className="font-medium text-foreground">{Math.round(progress)}%</span>
+      {/* Current step with progress */}
+      <div className="space-y-3">
+        {/* Current step indicator */}
+        <div className="flex items-center gap-3">
+          {error ? (
+            <XCircle className="w-5 h-5 text-destructive" />
+          ) : (
+            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+          )}
+          <span className={`text-sm font-medium ${error ? 'text-destructive' : 'text-primary'}`}>
+            {error ? 'Error' : stepLabels[currentStep]}
+          </span>
+          <span className="text-sm text-muted-foreground ml-auto">
+            {Math.round(progress)}%
+          </span>
         </div>
+
+        {/* Progress bar */}
         <div className="h-2 rounded-full bg-muted overflow-hidden">
           <div
-            className="h-full bg-primary transition-all duration-500 ease-out"
+            className={`h-full transition-all duration-500 ease-out ${error ? 'bg-destructive' : 'bg-primary'}`}
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
-      {/* Steps */}
-      <div className="space-y-2">
-        <h5 className="text-sm font-medium text-foreground">Steps</h5>
-        <div className="space-y-1">
-          {steps.map(step => (
-            <StepIndicator key={step} step={step} currentStep={currentStep} lastValidStep={lastValidStep} />
-          ))}
-        </div>
-      </div>
-
-      {/* API Calls */}
-      {apiCalls.length > 0 && (
-        <div className="space-y-2">
-          <h5 className="text-sm font-medium text-foreground">
-            API Calls <span className="text-muted-foreground">({apiCalls.length})</span>
-          </h5>
-          <div className="max-h-64 overflow-y-auto space-y-1 pr-2">
-            {apiCalls.map(call => (
-              <ApiCallItem key={call.id} call={call} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Error */}
+      {/* Error message */}
       {error && (
         <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
           <div className="flex items-start gap-2">
@@ -287,73 +355,51 @@ function WorkflowProgress({
         </div>
       )}
 
-      {/* Completion message */}
-      {currentStep === 'completed' && (
-        <div className="space-y-4">
-          {/* Success header */}
-          <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-lg font-semibold text-green-600 mb-1">
-                  Your project is ready!
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Test it by chatting with the model and the {demo.displayName.toLowerCase()} in RAG.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Processing stats */}
-          {processingResult && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-lg bg-accent/50 border border-accent">
-                <p className="text-xs text-muted-foreground mb-1">Files Processed</p>
-                <p className="text-2xl font-semibold text-foreground">
-                  {processingResult.totalFiles}
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-accent/50 border border-accent">
-                <p className="text-xs text-muted-foreground mb-1">Strategy</p>
-                <p className="text-sm font-medium text-foreground truncate" title={processingResult.parsers[0]}>
-                  {processingResult.parsers[0] || 'default'}
-                </p>
-              </div>
+      {/* Collapsed API Calls */}
+      {apiCalls.length > 0 && (
+        <div className="border border-accent rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowApiCalls(!showApiCalls)}
+            className="w-full flex items-center justify-between p-3 bg-accent/30 hover:bg-accent/50 transition-colors"
+          >
+            <span className="text-sm font-medium text-foreground">
+              API Calls <span className="text-muted-foreground">({apiCalls.length})</span>
+            </span>
+            {showApiCalls ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+          
+          {showApiCalls && (
+            <div className="p-3 space-y-1 max-h-64 overflow-y-auto">
+              {apiCalls.map(call => (
+                <ApiCallItem key={call.id} call={call} />
+              ))}
             </div>
           )}
-
-          {/* Sample questions */}
-          <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
-            <p className="text-sm font-medium text-foreground mb-3">
-              Try these sample questions to see professional answers:
-            </p>
-            <ul className="space-y-2">
-              {demo.sampleQuestions.slice(0, 4).map((q, i) => (
-                <li key={i} className="text-sm text-foreground flex items-start gap-2">
-                  <span className="text-primary font-semibold mt-0.5 shrink-0">{i + 1}.</span>
-                  <span className="italic text-muted-foreground">&ldquo;{q}&rdquo;</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Close to start chatting */}
-          <div className="text-center p-3 rounded-lg bg-accent/30 border border-accent/50">
-            <p className="text-sm text-muted-foreground">
-              👆 Close this modal to start chatting
-            </p>
-          </div>
         </div>
       )}
     </div>
   )
 }
 
-export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
+export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoModalProps & { autoStartDemoId?: string | null }) {
   const [selectedDemo, setSelectedDemo] = useState<DemoConfig | null>(null)
-  const { currentStep, lastValidStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
+  const { currentStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
     useDemoWorkflow()
+
+  // Auto-start demo if provided
+  React.useEffect(() => {
+    if (isOpen && autoStartDemoId && !selectedDemo && currentStep === 'idle') {
+      const demo = AVAILABLE_DEMOS.find(d => d.id === autoStartDemoId)
+      if (demo) {
+        handleSelectDemo(demo)
+      }
+    }
+  }, [isOpen, autoStartDemoId, selectedDemo, currentStep])
+
 
   const handleSelectDemo = (demo: DemoConfig) => {
     setSelectedDemo(demo)
@@ -368,44 +414,78 @@ export function DemoModal({ isOpen, onClose, namespace }: DemoModalProps) {
     onClose()
   }
 
+  const handleRetry = () => {
+    if (selectedDemo) {
+      reset()
+      startDemo(selectedDemo, namespace)
+    }
+  }
+
   const canClose = currentStep === 'idle' || currentStep === 'completed' || currentStep === 'error'
+
+  // Dynamic title and description based on state
+  const getModalContent = () => {
+    if (!selectedDemo) {
+      return {
+        title: 'Create Demo Project',
+        description: 'Choose a demo to instantly create a fully-configured AI assistant with knowledge base'
+      }
+    }
+    if (currentStep === 'completed') {
+      return {
+        title: 'Demo project created!',
+        description: 'Your AI assistant is ready to use with the demo knowledge base'
+      }
+    }
+    if (currentStep === 'error') {
+      return {
+        title: 'Project creation failed',
+        description: 'Something went wrong while creating your demo project'
+      }
+    }
+    return {
+      title: 'Creating demo project...',
+      description: 'Watch your demo project being created in real-time'
+    }
+  }
+
+  const { title, description } = getModalContent()
+
 
   return (
     <Dialog open={isOpen} onOpenChange={canClose ? handleClose : undefined}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Demo Project</DialogTitle>
-          <DialogDescription>
-            {!selectedDemo
-              ? 'Choose a pre-configured demo to explore LlamaFarm capabilities'
-              : 'Watch your demo project being created in real-time'}
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <div className="mt-4">
+        <div>
           {!selectedDemo ? (
             <DemoSelector onSelect={handleSelectDemo} />
           ) : (
             <WorkflowProgress
               demo={selectedDemo}
               currentStep={currentStep}
-              lastValidStep={lastValidStep}
               progress={progress}
               error={error}
               apiCalls={apiCalls}
               projectName={projectName}
               processingResult={processingResult}
+              onStartChat={handleClose}
+              onRetry={handleRetry}
             />
           )}
         </div>
 
-        {canClose && (
+        {/* Only show close button when not completed or error (those states have their own buttons) */}
+        {canClose && currentStep !== 'completed' && currentStep !== 'error' && (
           <div className="flex justify-end pt-4 border-t">
             <button
               onClick={handleClose}
               className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
             >
-              {currentStep === 'completed' ? 'Start Chatting' : 'Close'}
+              Close
             </button>
           </div>
         )}

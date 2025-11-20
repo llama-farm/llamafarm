@@ -1,11 +1,10 @@
 [project]
-name = "transformers-runtime"
+name = "universal-runtime"
 version = "1.0.0"
 description = "OpenAI-compatible API for HuggingFace models"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-  "torch>=2.0.0",
   "transformers>=4.35.0",
   "diffusers>=0.25.0",
   "accelerate>=0.25.0",
@@ -18,6 +17,10 @@ dependencies = [
   "openai>=1.0.0",
   "llamafarm-common",
   "structlog>=24.0.0",
+  "psutil>=5.9.0",
+  "pyyaml>=6.0",
+  "gguf>=0.17.1",
+  "hf-transfer>=0.1.9",
 ]
 
 [dependency-groups]
@@ -29,10 +32,19 @@ dev = [
   "pytest-timeout>=2.1.0",
   "httpx>=0.24.0",
   "numpy>=1.24.0",
+  # For testing: torch and llama-cpp-python will use CPU wheels via UV_EXTRA_INDEX_URL in CI
+  "torch>=2.0.0",
+  "llama-cpp-python>=0.3.0",
 ]
 
 [project.optional-dependencies]
-xformers = ["xformers>=0.0.22"]
+# Hardware-accelerated packages installed separately via CLI based on detected hardware
+# These are not installed during 'uv sync' to avoid compilation dependencies
+# Note: torch and llama-cpp-python are now in dev group for testing
+gpu = ["torch>=2.0.0", "llama-cpp-python>=0.3.0"]
+# xformers is GPU-only and must be installed manually when needed:
+#   uv pip install xformers
+# (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
 
 [build-system]
 requires = ["hatchling"]

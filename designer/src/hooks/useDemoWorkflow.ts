@@ -65,7 +65,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
   const [error, setError] = useState<string | null>(null)
   const [apiCalls, setApiCalls] = useState<ApiCall[]>([])
   const [projectName, setProjectName] = useState<string | null>(null)
-  const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null)
+  const [processingResult, setProcessingResult] =
+    useState<ProcessingResult | null>(null)
 
   // Wrapper to update both currentStep and lastValidStep (except for error state)
   const updateStep = (step: DemoStep) => {
@@ -79,7 +80,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
     const newCall: ApiCall = {
       ...call,
       id: Math.random().toString(36).substring(7),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
     setApiCalls(prev => [...prev, newCall])
     return newCall.id
@@ -109,7 +110,13 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
   const startDemo = useCallback(
     async (demo: DemoConfig, namespace: string) => {
+      // Always reset state completely before starting
       reset()
+
+      // Force refresh the projects list to get accurate numbering
+      await queryClient.invalidateQueries({
+        queryKey: projectKeys.list(namespace),
+      })
 
       try {
         // Step 1: Fetch demo config (10%)
@@ -120,13 +127,15 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'GET',
           endpoint: demo.configPath,
           status: 'pending',
-          description: 'Fetching demo configuration'
+          description: 'Fetching demo configuration',
         })
 
         const configStart = Date.now()
         const configResponse = await fetch(demo.configPath)
         if (!configResponse.ok) {
-          throw new Error(`Failed to fetch config: ${configResponse.statusText}`)
+          throw new Error(
+            `Failed to fetch config: ${configResponse.statusText}`
+          )
         }
         const configText = await configResponse.text()
         const configData = YAML.parse(configText)
@@ -134,17 +143,28 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         updateApiCall(configCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - configStart
+          duration: Date.now() - configStart,
         })
 
         setProgress(20)
 
         // Step 2: Generate unique project name
-        // Find highest demo-{n} number
+        // Fetch fresh project list (we invalidated cache at start)
+        await new Promise(resolve => setTimeout(resolve, 500)) // Small delay to ensure cache is cleared
         const existingProjects = await projectService.listProjects(namespace)
+
+        console.log(
+          `📋 Found ${existingProjects.projects.length} existing projects`
+        )
+
         const demoProjects = existingProjects.projects
           .map(p => p.name)
           .filter(name => name.startsWith(`${demo.name}-`))
+
+        console.log(
+          `📋 Found ${demoProjects.length} existing demo projects:`,
+          demoProjects
+        )
 
         const numbers = demoProjects
           .map(name => {
@@ -155,6 +175,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1
         const newProjectName = `${demo.name}-${nextNumber}`
+
+        console.log(`✨ Creating new demo project: ${newProjectName}`)
         setProjectName(newProjectName)
 
         // Step 3: Create project (30%)
@@ -165,18 +187,18 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'POST',
           endpoint: `/v1/projects/${namespace}`,
           status: 'pending',
-          description: `Creating project: ${newProjectName}`
+          description: `Creating project: ${newProjectName}`,
         })
 
         const createStart = Date.now()
         await projectService.createProject(namespace, {
-          name: newProjectName
+          name: newProjectName,
         })
 
         updateApiCall(createCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - createStart
+          duration: Date.now() - createStart,
         })
 
         setProgress(40)
@@ -186,18 +208,18 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'PUT',
           endpoint: `/v1/projects/${namespace}/${newProjectName}`,
           status: 'pending',
-          description: 'Applying demo configuration'
+          description: 'Applying demo configuration',
         })
 
         const updateStart = Date.now()
         await projectService.updateProject(namespace, newProjectName, {
-          config: configData
+          config: configData,
         })
 
         updateApiCall(updateCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - updateStart
+          duration: Date.now() - updateStart,
         })
 
         setProgress(55)
@@ -215,7 +237,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
             method: 'POST',
             endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/data`,
             status: 'pending',
-            description: `Uploading ${demoFile.filename} (${i + 1}/${fileCount})`
+            description: `Uploading ${demoFile.filename} (${i + 1}/${fileCount})`,
           })
 
           const uploadStart = Date.now()
@@ -226,7 +248,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
             throw new Error(`Failed to fetch file: ${demoFile.filename}`)
           }
           const fileBlob = await fileResponse.blob()
-          const file = new File([fileBlob], demoFile.filename, { type: demoFile.type })
+          const file = new File([fileBlob], demoFile.filename, {
+            type: demoFile.type,
+          })
 
           // Upload to dataset
           await datasetService.uploadFileToDataset(
@@ -239,11 +263,14 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           updateApiCall(uploadCallId, {
             status: 'success',
             statusCode: 200,
-            duration: Date.now() - uploadStart
+            duration: Date.now() - uploadStart,
           })
         }
 
         setProgress(80)
+
+        // Small delay to ensure backend is ready (file metadata written, etc.)
+        await new Promise(resolve => setTimeout(resolve, 1000))
 
         // Step 6: Process dataset (90%)
         updateStep('processing_dataset')
@@ -253,10 +280,24 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           method: 'POST',
           endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/process`,
           status: 'pending',
-          description: 'Processing dataset (embedding & indexing)'
+          description: 'Processing dataset (embedding & indexing)',
         })
 
         const processStart = Date.now()
+        console.log(
+          `🚀 Starting dataset processing for project: ${newProjectName}, dataset: ${demo.datasetName}`
+        )
+
+        // Verify project exists before processing
+        try {
+          await projectService.getProject(namespace, newProjectName)
+        } catch (err) {
+          console.error('Project verification failed:', err)
+          throw new Error(
+            `Project ${newProjectName} was created but cannot be found. Please try again.`
+          )
+        }
+
         const processResult = await datasetService.processDataset(
           namespace,
           newProjectName,
@@ -266,6 +307,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Poll for completion
         let taskResult: any = null
         if (processResult.task_id) {
+          console.log(
+            `📋 Received task ID: ${processResult.task_id} for project: ${newProjectName}`
+          )
           let completed = false
           let attempts = 0
           const maxAttempts = 60 // 2 minutes max
@@ -279,28 +323,61 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
               processResult.task_id
             )
 
+            console.log(
+              `📊 Task ${processResult.task_id} status: ${taskStatus.state} (attempt ${attempts + 1}/${maxAttempts})`
+            )
+
             if (taskStatus.state === 'SUCCESS') {
               completed = true
               taskResult = taskStatus.result
             } else if (taskStatus.state === 'FAILURE') {
-              throw new Error('Dataset processing failed')
+              // Extract detailed error message from task response
+              console.error('Dataset processing failed:', {
+                error: taskStatus.error,
+                traceback: taskStatus.traceback,
+                result: taskStatus.result,
+              })
+
+              // Provide user-friendly error message
+              let errorMsg = 'Dataset processing failed'
+              if (taskStatus.error) {
+                // Check for common error patterns
+                if (
+                  taskStatus.error.includes('not found') ||
+                  taskStatus.error.includes('deleted')
+                ) {
+                  errorMsg =
+                    'Project was deleted or is unavailable. This may be due to a stale background task. Please try again.'
+                } else {
+                  // Truncate very long errors for display
+                  errorMsg =
+                    taskStatus.error.length > 200
+                      ? taskStatus.error.substring(0, 200) + '...'
+                      : taskStatus.error
+                }
+              }
+
+              throw new Error(errorMsg)
             }
 
             // Update progress during processing (90-98%)
-            const processingProgress = 90 + Math.min(attempts / maxAttempts * 8, 8)
+            const processingProgress =
+              90 + Math.min((attempts / maxAttempts) * 8, 8)
             setProgress(processingProgress)
             attempts++
           }
 
           if (!completed) {
-            throw new Error('Dataset processing timed out')
+            throw new Error(
+              'Dataset processing timed out - the server may still be processing in the background. Please check the RAG page.'
+            )
           }
         }
 
         updateApiCall(processCallId, {
           status: 'success',
           statusCode: 200,
-          duration: Date.now() - processStart
+          duration: Date.now() - processStart,
         })
 
         setProgress(100)
@@ -314,7 +391,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           totalFiles,
           totalChunks: 0, // Backend doesn't aggregate this yet
           parsers: [strategy],
-          embedder: null
+          embedder: null,
         })
 
         // Mark as completed
@@ -328,7 +405,6 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         // Navigate to test page immediately - modal will stay open over the chat page
         navigate('/chat/test', { state: { fromDemo: true } })
-
       } catch (err) {
         console.error('Demo creation failed:', err)
         setCurrentStep('error')
@@ -348,6 +424,6 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
     processingResult,
     startDemo,
     reset,
-    navigateToChat
+    navigateToChat,
   }
 }

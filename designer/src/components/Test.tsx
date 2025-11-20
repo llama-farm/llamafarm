@@ -207,7 +207,7 @@ const Test = () => {
   }
 
   const [mode, setMode] = useModeWithReset('designer')
-  
+
   // Get active project and config for unsaved changes checking
   const activeProject = useActiveProject()
   const { data: projectDetail } = useProject(
@@ -215,20 +215,19 @@ const Test = () => {
     activeProject?.project || '',
     !!activeProject
   )
-  const projectConfig = (projectDetail as any)?.project?.config as ProjectConfig | undefined
-  
+  const projectConfig = (projectDetail as any)?.project?.config as
+    | ProjectConfig
+    | undefined
+
   // Use config pointer to handle mode changes with unsaved changes check
-  const getRootLocation = useCallback(
-    () => ({ type: 'root' as const }),
-    []
-  )
+  const getRootLocation = useCallback(() => ({ type: 'root' as const }), [])
   const { configPointer, handleModeChange } = useConfigPointer({
     mode,
     setMode,
     config: projectConfig,
     getLocation: getRootLocation,
   })
-  
+
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
   const [showReferences, setShowReferences] = useState<boolean>(() => {
@@ -241,11 +240,7 @@ const Test = () => {
     const v = localStorage.getItem('lf_test_showGenSettings')
     return v == null ? false : v === 'true'
   })
-  const [showPrompts, setShowPrompts] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    const v = localStorage.getItem('lf_test_showPrompts')
-    return v == null ? false : v === 'true'
-  })
+  const showPrompts = false
   const [showThinking, setShowThinking] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     const v = localStorage.getItem('lf_test_showThinking')
@@ -318,10 +313,6 @@ const Test = () => {
   }, [showGenSettings])
   useEffect(() => {
     if (typeof window === 'undefined') return
-    localStorage.setItem('lf_test_showPrompts', String(showPrompts))
-  }, [showPrompts])
-  useEffect(() => {
-    if (typeof window === 'undefined') return
     localStorage.setItem('lf_test_showThinking', String(showThinking))
   }, [showThinking])
   useEffect(() => {
@@ -388,11 +379,11 @@ const Test = () => {
 
       {/* Settings bar (designer mode only) */}
       {mode === 'designer' && (
-        <div className="mb-4 flex flex-col lg:flex-row lg:flex-wrap items-stretch lg:items-start gap-3">
-          <div className="flex-1 lg:min-w-[560px] rounded-xl bg-muted/30 border border-border px-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-2 lg:gap-0 h-auto lg:h-11 py-2 lg:py-0">
-            {/* Toggles group with wrapping; includes Allow ranking so it wraps on small screens */}
-            <div className="flex flex-wrap items-center gap-2 md:gap-3 gap-y-2 text-xs min-w-0 w-full">
-              <label className="inline-flex items-center gap-2">
+        <div className="mb-4 flex flex-col xl:flex-row xl:flex-wrap items-stretch xl:items-start gap-3">
+          <div className="flex-1 xl:min-w-[480px] rounded-xl bg-muted/30 border border-border px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 min-h-11 py-2 sm:py-0">
+            {/* Toggles group - no wrapping to prevent awkward breaks */}
+            <div className="flex flex-nowrap items-center gap-3 text-xs min-w-0 overflow-x-auto w-full">
+              <label className="inline-flex items-center gap-2 flex-shrink-0">
                 <Checkbox
                   id="show-processed"
                   checked={showReferences}
@@ -404,17 +395,7 @@ const Test = () => {
                   Show referenced chunks
                 </span>
               </label>
-              <label className="inline-flex items-center gap-2">
-                <Checkbox
-                  id="show-prompts"
-                  checked={showPrompts}
-                  onCheckedChange={(v: boolean | 'indeterminate') =>
-                    setShowPrompts(Boolean(v))
-                  }
-                />
-                <span className="whitespace-nowrap">Show prompts sent</span>
-              </label>
-              <label className="inline-flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 flex-shrink-0">
                 <Checkbox
                   id="show-thinking"
                   checked={showThinking}
@@ -425,7 +406,7 @@ const Test = () => {
                 <span className="whitespace-nowrap">Show thinking steps</span>
               </label>
               {/* Show generation settings toggle moved into the drawer */}
-              <div className="flex items-center gap-2 lg:ml-auto">
+              <div className="flex items-center gap-2 sm:ml-auto flex-shrink-0">
                 <span className="text-muted-foreground whitespace-nowrap">
                   Allow ranking
                 </span>
@@ -440,7 +421,7 @@ const Test = () => {
               </div>
             </div>
           </div>
-          <div className="w-full lg:basis-[640px] lg:flex-none flex flex-col lg:flex-row gap-2">
+          <div className="w-full xl:basis-[640px] xl:flex-none flex flex-col sm:flex-row gap-2">
             <div className="flex-1 relative">
               {isPanelOpen ? (
                 <button

@@ -296,6 +296,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        n_ctx: int | None = None,
     ) -> LFChatCompletion:
         # Check if echo mode is enabled
         if settings.lf_echo_mode:
@@ -347,7 +348,16 @@ class ProjectChatService:
                 raise
 
         try:
-            response = await chat_agent.run_async(messages=messages, tools=tools)
+            # Build extra_body dict for runtime-specific parameters
+            extra_body = {}
+            if n_ctx is not None:
+                extra_body["n_ctx"] = n_ctx
+
+            response = await chat_agent.run_async(
+                messages=messages,
+                tools=tools,
+                extra_body=extra_body if extra_body else None,
+            )
 
             # Log response (handle both dict and object responses)
             if hasattr(response, "model_dump_json"):
@@ -393,6 +403,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        n_ctx: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
 
@@ -455,8 +466,15 @@ class ProjectChatService:
         first_token_logged = False
 
         try:
+            # Build extra_body dict for runtime-specific parameters
+            extra_body = {}
+            if n_ctx is not None:
+                extra_body["n_ctx"] = n_ctx
+
             async for chunk in chat_agent.run_async_stream(
-                messages=messages, tools=tools
+                messages=messages,
+                tools=tools,
+                extra_body=extra_body if extra_body else None,
             ):
                 # Log time to first token (only once)
                 if not first_token_logged and event_logger:
