@@ -103,9 +103,11 @@ class LFAgentClientOpenAI(LFAgentClient):
                 else dict(self._model_config.extra_body)
             )
 
+        # Project-level config takes precedence over per-request params
+        # to ensure enforced limits (n_ctx, gguf_quantization, etc.) can't be bypassed
         extra_body_params = {
-            **config_extra_body,
             **(extra_body or {}),
+            **config_extra_body,
         }
 
         # Create non-streaming request
@@ -177,9 +179,11 @@ class LFAgentClientOpenAI(LFAgentClient):
                 else dict(self._model_config.extra_body)
             )
 
+        # Project-level config takes precedence over per-request params
+        # to ensure enforced limits (n_ctx, gguf_quantization, etc.) can't be bypassed
         extra_body_params = {
-            **config_extra_body,
             **(extra_body or {}),
+            **config_extra_body,
         }
 
         stream_param: Literal[True] = True
