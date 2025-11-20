@@ -136,12 +136,15 @@ jobs:
           echo "Build artifacts in release/${{ steps.version.outputs.version }}:"
           ls -lh "release/${{ steps.version.outputs.version }}/" || echo "No artifacts found"
 
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: llamafarm-desktop-macos-${{ matrix.arch }}-${{ steps.version.outputs.version }}
+          name: llamafarm-desktop-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.version.outputs.version }}
           path: |
-            electron-app/release/${{ steps.version.outputs.version }}/*
+            electron-app/release/${{ steps.version.outputs.version }}/*.AppImage
+            electron-app/release/${{ steps.version.outputs.version }}/*.deb
+            electron-app/release/${{ steps.version.outputs.version }}/*.exe
+            electron-app/release/${{ steps.version.outputs.version }}/*.dmg
           retention-days: 30
           if-no-files-found: warn
 
