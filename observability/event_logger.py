@@ -184,6 +184,16 @@ class EventLogger:
         if self._summary_data:
             full_event |= self._summary_data
 
+        # Calculate time_to_first_token_ms if llm_first_token event exists
+        first_token_event = next(
+            (e for e in self._events if e["event_name"] == "llm_first_token"),
+            None
+        )
+        if first_token_event:
+            first_token_time = datetime.fromisoformat(first_token_event["timestamp"])
+            time_to_first_token_ms = (first_token_time - self._start_time).total_seconds() * 1000
+            full_event["time_to_first_token_ms"] = round(time_to_first_token_ms, 2)
+
         # Set timestamp AFTER merge to ensure it's never overwritten by summary_data
         # This field is required by EventLogService.list_events() and EventLogService.get_event()
         full_event["timestamp"] = (

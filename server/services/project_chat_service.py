@@ -408,12 +408,31 @@ class ProjectChatService:
             )
 
         logger.info("Running async stream")
+
+        # Log LLM inference start
+        self._log_event(event_logger, "llm_inference_start", {
+            "model": chat_agent.model_name,
+        })
+
         event_failed = False
+        first_token_logged = False
+
         try:
             async for chunk in chat_agent.run_async_stream(
                 messages=messages, tools=tools
             ):
+                # Log time to first token (only once)
+                if not first_token_logged and event_logger:
+                    self._log_event(event_logger, "llm_first_token", {})
+                    first_token_logged = True
+
                 yield chunk
+
+            # Log LLM inference complete after streaming finishes
+            self._log_event(event_logger, "llm_inference_complete", {
+                "finish_reason": "stop",
+            })
+
         except Exception:
             event_failed = True
             raise
