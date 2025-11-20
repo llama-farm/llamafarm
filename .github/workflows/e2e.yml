@@ -47,6 +47,10 @@ jobs:
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
+      # Determine the repository to use: PR head repo for forks, otherwise base repo
+      ARTIFACT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+      # Determine the ref to use: PR head ref for PRs, otherwise current ref
+      ARTIFACT_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
     steps:
       # ============================================================
@@ -55,8 +59,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          # For PRs from forks, checkout from the head repository
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           # For workflow_run, checkout the commit that triggered the build
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # For PRs, checkout the head ref
+          ref: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
 
       # ============================================================
       # Download Pre-built CLI Binary
@@ -76,9 +83,12 @@ jobs:
 
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             echo "Checking for artifact (${ELAPSED}s elapsed)..."
+            echo "Repository: ${{ env.ARTIFACT_REPO }}"
+            echo "Commit: ${COMMIT}"
 
             # Get artifact info including run ID
-            ARTIFACT_INFO=$(gh api repos/${{ github.repository }}/actions/artifacts \
+            # Use PR head repository for forks, otherwise use base repository
+            ARTIFACT_INFO=$(gh api repos/${{ env.ARTIFACT_REPO }}/actions/artifacts \
               --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | select(.workflow_run.head_sha == \"${COMMIT}\") | {id: .id, run_id: .workflow_run.id}" \
               2>/dev/null | head -n 1)
 
@@ -105,6 +115,7 @@ jobs:
           run_id: ${{ github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id }}
           name: ${{ matrix.artifact }}
           path: cli/
+          repository: ${{ env.ARTIFACT_REPO }}
           if_no_artifact_found: fail
 
       - name: Download CLI binary artifact (search by commit)
@@ -112,9 +123,10 @@ jobs:
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
-          commit: ${{ github.sha }}
+          commit: ${{ github.event.pull_request.head.sha || github.sha }}
           name: ${{ matrix.artifact }}
           path: cli/
+          repository: ${{ env.ARTIFACT_REPO }}
           search_artifacts: true
           if_no_artifact_found: fail
 
