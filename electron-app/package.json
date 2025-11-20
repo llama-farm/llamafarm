@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "LlamaFarm Desktop - Local AI Platform",
   "main": "dist/main/index.js",
-  "author": "support@llamafarm.dev",
+  "author": "LlamaFarm Team <support@llamafarm.dev>",
   "homepage": "https://llamafarm.dev",
   "repository": {
     "type": "git",
