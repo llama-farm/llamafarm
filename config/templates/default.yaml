@@ -11,7 +11,7 @@ runtime:
       description: "Default Universal model"
       provider: universal
       model: unsloth/gemma-3-1b-it-gguf
-      model_api_parameters:
+      extra_body:
         gguf_quantization: "Q4_K_M"
       default: true
       prompt_format: unstructured
