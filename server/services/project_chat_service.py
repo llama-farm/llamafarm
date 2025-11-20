@@ -331,10 +331,29 @@ class ProjectChatService:
         try:
             response = await chat_agent.run_async(messages=messages, tools=tools)
 
+            # Log response (handle both dict and object responses)
+            if hasattr(response, "model_dump_json"):
+                response_data = response.model_dump_json()
+            elif hasattr(response, "choices"):
+                # Pydantic object but use dict serialization
+                response_content = response.choices[0].message.content if response.choices else ""
+                response_data = {
+                    "response_length": len(response_content),
+                    "finish_reason": response.choices[0].finish_reason if response.choices else "unknown",
+                }
+            else:
+                # Handle dict response (from tests)
+                choices = response.get("choices", [])
+                response_content = choices[0].get("message", {}).get("content", "") if choices else ""
+                response_data = {
+                    "response_length": len(response_content),
+                    "finish_reason": choices[0].get("finish_reason", "unknown") if choices else "unknown",
+                }
+
             self._log_event(
                 event_logger,
                 "response_generated",
-                response.model_dump_json(),
+                response_data,
             )
 
             self._complete_event(event_logger)
