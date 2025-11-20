@@ -360,8 +360,8 @@ class ProjectChatService:
             )
 
             # Log response (handle both dict and object responses)
-            if hasattr(response, "model_dump_json"):
-                response_data = response.model_dump_json()
+            if hasattr(response, "model_dump"):
+                response_data = response.model_dump(mode="json")
             elif hasattr(response, "choices"):
                 # Pydantic object but use dict serialization
                 response_content = response.choices[0].message.content if response.choices else ""
