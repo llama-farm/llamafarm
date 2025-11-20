@@ -89,10 +89,6 @@ jobs:
         working-directory: electron-app
         run: npm ci || npm install
 
-      - name: Install Linux build tools (for RPM)
-        if: matrix.platform == 'linux'
-        run: brew install rpm
-
       - name: Determine version
         id: version
         run: |
@@ -145,7 +141,7 @@ jobs:
         with:
           name: llamafarm-desktop-macos-${{ matrix.arch }}-${{ steps.version.outputs.version }}
           path: |
-            electron-app/release/${{ steps.version.outputs.version }}/*.dmg
+            electron-app/release/${{ steps.version.outputs.version }}/*
           retention-days: 30
           if-no-files-found: warn
 

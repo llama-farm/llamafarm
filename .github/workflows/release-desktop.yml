@@ -58,7 +58,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }} (${{ matrix.arch }})
     needs: build-designer
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     strategy:
       fail-fast: false
@@ -66,18 +66,12 @@ jobs:
         include:
           - platform: macos
             arch: universal
-            os: macos-latest
-            script: dist:mac
 
           - platform: linux
-            arch: x64
-            os: ubuntu-latest
-            script: dist:linux
+            arch: amd64
 
           - platform: windows
-            arch: x64
-            os: windows-latest
-            script: dist:win
+            arch: amd64
 
     steps:
       - name: Checkout code
@@ -85,7 +79,6 @@ jobs:
 
       - name: Get version
         id: version
-        shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             VERSION="${{ github.event.inputs.version }}"
@@ -117,7 +110,6 @@ jobs:
 
       - name: Update app version in package.json
         working-directory: electron-app
-        shell: bash
         run: |
           VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
 
@@ -132,7 +124,6 @@ jobs:
 
       - name: Build and Sign Electron app
         working-directory: electron-app
-        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS signing
@@ -153,17 +144,17 @@ jobs:
           fi
 
           echo "Building and signing Electron app for ${{ matrix.platform }}-${{ matrix.arch }}..."
-          npm run ${{ matrix.script }}
+          npm run build
+          npx electron-builder --${{ matrix.platform }} --${{ matrix.arch == 'amd64' && 'x64' || matrix.arch }}
           echo "✅ Electron app built successfully"
 
       - name: Generate checksums
         working-directory: electron-app
-        shell: bash
         run: |
           VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
           cd "release/${VERSION_NO_V}"
 
-          # Generate SHA256 for all distributable files
+          # Generate SHA256 for all distributable files (using shasum on macOS)
           if [[ "${{ matrix.platform }}" == "macos" ]]; then
             for file in *.dmg *.zip; do
               if [ -f "$file" ]; then
@@ -172,16 +163,16 @@ jobs:
               fi
             done
           elif [[ "${{ matrix.platform }}" == "linux" ]]; then
-            for file in *.AppImage *.deb *.rpm; do
+            for file in *.AppImage *.deb; do
               if [ -f "$file" ]; then
-                sha256sum "$file" > "$file.sha256"
+                shasum -a 256 "$file" > "$file.sha256"
                 echo "✅ Generated checksum for $file"
               fi
             done
           elif [[ "${{ matrix.platform }}" == "windows" ]]; then
             for file in *.exe; do
               if [ -f "$file" ]; then
-                sha256sum "$file" > "$file.sha256"
+                shasum -a 256 "$file" > "$file.sha256"
                 echo "✅ Generated checksum for $file"
               fi
             done
@@ -189,7 +180,6 @@ jobs:
 
       - name: List build artifacts
         working-directory: electron-app
-        shell: bash
         run: |
           VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
           echo "Build artifacts in release/${VERSION_NO_V}:"
@@ -200,7 +190,11 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.version }}
           files: |
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.exe
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.deb
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.AppImage
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.sha256
           fail_on_unmatched_files: false
           append_body: false
 
@@ -245,20 +239,16 @@ jobs:
             ### Linux
             Download the appropriate package for your Linux distribution:
             - **AppImage** (Universal): `LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage`
-            - **Debian/Ubuntu**: `llamafarm_${{ steps.version.outputs.version_no_v }}_amd64.deb`
-            - **Fedora/RHEL**: `llamafarm-${{ steps.version.outputs.version_no_v }}.x86_64.rpm`
+            - **Debian/Ubuntu**: `llamafarm-desktop_${{ steps.version.outputs.version_no_v }}_amd64.deb`
 
             **Installation:**
             ```bash
-            # AppImage
+            # AppImage (works on all distributions)
             chmod +x LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage
             ./LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage
 
             # Debian/Ubuntu
-            sudo dpkg -i llamafarm_${{ steps.version.outputs.version_no_v }}_amd64.deb
-
-            # Fedora/RHEL
-            sudo rpm -i llamafarm-${{ steps.version.outputs.version_no_v }}.x86_64.rpm
+            sudo dpkg -i llamafarm-desktop_${{ steps.version.outputs.version_no_v }}_amd64.deb
             ```
 
             ### Windows
