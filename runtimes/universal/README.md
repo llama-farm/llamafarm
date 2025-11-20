@@ -164,7 +164,7 @@ runtime:
     - name: default
       provider: universal
       model: unsloth/Qwen3-1.7B-GGUF
-      model_api_parameters:
+      extra_body:
         gguf_quantization: "Q8_0"  # Use higher quality 8-bit quantization
 ```
 
@@ -220,7 +220,7 @@ The Universal Runtime intelligently determines the optimal context window size f
 
 Context size is determined in this order (highest to lowest):
 
-1. **User Configuration** (via `llamafarm.yaml` → `model_api_parameters.n_ctx` or API `extra_body`)
+1. **User Configuration** (via `llamafarm.yaml` → `extra_body.n_ctx` or API `extra_body`)
    - Explicit value from project configuration or API request
    - Highest priority - respects user's explicit choice
 
@@ -297,7 +297,7 @@ runtime:
     - name: my-model
       provider: universal
       model: unsloth/Qwen3-4B-GGUF
-      model_api_parameters:
+      extra_body:
         n_ctx: 16384  # Explicit context size
 ```
 

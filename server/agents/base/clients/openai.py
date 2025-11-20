@@ -92,17 +92,21 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Prepare API parameters
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
-        # However, some Universal Runtime-specific params need to go in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
-        # Extract Universal Runtime-specific parameters to extra_body
-        universal_runtime_params = {}
-        for key in ["gguf_quantization", "n_ctx"]:
-            if key in api_params:
-                universal_runtime_params[key] = api_params.pop(key)
+        # Convert extra_body from Pydantic model to dict if needed
+        config_extra_body = {}
+        if self._model_config.extra_body:
+            config_extra_body = (
+                self._model_config.extra_body.model_dump(exclude_none=True)
+                if hasattr(self._model_config.extra_body, "model_dump")
+                else dict(self._model_config.extra_body)
+            )
 
-        # Merge with extra_body
-        extra_body_params = {**(extra_body or {}), **universal_runtime_params}
+        extra_body_params = {
+            **config_extra_body,
+            **(extra_body or {}),
+        }
 
         # Create non-streaming request
         stream_param: Literal[False] = False
@@ -162,17 +166,21 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Prepare API parameters
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
-        # However, some Universal Runtime-specific params need to go in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
-        # Extract Universal Runtime-specific parameters to extra_body
-        universal_runtime_params = {}
-        for key in ["gguf_quantization", "n_ctx"]:
-            if key in api_params:
-                universal_runtime_params[key] = api_params.pop(key)
+        # Convert extra_body from Pydantic model to dict if needed
+        config_extra_body = {}
+        if self._model_config.extra_body:
+            config_extra_body = (
+                self._model_config.extra_body.model_dump(exclude_none=True)
+                if hasattr(self._model_config.extra_body, "model_dump")
+                else dict(self._model_config.extra_body)
+            )
 
-        # Merge with extra_body
-        extra_body_params = {**(extra_body or {}), **universal_runtime_params}
+        extra_body_params = {
+            **config_extra_body,
+            **(extra_body or {}),
+        }
 
         stream_param: Literal[True] = True
         # Filter out None values from messages to avoid OpenAI validation errors
