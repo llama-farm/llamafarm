@@ -1670,6 +1670,107 @@ const Data = () => {
                 )
               }
 
+              // Step 4.5: Check and setup Ollama embedding model
+              toast({
+                message: 'Checking Ollama setup...',
+                variant: 'default',
+              })
+
+              try {
+                // Check if Ollama is running
+                const ollamaHealthResponse = await fetch('http://localhost:11434')
+                if (!ollamaHealthResponse.ok) {
+                  throw new Error('Ollama not responding')
+                }
+
+                // Extract embedding model from demo database config
+                const demoDatabase = configData.rag?.databases?.find(
+                  (db: any) => db.name === database
+                )
+                const embeddingStrategy = demoDatabase?.embedding_strategies?.[0]
+                const embeddingModel = embeddingStrategy?.config?.model
+
+                if (embeddingModel) {
+                  // Check if model exists
+                  const tagsResponse = await fetch('http://localhost:11434/api/tags')
+                  const tagsData = await tagsResponse.json()
+                  const modelExists = tagsData.models?.some(
+                    (m: any) => m.name === embeddingModel || m.name.startsWith(embeddingModel + ':')
+                  )
+
+                  if (!modelExists) {
+                    toast({
+                      message: `Pulling embedding model "${embeddingModel}"... (this may take a minute)`,
+                      variant: 'default',
+                    })
+
+                    // Pull the model
+                    const pullResponse = await fetch('http://localhost:11434/api/pull', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: embeddingModel }),
+                    })
+
+                    if (!pullResponse.ok) {
+                      throw new Error(`Failed to pull model: ${embeddingModel}`)
+                    }
+
+                    // Stream the pull progress
+                    const reader = pullResponse.body?.getReader()
+                    const decoder = new TextDecoder()
+                    
+                    if (reader) {
+                      let lastStatus = ''
+                      while (true) {
+                        const { done, value } = await reader.read()
+                        if (done) break
+                        
+                        const chunk = decoder.decode(value)
+                        const lines = chunk.split('\n').filter(line => line.trim())
+                        
+                        for (const line of lines) {
+                          try {
+                            const json = JSON.parse(line)
+                            if (json.status && json.status !== lastStatus) {
+                              lastStatus = json.status
+                              if (json.status.includes('pulling') || json.status.includes('downloading')) {
+                                const percent = json.completed && json.total 
+                                  ? Math.round((json.completed / json.total) * 100)
+                                  : null
+                                toast({
+                                  message: percent 
+                                    ? `Pulling ${embeddingModel}: ${percent}%`
+                                    : `Pulling ${embeddingModel}...`,
+                                  variant: 'default',
+                                })
+                              }
+                            }
+                          } catch (e) {
+                            // Ignore JSON parse errors
+                          }
+                        }
+                      }
+                    }
+
+                    toast({
+                      message: `Model "${embeddingModel}" ready!`,
+                      variant: 'default',
+                    })
+                  } else {
+                    toast({
+                      message: `Embedding model "${embeddingModel}" already available`,
+                      variant: 'default',
+                    })
+                  }
+                }
+              } catch (ollamaError) {
+                console.warn('Ollama check failed:', ollamaError)
+                toast({
+                  message: 'Warning: Could not verify Ollama setup. Embeddings may not work properly.',
+                  variant: 'default',
+                })
+              }
+
               // Step 5: Process dataset and wait for completion
               toast({
                 message: `Processing dataset "${name}"...`,
