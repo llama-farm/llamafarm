@@ -112,6 +112,8 @@ jobs:
       - name: Build Electron app (unsigned for PR testing)
         working-directory: electron-app
         env:
+          # GitHub token for electron-builder
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # SECURITY: Disable signing for PR builds to prevent exposing secrets to forks
           # Only release workflow (release-desktop.yml) should sign builds
           CSC_IDENTITY_AUTO_DISCOVERY: false
