@@ -36,11 +36,6 @@ runtime:
       provider: universal
       model: cross-encoder/ms-marco-MiniLM-L-6-v2
       base_url: http://127.0.0.1:11540
-      transformers:
-        device: auto
-        dtype: auto
-        trust_remote_code: true
-        model_type: reranking
 ```
 
 Then configure the retrieval strategy in your database:
@@ -140,11 +135,6 @@ runtime:
       provider: universal
       model: cross-encoder/ms-marco-MiniLM-L-6-v2
       base_url: http://127.0.0.1:11540
-      transformers:
-        device: auto
-        dtype: auto
-        trust_remote_code: true
-        model_type: reranking
 
 rag:
   databases:
@@ -379,11 +369,6 @@ runtime:
       provider: universal
       model: cross-encoder/ms-marco-MiniLM-L-6-v2
       base_url: http://127.0.0.1:11540
-      transformers:
-        device: auto
-        dtype: auto
-        trust_remote_code: true
-        model_type: reranking
 
 rag:
   databases:
@@ -586,8 +571,6 @@ runtime:
       provider: universal
       model: cross-encoder/ms-marco-MiniLM-L-6-v2
       base_url: http://127.0.0.1:11540
-      transformers:
-        model_type: reranking
 ```
 
 **Problem:** Reranking is slow
