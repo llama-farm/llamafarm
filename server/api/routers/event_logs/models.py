@@ -45,6 +45,8 @@ class EventDetail(BaseModel):
     status: str = Field(..., description="Event status")
     error: str | None = Field(None, description="Error message if failed")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    total_elapsed_time_ms: float | None = Field(None, description="Total event duration in milliseconds")
+    time_to_first_token_ms: float | None = Field(None, description="Time to first token in milliseconds (for streaming inference)")
 
 
 class ListEventsResponse(BaseModel):

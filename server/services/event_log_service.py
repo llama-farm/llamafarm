@@ -184,6 +184,8 @@ class EventLogService:
                 status=event_data["status"],
                 error=event_data.get("error"),
                 metadata=event_data.get("metadata", {}),
+                total_elapsed_time_ms=event_data.get("total_elapsed_time_ms"),
+                time_to_first_token_ms=event_data.get("time_to_first_token_ms"),
             )
 
         except Exception:
