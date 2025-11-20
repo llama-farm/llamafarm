@@ -68,7 +68,7 @@ jobs:
           commit: ${{ env.PR_HEAD_SHA }}
           name: ${{ matrix.artifact }}
           path: cli/
-          repository: ${{ env.ARTIFACT_REPO }}
+          repo: ${{ env.ARTIFACT_REPO }}
           search_artifacts: true
           if_no_artifact_found: fail
 
@@ -424,6 +424,7 @@ jobs:
           path: pr-info/pr-info.json
           retention-days: 7
           if-no-files-found: error
+          overwrite: true
 
       # ============================================================
       # Cleanup
