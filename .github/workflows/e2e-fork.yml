@@ -1,17 +1,15 @@
-name: End-to-End Tests
+name: E2E Tests (Fork PR)
+
+# Security: This workflow runs in untrusted context for PRs from forks
+# NO secrets or write permissions are exposed to fork code execution
 permissions:
   contents: read
   actions: read # Required to download artifacts from other workflows
 
 on:
-  # Trigger after CLI build completes (for main branch pushes)
-  # Note: PRs are handled by e2e-fork.yml (untrusted context)
-  workflow_run:
-    workflows: ["Build CLI"]
-    types: [completed]
+  pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
-  # Also allow manual trigger
-  workflow_dispatch:
 
 env:
   NX_NO_CLOUD: true
@@ -21,10 +19,6 @@ jobs:
     name: E2E Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # Skip e2e if CLI build failed (only for workflow_run trigger)
-    if: |
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -39,16 +33,14 @@ jobs:
           #   artifact: llamafarm-windows-amd64.exe
           #   binary: lf.exe
     env:
-      # Use the current branch/ref being tested
-      LF_VERSION_REF: ${{ github.ref_name }}
       # Use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages in CI
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
-      # Determine the repository to use: workflow_run head repo, otherwise base repo
-      ARTIFACT_REPO: ${{ github.event.workflow_run.head_repository.full_name || github.repository }}
-      # Determine the ref to use: workflow_run head branch, otherwise current ref
-      ARTIFACT_REF: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+      # Determine the repository to use: PR head repo for forks, otherwise base repo
+      ARTIFACT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+      # Use PR head SHA for security (not branch name to prevent injection)
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
     steps:
       # ============================================================
@@ -57,22 +49,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For workflow_run, checkout from the head repository
-          repository: ${{ github.event.workflow_run.head_repository.full_name || github.repository }}
-          # For workflow_run, checkout the commit that triggered the build
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # SECURITY: Use explicit SHA, not branch name to prevent injection
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Fetch only the specific commit, not the entire branch
+          fetch-depth: 1
 
       # ============================================================
       # Download Pre-built CLI Binary
       # ============================================================
-      - name: Download CLI binary artifact (from workflow_run)
-        if: github.event.workflow_run.id
+      # SECURITY: No GITHUB_TOKEN exposed to fork code execution
+      # The artifact download action will use public API access for public repos
+      # For private forks, this may fail - which is acceptable for security
+      - name: Download CLI binary artifact (search by commit)
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
-          run_id: ${{ github.event.workflow_run.id }}
+          commit: ${{ env.PR_HEAD_SHA }}
           name: ${{ matrix.artifact }}
           path: cli/
+          repository: ${{ env.ARTIFACT_REPO }}
+          search_artifacts: true
           if_no_artifact_found: fail
 
       - name: Rename binary to standard name
@@ -396,6 +393,39 @@ jobs:
           echo "All E2E tests passed!"
 
       # ============================================================
+      # Create PR metadata artifact
+      # ============================================================
+      - name: Create PR metadata
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p pr-info
+          cat > pr-info/pr-info.json <<EOF
+          {
+            "pr_number": ${{ github.event.pull_request.number }},
+            "head_sha": "${{ github.event.pull_request.head.sha }}",
+            "base_sha": "${{ github.event.pull_request.base.sha }}",
+            "head_ref": "${{ github.event.pull_request.head.ref }}",
+            "head_repo": "${{ github.event.pull_request.head.repo.full_name }}",
+            "base_repo": "${{ github.repository }}",
+            "workflow_run_id": "${{ github.run_id }}",
+            "workflow_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "conclusion": "${{ job.status }}"
+          }
+          EOF
+          echo "PR metadata created:"
+          cat pr-info/pr-info.json
+
+      - name: Upload PR metadata artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-info
+          path: pr-info/pr-info.json
+          retention-days: 7
+          if-no-files-found: error
+
+      # ============================================================
       # Cleanup
       # ============================================================
       - name: Cleanup test artifacts
@@ -457,3 +487,4 @@ jobs:
           path: ~/.llamafarm/logs/
           retention-days: 7
           if-no-files-found: warn
+
