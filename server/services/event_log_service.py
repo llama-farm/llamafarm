@@ -83,15 +83,26 @@ class EventLogService:
                 # Parse timestamp
                 timestamp = datetime.fromisoformat(event_data["timestamp"])
 
-                # Apply time filters
-                if start_time and timestamp < start_time:
-                    continue
-                if end_time and timestamp > end_time:
-                    continue
+                # Apply time filters (ensure both are timezone-aware for comparison)
+                if start_time:
+                    # Make start_time timezone-aware if it's naive
+                    if start_time.tzinfo is None:
+                        from datetime import timezone
+                        start_time = start_time.replace(tzinfo=timezone.utc)
+                    if timestamp < start_time:
+                        continue
+                if end_time:
+                    # Make end_time timezone-aware if it's naive
+                    if end_time.tzinfo is None:
+                        from datetime import timezone
+                        end_time = end_time.replace(tzinfo=timezone.utc)
+                    if timestamp > end_time:
+                        continue
 
-                # Calculate total duration
-                duration_ms = None
-                if event_data.get("events"):
+                # Get total duration (use total_elapsed_time_ms if available, not just last event)
+                duration_ms = event_data.get("total_elapsed_time_ms")
+                if duration_ms is None and event_data.get("events"):
+                    # Fallback to last event duration if total not available
                     last_event = event_data["events"][-1]
                     duration_ms = last_event.get("duration_ms")
 

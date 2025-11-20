@@ -317,7 +317,7 @@ class ProjectChatService:
                     chat_agent,
                     project_dir,
                     project_config,
-                    messages,
+                    latest_user_message.get("content", ""),
                     rag_enabled=rag_enabled,
                     database=database,
                     retrieval_strategy=retrieval_strategy,

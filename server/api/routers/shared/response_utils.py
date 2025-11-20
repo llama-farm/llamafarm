@@ -132,6 +132,9 @@ def create_streaming_response_from_iterator(
                 yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
                 await asyncio.sleep(0)
                 emitted = True
+        except asyncio.CancelledError:
+            # Re-raise cancellation so it propagates correctly
+            raise
         except Exception as e:
             # Log the error but ensure we still send [DONE] marker
             logger.error(
