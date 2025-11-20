@@ -10,7 +10,6 @@ import {
 } from '../ui/dialog'
 import { Badge } from '../ui/badge'
 import { type SuggestedDataset } from '../../data/sampleProjects'
-import { useExampleDatasets } from '../../hooks/useExamples'
 import { AVAILABLE_DEMOS } from '../../config/demos'
 
 type Kind = NonNullable<SuggestedDataset['kind']>
@@ -70,31 +69,42 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
     }
   }, [open])
 
-  const { data, isLoading, isError, refetch } = useExampleDatasets()
-
-  // Get list of demo project IDs to filter by
-  const demoProjectIds = useMemo(() => {
-    return AVAILABLE_DEMOS.map(demo => demo.id)
-  }, [])
-
+  // Transform AVAILABLE_DEMOS into dataset entries (no API needed!)
   const allDatasets: FlattenedDataset[] = useMemo(() => {
-    const rows = (data?.datasets || []) as any[]
-    // Filter to only show datasets from demo projects
-    const demoRows = rows.filter(row => demoProjectIds.includes(row.example_id))
-    return demoRows.map(row => {
-      const kind = (row.kind || undefined) as Kind | undefined
+    return AVAILABLE_DEMOS.map(demo => {
+      // Infer kind from file types
+      let kind: Kind | undefined = undefined
+      if (demo.files.length > 0) {
+        const firstType = demo.files[0].type.toLowerCase()
+        if (firstType.includes('pdf')) {
+          kind = 'pdf'
+        } else if (firstType.includes('markdown') || demo.files[0].filename.endsWith('.md')) {
+          kind = 'markdown'
+        } else if (firstType.includes('csv')) {
+          kind = 'csv'
+        } else if (firstType.includes('json')) {
+          kind = 'json'
+        } else if (firstType.includes('image')) {
+          kind = 'images'
+        }
+      }
+
+      // Calculate approximate size (for display only)
+      const fileCount = demo.files.length
+      const size = fileCount === 1 ? '~1 file' : `~${fileCount} files`
+
       return {
-        uid: `${row.example_id}:${row.name}`,
-        id: row.name,
-        name: row.name,
+        uid: `${demo.id}:${demo.datasetName}`,
+        id: demo.datasetName,
+        name: demo.datasetName,
         kind,
-        size: row.size_human,
-        projectId: row.example_id,
-        projectTitle: row.example_title || row.example_id,
-        defaultStrategy: row.strategy || mapKindToStrategy(kind),
+        size,
+        projectId: demo.id,
+        projectTitle: demo.displayName,
+        defaultStrategy: 'markdown_encyclopedia_processor', // Will be loaded from demo config
       }
     })
-  }, [data, demoProjectIds])
+  }, [])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -140,26 +150,9 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
           <div className="hidden" aria-hidden="true" />
           {/* Scroll region: always reserve scrollbar space to avoid layout jump */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 overflow-y-scroll items-stretch">
-            {isLoading ? (
-              <div className="col-span-full text-sm text-muted-foreground p-2">
-                Loading sample datasets…
-              </div>
-            ) : isError ? (
-              <div className="col-span-full text-sm text-muted-foreground p-2">
-                Could not load sample datasets. Ensure the server is running.
-                <div className="mt-2">
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-md border border-input hover:bg-accent/30"
-                    onClick={() => refetch()}
-                  >
-                    Retry
-                  </button>
-                </div>
-              </div>
-            ) : filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <div className="col-span-full text-sm text-muted-foreground p-2 self-start">
-                No datasets match your search.
+                No demo datasets match your search.
               </div>
             ) : (
               filtered.map(ds => {
