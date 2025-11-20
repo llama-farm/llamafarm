@@ -85,7 +85,7 @@ class LFAgentClient(ABC):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
-        extra_params: dict | None = None,
+        extra_body: dict | None = None,
     ) -> LFChatCompletion:
         """Simple chat without tool calling support (for backwards compatibility)."""
         pass
@@ -96,7 +96,7 @@ class LFAgentClient(ABC):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
-        extra_params: dict | None = None,
+        extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with tool calling support.
 
@@ -108,7 +108,7 @@ class LFAgentClient(ABC):
         Args:
             messages: Conversation history
             tools: Available tools (provider-agnostic format)
-            extra_params: Additional parameters to pass to the API
+            extra_body: Additional parameters to pass to the API
 
         Yields:
             StreamEvent: Either content chunks or tool call requests

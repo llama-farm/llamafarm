@@ -94,15 +94,15 @@ class ProjectChatService:
                 rag_score_threshold=rag_score_threshold,
             )
 
-        # Build extra_params dict for runtime-specific parameters
-        extra_params = {}
+        # Build extra_body dict for runtime-specific parameters
+        extra_body = {}
         if n_ctx is not None:
-            extra_params["n_ctx"] = n_ctx
+            extra_body["n_ctx"] = n_ctx
 
         return await chat_agent.run_async(
             messages=messages,
             tools=tools,
-            extra_params=extra_params if extra_params else None,
+            extra_body=extra_body if extra_body else None,
         )
 
     async def stream_chat(
@@ -143,17 +143,17 @@ class ProjectChatService:
                 rag_score_threshold=rag_score_threshold,
             )
 
-        # Build extra_params dict for runtime-specific parameters
-        extra_params = {}
+        # Build extra_body dict for runtime-specific parameters
+        extra_body = {}
         if n_ctx is not None:
-            extra_params["n_ctx"] = n_ctx
+            extra_body["n_ctx"] = n_ctx
 
         try:
             logger.info("Running async stream")
             async for chunk in chat_agent.run_async_stream(
                 messages=messages,
                 tools=tools,
-                extra_params=extra_params or None,
+                extra_body=extra_body or None,
             ):
                 yield chunk
         except Exception:

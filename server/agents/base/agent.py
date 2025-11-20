@@ -52,7 +52,7 @@ class LFAgent:
         *,
         messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
-        extra_params: dict | None = None,
+        extra_body: dict | None = None,
     ) -> LFChatCompletion:
         if messages:
             for message in messages:
@@ -64,7 +64,7 @@ class LFAgent:
         tools = self.config_tools + (tools or [])
 
         return await self._client.chat(
-            messages=messages, tools=tools, extra_params=extra_params
+            messages=messages, tools=tools, extra_body=extra_body
         )
 
     async def run_async_stream(
@@ -72,7 +72,7 @@ class LFAgent:
         *,
         messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
-        extra_params: dict | None = None,
+        extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         if messages:
             for message in messages:
@@ -83,7 +83,7 @@ class LFAgent:
         tools = self.config_tools + (tools or [])
 
         async for chunk in self._client.stream_chat(
-            messages=messages, tools=tools, extra_params=extra_params
+            messages=messages, tools=tools, extra_body=extra_body
         ):
             yield chunk
 

@@ -67,14 +67,14 @@ class LFAgentClientOpenAI(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
-        extra_params: dict | None = None,
+        extra_body: dict | None = None,
     ) -> LFChatCompletion:
         """Chat with tool calling support.
 
         Args:
             messages: Chat messages
             tools: Tool definitions
-            extra_params: Additional parameters to pass to the API (e.g., n_ctx for GGUF models)
+            extra_body: Additional parameters to pass to the API (e.g., n_ctx for GGUF models)
         """
         client = AsyncOpenAI(
             api_key=self._model_config.api_key or "",
@@ -91,7 +91,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             self._update_system_message_with_tools(messages, tools)
 
         # Prepare API parameters
-        # model_api_parameters go as direct kwargs, extra_params go in extra_body
+        # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         # However, some Universal Runtime-specific params need to go in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
@@ -101,8 +101,8 @@ class LFAgentClientOpenAI(LFAgentClient):
             if key in api_params:
                 universal_runtime_params[key] = api_params.pop(key)
 
-        # Merge with extra_params
-        extra_body_params = {**(extra_params or {}), **universal_runtime_params}
+        # Merge with extra_body
+        extra_body_params = {**(extra_body or {}), **universal_runtime_params}
 
         # Create non-streaming request
         stream_param: Literal[False] = False
@@ -136,14 +136,14 @@ class LFAgentClientOpenAI(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
-        extra_params: dict | None = None,
+        extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with native OpenAI function calling.
 
         Args:
             messages: Chat messages
             tools: Tool definitions
-            extra_params: Additional parameters to pass to the API (e.g., n_ctx for GGUF models)
+            extra_body: Additional parameters to pass to the API (e.g., n_ctx for GGUF models)
         """
 
         client = AsyncOpenAI(
@@ -161,7 +161,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             self._update_system_message_with_tools(messages, tools)
 
         # Prepare API parameters
-        # model_api_parameters go as direct kwargs, extra_params go in extra_body
+        # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         # However, some Universal Runtime-specific params need to go in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
@@ -171,8 +171,8 @@ class LFAgentClientOpenAI(LFAgentClient):
             if key in api_params:
                 universal_runtime_params[key] = api_params.pop(key)
 
-        # Merge with extra_params
-        extra_body_params = {**(extra_params or {}), **universal_runtime_params}
+        # Merge with extra_body
+        extra_body_params = {**(extra_body or {}), **universal_runtime_params}
 
         stream_param: Literal[True] = True
         # Filter out None values from messages to avoid OpenAI validation errors
