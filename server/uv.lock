@@ -803,11 +803,6 @@ name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../common" }
 
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = []
-
 [[package]]
 name = "llamafarm-config"
 version = "0.1.0"

@@ -140,30 +140,10 @@ properties:
               description: |
                 Provider-specific parameters passed in the request body's extra_body field.
                 These parameters are sent directly to the underlying provider API.
+
+                Note: For GGUF quantization, specify it in the model name using the format
+                "model_id:quantization" (e.g., "unsloth/Qwen3-4B-GGUF:Q4_K_M").
               properties:
-                gguf_quantization:
-                  type: string
-                  description: |
-                    Preferred GGUF model quantization (Universal runtime only).
-                    Examples: "Q4_K_M" (default, balanced), "Q8_0" (higher quality), "F16" (full precision).
-                    Only the selected quantization is downloaded to save disk space.
-                  examples:
-                    - "Q2_K"
-                    - "Q3_K_S"
-                    - "Q3_K_M"
-                    - "Q3_K_L"
-                    - "Q4_0"
-                    - "Q4_1"
-                    - "Q4_K_S"
-                    - "Q4_K_M"
-                    - "Q5_0"
-                    - "Q5_1"
-                    - "Q5_K_S"
-                    - "Q5_K_M"
-                    - "Q6_K"
-                    - "Q8_0"
-                    - "F16"
-                    - "F32"
                 n_ctx:
                   type: integer
                   description: |

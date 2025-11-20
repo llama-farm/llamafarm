@@ -104,7 +104,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             )
 
         # Project-level config takes precedence over per-request params
-        # to ensure enforced limits (n_ctx, gguf_quantization, etc.) can't be bypassed
+        # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
             **(extra_body or {}),
             **config_extra_body,
@@ -180,7 +180,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             )
 
         # Project-level config takes precedence over per-request params
-        # to ensure enforced limits (n_ctx, gguf_quantization, etc.) can't be bypassed
+        # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
             **(extra_body or {}),
             **config_extra_body,

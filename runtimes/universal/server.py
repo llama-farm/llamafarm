@@ -415,15 +415,17 @@ async def create_embeddings(request: EmbeddingRequest):
     OpenAI-compatible embeddings endpoint.
 
     Supports any HuggingFace encoder model for text embeddings.
+    Model names can include quantization suffix (e.g., "model:Q4_K_M").
     """
     try:
-        # Extract GGUF quantization preference from extra_body if provided
-        gguf_quantization = None
-        if request.extra_body:
-            gguf_quantization = request.extra_body.get("gguf_quantization")
+        # Import parsing utility
+        from utils.model_format import parse_model_with_quantization
+
+        # Parse model name to extract quantization if present
+        model_id, gguf_quantization = parse_model_with_quantization(request.model)
 
         model = await load_encoder(
-            request.model, task="embedding", preferred_quantization=gguf_quantization
+            model_id, task="embedding", preferred_quantization=gguf_quantization
         )
 
         # Normalize input to list

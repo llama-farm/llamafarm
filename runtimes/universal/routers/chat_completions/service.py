@@ -33,16 +33,19 @@ class ChatCompletionsService:
         """
 
         try:
+            # Import parsing utility
+            from utils.model_format import parse_model_with_quantization
+
             # Get context window size from request
             n_ctx = chat_request.n_ctx
 
-            # Extract GGUF quantization preference from extra_body if provided
-            gguf_quantization = None
-            if chat_request.extra_body:
-                gguf_quantization = chat_request.extra_body.get("gguf_quantization")
+            # Parse model name to extract quantization if present
+            model_id, gguf_quantization = parse_model_with_quantization(
+                chat_request.model
+            )
 
             model = await self.load_language(
-                chat_request.model,
+                model_id,
                 n_ctx=n_ctx,
                 preferred_quantization=gguf_quantization,
             )

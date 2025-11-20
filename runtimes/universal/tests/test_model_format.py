@@ -2,11 +2,12 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from utils.model_format import (
+from llamafarm_common import (
     parse_quantization_from_filename,
+    parse_model_with_quantization,
     select_gguf_file,
-    list_gguf_files,
 )
+from utils.model_format import list_gguf_files
 
 
 class TestParseQuantizationFromFilename:
@@ -53,6 +54,45 @@ class TestParseQuantizationFromFilename:
         filename = "unsloth_qwen3-1.7b-instruct.Q4_K_M.gguf"
         result = parse_quantization_from_filename(filename)
         assert result == "Q4_K_M"
+
+
+class TestParseModelWithQuantization:
+    """Test parsing model names with quantization suffix."""
+
+    def test_parse_with_q4_k_m(self):
+        """Test parsing model name with Q4_K_M quantization."""
+        model_name = "unsloth/Qwen3-4B-GGUF:Q4_K_M"
+        model_id, quantization = parse_model_with_quantization(model_name)
+        assert model_id == "unsloth/Qwen3-4B-GGUF"
+        assert quantization == "Q4_K_M"
+
+    def test_parse_with_lowercase_quantization(self):
+        """Test parsing with lowercase quantization (should be normalized)."""
+        model_name = "unsloth/Qwen3-4B-GGUF:q8_0"
+        model_id, quantization = parse_model_with_quantization(model_name)
+        assert model_id == "unsloth/Qwen3-4B-GGUF"
+        assert quantization == "Q8_0"
+
+    def test_parse_without_quantization(self):
+        """Test parsing model name without quantization suffix."""
+        model_name = "unsloth/Qwen3-4B-GGUF"
+        model_id, quantization = parse_model_with_quantization(model_name)
+        assert model_id == "unsloth/Qwen3-4B-GGUF"
+        assert quantization is None
+
+    def test_parse_with_multiple_colons(self):
+        """Test that only the last colon is used for quantization."""
+        model_name = "org:user/model:Q4_K_M"
+        model_id, quantization = parse_model_with_quantization(model_name)
+        assert model_id == "org:user/model"
+        assert quantization == "Q4_K_M"
+
+    def test_parse_with_empty_quantization(self):
+        """Test parsing with empty string after colon."""
+        model_name = "unsloth/Qwen3-4B-GGUF:"
+        model_id, quantization = parse_model_with_quantization(model_name)
+        assert model_id == "unsloth/Qwen3-4B-GGUF"
+        assert quantization is None
 
 
 class TestSelectGGUFFile:
@@ -122,10 +162,10 @@ class TestSelectGGUFFile:
         result = select_gguf_file(files)
         assert result == "model_a.gguf"
 
-    def test_select_empty_list_raises_error(self):
-        """Test that empty file list raises ValueError."""
-        with pytest.raises(ValueError, match="No GGUF files provided"):
-            select_gguf_file([])
+    def test_select_empty_list_returns_none(self):
+        """Test that empty file list returns None."""
+        result = select_gguf_file([])
+        assert result is None
 
 
 class TestListGGUFFiles:

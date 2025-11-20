@@ -198,8 +198,7 @@ jobs:
           fi
 
           # Update runtime model and quantization
-          yq -i '.runtime.models[0].model = "unsloth/Qwen3-0.6B-GGUF"' "$TEST_DIR/llamafarm.yaml"
-          yq -i '.runtime.models[0].extra_body.gguf_quantization = "IQ1_S"' "$TEST_DIR/llamafarm.yaml"
+          yq -i '.runtime.models[0].model = "unsloth/Qwen3-0.6B-GGUF:IQ1_S"' "$TEST_DIR/llamafarm.yaml"
 
           # Update embedding model and dimension
           yq -i '.rag.databases[0].embedding_strategies[0].config.model = "sentence-transformers/all-MiniLM-L6-v2"' "$TEST_DIR/llamafarm.yaml"
@@ -215,11 +214,10 @@ jobs:
 
           # Verify the changes took effect
           RUNTIME_MODEL=$(yq '.runtime.models[0].model' "$TEST_DIR/llamafarm.yaml")
-          QUANTIZATION=$(yq '.runtime.models[0].extra_body.gguf_quantization' "$TEST_DIR/llamafarm.yaml")
-          if [ "$RUNTIME_MODEL" != "unsloth/Qwen3-0.6B-GGUF" ] || [ "$QUANTIZATION" != "IQ1_S" ]; then
+          if [ "$RUNTIME_MODEL" != "unsloth/Qwen3-0.6B-GGUF:IQ1_S" ]; then
             echo "❌ Model configuration update failed!"
-            echo "Expected: unsloth/Qwen3-0.6B-GGUF with IQ1_S"
-            echo "Got: $RUNTIME_MODEL with $QUANTIZATION"
+            echo "Expected: unsloth/Qwen3-0.6B-GGUF:IQ1_S"
+            echo "Got: $RUNTIME_MODEL"
             exit 1
           fi
           echo "✓ Model configuration verified"

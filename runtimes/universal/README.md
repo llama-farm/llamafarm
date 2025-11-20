@@ -163,9 +163,7 @@ runtime:
   models:
     - name: default
       provider: universal
-      model: unsloth/Qwen3-1.7B-GGUF
-      extra_body:
-        gguf_quantization: "Q8_0"  # Use higher quality 8-bit quantization
+      model: unsloth/Qwen3-1.7B-GGUF:Q8_0  # Use higher quality 8-bit quantization
 ```
 
 **Via OpenAI-compatible API:**
@@ -174,9 +172,8 @@ from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8000/v1")
 response = client.chat.completions.create(
-    model="unsloth/Qwen3-1.7B-GGUF",
-    messages=[{"role": "user", "content": "Hello!"}],
-    extra_body={"gguf_quantization": "Q8_0"}  # Specify quantization at runtime
+    model="unsloth/Qwen3-1.7B-GGUF:Q8_0",  # Specify quantization in model name
+    messages=[{"role": "user", "content": "Hello!"}]
 )
 ```
 

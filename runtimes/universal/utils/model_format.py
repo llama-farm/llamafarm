@@ -5,14 +5,30 @@ Detects whether a HuggingFace model repository contains GGUF or transformers for
 
 import logging
 import os
-import re
 
 from huggingface_hub import HfApi, snapshot_download
+from llamafarm_common import (
+    GGUF_QUANTIZATION_PREFERENCE_ORDER,
+    parse_model_with_quantization,
+    parse_quantization_from_filename,
+    select_gguf_file,
+)
 
 logger = logging.getLogger(__name__)
 
 # Cache detection results to avoid repeated filesystem checks
 _format_cache: dict[str, str] = {}
+
+# Re-export commonly used functions for backward compatibility
+__all__ = [
+    "GGUF_QUANTIZATION_PREFERENCE_ORDER",
+    "parse_model_with_quantization",
+    "parse_quantization_from_filename",
+    "select_gguf_file",
+    "detect_model_format",
+    "list_gguf_files",
+    "get_gguf_file_path",
+]
 
 
 def detect_model_format(model_id: str, token: str | None = None) -> str:
@@ -99,47 +115,17 @@ def list_gguf_files(model_id: str, token: str | None = None) -> list[str]:
         raise
 
 
-def parse_quantization_from_filename(filename: str) -> str | None:
-    """
-    Extract quantization type from a GGUF filename.
-
-    Quantization types follow patterns like Q4_K_M, Q8_0, F16, etc.
-    This function uses regex to extract these patterns from filenames.
-
-    Args:
-        filename: GGUF filename (e.g., "qwen3-1.7b.Q4_K_M.gguf")
-
-    Returns:
-        Quantization type (e.g., "Q4_K_M") or None if not found
-
-    Examples:
-        >>> parse_quantization_from_filename("qwen3-1.7b.Q4_K_M.gguf")
-        'Q4_K_M'
-        >>> parse_quantization_from_filename("model.Q8_0.gguf")
-        'Q8_0'
-        >>> parse_quantization_from_filename("model.F16.gguf")
-        'F16'
-    """
-    # Common GGUF quantization patterns:
-    # - Q2_K, Q3_K_S, Q3_K_M, Q3_K_L, Q4_0, Q4_1, Q4_K_S, Q4_K_M, Q5_0, Q5_1, Q5_K_S, Q5_K_M
-    # - Q6_K, Q8_0, F16, F32
-    pattern = r"[\.-](Q[2-8]_(?:K_[SML]|K|[01])|(F(?:16|32)))\."
-    match = re.search(pattern, filename, re.IGNORECASE)
-    if match:
-        return match.group(1).upper()
-    return None
+# Note: parse_quantization_from_filename and select_gguf_file are imported from llamafarm_common
+# and re-exported above for backward compatibility. We wrap select_gguf_file to add logging.
 
 
-def select_gguf_file(
+def select_gguf_file_with_logging(
     gguf_files: list[str], preferred_quantization: str | None = None
 ) -> str:
     """
-    Select the best GGUF file from a list based on quantization preference.
+    Select the best GGUF file from a list based on quantization preference, with logging.
 
-    Selection logic:
-    1. If preferred_quantization is specified and found, use it
-    2. Otherwise, use default preference order: Q4_K_M > Q4_K > Q5_K_M > Q5_K > Q8_0 > others
-    3. Fall back to first file if no quantized versions found
+    This is a wrapper around llamafarm_common.select_gguf_file that adds logging.
 
     Args:
         gguf_files: List of .gguf filenames from the repository
@@ -149,14 +135,7 @@ def select_gguf_file(
         Selected GGUF filename
 
     Raises:
-        ValueError: If no GGUF files provided or preferred quantization not found
-
-    Examples:
-        >>> files = ["model.Q4_K_M.gguf", "model.Q8_0.gguf", "model.F16.gguf"]
-        >>> select_gguf_file(files)
-        'model.Q4_K_M.gguf'
-        >>> select_gguf_file(files, preferred_quantization="Q8_0")
-        'model.Q8_0.gguf'
+        ValueError: If no GGUF files provided
     """
     if not gguf_files:
         raise ValueError("No GGUF files provided")
@@ -166,58 +145,47 @@ def select_gguf_file(
         logger.info(f"Only one GGUF file available: {gguf_files[0]}")
         return gguf_files[0]
 
-    # Parse quantization types for all files
-    file_quantizations = [
-        (filename, parse_quantization_from_filename(filename))
-        for filename in gguf_files
-    ]
-
-    # If preferred quantization specified, try to find exact match
+    # Check if preferred quantization exists and log appropriately
+    found = False
     if preferred_quantization:
-        preferred_upper = preferred_quantization.upper()
-        for filename, quant in file_quantizations:
-            if quant and quant.upper() == preferred_upper:
-                logger.info(
-                    f"Selected GGUF file with preferred quantization '{preferred_quantization}': {filename}"
-                )
-                return filename
+        file_quantizations = [
+            (filename, parse_quantization_from_filename(filename))
+            for filename in gguf_files
+        ]
 
-        # Preferred not found - log warning and fall through to default selection
-        available = [q for _, q in file_quantizations if q]
-        logger.warning(
-            f"Preferred quantization '{preferred_quantization}' not found. "
-            f"Available quantizations: {available}. Falling back to default selection."
+        preferred_upper = preferred_quantization.upper()
+        found = any(
+            quant and quant.upper() == preferred_upper
+            for _, quant in file_quantizations
         )
 
-    # Default preference order (good balance of size/quality)
-    preference_order = [
-        "Q4_K_M",  # Best default: good balance of size and quality
-        "Q4_K",  # Generic Q4_K
-        "Q5_K_M",  # Slightly higher quality, larger size
-        "Q5_K",  # Generic Q5_K
-        "Q8_0",  # High quality, larger size
-        "Q6_K",  # Between Q5 and Q8
-        "Q4_K_S",  # Smaller Q4 variant
-        "Q5_K_S",  # Smaller Q5 variant
-        "Q3_K_M",  # Smaller, lower quality
-        "Q2_K",  # Very small, lower quality
-        "F16",  # Full precision, very large
-    ]
+        if found:
+            logger.info(
+                f"Selected GGUF file with preferred quantization '{preferred_quantization}'"
+            )
+        else:
+            available = [q for _, q in file_quantizations if q]
+            logger.warning(
+                f"Preferred quantization '{preferred_quantization}' not found. "
+                f"Available quantizations: {available}. Falling back to default selection."
+            )
 
-    # Try to find best match from preference order
-    for preferred in preference_order:
-        for filename, quant in file_quantizations:
-            if quant and quant.upper() == preferred:
-                logger.info(
-                    f"Selected GGUF file with default quantization '{quant}': {filename}"
-                )
-                return filename
+    # Use common selection logic
+    result = select_gguf_file(gguf_files, preferred_quantization)
 
-    # No quantized version found in preference order - use first file
-    logger.warning(
-        f"No preferred quantization found in {gguf_files}. Using first file: {gguf_files[0]}"
-    )
-    return gguf_files[0]
+    if not preferred_quantization or not found:
+        # Log which default was selected
+        quant = parse_quantization_from_filename(result)
+        if quant:
+            logger.info(
+                f"Selected GGUF file with default quantization '{quant}': {result}"
+            )
+        else:
+            logger.warning(
+                f"No preferred quantization found. Using first file: {result}"
+            )
+
+    return result
 
 
 def get_gguf_file_path(
@@ -260,7 +228,9 @@ def get_gguf_file_path(
         raise FileNotFoundError(f"No GGUF files found in model repository: {model_id}")
 
     # Step 2: Select the best GGUF file based on preference
-    selected_filename = select_gguf_file(available_gguf_files, preferred_quantization)
+    selected_filename = select_gguf_file_with_logging(
+        available_gguf_files, preferred_quantization
+    )
 
     logger.info(
         f"Selected GGUF file: {selected_filename} "
