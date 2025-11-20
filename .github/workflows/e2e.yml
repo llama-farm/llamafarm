@@ -45,10 +45,9 @@ jobs:
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
-      # Determine the repository to use: workflow_run head repo, otherwise base repo
-      ARTIFACT_REPO: ${{ github.event.workflow_run.head_repository.full_name || github.repository }}
-      # Determine the ref to use: workflow_run head branch, otherwise current ref
-      ARTIFACT_REF: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+      # Always use base repository for artifacts (cli.yml uploads to base repo)
+      # This workflow only runs on trusted contexts (main branch or manual dispatch)
+      ARTIFACT_REPO: ${{ github.repository }}
 
     steps:
       # ============================================================
@@ -57,9 +56,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For workflow_run, checkout from the head repository
-          repository: ${{ github.event.workflow_run.head_repository.full_name || github.repository }}
           # For workflow_run, checkout the commit that triggered the build
+          # Always use base repository (this workflow only runs on trusted contexts)
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # ============================================================
@@ -73,6 +71,8 @@ jobs:
           run_id: ${{ github.event.workflow_run.id }}
           name: ${{ matrix.artifact }}
           path: cli/
+          # Always use base repository - cli.yml uploads artifacts to base repo
+          repository: ${{ github.repository }}
           if_no_artifact_found: fail
 
       - name: Rename binary to standard name
