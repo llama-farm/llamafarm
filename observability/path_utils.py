@@ -44,14 +44,21 @@ def get_data_dir() -> str:
     Returns:
         str: Path to the LF data directory (e.g., ~/.llamafarm or /var/lib/llamafarm)
     """
+    data_dir = None
+
     try:
         # Try to import from server/rag settings
         from core.settings import settings
         # Server uses lf_data_dir, RAG uses LF_DATA_DIR
-        return getattr(settings, 'lf_data_dir', None) or getattr(settings, 'LF_DATA_DIR', None)
+        data_dir = getattr(settings, 'lf_data_dir', None) or getattr(settings, 'LF_DATA_DIR', None)
     except ImportError:
-        # Fall back to environment variable (for testing or standalone use)
-        return os.getenv("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
+        pass
+
+    # Fall back to environment variable or default if settings didn't provide a value
+    if not data_dir:
+        data_dir = os.getenv("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
+
+    return data_dir
 
 
 def validate_file_path(file_path: str, parent_dir: str, description: str = "file") -> None:

@@ -170,6 +170,7 @@ class EventLogger:
             "event_id": event_id,
             "event_type": self.event_type,
             "request_id": self.request_id,
+            "timestamp": event_timestamp.isoformat(),  # Top-level timestamp for event listing
             "namespace": self.namespace,
             "project": self.project,
             "config_hash": self.config_hash,
