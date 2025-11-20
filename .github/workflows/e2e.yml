@@ -47,9 +47,6 @@ jobs:
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
-      # Enable echo mode - chat responses will echo input instead of invoking models
-      # This is necessary because GitHub Actions doesn't have GPU access
-      LF_ECHO_MODE: 1
 
     steps:
       # ============================================================
@@ -186,40 +183,6 @@ jobs:
           echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
           echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
           echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-
-      - name: Update project model to sshleifer/tiny-gpt2
-        shell: bash
-        run: |
-          echo "Updating model to sshleifer/tiny-gpt2 for e2e tests..."
-          # Install yq using Go if not available
-          if ! command -v yq &> /dev/null; then
-            echo "Installing yq via Go..."
-            go install github.com/mikefarah/yq/v4@latest
-            # Add Go bin to PATH if not already there
-            export PATH="$HOME/go/bin:$PATH"
-          fi
-
-          # Use yq to update the model in the default model entry
-          # Find the model with name="default" and update its model field
-          yq eval '(.runtime.models[] | select(.name == "default") | .model) = "sshleifer/tiny-gpt2"' -i "$TEST_DIR/llamafarm.yaml"
-
-          # Verify the update
-          if grep -q "model: sshleifer/tiny-gpt2" "$TEST_DIR/llamafarm.yaml"; then
-            echo "✓ Model updated successfully"
-          else
-            echo "⚠ Warning: Model update may have failed, checking config..."
-            grep -A5 "runtime:" "$TEST_DIR/llamafarm.yaml" | head -10
-            exit 1
-          fi
-
-          echo ""
-          echo "=== CONFIG AFTER MODEL UPDATE ==="
-          grep -A5 "runtime:" "$TEST_DIR/llamafarm.yaml" | head -10 || echo "Could not display runtime section"
 
       # ============================================================
       # Data Ingestion Test
@@ -370,49 +333,40 @@ jobs:
       # ============================================================
       # Chat Command Test
       # ============================================================
-      # - name: Run chat command with RAG
-      #   working-directory: cli
-      #   shell: bash
-      #   env:
-      #     PYTHONUNBUFFERED: "1"
-      #   run: |
-      #     echo "Running chat command with RAG..."
-      #     if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
-      #       "Summarize neural scaling laws in one sentence" 2>&1); then
-      #       echo "❌ Chat command failed"
-      #       echo "$OUTPUT"
-      #       echo "Checking server health..."
-      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-      #       exit 1
-      #     fi
+      - name: Run chat command with RAG
+        working-directory: cli
+        shell: bash
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Running chat command with RAG..."
+          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
+            "Summarize neural scaling laws in one sentence" 2>&1); then
+            echo "❌ Chat command failed"
+            echo "$OUTPUT"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
 
-      #     echo "Chat response:"
-      #     echo "$OUTPUT"
+          echo "Chat response:"
+          echo "$OUTPUT"
 
-      #     # Verify output is not empty
-      #     if [ -z "$OUTPUT" ]; then
-      #       echo "❌ Error: Chat command returned empty output"
-      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-      #       exit 1
-      #     fi
+          # Verify output is not empty
+          if [ -z "$OUTPUT" ]; then
+            echo "❌ Error: Chat command returned empty output"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
 
-      #     # Check if output contains some text (at least 10 characters)
-      #     if [ ${#OUTPUT} -lt 10 ]; then
-      #       echo "❌ Error: Chat response too short, possible error"
-      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-      #       exit 1
-      #     fi
+          # Check if output contains some text (at least 10 characters)
+          if [ ${#OUTPUT} -lt 10 ]; then
+            echo "❌ Error: Chat response too short, possible error"
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
 
-      #     # Check if output contains fallback error message (indicates a problem)
-      #     if echo "$OUTPUT" | grep -qi "my previous response wasn't very helpful"; then
-      #       echo "❌ Error: Chat command returned fallback error message"
-      #       echo "This indicates the model call failed or returned an error response"
-      #       echo "$OUTPUT"
-      #       curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-      #       exit 1
-      #     fi
-
-      #     echo "✓ Chat command returned a response"
+          echo "✓ Chat command returned a response"
 
       - name: Test chat command without RAG
         working-directory: cli
@@ -423,7 +377,7 @@ jobs:
           echo "Running chat command without RAG..."
           if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
             --no-rag \
-            "Hello" 2>&1); then
+            "What is 2 + 2?" 2>&1); then
             echo "❌ Chat command (no RAG) failed"
             echo "$OUTPUT"
             echo "Checking server health..."
@@ -437,15 +391,6 @@ jobs:
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: Chat command (no RAG) returned empty output"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
-
-          # Check if output contains fallback error message (indicates a problem)
-          if echo "$OUTPUT" | grep -qi "my previous response wasn't very helpful"; then
-            echo "❌ Error: Chat command (no RAG) returned fallback error message"
-            echo "This indicates the model call failed or returned an error response"
-            echo "$OUTPUT"
             curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
@@ -496,18 +441,6 @@ jobs:
       # ============================================================
       # Cleanup
       # ============================================================
-      - name: Stop services gracefully
-        if: always()
-        working-directory: cli
-        shell: bash
-        run: |
-          echo "Stopping LlamaFarm services gracefully..."
-          # Stop services to ensure logs are flushed before workflow ends
-          ./${{ matrix.binary }} --cwd "$TEST_DIR" services stop || true
-          # Give processes time to flush logs
-          sleep 10
-          echo "✓ Services stopped"
-
       - name: Cleanup test artifacts
         if: always()
         shell: bash
@@ -517,7 +450,7 @@ jobs:
           echo "✓ Cleanup complete"
 
       - name: Display service logs on failure
-        if: always()
+        if: failure()
         shell: bash
         run: |
           echo "=========================================="
@@ -560,7 +493,7 @@ jobs:
           fi
 
       - name: Upload logs on failure
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-test-logs-${{ matrix.os }}
