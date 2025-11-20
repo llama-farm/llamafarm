@@ -211,4 +211,3 @@ func GetPyTorchIndexURL() string {
 
 	return indexURL
 }
-
