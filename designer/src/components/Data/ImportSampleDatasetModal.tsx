@@ -11,6 +11,7 @@ import {
 import { Badge } from '../ui/badge'
 import { type SuggestedDataset } from '../../data/sampleProjects'
 import { useExampleDatasets } from '../../hooks/useExamples'
+import { AVAILABLE_DEMOS } from '../../config/demos'
 
 type Kind = NonNullable<SuggestedDataset['kind']>
 
@@ -58,7 +59,8 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
   const [search, setSearch] = useState('')
   const [kind] = useState<'all' | Kind>('all')
   const [selected, setSelected] = useState<string>('')
-  const [includeStrategy, setIncludeStrategy] = useState(true)
+  // Always include strategy for demo datasets (checkbox is disabled)
+  const includeStrategy = true
 
   // Reset transient state whenever the modal opens
   useEffect(() => {
@@ -70,9 +72,16 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
 
   const { data, isLoading, isError, refetch } = useExampleDatasets()
 
+  // Get list of demo project IDs to filter by
+  const demoProjectIds = useMemo(() => {
+    return AVAILABLE_DEMOS.map(demo => demo.id)
+  }, [])
+
   const allDatasets: FlattenedDataset[] = useMemo(() => {
     const rows = (data?.datasets || []) as any[]
-    return rows.map(row => {
+    // Filter to only show datasets from demo projects
+    const demoRows = rows.filter(row => demoProjectIds.includes(row.example_id))
+    return demoRows.map(row => {
       const kind = (row.kind || undefined) as Kind | undefined
       return {
         uid: `${row.example_id}:${row.name}`,
@@ -85,7 +94,7 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
         defaultStrategy: row.strategy || mapKindToStrategy(kind),
       }
     })
-  }, [data])
+  }, [data, demoProjectIds])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -114,6 +123,9 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
       >
         <DialogHeader>
           <DialogTitle>Import sample dataset</DialogTitle>
+          <p className="text-sm text-muted-foreground pt-1">
+            Choose a dataset from a demo project to import
+          </p>
         </DialogHeader>
         {/* Middle scrollable region */}
         <div className="grid grid-rows-[auto_1fr] gap-3 min-h-0">
@@ -187,12 +199,12 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
         </div>
         <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm opacity-60 cursor-not-allowed">
               <input
                 type="checkbox"
                 className="accent-current"
-                checked={includeStrategy}
-                onChange={e => setIncludeStrategy(e.target.checked)}
+                checked={true}
+                disabled={true}
               />
               Include processing strategy
             </label>
@@ -214,9 +226,8 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
               disabled={!selectedObj}
               onClick={() => {
                 if (!selectedObj) return
-                const rag = includeStrategy
-                  ? selectedObj.defaultStrategy
-                  : 'default'
+                // Always include strategy for demo datasets
+                const rag = selectedObj.defaultStrategy
                 onImport({
                   name: selectedObj.name,
                   rag_strategy: rag,
