@@ -80,9 +80,11 @@ jobs:
       - name: Build test results summary
         id: build-summary
         shell: bash
+        env:
+          WORKFLOW_RUN_URL: ${{ steps.pr-info.outputs.workflow_run_url }}
         run: |
           CONCLUSION="${{ steps.workflow-conclusion.outputs.conclusion }}"
-          WORKFLOW_RUN_URL="${{ steps.pr-info.outputs.workflow_run_url }}"
+          WORKFLOW_RUN_URL="$WORKFLOW_RUN_URL"
           WORKFLOW_RUN_ID="${{ github.event.workflow_run.id }}"
           
           # Determine status emoji and message
@@ -134,9 +136,11 @@ jobs:
         id: find-comment
         if: steps.pr-info.outputs.pr_number != ''
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
         with:
           script: |
-            const prNumber = ${{ steps.pr-info.outputs.pr_number }};
+            const prNumber = process.env.PR_NUMBER;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -161,13 +165,17 @@ jobs:
       - name: Post or update PR comment
         if: steps.pr-info.outputs.pr_number != ''
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+          COMMENT_EXISTS: ${{ steps.find-comment.outputs.exists }}
+          EXISTING_COMMENT_ID: ${{ steps.find-comment.outputs.comment_id }}
         with:
           script: |
             const fs = require('fs');
-            const prNumber = ${{ steps.pr-info.outputs.pr_number }};
+            const prNumber = process.env.PR_NUMBER;
             const commentBody = fs.readFileSync('comment-body.txt', 'utf8');
-            const commentExists = '${{ steps.find-comment.outputs.exists }}' === 'true';
-            const existingCommentId = ${{ steps.find-comment.outputs.comment_id }};
+            const commentExists = process.env.COMMENT_EXISTS === 'true';
+            const existingCommentId = process.env.EXISTING_COMMENT_ID;
             
             if (commentExists && existingCommentId) {
               // Update existing comment
