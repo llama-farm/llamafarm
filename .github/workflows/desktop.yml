@@ -89,6 +89,10 @@ jobs:
         working-directory: electron-app
         run: npm ci || npm install
 
+      - name: Install Linux build tools (for RPM)
+        if: matrix.platform == 'linux'
+        run: brew install rpm
+
       - name: Determine version
         id: version
         run: |
