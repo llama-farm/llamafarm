@@ -48,9 +48,9 @@ jobs:
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
       # Determine the repository to use: PR head repo for forks, otherwise base repo
-      ARTIFACT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+      ARTIFACT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.event.workflow_run.head_repository.full_name || github.repository }}
       # Determine the ref to use: PR head ref for PRs, otherwise current ref
-      ARTIFACT_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+      ARTIFACT_REF: ${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch || github.ref_name }}
 
     steps:
       # ============================================================
