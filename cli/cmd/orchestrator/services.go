@@ -125,7 +125,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  180 * time.Second, // Longer timeout for first-time dependency installation
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
-		Args:            []string{"run", "--managed-python", "python", "server.py"},
+		Args:            []string{"run", "--managed-python", "--no-sync", "python", "server.py"},
 		Env: map[string]string{
 			"LF_RUNTIME_PORT":         "11540",
 			"LF_RUNTIME_HOST":         "127.0.0.1",
