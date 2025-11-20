@@ -7,6 +7,10 @@ import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { AVAILABLE_DEMOS } from '../../config/demos'
 import * as YAML from 'yaml'
 import {
+  saveDatasetTaskId,
+  saveDatasetResult,
+} from '../../utils/datasetStorage'
+import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -1610,6 +1614,18 @@ const Data = () => {
 
                 // Update project config if we added anything
                 if (needsUpdate) {
+                  // Also set the demo's database as the default RAG database
+                  // so test chat queries the right database
+                  if (database !== 'default') {
+                    updatedConfig = {
+                      ...updatedConfig,
+                      rag: {
+                        ...updatedConfig.rag,
+                        default_database: database,
+                      },
+                    }
+                  }
+
                   await projectService.updateProject(
                     activeProject.namespace,
                     activeProject.project,
@@ -1630,7 +1646,12 @@ const Data = () => {
                 database: database,
               })
 
-              // Step 3: Fetch and upload demo files
+              // Step 4: Fetch and upload demo files
+              toast({
+                message: `Uploading ${demo.files.length} file(s)...`,
+                variant: 'default',
+              })
+
               for (const demoFile of demo.files) {
                 const fileResponse = await fetch(demoFile.path)
                 if (!fileResponse.ok) {
@@ -1649,18 +1670,84 @@ const Data = () => {
                 )
               }
 
-              // Step 4: Process dataset
-              await datasetService.processDataset(
+              // Step 5: Process dataset and wait for completion
+              toast({
+                message: `Processing dataset "${name}"...`,
+                variant: 'default',
+              })
+
+              const processResult = await datasetService.processDataset(
                 activeProject.namespace,
                 activeProject.project,
                 name
               )
 
-              toast({
-                message: `Demo dataset "${name}" imported successfully!`,
-                variant: 'default',
-              })
+              // Poll for completion if we got a task ID
+              if (processResult.task_id) {
+                // Save task ID to localStorage so dataset page can track it
+                saveDatasetTaskId(
+                  activeProject.namespace,
+                  activeProject.project,
+                  name,
+                  processResult.task_id
+                )
+
+                let completed = false
+                let attempts = 0
+                const maxAttempts = 60 // 2 minutes max
+
+                while (!completed && attempts < maxAttempts) {
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+                  attempts++
+
+                  const taskStatus = await datasetService.getTaskStatus(
+                    activeProject.namespace,
+                    activeProject.project,
+                    processResult.task_id
+                  )
+
+                  if (taskStatus.state === 'SUCCESS') {
+                    completed = true
+
+                    toast({
+                      message: `Demo dataset "${name}" imported and processed successfully!`,
+                      variant: 'default',
+                    })
+
+                    // Save processing result to localStorage so dataset page shows processed status
+                    if (taskStatus.result) {
+                      saveDatasetResult(
+                        activeProject.namespace,
+                        activeProject.project,
+                        name,
+                        taskStatus.result
+                      )
+                    }
+                  } else if (taskStatus.state === 'FAILURE') {
+                    throw new Error(
+                      taskStatus.error || 'Dataset processing failed'
+                    )
+                  }
+                  // Still processing, continue polling...
+                }
+
+                if (!completed) {
+                  toast({
+                    message: `Dataset "${name}" imported, but processing is taking longer than expected. Check back in a moment.`,
+                    variant: 'default',
+                  })
+                }
+              } else {
+                toast({
+                  message: `Demo dataset "${name}" imported successfully!`,
+                  variant: 'default',
+                })
+              }
+
+              // Refetch datasets and wait a moment for localStorage to persist
               await refetchDatasets()
+              await new Promise(resolve => setTimeout(resolve, 100))
+
               navigate(`/chat/data/${name}`)
             } else {
               // Handle example import (old flow)
