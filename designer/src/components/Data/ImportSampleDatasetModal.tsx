@@ -35,31 +35,10 @@ type Props = {
   }) => void
 }
 
-const mapKindToStrategy = (kind?: Kind): string => {
-  switch (kind) {
-    case 'pdf':
-      return 'PDF Simple'
-    case 'markdown':
-      return 'Markdown'
-    case 'csv':
-      return 'Tabular (CSV)'
-    case 'images':
-      return 'Image OCR'
-    case 'json':
-      return 'JSON (records)'
-    case 'timeseries':
-      return 'Timeseries (basic)'
-    default:
-      return 'default'
-  }
-}
-
 function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
   const [search, setSearch] = useState('')
   const [kind] = useState<'all' | Kind>('all')
   const [selected, setSelected] = useState<string>('')
-  // Always include strategy for demo datasets (checkbox is disabled)
-  const includeStrategy = true
 
   // Reset transient state whenever the modal opens
   useEffect(() => {
