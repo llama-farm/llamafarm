@@ -84,64 +84,6 @@ class ProjectChatService:
             return latest_user_message.get("content", "")
         return ""
 
-    def _create_echo_completion(
-        self, messages: list[LFChatCompletionMessageParam], model_name: str
-    ) -> LFChatCompletion:
-        """Create an echo response that mirrors the input message."""
-        message = self._extract_latest_user_message(messages)
-        return LFChatCompletion(
-            id=f"chatcmpl-{uuid.uuid4()}",
-            created=int(time.time()),
-            model=model_name,
-            object="chat.completion",
-            choices=[
-                Choice(
-                    index=0,
-                    message=ChatCompletionMessage(
-                        role="assistant",
-                        content=f"[ECHO MODE] {message}",
-                    ),
-                    finish_reason="stop",
-                )
-            ],
-            usage=CompletionUsage(
-                prompt_tokens=len(message.split()),
-                completion_tokens=len(message.split()),
-                total_tokens=len(message.split()) * 2,
-            ),
-        )
-
-    async def _create_echo_stream(
-        self, messages: list[LFChatCompletionMessageParam], model_name: str
-    ) -> AsyncGenerator[LFChatCompletionChunk]:
-        """Create a streaming echo response that mirrors the input message."""
-        message = self._extract_latest_user_message(messages)
-        echo_content = f"[ECHO MODE] {message}"
-        chunk_id = f"chatcmpl-{uuid.uuid4()}"
-        created_time = int(time.time())
-        # Simulate streaming by yielding chunks
-        words = echo_content.split()
-        for i, word in enumerate(words):
-            chunk_content = word + (" " if i < len(words) - 1 else "")
-            yield LFChatCompletionChunk(
-                id=chunk_id,
-                created=created_time,
-                model=model_name,
-                object="chat.completion.chunk",
-                choices=[
-                    ChoiceChunk(
-                        index=0,
-                        delta=ChoiceDelta(
-                            role="assistant",
-                            content=chunk_content,
-                        ),
-                        finish_reason="stop" if i == len(words) - 1 else None,
-                    )
-                ],
-            )
-            # Small delay to simulate streaming
-            await asyncio.sleep(0.01)
-
     def _create_event_logger(
         self,
         project_config: LlamaFarmConfig,
@@ -298,13 +240,6 @@ class ProjectChatService:
         rag_score_threshold: float | None = None,
         n_ctx: int | None = None,
     ) -> LFChatCompletion:
-        # Check if echo mode is enabled
-        if settings.lf_echo_mode:
-            logger.info(
-                "Echo mode enabled - returning echo response instead of invoking model"
-            )
-            return self._create_echo_completion(messages, chat_agent.model_name)
-
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
 
@@ -364,18 +299,26 @@ class ProjectChatService:
                 response_data = response.model_dump(mode="json")
             elif hasattr(response, "choices"):
                 # Pydantic object but use dict serialization
-                response_content = response.choices[0].message.content if response.choices else ""
+                response_content = (
+                    response.choices[0].message.content if response.choices else ""
+                )
                 response_data = {
                     "response_length": len(response_content),
-                    "finish_reason": response.choices[0].finish_reason if response.choices else "unknown",
+                    "finish_reason": response.choices[0].finish_reason
+                    if response.choices
+                    else "unknown",
                 }
             else:
                 # Handle dict response (from tests)
                 choices = response.get("choices", [])
-                response_content = choices[0].get("message", {}).get("content", "") if choices else ""
+                response_content = (
+                    choices[0].get("message", {}).get("content", "") if choices else ""
+                )
                 response_data = {
                     "response_length": len(response_content),
-                    "finish_reason": choices[0].get("finish_reason", "unknown") if choices else "unknown",
+                    "finish_reason": choices[0].get("finish_reason", "unknown")
+                    if choices
+                    else "unknown",
                 }
 
             self._log_event(
@@ -406,18 +349,6 @@ class ProjectChatService:
         n_ctx: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
-
-        # Check if echo mode is enabled
-        if settings.lf_echo_mode:
-            logger.info(
-                "Echo mode enabled - returning echo stream instead of invoking model"
-            )
-            async for chunk in self._create_echo_stream(
-                messages, chat_agent.model_name
-            ):
-                yield chunk
-            return
-
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
 
@@ -458,9 +389,13 @@ class ProjectChatService:
         logger.info("Running async stream")
 
         # Log LLM inference start
-        self._log_event(event_logger, "llm_inference_start", {
-            "model": chat_agent.model_name,
-        })
+        self._log_event(
+            event_logger,
+            "llm_inference_start",
+            {
+                "model": chat_agent.model_name,
+            },
+        )
 
         event_failed = False
         first_token_logged = False
@@ -484,9 +419,13 @@ class ProjectChatService:
                 yield chunk
 
             # Log LLM inference complete after streaming finishes
-            self._log_event(event_logger, "llm_inference_complete", {
-                "finish_reason": "stop",
-            })
+            self._log_event(
+                event_logger,
+                "llm_inference_complete",
+                {
+                    "finish_reason": "stop",
+                },
+            )
 
         except Exception:
             event_failed = True
