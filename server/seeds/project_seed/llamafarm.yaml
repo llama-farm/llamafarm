@@ -290,9 +290,7 @@ runtime:
     - name: default
       description: Default Universal model for LlamaFarm
       provider: universal
-      model: unsloth/Qwen3-1.7B-GGUF
-      model_api_parameters:
-        gguf_quantization: "Q4_K_M"
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
       prompts: []
       tool_call_strategy: native_api
       tools:

@@ -514,6 +514,13 @@ name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../../common" }
 
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" }]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0.0" }]
+
 [[package]]
 name = "markupsafe"
 version = "3.0.2"
