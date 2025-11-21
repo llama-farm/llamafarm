@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "LlamaFarm Desktop - Local AI Platform",
   "main": "dist/main/index.js",
-  "author": "LlamaFarm Team",
+  "author": "LlamaFarm Team <support@llamafarm.dev>",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "electron-vite dev",
