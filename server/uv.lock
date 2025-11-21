@@ -803,11 +803,6 @@ name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../common" }
 
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = []
-
 [[package]]
 name = "llamafarm-config"
 version = "0.1.0"
@@ -1686,12 +1681,20 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-mock" },
+]
 test = [
     { name = "pytest" },
     { name = "pytest-mock" },
 ]
 
 [package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-mock" },
+]
 test = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1717,7 +1720,9 @@ requires-dist = [
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pre-commit", specifier = ">=4.2.0" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
+    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.12.0" },
     { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.12.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
@@ -1730,9 +1735,13 @@ requires-dist = [
     { name = "urllib3", specifier = ">=2.0.0" },
     { name = "uvicorn", specifier = ">=0.35.0" },
 ]
-provides-extras = ["test"]
+provides-extras = ["dev", "test"]
 
 [package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-mock", specifier = ">=3.12.0" },
+]
 test = [
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-asyncio", specifier = ">=1.1.0" },

@@ -73,3 +73,4 @@ echo -e "${GREEN}=== Test Complete ===${NC}"
 echo ""
 echo "The test used fake commit hashes to avoid network downloads."
 echo "In real scenarios, it will download the actual version from GitHub."
+

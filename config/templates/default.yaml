@@ -10,7 +10,7 @@ runtime:
     - name: default
       description: "Default Universal model"
       provider: universal
-      model: google/gemma-3-1b-it
+      model: unsloth/gemma-3-1b-it-gguf:Q4_K_M
       default: true
       prompt_format: unstructured
       # instructor_mode: json

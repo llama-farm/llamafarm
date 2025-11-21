@@ -70,6 +70,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        n_ctx: int | None = None,
     ) -> LFChatCompletion:
         latest_user_message = next(
             (
@@ -93,7 +94,16 @@ class ProjectChatService:
                 rag_score_threshold=rag_score_threshold,
             )
 
-        return await chat_agent.run_async(messages=messages, tools=tools)
+        # Build extra_body dict for runtime-specific parameters
+        extra_body = {}
+        if n_ctx is not None:
+            extra_body["n_ctx"] = n_ctx
+
+        return await chat_agent.run_async(
+            messages=messages,
+            tools=tools,
+            extra_body=extra_body if extra_body else None,
+        )
 
     async def stream_chat(
         self,
@@ -108,6 +118,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        n_ctx: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         latest_user_message = next(
@@ -132,10 +143,17 @@ class ProjectChatService:
                 rag_score_threshold=rag_score_threshold,
             )
 
+        # Build extra_body dict for runtime-specific parameters
+        extra_body = {}
+        if n_ctx is not None:
+            extra_body["n_ctx"] = n_ctx
+
         try:
             logger.info("Running async stream")
             async for chunk in chat_agent.run_async_stream(
-                messages=messages, tools=tools
+                messages=messages,
+                tools=tools,
+                extra_body=extra_body or None,
             ):
                 yield chunk
         except Exception:
