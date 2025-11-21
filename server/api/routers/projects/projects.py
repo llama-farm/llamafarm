@@ -551,6 +551,9 @@ class GetTaskResponse(BaseModel):
     traceback: str | None = Field(
         None, description="Traceback information if the task failed"
     )
+    cancelled: bool = Field(
+        default=False, description="Whether the task has been cancelled"
+    )
 
 
 def _process_group_children(
@@ -661,6 +664,32 @@ async def get_task(namespace: str, project_id: str, task_id: str):
 
     logger.info("Task status", task_id=task_id, state=res.state, ready=res.ready())
 
+    # Check for cancelled flag in metadata
+    is_cancelled = False
+    try:
+        # Try to get metadata from result (works when state is PENDING)
+        if res.state == "PENDING" and isinstance(res.result, dict):
+            is_cancelled = res.result.get("cancelled", False)
+        # Also try result property for other states
+        if not is_cancelled:
+            try:
+                result_value = res.result
+                if isinstance(result_value, dict) and result_value.get("type") == "group":
+                    is_cancelled = result_value.get("cancelled", False)
+            except Exception:
+                pass
+        # Try backend's _get_task_meta_for method if available
+        if not is_cancelled:
+            try:
+                if hasattr(app.backend, "_get_task_meta_for"):
+                    meta = app.backend._get_task_meta_for(task_id)
+                    if meta and isinstance(meta.get("result"), dict):
+                        is_cancelled = meta["result"].get("cancelled", False)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     response = GetTaskResponse(
         task_id=task_id,
         state=res.state,
@@ -668,6 +697,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
         result=None,
         error=None,
         traceback=None,
+        cancelled=is_cancelled,
     )
 
     # Check if this is a group result (parallel tasks)
@@ -681,6 +711,11 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             and res.result.get("type") == "group"
             else None
         )
+
+        # Also check for cancelled flag in group_info
+        if group_info and group_info.get("cancelled"):
+            is_cancelled = True
+            response.cancelled = True
 
         if group_info and "children" in group_info:
             # We have stored group metadata - query child tasks directly
@@ -876,6 +911,16 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             error=str(e),
             exc_info=True,
         )
+
+    # Ensure cancelled flag is checked even for non-group tasks
+    if not response.cancelled:
+        try:
+            # Try to get from result one more time
+            result_value = res.result
+            if isinstance(result_value, dict) and result_value.get("type") == "group":
+                response.cancelled = result_value.get("cancelled", False)
+        except Exception:
+            pass
 
     if res.info:
         response.meta = res.info

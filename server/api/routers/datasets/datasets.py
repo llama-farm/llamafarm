@@ -286,6 +286,14 @@ class ProcessDatasetResponse(BaseModel):
     task_id: str | None = None  # For async processing
 
 
+class CancelProcessingResponse(BaseModel):
+    message: str
+    task_id: str
+    cancelled: bool
+    pending_tasks_cancelled: int
+    running_tasks_at_cancel: int
+
+
 @router.post("/{dataset}/process", response_model=ProcessDatasetResponse)
 async def process_dataset(
     namespace: str,
@@ -735,3 +743,196 @@ async def delete_data(
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     return {"file_hash": file_hash}
+
+
+@router.post(
+    "/{dataset}/process/cancel",
+    response_model=CancelProcessingResponse,
+    operation_id="dataset_process_cancel",
+    tags=["datasets", "mcp"],
+    summary="Cancel ongoing dataset processing",
+    description="Cancel processing for a dataset. This will stop pending tasks and prevent new tasks from starting.",
+)
+async def cancel_dataset_processing(
+    namespace: str,
+    project: str,
+    dataset: str,
+    task_id: str | None = None,
+) -> CancelProcessingResponse:
+    """
+    Cancel ongoing dataset processing.
+
+    Args:
+        namespace: Project namespace
+        project: Project name
+        dataset: Dataset name
+        task_id: Optional task ID. If not provided, finds active task for dataset.
+
+    Returns:
+        Cancellation status with task details
+
+    Raises:
+        HTTPException: 404 if no active task found, 400 if task already completed, 500 for other errors
+    """
+    from datetime import datetime
+    from celery.result import AsyncResult
+
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+
+    try:
+        # Import celery app
+        from core.celery import app as celery_app
+
+        # For Phase 1, task_id is required (frontend already has it)
+        # In future phases, we could look up active tasks per dataset
+        if not task_id:
+            raise HTTPException(
+                status_code=404, detail="No active processing task found. task_id is required."
+            )
+
+        # Get group task
+        group_result: AsyncResult = celery_app.AsyncResult(task_id)
+
+        # Get stored metadata - try multiple approaches
+        result_meta = None
+
+        # Approach 1: Try to get from result when state is PENDING
+        # This is how metadata is stored in the existing code
+        try:
+            if group_result.state == "PENDING":
+                if isinstance(group_result.result, dict) and group_result.result.get("type") == "group":
+                    result_meta = group_result.result
+        except Exception as e:
+            logger.debug(f"Could not get metadata from PENDING result: {e}")
+
+        # Approach 2: Try accessing result property directly for other states
+        # Sometimes the metadata is still accessible even if state changed
+        if not result_meta:
+            try:
+                result_value = group_result.result
+                if isinstance(result_value, dict) and result_value.get("type") == "group":
+                    result_meta = result_value
+            except Exception as e:
+                logger.debug(f"Could not get metadata from result property: {e}")
+
+        # Approach 3: Try to access via backend's _get_task_meta_for method if available
+        # This is a fallback for filesystem backend
+        if not result_meta:
+            try:
+                # Some backends support this method
+                if hasattr(celery_app.backend, "_get_task_meta_for"):
+                    meta = celery_app.backend._get_task_meta_for(task_id)
+                    if meta and isinstance(meta.get("result"), dict):
+                        if meta["result"].get("type") == "group":
+                            result_meta = meta["result"]
+            except Exception as e:
+                logger.debug(f"Could not get metadata via backend method: {e}")
+
+        if not result_meta or result_meta.get("type") != "group":
+            raise HTTPException(
+                status_code=404, detail="Task not found or not a group task"
+            )
+
+        # Check if already cancelled
+        if result_meta.get("cancelled"):
+            # Already cancelled, return current state
+            child_task_ids = result_meta.get("children", [])
+            pending_count = 0
+            running_count = 0
+
+            # Count current states
+            for child_id in child_task_ids:
+                child_result = celery_app.AsyncResult(child_id)
+                try:
+                    if child_result.state == "PENDING":
+                        pending_count += 1
+                    elif child_result.state == "STARTED":
+                        running_count += 1
+                except Exception:
+                    pass
+
+            return CancelProcessingResponse(
+                message="Processing already cancelled",
+                task_id=task_id,
+                cancelled=True,
+                pending_tasks_cancelled=pending_count,
+                running_tasks_at_cancel=running_count,
+            )
+
+        # Check if already completed
+        if group_result.state in ("SUCCESS", "FAILURE"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel: processing already {group_result.state.lower()}",
+            )
+
+        # Get child task IDs
+        child_task_ids = result_meta.get("children", [])
+
+        # Revoke child tasks
+        pending_cancelled = 0
+        running_count = 0
+
+        for child_id in child_task_ids:
+            try:
+                child_result = celery_app.AsyncResult(child_id)
+
+                # Get current state (may raise exception if task doesn't exist)
+                try:
+                    child_state = child_result.state
+                except Exception:
+                    # Task may not exist or be inaccessible, skip it
+                    continue
+
+                if child_state == "PENDING":
+                    # Revoke pending tasks (prevent from starting)
+                    celery_app.control.revoke(child_id, terminate=False)
+                    pending_cancelled += 1
+                    logger.info(f"Revoked pending task: {child_id}")
+                elif child_state == "STARTED":
+                    # Revoke running tasks (graceful - let current work finish)
+                    celery_app.control.revoke(child_id, terminate=False)
+                    running_count += 1
+                    logger.info(f"Revoked running task: {child_id}")
+            except Exception as e:
+                logger.warning(f"Error revoking child task {child_id}: {e}")
+                # Continue with other tasks
+
+        # Update group metadata with cancellation flag
+        result_meta["cancelled"] = True
+        result_meta["cancelled_at"] = datetime.now().isoformat()
+
+        # Store updated metadata
+        # Use the current state or "CANCELLED" if backend supports it
+        current_state = group_result.state if hasattr(group_result, "state") else "PENDING"
+        celery_app.backend.store_result(
+            task_id,
+            result_meta,
+            current_state,  # Keep original state, cancellation is tracked in metadata
+        )
+
+        logger.info(
+            "Processing cancellation requested",
+            task_id=task_id,
+            pending_cancelled=pending_cancelled,
+            running_count=running_count,
+        )
+
+        return CancelProcessingResponse(
+            message="Processing cancellation requested",
+            task_id=task_id,
+            cancelled=True,
+            pending_tasks_cancelled=pending_cancelled,
+            running_tasks_at_cancel=running_count,
+        )
+
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        logger.error(
+            f"Error cancelling processing for {dataset}: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to cancel processing: {str(e)}"
+        ) from e
