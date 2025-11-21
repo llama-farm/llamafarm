@@ -49,4 +49,12 @@ class RAGContextProvider(BaseDynamicContextProvider):
             formatted_chunks.append(chunk_text)
             source_counter += 1
 
-        return "\n\n".join(formatted_chunks)
+        # Add instruction header to prevent markup from appearing in responses
+        instruction = (
+            "The following information has been retrieved from your knowledge base to help answer the user's question. "
+            "Use this information to provide accurate responses, but NEVER include the <chunk>, <chunk_name>, or <chunk_content> "
+            "tags in your response. Only provide the actual information and insights based on the content.\n\n"
+            "<chunks>\n"
+        )
+        
+        return instruction + "\n\n".join(formatted_chunks) + "\n</chunks>"
