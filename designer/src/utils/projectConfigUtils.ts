@@ -27,7 +27,17 @@ export function createMinimalConfig(name: string, namespace: string): Record<str
     version: 'v1',
     name,
     namespace,
-    prompts: [],
+    prompts: [
+      {
+        name: 'default',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful AI assistant.'
+          }
+        ]
+      }
+    ],
     datasets: [],
     rag: {
       strategies: [],
@@ -35,7 +45,8 @@ export function createMinimalConfig(name: string, namespace: string): Record<str
     },
     runtime: {
       provider: 'ollama',
-      model: 'granite3-moe'
+      model: 'granite3-moe',
+      models: []
     }
   }
 }
