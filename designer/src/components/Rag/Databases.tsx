@@ -994,7 +994,7 @@ function Databases() {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl">
-              {mode === 'designer' ? 'Databases' : 'Config editor'}
+              {mode === 'designer' ? 'RAG' : 'Config editor'}
             </h2>
             {mode === 'designer' && (
               <TooltipProvider>
@@ -1006,7 +1006,7 @@ function Databases() {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
                     <p className="text-sm">
-                      Databases store and organize your embedded data for AI
+                      RAG databases store and organize your embedded data for AI
                       search. Create multiple databases to handle different
                       content types with specialized embedding and retrieval
                       strategies.
