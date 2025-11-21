@@ -2,14 +2,13 @@ name: End-to-End Tests
 permissions:
   contents: read
   actions: read # Required to download artifacts from other workflows
+  pull-requests: write # Can post PR comments
 
 on:
-  # Trigger after CLI build completes (for main branch pushes)
-  # Note: PRs are handled by e2e-fork.yml (untrusted context)
+  # Trigger after CLI build completes (works for both main branch and PRs)
   workflow_run:
     workflows: ["Build CLI"]
     types: [completed]
-    branches: [main]
   # Also allow manual trigger
   workflow_dispatch:
 
@@ -21,10 +20,12 @@ jobs:
     name: E2E Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # Skip e2e if CLI build failed (only for workflow_run trigger)
+    # Only run if CLI build succeeded and it's a PR or main/develop branch
     if: |
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.event == 'pull_request' ||
+       github.event.workflow_run.head_branch == 'main' ||
+       github.event.workflow_run.head_branch == 'develop')
     strategy:
       fail-fast: false
       matrix:
@@ -56,8 +57,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # For workflow_run, checkout the commit that triggered the build
-          # Always use base repository (this workflow only runs on trusted contexts)
+          # For workflow_run, checkout the commit SHA that triggered the build
+          # Use SHA instead of branch name to work with fork PRs
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # ============================================================
@@ -71,9 +72,41 @@ jobs:
           run_id: ${{ github.event.workflow_run.id }}
           name: ${{ matrix.artifact }}
           path: cli/
-          # Always use base repository - cli.yml uploads artifacts to base repo
-          repository: ${{ github.repository }}
           if_no_artifact_found: fail
+
+      - name: Download PR info artifact
+        if: github.event.workflow_run.id
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: cli.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: pr-info
+          path: ./pr-info
+          if_no_artifact_found: ignore
+
+      - name: Set PR info
+        id: pr-info
+        shell: bash
+        run: |
+          if [ -f ./pr-info/pr_number.txt ]; then
+            # Read and trim whitespace from PR number
+            PR_NUMBER=$(cat ./pr-info/pr_number.txt | tr -d '[:space:]')
+            if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+              echo "⚠ Warning: Invalid PR number in metadata"
+              echo "pr_number=" >> $GITHUB_OUTPUT
+            else
+              echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+              echo "head_sha=$(cat ./pr-info/head_sha.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+              echo "base_sha=$(cat ./pr-info/base_sha.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+              echo "head_ref=$(cat ./pr-info/head_ref.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+              echo "head_repo=$(cat ./pr-info/head_repo.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+              echo "base_repo=$(cat ./pr-info/base_repo.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+              echo "✓ PR metadata loaded: PR #${PR_NUMBER}"
+            fi
+          else
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            echo "No PR metadata found (this is a push, not a PR)"
+          fi
 
       - name: Rename binary to standard name
         shell: bash
@@ -529,3 +562,191 @@ jobs:
           path: ~/.llamafarm/logs/
           retention-days: 7
           if-no-files-found: warn
+
+      # ============================================================
+      # Post PR Comment with Results
+      # ============================================================
+      - name: Build test results summary
+        if: always() && steps.pr-info.outputs.pr_number != ''
+        id: build-summary
+        shell: bash
+        run: |
+          CONCLUSION="${{ job.status }}"
+          WORKFLOW_RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          HEAD_SHA="${{ steps.pr-info.outputs.head_sha }}"
+          
+          # Determine status emoji and message
+          if [ "$CONCLUSION" = "success" ]; then
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="**All E2E tests passed!**"
+          elif [ "$CONCLUSION" = "failure" ]; then
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="**E2E tests failed**"
+          elif [ "$CONCLUSION" = "cancelled" ]; then
+            STATUS_EMOJI="⚠️"
+            STATUS_TEXT="**E2E tests were cancelled**"
+          else
+            STATUS_EMOJI="❓"
+            STATUS_TEXT="**E2E tests completed with status: ${CONCLUSION}**"
+          fi
+          
+          # Build the comment body
+          COMMENT_BODY="${STATUS_EMOJI} ${STATUS_TEXT} (${{ matrix.os }})
+
+          ### Test Results Summary
+          
+          - **Workflow Run**: [View Details](${WORKFLOW_RUN_URL})
+          - **Commit**: \`${HEAD_SHA:0:7}\`
+          - **Status**: \`${CONCLUSION}\`
+          - **OS**: \`${{ matrix.os }}\`
+          
+          ---
+          *This comment was automatically generated by the E2E Tests workflow.*"
+          
+          # Save to file for github-script
+          echo "$COMMENT_BODY" > comment-body-${{ matrix.os }}.txt
+          echo "Comment body prepared for ${{ matrix.os }}"
+
+      - name: Find existing comment
+        if: always() && steps.pr-info.outputs.pr_number != ''
+        id: find-comment
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+        with:
+          script: |
+            const prNumber = process.env.PR_NUMBER;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            // Find comment from this bot (contains the marker)
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('*This comment was automatically generated by the E2E Tests workflow.*')
+            );
+            
+            if (botComment) {
+              core.setOutput('comment_id', botComment.id);
+              core.setOutput('exists', 'true');
+              console.log(`Found existing comment: ${botComment.id}`);
+            } else {
+              core.setOutput('exists', 'false');
+              console.log('No existing comment found');
+            }
+
+      - name: Post or update PR comment
+        if: always() && steps.pr-info.outputs.pr_number != ''
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+          OS: ${{ matrix.os }}
+        with:
+          script: |
+            const fs = require('fs');
+            const prNumber = process.env.PR_NUMBER;
+            const os = process.env.OS;
+            const commentFile = `comment-body-${os}.txt`;
+            
+            if (!fs.existsSync(commentFile)) {
+              console.log(`Comment file not found: ${commentFile}`);
+              return;
+            }
+            
+            const newCommentBody = fs.readFileSync(commentFile, 'utf8');
+            const commentExists = '${{ steps.find-comment.outputs.exists }}' === 'true';
+            const existingCommentId = '${{ steps.find-comment.outputs.comment_id }}';
+            
+            if (commentExists && existingCommentId) {
+              // Get existing comment and append new results
+              const { data: existingComment } = await github.rest.issues.getComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingCommentId,
+              });
+              
+              // Append new OS results to existing comment
+              const updatedBody = existingComment.body + '\n\n---\n\n' + newCommentBody;
+              
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingCommentId,
+                body: updatedBody
+              });
+              console.log(`✅ Updated existing comment #${existingCommentId} on PR #${prNumber} with ${os} results`);
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: newCommentBody
+              });
+              console.log(`✅ Created new comment on PR #${prNumber} for ${os}`);
+            }
+
+  # Handle CLI build failures
+  notify-cli-failure:
+    name: Notify CLI Build Failure
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure'
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Download PR info artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: cli.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: pr-info
+          path: ./pr-info
+          if_no_artifact_found: ignore
+
+      - name: Set PR info
+        id: pr-info
+        shell: bash
+        run: |
+          if [ -f ./pr-info/pr_number.txt ]; then
+            # Read and trim whitespace from PR number
+            PR_NUMBER=$(cat ./pr-info/pr_number.txt | tr -d '[:space:]')
+            if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+              echo "⚠ Warning: Invalid PR number in metadata"
+              echo "pr_number=" >> $GITHUB_OUTPUT
+            else
+              echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+              echo "✓ PR metadata loaded: PR #${PR_NUMBER}"
+            fi
+          else
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            echo "No PR metadata found (this is a push, not a PR)"
+          fi
+
+      - name: Comment on PR about CLI build failure
+        if: steps.pr-info.outputs.pr_number != ''
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+        with:
+          script: |
+            const prNumber = process.env.PR_NUMBER;
+            const workflowRunUrl = context.payload.workflow_run.html_url;
+            
+            const commentBody = `⚠️ **CLI build failed** - E2E tests were not run.
+
+            Check the [CLI build workflow run](${workflowRunUrl}) for details.
+
+            ---
+            *This comment was automatically generated by the E2E Tests workflow.*`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: commentBody
+            });
+            console.log(`✅ Posted CLI build failure comment on PR #${prNumber}`);
