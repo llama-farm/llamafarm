@@ -2,323 +2,325 @@ version: v1
 name: project_seed
 namespace: llamafarm
 prompts:
-- name: default
-  messages:
-  - role: system
-    content: "# LlamaFarm Development Assistant\n\n    You are a helpful assistant\
-      \ for developers using LlamaFarm, an open-source framework for building RAG\
-      \ and agentic AI applications.\n\n    ## Your Role\n    - Help users understand\
-      \ and work with LlamaFarm projects\n    - Answer questions about configuration,\
-      \ CLI commands, RAG pipelines, and workflows\n    - Provide clear, concise guidance\
-      \ with practical examples\n    - Reference documentation and best practices\
-      \ when available\n\n    ## Core Principles\n    - **Conversational and helpful**:\
-      \ Keep responses clear and well-formatted in Markdown\n    - **Config-first**:\
-      \ The `llamafarm.yaml` file is the source of truth for projects\n    - **Practical\
-      \ guidance**: Suggest specific commands or config changes when appropriate\n\
-      \    - **Safety-aware**: Decline requests that could harm the user's system\
-      \ or data\n\n    ## Context Sources\n    You may receive additional context\
-      \ about LlamaFarm features and commands dynamically based on the user's question.\
-      \ Use this information to provide accurate, up-to-date answers.\n\n    ## When\
-      \ Unsure\n    If you don't have enough information to answer confidently:\n\
-      \    - Ask clarifying questions\n    - Suggest relevant CLI commands to explore\
-      \ (e.g., `lf --help`, `lf datasets --help`)\n    - Direct users to check their\
-      \ project's `llamafarm.yaml` configuration\n\n    ## Output Format\n    Respond\
-      \ with plain text in natural language. Do NOT wrap your response in JSON or\
-      \ any structured format. Just provide direct, helpful answers in conversational\
-      \ Markdown.\n\n    Remember: You're here to make LlamaFarm easier to use. Be\
-      \ friendly, concise, and actionable.\n- role: \"assistant\"\n  content: |\n\
-      \    Welcome to LlamaFarm dev mode! \U0001F999\n\n    I can help you with:\n\
-      \    - Getting started: `lf init`, `lf start`\n    - Dataset management: `lf\
-      \ datasets create/upload/process`\n    - RAG queries: `lf rag query`\n    -\
-      \ Configuration: editing `llamafarm.yaml`\n\n    Ask me anything about LlamaFarm,\
-      \ or type `/help` for chat commands!\n"
+  - name: default
+    messages:
+      - role: system
+        content:
+          "# LlamaFarm Development Assistant\n\n    You are a helpful assistant\
+          \ for developers using LlamaFarm, an open-source framework for building RAG\
+          \ and agentic AI applications.\n\n    ## Your Role\n    - Help users understand\
+          \ and work with LlamaFarm projects\n    - Answer questions about configuration,\
+          \ CLI commands, RAG pipelines, and workflows\n    - Provide clear, concise guidance\
+          \ with practical examples\n    - Reference documentation and best practices\
+          \ when available\n\n    ## Core Principles\n    - **Conversational and helpful**:\
+          \ Keep responses clear and well-formatted in Markdown\n    - **Config-first**:\
+          \ The `llamafarm.yaml` file is the source of truth for projects\n    - **Practical\
+          \ guidance**: Suggest specific commands or config changes when appropriate\n\
+          \    - **Safety-aware**: Decline requests that could harm the user's system\
+          \ or data\n\n    ## Context Sources\n    You may receive additional context\
+          \ about LlamaFarm features and commands dynamically based on the user's question.\
+          \ Use this information to provide accurate, up-to-date answers.\n\n    ## When\
+          \ Unsure\n    If you don't have enough information to answer confidently:\n\
+          \    - Ask clarifying questions\n    - Suggest relevant CLI commands to explore\
+          \ (e.g., `lf --help`, `lf datasets --help`)\n    - Direct users to check their\
+          \ project's `llamafarm.yaml` configuration\n\n    ## Output Format\n    Respond\
+          \ with plain text in natural language. Do NOT wrap your response in JSON or\
+          \ any structured format. Just provide direct, helpful answers in conversational\
+          \ Markdown.\n\n    Remember: You're here to make LlamaFarm easier to use. Be\
+          \ friendly, concise, and actionable.\n- role: \"assistant\"\n  content: |\n\
+          \    Welcome to LlamaFarm dev mode! \U0001F999\n\n    I can help you with:\n\
+          \    - Getting started: `lf init`, `lf start`\n    - Dataset management: `lf\
+          \ datasets create/upload/process`\n    - RAG queries: `lf rag query`\n    -\
+          \ Configuration: editing `llamafarm.yaml`\n\n    Ask me anything about LlamaFarm,\
+          \ or type `/help` for chat commands!\n"
 rag:
   default_database: main_database
   databases:
-  - name: main_database
-    type: ChromaStore
-    config:
-      persist_directory: ./data/chroma_db
-      distance_function: cosine
-      collection_name: documents
-    embedding_strategies:
-    - name: default_embeddings
-      type: UniversalEmbedder
+    - name: main_database
+      type: ChromaStore
       config:
-        model: nomic-ai/nomic-embed-text-v1.5
-        dimension: 768
-        batch_size: 16
-        timeout: 60
-        auto_pull: true
-      priority: 0
-    retrieval_strategies:
-    - name: basic_search
-      type: BasicSimilarityStrategy
-      config:
-        distance_metric: cosine
-        top_k: 10
-      default: true
-    - name: filtered_search
-      type: MetadataFilteredStrategy
-      config:
-        top_k: 10
-        filter_mode: post
-        fallback_multiplier: 2
-      default: false
-    default_embedding_strategy: default_embeddings
-    default_retrieval_strategy: basic_search
+        persist_directory: ./data/chroma_db
+        distance_function: cosine
+        collection_name: documents
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v1.5
+            dimension: 768
+            batch_size: 16
+            timeout: 60
+            auto_pull: true
+          priority: 0
+      retrieval_strategies:
+        - name: basic_search
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 10
+          default: true
+        - name: filtered_search
+          type: MetadataFilteredStrategy
+          config:
+            top_k: 10
+            filter_mode: post
+            fallback_multiplier: 2
+          default: false
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: basic_search
   data_processing_strategies:
-  - name: universal_processor
-    description: Unified processor for PDFs, Word docs, CSVs, Markdown, and text files
-    parsers:
-    - type: PDFParser_LlamaIndex
-      config:
-        chunk_strategy: semantic
-        chunk_size: 300
-        chunk_overlap: 50
-        extract_metadata: true
-        extract_tables: true
-      file_include_patterns:
-      - '*.pdf'
-      - '*.PDF'
-      priority: 10
-    - type: PDFParser_PyPDF2
-      config:
-        chunk_size: 300
-        chunk_overlap: 50
-        chunk_strategy: paragraphs
-        extract_metadata: true
-        combine_pages: false
-      file_include_patterns:
-      - '*.pdf'
-      - '*.PDF'
-      priority: 50
-    - type: DocxParser_LlamaIndex
-      config:
-        chunk_size: 500
-        chunk_overlap: 100
-        extract_metadata: true
-        extract_tables: true
-      file_include_patterns:
-      - '*.docx'
-      - '*.DOCX'
-      priority: 10
-    - type: MarkdownParser_Python
-      config:
-        chunk_size: 400
-        chunk_strategy: sections
-        extract_metadata: true
-        extract_code_blocks: true
-        extract_links: true
-      file_include_patterns:
-      - '*.md'
-      - '*.markdown'
-      - '*.mdown'
-      - '*.mkd'
-      - README*
-      priority: 10
-    - type: CSVParser_Pandas
-      config:
-        chunk_size: 1000
-        chunk_strategy: rows
-        extract_metadata: true
-        encoding: utf-8
-      file_include_patterns:
-      - '*.csv'
-      - '*.CSV'
-      - '*.tsv'
-      - '*.TSV'
-      - '*.dat'
-      priority: 10
-    - type: ExcelParser_Pandas
-      config:
-        chunk_size: 500
-        sheets: null
-        extract_metadata: true
-      file_include_patterns:
-      - '*.xlsx'
-      - '*.XLSX'
-      - '*.xls'
-      - '*.XLS'
-      priority: 10
-    - type: TextParser_Python
-      config:
-        encoding: utf-8
-        chunk_size: 500
-        chunk_overlap: 100
-        chunk_strategy: sentences
-        clean_text: true
-        extract_metadata: true
-      file_include_patterns:
-      - '*.txt'
-      - '*.text'
-      - '*.log'
-      - '*.json'
-      - '*.xml'
-      - '*.yaml'
-      - '*.yml'
-      - '*.toml'
-      - '*.cfg'
-      - '*.conf'
-      - '*.ini'
-      - '*.py'
-      - '*.js'
-      - '*.java'
-      - '*.cpp'
-      - '*.c'
-      - '*.h'
-      - '*.sh'
-      - '*.bash'
-      - '*.zsh'
-      - LICENSE*
-      - CHANGELOG*
-      - AUTHORS*
-      priority: 50
-    extractors:
-    - type: ContentStatisticsExtractor
-      config:
-        include_readability: true
-        include_vocabulary: true
-        include_structure: true
-      file_include_patterns:
-      - '*'
-      priority: 10
-    - type: EntityExtractor
-      config:
-        entity_types:
-        - PERSON
-        - ORG
-        - GPE
-        - DATE
-        - PRODUCT
-        - MONEY
-        - PERCENT
-        use_fallback: true
-        min_entity_length: 2
-      file_include_patterns:
-      - '*'
-      priority: 20
-    - type: KeywordExtractor
-      config:
-        algorithm: yake
-        max_keywords: 10
-        min_keyword_length: 3
-      file_include_patterns:
-      - '*'
-      priority: 30
-    - type: TableExtractor
-      config:
-        output_format: dict
-        extract_headers: true
-        merge_cells: true
-      file_include_patterns:
-      - '*.pdf'
-      - '*.PDF'
-      priority: 5
-    - type: DateTimeExtractor
-      config:
-        formats:
-        - ISO8601
-        - US
-        - EU
-        extract_relative: true
-        extract_times: true
-      file_include_patterns:
-      - '*.csv'
-      - '*.xlsx'
-      - '*.xls'
-      - '*.tsv'
-      priority: 5
-    - type: PatternExtractor
-      config:
-        predefined_patterns:
-        - email
-        - url
-        - ip_address
-        - version
-        custom_patterns:
-        - name: function_def
-          pattern: def\s+\w+\s*\(
-          description: Python function definitions
-        - name: class_def
-          pattern: class\s+\w+[\(\:]
-          description: Class definitions
-      file_include_patterns:
-      - '*.py'
-      - '*.js'
-      - '*.java'
-      - '*.cpp'
-      - '*.c'
-      - '*.h'
-      priority: 5
-    - type: HeadingExtractor
-      config:
-        max_level: 6
-        include_hierarchy: true
-        extract_outline: true
-      file_include_patterns:
-      - '*.md'
-      - '*.markdown'
-      - README*
-      priority: 5
-    - type: LinkExtractor
-      config:
-        extract_urls: true
-        extract_emails: true
-        extract_domains: true
-      file_include_patterns:
-      - '*.md'
-      - '*.markdown'
-      - '*.html'
-      - '*.htm'
-      priority: 10
+    - name: universal_processor
+      description: Unified processor for PDFs, Word docs, CSVs, Markdown, and text files
+      parsers:
+        - type: PDFParser_LlamaIndex
+          config:
+            chunk_strategy: semantic
+            chunk_size: 300
+            chunk_overlap: 50
+            extract_metadata: true
+            extract_tables: true
+          file_include_patterns:
+            - "*.pdf"
+            - "*.PDF"
+          priority: 10
+        - type: PDFParser_PyPDF2
+          config:
+            chunk_size: 300
+            chunk_overlap: 50
+            chunk_strategy: paragraphs
+            extract_metadata: true
+            combine_pages: false
+          file_include_patterns:
+            - "*.pdf"
+            - "*.PDF"
+          priority: 50
+        - type: DocxParser_LlamaIndex
+          config:
+            chunk_size: 500
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+          file_include_patterns:
+            - "*.docx"
+            - "*.DOCX"
+          priority: 10
+        - type: MarkdownParser_Python
+          config:
+            chunk_size: 400
+            chunk_strategy: sections
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+          file_include_patterns:
+            - "*.md"
+            - "*.markdown"
+            - "*.mdown"
+            - "*.mkd"
+            - README*
+          priority: 10
+        - type: CSVParser_Pandas
+          config:
+            chunk_size: 1000
+            chunk_strategy: rows
+            extract_metadata: true
+            encoding: utf-8
+          file_include_patterns:
+            - "*.csv"
+            - "*.CSV"
+            - "*.tsv"
+            - "*.TSV"
+            - "*.dat"
+          priority: 10
+        - type: ExcelParser_Pandas
+          config:
+            chunk_size: 500
+            sheets: null
+            extract_metadata: true
+          file_include_patterns:
+            - "*.xlsx"
+            - "*.XLSX"
+            - "*.xls"
+            - "*.XLS"
+          priority: 10
+        - type: TextParser_Python
+          config:
+            encoding: utf-8
+            chunk_size: 500
+            chunk_overlap: 100
+            chunk_strategy: sentences
+            clean_text: true
+            extract_metadata: true
+          file_include_patterns:
+            - "*.txt"
+            - "*.text"
+            - "*.log"
+            - "*.json"
+            - "*.xml"
+            - "*.yaml"
+            - "*.yml"
+            - "*.toml"
+            - "*.cfg"
+            - "*.conf"
+            - "*.ini"
+            - "*.py"
+            - "*.js"
+            - "*.java"
+            - "*.cpp"
+            - "*.c"
+            - "*.h"
+            - "*.sh"
+            - "*.bash"
+            - "*.zsh"
+            - LICENSE*
+            - CHANGELOG*
+            - AUTHORS*
+          priority: 50
+      extractors:
+        - type: ContentStatisticsExtractor
+          config:
+            include_readability: true
+            include_vocabulary: true
+            include_structure: true
+          file_include_patterns:
+            - "*"
+          priority: 10
+        - type: EntityExtractor
+          config:
+            entity_types:
+              - PERSON
+              - ORG
+              - GPE
+              - DATE
+              - PRODUCT
+              - MONEY
+              - PERCENT
+            use_fallback: true
+            min_entity_length: 2
+          file_include_patterns:
+            - "*"
+          priority: 20
+        - type: KeywordExtractor
+          config:
+            algorithm: yake
+            max_keywords: 10
+            min_keyword_length: 3
+          file_include_patterns:
+            - "*"
+          priority: 30
+        - type: TableExtractor
+          config:
+            output_format: dict
+            extract_headers: true
+            merge_cells: true
+          file_include_patterns:
+            - "*.pdf"
+            - "*.PDF"
+          priority: 5
+        - type: DateTimeExtractor
+          config:
+            formats:
+              - ISO8601
+              - US
+              - EU
+            extract_relative: true
+            extract_times: true
+          file_include_patterns:
+            - "*.csv"
+            - "*.xlsx"
+            - "*.xls"
+            - "*.tsv"
+          priority: 5
+        - type: PatternExtractor
+          config:
+            predefined_patterns:
+              - email
+              - url
+              - ip_address
+              - version
+            custom_patterns:
+              - name: function_def
+                pattern: def\s+\w+\s*\(
+                description: Python function definitions
+              - name: class_def
+                pattern: class\s+\w+[\(\:]
+                description: Class definitions
+          file_include_patterns:
+            - "*.py"
+            - "*.js"
+            - "*.java"
+            - "*.cpp"
+            - "*.c"
+            - "*.h"
+          priority: 5
+        - type: HeadingExtractor
+          config:
+            max_level: 6
+            include_hierarchy: true
+            extract_outline: true
+          file_include_patterns:
+            - "*.md"
+            - "*.markdown"
+            - README*
+          priority: 5
+        - type: LinkExtractor
+          config:
+            extract_urls: true
+            extract_emails: true
+            extract_domains: true
+          file_include_patterns:
+            - "*.md"
+            - "*.markdown"
+            - "*.html"
+            - "*.htm"
+          priority: 10
 datasets:
-- name: default
-  data_processing_strategy: universal_processor
-  database: main_database
-  files: []
-- name: main_database
-  data_processing_strategy: universal_processor
-  database: main_database
-  files:
-  - 969b87007c023f5e30a34eb489af37feb83f2db7b18ff04a603067fe5066c5ca
-  - 72c511d1dbfa8b0d65860ad5e0906c916335d3238207f6b07aabac517f3f012e
+  - name: default
+    data_processing_strategy: universal_processor
+    database: main_database
+    files: []
+  - name: main_database
+    data_processing_strategy: universal_processor
+    database: main_database
+    files:
+      - 969b87007c023f5e30a34eb489af37feb83f2db7b18ff04a603067fe5066c5ca
+      - 72c511d1dbfa8b0d65860ad5e0906c916335d3238207f6b07aabac517f3f012e
 runtime:
   default_model: default
   models:
-  - name: default
-    description: Default Universal model for LlamaFarm
-    provider: ollama
-    model: qwen3:1.7b
-    base_url: http://localhost:11434/v1
-    prompts: []
-    tool_call_strategy: native_api
-    tools:
-    - type: function
-      name: cli.dataset_upload
-      description: Upload a file to the dataset
-      parameters:
-        type: object
-        required:
-        - filepath
-        - namespace
-        - project
-        - dataset
-        properties:
-          namespace:
-            type: string
-            description: The namespace of the dataset
-          project:
-            type: string
-            description: The project of the dataset
-          dataset:
-            type: string
-            description: The dataset of the dataset
-          filepath:
-            type: string
-            description: The path to the file to upload
+    - name: default
+      description: Default Universal model for LlamaFarm
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF
+      model_api_parameters:
+        gguf_quantization: "Q4_K_M"
+      prompts: []
+      tool_call_strategy: native_api
+      tools:
+        - type: function
+          name: cli.dataset_upload
+          description: Upload a file to the dataset
+          parameters:
+            type: object
+            required:
+              - filepath
+              - namespace
+              - project
+              - dataset
+            properties:
+              namespace:
+                type: string
+                description: The namespace of the dataset
+              project:
+                type: string
+                description: The project of the dataset
+              dataset:
+                type: string
+                description: The dataset of the dataset
+              filepath:
+                type: string
+                description: The path to the file to upload
 mcp:
   servers:
-  - name: llamafarm-server
-    transport: http
-    base_url: http://localhost:8000/mcp
+    - name: llamafarm-server
+      transport: http
+      base_url: http://localhost:8000/mcp

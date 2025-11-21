@@ -87,6 +87,8 @@ jobs:
       - name: Build and Sign Electron app
         working-directory: electron-app
         env:
+          # GitHub token for electron-builder to publish artifacts
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Certificate (same as CLI workflow)
           CSC_LINK: ${{ secrets.APPLE_CERT_DATA }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}

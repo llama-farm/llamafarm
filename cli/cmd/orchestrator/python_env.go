@@ -136,21 +136,6 @@ func (m *PythonEnvManager) ValidatePythonInstallation() error {
 	return nil
 }
 
-// RunWithUV runs a command using UV's Python environment
-// This is the preferred way to run Python commands as it handles all environment setup
-func (m *PythonEnvManager) RunWithUV(workDir string, args ...string) *exec.Cmd {
-	uvPath := m.uvManager.GetUVPath()
-
-	// Build the command: uv run --managed-python python <args>
-	fullArgs := append([]string{"run", "--managed-python", "python"}, args...)
-
-	cmd := exec.Command(uvPath, fullArgs...)
-	cmd.Dir = workDir
-	cmd.Env = m.getEnv()
-
-	return cmd
-}
-
 // getEnv returns the environment variables for UV commands
 // This ensures UV uses our managed directories
 func (m *PythonEnvManager) getEnv() []string {

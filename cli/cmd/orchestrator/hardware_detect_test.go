@@ -177,3 +177,4 @@ func TestHasROCm(t *testing.T) {
 		}
 	}
 }
+

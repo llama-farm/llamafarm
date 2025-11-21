@@ -8,10 +8,14 @@ import {
 import Header from './components/Header'
 import { ToastProvider } from './components/ui/toast'
 import ProjectModal from './components/Project/ProjectModal'
+import CopyProjectModal from './components/Project/CopyProjectModal'
+import DeleteProjectModal from './components/Project/DeleteProjectModal'
 import {
   ProjectModalProvider,
   useProjectModalContext,
 } from './contexts/ProjectModalContext'
+import { useProjects } from './hooks/useProjects'
+import { getProjectsList } from './utils/projectConstants'
 import { ModeResetProvider } from './contexts/ModeContext'
 import { UnsavedChangesProvider } from './contexts/UnsavedChangesContext'
 import Home from './Home'
@@ -51,6 +55,10 @@ function RagRedirect({ path }: { path: string }) {
 
 function ProjectModalRoot() {
   const modal = useProjectModalContext()
+  const namespace = getCurrentNamespace()
+  const { data: projectsResponse } = useProjects(namespace)
+  const availableProjects = getProjectsList(projectsResponse)
+
   // Only render the modal for edit mode; create is handled by Home form
   if (modal.modalMode !== 'edit') return null
   // Derive initial details from current project config
@@ -60,18 +68,38 @@ function ProjectModalRoot() {
     what: projectBrief?.what || '',
   }
   return (
-    <ProjectModal
-      isOpen={modal.isModalOpen}
-      mode={modal.modalMode}
-      initialName={modal.projectName}
-      initialBrief={initialBrief}
-      onClose={modal.closeModal}
-      onSave={modal.saveProject}
-      onDelete={modal.modalMode === 'edit' ? modal.deleteProject : undefined}
-      isLoading={modal.isLoading}
-      projectError={modal.projectError}
-      onNameChange={modal.validateName}
-    />
+    <>
+      <ProjectModal
+        isOpen={modal.isModalOpen}
+        mode={modal.modalMode}
+        initialName={modal.projectName}
+        initialBrief={initialBrief}
+        onClose={modal.closeModal}
+        onSave={modal.saveProject}
+        onOpenDelete={modal.modalMode === 'edit' ? modal.openDeleteModal : undefined}
+        onCopy={() => modal.openCopyModal()}
+        isLoading={modal.isLoading}
+        projectError={modal.projectError}
+        onNameChange={modal.validateName}
+      />
+      <CopyProjectModal
+        isOpen={modal.isCopyModalOpen}
+        sourceProjectName={modal.projectName}
+        availableProjects={availableProjects}
+        onClose={modal.closeCopyModal}
+        onCopy={modal.copyProject}
+        isLoading={modal.isLoading}
+        projectError={modal.projectError}
+        onNameChange={modal.validateName}
+      />
+      <DeleteProjectModal
+        isOpen={modal.isDeleteModalOpen}
+        projectName={modal.projectName}
+        onClose={modal.closeDeleteModal}
+        onConfirm={modal.deleteProject}
+        isLoading={modal.isLoading}
+      />
+    </>
   )
 }
 
@@ -84,6 +112,7 @@ function DemoModalRoot() {
       isOpen={demoModal.isOpen}
       onClose={demoModal.closeModal}
       namespace={namespace}
+      autoStartDemoId={demoModal.autoStartDemoId}
     />
   )
 }

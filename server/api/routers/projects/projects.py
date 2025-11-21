@@ -388,6 +388,7 @@ class ChatRequest(BaseModel):
     rag_retrieval_strategy: str | None = None
     rag_top_k: int | None = None
     rag_score_threshold: float | None = None
+    n_ctx: int | None = None  # Context window size for GGUF models (universal runtime)
 
 
 @router.post(
@@ -503,6 +504,7 @@ async def chat(
                 retrieval_strategy=request.rag_retrieval_strategy,
                 rag_top_k=request.rag_top_k,
                 rag_score_threshold=request.rag_score_threshold,
+                n_ctx=request.n_ctx,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -519,6 +521,7 @@ async def chat(
             database=request.database,
             retrieval_strategy=request.rag_retrieval_strategy,
             rag_top_k=request.rag_top_k,
+            n_ctx=request.n_ctx,
             rag_score_threshold=request.rag_score_threshold,
         )
     except Exception as e:

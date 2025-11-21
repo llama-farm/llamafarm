@@ -55,6 +55,11 @@ class MCPService:
     def _resolve_servers(self) -> list[Server]:
         """Resolve the list of MCP servers to use for the model."""
         servers_to_use: list[Server] = []
+
+        # If no MCP config exists, return empty list
+        if self._config.mcp is None:
+            return servers_to_use
+
         if self._model_config.mcp_servers is not None:
             servers_to_use.extend(
                 [
@@ -64,9 +69,7 @@ class MCPService:
                 ]
             )
         else:
-            servers_to_use.extend(
-                self._config.mcp.servers if self._config.mcp is not None else []
-            )
+            servers_to_use.extend(self._config.mcp.servers)
         return servers_to_use
 
     def list_servers(self) -> list[str]:

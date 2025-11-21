@@ -131,7 +131,26 @@ properties:
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
             model_api_parameters:
               type: object
-              description: Additional parameters passed to the API provider
+              description: |
+                Additional parameters passed directly to the API provider as request parameters.
+                Common examples: temperature, top_p, max_tokens, frequency_penalty, etc.
+              additionalProperties: true
+            extra_body:
+              type: object
+              description: |
+                Provider-specific parameters passed in the request body's extra_body field.
+                These parameters are sent directly to the underlying provider API.
+
+                Note: For GGUF quantization, specify it in the model name using the format
+                "model_id:quantization" (e.g., "unsloth/Qwen3-4B-GGUF:Q4_K_M").
+              properties:
+                n_ctx:
+                  type: integer
+                  description: |
+                    Context window size for GGUF models (Universal runtime only).
+                    If not specified, automatically computed based on available memory,
+                    model training context, and pattern-based defaults.
+                    See Universal runtime documentation for auto-detection behavior.
               additionalProperties: true
             prompts:
               type: array

@@ -49,7 +49,7 @@ const textareaClasses =
 
 function EmptyState() {
   return (
-    <div className="flex items-center justify-center h-full">
+    <div className="flex items-center justify-center h-full w-full">
       <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-teal-500/20 border border-teal-500/30">
           <FontIcon type="test" className="w-5 h-5 text-teal-400" />
@@ -159,7 +159,10 @@ export default function TestChat({
       const apiDefaultName = (defaultModel as any)?.name
       if (apiDefaultName && validModelNames.includes(apiDefaultName)) {
         setSelectedModel(apiDefaultName)
-      } else if (fallbackDefaultName && validModelNames.includes(fallbackDefaultName)) {
+      } else if (
+        fallbackDefaultName &&
+        validModelNames.includes(fallbackDefaultName)
+      ) {
         setSelectedModel(fallbackDefaultName)
       } else if (validModelNames.length > 0) {
         // Use first available model as last resort
@@ -169,7 +172,12 @@ export default function TestChat({
         setSelectedModel(undefined)
       }
     }
-  }, [(defaultModel as any)?.name, fallbackDefaultName, selectedModel, unifiedModels])
+  }, [
+    (defaultModel as any)?.name,
+    fallbackDefaultName,
+    selectedModel,
+    unifiedModels,
+  ])
 
   // Persist valid model selection to localStorage
   useEffect(() => {
@@ -256,7 +264,9 @@ export default function TestChat({
       return typeof error === 'string' ? error : error.message
     }
     if (projectChatError) {
-      return typeof projectChatError === 'string' ? projectChatError : projectChatError.message
+      return typeof projectChatError === 'string'
+        ? projectChatError
+        : projectChatError.message
     }
     return null
   })()
@@ -875,12 +885,19 @@ export default function TestChat({
       )}
 
       {/* Messages */}
-      <div ref={listRef} className="flex-1 overflow-y-auto p-3 md:p-4">
-        <div className="flex flex-col gap-4 min-h-full pb-80">
-          {!hasMessages ? (
-            <EmptyState />
-          ) : (
-            messages.map((m: ChatboxMessage) => (
+      <div
+        ref={listRef}
+        className={
+          !hasMessages
+            ? 'flex-1 overflow-hidden p-3 md:p-4'
+            : 'flex-1 overflow-y-auto p-3 md:p-4'
+        }
+      >
+        {!hasMessages ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-4 min-h-full pb-80">
+            {messages.map((m: ChatboxMessage) => (
               <TestChatMessage
                 key={m.id}
                 message={m}
@@ -891,10 +908,10 @@ export default function TestChat({
                 lastUserInput={lastUserInputRef.current}
                 showGenSettings={showGenSettings}
               />
-            ))
-          )}
-          <div ref={endRef} />
-        </div>
+            ))}
+            <div ref={endRef} />
+          </div>
+        )}
       </div>
 
       {/* Input */}
@@ -987,11 +1004,20 @@ export function TestChatMessage({
   // Remove raw <tool_call> XML tags from display (handled as separate messages)
   if (isAssistant && typeof contentWithoutThinking === 'string') {
     // Remove complete tool_call blocks
-    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<tool_call>[\s\S]*?<\/tool_call>/g,
+      ''
+    )
     // Remove unclosed tool_call tags (streaming in progress)
-    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*$/g, '')
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<tool_call>[\s\S]*$/g,
+      ''
+    )
     // Remove orphaned closing tags
-    contentWithoutThinking = contentWithoutThinking.replace(/<\/tool_call>/g, '')
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<\/tool_call>/g,
+      ''
+    )
     contentWithoutThinking = contentWithoutThinking.trim()
   }
 
@@ -1035,9 +1061,7 @@ export function TestChatMessage({
         }
       >
         {message.isLoading && isAssistant ? (
-          showThinking ? (
-            <TypingDots label="Thinking" />
-          ) : null
+          <TypingDots label="Thinking" />
         ) : message.metadata?.isTest && isUser ? (
           <div className="whitespace-pre-wrap">
             <div className="mb-2">
@@ -1067,11 +1091,11 @@ export function TestChatMessage({
                   </span>
                 </button>
                 {openThinking && (
-                  <div className="px-3 py-2 text-sm whitespace-pre-wrap border-t border-border">
+                  <div className="px-3 py-2 text-sm border-t border-border">
                     {thinkingFromTags ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1.5 prose-pre:my-2">
+                      <div className="prose prose-sm dark:prose-invert max-w-none leading-normal prose-p:my-4 prose-li:my-0.5 prose-ul:my-3 prose-ol:my-3 prose-headings:my-4 prose-pre:my-3">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {thinkingFromTags}
+                          {thinkingFromTags.replace(/\n{3,}/g, '\n\n')}
                         </ReactMarkdown>
                       </div>
                     ) : Array.isArray((message as any)?.metadata?.thinking) &&
@@ -1096,9 +1120,9 @@ export function TestChatMessage({
             )}
 
             {/* Final answer content (without <think> … </think>) */}
-            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap leading-relaxed prose-p:my-1 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1.5 prose-pre:my-2">
+            <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-4 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-headings:my-4 prose-pre:my-3 [&>*]:mb-4">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {contentWithoutThinking}
+                {contentWithoutThinking.replace(/\n{3,}/g, '\n\n')}
               </ReactMarkdown>
             </div>
           </>

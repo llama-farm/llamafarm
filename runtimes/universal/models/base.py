@@ -2,11 +2,11 @@
 Base model class for all HuggingFace models (transformers & diffusers).
 """
 
-from abc import ABC, abstractmethod
-from typing import Optional, Any, Dict
-import torch
 import logging
+from abc import ABC, abstractmethod
+from typing import Any, Optional
 
+import torch
 from transformers import PreTrainedTokenizerBase
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,44 @@ class BaseModel(ABC):
         """Load the model and associated components."""
         pass
 
-    def get_model_info(self) -> Dict[str, Any]:
+    async def unload(self) -> None:
+        """Unload the model and free resources.
+
+        Default implementation for transformers models. Subclasses should override
+        if they need custom cleanup (e.g., GGUF models with llama-cpp-python).
+        """
+        logger.info(f"Unloading model: {self.model_id}")
+
+        # Move model to CPU to free GPU memory
+        if self.model is not None and hasattr(self.model, "to"):
+            try:
+                self.model = self.model.to("cpu")
+            except Exception as e:
+                logger.warning(f"Could not move model to CPU: {e}")
+
+        # Clear references
+        self.model = None
+        self.tokenizer = None
+        self.processor = None
+        self.feature_extractor = None
+        self.pipe = None
+
+        # Clear CUDA cache if available
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.debug("Cleared CUDA cache")
+
+        # Clear MPS cache if available (PyTorch 2.0+)
+        if hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
+            try:
+                torch.mps.empty_cache()
+                logger.debug("Cleared MPS cache")
+            except Exception:
+                pass
+
+        logger.info(f"Model unloaded: {self.model_id}")
+
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
         return {
             "model_id": self.model_id,
