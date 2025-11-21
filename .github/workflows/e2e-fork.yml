@@ -68,7 +68,7 @@ jobs:
           commit: ${{ env.PR_HEAD_SHA }}
           name: ${{ matrix.artifact }}
           path: cli/
-          repo: ${{ env.ARTIFACT_REPO }}
+          repository: ${{ env.ARTIFACT_REPO }}
           search_artifacts: true
           if_no_artifact_found: fail
 

@@ -72,7 +72,7 @@ jobs:
           name: ${{ matrix.artifact }}
           path: cli/
           # Always use base repository - cli.yml uploads artifacts to base repo
-          repo: ${{ github.repository }}
+          repository: ${{ github.repository }}
           if_no_artifact_found: fail
 
       - name: Rename binary to standard name
