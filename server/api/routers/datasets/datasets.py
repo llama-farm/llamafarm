@@ -286,12 +286,20 @@ class ProcessDatasetResponse(BaseModel):
     task_id: str | None = None  # For async processing
 
 
+class CleanupError(BaseModel):
+    file_hash: str
+    error: str
+
+
 class CancelProcessingResponse(BaseModel):
     message: str
     task_id: str
     cancelled: bool
     pending_tasks_cancelled: int
     running_tasks_at_cancel: int
+    files_reverted: int = 0
+    files_failed_to_revert: int = 0
+    errors: list[CleanupError] | None = None
 
 
 @router.post("/{dataset}/process", response_model=ProcessDatasetResponse)
@@ -799,9 +807,12 @@ async def cancel_dataset_processing(
         # Approach 1: Try to get from result when state is PENDING
         # This is how metadata is stored in the existing code
         try:
-            if group_result.state == "PENDING":
-                if isinstance(group_result.result, dict) and group_result.result.get("type") == "group":
-                    result_meta = group_result.result
+            if (
+                group_result.state == "PENDING"
+                and isinstance(group_result.result, dict)
+                and group_result.result.get("type") == "group"
+            ):
+                result_meta = group_result.result
         except Exception as e:
             logger.debug(f"Could not get metadata from PENDING result: {e}")
 
@@ -820,11 +831,13 @@ async def cancel_dataset_processing(
         if not result_meta:
             try:
                 # Some backends support this method
-                if hasattr(celery_app.backend, "_get_task_meta_for"):
-                    meta = celery_app.backend._get_task_meta_for(task_id)
-                    if meta and isinstance(meta.get("result"), dict):
-                        if meta["result"].get("type") == "group":
-                            result_meta = meta["result"]
+                if (
+                    hasattr(celery_app.backend, "_get_task_meta_for")
+                    and (meta := celery_app.backend._get_task_meta_for(task_id))
+                    and isinstance(meta.get("result"), dict)
+                    and meta["result"].get("type") == "group"
+                ):
+                    result_meta = meta["result"]
             except Exception as e:
                 logger.debug(f"Could not get metadata via backend method: {e}")
 
@@ -918,12 +931,71 @@ async def cancel_dataset_processing(
             running_count=running_count,
         )
 
+        # Trigger cleanup for successfully processed files
+        cleanup_result = {
+            "files_reverted": 0,
+            "files_failed_to_revert": 0,
+            "errors": None,
+        }
+
+        try:
+            from services.dataset_cleanup_service import DatasetCleanupService
+
+            cleanup_service = DatasetCleanupService()
+            cleanup_result = cleanup_service.cleanup_processed_files(
+                namespace, project, dataset, task_id
+            )
+
+            # Update metadata with cleanup results
+            result_meta["cleanup_status"] = cleanup_result
+
+        except Exception as e:
+            logger.error(
+                f"Error during cleanup (cancellation still succeeded): {e}",
+                exc_info=True,
+            )
+            # Don't fail cancellation if cleanup fails
+            cleanup_result["errors"] = [{"file_hash": "unknown", "error": str(e)}]
+
+        # Store updated metadata with cleanup status
+        current_state = group_result.state if hasattr(group_result, "state") else "PENDING"
+        celery_app.backend.store_result(
+            task_id,
+            result_meta,
+            current_state,
+        )
+
+        # Build response message
+        if cleanup_result["files_failed_to_revert"] == 0:
+            message = (
+                f"Processing cancelled and {cleanup_result['files_reverted']} file(s) reverted"
+                if cleanup_result["files_reverted"] > 0
+                else "Processing cancelled (no files to revert)"
+            )
+        else:
+            message = (
+                f"Processing cancelled with cleanup issues: "
+                f"{cleanup_result['files_reverted']} reverted, "
+                f"{cleanup_result['files_failed_to_revert']} failed"
+            )
+
+        # Convert errors to CleanupError objects if present
+        cleanup_errors = None
+        if cleanup_result.get("errors"):
+            cleanup_errors = [
+                CleanupError(file_hash=e["file_hash"], error=e["error"])
+                for e in cleanup_result["errors"]
+            ]
+
         return CancelProcessingResponse(
-            message="Processing cancellation requested",
+            message=message,
             task_id=task_id,
             cancelled=True,
             pending_tasks_cancelled=pending_cancelled,
             running_tasks_at_cancel=running_count,
+            files_reverted=cleanup_result["files_reverted"],
+            files_failed_to_revert=cleanup_result["files_failed_to_revert"],
+            errors=cleanup_errors,
         )
 
     except HTTPException:
@@ -935,4 +1007,145 @@ async def cancel_dataset_processing(
         )
         raise HTTPException(
             status_code=500, detail=f"Failed to cancel processing: {str(e)}"
+        ) from e
+
+
+@router.post(
+    "/{dataset}/cleanup/{file_hash}",
+    operation_id="dataset_cleanup_file",
+    tags=["datasets", "mcp"],
+    summary="Manually cleanup chunks for a specific file",
+    description="Manually cleanup chunks for a specific file. Useful for recovery when automatic cleanup fails.",
+)
+async def cleanup_file_chunks(
+    namespace: str,
+    project: str,
+    dataset: str,
+    file_hash: str,
+) -> dict:
+    """
+    Manually cleanup chunks for a specific file.
+
+    Useful for recovery when automatic cleanup fails.
+
+    Args:
+        namespace: Project namespace
+        project: Project name
+        dataset: Dataset name
+        file_hash: Hash of the file to cleanup
+
+    Returns:
+        Cleanup result with deleted chunk count
+    """
+    logger.bind(
+        namespace=namespace,
+        project=project,
+        dataset=dataset,
+        file_hash=file_hash,
+    )
+
+    try:
+        # Get project and dataset config
+        project_obj = ProjectService.get_project(namespace, project)
+        project_dir = ProjectService.get_project_dir(namespace, project)
+
+        dataset_config = next(
+            (ds for ds in (project_obj.config.datasets or []) if ds.name == dataset),
+            None,
+        )
+
+        if not dataset_config:
+            raise HTTPException(
+                status_code=404, detail=f"Dataset '{dataset}' not found"
+            )
+
+        database_name = dataset_config.database
+        if not database_name:
+            raise HTTPException(
+                status_code=400, detail=f"Dataset '{dataset}' has no database configured"
+            )
+
+        # Get database configuration
+        if not project_obj.config.rag or not project_obj.config.rag.databases:
+            raise HTTPException(
+                status_code=400, detail="No databases configured in project"
+            )
+
+        database_config = next(
+            (
+                db
+                for db in project_obj.config.rag.databases
+                if db.name == database_name
+            ),
+            None,
+        )
+
+        if not database_config:
+            raise HTTPException(
+                status_code=404, detail=f"Database '{database_name}' not found"
+            )
+
+        # Initialize vector store
+        import importlib
+        from pathlib import Path
+
+        vector_store_config = database_config.config
+        vector_store_type = (
+            database_config.type.value
+            if hasattr(database_config.type, "value")
+            else str(database_config.type)
+        )
+
+        store_name_lower = vector_store_type.replace("Store", "_store").lower()
+        module_path = f"rag.components.stores.{store_name_lower}"
+
+        try:
+            module = importlib.import_module(module_path)
+            store_class = getattr(module, vector_store_type)
+            vector_store = store_class(
+                config=vector_store_config, project_dir=Path(project_dir)
+            )
+        except (ImportError, AttributeError) as e:
+            raise HTTPException(
+                status_code=500, detail=f"Failed to initialize vector store: {e}"
+            ) from e
+
+        # Initialize document manager and delete chunks
+        from rag.core.document_manager import DocumentManager, DeletionStrategy
+
+        doc_manager = DocumentManager(
+            vector_store=vector_store,
+            config={"enable_soft_delete": False},  # Hard delete for cleanup
+        )
+
+        result = doc_manager.delete_documents(
+            document_hashes=[file_hash],
+            strategy=DeletionStrategy.HARD_DELETE,
+        )
+
+        deleted_count = result.get("deleted_count", 0)
+        errors = result.get("errors", [])
+
+        if errors:
+            logger.warning(
+                f"Errors during manual cleanup: {errors}",
+                file_hash=file_hash,
+            )
+
+        return {
+            "message": f"Deleted {deleted_count} chunk(s) for file {file_hash[:12]}...",
+            "deleted_count": deleted_count,
+            "file_hash": file_hash,
+            "errors": errors if errors else None,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Manual cleanup failed for {file_hash[:12]}...: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Cleanup failed: {str(e)}"
         ) from e
