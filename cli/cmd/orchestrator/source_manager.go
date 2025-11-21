@@ -912,7 +912,8 @@ func (m *SourceManager) GenerateDatamodel() error {
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 
 	// Run the generation script
-	cmd := exec.Command(uvPath, "run", "--managed-python", "python", "generate_types.py")
+	// Use --no-sync to avoid attempting to sync dependencies during run
+	cmd := exec.Command(uvPath, "run", "--no-sync", "--managed-python", "python", "generate_types.py")
 	cmd.Dir = configDir
 	cmd.Env = m.pythonEnvMgr.GetEnvForProcess()
 
