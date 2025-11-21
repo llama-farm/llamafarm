@@ -45,8 +45,15 @@ export function createMinimalConfig(name: string, namespace: string): Record<str
     },
     runtime: {
       provider: 'ollama',
-      model: 'granite3-moe',
-      models: []
+      model: 'default-model',
+      models: [
+        {
+          name: 'default-model',
+          provider: 'ollama',
+          model: 'gemma:2b',
+          prompts: ['default']
+        }
+      ]
     }
   }
 }
