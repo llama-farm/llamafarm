@@ -192,6 +192,7 @@ jobs:
           files: |
             electron-app/release/${{ steps.version.outputs.version_no_v }}/*.exe
             electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.zip
             electron-app/release/${{ steps.version.outputs.version_no_v }}/*.deb
             electron-app/release/${{ steps.version.outputs.version_no_v }}/*.AppImage
             electron-app/release/${{ steps.version.outputs.version_no_v }}/*.sha256

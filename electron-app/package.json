@@ -3,15 +3,7 @@
   "version": "0.0.1",
   "description": "LlamaFarm Desktop - Local AI Platform",
   "main": "dist/main/index.js",
-  "author": "LlamaFarm Team <support@llamafarm.dev>",
-  "homepage": "https://llamafarm.dev",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/llama-farm/llamafarm"
-  },
-  "bugs": {
-    "url": "https://github.com/llama-farm/llamafarm/issues"
-  },
+  "author": "LlamaFarm Team",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "electron-vite dev",
@@ -58,13 +50,15 @@
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "x64",
+            "arm64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "universal"
+            "x64",
+            "arm64"
           ]
         }
       ],
@@ -73,13 +67,10 @@
     },
     "win": {
       "target": [
-        "nsis"
+        "nsis",
+        "portable"
       ],
-      "icon": "build/icon.ico",
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
-      "sign": null
+      "icon": "build/icon.ico"
     },
     "linux": {
       "target": [
