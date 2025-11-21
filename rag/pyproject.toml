@@ -85,8 +85,7 @@ dependencies = [
   "pywin32>=306; sys_platform == 'win32'",
 ]
 
-[project.optional-dependencies]
-# Development dependencies
+[dependency-groups]
 dev = [
   "pytest>=7.0.0",
   "pytest-cov>=4.0.0",
@@ -98,6 +97,7 @@ dev = [
   "pre-commit>=3.0.0",
 ]
 
+[project.optional-dependencies]
 # Testing dependencies
 test = [
   "pytest>=7.0.0",
@@ -161,8 +161,8 @@ llamaindex = [
   "scipy>=1.10.0",                        # Scientific computing
 ]
 
-# All optional dependencies
-all = ["llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex]"]
+# All optional dependencies (dev moved to dependency-groups)
+all = ["llama-rag[test,docs,monitoring,vector-dbs,embeddings,llamaindex]"]
 
 [project.urls]
 Homepage = "https://github.com/llama-farm/llamafarm"
