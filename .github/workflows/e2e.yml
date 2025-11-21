@@ -570,10 +570,11 @@ jobs:
         if: always() && steps.pr-info.outputs.pr_number != ''
         id: build-summary
         shell: bash
+        env:
+          HEAD_SHA: ${{ steps.pr-info.outputs.head_sha }}
         run: |
           CONCLUSION="${{ job.status }}"
           WORKFLOW_RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          HEAD_SHA="${{ steps.pr-info.outputs.head_sha }}"
           
           # Determine status emoji and message
           if [ "$CONCLUSION" = "success" ]; then
