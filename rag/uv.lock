@@ -2155,7 +2155,6 @@ all = [
     { name = "scipy" },
     { name = "sentence-transformers" },
     { name = "tabula-py" },
-    { name = "torch" },
     { name = "transformers" },
     { name = "weaviate-client" },
 ]
@@ -2179,7 +2178,6 @@ embeddings = [
     { name = "cohere" },
     { name = "openai" },
     { name = "sentence-transformers" },
-    { name = "torch" },
     { name = "transformers" },
 ]
 llamaindex = [
@@ -2222,20 +2220,6 @@ vector-dbs = [
     { name = "pymilvus" },
     { name = "qdrant-client" },
     { name = "weaviate-client" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "isort" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "requests-mock" },
-    { name = "responses" },
 ]
 
 [package.metadata]
@@ -2317,7 +2301,6 @@ requires-dist = [
     { name = "spacy", specifier = ">=3.8.7" },
     { name = "structlog", specifier = ">=25.4.0" },
     { name = "tabula-py", marker = "extra == 'llamaindex'", specifier = ">=2.8.0" },
-    { name = "torch", marker = "extra == 'embeddings'", specifier = ">=2.0.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
     { name = "transformers", marker = "extra == 'embeddings'", specifier = ">=4.53.0" },
     { name = "weaviate-client", marker = "extra == 'vector-dbs'", specifier = ">=3.24.0" },
@@ -2325,29 +2308,17 @@ requires-dist = [
 ]
 provides-extras = ["dev", "test", "docs", "monitoring", "vector-dbs", "embeddings", "llamaindex", "all"]
 
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=23.0.0" },
-    { name = "isort", specifier = ">=5.12.0" },
-    { name = "mypy", specifier = ">=1.0.0" },
-    { name = "pre-commit", specifier = ">=3.0.0" },
-    { name = "pytest", specifier = ">=7.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.21.0" },
-    { name = "pytest-cov", specifier = ">=4.0.0" },
-    { name = "pytest-mock", specifier = ">=3.10.0" },
-    { name = "requests-mock", specifier = ">=1.10.0" },
-    { name = "responses", specifier = ">=0.23.0" },
-]
-
 [[package]]
 name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../common" }
 
 [package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" }]
+provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = []
+dev = [{ name = "pytest", specifier = ">=8.0.0" }]
 
 [[package]]
 name = "llamafarm-config"

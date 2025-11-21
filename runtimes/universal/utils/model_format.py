@@ -40,7 +40,7 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
     Results are cached to avoid repeated API calls.
 
     Args:
-        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-0.6B-GGUF")
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-0.6B-GGUF" or "unsloth/Qwen3-0.6B-GGUF:Q4_K_M")
         token: Optional HuggingFace authentication token for gated models
 
     Returns:
@@ -52,36 +52,41 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
     Examples:
         >>> detect_model_format("unsloth/Qwen3-0.6B-GGUF")
         "gguf"
+        >>> detect_model_format("unsloth/Qwen3-0.6B-GGUF:Q4_K_M")
+        "gguf"
         >>> detect_model_format("google/gemma-3-1b-it")
         "transformers"
     """
-    # Check cache first
-    if model_id in _format_cache:
-        logger.debug(f"Using cached format for {model_id}: {_format_cache[model_id]}")
-        return _format_cache[model_id]
+    # Parse model ID to remove quantization suffix if present
+    base_model_id, _ = parse_model_with_quantization(model_id)
+    
+    # Check cache first (use base model ID for caching)
+    if base_model_id in _format_cache:
+        logger.debug(f"Using cached format for {base_model_id}: {_format_cache[base_model_id]}")
+        return _format_cache[base_model_id]
 
-    logger.info(f"Detecting format for model: {model_id}")
+    logger.info(f"Detecting format for model: {base_model_id}")
 
     try:
         # Use API to list files without downloading anything
         api = HfApi()
-        all_files = api.list_repo_files(repo_id=model_id, token=token)
+        all_files = api.list_repo_files(repo_id=base_model_id, token=token)
 
         # Check if any .gguf files exist
         has_gguf = any(f.endswith(".gguf") for f in all_files)
 
         if has_gguf:
             logger.info("Detected GGUF format (found .gguf files)")
-            _format_cache[model_id] = "gguf"
+            _format_cache[base_model_id] = "gguf"
             return "gguf"
 
         # No GGUF files found - assume transformers format
         logger.info("Detected transformers format (no .gguf files found)")
-        _format_cache[model_id] = "transformers"
+        _format_cache[base_model_id] = "transformers"
         return "transformers"
 
     except Exception as e:
-        logger.error(f"Error detecting model format for {model_id}: {e}")
+        logger.error(f"Error detecting model format for {base_model_id}: {e}")
         raise
 
 
@@ -93,7 +98,7 @@ def list_gguf_files(model_id: str, token: str | None = None) -> list[str]:
     and returns only the .gguf files without downloading them.
 
     Args:
-        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF" or "unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
         token: Optional HuggingFace authentication token for gated models
 
     Returns:
@@ -103,15 +108,21 @@ def list_gguf_files(model_id: str, token: str | None = None) -> list[str]:
         >>> files = list_gguf_files("unsloth/Qwen3-1.7B-GGUF")
         >>> files
         ['qwen3-1.7b.Q4_K_M.gguf', 'qwen3-1.7b.Q8_0.gguf', 'qwen3-1.7b.F16.gguf']
+        >>> files = list_gguf_files("unsloth/Qwen3-1.7B-GGUF:Q8_0")
+        >>> files
+        ['qwen3-1.7b.Q4_K_M.gguf', 'qwen3-1.7b.Q8_0.gguf', 'qwen3-1.7b.F16.gguf']
     """
+    # Parse model ID to remove quantization suffix if present
+    base_model_id, _ = parse_model_with_quantization(model_id)
+    
     try:
         api = HfApi()
-        all_files = api.list_repo_files(repo_id=model_id, token=token)
+        all_files = api.list_repo_files(repo_id=base_model_id, token=token)
         gguf_files = [f for f in all_files if f.endswith(".gguf")]
-        logger.debug(f"Found {len(gguf_files)} GGUF files in {model_id}: {gguf_files}")
+        logger.debug(f"Found {len(gguf_files)} GGUF files in {base_model_id}: {gguf_files}")
         return gguf_files
     except Exception as e:
-        logger.error(f"Error listing files in {model_id}: {e}")
+        logger.error(f"Error listing files in {base_model_id}: {e}")
         raise
 
 
@@ -200,10 +211,10 @@ def get_gguf_file_path(
     downloads only that specific file, and returns its path.
 
     Args:
-        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF" or "unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
         token: Optional HuggingFace authentication token for gated models
         preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0")
-                                If not specified, defaults to Q4_K_M
+                                If not specified, will use quantization from model_id if present, otherwise defaults to Q4_K_M
 
     Returns:
         Full absolute path to the selected .gguf file
@@ -215,17 +226,29 @@ def get_gguf_file_path(
         >>> path = get_gguf_file_path("unsloth/Qwen3-0.6B-GGUF")
         >>> path.endswith('.gguf')
         True
+        >>> path = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF:Q8_0")
+        >>> "Q8_0" in path
+        True
         >>> path = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF", preferred_quantization="Q8_0")
         >>> "Q8_0" in path
         True
     """
-    logger.info(f"Locating GGUF file for model: {model_id}")
+    # Parse model ID to extract base model and quantization suffix if present
+    base_model_id, model_quantization = parse_model_with_quantization(model_id)
+    
+    # Use quantization from model_id if no explicit preference provided
+    if preferred_quantization is None and model_quantization is not None:
+        preferred_quantization = model_quantization
+        logger.info(f"Using quantization from model ID: {preferred_quantization}")
+    
+    logger.info(f"Locating GGUF file for model: {base_model_id}")
 
     # Step 1: List all GGUF files in the repository (without downloading)
-    available_gguf_files = list_gguf_files(model_id, token)
+    # list_gguf_files will handle parsing the model_id internally
+    available_gguf_files = list_gguf_files(base_model_id, token)
 
     if not available_gguf_files:
-        raise FileNotFoundError(f"No GGUF files found in model repository: {model_id}")
+        raise FileNotFoundError(f"No GGUF files found in model repository: {base_model_id}")
 
     # Step 2: Select the best GGUF file based on preference
     selected_filename = select_gguf_file_with_logging(
@@ -239,7 +262,7 @@ def get_gguf_file_path(
 
     # Step 3: Download only the selected file using allow_patterns
     local_path = snapshot_download(
-        repo_id=model_id,
+        repo_id=base_model_id,
         token=token,
         allow_patterns=[selected_filename],  # Only download this specific file
     )

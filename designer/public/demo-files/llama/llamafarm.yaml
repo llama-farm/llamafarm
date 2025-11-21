@@ -3,15 +3,17 @@ name: demo-app
 namespace: default
 
 # =============================================================================
-# RUNTIME CONFIGURATION - Ollama with fast, lightweight model
+# RUNTIME CONFIGURATION - Universal Runtime with fast, lightweight model
 # =============================================================================
 runtime:
   models:
     - name: default
-      description: "Fast Ollama model for demo - Llama & Alpaca expert"
-      provider: ollama
-      model: gemma3:1b
-      base_url: http://localhost:11434/v1
+      description: "Qwen3 1.7B (GGUF Q4_K_M quantized) - Fast, efficient model optimized for Apple Silicon and local inference"
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
+      base_url: http://127.0.0.1:11540/v1
+      default: true
+      prompt_format: unstructured
 
 # =============================================================================
 # PROMPTS CONFIGURATION - Llama & Alpaca Encyclopedia Expert
@@ -72,14 +74,14 @@ rag:
       default_embedding_strategy: "semantic_embeddings"
       embedding_strategies:
         - name: "semantic_embeddings"
-          type: "OllamaEmbedder"
+          type: "UniversalEmbedder"
           priority: 0
           config:
-            model: nomic-embed-text
-            dimension: 768
+            model: sentence-transformers/all-MiniLM-L6-v2
+            base_url: http://127.0.0.1:11540/v1
             batch_size: 32
-            timeout: 90
-            auto_pull: true
+            timeout: 120
+            normalize: true
 
       # Retrieval configuration - semantic search with high recall
       default_retrieval_strategy: "comprehensive_search"
