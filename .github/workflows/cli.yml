@@ -152,7 +152,7 @@ jobs:
       - name: Create checksums
         run: |
           cd dist/
-          sha256sum * > checksums.txt
+          find . -maxdepth 1 -type f ! -name checksums.txt -exec sha256sum {} \; > checksums.txt
           cat checksums.txt
 
       - name: Upload checksums
