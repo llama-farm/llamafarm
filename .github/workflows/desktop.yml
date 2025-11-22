@@ -49,17 +49,24 @@ jobs:
           path: designer/dist/
           retention-days: 7
 
-  build-macos:
-    name: Build macOS Desktop App
+  build:
+    name: Build Desktop App
     needs: build-designer
     runs-on: macos-latest
     strategy:
       matrix:
         include:
-          - arch: x64
-            output_suffix: ""
-          - arch: arm64
-            output_suffix: "-arm64"
+          - platform: macos
+            arch: universal
+          - platform: windows
+            arch: arm64
+          - platform: windows
+            arch: amd64
+
+          - platform: linux
+            arch: amd64
+          - platform: linux
+            arch: arm64
 
     steps:
       - name: Checkout code
@@ -109,24 +116,18 @@ jobs:
           "
           echo "✅ Updated app version to ${{ steps.version.outputs.version }}"
 
-      - name: Build Electron app (unsigned for PR testing)
+      - name: Build Electron app
         working-directory: electron-app
         env:
           # GitHub token for electron-builder
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # SECURITY: Disable signing for PR builds to prevent exposing secrets to forks
-          # Only release workflow (release-desktop.yml) should sign builds
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Conditionally enable code signing only on main branch (disable for PRs/forks)
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ github.ref == 'refs/heads/main' && 'true' || 'false' }}
         run: |
-          echo "Building unsigned Electron app for ${{ matrix.arch }}..."
+          echo "Building unsigned Electron app for ${{ matrix.platform }}-${{ matrix.arch }}..."
           echo "Note: PR builds are unsigned for security (prevents exposing secrets to forks)"
           npm run build
-
-          if [ "${{ matrix.arch }}" == "arm64" ]; then
-            npx electron-builder --mac --arm64
-          else
-            npx electron-builder --mac --x64
-          fi
+          npx electron-builder --${{ matrix.platform }} --${{ matrix.arch == 'amd64' && 'x64' || matrix.arch }}
           echo "✅ Electron app built successfully (unsigned)"
 
       - name: List build artifacts
@@ -135,37 +136,39 @@ jobs:
           echo "Build artifacts in release/${{ steps.version.outputs.version }}:"
           ls -lh "release/${{ steps.version.outputs.version }}/" || echo "No artifacts found"
 
-      - name: Upload DMG artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: llamafarm-desktop-macos-${{ matrix.arch }}-${{ steps.version.outputs.version }}
+          name: llamafarm-desktop-${{ matrix.platform }}-${{ matrix.arch }}-${{ steps.version.outputs.version }}
           path: |
+            electron-app/release/${{ steps.version.outputs.version }}/*.AppImage
+            electron-app/release/${{ steps.version.outputs.version }}/*.deb
+            electron-app/release/${{ steps.version.outputs.version }}/*.exe
             electron-app/release/${{ steps.version.outputs.version }}/*.dmg
-            electron-app/release/${{ steps.version.outputs.version }}/*${{ matrix.output_suffix }}-mac.zip
           retention-days: 30
           if-no-files-found: warn
 
   create-checksums:
     name: Create Checksums
     runs-on: ubuntu-latest
-    needs: build-macos
+    needs: build
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist/
-          pattern: llamafarm-desktop-macos-*
+          pattern: llamafarm-desktop-*
           merge-multiple: true
 
       - name: Create checksums
         run: |
           cd dist/
-          if ls *.dmg 1> /dev/null 2>&1; then
-            sha256sum *.dmg > checksums.txt
+          if ls * 1> /dev/null 2>&1; then
+            sha256sum * > checksums.txt
             echo "=== Checksums ==="
             cat checksums.txt
           else
-            echo "No DMG files found to checksum"
+            echo "No files found to checksum"
           fi
 
       - name: Upload checksums

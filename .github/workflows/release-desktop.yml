@@ -18,9 +18,60 @@ env:
   NX_NO_CLOUD: true
 
 jobs:
-  build-macos:
-    name: Build macOS Desktop App
+  build-designer:
+    name: Build Designer UI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: designer/package-lock.json
+
+      - name: Install Designer dependencies
+        working-directory: designer
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+      - name: Build Designer
+        working-directory: designer
+        run: |
+          npm run build
+          # Verify build output
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: Designer build failed - dist/index.html not found" >&2
+            exit 1
+          fi
+          echo "✅ Designer built successfully"
+
+      - name: Upload Designer build
+        uses: actions/upload-artifact@v4
+        with:
+          name: designer-dist
+          path: designer/dist/
+          retention-days: 1
+
+  build:
+    name: Build ${{ matrix.platform }} (${{ matrix.arch }})
+    needs: build-designer
     runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            arch: universal
+
+          - platform: linux
+            arch: amd64
+
+          - platform: windows
+            arch: amd64
 
     steps:
       - name: Checkout code
@@ -40,29 +91,18 @@ jobs:
           echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
           echo "Using version: ${VERSION} (no v: ${VERSION_NO_V})"
 
+      - name: Download Designer build
+        uses: actions/download-artifact@v4
+        with:
+          name: designer-dist
+          path: designer/dist/
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: |
-            designer/package-lock.json
-            electron-app/package-lock.json
-
-      - name: Install Designer dependencies
-        working-directory: designer
-        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
-
-      - name: Build Designer
-        working-directory: designer
-        run: |
-          npm run build
-          # Verify build output
-          if [ ! -f "dist/index.html" ]; then
-            echo "Error: Designer build failed - dist/index.html not found" >&2
-            exit 1
-          fi
-          echo "✅ Designer built successfully"
+          cache-dependency-path: electron-app/package-lock.json
 
       - name: Install Electron app dependencies
         working-directory: electron-app
@@ -71,9 +111,7 @@ jobs:
       - name: Update app version in package.json
         working-directory: electron-app
         run: |
-          # Strip 'v' prefix from version
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NO_V="${VERSION#v}"
+          VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
 
           # Update version in package.json using Node.js
           node -e "
@@ -87,113 +125,151 @@ jobs:
       - name: Build and Sign Electron app
         working-directory: electron-app
         env:
-          # GitHub token for electron-builder to publish artifacts
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Certificate (same as CLI workflow)
-          CSC_LINK: ${{ secrets.APPLE_CERT_DATA }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
-          # Notarization via App Store Connect API (same as CLI workflow)
-          APPLE_API_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+          # macOS signing
+          CSC_LINK: ${{ matrix.platform == 'macos' && secrets.APPLE_CERT_DATA || (matrix.platform == 'windows' && secrets.WINDOWS_CERT_DATA || '') }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_CERT_PASSWORD || (matrix.platform == 'windows' && secrets.WINDOWS_CERT_PASSWORD || '') }}
+          APPLE_API_KEY: ${{ matrix.platform == 'macos' && secrets.APPLE_NOTARY_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_NOTARY_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ matrix.platform == 'macos' && secrets.APPLE_NOTARY_ISSUER || '' }}
         run: |
-          # Remove identity: null from package.json to enable signing
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            delete pkg.build.mac.identity;
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
+          if [[ "${{ matrix.platform }}" == "macos" ]]; then
+            # Remove identity: null from package.json to enable signing
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              delete pkg.build.mac.identity;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+          fi
 
-          echo "Building and signing Electron app..."
-          npm run dist:mac
-          echo "✅ Electron app built and signed successfully"
+          echo "Building and signing Electron app for ${{ matrix.platform }}-${{ matrix.arch }}..."
+          npm run build
+          npx electron-builder --${{ matrix.platform }} --${{ matrix.arch == 'amd64' && 'x64' || matrix.arch }}
+          echo "✅ Electron app built successfully"
 
       - name: Generate checksums
         working-directory: electron-app
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NO_V="${VERSION#v}"
-
+          VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
           cd "release/${VERSION_NO_V}"
 
-          # Generate SHA256 for all distributable files
-          for file in *.dmg *.zip; do
-            if [ -f "$file" ]; then
-              shasum -a 256 "$file" > "$file.sha256"
-              echo "✅ Generated checksum for $file"
-              cat "$file.sha256"
-            fi
-          done
+          # Generate SHA256 for all distributable files (using shasum on macOS)
+          if [[ "${{ matrix.platform }}" == "macos" ]]; then
+            for file in *.dmg *.zip; do
+              if [ -f "$file" ]; then
+                shasum -a 256 "$file" > "$file.sha256"
+                echo "✅ Generated checksum for $file"
+              fi
+            done
+          elif [[ "${{ matrix.platform }}" == "linux" ]]; then
+            for file in *.AppImage *.deb; do
+              if [ -f "$file" ]; then
+                shasum -a 256 "$file" > "$file.sha256"
+                echo "✅ Generated checksum for $file"
+              fi
+            done
+          elif [[ "${{ matrix.platform }}" == "windows" ]]; then
+            for file in *.exe; do
+              if [ -f "$file" ]; then
+                shasum -a 256 "$file" > "$file.sha256"
+                echo "✅ Generated checksum for $file"
+              fi
+            done
+          fi
 
       - name: List build artifacts
         working-directory: electron-app
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NO_V="${VERSION#v}"
-
+          VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
           echo "Build artifacts in release/${VERSION_NO_V}:"
-          ls -lh "release/${VERSION_NO_V}/"
-
-      - name: Verify build artifacts exist
-        working-directory: electron-app
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NO_V="${VERSION#v}"
-
-          echo "Checking for required artifacts in release/${VERSION_NO_V}/"
-
-          # Check for required DMG files
-          if ! ls "release/${VERSION_NO_V}"/*.dmg 1> /dev/null 2>&1; then
-            echo "❌ ERROR: No DMG files found!"
-            exit 1
-          fi
-
-          # Check for required ZIP files
-          if ! ls "release/${VERSION_NO_V}"/*-mac.zip 1> /dev/null 2>&1; then
-            echo "❌ ERROR: No ZIP files found!"
-            exit 1
-          fi
-
-          echo "✅ All required artifacts found"
-          ls -lh "release/${VERSION_NO_V}"/*.dmg "release/${VERSION_NO_V}"/*-mac.zip
+          ls -lh "release/${VERSION_NO_V}/" || echo "No artifacts found"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           files: |
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.exe
             electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg.sha256
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg.blockmap
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*-mac.zip
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*-mac.zip.sha256
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*-mac.zip.blockmap
-          fail_on_unmatched_files: true
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.zip
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.deb
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.AppImage
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.sha256
+          fail_on_unmatched_files: false
+          append_body: false
+
+  add-release-notes:
+    name: Add Release Notes
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
+          VERSION_NO_V="${VERSION#v}"
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
+
+      - name: Update release with installation notes
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
           append_body: true
           body: |
 
-            ## Desktop App (macOS)
+            ## Desktop App Downloads
 
-            Download the appropriate DMG for your Mac:
-            - **Apple Silicon (M1/M2/M3)**: `LlamaFarm-${{ steps.version.outputs.version_no_v }}-arm64.dmg`
-            - **Intel**: `LlamaFarm-${{ steps.version.outputs.version_no_v }}.dmg`
+            ### macOS
+            Download the universal DMG that works on both Apple Silicon and Intel Macs:
+            - **Universal (Apple Silicon and Intel)**: `LlamaFarm-${{ steps.version.outputs.version_no_v }}.dmg`
 
-            ### Installation
+            **Installation:**
             1. Download the DMG file
             2. Open the DMG and drag LlamaFarm to Applications
             3. Launch the app (it's signed and notarized, so it will open normally)
             4. The app will auto-install the CLI and start services
 
+            ### Linux
+            Download the appropriate package for your Linux distribution:
+            - **AppImage** (Universal): `LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage`
+            - **Debian/Ubuntu**: `llamafarm-desktop_${{ steps.version.outputs.version_no_v }}_amd64.deb`
+
+            **Installation:**
+            ```bash
+            # AppImage (works on all distributions)
+            chmod +x LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage
+            ./LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage
+
+            # Debian/Ubuntu
+            sudo dpkg -i llamafarm-desktop_${{ steps.version.outputs.version_no_v }}_amd64.deb
+            ```
+
+            ### Windows
+            Download the Windows installer:
+            - **Windows Installer**: `LlamaFarm-Setup-${{ steps.version.outputs.version_no_v }}.exe`
+
+            **Installation:**
+            1. Download the installer
+            2. Run the installer (it will install to your user directory)
+            3. Launch LlamaFarm from the Start Menu
+            4. The app will auto-install the CLI and start services
+
+            ---
+
             ### Auto-Updates
             Once installed, the app will automatically check for updates and prompt you to install them.
 
-            ### Code Signing
-            This app is signed with an Apple Developer certificate and notarized by Apple for your security.
-
   test-installation:
     name: Test macOS App Installation
-    needs: build-macos
+    needs: build
     runs-on: macos-latest
 
     steps:
@@ -216,13 +292,13 @@ jobs:
           echo "Waiting 60 seconds for release assets to be available..."
           sleep 60
 
-      - name: Download and verify DMG (Apple Silicon)
+      - name: Download and verify DMG (Universal)
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NO_V="${VERSION#v}"
+          VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
 
-          # Download the Apple Silicon DMG
-          DMG_URL="https://github.com/llama-farm/llamafarm/releases/download/${VERSION}/LlamaFarm-${VERSION_NO_V}-arm64.dmg"
+          # Download the Universal DMG
+          DMG_URL="https://github.com/llama-farm/llamafarm/releases/download/${VERSION}/LlamaFarm-${VERSION_NO_V}.dmg"
           echo "Downloading from: $DMG_URL"
 
           # Download with retries
@@ -256,8 +332,8 @@ jobs:
           FILE_SIZE=$(stat -f%z "LlamaFarm.dmg")
           echo "✅ DMG downloaded successfully (${FILE_SIZE} bytes)"
 
-          # Verify minimum file size (DMG should be at least 50MB)
-          MIN_SIZE=$((50 * 1024 * 1024))
+          # Verify minimum file size (DMG should be at least 80MB for universal binary)
+          MIN_SIZE=$((80 * 1024 * 1024))
           if [ $FILE_SIZE -lt $MIN_SIZE ]; then
             echo "❌ ERROR: DMG file is too small (${FILE_SIZE} bytes < ${MIN_SIZE} bytes)"
             echo "The file may be corrupted or incomplete"
@@ -287,6 +363,18 @@ jobs:
           fi
 
           echo "✅ App bundle structure is valid"
+
+          # Verify universal binary (contains both arm64 and x86_64)
+          ARCHITECTURES=$(lipo -archs "/Volumes/LlamaFarm/LlamaFarm.app/Contents/MacOS/LlamaFarm")
+          echo "Binary architectures: $ARCHITECTURES"
+
+          if [[ ! "$ARCHITECTURES" =~ "arm64" ]] || [[ ! "$ARCHITECTURES" =~ "x86_64" ]]; then
+            echo "❌ ERROR: Binary is not universal (missing arm64 or x86_64)"
+            hdiutil detach /Volumes/LlamaFarm
+            exit 1
+          fi
+
+          echo "✅ Binary is universal (contains both arm64 and x86_64)"
 
           # Unmount
           hdiutil detach /Volumes/LlamaFarm

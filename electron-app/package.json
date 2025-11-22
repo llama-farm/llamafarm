@@ -3,8 +3,31 @@
   "version": "0.0.1",
   "description": "LlamaFarm Desktop - Local AI Platform",
   "main": "dist/main/index.js",
-  "author": "LlamaFarm Team",
+  "author": "LlamaFarm Team <support@llamafarm.dev>",
   "license": "Apache-2.0",
+  "homepage": "https://llamafarm.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/llama-farm/llamafarm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/llama-farm/llamafarm/issues"
+  },
+  "keywords": [
+    "llamafarm",
+    "ai",
+    "local",
+    "platform",
+    "desktop",
+    "application"
+  ],
+  "contributors": [
+    {
+      "name": "LlamaFarm Team",
+      "email": "support@llamafarm.dev",
+      "url": "https://llamafarm.dev"
+    }
+  ],
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -49,22 +72,34 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "identity": null,
       "darkModeSupport": true
     },
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Development",
       "icon": "build/icons"
     },
@@ -72,7 +107,9 @@
       {
         "from": "../designer/dist",
         "to": "designer",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   }

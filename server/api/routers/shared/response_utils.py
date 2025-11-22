@@ -8,6 +8,10 @@ from typing import Any
 from fastapi import Response
 from starlette.responses import StreamingResponse
 
+from core.logging import FastAPIStructLogger
+
+logger = FastAPIStructLogger()
+
 
 def set_session_header(response: Response | None, session_id: str | None) -> None:
     if response is not None and session_id:
@@ -119,14 +123,46 @@ def create_streaming_response_from_iterator(
     async def event_stream() -> AsyncIterator[bytes]:
         emitted = False
 
-        async for chunk in stream_source:
-            if not chunk:
-                continue
-            # Chunk is already a ChatCompletionChunk - serialize it directly
-            chunk_dict = chunk.model_dump(exclude_none=True)
-            yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
-            await asyncio.sleep(0)
-            emitted = True
+        try:
+            async for chunk in stream_source:
+                if not chunk:
+                    continue
+                # Chunk is already a ChatCompletionChunk - serialize it directly
+                chunk_dict = chunk.model_dump(exclude_none=True)
+                yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
+                await asyncio.sleep(0)
+                emitted = True
+        except asyncio.CancelledError:
+            # Re-raise cancellation so it propagates correctly
+            raise
+        except Exception as e:
+            # Log the error but ensure we still send [DONE] marker
+            logger.error(
+                "Error in stream source",
+                exc_info=True,
+                error=str(e),
+            )
+            # If we haven't emitted anything and have a default message, send it
+            if not emitted and default_message:
+                created_ts = int(time.time())
+                payload = {
+                    "id": f"chat-{uuid.uuid4()}",
+                    "object": "chat.completion.chunk",
+                    "created": created_ts,
+                    "model": request.model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": default_message},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(payload)}\n\n".encode()
+                await asyncio.sleep(0)
+            # Always send [DONE] even on error to prevent unexpected EOF
+            yield b"data: [DONE]\n\n"
+            return
 
         if not emitted and default_message:
             # Fallback: create a simple chunk with default message
