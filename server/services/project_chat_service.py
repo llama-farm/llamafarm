@@ -372,35 +372,35 @@ class ProjectChatService:
             None,
         )
 
-        if latest_user_message:
-            await self._perform_rag_with_logging(
-                event_logger,
-                chat_agent,
-                project_dir,
-                project_config,
-                latest_user_message.get("content", ""),
-                rag_enabled=rag_enabled,
-                database=database,
-                retrieval_strategy=retrieval_strategy,
-                rag_top_k=rag_top_k,
-                rag_score_threshold=rag_score_threshold,
-            )
-
-        logger.info("Running async stream")
-
-        # Log LLM inference start
-        self._log_event(
-            event_logger,
-            "llm_inference_start",
-            {
-                "model": chat_agent.model_name,
-            },
-        )
-
         event_failed = False
         first_token_logged = False
 
         try:
+            if latest_user_message:
+                await self._perform_rag_with_logging(
+                    event_logger,
+                    chat_agent,
+                    project_dir,
+                    project_config,
+                    latest_user_message.get("content", ""),
+                    rag_enabled=rag_enabled,
+                    database=database,
+                    retrieval_strategy=retrieval_strategy,
+                    rag_top_k=rag_top_k,
+                    rag_score_threshold=rag_score_threshold,
+                )
+
+            logger.debug("Running async stream")
+
+            # Log LLM inference start
+            self._log_event(
+                event_logger,
+                "llm_inference_start",
+                {
+                    "model": chat_agent.model_name,
+                },
+            )
+
             # Build extra_body dict for runtime-specific parameters
             extra_body = {}
             if n_ctx is not None:
