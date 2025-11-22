@@ -44,13 +44,13 @@ export function createMinimalConfig(name: string, namespace: string): Record<str
       strategy_templates: {}
     },
     runtime: {
-      provider: 'ollama',
+      provider: 'universal',
       model: 'default-model',
       models: [
         {
           name: 'default-model',
-          provider: 'ollama',
-          model: 'gemma:2b',
+          provider: 'universal',
+          model: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
           prompts: ['default']
         }
       ]
