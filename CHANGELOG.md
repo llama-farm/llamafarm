@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.16](https://github.com/llama-farm/llamafarm/compare/v0.0.15...v0.0.16) (2025-11-23)
+
+
+### Bug Fixes
+
+* cli packaging ([8058b1f](https://github.com/llama-farm/llamafarm/commit/8058b1f3f8c809e5896a47e3d73a579d8a14fbfd))
+
 ## [0.0.15](https://github.com/llama-farm/llamafarm/compare/v0.0.14...v0.0.15) (2025-11-22)
 
 
