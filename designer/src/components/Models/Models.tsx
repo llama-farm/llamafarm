@@ -608,6 +608,7 @@ function AddOrChangeModels({
   const [selectedPromptSets, setSelectedPromptSets] = useState<string[]>([])
   const [downloadProgress, setDownloadProgress] = useState(0)
   const [downloadError, setDownloadError] = useState('')
+  const [showRecommendedBackgroundDownload, setShowRecommendedBackgroundDownload] = useState(false)
 
   // Device model state
   const [deviceConfirmOpen, setDeviceConfirmOpen] = useState(false)
@@ -1260,7 +1261,11 @@ function AddOrChangeModels({
         open={confirmOpen}
         onOpenChange={open => {
           setConfirmOpen(open)
-          if (!open) {
+          // If closing while downloading, minimize to background
+          if (!open && submitState === 'loading') {
+            setShowRecommendedBackgroundDownload(true)
+          }
+          if (!open && submitState !== 'loading') {
             setSubmitState('idle')
             setPendingVariant(null)
             setModelName('')
@@ -1377,9 +1382,21 @@ function AddOrChangeModels({
             ) : null}
           </DialogDescription>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
+            {submitState === 'loading' ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowRecommendedBackgroundDownload(true)
+                  setConfirmOpen(false)
+                }}
+              >
+                Continue in background
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </Button>
+            )}
             <Button
               disabled={submitState === 'loading' || !modelName.trim()}
               onClick={async () => {
@@ -1436,10 +1453,13 @@ function AddOrChangeModels({
                         setEstimatedTimeRemaining('')
                         refetchCachedModels()
                         setTimeout(() => {
-                          setConfirmOpen(false)
-                          onGoToProject()
+                          if (!showRecommendedBackgroundDownload) {
+                            setConfirmOpen(false)
+                            onGoToProject()
+                          }
                           setSubmitState('idle')
                           setDownloadProgress(0)
+                          setShowRecommendedBackgroundDownload(false)
                         }, 1000)
                       } else if (event.event === 'error') {
                         setSubmitState('error')
@@ -1479,6 +1499,115 @@ function AddOrChangeModels({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Background download indicator - minimized */}
+      {showRecommendedBackgroundDownload && submitState === 'loading' && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            setShowRecommendedBackgroundDownload(false)
+            setConfirmOpen(true)
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setShowRecommendedBackgroundDownload(false)
+              setConfirmOpen(true)
+            }
+          }}
+          className="fixed bottom-4 right-4 z-[100] w-[320px] rounded-lg border border-border bg-card text-card-foreground shadow-lg p-3 text-left"
+          aria-label="Show download progress"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium">
+              {pendingVariant ? `Downloading ${modelName || pendingVariant.label}...` : 'Downloading model...'}
+            </div>
+            <button
+              type="button"
+              className="h-7 px-2 rounded-md border border-input text-xs hover:bg-accent/30"
+              onClick={e => {
+                e.stopPropagation()
+                setShowRecommendedBackgroundDownload(false)
+                setConfirmOpen(true)
+              }}
+            >
+              View
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-full rounded-full bg-accent/20">
+              <div
+                className="h-2 rounded-full bg-primary transition-all"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {Math.floor(downloadProgress)}%
+            </div>
+          </div>
+          {estimatedTimeRemaining && (
+            <div className="mt-2 text-xs text-muted-foreground truncate">
+              {estimatedTimeRemaining} remaining
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Background download success notification */}
+      {showRecommendedBackgroundDownload && submitState === 'success' && (
+        <div className="fixed bottom-4 right-4 z-[100] w-[320px] rounded-lg border border-border bg-card text-card-foreground shadow-lg p-3 flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <FontIcon
+              type="checkmark-filled"
+              className="w-5 h-5 text-primary"
+            />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-medium">Download complete</div>
+            <div className="text-xs text-muted-foreground">
+              {modelName || (pendingVariant?.label || 'Model')} is ready to use
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setShowRecommendedBackgroundDownload(false)
+              onGoToProject()
+            }}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <FontIcon type="close" className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Background download error notification */}
+      {showRecommendedBackgroundDownload && submitState === 'error' && (
+        <div className="fixed bottom-4 right-4 z-[100] w-[320px] rounded-lg border border-destructive/20 bg-card text-card-foreground shadow-lg p-3 flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <FontIcon
+              type="close-circle"
+              className="w-5 h-5 text-destructive"
+            />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-medium text-destructive">Download failed</div>
+            <div className="text-xs text-muted-foreground">
+              {downloadError || 'Failed to download model'}
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setShowRecommendedBackgroundDownload(false)
+              setSubmitState('idle')
+              setDownloadError('')
+            }}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <FontIcon type="close" className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </>
   )
 }
