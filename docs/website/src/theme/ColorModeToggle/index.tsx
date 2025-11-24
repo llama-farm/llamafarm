@@ -51,7 +51,7 @@ function ColorModeToggle({
         disabled={!isBrowser}
         title={title}
         aria-label={title}
-        aria-live="polite">
+        aria-pressed={value === 'dark'}>
         {value === 'dark' ? <SunIcon /> : <MoonIcon />}
       </button>
     </div>

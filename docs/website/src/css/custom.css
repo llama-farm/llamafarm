@@ -29,6 +29,11 @@
   /* Minimal brand accent for CTAs */
   --brand-accent: #017BF7;
   --brand-accent-hover: #0369d1;
+  
+  /* Success color - use teal */
+  --ifm-color-success: #48FFE4;
+  --ifm-color-success-dark: #19e6ca;
+  --ifm-color-success-darker: #12cbb2;
 
   /* Primary color (light) - minimal brand usage */
   --ifm-color-primary: var(--brand-accent);
@@ -87,6 +92,11 @@ html[data-theme='dark'] {
   /* Minimal brand accent in dark mode - teal like designer */
   --brand-accent: #48FFE4;
   --brand-accent-hover: #5affeb;
+  
+  /* Success color - teal */
+  --ifm-color-success: #48FFE4;
+  --ifm-color-success-dark: #19e6ca;
+  --ifm-color-success-darker: #12cbb2;
 
   --ifm-color-primary: var(--brand-accent);
   --ifm-color-primary-dark: var(--brand-accent-hover);
@@ -354,6 +364,18 @@ html[data-theme='dark'] .footer__link-item:hover {
 .breadcrumbs__link:hover {
   color: var(--ifm-color-primary);
   background: hsl(var(--accent));
+}
+
+/* Edit this page */
+.theme-edit-this-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-edit-this-page-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 /* Pagination navigation */

@@ -9,6 +9,11 @@ export default function CopyButton({ code, className }: Props): JSX.Element {
   const [isCopied, setIsCopied] = React.useState(false)
   const copyTimeout = React.useRef<number | undefined>(undefined)
   const handleCopyCode = React.useCallback(() => {
+    // Clear any existing timeout before setting a new one
+    if (copyTimeout.current) {
+      window.clearTimeout(copyTimeout.current)
+    }
+    
     navigator.clipboard.writeText(code).then(
       () => {
         setIsCopied(true)
