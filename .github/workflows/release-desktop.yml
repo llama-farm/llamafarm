@@ -1,6 +1,9 @@
 name: Release - Desktop App
 
 on:
+  push:
+    branches:
+      - feat-app-signing # TEMPORARY FOR TESTING
   release:
     types:
       - published
@@ -278,6 +281,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Host "No artifacts found" }
 
       - name: Upload release assets
+        if: github.event_name != 'pull_request' &&
+          (
+          startsWith(github.ref, 'refs/heads/main') ||
+          startsWith(github.ref, 'refs/heads/release/') ||
+          startsWith(github.ref, 'refs/tags/v')
+          )
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
