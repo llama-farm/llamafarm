@@ -57,3 +57,4 @@ echo "3. Change version: export LF_VERSION_REF=v1.1.0"
 echo "4. Check logs: LF_DEBUG=1 ./lf start"
 echo ""
 echo "You should see debug output about 'Source version mismatch' and 'stopping all services before upgrade'"
+

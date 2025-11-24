@@ -2,7 +2,8 @@ import { createContext, useContext, useState, ReactNode } from 'react'
 
 interface DemoModalContextType {
   isOpen: boolean
-  openModal: () => void
+  autoStartDemoId: string | null
+  openModal: (autoStartDemoId?: string) => void
   closeModal: () => void
 }
 
@@ -10,12 +11,20 @@ const DemoModalContext = createContext<DemoModalContextType | undefined>(undefin
 
 export function DemoModalProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [autoStartDemoId, setAutoStartDemoId] = useState<string | null>(null)
 
-  const openModal = () => setIsOpen(true)
-  const closeModal = () => setIsOpen(false)
+  const openModal = (demoId?: string) => {
+    setAutoStartDemoId(demoId || null)
+    setIsOpen(true)
+  }
+  
+  const closeModal = () => {
+    setIsOpen(false)
+    setAutoStartDemoId(null)
+  }
 
   return (
-    <DemoModalContext.Provider value={{ isOpen, openModal, closeModal }}>
+    <DemoModalContext.Provider value={{ isOpen, autoStartDemoId, openModal, closeModal }}>
       {children}
     </DemoModalContext.Provider>
   )

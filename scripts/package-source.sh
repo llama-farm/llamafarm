@@ -30,7 +30,7 @@ ARCHIVE_PATH="${OUTPUT_DIR}/${ARCHIVE_NAME}"
 echo "Packaging LlamaFarm source code (version: $VERSION)..."
 
 # Verify required directories exist
-REQUIRED_DIRS=("server" "rag" "common" "config" "runtimes/universal" "designer/dist")
+REQUIRED_DIRS=("server" "rag" "common" "config" "observability" "runtimes/universal" "designer/dist")
 for dir in "${REQUIRED_DIRS[@]}"; do
     if [ ! -d "$dir" ]; then
         echo "Error: Required directory not found: $dir" >&2
@@ -83,6 +83,9 @@ rsync -a "${RSYNC_EXCLUDE[@]}" common/ "$SOURCE_DIR/common/"
 
 echo "Copying config/..."
 rsync -a "${RSYNC_EXCLUDE[@]}" config/ "$SOURCE_DIR/config/"
+
+echo "Copying observability/..."
+rsync -a "${RSYNC_EXCLUDE[@]}" observability/ "$SOURCE_DIR/observability/"
 
 echo "Copying runtimes/universal/..."
 mkdir -p "$SOURCE_DIR/runtimes"

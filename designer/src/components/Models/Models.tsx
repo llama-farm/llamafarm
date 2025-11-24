@@ -1699,7 +1699,7 @@ const Models = () => {
       base_url: 'http://localhost:11434',
       prompt_format: 'unstructured',
       provider_config: {},
-      prompts: promptSets || [],
+      prompts: promptSets && promptSets.length > 0 ? promptSets : ['default'],
     }
 
     const updatedModels = [...runtimeModels, newModel]
@@ -1906,7 +1906,7 @@ const Models = () => {
       if (model.name === id) {
         return {
           ...model,
-          prompts: updatedMap[id] || [],
+          prompts: updatedMap[id] && updatedMap[id].length > 0 ? updatedMap[id] : ['default'],
         }
       }
       return model
@@ -1955,7 +1955,7 @@ const Models = () => {
       if (model.name === id) {
         return {
           ...model,
-          prompts: [],
+          prompts: ['default'],
         }
       }
       return model

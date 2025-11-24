@@ -124,18 +124,10 @@ npm run dist:linux
 
 Built applications will be in `release/{version}/`:
 - DMG files (macOS)
-- ZIP files with blockmap (for auto-updates)
 - Installers for Windows/Linux
 
-**Build Outputs** (macOS example):
-- `LlamaFarm-{version}-arm64-mac.zip` - Apple Silicon app bundle
-- `LlamaFarm-{version}-arm64-mac.zip.blockmap` - Update diff file
-- `LlamaFarm-{version}-arm64.dmg` - Apple Silicon installer
-- `LlamaFarm-{version}-arm64.dmg.blockmap` - Update diff file
-- `LlamaFarm-{version}-mac.zip` - Intel app bundle
-- `LlamaFarm-{version}-mac.zip.blockmap` - Update diff file
-- `LlamaFarm-{version}.dmg` - Intel installer
-- `LlamaFarm-{version}.dmg.blockmap` - Update diff file
+**Build Outputs**
+- `LlamaFarm-{version}-universal.dmg` - Mac Universal installer
 
 ## Architecture
 

@@ -49,7 +49,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             <div
               className={cn(
-                'w-7 h-7 rounded-full grid place-items-center',
+                'w-7 h-7 flex-shrink-0 rounded-full grid place-items-center',
                 t.variant === 'destructive'
                   ? 'bg-destructive text-destructive-foreground'
                   : t.icon === 'alert-triangle'
@@ -65,7 +65,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 className="w-4 h-4"
               />
             </div>
-            <div className="text-sm md:text-base leading-5">{t.message}</div>
+            <div className="text-sm md:text-base leading-5 flex-1 break-words">{t.message}</div>
           </div>
         ))}
       </div>

@@ -10,7 +10,6 @@ from config.datamodel import LlamaFarmConfig
 from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_chunk import (
-    ChatCompletionChunk,
     Choice as ChoiceChunk,
 )
 from openai.types.chat.chat_completion_chunk import (
@@ -121,6 +120,7 @@ class ChatOrchestratorAgent(LFAgent):
         self,
         messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_body: dict | None = None,
     ) -> LFChatCompletion:
         """Run the agent with MCP tool calling support.
 
@@ -142,7 +142,9 @@ class ChatOrchestratorAgent(LFAgent):
 
             try:
                 # Get LLM response
-                response = await super().run_async(messages=messages, tools=tools)
+                response = await super().run_async(
+                    messages=messages, tools=tools, extra_body=extra_body
+                )
 
                 assistant_message = response.choices[0].message
                 tool_calls = assistant_message.tool_calls
@@ -242,6 +244,7 @@ class ChatOrchestratorAgent(LFAgent):
         self,
         messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat with MCP tool execution support."""
 
@@ -265,7 +268,7 @@ class ChatOrchestratorAgent(LFAgent):
             last_chunk: LFChatCompletionChunk | None = None
 
             async for chunk in super().run_async_stream(
-                messages=current_messages, tools=tools
+                messages=current_messages, tools=tools, extra_body=extra_body
             ):
                 last_chunk = chunk
                 choice = chunk.choices[0]
@@ -650,7 +653,10 @@ class ChatOrchestratorAgentFactory:
 
         # ProjectContextProvider: Only for dev chat to show the user's active project context
         # Regular user projects don't need this metadata clutter
-        if project_config.namespace == "llamafarm" and project_config.name == "project_seed":
+        if (
+            project_config.namespace == "llamafarm"
+            and project_config.name == "project_seed"
+        ):
             # Dev chat: use active project from header if provided
             if active_project_namespace and active_project_name:
                 project_context_provider = ProjectContextProvider(
@@ -658,7 +664,9 @@ class ChatOrchestratorAgentFactory:
                     namespace=active_project_namespace,
                     name=active_project_name,
                 )
-                agent.register_context_provider("project_context", project_context_provider)
+                agent.register_context_provider(
+                    "project_context", project_context_provider
+                )
 
         await agent.setup_tools()
 
