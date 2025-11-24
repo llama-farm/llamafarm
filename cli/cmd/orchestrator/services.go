@@ -121,7 +121,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  180 * time.Second, // Longer timeout for first-time dependency installation
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
-		Args:            []string{"run", "--python", "3.13", "python", "server.py"},
+		Args:            []string{"run", "--managed-python", "python", "server.py"},
 		Env: map[string]string{
 			"TRANSFORMERS_PORT":       "11540",
 			"TRANSFORMERS_HOST":       "127.0.0.1",
@@ -144,7 +144,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  90 * time.Second,
 		WorkDir:         "server",
 		Command:         "uv",
-		Args:            []string{"run", "--python", "3.13", "uvicorn", "main:app", "--host", "0.0.0.0"},
+		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
 		Env: map[string]string{
 			"OLLAMA_HOST": "http://localhost:11434",
 		},
@@ -157,7 +157,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  180 * time.Second,
 		WorkDir:         "rag",
 		Command:         "uv",
-		Args:            []string{"run", "--python", "3.13", "python", "main.py"},
+		Args:            []string{"run", "--managed-python", "python", "main.py"},
 		HealthComponent: "rag-service",
 	},
 }
