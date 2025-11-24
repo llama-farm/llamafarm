@@ -875,10 +875,16 @@ async def get_task(namespace: str, project_id: str, task_id: str):
         )
 
     if res.info:
-        response.meta = res.info
+        if isinstance(res.info, (dict, list, str, int, float, bool, type(None))):
+            response.meta = res.info
+        else:
+            response.meta = {"message": str(res.info)}
 
     if res.state == "SUCCESS":
-        response.result = res.result
+        if isinstance(res.result, (dict, list, str, int, float, bool, type(None))):
+            response.result = res.result
+        else:
+            response.result = {"message": str(res.result)}
     elif res.state == "FAILURE":
         response.error = str(res.result)
         response.traceback = res.traceback

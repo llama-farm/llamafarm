@@ -131,7 +131,7 @@ export async function deleteDataset(
  * @param project - The project identifier
  * @param dataset - The dataset name
  * @param request - The action request
- * @returns Promise<DatasetActionResponse> - The action response with task URI
+ * @returns Promise<DatasetActionResponse> - The action response with task tracking info
  */
 export async function executeDatasetAction(
   namespace: string,
@@ -284,24 +284,6 @@ export async function deleteDatasetFile(
 }
 
 /**
- * Process a dataset (async processing with task tracking)
- * @param namespace - The project namespace
- * @param project - The project identifier
- * @param dataset - The dataset name
- * @returns Promise with task information
- */
-export async function processDataset(
-  namespace: string,
-  project: string,
-  dataset: string
-): Promise<{ message: string; task_id: string }> {
-  const response = await apiClient.post(
-    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/process?async_processing=true`
-  )
-  return response.data
-}
-
-/**
  * Default export with all dataset service functions
  */
 export default {
@@ -315,5 +297,4 @@ export default {
   ingestDataset,
   getTaskStatus,
   deleteDatasetFile,
-  processDataset,
 }

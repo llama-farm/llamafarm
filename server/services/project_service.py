@@ -31,7 +31,7 @@ RESERVED_NAMESPACES = ["llamafarm"]
 class Project(BaseModel):
     namespace: str
     name: str
-    config: LlamaFarmConfig | dict
+    config: LlamaFarmConfig
     validation_error: str | None = None
     last_modified: datetime | None = None
 
@@ -45,6 +45,7 @@ class ProjectWithConfigDict(BaseModel):
     - config: Validated LlamaFarmConfig instance (None if validation failed)
     - validation_error: Error message if config validation failed
     """
+
     namespace: str
     name: str
     config_dict: dict
@@ -90,7 +91,12 @@ class ProjectService:
         """
         try:
             # Look for config files in order of preference
-            config_files = ["llamafarm.yaml", "llamafarm.yml", "llamafarm.toml", "llamafarm.json"]
+            config_files = [
+                "llamafarm.yaml",
+                "llamafarm.yml",
+                "llamafarm.toml",
+                "llamafarm.json",
+            ]
             for config_file in config_files:
                 config_path = os.path.join(project_dir, config_file)
                 if os.path.isfile(config_path):
@@ -207,7 +213,9 @@ class ProjectService:
                     validate=False,
                 )
                 # Also get the dict version
-                config_dict = validated_config.model_dump(mode="json", exclude_none=True)
+                config_dict = validated_config.model_dump(
+                    mode="json", exclude_none=True
+                )
             except ValidationError as e:
                 # Config file exists but has validation errors
                 logger.warning(
@@ -222,9 +230,13 @@ class ProjectService:
                         loc = ".".join(str(x) for x in err.get("loc", []))
                         msg = err.get("msg", "validation error")
                         error_details.append(f"{loc}: {msg}")
-                    validation_error_msg = "; ".join(error_details[:5])  # Limit to first 5 errors
+                    validation_error_msg = "; ".join(
+                        error_details[:5]
+                    )  # Limit to first 5 errors
                     if len(e.errors()) > 5:
-                        validation_error_msg += f" (and {len(e.errors()) - 5} more errors)"
+                        validation_error_msg += (
+                            f" (and {len(e.errors()) - 5} more errors)"
+                        )
                 else:
                     validation_error_msg = f"Config validation failed: {str(e)}"
 
@@ -371,7 +383,9 @@ class ProjectService:
                     loc = ".".join(str(x) for x in err.get("loc", []))
                     msg = err.get("msg", "validation error")
                     error_details.append(f"{loc}: {msg}")
-                validation_error_msg = "; ".join(error_details[:5])  # Limit to first 5 errors
+                validation_error_msg = "; ".join(
+                    error_details[:5]
+                )  # Limit to first 5 errors
                 if len(e.errors()) > 5:
                     validation_error_msg += f" (and {len(e.errors()) - 5} more errors)"
             else:
@@ -453,7 +467,8 @@ class ProjectService:
             raise ProjectConfigError(
                 namespace,
                 project_id,
-                message=safe_project.validation_error or "Configuration validation failed",
+                message=safe_project.validation_error
+                or "Configuration validation failed",
             )
 
         return Project(
@@ -546,7 +561,9 @@ class ProjectService:
         project_copy = Project(
             namespace=safe_project.namespace,
             name=safe_project.name,
-            config=safe_project.config if safe_project.config is not None else safe_project.config_dict,
+            config=safe_project.config
+            if safe_project.config is not None
+            else safe_project.config_dict,
             validation_error=safe_project.validation_error,
             last_modified=safe_project.last_modified,
         )

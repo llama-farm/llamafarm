@@ -91,7 +91,7 @@ export interface DeleteDatasetResponse {
  */
 export interface DatasetActionRequest {
   /** Type of action to execute (currently only 'ingest') */
-  action_type: 'ingest'
+  action_type: 'ingest' | 'process'
 }
 
 /**
@@ -102,6 +102,8 @@ export interface DatasetActionResponse {
   message: 'Accepted'
   /** URI for tracking the task */
   task_uri: string
+  /** Task identifier */
+  task_id: string
 }
 
 /**

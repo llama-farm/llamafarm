@@ -352,10 +352,11 @@ export function useProcessDataset() {
       project: string
       dataset: string
     }) =>
-      datasetService.processDataset(
+      datasetService.executeDatasetAction(
         data.namespace,
         data.project,
-        data.dataset
+        data.dataset,
+        { action_type: 'process' }
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh any status changes

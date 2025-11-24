@@ -118,7 +118,7 @@ Common HTTP status codes:
 - `POST /v1/projects/{namespace}/{project}/datasets` - Create dataset
 - `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}` - Delete dataset
 - `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data` - Upload file to dataset
-- `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/process` - Process dataset into vector database
+- `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/actions` - Trigger dataset actions (ingest/process) via Celery tasks
 - `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}/data/{file_hash}` - Remove file from dataset
 
 ### RAG (Retrieval-Augmented Generation)
@@ -743,68 +743,39 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_
 
 ### Process Dataset
 
-Process all files in a dataset into the vector database.
+Processing is now driven exclusively through the dataset actions endpoint, which queues Celery tasks and returns a task ID you can poll later.
 
-**Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/process`
+**Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/actions`
 
 **Parameters:**
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `dataset` (path, required): Dataset name
-- `async_processing` (query, optional): Process asynchronously (default: false)
+- `action_type` (body, required): `"process"` (alias `"ingest"`)
 
-**Response (Synchronous):**
+**Request Body:**
 ```json
 {
-  "message": "Dataset processing completed",
-  "processed_files": 2,
-  "skipped_files": 0,
-  "failed_files": 0,
-  "strategy": "universal_processor",
-  "database": "main_db",
-  "details": [
-    {
-      "hash": "abc123",
-      "filename": "paper1.pdf",
-      "status": "processed",
-      "parser": "pdf",
-      "extractors": ["text"],
-      "chunks": 42,
-      "chunk_size": 500,
-      "embedder": "sentence-transformers"
-    }
-  ]
+  "action_type": "process"
 }
 ```
 
-**Response (Asynchronous):**
+**Response:**
 ```json
 {
-  "message": "Dataset processing started asynchronously",
-  "processed_files": 0,
-  "skipped_files": 0,
-  "failed_files": 0,
-  "strategy": "universal_processor",
-  "database": "main_db",
-  "details": [
-    {
-      "hash": "abc123",
-      "filename": null,
-      "status": "pending"
-    }
-  ],
-  "task_id": "task-123-abc"
+  "message": "Accepted",
+  "task_uri": "http://localhost:8000/v1/projects/my-org/chatbot/tasks/8f6f9c2a",
+  "task_id": "8f6f9c2a"
 }
 ```
 
-**Example (Synchronous):**
-```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/process
-```
+Use `task_uri`/`task_id` with `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` to monitor progress. When the Celery task finishes, the `result` payload matches the historical `ProcessDatasetResponse` structure (processed/skipped/failed counts plus per-file details).
 
-**Example (Asynchronous):**
+**Example:**
 ```bash
-curl -X POST "http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/process?async_processing=true"
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/actions \
+  -H "Content-Type: application/json" \
+  -d '{"action_type":"process"}'
 ```
 
 ### Remove File from Dataset
@@ -1312,7 +1283,7 @@ The API handles concurrent requests efficiently:
 ### Async Processing
 
 For long-running operations (dataset processing):
-1. Use `async_processing=true` to get immediate response
+1. POST to the dataset `actions` endpoint (`{"action_type":"process"}`) to queue a Celery task
 2. Poll the task endpoint to check status
 3. Retrieve final results when `state` is `SUCCESS`
 

@@ -251,16 +251,17 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         const processCallId = addApiCall({
           method: 'POST',
-          endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/process`,
+          endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/actions`,
           status: 'pending',
-          description: 'Processing dataset (embedding & indexing)'
+          description: 'Processing dataset (embedding & indexing via actions)'
         })
 
         const processStart = Date.now()
-        const processResult = await datasetService.processDataset(
+        const processResult = await datasetService.executeDatasetAction(
           namespace,
           newProjectName,
-          demo.datasetName
+          demo.datasetName,
+          { action_type: 'process' }
         )
 
         // Poll for completion
