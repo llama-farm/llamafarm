@@ -218,6 +218,7 @@ export type RawFileProcessingDetail = [
   boolean, // success
   {
     filename?: string
+    file_hash?: string
     status?: string
     reason?: string
     parser?: string
@@ -226,6 +227,8 @@ export type RawFileProcessingDetail = [
     chunk_size?: number | null
     embedder?: string
     error?: string
+    stored_count?: number
+    skipped_count?: number
     result?: {
       status?: string
       filename?: string
@@ -267,6 +270,10 @@ export interface FileProcessingDetail {
   error?: string
   /** Reason for skipped status */
   reason?: string
+  /** Number of chunks stored in vector database */
+  stored_count?: number
+  /** Number of chunks skipped (duplicates) */
+  skipped_count?: number
 }
 
 /**
