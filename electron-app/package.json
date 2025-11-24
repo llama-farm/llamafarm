@@ -69,6 +69,9 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
@@ -93,7 +96,13 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "azureSignOptions": {
+        "publisher": "Rownd, Inc.",
+        "endpoint": "https://eus.codesigning.azure.net/",
+        "certificateProfileName": "llamafarm-app",
+        "codeSigningAccountName": "LlamaFarm"
+      }
     },
     "linux": {
       "target": [
