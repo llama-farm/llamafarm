@@ -98,7 +98,7 @@
       ],
       "icon": "build/icon.ico",
       "azureSignOptions": {
-        "publisher": "Rownd, Inc.",
+        "publisherName": "Rownd, Inc.",
         "endpoint": "https://eus.codesigning.azure.net/",
         "certificateProfileName": "llamafarm-app",
         "codeSigningAccountName": "LlamaFarm"
