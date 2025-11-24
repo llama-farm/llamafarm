@@ -575,24 +575,236 @@ var datasetsProcessCmd = &cobra.Command{
 				fmt.Printf("\r✅ Task %s completed successfully\n", taskStatus.TaskID)
 
 				if len(taskStatus.Result) > 0 && string(taskStatus.Result) != "null" {
-					var summary struct {
-						Message        string `json:"message"`
+					// Parse the async task result
+					var rawResult struct {
+						ProcessedFiles int               `json:"processed_files"`
+						SkippedFiles   int               `json:"skipped_files"`
+						FailedFiles    int               `json:"failed_files"`
+						Details        []json.RawMessage `json:"details"`
+					}
+					if err := json.Unmarshal(taskStatus.Result, &rawResult); err != nil {
+						fmt.Printf("   Result: %s\n", string(taskStatus.Result))
+						return
+					}
+
+					// Transform the async result into the expected format (matching origin/main)
+					result := struct {
 						ProcessedFiles int    `json:"processed_files"`
 						SkippedFiles   int    `json:"skipped_files"`
 						FailedFiles    int    `json:"failed_files"`
-						Strategy       string `json:"strategy"`
-						Database       string `json:"database"`
+						Strategy       string `json:"strategy,omitempty"`
+						Database       string `json:"database,omitempty"`
+						Details        []struct {
+							Hash       string   `json:"hash"`
+							Filename   string   `json:"filename,omitempty"`
+							Status     string   `json:"status"`
+							Parser     string   `json:"parser,omitempty"`
+							Extractors []string `json:"extractors,omitempty"`
+							Chunks     *int     `json:"chunks,omitempty"`
+							ChunkSize  *int     `json:"chunk_size,omitempty"`
+							Embedder   string   `json:"embedder,omitempty"`
+							Error      string   `json:"error,omitempty"`
+							Reason     string   `json:"reason,omitempty"`
+						} `json:"details"`
+					}{
+						ProcessedFiles: rawResult.ProcessedFiles,
+						SkippedFiles:   rawResult.SkippedFiles,
+						FailedFiles:    rawResult.FailedFiles,
 					}
-					if err := json.Unmarshal(taskStatus.Result, &summary); err == nil && summary.Message != "" {
-						fmt.Printf("   Message: %s\n", summary.Message)
-						fmt.Printf("   Strategy: %s | Database: %s\n", summary.Strategy, summary.Database)
-						fmt.Printf("   Processed: %d | Skipped: %d | Failed: %d\n",
-							summary.ProcessedFiles, summary.SkippedFiles, summary.FailedFiles)
-						if summary.FailedFiles > 0 {
-							os.Exit(1)
+
+					// Parse the detail array format [bool, {...}] and transform to flat structure
+					for _, detail := range rawResult.Details {
+						var rawArray []json.RawMessage
+						if err := json.Unmarshal(detail, &rawArray); err == nil && len(rawArray) >= 2 {
+							var success bool
+							var info struct {
+								Filename   string   `json:"filename"`
+								Status     string   `json:"status"`
+								Reason     string   `json:"reason"`
+								Parser     string   `json:"parser"`
+								Extractors []string `json:"extractors"`
+								Chunks     *int     `json:"chunks"`
+								ChunkSize  *int     `json:"chunk_size"`
+								Embedder   string   `json:"embedder"`
+								Error      string   `json:"error"`
+								Result     struct {
+									Filename string `json:"filename"`
+								} `json:"result"`
+							}
+							json.Unmarshal(rawArray[0], &success)
+							json.Unmarshal(rawArray[1], &info)
+
+							// Determine status
+							status := info.Status
+							if status == "" {
+								if success {
+									status = "processed"
+								} else {
+									status = "failed"
+								}
+							}
+
+							// Use filename from result if main filename looks like a hash
+							filename := info.Filename
+							if info.Result.Filename != "" && len(info.Filename) == 64 {
+								filename = info.Result.Filename
+							}
+
+							result.Details = append(result.Details, struct {
+								Hash       string   `json:"hash"`
+								Filename   string   `json:"filename,omitempty"`
+								Status     string   `json:"status"`
+								Parser     string   `json:"parser,omitempty"`
+								Extractors []string `json:"extractors,omitempty"`
+								Chunks     *int     `json:"chunks,omitempty"`
+								ChunkSize  *int     `json:"chunk_size,omitempty"`
+								Embedder   string   `json:"embedder,omitempty"`
+								Error      string   `json:"error,omitempty"`
+								Reason     string   `json:"reason,omitempty"`
+							}{
+								Hash:       info.Filename,
+								Filename:   filename,
+								Status:     status,
+								Parser:     info.Parser,
+								Extractors: info.Extractors,
+								Chunks:     info.Chunks,
+								ChunkSize:  info.ChunkSize,
+								Embedder:   info.Embedder,
+								Error:      info.Error,
+								Reason:     info.Reason,
+							})
 						}
+					}
+
+					// Use the exact formatting from origin/main
+					fmt.Printf("\n📁 File Processing Details:\n")
+					fmt.Printf("────────────────────────────────────────────────────────────────────────\n")
+					for i, d := range result.Details {
+						// Show both filename and hash for clarity
+						identifier := ""
+						if d.Filename != "" {
+							identifier = d.Filename
+							if len(d.Hash) > 12 {
+								identifier += fmt.Sprintf(" [%s...]", d.Hash[:12])
+							}
+						} else {
+							identifier = d.Hash
+						}
+
+						// Color-code status
+						statusDisplay := d.Status
+						statusBadge := ""
+						switch d.Status {
+						case "processed":
+							statusDisplay = "PROCESSED"
+							statusBadge = "✅"
+						case "skipped":
+							statusDisplay = "SKIPPED"
+							statusBadge = "⏭️"
+						case "failed":
+							statusDisplay = "FAILED"
+							statusBadge = "❌"
+						}
+
+						// File header with number, status badge, and identifier
+						fmt.Printf("\n   %s [%d] %s\n", statusBadge, i+1, identifier)
+						fmt.Printf("       ├─ Status: %s\n", statusDisplay)
+
+						switch d.Status {
+						case "processed":
+							// Parser information
+							if d.Parser != "" {
+								fmt.Printf("       ├─ Parser: %s\n", d.Parser)
+							}
+
+							// Chunks information - show more detail
+							if d.Chunks != nil {
+								chunkInfo := fmt.Sprintf("%d chunks created", *d.Chunks)
+								if d.ChunkSize != nil {
+									chunkInfo += fmt.Sprintf(" (target size: %d chars)", *d.ChunkSize)
+								}
+								fmt.Printf("       ├─ Chunking: %s\n", chunkInfo)
+							}
+
+							// Extractors - show count and types
+							if len(d.Extractors) > 0 {
+								fmt.Printf("       ├─ Extractors: %d applied\n", len(d.Extractors))
+								// Show first 3 extractors inline, rest on new lines
+								if len(d.Extractors) <= 3 {
+									fmt.Printf("       │   └─ %s\n", strings.Join(d.Extractors, ", "))
+								} else {
+									for j, ext := range d.Extractors {
+										if j < len(d.Extractors)-1 {
+											fmt.Printf("       │   ├─ %s\n", ext)
+										} else {
+											fmt.Printf("       │   └─ %s\n", ext)
+										}
+									}
+								}
+							}
+
+							// Embedder information
+							if d.Embedder != "" {
+								fmt.Printf("       └─ Embedder: %s\n", d.Embedder)
+							}
+						case "skipped":
+							if d.Reason == "duplicate" {
+								fmt.Printf("       ├─ Reason: All chunks already exist in database\n")
+								fmt.Printf("       └─ Action: No new data added (file previously processed)\n")
+							} else if d.Reason != "" {
+								fmt.Printf("       └─ Reason: %s\n", d.Reason)
+							}
+							// Still show what would have been used
+							if d.Parser != "" {
+								fmt.Printf("       Would use parser: %s\n", d.Parser)
+							}
+							if d.Embedder != "" {
+								fmt.Printf("       Would use embedder: %s\n", d.Embedder)
+							}
+						case "failed":
+							if d.Error != "" {
+								fmt.Printf("       Error: %s\n", d.Error)
+							}
+						}
+					}
+
+					// Summary with more context
+					fmt.Printf("\n────────────────────────────────────────────────────────────────────────\n")
+					totalFiles := result.ProcessedFiles + result.SkippedFiles + result.FailedFiles
+					if totalFiles == 0 {
+						fmt.Printf("\n⚠️  No files to process\n")
+					} else if result.FailedFiles > 0 {
+						fmt.Printf("\n⚠️  Processing Complete with Errors:\n")
+					} else if result.SkippedFiles == totalFiles {
+						fmt.Printf("\n✓ Processing Complete (All files already in database):\n")
 					} else {
-						fmt.Printf("   Result: %s\n", string(taskStatus.Result))
+						fmt.Printf("\n✅ Processing Complete:\n")
+					}
+
+					fmt.Printf("   📊 Total files: %d\n", totalFiles)
+					if result.ProcessedFiles > 0 {
+						fmt.Printf("   ✅ Successfully processed: %d\n", result.ProcessedFiles)
+						// Calculate total chunks from details
+						totalChunks := 0
+						for _, d := range result.Details {
+							if d.Status == "processed" && d.Chunks != nil {
+								totalChunks += *d.Chunks
+							}
+						}
+						if totalChunks > 0 {
+							fmt.Printf("   📝 Total chunks created: %d\n", totalChunks)
+						}
+					}
+					if result.SkippedFiles > 0 {
+						fmt.Printf("   ⏭️  Skipped (duplicates): %d\n", result.SkippedFiles)
+					}
+					if result.FailedFiles > 0 {
+						fmt.Printf("   ❌ Failed: %d\n", result.FailedFiles)
+					}
+
+					// Exit with non-zero code if any files failed
+					if result.FailedFiles > 0 {
+						os.Exit(1)
 					}
 				}
 				return

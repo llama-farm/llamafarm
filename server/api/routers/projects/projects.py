@@ -761,7 +761,6 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 else:
                     response.state = "SUCCESS"
             else:
-                response.state = "PROGRESS"
                 response.meta = {
                     "current": completed,
                     "total": total,

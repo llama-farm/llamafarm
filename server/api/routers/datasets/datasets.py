@@ -120,11 +120,7 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
 
 
 class DatasetActionType(str, Enum):
-    INGEST = "ingest"  # alias for "process"
-    PROCESS = Field(
-        "process",
-        description="Process all files in the dataset using the configured data processing strategy",
-    )
+    PROCESS = "process"
 
 
 class DatasetActionRequest(BaseModel):
@@ -162,7 +158,7 @@ async def actions(
             f"http://localhost:8000/v1/projects/{namespace}/{project}/tasks/{task_id}"
         )
 
-    if action_type in [DatasetActionType.INGEST, DatasetActionType.PROCESS]:
+    if action_type in [DatasetActionType.PROCESS]:
         launch = DatasetService.start_dataset_ingestion(namespace, project, dataset)
         return {
             "message": launch.message,

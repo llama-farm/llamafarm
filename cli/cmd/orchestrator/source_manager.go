@@ -571,7 +571,8 @@ func (m *SourceManager) syncDirectory(dir string, name string, keepPyTorchIndex 
 
 	// Run UV sync command in the specific project directory
 	// This ensures .venv is created in the correct location
-	cmd := exec.Command(uvPath, "sync", "--managed-python")
+	// Pin to Python 3.13 because Python 3.14 is not yet supported by pydantic-core/PyO3
+	cmd := exec.Command(uvPath, "sync", "--python", "3.13")
 	cmd.Dir = dir // Critical: run from project directory so .venv is created there
 
 	// Get base environment
@@ -868,7 +869,8 @@ func (m *SourceManager) GenerateDatamodel() error {
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 
 	// Run the generation script
-	cmd := exec.Command(uvPath, "run", "--managed-python", "python", "generate_types.py")
+	// Pin to Python 3.13 because Python 3.14 is not yet supported by pydantic-core/PyO3
+	cmd := exec.Command(uvPath, "run", "--python", "3.13", "python", "generate_types.py")
 	cmd.Dir = configDir
 	cmd.Env = m.pythonEnvMgr.GetEnvForProcess()
 

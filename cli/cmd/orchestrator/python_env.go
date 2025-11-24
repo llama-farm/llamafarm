@@ -83,7 +83,8 @@ func (m *PythonEnvManager) EnsurePython() (string, error) {
 
 // findPython finds the Python executable managed by UV
 func (m *PythonEnvManager) findPython(uvPath string) (string, error) {
-	cmd := exec.Command(uvPath, "--managed-python", "python", "find", pythonVersion)
+	// Pin to Python 3.13 because Python 3.14 is not yet supported by pydantic-core/PyO3
+	cmd := exec.Command(uvPath, "python", "find", "3.13")
 	cmd.Dir = m.pythonDir // Run from Python directory context
 	cmd.Env = m.getEnv()
 	output, err := cmd.Output()
@@ -141,8 +142,9 @@ func (m *PythonEnvManager) ValidatePythonInstallation() error {
 func (m *PythonEnvManager) RunWithUV(workDir string, args ...string) *exec.Cmd {
 	uvPath := m.uvManager.GetUVPath()
 
-	// Build the command: uv run --managed-python python <args>
-	fullArgs := append([]string{"run", "--managed-python", "python"}, args...)
+	// Build the command: uv run --python 3.13 python <args>
+	// Pin to Python 3.13 because Python 3.14 is not yet supported by pydantic-core/PyO3
+	fullArgs := append([]string{"run", "--python", "3.13", "python"}, args...)
 
 	cmd := exec.Command(uvPath, fullArgs...)
 	cmd.Dir = workDir
