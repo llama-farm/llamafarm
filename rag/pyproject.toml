@@ -85,8 +85,7 @@ dependencies = [
   "pywin32>=306; sys_platform == 'win32'",
 ]
 
-[project.optional-dependencies]
-# Development dependencies
+[dependency-groups]
 dev = [
   "pytest>=7.0.0",
   "pytest-cov>=4.0.0",
@@ -98,6 +97,7 @@ dev = [
   "pre-commit>=3.0.0",
 ]
 
+[project.optional-dependencies]
 # Testing dependencies
 test = [
   "pytest>=7.0.0",
@@ -161,8 +161,20 @@ llamaindex = [
   "scipy>=1.10.0",                        # Scientific computing
 ]
 
-# All optional dependencies
-all = ["llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex]"]
+# All optional dependencies (dev moved to dependency-groups)
+all = ["llama-rag[docs,monitoring,vector-dbs,embeddings,llamaindex]"]
+
+# Development dependencies
+dev = [
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "pytest-asyncio>=0.21.0",
+  "black>=23.0.0",
+  "isort>=5.12.0",
+  "flake8>=6.0.0",
+  "mypy>=1.0.0",
+  "pre-commit>=3.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/llama-farm/llamafarm"
@@ -262,7 +274,7 @@ addopts = [
   # "--cov-report=html",
   # "--cov-report=xml",
 ]
-testpaths = ["tests", "."]
+testpaths = ["tests"]
 pythonpath = [".", ".."]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",

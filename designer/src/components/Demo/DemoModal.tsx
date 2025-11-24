@@ -454,7 +454,7 @@ export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoM
 
   return (
     <Dialog open={isOpen} onOpenChange={canClose ? handleClose : undefined}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" hideCloseButton={!canClose}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

@@ -357,6 +357,20 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
                 }
               }
 
+              // If we have result details with file-specific errors, include those
+              if (
+                taskStatus.result?.details &&
+                Array.isArray(taskStatus.result.details)
+              ) {
+                const fileErrors = taskStatus.result.details
+                  .filter((d: any) => d.error)
+                  .map((d: any) => `${d.filename}: ${d.error}`)
+                  .join('; ')
+                if (fileErrors) {
+                  errorMsg += `. File errors: ${fileErrors.substring(0, 300)}`
+                }
+              }
+
               throw new Error(errorMsg)
             }
 

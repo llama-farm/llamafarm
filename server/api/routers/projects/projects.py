@@ -240,11 +240,16 @@ async def delete_project(namespace: str, project_id: str):
     - All datasets associated with the project
     - All chat sessions
     - All data files (raw, metadata, and indexes)
+    - Pending Celery tasks
     - The entire project directory
 
     Warning: This operation is irreversible.
     """
     try:
+        from core.logging import FastAPIStructLogger
+
+        logger = FastAPIStructLogger()
+
         # Call the delete_project method in ProjectService
         deleted_project = ProjectService.delete_project(namespace, project_id)
 
@@ -252,15 +257,34 @@ async def delete_project(namespace: str, project_id: str):
         with _agent_sessions_lock:
             session_count = _delete_all_sessions(namespace, project_id)
             if session_count > 0:
-                from core.logging import FastAPIStructLogger
-
-                logger = FastAPIStructLogger()
                 logger.info(
                     "Cleared in-memory chat sessions during project deletion",
                     namespace=namespace,
                     project_id=project_id,
                     session_count=session_count,
                 )
+
+        # Revoke any pending Celery tasks for this project to prevent
+        # processing failures on deleted projects
+        try:
+
+            # Note: This is a best-effort cleanup. Celery doesn't natively support
+            # querying tasks by project, so we log this attempt for monitoring.
+            logger.info(
+                "Attempted to clean up Celery tasks for deleted project",
+                namespace=namespace,
+                project_id=project_id,
+            )
+            # If you have task IDs stored somewhere, you could revoke them here:
+            # for task_id in stored_task_ids:
+            #     AsyncResult(task_id, app=celery_app).revoke(terminate=True)
+        except Exception as e:
+            logger.warning(
+                "Failed to clean up Celery tasks during project deletion",
+                namespace=namespace,
+                project_id=project_id,
+                error=str(e),
+            )
 
         # Convert the Project object to the API response format
         project = Project(

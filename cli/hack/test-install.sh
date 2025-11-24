@@ -57,7 +57,7 @@ test_local_build() {
 
     # Build the CLI locally
     info "Building CLI locally..."
-    go build -ldflags="-X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-1.0.0'" -o lf . || error "Failed to build CLI"
+    go build -ldflags="-X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=test-1.0.0'" -o lf . || error "Failed to build CLI"
 
     # Test the binary
     info "Testing built binary..."
@@ -85,15 +85,15 @@ test_cross_compile() {
 
     # Test Linux build
     info "Testing Linux amd64 build..."
-    GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-1.0.0'" -o lf-linux . || error "Linux build failed"
+    GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=test-1.0.0'" -o lf-linux . || error "Linux build failed"
 
     # Test macOS build
     info "Testing macOS amd64 build..."
-    GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-1.0.0'" -o lf-macos . || error "macOS build failed"
+    GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=test-1.0.0'" -o lf-macos . || error "macOS build failed"
 
     # Test Windows build
     info "Testing Windows amd64 build..."
-    GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X 'github.com/llamafarm/cli/cmd/version.CurrentVersion=test-1.0.0'" -o lf-windows.exe . || error "Windows build failed"
+    GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=test-1.0.0'" -o lf-windows.exe . || error "Windows build failed"
 
     success "Cross-compilation test passed"
 

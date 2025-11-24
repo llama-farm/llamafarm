@@ -153,6 +153,7 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 // captureOutput captures output from a pipe and writes to log file
 func (pm *ProcessManager) captureOutput(name string, reader io.Reader, logFile *os.File, streamName string) {
 	scanner := bufio.NewScanner(reader)
+	lineCount := 0
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -161,15 +162,31 @@ func (pm *ProcessManager) captureOutput(name string, reader io.Reader, logFile *
 		logLine := fmt.Sprintf("[%s] [%s] %s\n", timestamp, streamName, line)
 		logFile.WriteString(logLine)
 
+		// Sync every 10 lines to ensure writes are flushed periodically
+		// This prevents log loss if the process is killed abruptly
+		lineCount++
+		if lineCount%10 == 0 {
+			logFile.Sync()
+		}
+
 		// Optionally write to debug output
 		utils.LogDebug(fmt.Sprintf("[%s] %s\n", name, line))
+	}
+
+	// Final sync before goroutine exits to ensure all writes are flushed
+	if logFile != nil {
+		logFile.Sync()
 	}
 }
 
 // monitorProcess monitors a process and updates its status
 func (pm *ProcessManager) monitorProcess(name string, cmd *exec.Cmd, logFile *os.File) {
 	if logFile != nil {
-		defer logFile.Close()
+		defer func() {
+			// Sync before closing to ensure all buffered writes are flushed to disk
+			logFile.Sync()
+			logFile.Close()
+		}()
 	}
 
 	err := cmd.Wait()

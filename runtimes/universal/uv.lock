@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform != 'darwin'",
@@ -513,6 +513,13 @@ sdist = { url = "https://files.pythonhosted.org/packages/e4/b4/c8cd17629ced0b964
 name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../../common" }
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" }]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0.0" }]
 
 [[package]]
 name = "markupsafe"

@@ -1,9 +1,19 @@
+import asyncio
+import contextlib
+import time
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.base.types import ToolDefinition
 
 from config.datamodel import LlamaFarmConfig  # noqa: E402
+from observability.event_logger import EventLogger
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+from openai.types.chat.chat_completion_chunk import ChoiceDelta
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.completion_usage import CompletionUsage
 
 from agents.base.agent import LFAgent
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
@@ -17,6 +27,7 @@ from context_providers.rag_context_provider import (
     RAGContextProvider,
 )
 from core.logging import FastAPIStructLogger
+from core.settings import settings
 from services.rag_service import search_with_rag
 
 logger = FastAPIStructLogger()
@@ -57,6 +68,163 @@ class RAGParameters:
 
 
 class ProjectChatService:
+    def _extract_latest_user_message(
+        self, messages: list[LFChatCompletionMessageParam]
+    ) -> str:
+        """Extract the content from the latest user message in the messages list."""
+        latest_user_message = next(
+            (
+                msg
+                for msg in reversed(messages)
+                if msg.get("role", None) == "user" and msg.get("content", None)
+            ),
+            None,
+        )
+        if latest_user_message:
+            return latest_user_message.get("content", "")
+        return ""
+
+    def _create_event_logger(
+        self,
+        project_config: LlamaFarmConfig,
+        event_type: str = "inference",
+    ) -> EventLogger | None:
+        """Create event logger, returning None if it fails (e.g., in tests with mocks)."""
+        try:
+            request_id = f"req_{uuid.uuid4().hex[:12]}"
+            return EventLogger(
+                event_type=event_type,
+                request_id=request_id,
+                namespace=project_config.namespace,
+                project=project_config.name,
+                config=project_config,
+            )
+        except Exception:
+            # Event logging failed (likely tests with mocks), skip it
+            return None
+
+    def _log_event(self, event_logger: EventLogger | None, event_name: str, data: dict):
+        """Log event if logger exists."""
+        if event_logger:
+            with contextlib.suppress(Exception):
+                event_logger.log_event(event_name, data)
+
+    def _complete_event(self, event_logger: EventLogger | None):
+        """Complete event if logger exists."""
+        if event_logger:
+            with contextlib.suppress(Exception):
+                event_logger.complete_event()
+
+    def _fail_event(self, event_logger: EventLogger | None, error: str):
+        """Fail event if logger exists."""
+        if event_logger:
+            with contextlib.suppress(Exception):
+                event_logger.fail_event(error)
+
+    async def _perform_rag_with_logging(
+        self,
+        event_logger: EventLogger | None,
+        chat_agent: LFAgent,
+        project_dir: str,
+        project_config: LlamaFarmConfig,
+        message: str,
+        rag_enabled: bool | None = None,
+        database: str | None = None,
+        retrieval_strategy: str | None = None,
+        rag_top_k: int | None = None,
+        rag_score_threshold: float | None = None,
+    ) -> None:
+        """
+        Perform RAG search with event logging.
+
+        Wraps _perform_rag_search_and_add_to_context to capture RAG metrics
+        for observability without duplicating RAG logic.
+        """
+        # Resolve RAG parameters to check if RAG is enabled
+        rag_params = self._resolve_rag_parameters(
+            project_config,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
+
+        if not rag_params.rag_enabled:
+            return
+
+        # Log RAG query start if enabled
+        self._log_event(
+            event_logger,
+            "rag_query_start",
+            {
+                "database": rag_params.database,
+                "query": message,
+                "top_k": rag_params.rag_top_k,
+                "retrieval_strategy": rag_params.retrieval_strategy,
+            },
+        )
+
+        # Perform RAG search using existing helper
+        await self._perform_rag_search_and_add_to_context(
+            chat_agent,
+            project_dir,
+            project_config,
+            message,
+            rag_enabled=rag_enabled,
+            database=database,
+            retrieval_strategy=retrieval_strategy,
+            rag_top_k=rag_top_k,
+            rag_score_threshold=rag_score_threshold,
+        )
+
+        # Extract results from context provider to log completion metrics
+        if rag_params.rag_enabled:
+            # Always log rag_retrieval_complete when RAG is enabled
+            chunks = []
+            avg_score = 0.0
+
+            try:
+                # Access the RAG context provider to get results
+                # Check if context_providers exists and is accessible
+                if hasattr(chat_agent, "context_providers"):
+                    context_provider = chat_agent.context_providers.get("rag_context")
+                    if context_provider and hasattr(context_provider, "chunks"):
+                        chunks = context_provider.chunks
+
+                        # Calculate average score
+                        if chunks:
+                            scores = [
+                                chunk.metadata.get("score", 0.0) for chunk in chunks
+                            ]
+                            avg_score = sum(scores) / len(scores) if scores else 0.0
+            except Exception as e:
+                # If we can't extract metrics, log with empty results
+                logger.warning(f"Could not extract RAG metrics: {e}", exc_info=False)
+
+            # Always log the completion event (even if 0 chunks found)
+            self._log_event(
+                event_logger,
+                "rag_retrieval_complete",
+                {
+                    "chunks_retrieved": len(chunks),
+                    "avg_score": round(avg_score, 3),
+                    "top_chunks": [
+                        {
+                            "rank": idx + 1,
+                            "content_preview": chunk.content[:100]
+                            if len(chunk.content) > 100
+                            else chunk.content,
+                            "source": chunk.metadata.get("source", "unknown"),
+                            "score": round(chunk.metadata.get("score", 0.0), 3),
+                        }
+                        for idx, chunk in enumerate(chunks[:2])  # Top 2 chunks
+                    ]
+                    if chunks
+                    else [],
+                },
+            )
+
     async def chat(
         self,
         *,
@@ -72,6 +240,20 @@ class ProjectChatService:
         rag_score_threshold: float | None = None,
         n_ctx: int | None = None,
     ) -> LFChatCompletion:
+        # Create event logger (gracefully handles test mocks)
+        event_logger = self._create_event_logger(project_config)
+
+        # Log request
+        self._log_event(
+            event_logger,
+            "request_received",
+            {
+                "message_length": len(messages),
+                "model": chat_agent.model_name,
+                "rag_enabled": rag_enabled,
+            },
+        )
+
         latest_user_message = next(
             (
                 msg
@@ -82,28 +264,74 @@ class ProjectChatService:
         )
 
         if latest_user_message:
-            await self._perform_rag_search_and_add_to_context(
-                chat_agent,
-                project_dir,
-                project_config,
-                latest_user_message.get("content", ""),
-                rag_enabled=rag_enabled,
-                database=database,
-                retrieval_strategy=retrieval_strategy,
-                rag_top_k=rag_top_k,
-                rag_score_threshold=rag_score_threshold,
+            try:
+                # Perform RAG search with event logging
+                await self._perform_rag_with_logging(
+                    event_logger,
+                    chat_agent,
+                    project_dir,
+                    project_config,
+                    latest_user_message.get("content", ""),
+                    rag_enabled=rag_enabled,
+                    database=database,
+                    retrieval_strategy=retrieval_strategy,
+                    rag_top_k=rag_top_k,
+                    rag_score_threshold=rag_score_threshold,
+                )
+            except Exception as e:
+                self._fail_event(event_logger, str(e))
+                raise
+
+        try:
+            # Build extra_body dict for runtime-specific parameters
+            extra_body = {}
+            if n_ctx is not None:
+                extra_body["n_ctx"] = n_ctx
+
+            response = await chat_agent.run_async(
+                messages=messages,
+                tools=tools,
+                extra_body=extra_body if extra_body else None,
             )
 
-        # Build extra_body dict for runtime-specific parameters
-        extra_body = {}
-        if n_ctx is not None:
-            extra_body["n_ctx"] = n_ctx
+            # Log response (handle both dict and object responses)
+            if hasattr(response, "model_dump"):
+                response_data = response.model_dump(mode="json")
+            elif hasattr(response, "choices"):
+                # Pydantic object but use dict serialization
+                response_content = (
+                    response.choices[0].message.content if response.choices else ""
+                )
+                response_data = {
+                    "response_length": len(response_content),
+                    "finish_reason": response.choices[0].finish_reason
+                    if response.choices
+                    else "unknown",
+                }
+            else:
+                # Handle dict response (from tests)
+                choices = response.get("choices", [])
+                response_content = (
+                    choices[0].get("message", {}).get("content", "") if choices else ""
+                )
+                response_data = {
+                    "response_length": len(response_content),
+                    "finish_reason": choices[0].get("finish_reason", "unknown")
+                    if choices
+                    else "unknown",
+                }
 
-        return await chat_agent.run_async(
-            messages=messages,
-            tools=tools,
-            extra_body=extra_body if extra_body else None,
-        )
+            self._log_event(
+                event_logger,
+                "response_generated",
+                response_data,
+            )
+
+            self._complete_event(event_logger)
+            return response
+        except Exception as e:
+            self._fail_event(event_logger, str(e))
+            raise
 
     async def stream_chat(
         self,
@@ -121,6 +349,20 @@ class ProjectChatService:
         n_ctx: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
+        # Create event logger (gracefully handles test mocks)
+        event_logger = self._create_event_logger(project_config)
+
+        # Log request
+        self._log_event(
+            event_logger,
+            "request_received",
+            {
+                "message_length": len(messages),
+                "model": chat_agent.model_name,
+                "rag_enabled": rag_enabled,
+            },
+        )
+
         latest_user_message = next(
             (
                 msg
@@ -130,37 +372,70 @@ class ProjectChatService:
             None,
         )
 
-        if latest_user_message:
-            await self._perform_rag_search_and_add_to_context(
-                chat_agent,
-                project_dir,
-                project_config,
-                latest_user_message.get("content", ""),
-                rag_enabled=rag_enabled,
-                database=database,
-                retrieval_strategy=retrieval_strategy,
-                rag_top_k=rag_top_k,
-                rag_score_threshold=rag_score_threshold,
-            )
-
-        # Build extra_body dict for runtime-specific parameters
-        extra_body = {}
-        if n_ctx is not None:
-            extra_body["n_ctx"] = n_ctx
+        event_failed = False
+        first_token_logged = False
 
         try:
-            logger.info("Running async stream")
+            if latest_user_message:
+                await self._perform_rag_with_logging(
+                    event_logger,
+                    chat_agent,
+                    project_dir,
+                    project_config,
+                    latest_user_message.get("content", ""),
+                    rag_enabled=rag_enabled,
+                    database=database,
+                    retrieval_strategy=retrieval_strategy,
+                    rag_top_k=rag_top_k,
+                    rag_score_threshold=rag_score_threshold,
+                )
+
+            logger.debug("Running async stream")
+
+            # Log LLM inference start
+            self._log_event(
+                event_logger,
+                "llm_inference_start",
+                {
+                    "model": chat_agent.model_name,
+                },
+            )
+
+            # Build extra_body dict for runtime-specific parameters
+            extra_body = {}
+            if n_ctx is not None:
+                extra_body["n_ctx"] = n_ctx
+
             async for chunk in chat_agent.run_async_stream(
                 messages=messages,
                 tools=tools,
-                extra_body=extra_body or None,
+                extra_body=extra_body if extra_body else None,
             ):
+                # Log time to first token (only once)
+                if not first_token_logged and event_logger:
+                    self._log_event(event_logger, "llm_first_token", {})
+                    first_token_logged = True
+
                 yield chunk
-        except Exception:
-            logger.error(
-                "Model call failed",
-                exc_info=True,
+
+            # Log LLM inference complete after streaming finishes
+            self._log_event(
+                event_logger,
+                "llm_inference_complete",
+                {
+                    "finish_reason": "stop",
+                },
             )
+
+        except Exception:
+            event_failed = True
+            raise
+        finally:
+            if event_failed:
+                self._fail_event(event_logger, "stream_failed")
+            else:
+                self._log_event(event_logger, "stream_complete", {})
+                self._complete_event(event_logger)
 
     def _resolve_rag_parameters(
         self,
@@ -434,6 +709,7 @@ class ProjectChatService:
                 database=rag_params.database,
                 retrieval_strategy=rag_params.retrieval_strategy,
             )
+
         for idx, result in enumerate(rag_results):
             chunk_item = ChunkItem(
                 content=result.content,

@@ -73,7 +73,7 @@ function Header({ currentVersion }: HeaderProps) {
     { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { key: 'prompt', label: 'Prompts', icon: 'prompt' },
     { key: 'data', label: 'Data', icon: 'data' },
-    { key: 'databases', label: 'Databases', icon: 'rag' },
+    { key: 'databases', label: 'RAG', icon: 'rag' },
     { key: 'models', label: 'Models', icon: 'model' },
     { key: 'test', label: 'Test', icon: 'test' },
   ] as const
@@ -90,7 +90,7 @@ function Header({ currentVersion }: HeaderProps) {
     },
     prompt: { label: 'Prompts', icon: 'prompt', path: '/chat/prompt' },
     data: { label: 'Data', icon: 'data', path: '/chat/data' },
-    databases: { label: 'Databases', icon: 'rag', path: '/chat/databases' },
+    databases: { label: 'RAG', icon: 'rag', path: '/chat/databases' },
     models: { label: 'Models', icon: 'model', path: '/chat/models' },
     test: { label: 'Test', icon: 'test', path: '/chat/test' },
   }

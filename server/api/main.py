@@ -87,6 +87,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.rag_router, prefix=API_PREFIX)
     app.include_router(routers.upgrades_router, prefix=API_PREFIX)
     app.include_router(routers.examples_router, prefix=API_PREFIX)
+    app.include_router(routers.event_logs_router, prefix=API_PREFIX)
     app.include_router(routers.models_router, prefix=API_PREFIX)
     # Health endpoints are exposed at the root (no version prefix)
     app.include_router(routers.health_router)
