@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat-app-signing # TEMPORARY FOR TESTING
+
   release:
     types:
       - published
@@ -125,6 +126,54 @@ jobs:
             echo "version=${{ steps.version-unix.outputs.version }}" >> $GITHUB_OUTPUT
             echo "version_no_v=${{ steps.version-unix.outputs.version_no_v }}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Ensure version fallback if blank
+        id: patch-version
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
+          # If version is empty or just 'v'
+          if [ -z "$VERSION_NO_V" ] || [ "$VERSION_NO_V" = "v" ]; then
+            # Fallback: get most recent version in package.json plus GitHub ref as suffix
+            # (Assumes a valid version is present in package.json at repo root or electron-app/package.json)
+            if [ -f "electron-app/package.json" ]; then
+              PKG_JSON="electron-app/package.json"
+            else
+              PKG_JSON="package.json"
+            fi
+            BASE_VERSION=$(node -e "console.log(require('./$PKG_JSON').version)")
+            # Remove possible leading/trailing whitespace or "v"
+            BASE_VERSION_CLEAN="${BASE_VERSION#v}"
+            BASE_VERSION_CLEAN="$(echo "$BASE_VERSION_CLEAN" | xargs)"
+            # Get a short ref for branch/pr
+            REF="${GITHUB_REF_NAME:-$GITHUB_REF}"
+            if [ -z "$REF" ]; then
+              REF="$(git rev-parse --abbrev-ref HEAD)"
+            fi
+            # sanitize: replace slashes with dashes (for branches/refs)
+            REF="${REF//\//-}"
+            FALLBACK_VERSION="${BASE_VERSION_CLEAN}-${REF}"
+            echo "No version supplied, using fallback version: $FALLBACK_VERSION"
+            echo "version=$FALLBACK_VERSION" >> $GITHUB_OUTPUT
+            echo "version_no_v=$FALLBACK_VERSION" >> $GITHUB_OUTPUT
+          else
+            # version is already set, re-emit outputs
+            echo "version=$VERSION_NO_V" >> $GITHUB_OUTPUT
+            echo "version_no_v=$VERSION_NO_V" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set effective version for subsequent steps
+        id: effective-version
+        shell: bash
+        run: |
+          # Patch steps.version.outputs.version if fallback was used
+          # Take patch-version output if present
+          FINAL_VERSION="${{ steps.patch-version.outputs.version }}"
+          if [ -z "$FINAL_VERSION" ]; then
+            FINAL_VERSION="${{ steps.version.outputs.version_no_v }}"
+          fi
+          echo "version_no_v=$FINAL_VERSION" >> $GITHUB_OUTPUT
 
       - name: Download Designer build
         uses: actions/download-artifact@v4
