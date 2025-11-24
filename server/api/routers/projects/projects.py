@@ -267,7 +267,6 @@ async def delete_project(namespace: str, project_id: str):
         # Revoke any pending Celery tasks for this project to prevent
         # processing failures on deleted projects
         try:
-
             # Note: This is a best-effort cleanup. Celery doesn't natively support
             # querying tasks by project, so we log this attempt for monitoring.
             logger.info(
@@ -731,21 +730,11 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             if completed == total:
                 # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
-                skipped_count = 0
                 for i, child in enumerate(children):
                     if child.successful():
                         try:
                             result_data = child.result
                             results.append(result_data)
-                            # Check if this file was skipped by examining its details
-                            if isinstance(result_data, dict):
-                                details = result_data.get("details", {})
-                                # Check both details.status and details.result.status for "skipped"
-                                if details.get("status") == "skipped" or (
-                                    isinstance(details.get("result"), dict)
-                                    and details["result"].get("status") == "skipped"
-                                ):
-                                    skipped_count += 1
                         except Exception:
                             pass
                     elif child.failed():
@@ -773,18 +762,56 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                         except Exception as e:
                             logger.error(f"Error processing failed child result: {e}")
 
+                # Count actual statuses from the results (don't rely on Celery's successful count)
+                processed_count = 0
+                skipped_count = 0
+                failed_count = 0
+
+                for result in results:
+                    if isinstance(result, list) and len(result) >= 2:
+                        # New format: [success, info]
+                        success, info = result[0], result[1]
+                        status = (
+                            info.get("status") or info.get("result", {}).get("status")
+                            if isinstance(info, dict)
+                            else None
+                        )
+
+                        if status == "skipped":
+                            skipped_count += 1
+                        elif not success:
+                            failed_count += 1
+                        else:
+                            processed_count += 1
+                    elif isinstance(result, dict):
+                        # Old format or failed task result
+                        details = result.get("details", {})
+                        status = (
+                            details.get("status")
+                            or details.get("result", {}).get("status")
+                            if isinstance(details, dict)
+                            else None
+                        )
+
+                        if status == "skipped":
+                            skipped_count += 1
+                        elif not result.get("success", True):
+                            failed_count += 1
+                        else:
+                            processed_count += 1
+
                 # Set result with all file details (successful, skipped, and failed)
                 response.result = {
-                    "processed_files": successful - skipped_count,
-                    "failed_files": failed,
+                    "processed_files": processed_count,
+                    "failed_files": failed_count,
                     "skipped_files": skipped_count,
                     "details": results,
                 }
 
                 # Set state based on whether any files failed
-                if failed > 0:
+                if failed_count > 0:
                     response.state = "FAILURE"
-                    response.error = f"{failed} of {total} tasks failed"
+                    response.error = f"{failed_count} of {total} tasks failed"
                 else:
                     response.state = "SUCCESS"
             else:
@@ -823,21 +850,11 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             if completed == total:
                 # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
-                skipped_count = 0
                 for i, child in enumerate(children):
                     if child.successful():
                         try:
                             result_data = child.result
                             results.append(result_data)
-                            # Check if this file was skipped by examining its details
-                            if isinstance(result_data, dict):
-                                details = result_data.get("details", {})
-                                # Check both details.status and details.result.status for "skipped"
-                                if details.get("status") == "skipped" or (
-                                    isinstance(details.get("result"), dict)
-                                    and details["result"].get("status") == "skipped"
-                                ):
-                                    skipped_count += 1
                         except Exception:
                             pass
                     elif child.failed():
@@ -865,18 +882,56 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                         except Exception as e:
                             logger.error(f"Error processing failed child result: {e}")
 
+                # Count actual statuses from the results (don't rely on Celery's successful count)
+                processed_count = 0
+                skipped_count = 0
+                failed_count = 0
+
+                for result in results:
+                    if isinstance(result, list) and len(result) >= 2:
+                        # New format: [success, info]
+                        success, info = result[0], result[1]
+                        status = (
+                            info.get("status") or info.get("result", {}).get("status")
+                            if isinstance(info, dict)
+                            else None
+                        )
+
+                        if status == "skipped":
+                            skipped_count += 1
+                        elif not success:
+                            failed_count += 1
+                        else:
+                            processed_count += 1
+                    elif isinstance(result, dict):
+                        # Old format or failed task result
+                        details = result.get("details", {})
+                        status = (
+                            details.get("status")
+                            or details.get("result", {}).get("status")
+                            if isinstance(details, dict)
+                            else None
+                        )
+
+                        if status == "skipped":
+                            skipped_count += 1
+                        elif not result.get("success", True):
+                            failed_count += 1
+                        else:
+                            processed_count += 1
+
                 # Set result with all file details (successful, skipped, and failed)
                 response.result = {
-                    "processed_files": successful - skipped_count,
-                    "failed_files": failed,
+                    "processed_files": processed_count,
+                    "failed_files": failed_count,
                     "skipped_files": skipped_count,
                     "details": results,
                 }
 
                 # Set state based on whether any files failed
-                if failed > 0:
+                if failed_count > 0:
                     response.state = "FAILURE"
-                    response.error = f"{failed} of {total} tasks failed"
+                    response.error = f"{failed_count} of {total} tasks failed"
                 else:
                     response.state = "SUCCESS"
             else:
