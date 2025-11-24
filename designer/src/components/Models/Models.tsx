@@ -596,17 +596,18 @@ function AddOrChangeModels({
 }) {
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
   const [query, setQuery] = useState('')
-  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingVariant, setPendingVariant] = useState<ModelVariant | null>(
     null
   )
   const [submitState, setSubmitState] = useState<
-    'idle' | 'loading' | 'success'
+    'idle' | 'loading' | 'success' | 'error'
   >('idle')
   const [modelName, setModelName] = useState('')
   const [modelDescription, setModelDescription] = useState('')
   const [selectedPromptSets, setSelectedPromptSets] = useState<string[]>([])
+  const [downloadProgress, setDownloadProgress] = useState(0)
+  const [downloadError, setDownloadError] = useState('')
 
   // Device model state
   const [deviceConfirmOpen, setDeviceConfirmOpen] = useState(false)
@@ -644,219 +645,77 @@ function AddOrChangeModels({
   interface ModelVariant {
     id: number
     label: string
-    parameterSize: string
-    downloadSize: string
+    parameterSize?: string
+    downloadSize?: string
+    modelIdentifier: string
   }
 
   interface LocalModelGroup {
     id: number
     name: string
-    parameterSummary: string
-    downloadSummary: string
     variants: ModelVariant[]
   }
 
   const localGroups: LocalModelGroup[] = [
     {
       id: 1,
-      name: 'deepseek-r1',
-      parameterSummary: '1b, 7b, 70b, 100b',
-      downloadSummary: '4.5–45 GB',
+      name: 'Qwen3',
       variants: [
         {
           id: 11,
-          label: 'deepseek-r1,1b',
-          parameterSize: '1b',
-          downloadSize: '4.5 GB',
-        },
-        {
-          id: 12,
-          label: 'deepseek-r1,7b',
-          parameterSize: '7b',
-          downloadSize: '13 GB',
-        },
-        {
-          id: 13,
-          label: 'deepseek-r1,70b',
-          parameterSize: '70b',
-          downloadSize: '25 GB',
-        },
-        {
-          id: 14,
-          label: 'deepseek-r1,100b',
-          parameterSize: '100b',
-          downloadSize: '45 GB',
+          label: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
+          modelIdentifier: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
         },
       ],
     },
     {
       id: 2,
-      name: 'tinyllama',
-      parameterSummary: '1.1b',
-      downloadSummary: '1–2 GB',
+      name: 'IBM Granite',
       variants: [
         {
           id: 21,
-          label: 'tinyllama,1.1b',
-          parameterSize: '1.1b',
-          downloadSize: '1.6 GB',
+          label: 'unsloth/granite-4.0-h-1b-GGUF:Q5_K_M',
+          modelIdentifier: 'unsloth/granite-4.0-h-1b-GGUF:Q5_K_M',
         },
       ],
     },
     {
       id: 3,
-      name: 'mistral',
-      parameterSummary: '7b, 8x7b, 22b',
-      downloadSummary: '2.5–12 GB',
+      name: 'Llama 3.2',
       variants: [
         {
           id: 31,
-          label: 'mistral,7b',
-          parameterSize: '7b',
-          downloadSize: '2.5 GB',
-        },
-        {
-          id: 32,
-          label: 'mistral,8x7b',
-          parameterSize: '8x7b',
-          downloadSize: '8.0 GB',
-        },
-        {
-          id: 33,
-          label: 'mistral,22b',
-          parameterSize: '22b',
-          downloadSize: '12 GB',
+          label: 'unsloth/Llama-3.2-1B-Instruct-GGUF:Q5_K_M',
+          modelIdentifier: 'unsloth/Llama-3.2-1B-Instruct-GGUF:Q5_K_M',
         },
       ],
     },
     {
       id: 4,
-      name: 'qwen2.5',
-      parameterSummary: '1.5b, 7b, 32b, 72b',
-      downloadSummary: '3.4–20 GB',
+      name: 'GPT-OSS',
       variants: [
         {
           id: 41,
-          label: 'qwen2.5,1.5b',
-          parameterSize: '1.5b',
-          downloadSize: '3.4 GB',
-        },
-        {
-          id: 42,
-          label: 'qwen2.5,7b',
-          parameterSize: '7b',
-          downloadSize: '7 GB',
-        },
-        {
-          id: 43,
-          label: 'qwen2.5,32b',
-          parameterSize: '32b',
-          downloadSize: '14 GB',
-        },
-        {
-          id: 44,
-          label: 'qwen2.5,72b',
-          parameterSize: '72b',
-          downloadSize: '20 GB',
+          label: 'unsloth/gpt-oss-20b-GGUF:Q4_K_M',
+          modelIdentifier: 'unsloth/gpt-oss-20b-GGUF:Q4_K_M',
         },
       ],
     },
     {
       id: 5,
-      name: 'llama3.2',
-      parameterSummary: '1b, 3b, 11b',
-      downloadSummary: '2–8 GB',
+      name: 'Gemma 3',
       variants: [
         {
           id: 51,
-          label: 'llama3.2,1b',
-          parameterSize: '1b',
-          downloadSize: '2 GB',
-        },
-        {
-          id: 52,
-          label: 'llama3.2,3b',
-          parameterSize: '3b',
-          downloadSize: '3.5 GB',
-        },
-        {
-          id: 53,
-          label: 'llama3.2,11b',
-          parameterSize: '11b',
-          downloadSize: '8 GB',
-        },
-      ],
-    },
-    {
-      id: 6,
-      name: 'llama3.1',
-      parameterSummary: '8b, 70b',
-      downloadSummary: '4–42 GB',
-      variants: [
-        {
-          id: 61,
-          label: 'llama3.1,8b',
-          parameterSize: '8b',
-          downloadSize: '4.1 GB',
-        },
-        {
-          id: 62,
-          label: 'llama3.1,70b',
-          parameterSize: '70b',
-          downloadSize: '42 GB',
-        },
-      ],
-    },
-    {
-      id: 7,
-      name: 'phi-3',
-      parameterSummary: '3.8b, 14b',
-      downloadSummary: '2.8–10 GB',
-      variants: [
-        {
-          id: 71,
-          label: 'phi-3,3.8b',
-          parameterSize: '3.8b',
-          downloadSize: '2.8 GB',
-        },
-        {
-          id: 72,
-          label: 'phi-3,14b',
-          parameterSize: '14b',
-          downloadSize: '10 GB',
-        },
-      ],
-    },
-    {
-      id: 8,
-      name: 'codellama',
-      parameterSummary: '7b, 13b, 34b',
-      downloadSummary: '7–24 GB',
-      variants: [
-        {
-          id: 81,
-          label: 'codellama,7b',
-          parameterSize: '7b',
-          downloadSize: '7 GB',
-        },
-        {
-          id: 82,
-          label: 'codellama,13b',
-          parameterSize: '13b',
-          downloadSize: '13 GB',
-        },
-        {
-          id: 83,
-          label: 'codellama,34b',
-          parameterSize: '34b',
-          downloadSize: '24 GB',
+          label: 'unsloth/gemma-3-4b-it-GGUF:Q4_K_M',
+          modelIdentifier: 'unsloth/gemma-3-4b-it-GGUF:Q4_K_M',
         },
       ],
     },
   ]
 
   const filteredGroups = localGroups.filter(g =>
-    [g.name, g.parameterSummary].some(v =>
+    [g.name, ...g.variants.map(v => v.modelIdentifier || v.label)].some(v =>
       v.toLowerCase().includes(query.toLowerCase())
     )
   )
@@ -1028,14 +887,13 @@ function AddOrChangeModels({
         isModelInUse={isModelInUse}
       />
 
-      {/* Download or use other models section */}
+      {/* Download recommended models section */}
       <div className="flex flex-col gap-4">
         <div>
-          <h3 className="font-medium">Download or use other models</h3>
+          <h3 className="font-medium">Download recommended models</h3>
           <div className="h-1" />
           <div className="text-sm text-muted-foreground">
-            Add a new model provider or switch which models are enabled for this
-            project.
+            Download and add recommended GGUF models to your project.
           </div>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4 mb-12">
@@ -1103,12 +961,9 @@ function AddOrChangeModels({
           {/* Table */}
           {sourceTab === 'local' && (
             <div className="w-full overflow-hidden rounded-lg border border-border">
-              <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
-                <div className="col-span-6">Model</div>
-                <div className="col-span-3">Parameter size</div>
-                <div className="col-span-2 text-right pr-4 sm:pr-10">
-                  Download size
-                </div>
+              <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-3">
+                <div className="col-span-4">Provider</div>
+                <div className="col-span-7">Model</div>
                 <div className="col-span-1" />
               </div>
               {filteredGroups.length === 0 ? (
@@ -1133,83 +988,43 @@ function AddOrChangeModels({
                   </Button>
                 </div>
               ) : (
-                filteredGroups.map(group => {
-                  const isOpen = expandedGroupId === group.id
-                  return (
-                    <div key={group.id} className="border-t border-border">
-                      <div
-                        className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
-                        onClick={() =>
-                          setExpandedGroupId(prev =>
-                            prev === group.id ? null : group.id
-                          )
-                        }
-                      >
-                        <div className="col-span-6 flex items-center gap-2">
-                          <FontIcon
-                            type="chevron-down"
-                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                          />
-                          <span className="truncate">{group.name}</span>
-                        </div>
-                        <div className="col-span-3 text-xs">
-                          {group.parameterSummary}
-                        </div>
-                        <div className="col-span-2 text-xs text-right pr-4 sm:pr-10">
-                          <span className="inline-block min-w-[3.5rem] truncate">
-                            {group.downloadSummary}
-                          </span>
-                        </div>
-                        <div className="col-span-1" />
+                filteredGroups.map(group =>
+                  group.variants.map(variant => (
+                    <div
+                      key={variant.id}
+                      className="grid grid-cols-12 items-center px-3 py-3 text-sm border-t border-border hover:bg-accent/40"
+                    >
+                      <div className="col-span-4">
+                        <span className="font-medium">{group.name}</span>
                       </div>
-                      {isOpen && (
-                        <div className="px-3 pb-2">
-                          {group.variants.map(variant => (
-                            <div
-                              key={variant.id}
-                              className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                            >
-                              <div className="col-span-6 flex items-center text-muted-foreground">
-                                <span className="inline-block w-4" />
-                                <span className="ml-2 truncate">
-                                  {variant.label}
-                                </span>
-                              </div>
-                              <div className="col-span-3 text-xs">
-                                {variant.parameterSize}
-                              </div>
-                              <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-10">
-                                <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right whitespace-nowrap">
-                                  {variant.downloadSize}
-                                </div>
-                              </div>
-                              <div className="col-span-1 flex items-center justify-end pr-2">
-                                <Button
-                                  size="sm"
-                                  className="h-8 px-3"
-                                  onClick={() => {
-                                    setPendingVariant(variant)
-                                    setConfirmOpen(true)
-                                  }}
-                                >
-                                  Add
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                          <div className="flex justify-end pr-3">
-                            <button
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => setExpandedGroupId(null)}
-                            >
-                              Hide
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      <div className="col-span-7 text-muted-foreground truncate">
+                        {variant.label}
+                      </div>
+                      <div className="col-span-1 flex items-center justify-end pr-2">
+                        <Button
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => {
+                            setPendingVariant(variant)
+                            // Prepopulate name from model identifier
+                            const modelName = variant.modelIdentifier
+                              ? variant.modelIdentifier
+                                  .split('/')
+                                  .pop()
+                                  ?.replace(/-GGUF.*$/, '')
+                                  .replace(/[-_]/g, ' ')
+                                  .replace(/\b\w/g, l => l.toUpperCase()) || variant.label
+                              : variant.label
+                            setModelName(modelName)
+                            setConfirmOpen(true)
+                          }}
+                        >
+                          Add
+                        </Button>
+                      </div>
                     </div>
-                  )
-                })
+                  ))
+                )
               )}
             </div>
           )}
@@ -1451,6 +1266,11 @@ function AddOrChangeModels({
             setModelName('')
             setModelDescription('')
             setSelectedPromptSets([])
+            setDownloadProgress(0)
+            setDownloadError('')
+            setDownloadedBytes(0)
+            setTotalBytes(0)
+            setEstimatedTimeRemaining('')
           }
         }}
       >
@@ -1520,12 +1340,39 @@ function AddOrChangeModels({
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="text-muted-foreground">Provider</div>
-                  <div>Ollama</div>
-                  <div className="text-muted-foreground">Parameter size</div>
-                  <div>{pendingVariant.parameterSize}</div>
-                  <div className="text-muted-foreground">Download size</div>
-                  <div>{pendingVariant.downloadSize}</div>
+                  <div>Universal</div>
+                  <div className="text-muted-foreground">Model</div>
+                  <div className="truncate">{pendingVariant.modelIdentifier}</div>
                 </div>
+
+                {/* Progress bar */}
+                {submitState === 'loading' && (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Downloading... {formatBytes(downloadedBytes)} /{' '}
+                        {formatBytes(totalBytes)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {downloadProgress}%{' '}
+                        {estimatedTimeRemaining && `• ${estimatedTimeRemaining}`}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${downloadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Error message */}
+                {submitState === 'error' && downloadError && (
+                  <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                    <p className="text-sm text-destructive">{downloadError}</p>
+                  </div>
+                )}
               </div>
             ) : null}
           </DialogDescription>
@@ -1535,29 +1382,83 @@ function AddOrChangeModels({
             </Button>
             <Button
               disabled={submitState === 'loading' || !modelName.trim()}
-              onClick={() => {
+              onClick={async () => {
                 if (!pendingVariant) return
+                
+                setSubmitState('loading')
+                setDownloadProgress(5)
+                setDownloadError('')
+                setDownloadedBytes(0)
+                setTotalBytes(0)
+                setEstimatedTimeRemaining('')
+                const start = Date.now()
+
                 // Show download and add a placeholder card with user-entered data
                 onAddModel(
                   {
                     id: `dl-${pendingVariant.id}`,
                     name: modelName.trim(),
-                    modelIdentifier: pendingVariant.label,
+                    modelIdentifier: pendingVariant.modelIdentifier,
                     meta: modelDescription.trim() || 'Downloading…',
-                    badges: ['Local', 'Ollama'],
+                    badges: ['Local', 'Universal'],
                     status: 'downloading',
                   },
                   selectedPromptSets.length > 0 ? selectedPromptSets : undefined
                 )
-                setSubmitState('loading')
-                setTimeout(() => {
-                  setSubmitState('success')
-                  setTimeout(() => {
-                    setConfirmOpen(false)
-                    onGoToProject()
-                    setSubmitState('idle')
-                  }, 600)
-                }, 1000)
+
+                const downloadAsync = async () => {
+                  try {
+                    for await (const event of modelService.downloadModel({
+                      model_name: pendingVariant.modelIdentifier,
+                      provider: 'universal',
+                    })) {
+                      if (event.event === 'progress') {
+                        const d = Number(event.downloaded || 0)
+                        const t = Number(event.total || 0)
+                        setDownloadedBytes(d)
+                        setTotalBytes(t)
+                        if (t > 0 && isFinite(d) && d >= 0) {
+                          const percent = Math.max(
+                            5,
+                            Math.min(95, Math.round((d / t) * 90) + 5)
+                          )
+                          setDownloadProgress(percent)
+                          const elapsedSec = (Date.now() - start) / 1000
+                          if (elapsedSec > 0) {
+                            const speed = d / elapsedSec
+                            const remain = (t - d) / (speed || 1)
+                            setEstimatedTimeRemaining(formatETA(remain))
+                          }
+                        }
+                      } else if (event.event === 'done') {
+                        setDownloadProgress(100)
+                        setSubmitState('success')
+                        setEstimatedTimeRemaining('')
+                        refetchCachedModels()
+                        setTimeout(() => {
+                          setConfirmOpen(false)
+                          onGoToProject()
+                          setSubmitState('idle')
+                          setDownloadProgress(0)
+                        }, 1000)
+                      } else if (event.event === 'error') {
+                        setSubmitState('error')
+                        setDownloadError(
+                          event.message ||
+                            'Failed to download model. Please check the model name and try again.'
+                        )
+                      }
+                    }
+                  } catch (error: any) {
+                    setSubmitState('error')
+                    setDownloadError(
+                      error.message ||
+                        'Failed to download model. Please check the model name and try again.'
+                    )
+                  }
+                }
+
+                downloadAsync()
               }}
             >
               {submitState === 'loading' && (
@@ -1691,12 +1592,19 @@ const Models = () => {
     const currentConfig = projectResponse.project.config
     const runtimeModels = currentConfig.runtime?.models || []
 
+    // Determine provider based on model identifier
+    // If model identifier contains '/', it's a HuggingFace path (universal provider)
+    // Otherwise, use ollama for backward compatibility
+    const modelId = m.modelIdentifier || m.name
+    const provider = modelId.includes('/') ? 'universal' : 'ollama'
+    const baseUrl = provider === 'universal' ? undefined : 'http://localhost:11434'
+
     const newModel = {
       name: m.name,
       description: m.meta === 'Downloading…' ? '' : m.meta,
-      provider: 'ollama',
-      model: m.modelIdentifier || m.name,
-      base_url: 'http://localhost:11434',
+      provider,
+      model: modelId,
+      ...(baseUrl && { base_url: baseUrl }),
       prompt_format: 'unstructured',
       provider_config: {},
       prompts: promptSets && promptSets.length > 0 ? promptSets : ['default'],
