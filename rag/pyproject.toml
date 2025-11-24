@@ -41,7 +41,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Topic :: Text Processing :: Linguistic",
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 dependencies = [
   # External dependencies
   "chromadb>=1.0.0",
@@ -85,8 +85,7 @@ dependencies = [
   "pywin32>=306; sys_platform == 'win32'",
 ]
 
-[project.optional-dependencies]
-# Development dependencies
+[dependency-groups]
 dev = [
   "pytest>=7.0.0",
   "pytest-cov>=4.0.0",
@@ -98,6 +97,7 @@ dev = [
   "pre-commit>=3.0.0",
 ]
 
+[project.optional-dependencies]
 # Testing dependencies
 test = [
   "pytest>=7.0.0",
@@ -139,7 +139,6 @@ embeddings = [
   "openai>=1.0.0",
   "cohere>=4.32.0",
   "transformers>=4.53.0",
-  "torch>=2.0.0",
 ]
 
 # LlamaIndex parsers and advanced document processing
@@ -162,8 +161,20 @@ llamaindex = [
   "scipy>=1.10.0",                        # Scientific computing
 ]
 
-# All optional dependencies
-all = ["llama-rag[dev,test,docs,monitoring,vector-dbs,embeddings,llamaindex]"]
+# All optional dependencies (dev moved to dependency-groups)
+all = ["llama-rag[docs,monitoring,vector-dbs,embeddings,llamaindex]"]
+
+# Development dependencies
+dev = [
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "pytest-asyncio>=0.21.0",
+  "black>=23.0.0",
+  "isort>=5.12.0",
+  "flake8>=6.0.0",
+  "mypy>=1.0.0",
+  "pre-commit>=3.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/llama-farm/llamafarm"
@@ -263,7 +274,7 @@ addopts = [
   # "--cov-report=html",
   # "--cov-report=xml",
 ]
-testpaths = ["tests", "."]
+testpaths = ["tests"]
 pythonpath = [".", ".."]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -322,20 +333,6 @@ per-file-ignores = [
 ]
 
 # UV-specific configuration
-[tool.uv]
-dev-dependencies = [
-  "pytest>=7.0.0",
-  "pytest-cov>=4.0.0",
-  "pytest-asyncio>=0.21.0",
-  "pytest-mock>=3.10.0",
-  "responses>=0.23.0",
-  "requests-mock>=1.10.0",
-  "black>=23.0.0",
-  "isort>=5.12.0",
-  "mypy>=1.0.0",
-  "pre-commit>=3.0.0",
-]
-
 [tool.uv.sources]
 llamafarm-config = { path = "../config", editable = true }
 llamafarm-common = { path = "../common", editable = true }
