@@ -418,7 +418,7 @@ function CloudModelsForm({
       id: `cloud-${provider}-${name}`.toLowerCase().replace(/\s+/g, '-'),
       name,
       meta: `Added on ${new Date().toLocaleDateString()}`,
-      badges: ['Cloud', providerLabel],
+      badges: ['Cloud'],
       status: 'ready',
     })
     setTimeout(() => {
@@ -841,7 +841,7 @@ function AddOrChangeModels({
       name: cachedModel.name,
       modelIdentifier: cachedModel.name,
       meta: formatBytes(cachedModel.size),
-      badges: ['Local', 'Disk'],
+      badges: ['Local'],
     })) || []
 
   const handleUseDeviceModel = (model: DeviceModel) => {
@@ -946,7 +946,7 @@ function AddOrChangeModels({
                 meta:
                   customModelDescription.trim() ||
                   'Downloaded from HuggingFace',
-                badges: ['Local', 'HuggingFace'],
+                badges: ['Local'],
                 status: 'ready',
               },
               customSelectedPromptSets.length > 0
@@ -1351,7 +1351,7 @@ function AddOrChangeModels({
                     name: deviceModelName.trim(),
                     modelIdentifier: pendingDeviceModel.modelIdentifier,
                     meta: deviceModelDescription.trim() || 'Model from disk',
-                    badges: ['Local', 'Disk'],
+                    badges: ['Local'],
                     status: 'ready',
                   },
                   deviceSelectedPromptSets.length > 0
@@ -1592,7 +1592,7 @@ function AddOrChangeModels({
                     name: modelName.trim(),
                     modelIdentifier: pendingVariant.modelIdentifier,
                     meta: modelDescription.trim() || 'Downloading…',
-                    badges: ['Local', 'Universal'],
+                    badges: ['Local'],
                     status: 'downloading',
                   },
                   selectedPromptSets.length > 0 ? selectedPromptSets : undefined
@@ -1855,21 +1855,19 @@ const Models = () => {
         (model && (model.name || model.model)) || 'unnamed-model'
       const provider: string =
         typeof model?.provider === 'string' ? model.provider : ''
-      const providerBadge = provider
-        ? provider.charAt(0).toUpperCase() + provider.slice(1)
-        : 'Unknown'
-      const localityBadge = provider
-        ? provider === 'ollama'
-          ? 'Local'
-          : 'Cloud'
-        : 'Unknown'
+      
+      // Determine if model is Local or Cloud
+      // Local: ollama, universal (both run locally)
+      // Cloud: everything else (openai, anthropic, etc.)
+      const isLocal = provider === 'ollama' || provider === 'universal'
+      const localityBadge = isLocal ? 'Local' : 'Cloud'
 
       return {
         id: name,
         name,
         modelIdentifier: typeof model?.model === 'string' ? model.model : '',
         meta: (model && model.description) || 'Model from config',
-        badges: [localityBadge, providerBadge],
+        badges: [localityBadge],
         isDefault: name === defaultModelName,
         status: 'ready' as ModelStatus,
       }
