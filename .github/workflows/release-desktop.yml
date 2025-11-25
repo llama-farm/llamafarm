@@ -1,10 +1,6 @@
 name: Release - Desktop App
 
 on:
-  push:
-    branches:
-      - feat-app-signing # TEMPORARY FOR TESTING
-
   release:
     types:
       - published
