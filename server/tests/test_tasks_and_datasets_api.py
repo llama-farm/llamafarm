@@ -20,7 +20,7 @@ def test_dataset_actions_ingest_triggers_task_and_returns_task_uri(mocker):
     client = _client()
     resp = client.post(
         "/v1/projects/ns1/proj1/datasets/ds1/actions",
-        json={"action_type": "ingest"},
+        json={"action_type": "process"},
     )
 
     assert resp.status_code == 200
