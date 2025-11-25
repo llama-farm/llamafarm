@@ -331,7 +331,7 @@ jobs:
         shell: pwsh
         run: |
           $VERSION_NO_V = "${{ steps.version.outputs.version_no_v }}"
-          Write-Host "Build artifacts in release/$VERSION_NO_V:"
+          Write-Host "Build artifacts in release/${VERSION_NO_V}:"
           Get-ChildItem -Path "release/$VERSION_NO_V" -ErrorAction SilentlyContinue | Format-Table -AutoSize
           if ($LASTEXITCODE -ne 0) { Write-Host "No artifacts found" }
 
