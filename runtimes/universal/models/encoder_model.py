@@ -2,16 +2,17 @@
 Encoder model wrapper for embeddings and classification.
 """
 
-from transformers import (
-    AutoModel,
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    PreTrainedTokenizerBase,
-)
+import logging
+from typing import Any, Dict, List, Optional
+
 import torch
 import torch.nn.functional as F
-from typing import List, Optional, Dict, Any
-import logging
+from transformers import (
+    AutoModel,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    PreTrainedTokenizerBase,
+)
 
 from .base import BaseModel
 

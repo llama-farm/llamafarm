@@ -15,4 +15,5 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: float | None = 0.0
     frequency_penalty: float | None = 0.0
     user: str | None = None
+    n_ctx: int | None = None  # Context window size for GGUF models
     extra_body: dict | None = None

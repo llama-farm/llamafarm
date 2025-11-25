@@ -1,0 +1,13 @@
+# Default context sizes for GGUF models
+# Patterns use Unix shell-style wildcards (*, ?, [seq])
+# More specific patterns should be listed first
+
+# Memory usage factor for computing max context size
+# 0.8 = use 80% of available memory (aggressive but safe for most systems)
+memory_usage_factor: 0.8
+
+model_defaults:
+  # Exact model matches (highest priority)
+  - pattern: "unsloth/Qwen2.5-Coder-1.5B-Instruct-GGUF"
+    n_ctx: 32768
+    notes: "Qwen 2.5 supports 32k context"

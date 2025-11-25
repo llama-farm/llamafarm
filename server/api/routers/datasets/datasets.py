@@ -666,17 +666,8 @@ async def process_dataset(
                 )
             )
         )
-        if rag_path not in sys.path:
-            sys.path.insert(0, rag_path)
-
-        from rag.core.processing_logger import ProcessingLogger
-
-        log_files = ProcessingLogger.get_latest_logs(project_dir, dataset)
-        if log_files:
-            log_info = f"Processing logs saved to: {log_files[0]}"
-            logger.info(log_info)
     except Exception as e:
-        logger.debug(f"Could not get log info: {e}")
+        logger.debug(f"Could not get processing info: {e}")
 
     response = ProcessDatasetResponse(
         message="Dataset processing completed",

@@ -1,16 +1,20 @@
 import asyncio
-from datetime import datetime
-import os
 import logging
+import os
+from datetime import datetime
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from models import LanguageModel
 from openai.types.chat.chat_completion_chunk import (
     ChatCompletionChunk,
-    Choice as ChoiceChunk,
     ChoiceDelta,
 )
+from openai.types.chat.chat_completion_chunk import (
+    Choice as ChoiceChunk,
+)
+
+from models import GGUFLanguageModel, LanguageModel
+
 from .types import ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
@@ -29,12 +33,27 @@ class ChatCompletionsService:
         """
 
         try:
-            model = await self.load_language(chat_request.model)
+            # Import parsing utility
+            from utils.model_format import parse_model_with_quantization
+
+            # Get context window size from request
+            n_ctx = chat_request.n_ctx
+
+            # Parse model name to extract quantization if present
+            model_id, gguf_quantization = parse_model_with_quantization(
+                chat_request.model
+            )
+
+            model = await self.load_language(
+                model_id,
+                n_ctx=n_ctx,
+                preferred_quantization=gguf_quantization,
+            )
 
             # Convert messages to prompt
             # ChatCompletionMessageParam is already dict-compatible
             messages_dict = [dict(msg) for msg in chat_request.messages]
-            if isinstance(model, LanguageModel):
+            if isinstance(model, (LanguageModel, GGUFLanguageModel)):
                 prompt = model.format_messages(messages_dict)
 
             # Handle streaming if requested
@@ -68,7 +87,9 @@ class ChatCompletionsService:
                     async for token in model.generate_stream(
                         prompt=prompt,
                         max_tokens=chat_request.max_tokens,
-                        temperature=chat_request.temperature if chat_request.temperature is not None else 0.7,
+                        temperature=chat_request.temperature
+                        if chat_request.temperature is not None
+                        else 0.7,
                         top_p=chat_request.top_p,
                         stop=chat_request.stop,
                     ):
@@ -150,4 +171,4 @@ class ChatCompletionsService:
 
         except Exception as e:
             logger.error(f"Error in chat_completions: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e

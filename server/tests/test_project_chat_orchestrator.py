@@ -114,7 +114,7 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     # Intercept LFAgent.run_async to capture messages (no network calls)
     from agents.base.agent import LFAgent
 
-    async def fake_run_async(self, *, messages=None, tools=None):
+    async def fake_run_async(self, *, messages=None, tools=None, extra_body=None):
         # LFAgent.run_async adds messages to history if provided
         if messages:
             for message in messages:

@@ -43,8 +43,6 @@ jobs:
     env:
       # Use the current branch/ref being tested instead of main
       LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
-      # Use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages in CI
-      UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
 
@@ -183,6 +181,78 @@ jobs:
           echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
           echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
           echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
+
+      - name: Switch to tiny models for fast CI testing
+        shell: bash
+        run: |
+          echo "Switching to tiny models for faster CI execution..."
+          # Install yq if not available
+          if ! command -v yq &> /dev/null; then
+            echo "Installing yq..."
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              brew install yq
+            else
+              sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+              sudo chmod +x /usr/local/bin/yq
+            fi
+          fi
+
+          # Update runtime model and quantization
+          yq -i '.runtime.models[0].model = "unsloth/Qwen3-0.6B-GGUF:IQ1_S"' "$TEST_DIR/llamafarm.yaml"
+
+          # Update embedding model and dimension
+          yq -i '.rag.databases[0].embedding_strategies[0].config.model = "sentence-transformers/all-MiniLM-L6-v2"' "$TEST_DIR/llamafarm.yaml"
+          yq -i '.rag.databases[0].embedding_strategies[0].config.dimension = 384' "$TEST_DIR/llamafarm.yaml"
+
+          echo "✓ Model configuration updated"
+          echo ""
+          echo "=== Updated runtime config ==="
+          yq '.runtime.models[0]' "$TEST_DIR/llamafarm.yaml"
+          echo ""
+          echo "=== Updated embedding config ==="
+          yq '.rag.databases[0].embedding_strategies[0].config | pick(["model", "dimension"])' "$TEST_DIR/llamafarm.yaml"
+
+          # Verify the changes took effect
+          RUNTIME_MODEL=$(yq '.runtime.models[0].model' "$TEST_DIR/llamafarm.yaml")
+          if [ "$RUNTIME_MODEL" != "unsloth/Qwen3-0.6B-GGUF:IQ1_S" ]; then
+            echo "❌ Model configuration update failed!"
+            echo "Expected: unsloth/Qwen3-0.6B-GGUF:IQ1_S"
+            echo "Got: $RUNTIME_MODEL"
+            exit 1
+          fi
+          echo "✓ Model configuration verified"
+
+      - name: Pre-warm models by loading them
+        working-directory: cli
+        shell: bash
+        timeout-minutes: 8
+        env:
+          PYTHONUNBUFFERED: "1"
+          HF_HUB_ENABLE_HF_TRANSFER: "1" # Use faster download method
+        run: |
+          echo "Pre-warming models (downloading and loading)..."
+          echo "Model: unsloth/Qwen3-0.6B-GGUF (IQ1_S quantization)"
+          echo "Expected size: ~50-100MB"
+          echo ""
+
+          # Use a simple query to trigger model loading
+          # The --no-rag flag means we only need to load the language model, not embeddings yet
+          START_TIME=$(date +%s)
+          if ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "hi" 2>&1 | tee /tmp/prewarm.log; then
+            END_TIME=$(date +%s)
+            DURATION=$((END_TIME - START_TIME))
+            echo ""
+            echo "✓ Models successfully pre-warmed in ${DURATION}s"
+          else
+            echo ""
+            echo "❌ Model pre-warming failed!"
+            echo "Checking server health..."
+            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            echo ""
+            echo "Last 50 lines of output:"
+            tail -50 /tmp/prewarm.log
+            exit 1
+          fi
 
       # ============================================================
       # Data Ingestion Test

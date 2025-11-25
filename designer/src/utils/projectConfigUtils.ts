@@ -27,15 +27,33 @@ export function createMinimalConfig(name: string, namespace: string): Record<str
     version: 'v1',
     name,
     namespace,
-    prompts: [],
+    prompts: [
+      {
+        name: 'default',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful AI assistant.'
+          }
+        ]
+      }
+    ],
     datasets: [],
     rag: {
       strategies: [],
       strategy_templates: {}
     },
     runtime: {
-      provider: 'ollama',
-      model: 'granite3-moe'
+      provider: 'universal',
+      model: 'default-model',
+      models: [
+        {
+          name: 'default-model',
+          provider: 'universal',
+          model: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
+          prompts: ['default']
+        }
+      ]
     }
   }
 }

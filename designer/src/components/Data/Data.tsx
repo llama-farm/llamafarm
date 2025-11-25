@@ -4,6 +4,12 @@ import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
+import { AVAILABLE_DEMOS } from '../../config/demos'
+import * as YAML from 'yaml'
+import {
+  saveDatasetTaskId,
+  saveDatasetResult,
+} from '../../utils/datasetStorage'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -37,6 +43,8 @@ import {
   useAvailableStrategies,
 } from '../../hooks/useDatasets'
 import { uploadFileToDataset } from '../../api/datasets'
+import datasetService from '../../api/datasets'
+import projectService from '../../api/projectService'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
@@ -1512,35 +1520,361 @@ const Data = () => {
               })
               return
             }
-            await importExampleDataset.mutateAsync({
-              exampleId: sourceProjectId,
-              namespace: activeProject.namespace,
-              project: activeProject.project,
-              dataset: name,
-              include_strategies: true,
-              process: true,
-            })
-            toast({
-              message: `Dataset "${name}" importing…`,
-              variant: 'default',
-            })
-            setIsImportOpen(false)
-            navigate(`/chat/data/${name}`)
+
+            // Check if this is a demo import
+            const demo = AVAILABLE_DEMOS.find(d => d.id === sourceProjectId)
+
+            if (demo) {
+              // Handle demo import
+              toast({
+                message: `Importing demo dataset "${name}"...`,
+                variant: 'default',
+              })
+              setIsImportOpen(false)
+
+              // Step 1: Fetch demo config to get processing strategy
+              const configResponse = await fetch(demo.configPath)
+              if (!configResponse.ok) {
+                throw new Error('Failed to fetch demo configuration')
+              }
+              const configText = await configResponse.text()
+              const configData = YAML.parse(configText)
+
+              // Extract processing strategy from demo config
+              const demoDataset = configData.datasets?.find(
+                (ds: any) => ds.name === demo.datasetName
+              )
+              const processingStrategyName =
+                demoDataset?.data_processing_strategy || 'default'
+              const database = demoDataset?.database || 'default'
+
+              // Step 2: Import the processing strategy and database into user's project if they don't exist
+              const currentProjectConfig = (projectResp as any)?.project?.config
+              if (currentProjectConfig) {
+                let needsUpdate = false
+                let updatedConfig = { ...currentProjectConfig }
+
+                // Check and add processing strategy if needed
+                const existingStrategies =
+                  currentProjectConfig.rag?.data_processing_strategies || []
+                const strategyExists = existingStrategies.some(
+                  (s: any) => s.name === processingStrategyName
+                )
+
+                if (!strategyExists && processingStrategyName !== 'default') {
+                  // Find the strategy definition in demo config
+                  const demoStrategy =
+                    configData.rag?.data_processing_strategies?.find(
+                      (s: any) => s.name === processingStrategyName
+                    )
+
+                  if (demoStrategy) {
+                    updatedConfig = {
+                      ...updatedConfig,
+                      rag: {
+                        ...updatedConfig.rag,
+                        data_processing_strategies: [
+                          ...(updatedConfig.rag?.data_processing_strategies ||
+                            []),
+                          demoStrategy,
+                        ],
+                      },
+                    }
+                    needsUpdate = true
+                  }
+                }
+
+                // Check and add database if needed
+                const existingDatabases =
+                  currentProjectConfig.rag?.databases || []
+                const databaseExists = existingDatabases.some(
+                  (db: any) => db.name === database
+                )
+
+                if (!databaseExists && database !== 'default') {
+                  // Find the database definition in demo config
+                  const demoDatabase = configData.rag?.databases?.find(
+                    (db: any) => db.name === database
+                  )
+
+                  if (demoDatabase) {
+                    updatedConfig = {
+                      ...updatedConfig,
+                      rag: {
+                        ...updatedConfig.rag,
+                        databases: [
+                          ...(updatedConfig.rag?.databases || []),
+                          demoDatabase,
+                        ],
+                      },
+                    }
+                    needsUpdate = true
+                  }
+                }
+
+                // Update project config if we added anything
+                if (needsUpdate) {
+                  // Also set the demo's database as the default RAG database
+                  // so test chat queries the right database
+                  if (database !== 'default') {
+                    updatedConfig = {
+                      ...updatedConfig,
+                      rag: {
+                        ...updatedConfig.rag,
+                        default_database: database,
+                      },
+                    }
+                  }
+
+                  await projectService.updateProject(
+                    activeProject.namespace,
+                    activeProject.project,
+                    { config: updatedConfig }
+                  )
+
+                  // Refetch project to get updated config
+                  await refetchDatasets()
+                }
+              }
+
+              // Step 3: Create dataset with demo's processing strategy
+              await createDatasetMutation.mutateAsync({
+                namespace: activeProject.namespace,
+                project: activeProject.project,
+                name: name,
+                data_processing_strategy: processingStrategyName,
+                database: database,
+              })
+
+              // Step 4: Fetch and upload demo files
+              toast({
+                message: `Uploading ${demo.files.length} file(s)...`,
+                variant: 'default',
+              })
+
+              for (const demoFile of demo.files) {
+                const fileResponse = await fetch(demoFile.path)
+                if (!fileResponse.ok) {
+                  throw new Error(`Failed to fetch file: ${demoFile.filename}`)
+                }
+                const fileBlob = await fileResponse.blob()
+                const file = new File([fileBlob], demoFile.filename, {
+                  type: demoFile.type,
+                })
+
+                await uploadFileToDataset(
+                  activeProject.namespace,
+                  activeProject.project,
+                  name,
+                  file
+                )
+              }
+
+              // Step 4.5: Check and setup Ollama embedding model
+              toast({
+                message: 'Checking Ollama setup...',
+                variant: 'default',
+              })
+
+              try {
+                // Check if Ollama is running
+                const ollamaHealthResponse = await fetch('http://localhost:11434')
+                if (!ollamaHealthResponse.ok) {
+                  throw new Error('Ollama not responding')
+                }
+
+                // Extract embedding model from demo database config
+                const demoDatabase = configData.rag?.databases?.find(
+                  (db: any) => db.name === database
+                )
+                const embeddingStrategy = demoDatabase?.embedding_strategies?.[0]
+                const embeddingModel = embeddingStrategy?.config?.model
+
+                if (embeddingModel) {
+                  // Check if model exists
+                  const tagsResponse = await fetch('http://localhost:11434/api/tags')
+                  const tagsData = await tagsResponse.json()
+                  const modelExists = tagsData.models?.some(
+                    (m: any) => m.name === embeddingModel || m.name.startsWith(embeddingModel + ':')
+                  )
+
+                  if (!modelExists) {
+                    toast({
+                      message: `Pulling embedding model "${embeddingModel}"... (this may take a minute)`,
+                      variant: 'default',
+                    })
+
+                    // Pull the model
+                    const pullResponse = await fetch('http://localhost:11434/api/pull', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: embeddingModel }),
+                    })
+
+                    if (!pullResponse.ok) {
+                      throw new Error(`Failed to pull model: ${embeddingModel}`)
+                    }
+
+                    // Stream the pull progress
+                    const reader = pullResponse.body?.getReader()
+                    const decoder = new TextDecoder()
+                    
+                    if (reader) {
+                      let lastStatus = ''
+                      while (true) {
+                        const { done, value } = await reader.read()
+                        if (done) break
+                        
+                        const chunk = decoder.decode(value)
+                        const lines = chunk.split('\n').filter(line => line.trim())
+                        
+                        for (const line of lines) {
+                          try {
+                            const json = JSON.parse(line)
+                            if (json.status && json.status !== lastStatus) {
+                              lastStatus = json.status
+                              if (json.status.includes('pulling') || json.status.includes('downloading')) {
+                                const percent = json.completed && json.total 
+                                  ? Math.round((json.completed / json.total) * 100)
+                                  : null
+                                toast({
+                                  message: percent 
+                                    ? `Pulling ${embeddingModel}: ${percent}%`
+                                    : `Pulling ${embeddingModel}...`,
+                                  variant: 'default',
+                                })
+                              }
+                            }
+                          } catch (e) {
+                            // Ignore JSON parse errors
+                          }
+                        }
+                      }
+                    }
+
+                    toast({
+                      message: `Model "${embeddingModel}" ready!`,
+                      variant: 'default',
+                    })
+                  } else {
+                    toast({
+                      message: `Embedding model "${embeddingModel}" already available`,
+                      variant: 'default',
+                    })
+                  }
+                }
+              } catch (ollamaError) {
+                console.warn('Ollama check failed:', ollamaError)
+                toast({
+                  message: 'Warning: Could not verify Ollama setup. Embeddings may not work properly.',
+                  variant: 'default',
+                })
+              }
+
+              // Step 5: Process dataset and wait for completion
+              toast({
+                message: `Processing dataset "${name}"...`,
+                variant: 'default',
+              })
+
+              const processResult = await datasetService.processDataset(
+                activeProject.namespace,
+                activeProject.project,
+                name
+              )
+
+              // Poll for completion if we got a task ID
+              if (processResult.task_id) {
+                // Save task ID to localStorage so dataset page can track it
+                saveDatasetTaskId(
+                  activeProject.namespace,
+                  activeProject.project,
+                  name,
+                  processResult.task_id
+                )
+
+                let completed = false
+                let attempts = 0
+                const maxAttempts = 60 // 2 minutes max
+
+                while (!completed && attempts < maxAttempts) {
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+                  attempts++
+
+                  const taskStatus = await datasetService.getTaskStatus(
+                    activeProject.namespace,
+                    activeProject.project,
+                    processResult.task_id
+                  )
+
+                  if (taskStatus.state === 'SUCCESS') {
+                    completed = true
+
+                    toast({
+                      message: `Demo dataset "${name}" imported and processed successfully!`,
+                      variant: 'default',
+                    })
+
+                    // Save processing result to localStorage so dataset page shows processed status
+                    if (taskStatus.result) {
+                      saveDatasetResult(
+                        activeProject.namespace,
+                        activeProject.project,
+                        name,
+                        taskStatus.result
+                      )
+                    }
+                  } else if (taskStatus.state === 'FAILURE') {
+                    throw new Error(
+                      taskStatus.error || 'Dataset processing failed'
+                    )
+                  }
+                  // Still processing, continue polling...
+                }
+
+                if (!completed) {
+                  toast({
+                    message: `Dataset "${name}" imported, but processing is taking longer than expected. Check back in a moment.`,
+                    variant: 'default',
+                  })
+                }
+              } else {
+                toast({
+                  message: `Demo dataset "${name}" imported successfully!`,
+                  variant: 'default',
+                })
+              }
+
+              // Refetch datasets and wait a moment for localStorage to persist
+              await refetchDatasets()
+              await new Promise(resolve => setTimeout(resolve, 100))
+
+              navigate(`/chat/data/${name}`)
+            } else {
+              // Handle example import (old flow)
+              await importExampleDataset.mutateAsync({
+                exampleId: sourceProjectId,
+                namespace: activeProject.namespace,
+                project: activeProject.project,
+                dataset: name,
+                include_strategies: true,
+                process: true,
+              })
+              toast({
+                message: `Dataset "${name}" importing…`,
+                variant: 'default',
+              })
+              setIsImportOpen(false)
+              navigate(`/chat/data/${name}`)
+            }
           } catch (error: any) {
             console.error('Import failed', error)
-            try {
-              const serverMessage =
-                (error?.response?.data?.detail as string) ||
-                (error?.message as string) ||
-                'Unknown error'
-              toast({
-                message: `Failed to import dataset: ${serverMessage}`,
-                variant: 'destructive',
-              })
-            } catch {}
-            // Import failed - show error (no localStorage fallback)
+            const serverMessage =
+              (error?.response?.data?.detail as string) ||
+              (error?.message as string) ||
+              'Unknown error'
             toast({
-              message: 'Failed to import dataset',
+              message: `Failed to import dataset: ${serverMessage}`,
               variant: 'destructive',
             })
           }

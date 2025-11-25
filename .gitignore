@@ -758,7 +758,9 @@ server/control/
 rag/control/
 llamafarm.yaml
 !examples/**/llamafarm.yaml
+!designer/public/demo-files/**/llamafarm.yaml
 llamafarm.yaml.backup*
 
 lf
 thoughts
+.plans
