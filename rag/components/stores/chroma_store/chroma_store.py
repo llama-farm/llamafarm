@@ -142,18 +142,17 @@ class ChromaStore(VectorStore):
             return False
 
     def _setup_collection(self):
-        """Setup or get collection."""
-        try:
-            self.collection = self.client.get_collection(name=self.collection_name)
-            logger.info(f"Using existing collection: {self.collection_name}")
-        except Exception:
-            # Collection doesn't exist, create it with configured distance metric
-            # Map our metric names to ChromaDB's HNSW space names
-            metric_map = {
-                "cosine": "cosine",
-                "l2": "l2",
-                "ip": "ip",  # inner product
-            }
+        """Setup or get collection.
+
+        Uses get_or_create_collection to avoid race conditions when multiple
+        processes try to create the same collection simultaneously.
+        """
+        # Map our metric names to ChromaDB's HNSW space names
+        metric_map = {
+            "cosine": "cosine",
+            "l2": "l2",
+            "ip": "ip",  # inner product
+        }
 
         try:
             # Use get_or_create_collection for atomic operation
@@ -163,7 +162,7 @@ class ChromaStore(VectorStore):
                 metadata={"hnsw:space": metric_map.get(self.distance_metric, "cosine")},
             )
             logger.info(
-                f"Created new collection: {self.collection_name} with {self.distance_metric} distance"
+                f"Using collection: {self.collection_name} with {self.distance_metric} distance"
             )
         except Exception as e:
             # Handle edge case where get_or_create still fails due to timing issues
