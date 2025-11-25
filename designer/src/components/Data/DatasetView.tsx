@@ -989,7 +989,7 @@ function DatasetView() {
     }
 
     const fileDetail = processingResult.details.find(
-      (detail: FileProcessingDetail) => detail.hash === fileHash
+      (detail: FileProcessingDetail) => detail.hash === fileHash || (detail as any).file_hash === fileHash
     )
 
     if (!fileDetail) {
