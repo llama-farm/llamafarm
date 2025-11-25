@@ -868,6 +868,18 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                     response.error = f"{failed_count} of {total} tasks failed"
                 else:
                     response.state = "SUCCESS"
+
+                # Persist the final state to the backend so subsequent polls see the correct state
+                # This is necessary because we manually stored group metadata with PENDING state
+                app.backend.store_result(task_id, response.result, response.state)
+                logger.info(
+                    "Persisted final group task state",
+                    task_id=task_id,
+                    state=response.state,
+                    processed=processed_count,
+                    failed=failed_count,
+                    skipped=skipped_count,
+                )
             else:
                 response.meta = {
                     "current": completed,
@@ -1005,6 +1017,17 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                     response.error = f"{failed_count} of {total} tasks failed"
                 else:
                     response.state = "SUCCESS"
+
+                # Persist the final state to the backend so subsequent polls see the correct state
+                app.backend.store_result(task_id, response.result, response.state)
+                logger.info(
+                    "Persisted final group task state (GroupResult fallback)",
+                    task_id=task_id,
+                    state=response.state,
+                    processed=processed_count,
+                    failed=failed_count,
+                    skipped=skipped_count,
+                )
             else:
                 response.state = "PROGRESS"
                 response.meta = {

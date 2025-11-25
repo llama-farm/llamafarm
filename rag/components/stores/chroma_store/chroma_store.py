@@ -155,13 +155,27 @@ class ChromaStore(VectorStore):
                 "ip": "ip",  # inner product
             }
 
-            self.collection = self.client.create_collection(
+        try:
+            # Use get_or_create_collection for atomic operation
+            # This prevents race conditions when multiple workers start simultaneously
+            self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 metadata={"hnsw:space": metric_map.get(self.distance_metric, "cosine")},
             )
             logger.info(
                 f"Created new collection: {self.collection_name} with {self.distance_metric} distance"
             )
+        except Exception as e:
+            # Handle edge case where get_or_create still fails due to timing issues
+            # This can happen with persistent client and multiple processes
+            logger.warning(f"get_or_create_collection failed, attempting fallback: {e}")
+            try:
+                # Try to get the existing collection
+                self.collection = self.client.get_collection(name=self.collection_name)
+                logger.info(f"Using existing collection: {self.collection_name}")
+            except Exception as e2:
+                logger.error(f"Failed to setup collection {self.collection_name}: {e2}")
+                raise
 
     def _parse_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Parse JSON strings in metadata back to Python objects.

@@ -527,8 +527,16 @@ var datasetsProcessCmd = &cobra.Command{
 		)
 
 		pollInterval := 2 * time.Second
+		pollTimeout := 10 * time.Minute // Timeout to prevent hanging forever
+		pollStart := time.Now()
 
 		for {
+			// Check for timeout
+			if time.Since(pollStart) > pollTimeout {
+				fmt.Fprintf(os.Stderr, "\n❌ Task polling timed out after %v. Task may still be running in background.\n", pollTimeout)
+				fmt.Fprintf(os.Stderr, "   Check status manually: curl %s\n", taskStatusURL)
+				os.Exit(1)
+			}
 			req, err := http.NewRequest("GET", taskStatusURL, nil)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error creating task status request: %v\n", err)
@@ -568,7 +576,7 @@ var datasetsProcessCmd = &cobra.Command{
 			fmt.Printf("\r   • Task state: %s", taskStatus.State)
 
 			switch taskStatus.State {
-			case "PENDING", "STARTED":
+			case "PENDING", "STARTED", "PROGRESS":
 				time.Sleep(pollInterval)
 				continue
 			case "SUCCESS":
