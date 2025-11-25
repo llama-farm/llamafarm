@@ -478,8 +478,8 @@ class RerankRequest(PydanticBaseModel):
 
     model: str
     query: str
-    documents: List[str]
-    top_k: Optional[int] = None
+    documents: list[str]
+    top_k: int | None = None
     return_documents: bool = True
 
 
@@ -499,9 +499,7 @@ async def rerank_documents(request: RerankRequest):
 
         # Rerank documents
         results = await model.rerank(
-            query=request.query,
-            documents=request.documents,
-            top_k=request.top_k
+            query=request.query, documents=request.documents, top_k=request.top_k
         )
 
         # Format response
@@ -527,7 +525,7 @@ async def rerank_documents(request: RerankRequest):
 
     except Exception as e:
         logger.error(f"Error in rerank_documents: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":
