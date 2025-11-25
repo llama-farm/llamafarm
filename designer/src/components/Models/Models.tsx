@@ -350,7 +350,7 @@ function ProjectInferenceModels({
   const existingNames = models.map(m => m.name)
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6 pb-8">
       {models.map((m, index) => (
         <ModelCard
           key={`${m.modelIdentifier}-${index}`}
