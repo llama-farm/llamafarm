@@ -218,6 +218,9 @@ jobs:
           AZURE_TENANT_ID: ${{ matrix.platform == 'windows' && secrets.AZURE_TENANT_ID || '' }}
           AZURE_CLIENT_ID: ${{ matrix.platform == 'windows' && secrets.AZURE_CLIENT_ID || '' }}
           AZURE_CLIENT_SECRET: ${{ matrix.platform == 'windows' && secrets.AZURE_CLIENT_SECRET || '' }}
+          AZURE_SIGNING_ENDPOINT: ${{ matrix.platform == 'windows' && 'https://eus.codesigning.azure.net/' || '' }}
+          AZURE_SIGNING_CERTIFICATE_PROFILE: ${{ matrix.platform == 'windows' && 'llamafarm-app' || '' }}
+          AZURE_SIGNING_ACCOUNT_NAME: ${{ matrix.platform == 'windows' && 'LlamaFarm' || '' }}
         run: |
           if [[ "${{ matrix.platform }}" == "macos" ]]; then
             # Remove identity: null from package.json to enable signing

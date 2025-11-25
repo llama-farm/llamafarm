@@ -97,12 +97,8 @@
         "portable"
       ],
       "icon": "build/icon.ico",
-      "azureSignOptions": {
-        "publisherName": "Rownd, Inc.",
-        "endpoint": "https://eus.codesigning.azure.net/",
-        "certificateProfileName": "llamafarm-app",
-        "codeSigningAccountName": "LlamaFarm"
-      }
+      "sign": "./sign-windows.js",
+      "publisherName": "Rownd, Inc."
     },
     "linux": {
       "target": [
