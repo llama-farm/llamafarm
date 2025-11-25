@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.17](https://github.com/llama-farm/llamafarm/compare/v0.0.16...v0.0.17) (2025-11-24)
+
+
+### Bug Fixes
+
+* **designer:** fix empty prompts array for new projects, fix current version in designer ([#495](https://github.com/llama-farm/llamafarm/issues/495)) ([488313c](https://github.com/llama-farm/llamafarm/commit/488313cd239c2075f2adcce47b297e0b89005494))
+* **docs:** add troubleshooting and update styles ([#498](https://github.com/llama-farm/llamafarm/issues/498)) ([270af60](https://github.com/llama-farm/llamafarm/commit/270af6050c3007744aa1e8ea778afe6ce3f66177))
+* hf progress bars can crash runtime ([#499](https://github.com/llama-farm/llamafarm/issues/499)) ([50d66a8](https://github.com/llama-farm/llamafarm/commit/50d66a847062b5071e47b66231e1b9e9297f2e88))
+
 ## [0.0.16](https://github.com/llama-farm/llamafarm/compare/v0.0.15...v0.0.16) (2025-11-23)
 
 

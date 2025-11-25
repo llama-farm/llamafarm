@@ -115,6 +115,8 @@ func (e *HealthError) Error() string {
 	return fmt.Sprintf("server unhealthy: %s", e.Status)
 }
 
+const hfHubDisableProgressBars = "1" // Disable HF transfer progress bars, as they can cause headless services to crash
+
 // Service Graph Definition
 // Services are defined declaratively - just specify config, the framework handles the rest
 
@@ -133,10 +135,11 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			return []string{"run", "--managed-python", "--no-sync", "python", "server.py"}
 		}(),
 		Env: map[string]string{
-			"LF_RUNTIME_PORT":         "11540",
-			"LF_RUNTIME_HOST":         "127.0.0.1",
-			"TRANSFORMERS_OUTPUT_DIR": filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
-			"TRANSFORMERS_CACHE_DIR":  filepath.Join("${HOME}", ".cache", "huggingface"),
+			"LF_RUNTIME_PORT":              "11540",
+			"LF_RUNTIME_HOST":              "127.0.0.1",
+			"TRANSFORMERS_OUTPUT_DIR":      filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
+			"TRANSFORMERS_CACHE_DIR":       filepath.Join("${HOME}", ".cache", "huggingface"),
+			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 			// Device control (empty = inherit from parent environment)
 			"TRANSFORMERS_SKIP_MPS":            "", // Set to "1" to skip MPS on macOS
 			"TRANSFORMERS_FORCE_CPU":           "", // Set to "1" to force CPU (useful in CI)
@@ -160,7 +163,8 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
 		Env: map[string]string{
-			"OLLAMA_HOST": "http://localhost:11434",
+			"OLLAMA_HOST":                  "http://localhost:11434",
+			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 		},
 		HealthComponent: "server",
 	},
@@ -172,6 +176,9 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		WorkDir:         "rag",
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "main.py"},
+		Env: map[string]string{
+			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
+		},
 		HealthComponent: "rag-service",
 	},
 }
