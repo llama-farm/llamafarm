@@ -3,7 +3,6 @@
 import json
 import os
 import threading
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,10 +14,6 @@ from utils.hash_utils import DeduplicationTracker
 from core.logging import RAGStructLogger
 
 logger = RAGStructLogger("rag.components.stores.chroma_store.chroma_store")
-
-# Constants for retry logic
-MAX_CLIENT_RETRIES = 5
-INITIAL_RETRY_DELAY = 0.5  # seconds
 
 
 class ChromaStore(VectorStore):
@@ -105,9 +100,6 @@ class ChromaStore(VectorStore):
         This ensures that multiple ChromaStore instances using the same database
         path share the same underlying client, preventing database contention.
 
-        Includes retry logic to handle cross-process race conditions when multiple
-        Celery workers try to initialize the database simultaneously.
-
         Args:
             client_key: Unique key identifying the client (e.g., path or host:port)
             client_factory: Callable that creates a new client if one doesn't exist
@@ -118,35 +110,7 @@ class ChromaStore(VectorStore):
         with cls._client_cache_lock:
             if client_key not in cls._client_cache:
                 logger.info(f"Creating new ChromaDB client for: {client_key}")
-
-                # Retry logic to handle cross-process race conditions
-                # When multiple Celery workers start simultaneously, they may race
-                # on creating the SQLite database tables
-                last_error = None
-                for attempt in range(MAX_CLIENT_RETRIES):
-                    try:
-                        cls._client_cache[client_key] = client_factory()
-                        break
-                    except Exception as e:
-                        last_error = e
-                        error_str = str(e).lower()
-                        # Check for SQLite table creation race condition
-                        if "table" in error_str and "already exists" in error_str:
-                            delay = INITIAL_RETRY_DELAY * (2**attempt)
-                            logger.warning(
-                                f"ChromaDB initialization race detected (attempt {attempt + 1}/{MAX_CLIENT_RETRIES}), "
-                                f"retrying in {delay:.1f}s: {e}"
-                            )
-                            time.sleep(delay)
-                        else:
-                            # Not a race condition error, re-raise immediately
-                            raise
-                else:
-                    # All retries exhausted
-                    logger.error(
-                        f"Failed to create ChromaDB client after {MAX_CLIENT_RETRIES} attempts: {last_error}"
-                    )
-                    raise last_error  # type: ignore
+                cls._client_cache[client_key] = client_factory()
             else:
                 logger.debug(f"Reusing existing ChromaDB client for: {client_key}")
             return cls._client_cache[client_key]
@@ -178,39 +142,26 @@ class ChromaStore(VectorStore):
             return False
 
     def _setup_collection(self):
-        """Setup or get collection.
-
-        Uses get_or_create_collection to avoid race conditions when multiple
-        processes try to create the same collection simultaneously.
-        """
-        # Map our metric names to ChromaDB's HNSW space names
-        metric_map = {
-            "cosine": "cosine",
-            "l2": "l2",
-            "ip": "ip",  # inner product
-        }
-
+        """Setup or get collection."""
         try:
-            # Use get_or_create_collection for atomic operation
-            # This prevents race conditions when multiple workers start simultaneously
-            self.collection = self.client.get_or_create_collection(
+            self.collection = self.client.get_collection(name=self.collection_name)
+            logger.info(f"Using existing collection: {self.collection_name}")
+        except Exception:
+            # Collection doesn't exist, create it with configured distance metric
+            # Map our metric names to ChromaDB's HNSW space names
+            metric_map = {
+                "cosine": "cosine",
+                "l2": "l2",
+                "ip": "ip",  # inner product
+            }
+
+            self.collection = self.client.create_collection(
                 name=self.collection_name,
                 metadata={"hnsw:space": metric_map.get(self.distance_metric, "cosine")},
             )
             logger.info(
-                f"Using collection: {self.collection_name} with {self.distance_metric} distance"
+                f"Created new collection: {self.collection_name} with {self.distance_metric} distance"
             )
-        except Exception as e:
-            # Handle edge case where get_or_create still fails due to timing issues
-            # This can happen with persistent client and multiple processes
-            logger.warning(f"get_or_create_collection failed, attempting fallback: {e}")
-            try:
-                # Try to get the existing collection
-                self.collection = self.client.get_collection(name=self.collection_name)
-                logger.info(f"Using existing collection: {self.collection_name}")
-            except Exception as e2:
-                logger.error(f"Failed to setup collection {self.collection_name}: {e2}")
-                raise
 
     def _parse_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Parse JSON strings in metadata back to Python objects.
