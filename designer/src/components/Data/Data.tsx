@@ -1561,7 +1561,7 @@ const Data = () => {
                   (s: any) => s.name === processingStrategyName
                 )
 
-                if (!strategyExists && processingStrategyName !== 'default') {
+                if (!strategyExists) {
                   // Find the strategy definition in demo config
                   const demoStrategy =
                     configData.rag?.data_processing_strategies?.find(
