@@ -165,49 +165,46 @@ function ToastGroup({
             : 'border-teal-600/40'
         )}
       >
-        <CollapsibleTrigger asChild>
-          <button
-            className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-muted/30 transition-colors rounded-lg"
-          >
-            <div
-              className={cn(
-                'w-7 h-7 flex-shrink-0 rounded-full grid place-items-center',
-                group.variant === 'destructive'
-                  ? 'bg-destructive text-destructive-foreground'
-                  : group.icon === 'alert-triangle'
-                    ? 'bg-muted text-muted-foreground'
-                    : 'bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900'
-              )}
+        <div className="px-4 py-3.5 flex items-center gap-3">
+          <CollapsibleTrigger asChild>
+            <button
+              className="flex-1 flex items-center gap-3 hover:bg-muted/30 transition-colors rounded-lg -ml-3 -mr-3 pl-3 pr-3"
             >
-              <FontIcon
-                type={
-                  group.icon ||
-                  (group.variant === 'destructive' ? 'close' : 'checkmark-filled')
-                }
-                className="w-4 h-4"
-              />
-            </div>
-            <div className="text-sm md:text-base leading-5 flex-1 break-words text-left">
-              {getGroupMessage(group)}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+              <div
+                className={cn(
+                  'w-7 h-7 flex-shrink-0 rounded-full grid place-items-center',
+                  group.variant === 'destructive'
+                    ? 'bg-destructive text-destructive-foreground'
+                    : group.icon === 'alert-triangle'
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900'
+                )}
+              >
+                <FontIcon
+                  type={
+                    group.icon ||
+                    (group.variant === 'destructive' ? 'close' : 'checkmark-filled')
+                  }
+                  className="w-4 h-4"
+                />
+              </div>
+              <div className="text-sm md:text-base leading-5 flex-1 break-words text-left">
+                {getGroupMessage(group)}
+              </div>
               <FontIcon
                 type={isOpen ? 'chevron-up' : 'chevron-down'}
-                className="w-4 h-4"
+                className="w-4 h-4 flex-shrink-0"
               />
-              <button
-                onClick={e => {
-                  e.stopPropagation()
-                  handleDismiss()
-                }}
-                className="w-5 h-5 rounded-sm hover:opacity-80 hover:bg-muted/50 flex items-center justify-center transition-colors"
-                aria-label="Dismiss"
-              >
-                <FontIcon type="close" className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            </button>
+          </CollapsibleTrigger>
+          <button
+            onClick={handleDismiss}
+            className="flex-shrink-0 w-5 h-5 rounded-sm hover:opacity-80 hover:bg-muted/50 flex items-center justify-center transition-colors"
+            aria-label="Dismiss"
+          >
+            <FontIcon type="close" className="w-3.5 h-3.5" />
           </button>
-        </CollapsibleTrigger>
+        </div>
         <CollapsibleContent>
           <div className="px-4 pb-3.5 pt-2 space-y-2 border-t border-border/50">
             {group.toasts.map(toast => (
@@ -259,18 +256,33 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const toast = React.useCallback((opts: Omit<Toast, 'id' | 'timeoutId'>) => {
     const id = Date.now() + Math.random()
-    setToasts(prev => {
-      const newToasts = [...prev, { id, ...opts }]
-      
-      // Set timeout for auto-dismiss (8 seconds)
+    setToasts(prev => [...prev, { id, ...opts }])
+  }, [])
+
+  // Set up auto-dismiss timeouts for new toasts
+  React.useEffect(() => {
+    toasts.forEach(toast => {
+      // Skip if timeout already exists
+      if (timeoutRefs.current.has(toast.id)) {
+        return
+      }
+
       const timeoutId = window.setTimeout(() => {
-        setToasts(current => current.filter(t => t.id !== id))
-        timeoutRefs.current.delete(id)
+        dismiss(toast.id)
       }, 8000)
-      
-      timeoutRefs.current.set(id, timeoutId)
-      return newToasts
+
+      timeoutRefs.current.set(toast.id, timeoutId)
     })
+  }, [toasts, dismiss])
+
+  // Cleanup all timeouts on unmount
+  React.useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach(timeoutId => {
+        window.clearTimeout(timeoutId)
+      })
+      timeoutRefs.current.clear()
+    }
   }, [])
 
   const { groups, individuals } = groupToasts(toasts)
