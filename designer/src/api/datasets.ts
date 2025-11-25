@@ -126,7 +126,7 @@ export async function deleteDataset(
 }
 
 /**
- * Execute an action on a dataset (currently only 'ingest')
+ * Execute an action on a dataset (currently only 'process')
  * @param namespace - The project namespace
  * @param project - The project identifier
  * @param dataset - The dataset name
@@ -169,9 +169,13 @@ export async function uploadFileToDataset(
   const cleanFileName = file.name.split('/').pop() || file.name
 
   // Create new File with clean name if needed
-  const fileToUpload = file.name !== cleanFileName
-    ? new File([file], cleanFileName, { type: file.type, lastModified: file.lastModified })
-    : file
+  const fileToUpload =
+    file.name !== cleanFileName
+      ? new File([file], cleanFileName, {
+          type: file.type,
+          lastModified: file.lastModified,
+        })
+      : file
 
   formData.append('file', fileToUpload)
 
@@ -219,7 +223,7 @@ export async function deleteFileFromDataset(
 }
 
 /**
- * Convenience function to ingest a dataset (execute 'ingest' action)
+ * Convenience function to ingest a dataset (execute 'process' action)
  * @param namespace - The project namespace
  * @param project - The project identifier
  * @param dataset - The dataset name
@@ -231,7 +235,7 @@ export async function ingestDataset(
   dataset: string
 ): Promise<DatasetActionResponse> {
   return executeDatasetAction(namespace, project, dataset, {
-    action_type: 'ingest',
+    action_type: 'process',
   })
 }
 

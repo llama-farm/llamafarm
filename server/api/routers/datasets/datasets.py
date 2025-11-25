@@ -186,7 +186,7 @@ class DatasetDataUploadResponse(BaseModel):
     summary="Upload a file to the dataset",
     description=(
         "Upload a file to the dataset (stores it but does NOT process into vector database. "
-        "Use the dataset actions endpoint with the 'ingest' action_type to process the file into the vector database)"
+        "Use the dataset actions endpoint with the 'process' action_type to process the file into the vector database)"
     ),
     responses={200: {"model": DatasetDataUploadResponse}},
 )

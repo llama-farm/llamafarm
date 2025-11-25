@@ -1678,7 +1678,9 @@ const Data = () => {
 
               try {
                 // Check if Ollama is running
-                const ollamaHealthResponse = await fetch('http://localhost:11434')
+                const ollamaHealthResponse = await fetch(
+                  'http://localhost:11434'
+                )
                 if (!ollamaHealthResponse.ok) {
                   throw new Error('Ollama not responding')
                 }
@@ -1687,15 +1689,20 @@ const Data = () => {
                 const demoDatabase = configData.rag?.databases?.find(
                   (db: any) => db.name === database
                 )
-                const embeddingStrategy = demoDatabase?.embedding_strategies?.[0]
+                const embeddingStrategy =
+                  demoDatabase?.embedding_strategies?.[0]
                 const embeddingModel = embeddingStrategy?.config?.model
 
                 if (embeddingModel) {
                   // Check if model exists
-                  const tagsResponse = await fetch('http://localhost:11434/api/tags')
+                  const tagsResponse = await fetch(
+                    'http://localhost:11434/api/tags'
+                  )
                   const tagsData = await tagsResponse.json()
                   const modelExists = tagsData.models?.some(
-                    (m: any) => m.name === embeddingModel || m.name.startsWith(embeddingModel + ':')
+                    (m: any) =>
+                      m.name === embeddingModel ||
+                      m.name.startsWith(embeddingModel + ':')
                   )
 
                   if (!modelExists) {
@@ -1705,11 +1712,14 @@ const Data = () => {
                     })
 
                     // Pull the model
-                    const pullResponse = await fetch('http://localhost:11434/api/pull', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ name: embeddingModel }),
-                    })
+                    const pullResponse = await fetch(
+                      'http://localhost:11434/api/pull',
+                      {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: embeddingModel }),
+                      }
+                    )
 
                     if (!pullResponse.ok) {
                       throw new Error(`Failed to pull model: ${embeddingModel}`)
@@ -1718,27 +1728,35 @@ const Data = () => {
                     // Stream the pull progress
                     const reader = pullResponse.body?.getReader()
                     const decoder = new TextDecoder()
-                    
+
                     if (reader) {
                       let lastStatus = ''
                       while (true) {
                         const { done, value } = await reader.read()
                         if (done) break
-                        
+
                         const chunk = decoder.decode(value)
-                        const lines = chunk.split('\n').filter(line => line.trim())
-                        
+                        const lines = chunk
+                          .split('\n')
+                          .filter(line => line.trim())
+
                         for (const line of lines) {
                           try {
                             const json = JSON.parse(line)
                             if (json.status && json.status !== lastStatus) {
                               lastStatus = json.status
-                              if (json.status.includes('pulling') || json.status.includes('downloading')) {
-                                const percent = json.completed && json.total 
-                                  ? Math.round((json.completed / json.total) * 100)
-                                  : null
+                              if (
+                                json.status.includes('pulling') ||
+                                json.status.includes('downloading')
+                              ) {
+                                const percent =
+                                  json.completed && json.total
+                                    ? Math.round(
+                                        (json.completed / json.total) * 100
+                                      )
+                                    : null
                                 toast({
-                                  message: percent 
+                                  message: percent
                                     ? `Pulling ${embeddingModel}: ${percent}%`
                                     : `Pulling ${embeddingModel}...`,
                                   variant: 'default',
@@ -1766,7 +1784,8 @@ const Data = () => {
               } catch (ollamaError) {
                 console.warn('Ollama check failed:', ollamaError)
                 toast({
-                  message: 'Warning: Could not verify Ollama setup. Embeddings may not work properly.',
+                  message:
+                    'Warning: Could not verify Ollama setup. Embeddings may not work properly.',
                   variant: 'default',
                 })
               }
@@ -1777,10 +1796,11 @@ const Data = () => {
                 variant: 'default',
               })
 
-              const processResult = await datasetService.processDataset(
+              const processResult = await datasetService.executeDatasetAction(
                 activeProject.namespace,
                 activeProject.project,
-                name
+                name,
+                { action_type: 'process' }
               )
 
               // Poll for completion if we got a task ID

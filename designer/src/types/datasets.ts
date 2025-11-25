@@ -90,8 +90,8 @@ export interface DeleteDatasetResponse {
  * Request payload for executing dataset actions
  */
 export interface DatasetActionRequest {
-  /** Type of action to execute (currently only 'ingest') */
-  action_type: 'ingest' | 'process'
+  /** Type of action to execute (currently only 'process') */
+  action_type: 'process'
 }
 
 /**
