@@ -210,10 +210,10 @@ jobs:
           Write-Host "📦 Installing Azure Trusted Signing PowerShell module..."
 
           # Install the Trusted Signing module from PowerShell Gallery
-          Install-Module -Name Microsoft.Windows.TrustedSigning -Force -Scope CurrentUser -Repository PSGallery -AllowClobber
+          Install-Module -Name TrustedSigning -Force -Scope CurrentUser -Repository PSGallery -AllowClobber
 
           # Verify installation
-          $module = Get-Module -ListAvailable -Name Microsoft.Windows.TrustedSigning
+          $module = Get-Module -ListAvailable -Name TrustedSigning
           if ($module) {
             Write-Host "✅ Trusted Signing module installed successfully"
             Write-Host "   Version: $($module.Version)"
@@ -223,7 +223,7 @@ jobs:
           }
 
           # Import the module
-          Import-Module Microsoft.Windows.TrustedSigning
+          Import-Module TrustedSigning
 
           # Verify the cmdlet is available
           $cmdlet = Get-Command Invoke-TrustedSigning -ErrorAction SilentlyContinue

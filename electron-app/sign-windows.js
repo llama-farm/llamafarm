@@ -48,7 +48,7 @@ exports.default = async function (configuration) {
   // NOTE: We import the module first, then call Invoke-TrustedSigning
   // We don't quote the path in -Files because Invoke-TrustedSigning
   // expects an unquoted path or an array of paths
-  const psCommand = `Import-Module Microsoft.Windows.TrustedSigning -ErrorAction Stop; Invoke-TrustedSigning -Endpoint '${endpoint}' -CertificateProfileName '${certificateProfile}' -CodeSigningAccountName '${accountName}' -TimestampRfc3161 'http://timestamp.acs.microsoft.com' -TimestampDigest 'SHA256' -FileDigest 'SHA256' -Files '${normalizedPath}'`;
+  const psCommand = `Import-Module TrustedSigning -ErrorAction Stop; Invoke-TrustedSigning -Endpoint '${endpoint}' -CertificateProfileName '${certificateProfile}' -CodeSigningAccountName '${accountName}' -TimestampRfc3161 'http://timestamp.acs.microsoft.com' -TimestampDigest 'SHA256' -FileDigest 'SHA256' -Files '${normalizedPath}'`;
 
   const command = `pwsh.exe -NoProfile -NonInteractive -Command "${psCommand}"`;
 
