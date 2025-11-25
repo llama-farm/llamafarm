@@ -57,12 +57,16 @@ class DataService:
         project_dir = ProjectService.get_project_dir(namespace, project_id)
         datasets_dir = os.path.join(project_dir, DATA_DIR_NAME, "datasets")
         dataset_dir = os.path.join(datasets_dir, dataset)
-        os.makedirs(dataset_dir, exist_ok=True)
-        os.makedirs(os.path.join(dataset_dir, "meta"), exist_ok=True)
-        os.makedirs(os.path.join(dataset_dir, "raw"), exist_ok=True)
-        os.makedirs(os.path.join(dataset_dir, "stores"), exist_ok=True)
-        os.makedirs(os.path.join(dataset_dir, "index", "by_name"), exist_ok=True)
-        return dataset_dir
+        norm_datasets_dir = os.path.abspath(os.path.normpath(datasets_dir))
+        norm_dataset_dir = os.path.abspath(os.path.normpath(dataset_dir))
+        if not norm_dataset_dir.startswith(norm_datasets_dir + os.sep):
+            raise ValueError(f"Invalid dataset name: {dataset!r}")
+        os.makedirs(norm_dataset_dir, exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "meta"), exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "raw"), exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "stores"), exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "index", "by_name"), exist_ok=True)
+        return norm_dataset_dir
 
     @classmethod
     def hash_data(cls, data: bytes):
