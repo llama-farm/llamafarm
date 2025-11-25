@@ -760,8 +760,24 @@ function DatasetView() {
           // Combine into array
           const mergedDetails = Array.from(detailsMap.values())
 
+          // Recalculate counters from the merged details to keep totals accurate
+          const processedCount = mergedDetails.filter(
+            (d: FileProcessingDetail) =>
+              d.status === 'processed' || (d.success && d.status !== 'skipped')
+          ).length
+          const failedCount = mergedDetails.filter(
+            (d: FileProcessingDetail) =>
+              d.status === 'failed' || (!d.success && d.status !== 'skipped')
+          ).length
+          const skippedCount = mergedDetails.filter(
+            (d: FileProcessingDetail) => d.status === 'skipped'
+          ).length
+
           return {
             ...normalizedResult,
+            processed_files: processedCount,
+            failed_files: failedCount,
+            skipped_files: skippedCount,
             details: mergedDetails,
           }
         })
@@ -989,7 +1005,8 @@ function DatasetView() {
     }
 
     const fileDetail = processingResult.details.find(
-      (detail: FileProcessingDetail) => detail.hash === fileHash || (detail as any).file_hash === fileHash
+      (detail: FileProcessingDetail) =>
+        detail.hash === fileHash || (detail as any).file_hash === fileHash
     )
 
     if (!fileDetail) {
