@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '../ui/button'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
@@ -92,9 +92,20 @@ export function DeviceModelsSection({
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredModels.length / ITEMS_PER_PAGE)
+
+  // Clamp currentPage to valid range when filtered results shrink
+  useEffect(() => {
+    if (totalPages > 0 && currentPage >= totalPages) {
+      setCurrentPage(Math.max(0, totalPages - 1))
+    }
+  }, [totalPages, currentPage])
+
+  const effectivePage =
+    totalPages > 0 ? Math.min(currentPage, totalPages - 1) : 0
+
   const paginatedModels = filteredModels.slice(
-    currentPage * ITEMS_PER_PAGE,
-    (currentPage + 1) * ITEMS_PER_PAGE
+    effectivePage * ITEMS_PER_PAGE,
+    (effectivePage + 1) * ITEMS_PER_PAGE
   )
 
   const resetPage = () => setCurrentPage(0)
@@ -130,7 +141,7 @@ export function DeviceModelsSection({
         <SearchInput
           placeholder="Search models..."
           value={searchQuery}
-          onChange={(e) => {
+          onChange={e => {
             setSearchQuery(e.target.value)
             resetPage()
           }}
@@ -162,7 +173,7 @@ export function DeviceModelsSection({
           <div className="min-h-[280px]">
             <AnimatePresence mode="wait">
               <motion.div
-                key={currentPage}
+                key={effectivePage}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -188,21 +199,23 @@ export function DeviceModelsSection({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => p - 1)}
-                disabled={currentPage === 0}
+                onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                disabled={effectivePage === 0}
                 className="flex items-center gap-1"
               >
                 <FontIcon type="chevron-down" className="w-4 h-4 rotate-90" />
                 Previous
               </Button>
               <span className="text-sm text-muted-foreground px-2">
-                Page {currentPage + 1} of {totalPages}
+                Page {effectivePage + 1} of {totalPages}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(p => p + 1)}
-                disabled={currentPage >= totalPages - 1}
+                onClick={() =>
+                  setCurrentPage(p => Math.min(totalPages - 1, p + 1))
+                }
+                disabled={effectivePage >= totalPages - 1}
                 className="flex items-center gap-1"
               >
                 Next
@@ -217,4 +230,3 @@ export function DeviceModelsSection({
 }
 
 export type { DeviceModel }
-
