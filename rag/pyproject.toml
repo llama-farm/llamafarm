@@ -44,9 +44,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
   # External dependencies
-  # Pin to 0.x - ChromaDB 1.0.x has a known bug with RustBindingsAPI that breaks PersistentClient
-  # See: https://github.com/chroma-core/chroma/issues/3410
-  "chromadb>=0.5.0,<1.0.0",
+  "chromadb>=1.0.0",
   "requests>=2.31.0",
   "tqdm>=4.65.0",
   "colorama>=0.4.6",
