@@ -97,8 +97,9 @@
         "portable"
       ],
       "icon": "build/icon.ico",
-      "sign": "./sign-windows.js",
-      "publisherName": "Rownd, Inc."
+      "signtoolOptions": {
+        "sign": "./sign-windows.js"
+      }
     },
     "linux": {
       "target": [
