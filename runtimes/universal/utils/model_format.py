@@ -151,50 +151,22 @@ def select_gguf_file_with_logging(
     if not gguf_files:
         raise ValueError("No GGUF files provided")
 
-    # If only one file, return it
-    if len(gguf_files) == 1:
-        logger.info(f"Only one GGUF file available: {gguf_files[0]}")
-        return gguf_files[0]
-
-    # Check if preferred quantization exists and log appropriately
-    found = False
-    if preferred_quantization:
-        file_quantizations = [
-            (filename, parse_quantization_from_filename(filename))
-            for filename in gguf_files
-        ]
-
-        preferred_upper = preferred_quantization.upper()
-        found = any(
-            quant and quant.upper() == preferred_upper
-            for _, quant in file_quantizations
-        )
-
-        if found:
-            logger.info(
-                f"Selected GGUF file with preferred quantization '{preferred_quantization}'"
-            )
-        else:
-            available = [q for _, q in file_quantizations if q]
-            logger.warning(
-                f"Preferred quantization '{preferred_quantization}' not found. "
-                f"Available quantizations: {available}. Falling back to default selection."
-            )
-
     # Use common selection logic
     result = select_gguf_file(gguf_files, preferred_quantization)
+    
+    if not result:
+        raise ValueError("No GGUF file selected")
 
-    if not preferred_quantization or not found:
-        # Log which default was selected
-        quant = parse_quantization_from_filename(result)
-        if quant:
-            logger.info(
-                f"Selected GGUF file with default quantization '{quant}': {result}"
-            )
-        else:
-            logger.warning(
-                f"No preferred quantization found. Using first file: {result}"
-            )
+    # Log the selection
+    quant = parse_quantization_from_filename(result)
+    if len(gguf_files) == 1:
+        logger.info(f"Only one GGUF file available: {result}")
+    elif preferred_quantization and quant and quant.upper() == preferred_quantization.upper():
+        logger.info(f"Selected GGUF file with preferred quantization '{preferred_quantization}': {result}")
+    elif quant:
+        logger.info(f"Selected GGUF file with quantization '{quant}': {result}")
+    else:
+        logger.info(f"Selected GGUF file: {result}")
 
     return result
 
