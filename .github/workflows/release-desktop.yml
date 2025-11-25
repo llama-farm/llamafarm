@@ -203,6 +203,37 @@ jobs:
           ls -lh /tmp/certs/AuthKey_${{ secrets.APPLE_NOTARY_KEY_ID }}.p8
           echo "✅ P8 API key file created successfully"
 
+      - name: Install Azure Trusted Signing for Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          Write-Host "📦 Installing Azure Trusted Signing PowerShell module..."
+
+          # Install the Trusted Signing module from PowerShell Gallery
+          Install-Module -Name Microsoft.Windows.TrustedSigning -Force -Scope CurrentUser -Repository PSGallery -AllowClobber
+
+          # Verify installation
+          $module = Get-Module -ListAvailable -Name Microsoft.Windows.TrustedSigning
+          if ($module) {
+            Write-Host "✅ Trusted Signing module installed successfully"
+            Write-Host "   Version: $($module.Version)"
+          } else {
+            Write-Host "❌ Failed to install Trusted Signing module"
+            exit 1
+          }
+
+          # Import the module
+          Import-Module Microsoft.Windows.TrustedSigning
+
+          # Verify the cmdlet is available
+          $cmdlet = Get-Command Invoke-TrustedSigning -ErrorAction SilentlyContinue
+          if ($cmdlet) {
+            Write-Host "✅ Invoke-TrustedSigning cmdlet is available"
+          } else {
+            Write-Host "❌ Invoke-TrustedSigning cmdlet not found"
+            exit 1
+          }
+
       - name: Build and Sign Electron app
         working-directory: electron-app
         env:
