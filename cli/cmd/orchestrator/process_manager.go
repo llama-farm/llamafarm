@@ -41,7 +41,13 @@ func NewProcessManager() (*ProcessManager, error) {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	logsDir := filepath.Join(homeDir, ".llamafarm", "logs")
+	// Use GetLFDataDir to respect LF_DATA_DIR environment variable
+	lfDataDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LF data directory: %w", err)
+	}
+
+	logsDir := filepath.Join(lfDataDir, "logs")
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create logs directory: %w", err)
 	}
@@ -80,12 +86,15 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 		return fmt.Errorf("working directory does not exist: %s", workDir)
 	}
 
+	// Add LOG_FILE to environment variables
+	env = append(env, fmt.Sprintf("LOG_FILE=%s", logFile))
+
 	// Create the command
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = workDir // Critical: processes must run in their project directory (e.g., ~/.llamafarm/src/server)
 	cmd.Env = env
 
-	utils.LogDebug(fmt.Sprintf("Starting %s in directory: %s\n", name, workDir))
+	utils.LogDebug(fmt.Sprintf("Starting %s in directory: %s with LOG_FILE=%s\n", name, workDir, logFile))
 
 	// Set up pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()
