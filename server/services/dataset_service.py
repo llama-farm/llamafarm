@@ -79,11 +79,56 @@ class DatasetService:
         """
         dataset_dir = DataService.ensure_data_dir(namespace, project, dataset)
         dataset_meta_dir = os.path.join(dataset_dir, "meta")
-        files = []
-        for file in os.listdir(dataset_meta_dir):
-            with open(os.path.join(dataset_meta_dir, file)) as f:
-                metadata = MetadataFileContent.model_validate_json(f.read())
-                files.append(metadata)
+        files: list[MetadataFileContent] = []
+
+        try:
+            file_list = os.listdir(dataset_meta_dir)
+        except FileNotFoundError:
+            logger.warning(
+                "Dataset metadata directory not found",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                path=dataset_meta_dir,
+            )
+            return files
+        except PermissionError as e:
+            logger.error(
+                "Permission denied reading dataset metadata directory",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                path=dataset_meta_dir,
+                error=str(e),
+            )
+            return files
+
+        for file in file_list:
+            file_path = os.path.join(dataset_meta_dir, file)
+            try:
+                with open(file_path) as f:
+                    metadata = MetadataFileContent.model_validate_json(f.read())
+                    files.append(metadata)
+            except (OSError, IOError) as e:
+                logger.warning(
+                    "Failed to read metadata file",
+                    namespace=namespace,
+                    project=project,
+                    dataset=dataset,
+                    file=file,
+                    error=str(e),
+                )
+            except ValueError as e:
+                # Pydantic validation errors (including JSON parsing) raise ValueError
+                logger.warning(
+                    "Failed to parse metadata file",
+                    namespace=namespace,
+                    project=project,
+                    dataset=dataset,
+                    file=file,
+                    error=str(e),
+                )
+
         return files
 
     @classmethod
