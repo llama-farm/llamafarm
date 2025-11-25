@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
 import { Label } from '../ui/label'
@@ -33,6 +34,7 @@ import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { useToast } from '../ui/toast'
+import { validateProjectName, checkForDuplicateName } from '../../utils/projectValidation'
 
 interface TabBarProps {
   activeTab: string
@@ -86,6 +88,95 @@ interface ModelCardProps {
   onModelChange: (newModelIdentifier: string) => void
 }
 
+function RenameModelModal({
+  open,
+  onOpenChange,
+  currentName,
+  existingNames,
+  onRename,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  currentName: string
+  existingNames: string[]
+  onRename: (newName: string) => void
+}) {
+  const [editedName, setEditedName] = useState(currentName)
+  const [nameError, setNameError] = useState<string>('')
+
+  useEffect(() => {
+    if (open) {
+      setEditedName(currentName)
+      setNameError('')
+    }
+  }, [open, currentName])
+
+  const handleSave = () => {
+    const validation = validateModelName(editedName.trim(), existingNames, currentName)
+    if (!validation.isValid) {
+      setNameError(validation.error || 'Invalid model name')
+      return
+    }
+
+    if (editedName.trim() !== currentName) {
+      onRename(editedName.trim())
+    }
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rename model</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3 pt-1">
+          <div>
+            <label className="text-xs text-muted-foreground">Model name</label>
+            <input
+              className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border text-foreground ${
+                nameError ? 'border-destructive' : 'border-input'
+              }`}
+              placeholder="Enter model name"
+              value={editedName}
+              onChange={e => {
+                const sanitized = sanitizeModelName(e.target.value)
+                setEditedName(sanitized)
+                if (nameError) {
+                  setNameError('')
+                }
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  handleSave()
+                }
+              }}
+              autoFocus
+            />
+            {nameError && (
+              <p className="text-xs text-destructive mt-1">{nameError}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!editedName.trim() || editedName.trim() === currentName}
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function ModelCard({
   model,
   onMakeDefault,
@@ -98,41 +189,9 @@ function ModelCard({
   availableProjectModels,
   availableDeviceModels,
   onModelChange,
-}: ModelCardProps) {
-  const [isEditingName, setIsEditingName] = useState(false)
-  const [editedName, setEditedName] = useState(model.name)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (isEditingName && inputRef.current) {
-      inputRef.current.focus()
-      // Place cursor at the beginning
-      inputRef.current.setSelectionRange(0, 0)
-    }
-  }, [isEditingName])
-
-  const handleSaveName = () => {
-    const trimmedName = editedName.trim()
-    if (trimmedName && trimmedName !== model.name && onRename) {
-      onRename(trimmedName)
-    } else {
-      setEditedName(model.name)
-    }
-    setIsEditingName(false)
-  }
-
-  const handleCancelEdit = () => {
-    setEditedName(model.name)
-    setIsEditingName(false)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSaveName()
-    } else if (e.key === 'Escape') {
-      handleCancelEdit()
-    }
-  }
+  existingModelNames = [],
+}: ModelCardProps & { existingModelNames?: string[] }) {
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false)
 
   return (
     <div className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative">
@@ -167,30 +226,18 @@ function ModelCard({
 
           <div className="flex items-center gap-2 mb-2">
             <div className="flex-1 min-w-0">
-              {isEditingName ? (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={editedName}
-                  onChange={(e) => setEditedName(e.target.value)}
-                  onBlur={handleSaveName}
-                  onKeyDown={handleKeyDown}
-                  className="w-full text-lg font-medium bg-background border border-input rounded px-1 py-0 focus:outline-none focus:ring-1 focus:ring-ring min-h-[28px]"
-                />
-              ) : (
-                <div className="flex items-center gap-1.5 group">
-                  <div className="text-lg font-medium min-h-[28px] flex items-center">{model.name}</div>
-                  {onRename && (
-                    <button
-                      onClick={() => setIsEditingName(true)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-accent/30 rounded"
-                      aria-label="Rename model"
-                    >
-                      <FontIcon type="edit" className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
-                  )}
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 group">
+                <div className="text-lg font-medium min-h-[28px] flex items-center">{model.name}</div>
+                {onRename && (
+                  <button
+                    onClick={() => setIsRenameModalOpen(true)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-accent/30 rounded"
+                    aria-label="Rename model"
+                  >
+                    <FontIcon type="edit" className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
             </div>
             {model.isDefault && (
               <div className="text-[10px] leading-4 rounded-xl px-2 py-0.5 bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900">
@@ -246,6 +293,16 @@ function ModelCard({
           />
         </div>
       </div>
+
+      {onRename && (
+        <RenameModelModal
+          open={isRenameModalOpen}
+          onOpenChange={setIsRenameModalOpen}
+          currentName={model.name}
+          existingNames={existingModelNames}
+          onRename={onRename}
+        />
+      )}
     </div>
   )
 }
@@ -275,6 +332,8 @@ function ProjectInferenceModels({
   availableDeviceModels: Array<{ identifier: string; name: string }>
   onModelChange: (modelId: string, newModelIdentifier: string) => void
 }) {
+  const existingNames = models.map(m => m.name)
+  
   return (
     <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6">
       {models.map((m, index) => (
@@ -291,6 +350,7 @@ function ProjectInferenceModels({
           availableProjectModels={availableProjectModels}
           availableDeviceModels={availableDeviceModels}
           onModelChange={(newModelIdentifier) => onModelChange(m.id, newModelIdentifier)}
+          existingModelNames={existingNames}
         />
       ))}
     </div>
@@ -553,6 +613,49 @@ function formatETA(seconds: number): string {
   return `~${s}s`
 }
 
+/**
+ * Sanitizes a model identifier to a valid model name
+ * Converts to lowercase, replaces spaces and special chars with hyphens
+ */
+function sanitizeModelName(modelIdentifier: string): string {
+  return modelIdentifier
+    .toLowerCase()
+    .replace(/\//g, '-')  // Replace / with -
+    .replace(/:/g, '-')   // Replace : with -
+    .replace(/\s+/g, '-') // Replace spaces with -
+    .replace(/[^a-zA-Z0-9_-]/g, '') // Remove any other special characters except - and _
+    .replace(/-+/g, '-')  // Replace multiple dashes with single dash
+    .replace(/^-|-$/g, '') // Remove leading/trailing dashes
+}
+
+/**
+ * Validates model name with duplicate check
+ */
+function validateModelName(
+  name: string,
+  existingModelNames: string[],
+  currentName: string | null = null
+): { isValid: boolean; error?: string } {
+  const trimmedName = name?.trim()
+
+  if (!trimmedName) {
+    return { isValid: false, error: 'Model name is required' }
+  }
+
+  // Use same validation as project names
+  const validation = validateProjectName(trimmedName)
+  if (!validation.isValid) {
+    return validation
+  }
+
+  // Check for duplicates
+  if (checkForDuplicateName(trimmedName, existingModelNames, currentName)) {
+    return { isValid: false, error: 'A model with this name already exists' }
+  }
+
+  return { isValid: true }
+}
+
 function AddOrChangeModels({
   onAddModel,
   onGoToProject,
@@ -609,6 +712,8 @@ function AddOrChangeModels({
   const [downloadProgress, setDownloadProgress] = useState(0)
   const [downloadError, setDownloadError] = useState('')
   const [showRecommendedBackgroundDownload, setShowRecommendedBackgroundDownload] = useState(false)
+  const [modelNameError, setModelNameError] = useState<string>('')
+  const [deviceModelNameError, setDeviceModelNameError] = useState<string>('')
 
   // Device model state
   const [deviceConfirmOpen, setDeviceConfirmOpen] = useState(false)
@@ -642,6 +747,7 @@ function AddOrChangeModels({
     string[]
   >([])
   const [customDownloadError, setCustomDownloadError] = useState('')
+  const [customModelNameError, setCustomModelNameError] = useState<string>('')
 
   interface ModelVariant {
     id: number
@@ -740,7 +846,10 @@ function AddOrChangeModels({
 
   const handleUseDeviceModel = (model: DeviceModel) => {
     setPendingDeviceModel(model)
-    setDeviceModelName(model.name)
+    // Sanitize the model name to remove spaces and special characters
+    const sanitized = sanitizeModelName(model.name)
+    setDeviceModelName(sanitized)
+    setDeviceModelNameError('')
     setDeviceConfirmOpen(true)
   }
 
@@ -783,6 +892,15 @@ function AddOrChangeModels({
 
   // Handle custom model download
   const handleCustomModelDownload = async () => {
+    // Validate model name
+    const existingNames = projectModels.map(m => m.name)
+    const validation = validateModelName(customModelName.trim(), existingNames)
+    if (!validation.isValid) {
+      setCustomModelNameError(validation.error || 'Invalid model name')
+      return
+    }
+    setCustomModelNameError('')
+    
     setCustomDownloadState('downloading')
     setCustomDownloadProgress(5)
     setCustomDownloadError('')
@@ -951,6 +1069,7 @@ function AddOrChangeModels({
                   setCustomSelectedPromptSets([])
                   setCustomDownloadState('idle')
                   setCustomDownloadError('')
+                  setCustomModelNameError('')
                 }}
                 className="h-10 whitespace-nowrap"
               >
@@ -983,6 +1102,7 @@ function AddOrChangeModels({
                       setCustomSelectedPromptSets([])
                       setCustomDownloadState('idle')
                       setCustomDownloadError('')
+                      setCustomModelNameError('')
                     }}
                   >
                     Add HuggingFace model
@@ -1007,16 +1127,16 @@ function AddOrChangeModels({
                           className="h-8 px-3"
                           onClick={() => {
                             setPendingVariant(variant)
-                            // Prepopulate name from model identifier
-                            const modelName = variant.modelIdentifier
+                            // Prepopulate name from model identifier - sanitize to remove spaces and special chars
+                            const rawName = variant.modelIdentifier
                               ? variant.modelIdentifier
                                   .split('/')
                                   .pop()
-                                  ?.replace(/-GGUF.*$/, '')
-                                  .replace(/[-_]/g, ' ')
-                                  .replace(/\b\w/g, l => l.toUpperCase()) || variant.label
+                                  ?.replace(/-GGUF.*$/, '') || variant.label
                               : variant.label
-                            setModelName(modelName)
+                            const sanitized = sanitizeModelName(rawName)
+                            setModelName(sanitized)
+                            setModelNameError('')
                             setConfirmOpen(true)
                           }}
                         >
@@ -1071,6 +1191,7 @@ function AddOrChangeModels({
               setCustomDownloadState('idle')
               setCustomDownloadProgress(0)
               setCustomDownloadError('')
+              setCustomModelNameError('')
             }
           }
         }}
@@ -1086,6 +1207,8 @@ function AddOrChangeModels({
         customDownloadState={customDownloadState}
         customDownloadProgress={customDownloadProgress}
         customDownloadError={customDownloadError}
+        customModelNameError={customModelNameError}
+        onClearModelNameError={() => setCustomModelNameError('')}
         downloadedBytes={downloadedBytes}
         totalBytes={totalBytes}
         estimatedTimeRemaining={estimatedTimeRemaining}
@@ -1135,9 +1258,25 @@ function AddOrChangeModels({
                     type="text"
                     placeholder="Enter model name"
                     value={deviceModelName}
-                    onChange={e => setDeviceModelName(e.target.value)}
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                    onChange={e => {
+                      setDeviceModelName(e.target.value)
+                      // Clear error when user types
+                      if (deviceModelNameError) {
+                        setDeviceModelNameError('')
+                      }
+                    }}
+                    className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border ${
+                      deviceModelNameError ? 'border-destructive' : 'border-input'
+                    } text-foreground`}
                   />
+                  {deviceModelNameError && (
+                    <div className="text-xs text-destructive mt-1">
+                      {deviceModelNameError}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Only letters, numbers, underscores (_), and hyphens (-) are allowed. No spaces.
+                  </div>
                 </div>
 
                 <div>
@@ -1196,6 +1335,16 @@ function AddOrChangeModels({
               }
               onClick={() => {
                 if (!pendingDeviceModel) return
+                
+                // Validate model name
+                const existingNames = projectModels.map(m => m.name)
+                const validation = validateModelName(deviceModelName.trim(), existingNames)
+                if (!validation.isValid) {
+                  setDeviceModelNameError(validation.error || 'Invalid model name')
+                  return
+                }
+                setDeviceModelNameError('')
+                
                 onAddModel(
                   {
                     id: `disk-${pendingDeviceModel.id}`,
@@ -1273,6 +1422,7 @@ function AddOrChangeModels({
             setSelectedPromptSets([])
             setDownloadProgress(0)
             setDownloadError('')
+            setModelNameError('')
             setDownloadedBytes(0)
             setTotalBytes(0)
             setEstimatedTimeRemaining('')
@@ -1304,9 +1454,25 @@ function AddOrChangeModels({
                     type="text"
                     placeholder="Enter model name"
                     value={modelName}
-                    onChange={e => setModelName(e.target.value)}
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                    onChange={e => {
+                      setModelName(e.target.value)
+                      // Clear error when user types
+                      if (modelNameError) {
+                        setModelNameError('')
+                      }
+                    }}
+                    className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border ${
+                      modelNameError ? 'border-destructive' : 'border-input'
+                    } text-foreground`}
                   />
+                  {modelNameError && (
+                    <div className="text-xs text-destructive mt-1">
+                      {modelNameError}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Only letters, numbers, underscores (_), and hyphens (-) are allowed. No spaces.
+                  </div>
                 </div>
 
                 <div>
@@ -1401,6 +1567,15 @@ function AddOrChangeModels({
               disabled={submitState === 'loading' || !modelName.trim()}
               onClick={async () => {
                 if (!pendingVariant) return
+                
+                // Validate model name
+                const existingNames = projectModels.map(m => m.name)
+                const validation = validateModelName(modelName.trim(), existingNames)
+                if (!validation.isValid) {
+                  setModelNameError(validation.error || 'Invalid model name')
+                  return
+                }
+                setModelNameError('')
                 
                 setSubmitState('loading')
                 setDownloadProgress(5)
@@ -2087,35 +2262,18 @@ const Models = () => {
     )
       return
 
-    // Validate input
+    // Validate input using the same validation as other dialogs
+    const existingNames = projectModels.map(m => m.name)
+    const validation = validateModelName(newName.trim(), existingNames, modelId)
+    if (!validation.isValid) {
+      toast({
+        message: validation.error || 'Invalid model name',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const trimmedName = newName.trim()
-    
-    // Check for empty name
-    if (!trimmedName) {
-      toast({
-        message: 'Model name cannot be empty',
-        variant: 'destructive',
-      })
-      return
-    }
-    
-    // Check for duplicate name
-    if (projectModels.some(m => m.id === trimmedName && m.id !== modelId)) {
-      toast({
-        message: 'A model with this name already exists',
-        variant: 'destructive',
-      })
-      return
-    }
-    
-    // Check for length (reasonable limit)
-    if (trimmedName.length > 100) {
-      toast({
-        message: 'Model name must be 100 characters or less',
-        variant: 'destructive',
-      })
-      return
-    }
 
     // Optimistically update local state
     const prevModels = [...projectModels]

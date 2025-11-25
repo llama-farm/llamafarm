@@ -10,6 +10,21 @@ import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import { PromptSetSelector } from './PromptSetSelector'
 
+/**
+ * Sanitizes a model identifier to a valid model name
+ * Converts to lowercase, replaces spaces and special chars with hyphens
+ */
+function sanitizeModelName(modelIdentifier: string): string {
+  return modelIdentifier
+    .toLowerCase()
+    .replace(/\//g, '-')  // Replace / with -
+    .replace(/:/g, '-')   // Replace : with -
+    .replace(/\s+/g, '-') // Replace spaces with -
+    .replace(/[^a-zA-Z0-9_-]/g, '') // Remove any other special characters except - and _
+    .replace(/-+/g, '-')  // Replace multiple dashes with single dash
+    .replace(/^-|-$/g, '') // Remove leading/trailing dashes
+}
+
 function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
@@ -34,6 +49,8 @@ interface CustomDownloadDialogProps {
   customDownloadState: 'idle' | 'downloading' | 'success' | 'error'
   customDownloadProgress: number
   customDownloadError: string
+  customModelNameError?: string
+  onClearModelNameError?: () => void
   downloadedBytes: number
   totalBytes: number
   estimatedTimeRemaining: string
@@ -56,6 +73,8 @@ export function CustomDownloadDialog({
   customDownloadState,
   customDownloadProgress,
   customDownloadError,
+  customModelNameError,
+  onClearModelNameError,
   downloadedBytes,
   totalBytes,
   estimatedTimeRemaining,
@@ -88,9 +107,10 @@ export function CustomDownloadDialog({
                 value={customModelInput}
                 onChange={e => {
                   setCustomModelInput(e.target.value)
-                  // Auto-populate name if empty
+                  // Auto-populate name if empty - sanitize it
                   if (!customModelName) {
-                    setCustomModelName(e.target.value)
+                    const sanitized = sanitizeModelName(e.target.value)
+                    setCustomModelName(sanitized)
                   }
                 }}
                 disabled={customDownloadState === 'downloading'}
@@ -122,10 +142,27 @@ export function CustomDownloadDialog({
                 type="text"
                 placeholder="Enter model name"
                 value={customModelName}
-                onChange={e => setCustomModelName(e.target.value)}
+                onChange={e => {
+                  const sanitized = sanitizeModelName(e.target.value)
+                  setCustomModelName(sanitized)
+                  // Clear error when user types
+                  if (customModelNameError && onClearModelNameError) {
+                    onClearModelNameError()
+                  }
+                }}
                 disabled={customDownloadState === 'downloading'}
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border ${
+                  customModelNameError ? 'border-destructive' : 'border-input'
+                } text-foreground`}
               />
+              {customModelNameError && (
+                <div className="text-xs text-destructive mt-1">
+                  {customModelNameError}
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                Only letters, numbers, underscores (_), and hyphens (-) are allowed. No spaces.
+              </div>
             </div>
 
             {/* Description field */}
