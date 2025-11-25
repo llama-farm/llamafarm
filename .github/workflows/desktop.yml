@@ -104,7 +104,7 @@ jobs:
           echo "version=${VERSION_NO_V}" >> $GITHUB_OUTPUT
           echo "Using version: ${VERSION_NO_V}"
 
-      - name: Update app version
+      - name: Update app version and disable signing
         working-directory: electron-app
         run: |
           # Update version in package.json
@@ -112,6 +112,9 @@ jobs:
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             pkg.version = '${{ steps.version.outputs.version }}';
+            pkg.build.win.signtoolOptions = {
+              sign: false
+            };
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
           echo "✅ Updated app version to ${{ steps.version.outputs.version }}"
