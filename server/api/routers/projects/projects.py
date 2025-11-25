@@ -617,6 +617,10 @@ def _process_group_children(
             task_id=task_id,
         )
 
+    # Aggregate counts across all files
+    total_stored_count = 0
+    total_skipped_count = 0
+
     for i, child in enumerate(children):
         # Use clear fallback filename if hash is not available
         if i < len(file_hashes) and file_hashes[i]:
@@ -630,15 +634,48 @@ def _process_group_children(
             "state": "pending",
             "filename": filename,
             "error": None,
+            "stored_count": None,
+            "skipped_count": None,
         }
 
         if child.successful():
             file_status["state"] = "success"
             try:
                 result_data = child.result
-                if isinstance(result_data, dict):
+                # Handle tuple/list format: (success, details)
+                if isinstance(result_data, (list, tuple)) and len(result_data) >= 2:
+                    _success, details = result_data[0], result_data[1]
+                    if isinstance(details, dict):
+                        file_status["filename"] = details.get("filename", filename)
+                        file_status["chunks"] = details.get("chunks")
+                        # Extract stored_count and skipped_count from details or result
+                        result_obj = details.get("result", {})
+                        stored = details.get("stored_count") or (
+                            result_obj.get("stored_count")
+                            if isinstance(result_obj, dict)
+                            else None
+                        )
+                        skipped = details.get("skipped_count") or (
+                            result_obj.get("skipped_count")
+                            if isinstance(result_obj, dict)
+                            else None
+                        )
+                        file_status["stored_count"] = stored
+                        file_status["skipped_count"] = skipped
+                        if stored is not None:
+                            total_stored_count += stored
+                        if skipped is not None:
+                            total_skipped_count += skipped
+                elif isinstance(result_data, dict):
                     file_status["filename"] = result_data.get("file_hash", filename)
                     file_status["chunks"] = result_data.get("chunks_created")
+                    # Extract stored_count and skipped_count from dict format
+                    file_status["stored_count"] = result_data.get("stored_count")
+                    file_status["skipped_count"] = result_data.get("skipped_count")
+                    if file_status["stored_count"] is not None:
+                        total_stored_count += file_status["stored_count"]
+                    if file_status["skipped_count"] is not None:
+                        total_skipped_count += file_status["skipped_count"]
             except Exception:
                 pass
         elif child.failed():
@@ -660,6 +697,8 @@ def _process_group_children(
         "failed": failed,
         "successful": successful,
         "file_statuses": file_statuses,
+        "total_stored_count": total_stored_count,
+        "total_skipped_count": total_skipped_count,
     }
 
 
@@ -731,22 +770,35 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
                 for i, child in enumerate(children):
+                    # Get file hash from file_hashes if available
+                    file_hash = (
+                        file_hashes[i] if i < len(file_hashes) else f"unknown_file_{i}"
+                    )
+
                     if child.successful():
                         try:
                             result_data = child.result
-                            results.append(result_data)
+                            # Inject file_hash into the result for frontend consumption
+                            if (
+                                isinstance(result_data, (list, tuple))
+                                and len(result_data) >= 2
+                            ):
+                                # Format: [success, details] - inject hash into details
+                                success_flag, details = result_data[0], result_data[1]
+                                if isinstance(details, dict):
+                                    details["file_hash"] = file_hash
+                                results.append([success_flag, details])
+                            elif isinstance(result_data, dict):
+                                result_data["file_hash"] = file_hash
+                                results.append(result_data)
+                            else:
+                                results.append(result_data)
                         except Exception:
                             pass
                     elif child.failed():
                         # Also collect failed task results
                         try:
                             error_info = str(child.result)
-                            # Get file hash from file_hashes if available
-                            file_hash = (
-                                file_hashes[i]
-                                if i < len(file_hashes)
-                                else f"unknown_file_{i}"
-                            )
                             # Create a failed result entry
                             failed_result = {
                                 "file_hash": file_hash,
@@ -805,6 +857,8 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                     "processed_files": processed_count,
                     "failed_files": failed_count,
                     "skipped_files": skipped_count,
+                    "stored_count": progress.get("total_stored_count", 0),
+                    "skipped_count": progress.get("total_skipped_count", 0),
                     "details": results,
                 }
 
@@ -821,6 +875,8 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                     "progress": int((completed / total) * 100) if total > 0 else 0,
                     "message": f"Processing {completed}/{total} files",
                     "files": file_statuses,  # Include per-file details
+                    "stored_count": progress.get("total_stored_count", 0),
+                    "skipped_count": progress.get("total_skipped_count", 0),
                 }
             return response
 
@@ -851,22 +907,35 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 # Processing is complete - aggregate results from all tasks (successful AND failed)
                 results = []
                 for i, child in enumerate(children):
+                    # Get file hash from file_hashes if available (may be empty in this fallback path)
+                    file_hash = (
+                        file_hashes[i] if i < len(file_hashes) else f"unknown_file_{i}"
+                    )
+
                     if child.successful():
                         try:
                             result_data = child.result
-                            results.append(result_data)
+                            # Inject file_hash into the result for frontend consumption
+                            if (
+                                isinstance(result_data, (list, tuple))
+                                and len(result_data) >= 2
+                            ):
+                                # Format: [success, details] - inject hash into details
+                                success_flag, details = result_data[0], result_data[1]
+                                if isinstance(details, dict):
+                                    details["file_hash"] = file_hash
+                                results.append([success_flag, details])
+                            elif isinstance(result_data, dict):
+                                result_data["file_hash"] = file_hash
+                                results.append(result_data)
+                            else:
+                                results.append(result_data)
                         except Exception:
                             pass
                     elif child.failed():
                         # Also collect failed task results
                         try:
                             error_info = str(child.result)
-                            # Get file hash from file_hashes if available
-                            file_hash = (
-                                file_hashes[i]
-                                if i < len(file_hashes)
-                                else f"unknown_file_{i}"
-                            )
                             # Create a failed result entry
                             failed_result = {
                                 "file_hash": file_hash,
@@ -925,6 +994,8 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                     "processed_files": processed_count,
                     "failed_files": failed_count,
                     "skipped_files": skipped_count,
+                    "stored_count": progress.get("total_stored_count", 0),
+                    "skipped_count": progress.get("total_skipped_count", 0),
                     "details": results,
                 }
 
@@ -942,6 +1013,8 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                     "progress": int((completed / total) * 100) if total > 0 else 0,
                     "message": f"Processing {completed}/{total} files",
                     "files": file_statuses,  # Include per-file details
+                    "stored_count": progress.get("total_stored_count", 0),
+                    "skipped_count": progress.get("total_skipped_count", 0),
                 }
             return response
         else:
