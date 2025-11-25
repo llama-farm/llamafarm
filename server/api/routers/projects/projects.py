@@ -820,37 +820,22 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 failed_count = 0
 
                 for result in results:
-                    if isinstance(result, list) and len(result) >= 2:
-                        # New format: [success, info]
-                        success, info = result[0], result[1]
-                        status = (
-                            info.get("status") or info.get("result", {}).get("status")
-                            if isinstance(info, dict)
-                            else None
-                        )
+                    # New format: [success, info]
+                    success, info = result[0], result[1]
+                    if not success:
+                        failed_count += 1
+                        continue
 
-                        if status == "skipped":
-                            skipped_count += 1
-                        elif not success:
-                            failed_count += 1
-                        else:
-                            processed_count += 1
-                    elif isinstance(result, dict):
-                        # Old format or failed task result
-                        details = result.get("details", {})
-                        status = (
-                            details.get("status")
-                            or details.get("result", {}).get("status")
-                            if isinstance(details, dict)
-                            else None
-                        )
+                    status = (
+                        info.get("status") or info.get("result", {}).get("status")
+                        if isinstance(info, dict)
+                        else None
+                    )
 
-                        if status == "skipped":
-                            skipped_count += 1
-                        elif not result.get("success", True):
-                            failed_count += 1
-                        else:
-                            processed_count += 1
+                    if status == "skipped":
+                        skipped_count += 1
+                    else:
+                        processed_count += 1
 
                 # Set result with all file details (successful, skipped, and failed)
                 response.result = {
