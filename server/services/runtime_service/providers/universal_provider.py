@@ -7,6 +7,11 @@ from collections.abc import AsyncIterator
 import requests  # type: ignore
 from huggingface_hub import scan_cache_dir, snapshot_download
 from huggingface_hub.errors import RepositoryNotFoundError
+from llamafarm_common import (
+    parse_model_with_quantization,
+    parse_quantization_from_filename,
+    select_gguf_file,
+)
 from tqdm.asyncio import tqdm  # type: ignore
 
 from agents.base.clients.client import LFAgentClient
@@ -183,8 +188,15 @@ class UniversalProvider(RuntimeProvider):
 
     @staticmethod
     async def download_model(model_name: str) -> AsyncIterator[dict]:
-        """Download/cache a model for the given model name."""
+        """Download/cache a model for the given model name.
+
+        Supports model names with quantization suffix (e.g., "model:Q4_K_M").
+        For GGUF models, only downloads the specified quantization.
+        """
         try:
+            # Parse model name to extract quantization if present
+            model_id, quantization = parse_model_with_quantization(model_name)
+
             queue: asyncio.Queue[dict] = asyncio.Queue()
             loop = asyncio.get_event_loop()
 
@@ -197,9 +209,82 @@ class UniversalProvider(RuntimeProvider):
                 huggingface_hub.file_download.tqdm = custom_class
 
                 try:
-                    local_dir = snapshot_download(
-                        repo_id=model_name, revision="main", tqdm_class=custom_class
-                    )
+                    from huggingface_hub import HfApi
+
+                    # Check if this is a GGUF model repository
+                    api = HfApi()
+                    try:
+                        files = api.list_repo_files(repo_id=model_id, repo_type="model")
+                        gguf_files = [f for f in files if f.endswith(".gguf")]
+
+                        if gguf_files:
+                            # This is a GGUF repo - use intelligent selection
+                            # to download only one quantization variant
+                            selected_file = None
+
+                            if quantization:
+                                # User specified a quantization - find matching file
+                                matching_files = [
+                                    f
+                                    for f in gguf_files
+                                    if quantization.upper() in f.upper()
+                                ]
+
+                                if matching_files:
+                                    selected_file = matching_files[0]
+                                    logger.info(
+                                        f"Downloading GGUF with quantization {quantization}: {selected_file}"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"Quantization {quantization} not found in {model_id}. "
+                                        f"Available: {gguf_files}"
+                                    )
+
+                            if not selected_file:
+                                # No quantization specified or not found - use smart selection
+                                # Use common selection logic from llamafarm_common
+                                selected_file = select_gguf_file(
+                                    gguf_files, preferred_quantization=None
+                                )
+                                if selected_file:
+                                    quant = parse_quantization_from_filename(
+                                        selected_file
+                                    )
+                                    if quant:
+                                        logger.info(
+                                            f"Auto-selected GGUF quantization {quant}: {selected_file}"
+                                        )
+                                    else:
+                                        logger.info(
+                                            f"No preferred quantization found, using first file: {selected_file}"
+                                        )
+
+                            # Download only the selected GGUF file
+                            local_dir = snapshot_download(
+                                repo_id=model_id,
+                                revision="main",
+                                allow_patterns=[selected_file],
+                                tqdm_class=custom_class,
+                            )
+                        else:
+                            # Not a GGUF repo - download normally
+                            logger.info(
+                                f"Not a GGUF model, downloading all files for {model_id}"
+                            )
+                            local_dir = snapshot_download(
+                                repo_id=model_id,
+                                revision="main",
+                                tqdm_class=custom_class,
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not check files in {model_id}: {e}. "
+                            "Falling back to downloading all files"
+                        )
+                        local_dir = snapshot_download(
+                            repo_id=model_id, revision="main", tqdm_class=custom_class
+                        )
                 finally:
                     huggingface_hub.file_download.tqdm = original
 
@@ -221,7 +306,7 @@ class UniversalProvider(RuntimeProvider):
                         evt = await asyncio.wait_for(queue.get(), timeout=300)
                         yield evt
                         done = evt.get("event") == "done"
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         # Check if worker task has failed
                         if task.done():
                             # Task finished but no "done" event - likely an error
@@ -245,13 +330,13 @@ class UniversalProvider(RuntimeProvider):
                 if not task.done():
                     task.cancel()
         except RepositoryNotFoundError as e:
-            logger.error(f"Model {model_name} not found")
+            logger.error(f"Model {model_id} not found")
             raise NotFoundError(
-                f"Model '{model_name}' not found. Check if the model exists on "
+                f"Model '{model_id}' not found. Check if the model exists on "
                 f"HuggingFace and that you specified the correct repo path."
             ) from e
         except Exception as e:
-            logger.exception(f"Error downloading model {model_name}: {e}")
+            logger.exception(f"Error downloading model {model_id}: {e}")
             raise e
 
     @staticmethod
@@ -259,7 +344,9 @@ class UniversalProvider(RuntimeProvider):
         """Delete a cached model from the HuggingFace cache.
 
         Args:
-            model_name: The model identifier (e.g., "meta-llama/Llama-2-7b-hf")
+            model_name: The model identifier (e.g., "meta-llama/Llama-2-7b-hf" or
+                       "unsloth/Qwen3-4B-GGUF:Q4_K_M"). If quantization suffix is
+                       present, it will be stripped since the cache stores by model_id.
 
         Returns:
             Dict with deleted model info including freed space
@@ -267,6 +354,9 @@ class UniversalProvider(RuntimeProvider):
         Raises:
             NotFoundError: If the model is not found in the cache
         """
+        # Parse model name to strip quantization suffix if present
+        model_id, _ = parse_model_with_quantization(model_name)
+
         cache_info = scan_cache_dir()
 
         # Find the repo to delete
@@ -274,14 +364,14 @@ class UniversalProvider(RuntimeProvider):
             (
                 repo
                 for repo in cache_info.repos
-                if repo.repo_id == model_name and repo.repo_type == "model"
+                if repo.repo_id == model_id and repo.repo_type == "model"
             ),
             None,
         )
 
         if not target_repo:
             raise NotFoundError(
-                f"Model '{model_name}' not found in cache. "
+                f"Model '{model_id}' not found in cache. "
                 "Use GET /v1/models to see available models."
             )
 
@@ -297,14 +387,14 @@ class UniversalProvider(RuntimeProvider):
         delete_strategy.execute()
 
         logger.info(
-            f"Deleted model {model_name}",
+            f"Deleted model {model_id}",
             revisions=revision_count,
             size_freed=size_on_disk,
             path=repo_path,
         )
 
         return {
-            "model_name": model_name,
+            "model_name": model_id,
             "revisions_deleted": revision_count,
             "size_freed": size_on_disk,
             "path": repo_path,

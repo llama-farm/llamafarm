@@ -190,7 +190,9 @@ jobs:
           UV_EXTRA_INDEX_URL: ${{ matrix.component == 'runtimes/universal' && 'https://download.pytorch.org/whl/cpu' || '' }}
         run: |
           if [ -f "uv.lock" ]; then
-            uv sync --all-extras
+            # Install main + dev dependencies only (skip optional extras that may have platform requirements)
+            # Use --frozen to avoid re-resolving dependencies from extras that aren't being installed
+            uv sync --group dev --frozen
           else
             echo "No uv.lock found, attempting to install from pyproject.toml"
             uv pip install -e .

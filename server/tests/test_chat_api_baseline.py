@@ -198,6 +198,8 @@ def app_client(mocker):
         project_dir: str,
         model_name: str | None = None,
         session_id: str | None = None,
+        active_project_namespace: str | None = None,
+        active_project_name: str | None = None,
     ):
         tag = f"{project_config.namespace}/{project_config.name}"
         agent = StubAgent(tag)

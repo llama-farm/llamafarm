@@ -13,7 +13,7 @@ import {
 import {
   getModelNames,
   formatLastModified,
-  parseTimestamp
+  parseTimestamp,
 } from './utils/projectHelpers'
 import { getCurrentNamespace } from './utils/namespaceUtils'
 import projectService from './api/projectService'
@@ -26,8 +26,13 @@ import {
 import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
+import { useDemoModal } from './contexts/DemoModalContext'
+import { AVAILABLE_DEMOS } from './config/demos'
 
 function Home() {
+  // Demo modal context
+  const demoModal = useDemoModal()
+
   // Form state
   const [projectName, setProjectName] = useState('')
   const [what, setWhat] = useState('')
@@ -38,7 +43,9 @@ function Home() {
   const [generalError, setGeneralError] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'a-z' | 'z-a' | 'model'>('newest')
+  const [sortBy, setSortBy] = useState<
+    'newest' | 'oldest' | 'a-z' | 'z-a' | 'model'
+  >('newest')
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
   const [fakeProgress, setFakeProgress] = useState(0)
@@ -67,12 +74,15 @@ function Home() {
     return new Map(
       apiProjects.map(p => {
         const key = `${p.namespace}/${p.name}`
-        return [key, {
-          ...p,
-          // Precompute sort keys for performance
-          _sortTimestamp: parseTimestamp(p.last_modified),
-          _sortModels: getModelNames(p.config)
-        }]
+        return [
+          key,
+          {
+            ...p,
+            // Precompute sort keys for performance
+            _sortTimestamp: parseTimestamp(p.last_modified),
+            _sortModels: getModelNames(p.config),
+          },
+        ]
       })
     )
   }, [projectsResponse])
@@ -101,10 +111,14 @@ function Home() {
       switch (sortBy) {
         case 'newest':
           // Use precomputed timestamps
-          return (projectB?._sortTimestamp || 0) - (projectA?._sortTimestamp || 0)
+          return (
+            (projectB?._sortTimestamp || 0) - (projectA?._sortTimestamp || 0)
+          )
         case 'oldest':
           // Use precomputed timestamps
-          return (projectA?._sortTimestamp || 0) - (projectB?._sortTimestamp || 0)
+          return (
+            (projectA?._sortTimestamp || 0) - (projectB?._sortTimestamp || 0)
+          )
         case 'a-z':
           return a.localeCompare(b)
         case 'z-a':
@@ -158,11 +172,11 @@ function Home() {
 
   const handleCreateProject = async () => {
     const MIN_LOADING_MS = 3000
-    
+
     // Validate and sanitize project name
     const sanitizedName = sanitizeProjectName(projectName)
     const validation = validateProjectName(sanitizedName)
-    
+
     if (!validation.isValid) {
       setProjectNameError(validation.error || 'Invalid project name')
       return
@@ -178,36 +192,45 @@ function Home() {
     setGeneralError(null)
     setIsCreatingProject(true)
     const startedAt = performance.now()
-    
+
     try {
-      // 1) Create the project
-      const created = await projectService.createProject(namespace, {
+      // 1) Create the base project
+      await projectService.createProject(namespace, {
         name: sanitizedName,
         config_template: 'default',
       })
 
-      // 2) Save optional "what" description and deployment into config if provided
+      // 2) Save optional "what" description and deployment
       if (what.trim() || deployment) {
         const brief: { what?: string; deployment?: string } = {}
         if (what.trim()) brief.what = what.trim()
         if (deployment) brief.deployment = deployment
-        
-        const mergedConfig = mergeProjectConfig(created.project.config || {}, {
-          project_brief: brief,
-        })
+
+        // Get current config
+        const currentProject = await projectService.getProject(
+          namespace,
+          sanitizedName
+        )
+
+        const mergedConfig = mergeProjectConfig(
+          currentProject.project.config || {},
+          {
+            project_brief: brief,
+          }
+        )
         try {
-          await projectService.updateProject(namespace, created.project.name, {
+          await projectService.updateProject(namespace, sanitizedName, {
             config: mergedConfig,
           })
         } catch (e) {
-          console.error('Failed to update project config:', e)
+          console.error('Failed to update project brief:', e)
           // Non-critical, continue anyway
         }
       }
 
       // 3) Activate and navigate to dashboard
-      localStorage.setItem('activeProject', created.project.name)
-      
+      localStorage.setItem('activeProject', sanitizedName)
+
       // Optimistically update caches
       try {
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
@@ -217,14 +240,14 @@ function Home() {
       try {
         const raw = localStorage.getItem('lf_custom_projects')
         const arr: string[] = raw ? JSON.parse(raw) : []
-        if (!arr.includes(created.project.name)) {
+        if (!arr.includes(sanitizedName)) {
           localStorage.setItem(
             'lf_custom_projects',
-            JSON.stringify([...arr, created.project.name])
+            JSON.stringify([...arr, sanitizedName])
           )
         }
       } catch {}
-      
+
       // Ensure the loading overlay is visible for at least MIN_LOADING_MS
       const elapsed = performance.now() - startedAt
       if (elapsed < MIN_LOADING_MS) {
@@ -236,7 +259,8 @@ function Home() {
       navigate('/chat/dashboard')
     } catch (error) {
       console.error('❌ Failed to create project:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
       setGeneralError(`Failed to create project: ${errorMessage}`)
     } finally {
       setIsCreatingProject(false)
@@ -246,6 +270,15 @@ function Home() {
   const openProject = (name: string) => {
     localStorage.setItem('activeProject', name)
     navigate('/chat/dashboard')
+  }
+
+  // Start the llama demo directly - modal will auto-start it and show progress
+  const handleStartLlamaDemo = () => {
+    const llamaDemo = AVAILABLE_DEMOS[0] // First demo is Llama & Alpaca
+    if (llamaDemo) {
+      // Open modal with auto-start demo ID
+      demoModal.openModal(llamaDemo.id)
+    }
   }
 
   // Listen for header-triggered create intent and scroll (run once on mount)
@@ -290,7 +323,7 @@ function Home() {
       const deletedProjectName = (event as CustomEvent<string>).detail
       // Force refetch of projects list to ensure UI is updated
       queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
-      
+
       // Clear active project if it was the one deleted
       try {
         const active = localStorage.getItem('activeProject')
@@ -308,8 +341,8 @@ function Home() {
   }, [namespace, queryClient])
 
   return (
-    <div className="min-h-screen flex flex-col items-stretch px-4 sm:px-6 lg:px-8 pt-24 md:pt-28 pb-8 bg-background">
-      <div className="max-w-4xl w-full mx-auto text-center space-y-8">
+    <div className="min-h-screen flex flex-col items-stretch pt-24 md:pt-28 pb-8 bg-background">
+      <div className="max-w-6xl w-full mx-auto px-6 text-center space-y-8">
         <div className="space-y-4">
           <p className="text-sm font-medium tracking-wide text-foreground/80">
             Welcome to LlamaFarm 🦙
@@ -319,133 +352,217 @@ function Home() {
             Create a new project
           </h1>
         </div>
-        <div id="home-create-form" className="max-w-3xl mx-auto">
-          {generalError && (
-            <div className="mb-4 text-red-600 bg-red-100 border border-red-300 rounded p-3 text-sm">
-              {generalError}
-            </div>
-          )}
-          <div className="rounded-lg border p-4 sm:p-5 bg-card border-input shadow-sm relative">
-            <div className="grid gap-4 text-left">
-              <div className="grid gap-2.5">
-                <Label htmlFor="projectName">Project name</Label>
-                <Input
-                  id="projectName"
-                  value={projectName}
-                  onChange={e => {
-                    setProjectName(e.target.value)
-                    if (projectNameError) setProjectNameError(null)
-                    if (generalError) setGeneralError(null)
-                  }}
-                  placeholder="my-project"
-                  disabled={isCreatingProject}
-                  className={projectNameError ? 'border-destructive' : ''}
-                />
-                {projectNameError && (
-                  <p className="text-xs text-destructive">{projectNameError}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Only letters, numbers, underscores (_), and hyphens (-) allowed. No spaces.
-                </p>
-              </div>
 
-              <div className="grid gap-2.5">
-                <Label htmlFor="what">What are you building? (optional)</Label>
-                <Textarea
-                  id="what"
-                  value={what}
-                  onChange={e => setWhat(e.target.value)}
-                  placeholder="A customer support chatbot, inventory system, data dashboard..."
-                  className="min-h-[72px]"
-                  disabled={isCreatingProject}
-                />
-              </div>
-
-              <div className="grid gap-2.5">
-                <Label>Where do you plan to deploy this?</Label>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 hover:bg-accent/20">
-                    <input
-                      type="radio"
-                      name="deploy"
-                      className="h-4 w-4"
-                      checked={deployment === 'local'}
-                      onChange={() => setDeployment('local')}
-                      disabled={isCreatingProject}
-                    />
-                    <span className="text-sm">Local machine</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 hover:bg-accent/20">
-                    <input
-                      type="radio"
-                      name="deploy"
-                      className="h-4 w-4"
-                      checked={deployment === 'cloud'}
-                      onChange={() => setDeployment('cloud')}
-                      disabled={isCreatingProject}
-                    />
-                    <span className="text-sm">Cloud</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-card px-3 py-2 hover:bg-accent/20">
-                    <input
-                      type="radio"
-                      name="deploy"
-                      className="h-4 w-4"
-                      checked={deployment === 'unsure'}
-                      onChange={() => setDeployment('unsure')}
-                      disabled={isCreatingProject}
-                    />
-                    <span className="text-sm">Not sure</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <button
-                  onClick={handleCreateProject}
-                  disabled={isCreatingProject || !hasAnyInput}
-                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label={
-                    isCreatingProject
-                      ? 'Creating project...'
-                      : hasAnyInput
-                        ? 'Create new project'
-                        : 'Enter a project name to create'
-                  }
-                >
-                  {isCreatingProject ? 'Creating…' : 'Create project'}
-                </button>
-              </div>
+        {/* Split Screen Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          {/* Left Side: Quick Start Demo */}
+          <div className="rounded-xl border-2 border-primary/40 bg-card p-6 flex flex-col relative">
+            {/* Center Recommended Tag */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-md text-xs font-semibold">
+              Recommended
             </div>
 
-            {isCreatingProject && (
-              <div className="absolute inset-0 rounded-lg bg-background/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-4">
-                <div className="w-9 h-9 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <div className="text-sm font-serif text-foreground text-center px-4">
-                  {loadingMessages[loadingMsgIndex]}
-                </div>
-                <div className="w-56 h-2 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-primary/70 transition-all duration-200"
-                    style={{ width: `${fakeProgress}%` }}
-                  />
-                </div>
-                <div className="flex items-center gap-1 mt-1">
-                  <span
-                    className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                    style={{ animationDelay: '0ms' }}
-                  />
-                  <span
-                    className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                    style={{ animationDelay: '150ms' }}
-                  />
-                  <span
-                    className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                    style={{ animationDelay: '300ms' }}
-                  />
+            <div className="mb-4 text-center">
+              <h2 className="text-xl font-semibold text-foreground mb-1">
+                Quick start demo
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Learn LlamaFarm by exploring a pre-configured project.
+              </p>
+            </div>
+
+            {/* Llama Demo Card */}
+            {AVAILABLE_DEMOS[0] && (
+              <div className="mb-6 rounded-lg border border-input bg-accent/50 p-6">
+                <div className="flex flex-col items-center text-center gap-3">
+                  <div className="text-5xl">{AVAILABLE_DEMOS[0].icon}</div>
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-semibold text-foreground text-base">
+                      Llama & Alpaca Care
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Chat with an encyclopedia about llama and alpaca care.
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md text-xs bg-primary/10 text-primary">
+                    Demo project
+                  </span>
                 </div>
               </div>
             )}
+
+            {/* Action Buttons */}
+            <div className="space-y-3 mt-auto">
+              <button
+                onClick={handleStartLlamaDemo}
+                className="w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 font-medium transition-opacity"
+              >
+                Start
+              </button>
+              <button
+                onClick={() => demoModal.openModal()}
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground hover:bg-accent/20 font-medium transition-colors"
+              >
+                Explore more demo projects
+              </button>
+            </div>
+          </div>
+
+          {/* OR Divider */}
+          <div className="lg:hidden text-center">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-background px-3 py-1 text-foreground font-medium">
+                  OR
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Custom Project */}
+          <div className="rounded-xl border-2 border-border bg-card p-6 flex flex-col">
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold text-foreground mb-1">
+                Custom project
+              </h2>
+            </div>
+
+            {/* Custom Project Form */}
+            <div id="home-create-form" className="flex-1 flex flex-col">
+              {generalError && (
+                <div className="mb-4 text-red-600 bg-red-100 border border-red-300 rounded p-3 text-sm">
+                  {generalError}
+                </div>
+              )}
+              <div className="grid gap-4 text-left flex-1 relative">
+                <div className="grid gap-2.5">
+                  <Label htmlFor="projectName">Project name</Label>
+                  <Input
+                    id="projectName"
+                    value={projectName}
+                    onChange={e => {
+                      setProjectName(e.target.value)
+                      if (projectNameError) setProjectNameError(null)
+                      if (generalError) setGeneralError(null)
+                    }}
+                    placeholder="my-project"
+                    disabled={isCreatingProject}
+                    className={projectNameError ? 'border-destructive' : ''}
+                  />
+                  {projectNameError && (
+                    <p className="text-xs text-destructive">
+                      {projectNameError}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Only letters, numbers, underscores (_), and hyphens (-)
+                    allowed. No spaces.
+                  </p>
+                </div>
+
+                <div className="grid gap-2.5">
+                  <Label htmlFor="what">
+                    What are you building? (optional)
+                  </Label>
+                  <Textarea
+                    id="what"
+                    value={what}
+                    onChange={e => setWhat(e.target.value)}
+                    placeholder="A customer support chatbot, inventory system, data dashboard..."
+                    className="min-h-[72px]"
+                    disabled={isCreatingProject}
+                  />
+                </div>
+
+                <div className="grid gap-2.5">
+                  <Label>Where do you plan to deploy this?</Label>
+                  <div className="flex flex-row gap-3">
+                    <label className="flex-1 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 h-10 hover:bg-accent/20 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deploy"
+                        className="h-4 w-4"
+                        checked={deployment === 'local'}
+                        onChange={() => setDeployment('local')}
+                        disabled={isCreatingProject}
+                      />
+                      <span className="text-sm">Local</span>
+                    </label>
+                    <label className="flex-1 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 h-10 hover:bg-accent/20 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deploy"
+                        className="h-4 w-4"
+                        checked={deployment === 'cloud'}
+                        onChange={() => setDeployment('cloud')}
+                        disabled={isCreatingProject}
+                      />
+                      <span className="text-sm">Cloud</span>
+                    </label>
+                    <label className="flex-1 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 h-10 hover:bg-accent/20 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deploy"
+                        className="h-4 w-4"
+                        checked={deployment === 'unsure'}
+                        onChange={() => setDeployment('unsure')}
+                        disabled={isCreatingProject}
+                      />
+                      <span className="text-sm">Not sure</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-1 mt-auto">
+                  <button
+                    onClick={handleCreateProject}
+                    disabled={isCreatingProject || !hasAnyInput}
+                    className="w-full px-6 py-3 rounded-lg bg-muted text-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-opacity"
+                    aria-label={
+                      isCreatingProject
+                        ? 'Creating project...'
+                        : hasAnyInput
+                          ? 'Create new project'
+                          : 'Enter a project name to create'
+                    }
+                  >
+                    {isCreatingProject ? 'Creating…' : 'Create project'}
+                  </button>
+                </div>
+
+                {isCreatingProject && (
+                  <div className="absolute inset-0 rounded-lg bg-background/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-4">
+                    <div className="w-9 h-9 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <div className="text-sm font-serif text-foreground text-center px-4">
+                      {loadingMessages[loadingMsgIndex]}
+                    </div>
+                    <div className="w-56 h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-primary/70 transition-all duration-200"
+                        style={{ width: `${fakeProgress}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span
+                        className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                        style={{ animationDelay: '0ms' }}
+                      />
+                      <span
+                        className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                        style={{ animationDelay: '150ms' }}
+                      />
+                      <span
+                        className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                        style={{ animationDelay: '300ms' }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -467,9 +584,9 @@ function Home() {
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <button
               className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
-              onClick={() => navigate('/samples')}
+              onClick={() => demoModal.openModal()}
             >
-              Explore sample projects
+              Explore demo projects
             </button>
             {/* New project button removed per design */}
           </div>
@@ -478,9 +595,9 @@ function Home() {
         <div className="md:hidden mb-4 flex items-center justify-between gap-3">
           <button
             className="flex-1 px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
-            onClick={() => navigate('/samples')}
+            onClick={() => demoModal.openModal()}
           >
-            Explore sample projects
+            Explore demo projects
           </button>
           {/* New project button removed per design */}
         </div>
@@ -644,6 +761,7 @@ function Home() {
       </div>
       {/* Project edit modal over Home */}
       {/* Modal rendered globally in App */}
+      {/* Demo Modal rendered globally in App via DemoModalRoot */}
     </div>
   )
 }

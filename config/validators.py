@@ -4,6 +4,7 @@ These validators handle constraints that cannot be expressed in JSON Schema draf
 such as uniqueness of object properties within arrays.
 """
 
+import re
 from typing import Any
 
 
@@ -23,6 +24,55 @@ def validate_llamafarm_config(config_dict: dict[str, Any]) -> None:
                 f"Duplicate prompt set names found: {', '.join(set(duplicates))}. "
                 "Each prompt set must have a unique name."
             )
+    
+    # Validate dataset names
+    if "datasets" in config_dict and config_dict["datasets"]:
+        datasets = config_dict["datasets"]
+        if isinstance(datasets, list):
+            dataset_names = []
+            for idx, dataset in enumerate(datasets):
+                if not isinstance(dataset, dict):
+                    continue
+                    
+                name = dataset.get("name", "")
+                if not name:
+                    raise ValueError(
+                        f"Dataset at index {idx} is missing a name. "
+                        "Each dataset must have a name."
+                    )
+                
+                # Validate name length
+                if len(name) > 100:
+                    raise ValueError(
+                        f"Dataset name '{name}' is too long (max 100 characters). "
+                        "Please use a shorter name."
+                    )
+                
+                # Validate name characters (only alphanumeric, hyphens, underscores)
+                valid_pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
+                if not valid_pattern.match(name):
+                    raise ValueError(
+                        f"Dataset name '{name}' contains invalid characters. "
+                        "Dataset names can only contain letters, numbers, underscores (_), and hyphens (-)."
+                    )
+                
+                dataset_names.append(name)
+            
+            # Check for duplicate dataset names (case-insensitive)
+            name_counts: dict[str, list[str]] = {}
+            for name in dataset_names:
+                lower_name = name.lower()
+                if lower_name not in name_counts:
+                    name_counts[lower_name] = []
+                name_counts[lower_name].append(name)
+            
+            duplicates = {original[0]: original for original in name_counts.values() if len(original) > 1}
+            if duplicates:
+                duplicate_list = ', '.join(f"'{name}'" for name in duplicates.keys())
+                raise ValueError(
+                    f"Duplicate dataset names found: {duplicate_list}. "
+                    "Each dataset must have a unique name (case-insensitive)."
+                )
 
     # Validate model.prompts reference existing sets
     if "prompts" in config_dict and "runtime" in config_dict:

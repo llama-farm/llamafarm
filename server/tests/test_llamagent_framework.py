@@ -244,6 +244,7 @@ class TestLFAgent:
                 *,
                 messages,
                 tools=None,
+                extra_body=None,
             ):
                 return "Response"
 
@@ -252,6 +253,7 @@ class TestLFAgent:
                 *,
                 messages,
                 tools=None,
+                extra_body=None,
             ):
                 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 

@@ -24,6 +24,7 @@ import { useConfigStructure } from '../../hooks/useConfigStructure'
 import type { TOCNode } from '../../types/config-toc'
 import { normalisePointer, parentPointer } from '../../utils/configNavigation'
 import { findSearchMatches, type SearchMatch } from '../../utils/searchUtils'
+import { validateAllDatasetNames } from '../../utils/datasetValidation'
 
 // Lazy load the CodeMirror editor
 const CodeMirrorEditor = lazy(
@@ -343,6 +344,20 @@ const ConfigEditor: React.FC<ConfigEditorProps> = ({
         const errorMsg = `YAML syntax error: ${parseError instanceof Error ? parseError.message : 'Invalid YAML syntax'}. Please fix the syntax before saving.`
         setSaveError(errorMsg)
         return { success: false, error: errorMsg }
+      }
+
+      // Validate dataset names before saving
+      if (configObj?.datasets && Array.isArray(configObj.datasets)) {
+        const validation = validateAllDatasetNames(configObj.datasets)
+        
+        if (!validation.isValid) {
+          const errorMessages = validation.errors.map(err => 
+            `Dataset #${err.index + 1} (${err.name}): ${err.error}`
+          )
+          const errorMsg = `Dataset validation failed:\n${errorMessages.join('\n')}`
+          setSaveError(errorMsg)
+          return { success: false, error: errorMsg }
+        }
       }
 
       // Update project via API

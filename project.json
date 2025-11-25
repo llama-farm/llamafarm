@@ -21,6 +21,12 @@
         "command": "cd config && bash ../runtimes/lemonade/start-all.sh"
       }
     },
+    "generate-types": {
+      "dependsOn": [
+        "config:generate-types",
+        "cli:generate-types"
+      ]
+    },
     "pack": {
       "executor": "nx:run-commands",
       "options": {

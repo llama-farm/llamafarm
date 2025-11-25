@@ -95,9 +95,18 @@ func StartConfigWatcher(namespace, project string) error {
 				fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
 			}
 		} else if cwdHasValid && homeHasValid {
-			// Both valid - prefer CWD config (user's working directory)
-			if err := syncConfigFiles(cwdConfigPath, homeConfigPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+			// Both valid - sync the newer one to the older one
+			// This allows changes from the designer (home) to propagate to CWD
+			if homeConfigInfo.ModTime().After(cwdConfigInfo.ModTime()) {
+				// Home config is newer (e.g., edited via designer) - sync home -> CWD
+				if err := syncConfigFiles(homeConfigPath, cwdConfigPath); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+				}
+			} else {
+				// CWD config is newer or same age - sync CWD -> home
+				if err := syncConfigFiles(cwdConfigPath, homeConfigPath); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to sync config files: %v\n", err)
+				}
 			}
 		}
 		// If neither has valid name/namespace, don't sync (will fail later anyway)

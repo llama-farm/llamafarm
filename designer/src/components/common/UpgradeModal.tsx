@@ -37,17 +37,15 @@ export function UpgradeModal({ open, onOpenChange }: Props) {
     const tag = `v${latestVersion}`
 
     const cli: { label: string; cmd: string }[] = []
-    if (os === 'mac_linux') {
+    // Simplified upgrade command - just use the CLI's built-in upgrade
       cli.push({
-        label: 'One-liner (CLI + services)',
-        cmd: `lf version upgrade ${tag} && docker rm -f llamafarm-server llamafarm-rag llamafarm-designer 2>/dev/null || true; LF_IMAGE_TAG=${tag} lf start; docker run -d --restart unless-stopped --name llamafarm-designer -p 7724:80 ghcr.io/llama-farm/llamafarm/designer:${tag}`,
+      label: 'Upgrade to latest',
+      cmd: `lf version upgrade`,
       })
-    } else {
       cli.push({
-        label: 'One-liner (CLI + services)',
-        cmd: `winget install LlamaFarm.CLI && set TAG=${tag} && docker rm -f llamafarm-server llamafarm-rag llamafarm-designer 2>NUL || ver>NUL && set LF_IMAGE_TAG=%TAG% && lf start && docker run -d --restart unless-stopped --name llamafarm-designer -p 7724:80 ghcr.io/llama-farm/llamafarm/designer:%TAG%`,
+      label: 'Upgrade to specific version',
+      cmd: `lf version upgrade ${tag}`,
       })
-    }
     return { os, cli }
   }, [latestVersion])
 

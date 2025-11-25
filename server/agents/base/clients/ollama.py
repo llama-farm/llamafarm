@@ -2,7 +2,7 @@ import datetime
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Any, Literal
 
 from ollama import AsyncClient, Message
 from openai.types.chat import (
@@ -47,6 +47,7 @@ class LFAgentClientOllama(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
+        **_,
     ) -> LFChatCompletion:
         """Chat with tool calling support."""
         client = AsyncClient(
@@ -131,6 +132,7 @@ class LFAgentClientOllama(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
+        **_,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat, converting Ollama chunks to OpenAI format."""
 

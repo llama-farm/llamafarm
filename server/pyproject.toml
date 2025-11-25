@@ -32,7 +32,7 @@ dependencies = [
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
-  "jsonref>=1.1.0", # Can be removed since it's now in config
+  "jsonref>=1.1.0",             # Can be removed since it's now in config
   "celery>=5.5.3",
   # Configuration parsing
   "pyyaml>=6.0.0", # Can be removed since it's now in config
@@ -49,9 +49,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 test = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 
 [dependency-groups]
+dev = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 test = ["pytest>=8.4.1", "pytest-asyncio>=1.1.0", "pytest-mock>=3.14.1"]
 
 [tool.pytest.ini_options]

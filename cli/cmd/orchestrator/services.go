@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,10 @@ type ServiceDefinition struct {
 	Env             map[string]string // Environment variables
 	HealthComponent string            // Component name in /health endpoint (e.g., "server", "rag")
 
+	// Hardware-specific packages (optional)
+	// If set, these packages will be installed with hardware-appropriate wheels after uv sync
+	HardwarePackages []HardwarePackageSpec
+
 	// Runtime info
 	State *ServiceState
 }
@@ -111,6 +116,8 @@ func (e *HealthError) Error() string {
 	return fmt.Sprintf("server unhealthy: %s", e.Status)
 }
 
+const hfHubDisableProgressBars = "1" // Disable HF transfer progress bars, as they can cause headless services to crash
+
 // Service Graph Definition
 // Services are defined declaratively - just specify config, the framework handles the rest
 
@@ -122,12 +129,18 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  180 * time.Second, // Longer timeout for first-time dependency installation
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
-		Args:            []string{"run", "--managed-python", "python", "server.py"},
+		Args: func() []string {
+			if runtime.GOOS == "linux" {
+				return []string{"run", "--managed-python", "python", "server.py"}
+			}
+			return []string{"run", "--managed-python", "--no-sync", "python", "server.py"}
+		}(),
 		Env: map[string]string{
-			"TRANSFORMERS_PORT":       "11540",
-			"TRANSFORMERS_HOST":       "127.0.0.1",
-			"TRANSFORMERS_OUTPUT_DIR": filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
-			"TRANSFORMERS_CACHE_DIR":  filepath.Join("${HOME}", ".cache", "huggingface"),
+			"LF_RUNTIME_PORT":              "11540",
+			"LF_RUNTIME_HOST":              "127.0.0.1",
+			"TRANSFORMERS_OUTPUT_DIR":      filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
+			"TRANSFORMERS_CACHE_DIR":       filepath.Join("${HOME}", ".cache", "huggingface"),
+			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 			// Device control (empty = inherit from parent environment)
 			"TRANSFORMERS_SKIP_MPS":            "", // Set to "1" to skip MPS on macOS
 			"TRANSFORMERS_FORCE_CPU":           "", // Set to "1" to force CPU (useful in CI)
@@ -137,6 +150,10 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
 		},
 		HealthComponent: "universal-runtime",
+		HardwarePackages: []HardwarePackageSpec{
+			PyTorchSpec,
+			LlamaCppSpec,
+		},
 	},
 	"server": {
 		Name:            "server",
@@ -147,7 +164,8 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
 		Env: map[string]string{
-			"OLLAMA_HOST": "http://localhost:11434",
+			"OLLAMA_HOST":                  "http://localhost:11434",
+			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 		},
 		HealthComponent: "server",
 	},
@@ -159,6 +177,9 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		WorkDir:         "rag",
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "main.py"},
+		Env: map[string]string{
+			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
+		},
 		HealthComponent: "rag-service",
 	},
 }
@@ -359,44 +380,6 @@ func (sm *ServiceManager) ensureSingleService(serviceName string) error {
 func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	// Build environment variables
 	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
-
-	// For universal-runtime, auto-detect hardware and set PyTorch index
-	if serviceDef.Name == "universal-runtime" {
-		// Only auto-detect if UV_EXTRA_INDEX_URL is not already set
-		uvIndexFound := false
-		for _, e := range env {
-			if strings.HasPrefix(e, "UV_EXTRA_INDEX_URL=") {
-				value := strings.TrimPrefix(e, "UV_EXTRA_INDEX_URL=")
-				if value != "" && value != "${UV_EXTRA_INDEX_URL}" {
-					uvIndexFound = true
-					utils.LogDebug(fmt.Sprintf("UV_EXTRA_INDEX_URL already set to: %s", value))
-					break
-				}
-			}
-		}
-
-		if !uvIndexFound {
-			// Auto-detect hardware and set appropriate PyTorch index
-			indexURL := GetPyTorchIndexURL()
-			if indexURL != "" {
-				utils.LogDebug(fmt.Sprintf("Setting UV_EXTRA_INDEX_URL=%s for hardware-optimized PyTorch", indexURL))
-				// Update or add UV_EXTRA_INDEX_URL in environment
-				updatedEnv := false
-				for i, e := range env {
-					if strings.HasPrefix(e, "UV_EXTRA_INDEX_URL=") {
-						env[i] = "UV_EXTRA_INDEX_URL=" + indexURL
-						updatedEnv = true
-						break
-					}
-				}
-				if !updatedEnv {
-					env = append(env, "UV_EXTRA_INDEX_URL="+indexURL)
-				}
-			} else {
-				utils.LogDebug("Using default PyPI for GPU-accelerated PyTorch")
-			}
-		}
-	}
 
 	// Build command args - replace "uv" with full path if needed
 	command := serviceDef.Command

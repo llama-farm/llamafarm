@@ -64,7 +64,7 @@ func start(mode SessionMode) {
 
 	factory := GetServiceConfigFactory()
 	config := factory.ServerOnly(serverURL)
-	orchestrator.EnsureServicesOrExitWithConfig(config, "server")
+	orchestrator.EnsureServicesOrExitWithConfig(config, "server", "universal-runtime")
 
 	runChatSessionTUI(mode, projectInfo)
 }

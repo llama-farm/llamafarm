@@ -4,6 +4,12 @@ import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
+import { AVAILABLE_DEMOS } from '../../config/demos'
+import * as YAML from 'yaml'
+import {
+  saveDatasetTaskId,
+  saveDatasetResult,
+} from '../../utils/datasetStorage'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -37,14 +43,181 @@ import {
   useAvailableStrategies,
 } from '../../hooks/useDatasets'
 import { uploadFileToDataset } from '../../api/datasets'
+import datasetService from '../../api/datasets'
+import projectService from '../../api/projectService'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { isValidFile } from '../../utils/fileValidation'
+import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
+import { getDatabaseColor } from '../../utils/databaseColors'
+import {
+  loadDatasetTaskId,
+  clearDatasetTaskId,
+} from '../../utils/datasetStorage'
+import { useTaskStatus } from '../../hooks/useDatasets'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
+
+// Component for individual dataset card with processing status tracking
+const DatasetCard = ({
+  dataset,
+  activeProject,
+  databases,
+  onNavigate,
+  onDelete,
+}: {
+  dataset: any
+  activeProject: any
+  databases: any[]
+  onNavigate: (id: string) => void
+  onDelete: (id: string, name: string) => void
+}) => {
+  // Check if this dataset has an active processing task
+  const taskId = loadDatasetTaskId(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    dataset.name
+  )
+
+  // Poll task status if task exists
+  const { data: taskStatus } = useTaskStatus(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    taskId,
+    {
+      enabled: !!taskId && !!activeProject,
+      refetchInterval: 2000,
+    }
+  )
+
+  // Clear task ID when processing completes
+  useEffect(() => {
+    if (
+      taskStatus &&
+      (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE')
+    ) {
+      clearDatasetTaskId(
+        activeProject?.namespace || '',
+        activeProject?.project || '',
+        dataset.name
+      )
+    }
+  }, [taskStatus, activeProject, dataset.name])
+
+  // Calculate processing percentage
+  const isProcessing =
+    taskStatus &&
+    taskStatus.state !== 'SUCCESS' &&
+    taskStatus.state !== 'FAILURE'
+  const processingPercent = useMemo(() => {
+    if (!isProcessing || !taskStatus) return 0
+
+    if (taskStatus.meta?.progress) {
+      return taskStatus.meta.progress
+    }
+
+    if (taskStatus.meta?.current && taskStatus.meta?.total) {
+      return Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)
+    }
+
+    return 0
+  }, [isProcessing, taskStatus])
+
+  return (
+    <div
+      key={dataset.id}
+      className={`w-full bg-card rounded-lg border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors ${
+        isProcessing ? 'border-[#1e3a8a] dark:border-white' : 'border-border'
+      }`}
+      onClick={() => onNavigate(dataset.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onNavigate(dataset.id)
+        }
+      }}
+    >
+      <div className="absolute right-3 top-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+              onClick={e => e.stopPropagation()}
+              aria-label="Dataset actions"
+            >
+              <FontIcon type="overflow" className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem] w-[10rem]">
+            <DropdownMenuItem
+              onClick={e => {
+                e.stopPropagation()
+                onNavigate(dataset.id)
+              }}
+            >
+              View
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={e => {
+                e.stopPropagation()
+                onDelete(dataset.id, dataset.name)
+              }}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="text-sm font-medium">{dataset.name}</div>
+      <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
+        {dataset.database && (
+          <Badge
+            variant="default"
+            size="sm"
+            className={`rounded-xl ${getDatabaseColor(dataset.database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
+            onClick={e => {
+              e.stopPropagation()
+              onNavigate(
+                `/chat/databases?database=${encodeURIComponent(dataset.database)}`
+              )
+            }}
+          >
+            {dataset.database}
+          </Badge>
+        )}
+        <Badge
+          variant="default"
+          size="sm"
+          className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
+        >
+          {dataset.data_processing_strategy}
+        </Badge>
+      </div>
+      <div className="text-xs text-muted-foreground mt-2">
+        {dataset.files.length} {dataset.files.length === 1 ? 'file' : 'files'}
+      </div>
+
+      {/* Processing percentage badge */}
+      {isProcessing && (
+        <div className="absolute bottom-3 right-3">
+          <Badge
+            variant="secondary"
+            size="sm"
+            className="rounded-xl bg-primary/10 text-primary border border-primary/20"
+          >
+            Processing {processingPercent}%...
+          </Badge>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const Data = () => {
   const [isDragging, setIsDragging] = useState(false)
@@ -201,6 +374,12 @@ const Data = () => {
     }))
   }, [apiDatasets])
 
+  // Extract databases from project config for color assignment
+  const databases = useMemo(() => {
+    const ragDatabases = (projectResp as any)?.project?.config?.rag?.databases
+    return Array.isArray(ragDatabases) ? ragDatabases : []
+  }, [projectResp])
+
   // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
   const hasRedirectedFromQuery = useRef(false)
   useEffect(() => {
@@ -306,6 +485,7 @@ const Data = () => {
     newDatasetDataProcessingStrategy,
     setNewDatasetDataProcessingStrategy,
   ] = useState('')
+  const [datasetNameError, setDatasetNameError] = useState<string | null>(null)
 
   // Set default values when dialog opens and options are available
   useEffect(() => {
@@ -339,6 +519,18 @@ const Data = () => {
     const name = newDatasetName.trim()
     if (!name) return
 
+    // Validate dataset name
+    const existingDatasetNames = datasets?.map(d => d.name) || []
+    const validation = validateDatasetNameWithDuplicateCheck(
+      name,
+      existingDatasetNames
+    )
+
+    if (!validation.isValid) {
+      setDatasetNameError(validation.error || 'Invalid dataset name')
+      return
+    }
+
     if (!activeProject?.namespace || !activeProject?.project) {
       toast({
         message: 'No active project selected',
@@ -361,6 +553,7 @@ const Data = () => {
       setNewDatasetName('')
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
+      setDatasetNameError(null)
 
       // If we should upload files after creating, use the newly created dataset
       // Note: In this system, dataset name serves as the unique identifier (ID)
@@ -903,6 +1096,7 @@ const Data = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
+                    variant="secondary"
                     size="sm"
                     onClick={() => {
                       setStrategyCreateName('')
@@ -911,7 +1105,7 @@ const Data = () => {
                       setStrategyCreateOpen(true)
                     }}
                   >
-                    Create new
+                    Create new processing strategy
                   </Button>
                 </div>
               </div>
@@ -1039,7 +1233,7 @@ const Data = () => {
                             key={name}
                             variant="default"
                             size="sm"
-                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
+                            className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground"
                           >
                             {name}
                           </Badge>
@@ -1119,6 +1313,7 @@ const Data = () => {
                           setNewDatasetName('')
                           setNewDatasetDatabase('')
                           setNewDatasetDataProcessingStrategy('')
+                          setDatasetNameError(null)
                           setPendingFiles([])
                           setShouldUploadAfterCreate(false)
                         }
@@ -1127,7 +1322,7 @@ const Data = () => {
                   >
                     <DialogTrigger asChild>
                       <Button variant="default" size="sm">
-                        Create new
+                        Create new dataset
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
@@ -1142,9 +1337,34 @@ const Data = () => {
                           <Input
                             autoFocus
                             value={newDatasetName}
-                            onChange={e => setNewDatasetName(e.target.value)}
+                            onChange={e => {
+                              const newName = e.target.value
+                              setNewDatasetName(newName)
+
+                              // Validate on change for real-time feedback
+                              const existingDatasetNames =
+                                datasets?.map(d => d.name) || []
+                              const validation =
+                                validateDatasetNameWithDuplicateCheck(
+                                  newName,
+                                  existingDatasetNames
+                                )
+                              setDatasetNameError(
+                                validation.isValid
+                                  ? null
+                                  : validation.error || 'Invalid dataset name'
+                              )
+                            }}
                             placeholder="Enter dataset name"
+                            className={
+                              datasetNameError ? 'border-destructive' : ''
+                            }
                           />
+                          {datasetNameError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {datasetNameError}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1">
                           <label className="text-xs text-muted-foreground">
@@ -1202,6 +1422,7 @@ const Data = () => {
                             !newDatasetName.trim() ||
                             !newDatasetDataProcessingStrategy.trim() ||
                             !newDatasetDatabase.trim() ||
+                            !!datasetNameError ||
                             createDatasetMutation.isPending
                           }
                         >
@@ -1250,84 +1471,25 @@ const Data = () => {
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-2 mb-6">
                         {datasets.map(ds => (
-                          <div
+                          <DatasetCard
                             key={ds.id}
-                            className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative hover:bg-accent/20 cursor-pointer transition-colors"
-                            onClick={() => navigate(`/chat/data/${ds.id}`)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                navigate(`/chat/data/${ds.id}`)
+                            dataset={ds}
+                            activeProject={activeProject}
+                            databases={databases}
+                            onNavigate={(id: string) => {
+                              // Handle navigation to dataset or databases page
+                              if (id.startsWith('/')) {
+                                navigate(id)
+                              } else {
+                                navigate(`/chat/data/${id}`)
                               }
                             }}
-                          >
-                            <div className="absolute right-3 top-3">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
-                                    onClick={e => e.stopPropagation()}
-                                    aria-label="Dataset actions"
-                                  >
-                                    <FontIcon
-                                      type="overflow"
-                                      className="w-4 h-4"
-                                    />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  align="end"
-                                  className="min-w-[10rem] w-[10rem]"
-                                >
-                                  {/* Edit removed - API doesn't support updating datasets */}
-                                  <DropdownMenuItem
-                                    onClick={e => {
-                                      e.stopPropagation()
-                                      navigate(`/chat/data/${ds.id}`)
-                                    }}
-                                  >
-                                    View
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    onClick={e => {
-                                      e.stopPropagation()
-                                      setConfirmDeleteId(ds.id)
-                                      setConfirmDeleteName(ds.name)
-                                      setIsConfirmDeleteOpen(true)
-                                    }}
-                                  >
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                            <div className="text-sm font-medium">{ds.name}</div>
-                            <div className="flex flex-row gap-2 items-center flex-wrap mt-2">
-                              {ds.database && (
-                                <Badge
-                                  variant="default"
-                                  size="sm"
-                                  className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900"
-                                >
-                                  {ds.database}
-                                </Badge>
-                              )}
-                              <Badge
-                                variant="default"
-                                size="sm"
-                                className="rounded-xl"
-                              >
-                                {ds.data_processing_strategy}
-                              </Badge>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-2">
-                              {ds.files.length}{' '}
-                              {ds.files.length === 1 ? 'file' : 'files'}
-                            </div>
-                          </div>
+                            onDelete={(id: string, name: string) => {
+                              setConfirmDeleteId(id)
+                              setConfirmDeleteName(name)
+                              setIsConfirmDeleteOpen(true)
+                            }}
+                          />
                         ))}
                       </div>
                     )}
@@ -1358,35 +1520,361 @@ const Data = () => {
               })
               return
             }
-            await importExampleDataset.mutateAsync({
-              exampleId: sourceProjectId,
-              namespace: activeProject.namespace,
-              project: activeProject.project,
-              dataset: name,
-              include_strategies: true,
-              process: true,
-            })
-            toast({
-              message: `Dataset "${name}" importing…`,
-              variant: 'default',
-            })
-            setIsImportOpen(false)
-            navigate(`/chat/data/${name}`)
+
+            // Check if this is a demo import
+            const demo = AVAILABLE_DEMOS.find(d => d.id === sourceProjectId)
+
+            if (demo) {
+              // Handle demo import
+              toast({
+                message: `Importing demo dataset "${name}"...`,
+                variant: 'default',
+              })
+              setIsImportOpen(false)
+
+              // Step 1: Fetch demo config to get processing strategy
+              const configResponse = await fetch(demo.configPath)
+              if (!configResponse.ok) {
+                throw new Error('Failed to fetch demo configuration')
+              }
+              const configText = await configResponse.text()
+              const configData = YAML.parse(configText)
+
+              // Extract processing strategy from demo config
+              const demoDataset = configData.datasets?.find(
+                (ds: any) => ds.name === demo.datasetName
+              )
+              const processingStrategyName =
+                demoDataset?.data_processing_strategy || 'default'
+              const database = demoDataset?.database || 'default'
+
+              // Step 2: Import the processing strategy and database into user's project if they don't exist
+              const currentProjectConfig = (projectResp as any)?.project?.config
+              if (currentProjectConfig) {
+                let needsUpdate = false
+                let updatedConfig = { ...currentProjectConfig }
+
+                // Check and add processing strategy if needed
+                const existingStrategies =
+                  currentProjectConfig.rag?.data_processing_strategies || []
+                const strategyExists = existingStrategies.some(
+                  (s: any) => s.name === processingStrategyName
+                )
+
+                if (!strategyExists && processingStrategyName !== 'default') {
+                  // Find the strategy definition in demo config
+                  const demoStrategy =
+                    configData.rag?.data_processing_strategies?.find(
+                      (s: any) => s.name === processingStrategyName
+                    )
+
+                  if (demoStrategy) {
+                    updatedConfig = {
+                      ...updatedConfig,
+                      rag: {
+                        ...updatedConfig.rag,
+                        data_processing_strategies: [
+                          ...(updatedConfig.rag?.data_processing_strategies ||
+                            []),
+                          demoStrategy,
+                        ],
+                      },
+                    }
+                    needsUpdate = true
+                  }
+                }
+
+                // Check and add database if needed
+                const existingDatabases =
+                  currentProjectConfig.rag?.databases || []
+                const databaseExists = existingDatabases.some(
+                  (db: any) => db.name === database
+                )
+
+                if (!databaseExists && database !== 'default') {
+                  // Find the database definition in demo config
+                  const demoDatabase = configData.rag?.databases?.find(
+                    (db: any) => db.name === database
+                  )
+
+                  if (demoDatabase) {
+                    updatedConfig = {
+                      ...updatedConfig,
+                      rag: {
+                        ...updatedConfig.rag,
+                        databases: [
+                          ...(updatedConfig.rag?.databases || []),
+                          demoDatabase,
+                        ],
+                      },
+                    }
+                    needsUpdate = true
+                  }
+                }
+
+                // Update project config if we added anything
+                if (needsUpdate) {
+                  // Also set the demo's database as the default RAG database
+                  // so test chat queries the right database
+                  if (database !== 'default') {
+                    updatedConfig = {
+                      ...updatedConfig,
+                      rag: {
+                        ...updatedConfig.rag,
+                        default_database: database,
+                      },
+                    }
+                  }
+
+                  await projectService.updateProject(
+                    activeProject.namespace,
+                    activeProject.project,
+                    { config: updatedConfig }
+                  )
+
+                  // Refetch project to get updated config
+                  await refetchDatasets()
+                }
+              }
+
+              // Step 3: Create dataset with demo's processing strategy
+              await createDatasetMutation.mutateAsync({
+                namespace: activeProject.namespace,
+                project: activeProject.project,
+                name: name,
+                data_processing_strategy: processingStrategyName,
+                database: database,
+              })
+
+              // Step 4: Fetch and upload demo files
+              toast({
+                message: `Uploading ${demo.files.length} file(s)...`,
+                variant: 'default',
+              })
+
+              for (const demoFile of demo.files) {
+                const fileResponse = await fetch(demoFile.path)
+                if (!fileResponse.ok) {
+                  throw new Error(`Failed to fetch file: ${demoFile.filename}`)
+                }
+                const fileBlob = await fileResponse.blob()
+                const file = new File([fileBlob], demoFile.filename, {
+                  type: demoFile.type,
+                })
+
+                await uploadFileToDataset(
+                  activeProject.namespace,
+                  activeProject.project,
+                  name,
+                  file
+                )
+              }
+
+              // Step 4.5: Check and setup Ollama embedding model
+              toast({
+                message: 'Checking Ollama setup...',
+                variant: 'default',
+              })
+
+              try {
+                // Check if Ollama is running
+                const ollamaHealthResponse = await fetch('http://localhost:11434')
+                if (!ollamaHealthResponse.ok) {
+                  throw new Error('Ollama not responding')
+                }
+
+                // Extract embedding model from demo database config
+                const demoDatabase = configData.rag?.databases?.find(
+                  (db: any) => db.name === database
+                )
+                const embeddingStrategy = demoDatabase?.embedding_strategies?.[0]
+                const embeddingModel = embeddingStrategy?.config?.model
+
+                if (embeddingModel) {
+                  // Check if model exists
+                  const tagsResponse = await fetch('http://localhost:11434/api/tags')
+                  const tagsData = await tagsResponse.json()
+                  const modelExists = tagsData.models?.some(
+                    (m: any) => m.name === embeddingModel || m.name.startsWith(embeddingModel + ':')
+                  )
+
+                  if (!modelExists) {
+                    toast({
+                      message: `Pulling embedding model "${embeddingModel}"... (this may take a minute)`,
+                      variant: 'default',
+                    })
+
+                    // Pull the model
+                    const pullResponse = await fetch('http://localhost:11434/api/pull', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: embeddingModel }),
+                    })
+
+                    if (!pullResponse.ok) {
+                      throw new Error(`Failed to pull model: ${embeddingModel}`)
+                    }
+
+                    // Stream the pull progress
+                    const reader = pullResponse.body?.getReader()
+                    const decoder = new TextDecoder()
+                    
+                    if (reader) {
+                      let lastStatus = ''
+                      while (true) {
+                        const { done, value } = await reader.read()
+                        if (done) break
+                        
+                        const chunk = decoder.decode(value)
+                        const lines = chunk.split('\n').filter(line => line.trim())
+                        
+                        for (const line of lines) {
+                          try {
+                            const json = JSON.parse(line)
+                            if (json.status && json.status !== lastStatus) {
+                              lastStatus = json.status
+                              if (json.status.includes('pulling') || json.status.includes('downloading')) {
+                                const percent = json.completed && json.total 
+                                  ? Math.round((json.completed / json.total) * 100)
+                                  : null
+                                toast({
+                                  message: percent 
+                                    ? `Pulling ${embeddingModel}: ${percent}%`
+                                    : `Pulling ${embeddingModel}...`,
+                                  variant: 'default',
+                                })
+                              }
+                            }
+                          } catch (e) {
+                            // Ignore JSON parse errors
+                          }
+                        }
+                      }
+                    }
+
+                    toast({
+                      message: `Model "${embeddingModel}" ready!`,
+                      variant: 'default',
+                    })
+                  } else {
+                    toast({
+                      message: `Embedding model "${embeddingModel}" already available`,
+                      variant: 'default',
+                    })
+                  }
+                }
+              } catch (ollamaError) {
+                console.warn('Ollama check failed:', ollamaError)
+                toast({
+                  message: 'Warning: Could not verify Ollama setup. Embeddings may not work properly.',
+                  variant: 'default',
+                })
+              }
+
+              // Step 5: Process dataset and wait for completion
+              toast({
+                message: `Processing dataset "${name}"...`,
+                variant: 'default',
+              })
+
+              const processResult = await datasetService.processDataset(
+                activeProject.namespace,
+                activeProject.project,
+                name
+              )
+
+              // Poll for completion if we got a task ID
+              if (processResult.task_id) {
+                // Save task ID to localStorage so dataset page can track it
+                saveDatasetTaskId(
+                  activeProject.namespace,
+                  activeProject.project,
+                  name,
+                  processResult.task_id
+                )
+
+                let completed = false
+                let attempts = 0
+                const maxAttempts = 60 // 2 minutes max
+
+                while (!completed && attempts < maxAttempts) {
+                  await new Promise(resolve => setTimeout(resolve, 2000))
+                  attempts++
+
+                  const taskStatus = await datasetService.getTaskStatus(
+                    activeProject.namespace,
+                    activeProject.project,
+                    processResult.task_id
+                  )
+
+                  if (taskStatus.state === 'SUCCESS') {
+                    completed = true
+
+                    toast({
+                      message: `Demo dataset "${name}" imported and processed successfully!`,
+                      variant: 'default',
+                    })
+
+                    // Save processing result to localStorage so dataset page shows processed status
+                    if (taskStatus.result) {
+                      saveDatasetResult(
+                        activeProject.namespace,
+                        activeProject.project,
+                        name,
+                        taskStatus.result
+                      )
+                    }
+                  } else if (taskStatus.state === 'FAILURE') {
+                    throw new Error(
+                      taskStatus.error || 'Dataset processing failed'
+                    )
+                  }
+                  // Still processing, continue polling...
+                }
+
+                if (!completed) {
+                  toast({
+                    message: `Dataset "${name}" imported, but processing is taking longer than expected. Check back in a moment.`,
+                    variant: 'default',
+                  })
+                }
+              } else {
+                toast({
+                  message: `Demo dataset "${name}" imported successfully!`,
+                  variant: 'default',
+                })
+              }
+
+              // Refetch datasets and wait a moment for localStorage to persist
+              await refetchDatasets()
+              await new Promise(resolve => setTimeout(resolve, 100))
+
+              navigate(`/chat/data/${name}`)
+            } else {
+              // Handle example import (old flow)
+              await importExampleDataset.mutateAsync({
+                exampleId: sourceProjectId,
+                namespace: activeProject.namespace,
+                project: activeProject.project,
+                dataset: name,
+                include_strategies: true,
+                process: true,
+              })
+              toast({
+                message: `Dataset "${name}" importing…`,
+                variant: 'default',
+              })
+              setIsImportOpen(false)
+              navigate(`/chat/data/${name}`)
+            }
           } catch (error: any) {
             console.error('Import failed', error)
-            try {
-              const serverMessage =
-                (error?.response?.data?.detail as string) ||
-                (error?.message as string) ||
-                'Unknown error'
-              toast({
-                message: `Failed to import dataset: ${serverMessage}`,
-                variant: 'destructive',
-              })
-            } catch {}
-            // Import failed - show error (no localStorage fallback)
+            const serverMessage =
+              (error?.response?.data?.detail as string) ||
+              (error?.message as string) ||
+              'Unknown error'
             toast({
-              message: 'Failed to import dataset',
+              message: `Failed to import dataset: ${serverMessage}`,
               variant: 'destructive',
             })
           }

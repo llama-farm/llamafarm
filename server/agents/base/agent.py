@@ -52,6 +52,7 @@ class LFAgent:
         *,
         messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_body: dict | None = None,
     ) -> LFChatCompletion:
         if messages:
             for message in messages:
@@ -62,13 +63,16 @@ class LFAgent:
         # Combine config tools with extra tools
         tools = self.config_tools + (tools or [])
 
-        return await self._client.chat(messages=messages, tools=tools)
+        return await self._client.chat(
+            messages=messages, tools=tools, extra_body=extra_body
+        )
 
     async def run_async_stream(
         self,
         *,
         messages: list[LFChatCompletionMessageParam] | None = None,
         tools: list[ToolDefinition] | None = None,
+        extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         if messages:
             for message in messages:
@@ -78,7 +82,9 @@ class LFAgent:
         # Combine config tools with extra tools
         tools = self.config_tools + (tools or [])
 
-        async for chunk in self._client.stream_chat(messages=messages, tools=tools):
+        async for chunk in self._client.stream_chat(
+            messages=messages, tools=tools, extra_body=extra_body
+        ):
             yield chunk
 
     def register_context_provider(

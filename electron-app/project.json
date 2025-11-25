@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json.schemastore.org/nx-project",
+  "name": "electron-app",
+  "projectType": "application",
+  "sourceRoot": "electron-app/src",
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "electron-app",
+        "command": "npm run dev"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "electron-app",
+        "command": "npm run build"
+      },
+      "dependsOn": ["designer:build"]
+    },
+    "pack:mac": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "electron-app",
+        "command": "npm run pack:mac"
+      },
+      "dependsOn": ["build"]
+    },
+    "dist:mac": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "electron-app",
+        "command": "npm run dist:mac"
+      },
+      "dependsOn": ["build"]
+    },
+    "install": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "electron-app",
+        "command": "npm install"
+      }
+    }
+  }
+}

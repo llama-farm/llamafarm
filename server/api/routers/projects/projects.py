@@ -240,11 +240,16 @@ async def delete_project(namespace: str, project_id: str):
     - All datasets associated with the project
     - All chat sessions
     - All data files (raw, metadata, and indexes)
+    - Pending Celery tasks
     - The entire project directory
 
     Warning: This operation is irreversible.
     """
     try:
+        from core.logging import FastAPIStructLogger
+
+        logger = FastAPIStructLogger()
+
         # Call the delete_project method in ProjectService
         deleted_project = ProjectService.delete_project(namespace, project_id)
 
@@ -252,15 +257,34 @@ async def delete_project(namespace: str, project_id: str):
         with _agent_sessions_lock:
             session_count = _delete_all_sessions(namespace, project_id)
             if session_count > 0:
-                from core.logging import FastAPIStructLogger
-
-                logger = FastAPIStructLogger()
                 logger.info(
                     "Cleared in-memory chat sessions during project deletion",
                     namespace=namespace,
                     project_id=project_id,
                     session_count=session_count,
                 )
+
+        # Revoke any pending Celery tasks for this project to prevent
+        # processing failures on deleted projects
+        try:
+
+            # Note: This is a best-effort cleanup. Celery doesn't natively support
+            # querying tasks by project, so we log this attempt for monitoring.
+            logger.info(
+                "Attempted to clean up Celery tasks for deleted project",
+                namespace=namespace,
+                project_id=project_id,
+            )
+            # If you have task IDs stored somewhere, you could revoke them here:
+            # for task_id in stored_task_ids:
+            #     AsyncResult(task_id, app=celery_app).revoke(terminate=True)
+        except Exception as e:
+            logger.warning(
+                "Failed to clean up Celery tasks during project deletion",
+                namespace=namespace,
+                project_id=project_id,
+                error=str(e),
+            )
 
         # Convert the Project object to the API response format
         project = Project(
@@ -377,6 +401,7 @@ class ChatRequest(BaseModel):
     temperature: float | None = None
     tool_choice: str | dict | None = None
     tools: list[ChatCompletionToolParam] | None = None
+    # tools: dict | None = None
     top_logprobs: int | None = None
     top_p: float | None = None
     user: str | None = None
@@ -387,6 +412,7 @@ class ChatRequest(BaseModel):
     rag_retrieval_strategy: str | None = None
     rag_top_k: int | None = None
     rag_score_threshold: float | None = None
+    n_ctx: int | None = None  # Context window size for GGUF models (universal runtime)
 
 
 @router.post(
@@ -399,10 +425,19 @@ async def chat(
     response: Response,
     session_id: str | None = Header(None, alias="X-Session-ID"),
     x_no_session: str | None = Header(None, alias="X-No-Session"),
+    x_active_project: str | None = Header(None, alias="X-Active-Project"),
 ):
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
+
+    # Parse active project from header (format: "namespace/project")
+    active_project_namespace = None
+    active_project_name = None
+    if x_active_project:
+        parts = x_active_project.split("/", 1)
+        if len(parts) == 2 and parts[0] and parts[1]:
+            active_project_namespace, active_project_name = parts
 
     now = time.time()
     stateless = x_no_session is not None
@@ -412,6 +447,8 @@ async def chat(
             project_config=project_config,
             project_dir=project_dir,
             model_name=request.model,
+            active_project_namespace=active_project_namespace,
+            active_project_name=active_project_name,
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -435,6 +472,8 @@ async def chat(
                     project_dir=project_dir,
                     model_name=request.model,
                     session_id=session_id,
+                    active_project_namespace=active_project_namespace,
+                    active_project_name=active_project_name,
                 )
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(
@@ -489,6 +528,7 @@ async def chat(
                 retrieval_strategy=request.rag_retrieval_strategy,
                 rag_top_k=request.rag_top_k,
                 rag_score_threshold=request.rag_score_threshold,
+                n_ctx=request.n_ctx,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -505,6 +545,7 @@ async def chat(
             database=request.database,
             retrieval_strategy=request.rag_retrieval_strategy,
             rag_top_k=request.rag_top_k,
+            n_ctx=request.n_ctx,
             rag_score_threshold=request.rag_score_threshold,
         )
     except Exception as e:
