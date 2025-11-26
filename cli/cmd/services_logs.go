@@ -364,16 +364,25 @@ func followMultipleLogs(logFiles map[string]string, initialTailLines int) error 
 	}
 	files := make(map[string]*fileInfo)
 
+	files := make(map[string]*fileInfo)
 	for service, logFile := range logFiles {
 		file, err := os.Open(logFile)
 		if err != nil {
+			// Close any already opened files before returning
+			for _, fi := range files {
+				fi.file.Close()
+			}
 			return fmt.Errorf("failed to open log file for %s: %w", service, err)
 		}
-		defer file.Close()
 
 		// Seek to end if we didn't show initial tail
 		if initialTailLines == 0 {
 			if _, err := file.Seek(0, io.SeekEnd); err != nil {
+				file.Close()
+				// Close any already opened files before returning
+				for _, fi := range files {
+					fi.file.Close()
+				}
 				return fmt.Errorf("failed to seek to end for %s: %w", service, err)
 			}
 		}
@@ -383,6 +392,13 @@ func followMultipleLogs(logFiles map[string]string, initialTailLines int) error 
 			reader: bufio.NewReader(file),
 		}
 	}
+
+	// Defer closing all files
+	defer func() {
+		for _, fi := range files {
+			fi.file.Close()
+		}
+	}()
 
 	// Use a mutex to serialize output from different goroutines
 	var outputMu sync.Mutex
