@@ -22,6 +22,7 @@ class ChromaStore(VectorStore):
     # Class-level client cache to prevent multiple clients for the same database
     _client_cache: dict[str, chromadb.ClientAPI] = {}
     _client_cache_lock = threading.Lock()
+    _collection_setup_lock = threading.Lock()
 
     def __init__(
         self,
@@ -143,11 +144,8 @@ class ChromaStore(VectorStore):
 
     def _setup_collection(self):
         """Setup or get collection."""
-        try:
-            self.collection = self.client.get_collection(name=self.collection_name)
-            logger.info(f"Using existing collection: {self.collection_name}")
-        except Exception:
-            # Collection doesn't exist, create it with configured distance metric
+        # Use lock to prevent race conditions across multiple ChromaStore instances
+        with ChromaStore._collection_setup_lock:
             # Map our metric names to ChromaDB's HNSW space names
             metric_map = {
                 "cosine": "cosine",
@@ -155,12 +153,13 @@ class ChromaStore(VectorStore):
                 "ip": "ip",  # inner product
             }
 
-            self.collection = self.client.create_collection(
+            # Use get_or_create_collection for atomic collection access
+            self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 metadata={"hnsw:space": metric_map.get(self.distance_metric, "cosine")},
             )
             logger.info(
-                f"Created new collection: {self.collection_name} with {self.distance_metric} distance"
+                f"Collection ready: {self.collection_name} with {self.distance_metric} distance"
             )
 
     def _parse_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:

@@ -16,105 +16,105 @@ prompts:
   - name: default
     messages:
       - role: system
-        content: 'You are a technical analyst that reviews mixed-format project documentation.
+        content:
+          "You are a technical analyst that reviews mixed-format project documentation.
 
           Cite file names and sections when summarizing information. If the context lacks
           the answer, say so.
 
-          '
+          "
 
 rag:
   databases:
-  - name: mixed_db
-    type: ChromaStore
-    config:
-      collection_name: mixed_format_docs
-      distance_function: cosine
-      persist_directory: ./data/mixed_db
-      port: 8000
-    embedding_strategies:
-    - name: default_embeddings
-      type: UniversalEmbedder
+    - name: mixed_db
+      type: ChromaStore
       config:
-        model: nomic-ai/nomic-embed-text-v2-moe
-        dimension: 768
-        batch_size: 16
-        timeout: 60
-        auto_pull: true
-      priority: 0
-    retrieval_strategies:
-    - name: blended_search
-      type: HybridUniversalStrategy
-      config:
-        strategies:
-          - type: BasicSimilarityStrategy
-            config:
-              distance_metric: cosine
-              top_k: 8
-            weight: 0.6
-        fusion_method: rrf
-        top_k: 8
-      default: true
-    default_embedding_strategy: default_embeddings
-    default_retrieval_strategy: blended_search
+        collection_name: mixed_format_docs
+        distance_function: cosine
+        persist_directory: ./data/mixed_db
+        port: 8000
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v2-moe
+            dimension: 768
+            batch_size: 16
+            timeout: 60
+            auto_pull: true
+          priority: 0
+      retrieval_strategies:
+        - name: blended_search
+          type: HybridUniversalStrategy
+          config:
+            strategies:
+              - type: BasicSimilarityStrategy
+                config:
+                  distance_metric: cosine
+                  top_k: 8
+                weight: 0.6
+            fusion_method: rrf
+            top_k: 8
+          default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: blended_search
   data_processing_strategies:
-  - name: universal_processor
-    description: Handles PDFs, text, Markdown, HTML, and code snippets.
-    parsers:
-    - type: PDFParser_LlamaIndex
-      file_include_patterns:
-      - '*.pdf'
-      - '*.PDF'
-      priority: 120
-      config:
-        chunk_size: 1000
-        chunk_overlap: 120
-        extract_metadata: true
-    - type: MarkdownParser_LlamaIndex
-      file_include_patterns:
-      - '*.md'
-      - '*.markdown'
-      priority: 110
-      config:
-        chunk_size: 800
-        chunk_overlap: 80
-    - type: TextParser_LlamaIndex
-      file_include_patterns:
-      - '*.txt'
-      priority: 100
-      config:
-        chunk_size: 800
-        chunk_overlap: 80
-    - type: TextParser_Python
-      file_include_patterns:
-      - '*.html'
-      - '*.py'
-      priority: 90
-      config:
-        chunk_size: 600
-        chunk_overlap: 60
-    extractors:
-    - type: ContentStatisticsExtractor
-      file_include_patterns:
-      - '*'
-      priority: 100
-      config:
-        include_readability: true
-        include_structure: true
-    - type: EntityExtractor
-      file_include_patterns:
-      - '*'
-      priority: 90
-      config:
-        entity_types:
-        - ORG
-        - PERSON
-        - PRODUCT
-        - DATE
-        use_fallback: true
+    - name: universal_processor
+      description: Handles PDFs, text, Markdown, HTML, and code snippets.
+      parsers:
+        - type: PDFParser_LlamaIndex
+          file_include_patterns:
+            - "*.pdf"
+            - "*.PDF"
+          priority: 120
+          config:
+            chunk_size: 1000
+            chunk_overlap: 120
+            extract_metadata: true
+        - type: MarkdownParser_LlamaIndex
+          file_include_patterns:
+            - "*.md"
+            - "*.markdown"
+          priority: 110
+          config:
+            chunk_size: 800
+            chunk_overlap: 80
+        - type: TextParser_LlamaIndex
+          file_include_patterns:
+            - "*.txt"
+          priority: 100
+          config:
+            chunk_size: 800
+            chunk_overlap: 80
+        - type: TextParser_Python
+          file_include_patterns:
+            - "*.html"
+            - "*.py"
+          priority: 90
+          config:
+            chunk_size: 600
+            chunk_overlap: 60
+      extractors:
+        - type: ContentStatisticsExtractor
+          file_include_patterns:
+            - "*"
+          priority: 100
+          config:
+            include_readability: true
+            include_structure: true
+        - type: EntityExtractor
+          file_include_patterns:
+            - "*"
+          priority: 90
+          config:
+            entity_types:
+              - ORG
+              - PERSON
+              - PRODUCT
+              - DATE
+            use_fallback: true
 
 datasets:
-- name: mixed_files
-  data_processing_strategy: universal_processor
-  database: mixed_db
-  files: []
+  - name: mixed_files
+    data_processing_strategy: universal_processor
+    database: mixed_db

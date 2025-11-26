@@ -5,7 +5,7 @@ This module contains comprehensive tests for the datasets API endpoints
 focusing on the include_extra_details parameter and file metadata handling.
 """
 
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -21,7 +21,7 @@ from config.datamodel import (
 )
 
 from main import app
-from services.dataset_service import DatasetService, DatasetWithFileDetails
+from services.dataset_service import DatasetService
 from services.data_service import MetadataFileContent
 from services.project_service import ProjectService
 
@@ -215,23 +215,20 @@ class TestDatasetsAPIExtraDetails:
         )
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_list_datasets_include_extra_details_true(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test API with include_extra_details=True (default)."""
         # Setup mocks
         mock_load_config.return_value = self.mock_project_config
 
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_1:
-                return self.metadata_1
-            elif file_content_hash == self.file_hash_2:
-                return self.metadata_2
-            else:
-                raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "api_dataset_with_files":
+                return [self.metadata_1, self.metadata_2]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute API call with include_extra_details=True
         response = client.get(
@@ -306,35 +303,30 @@ class TestDatasetsAPIExtraDetails:
             assert "name" in dataset
             assert "data_processing_strategy" in dataset
             assert "database" in dataset
-            assert "files" in dataset
             assert "details" not in dataset  # Key verification: no details field
 
         # Verify specific dataset content
         dataset_with_files = next(
             d for d in data["datasets"] if d["name"] == "api_dataset_with_files"
         )
-        assert dataset_with_files["files"] == [self.file_hash_1, self.file_hash_2]
         assert dataset_with_files["data_processing_strategy"] == "api_test_strategy"
         assert dataset_with_files["database"] == "api_test_db"
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_list_datasets_parameter_default_behavior(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test API without specifying include_extra_details parameter (should default to True)."""
         # Setup mocks
         mock_load_config.return_value = self.mock_project_config
 
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_1:
-                return self.metadata_1
-            elif file_content_hash == self.file_hash_2:
-                return self.metadata_2
-            else:
-                raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "api_dataset_with_files":
+                return [self.metadata_1, self.metadata_2]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute API call without include_extra_details parameter
         response = client.get(
@@ -358,22 +350,19 @@ class TestDatasetsAPIExtraDetails:
         assert "files_metadata" in dataset_with_files["details"]
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_api_response_structure_with_details(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test API response structure when include_extra_details=True."""
         mock_load_config.return_value = self.mock_project_config
 
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_1:
-                return self.metadata_1
-            elif file_content_hash == self.file_hash_2:
-                return self.metadata_2
-            else:
-                raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "api_dataset_with_files":
+                return [self.metadata_1, self.metadata_2]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         response = client.get(
             "/v1/projects/api_test_namespace/api_test_project/datasets/",
@@ -392,13 +381,7 @@ class TestDatasetsAPIExtraDetails:
         # Verify dataset structure with details
         if len(data["datasets"]) > 0:
             dataset = data["datasets"][0]
-            expected_keys = {
-                "name",
-                "data_processing_strategy",
-                "database",
-                "files",
-                "details",
-            }
+            expected_keys = {"name", "data_processing_strategy", "database", "details"}
             assert set(dataset.keys()) == expected_keys
 
             # Verify details structure
@@ -442,16 +425,16 @@ class TestDatasetsAPIExtraDetails:
         # Verify dataset structure without details
         if len(data["datasets"]) > 0:
             dataset = data["datasets"][0]
-            expected_keys = {"name", "data_processing_strategy", "database", "files"}
+            expected_keys = {"name", "data_processing_strategy", "database"}
             assert set(dataset.keys()) == expected_keys
             assert "details" not in dataset
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    def test_api_file_metadata_serialization(self, mock_get_metadata, mock_load_config):
+    @patch.object(DatasetService, "list_dataset_files")
+    def test_api_file_metadata_serialization(self, mock_list_files, mock_load_config):
         """Test that MetadataFileContent serializes correctly in API response."""
         mock_load_config.return_value = self.mock_project_config
-        mock_get_metadata.return_value = self.metadata_1
+        mock_list_files.return_value = [self.metadata_1]
 
         response = client.get(
             "/v1/projects/api_test_namespace/api_test_project/datasets/",
@@ -518,22 +501,20 @@ class TestDatasetsAPIExtraDetails:
         assert data["datasets"] == []
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    @patch("services.dataset_service.logger")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_api_handles_metadata_errors_gracefully(
-        self, mock_logger, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test that API handles metadata retrieval errors gracefully."""
         mock_load_config.return_value = self.mock_project_config
 
-        # Configure metadata lookup to fail for some files
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_1:
-                return self.metadata_1
-            elif file_content_hash == self.file_hash_2:
-                raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
+        # Only one metadata entry returned to simulate partial availability
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "api_dataset_with_files":
+                return [self.metadata_1]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         response = client.get(
             "/v1/projects/api_test_namespace/api_test_project/datasets/",
@@ -552,15 +533,12 @@ class TestDatasetsAPIExtraDetails:
         dataset_with_files = next(
             d for d in data["datasets"] if d["name"] == "api_dataset_with_files"
         )
-        # Should only have 1 file metadata (for file_hash_1) since file_hash_2 failed
+        # Should only have metadata for the available file
         assert len(dataset_with_files["details"]["files_metadata"]) == 1
         assert (
             dataset_with_files["details"]["files_metadata"][0]["hash"]
             == self.file_hash_1
         )
-
-        # Verify warning was logged
-        mock_logger.warning.assert_called()
 
 
 # Integration tests for end-to-end workflows
@@ -568,9 +546,9 @@ class TestDatasetsAPIExtraDetailsIntegration:
     """Integration tests for datasets API extra details workflows."""
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_complex_api_workflow_with_multiple_datasets(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test complex API workflow with multiple datasets and various file types."""
         # Create complex test scenario
@@ -699,17 +677,15 @@ class TestDatasetsAPIExtraDetailsIntegration:
 
         mock_load_config.return_value = complex_config
 
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == hash_pdf:
-                return metadata_pdf
-            elif file_content_hash == hash_csv:
-                return metadata_csv
-            elif file_content_hash == hash_txt:
-                return metadata_txt
-            else:
-                raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
+        def list_files_side_effect(namespace, project_id, dataset):
+            mapping = {
+                "documents": [metadata_pdf, metadata_txt],
+                "data": [metadata_csv],
+                "everything": [metadata_pdf, metadata_csv, metadata_txt],
+            }
+            return mapping.get(dataset, [])
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Test with details
         response_with_details = client.get(
@@ -757,13 +733,8 @@ class TestDatasetsAPIExtraDetailsIntegration:
         # Verify no details in response
         for dataset in data_without_details["datasets"]:
             assert "details" not in dataset
-            assert "files" in dataset
-
-        # Verify that file hashes are still present in basic response
-        everything_basic = next(
-            d for d in data_without_details["datasets"] if d["name"] == "everything"
-        )
-        assert len(everything_basic["files"]) == 3
-        assert hash_pdf in everything_basic["files"]
-        assert hash_csv in everything_basic["files"]
-        assert hash_txt in everything_basic["files"]
+            assert set(dataset.keys()) == {
+                "name",
+                "data_processing_strategy",
+                "database",
+            }

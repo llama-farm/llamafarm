@@ -90,8 +90,8 @@ export interface DeleteDatasetResponse {
  * Request payload for executing dataset actions
  */
 export interface DatasetActionRequest {
-  /** Type of action to execute (currently only 'ingest') */
-  action_type: 'ingest'
+  /** Type of action to execute (currently only 'process') */
+  action_type: 'process'
 }
 
 /**
@@ -102,6 +102,8 @@ export interface DatasetActionResponse {
   message: 'Accepted'
   /** URI for tracking the task */
   task_uri: string
+  /** Task identifier */
+  task_id: string
 }
 
 /**
@@ -210,39 +212,23 @@ export class DatasetNetworkError extends DatasetError {
 }
 
 /**
- * Details about a single file's processing result
+ * Raw async task detail format from server: [success: bool, info: object]
  */
-export interface FileProcessingDetail {
-  /** File hash identifier */
-  hash?: string
-  /** Alternative hash field name */
-  file_hash?: string
-  /** Original filename */
-  filename?: string
-  /** Whether processing was successful */
-  success: boolean
-  /** Processing status: processed, skipped, or failed */
-  status?: string
-  /** Parser used for this file */
-  parser?: string | null
-  /** Extractors applied to this file */
-  extractors?: string[]
-  /** Number of chunks created */
-  chunks?: number | null
-  /** Chunk size used */
-  chunk_size?: number | null
-  /** Embedder used */
-  embedder?: string | null
-  /** Error message if failed */
-  error?: string | null
-  /** Reason for skipped status */
-  reason?: string | null
-  /** Nested details object (some APIs use this structure) */
-  details?: {
-    status?: string
+export type RawFileProcessingDetail = [
+  boolean, // success
+  {
     filename?: string
-    error?: string
+    file_hash?: string
+    status?: string
     reason?: string
+    parser?: string
+    extractors?: string[]
+    chunks?: number | null
+    chunk_size?: number | null
+    embedder?: string
+    error?: string
+    stored_count?: number
+    skipped_count?: number
     result?: {
       status?: string
       filename?: string
@@ -255,7 +241,39 @@ export interface FileProcessingDetail {
       extractors_applied?: string[]
       document_ids?: string[]
     }
-  }
+  },
+]
+
+/**
+ * Normalized file processing detail (converted from RawFileProcessingDetail)
+ */
+export interface FileProcessingDetail {
+  /** File hash identifier */
+  hash: string
+  /** Original filename (may differ from hash if hash is a SHA) */
+  filename: string
+  /** Whether processing was successful */
+  success: boolean
+  /** Processing status: processed, skipped, or failed */
+  status: string
+  /** Parser used for this file */
+  parser?: string
+  /** Extractors applied to this file */
+  extractors?: string[]
+  /** Number of chunks created */
+  chunks?: number
+  /** Chunk size used */
+  chunk_size?: number
+  /** Embedder used */
+  embedder?: string
+  /** Error message if failed */
+  error?: string
+  /** Reason for skipped status */
+  reason?: string
+  /** Number of chunks stored in vector database */
+  stored_count?: number
+  /** Number of chunks skipped (duplicates) */
+  skipped_count?: number
 }
 
 /**

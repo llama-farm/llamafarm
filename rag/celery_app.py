@@ -115,27 +115,22 @@ def setup_celery_logging(**kwargs):
 
 def run_worker():
     try:
-        # For macOS and Windows, use threads instead of processes to avoid fork/spawn issues
-        # Can also be forced with LF_CELERY_USE_THREADS=true
-        worker_args = ["worker", "-Q", "rag"]
-        use_threads = (
-            sys.platform == "darwin"
-            or sys.platform == "win32"
-            or os.getenv("LF_CELERY_USE_THREADS", "false").lower() == "true"
-        )
+        # Always use thread pool to avoid:
+        # 1. Fork/spawn issues on macOS/Windows
+        # 2. SQLite "database is locked" errors with ChromaDB's persistent client
+        #    (prefork pool spawns multiple processes that can't share SQLite connections)
+        worker_args = ["worker", "-Q", "rag", "--pool=threads"]
 
-        if use_threads:
-            worker_args.extend(["--pool=threads", "--concurrency=2"])
-            platform_name = (
-                "macOS"
-                if sys.platform == "darwin"
-                else "Windows"
-                if sys.platform == "win32"
-                else "platform"
-            )
+        # Allow concurrency override via environment variable
+        # If not set, Celery defaults to number of CPUs (reasonable for I/O-bound tasks)
+        concurrency = os.getenv("LF_CELERY_CONCURRENCY")
+        if concurrency:
+            worker_args.extend(["--concurrency", concurrency])
             logger.info(
-                f"Using thread-based worker pool for {platform_name} compatibility"
+                f"Starting RAG worker with thread pool (concurrency={concurrency})"
             )
+        else:
+            logger.info("Starting RAG worker with thread pool (concurrency=auto)")
 
         # Only consume from the 'rag' queue, not the 'celery' queue
         app.worker_main(argv=worker_args)

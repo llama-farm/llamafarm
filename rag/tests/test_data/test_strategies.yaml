@@ -10,7 +10,6 @@ models:
 
 datasets:
   - name: "minimal_dataset"
-    files: []
     data_processing_strategy: "default"
     database: "minimal_db"
 
