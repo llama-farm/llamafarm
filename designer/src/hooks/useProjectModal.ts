@@ -149,10 +149,10 @@ export const useProjectModal = ({
 
   const openCopyModal = () => {
     // Close the edit modal first, then open create modal with source project pre-filled
-    setIsModalOpen(false)
-    setProjectError(null)
+    const sourceProjectName = projectName
+    closeModal()
     // Open create modal with current project as copy source
-    openCreateModal(projectName)
+    openCreateModal(sourceProjectName)
   }
 
   const closeCopyModal = () => {

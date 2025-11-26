@@ -24,7 +24,7 @@ interface CreateProjectModalProps {
   onCreate: (name: string, copyFrom?: string | null, deployment?: 'local' | 'cloud' | 'unsure') => void
   isLoading?: boolean
   projectError?: string | null
-  onNameChange?: (name: string) => void
+  onNameChange?: (name: string) => boolean
 }
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
