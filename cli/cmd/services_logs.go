@@ -152,7 +152,7 @@ func isValidService(serviceName string, validServices []string) bool {
 
 // getServiceLogFile returns the path to a service's log file
 func getServiceLogFile(serviceName string) (string, error) {
-	dataDir, err := utils.GetLlamafarmDataDir()
+	dataDir, err := utils.GetLFDataDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get llamafarm data directory: %w", err)
 	}
@@ -364,7 +364,6 @@ func followMultipleLogs(logFiles map[string]string, initialTailLines int) error 
 	}
 	files := make(map[string]*fileInfo)
 
-	files := make(map[string]*fileInfo)
 	for service, logFile := range logFiles {
 		file, err := os.Open(logFile)
 		if err != nil {
