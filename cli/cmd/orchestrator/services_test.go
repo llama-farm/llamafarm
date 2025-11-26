@@ -360,14 +360,15 @@ func TestEnsureServicesWithConfig_ErrorMessageFormat(t *testing.T) {
 	// This test verifies the error message format includes all unhealthy services
 	// Since we can't easily mock isServiceHealthy, we test the error message structure
 	// by checking that the error message format is correct when services are unhealthy
+	// We use port 59999 to ensure no server is running
 
 	sm := &ServiceManager{
-		serverURL: "http://localhost:8000",
+		serverURL: "http://localhost:59999",
 		services:  ServiceGraph,
 	}
 
 	config := &ServiceOrchestrationConfig{
-		ServerURL:   "http://localhost:8000",
+		ServerURL:   "http://localhost:59999",
 		PrintStatus: false,
 		AutoStart:   false,
 	}
@@ -376,14 +377,17 @@ func TestEnsureServicesWithConfig_ErrorMessageFormat(t *testing.T) {
 	// This tests the error message format
 	err := sm.EnsureServicesWithConfig(config, "server")
 
-	if err != nil {
-		// Verify error message contains expected format
-		errMsg := err.Error()
-		if !contains(errMsg, "services not running") || !contains(errMsg, "auto-start is disabled") {
-			t.Errorf("EnsureServicesWithConfig() error message should mention 'services not running' and 'auto-start is disabled', got: %v", errMsg)
-		}
-		if !contains(errMsg, "--auto-start") {
-			t.Errorf("EnsureServicesWithConfig() error message should mention '--auto-start', got: %v", errMsg)
-		}
+	// The server should not be running during unit tests, so we must get an error
+	if err == nil {
+		t.Fatal("EnsureServicesWithConfig() expected error when server is not running and AutoStart is false, but got nil")
+	}
+
+	// Verify error message contains expected format
+	errMsg := err.Error()
+	if !contains(errMsg, "services not running") || !contains(errMsg, "auto-start is disabled") {
+		t.Errorf("EnsureServicesWithConfig() error message should mention 'services not running' and 'auto-start is disabled', got: %v", errMsg)
+	}
+	if !contains(errMsg, "--auto-start") {
+		t.Errorf("EnsureServicesWithConfig() error message should mention '--auto-start', got: %v", errMsg)
 	}
 }
