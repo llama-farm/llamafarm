@@ -379,7 +379,7 @@ func TestEnsureServicesWithConfig_ErrorMessageFormat(t *testing.T) {
 	if err != nil {
 		// Verify error message contains expected format
 		errMsg := err.Error()
-		if !contains(errMsg, "services not running") && !contains(errMsg, "auto-start is disabled") {
+		if !contains(errMsg, "services not running") || !contains(errMsg, "auto-start is disabled") {
 			t.Errorf("EnsureServicesWithConfig() error message should mention 'services not running' and 'auto-start is disabled', got: %v", errMsg)
 		}
 		if !contains(errMsg, "--auto-start") {
