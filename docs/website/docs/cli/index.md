@@ -79,13 +79,15 @@ lf rag stats --auto-start=false
 **Error handling:**
 If services are not running and you use `--auto-start=false`, you'll see:
 ```
-Service 'server' is not running and auto-start is disabled (use --auto-start to enable automatic startup).
+services not running and auto-start is disabled: server, celery (use --auto-start to enable automatic startup)
+```
 
 To start services manually, run:
-  lf start
-
-Or remove the --auto-start=false flag to allow automatic startup.
+```bash
+lf start
 ```
+
+Or remove the `--auto-start=false` flag to allow automatic startup.
 
 ## Troubleshooting CLI Output
 

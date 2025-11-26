@@ -126,7 +126,7 @@ This operation is irreversible and will delete all project data.`,
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-
+		serverURL = serverCfg.URL
 		ns := strings.TrimSpace(serverCfg.Namespace)
 		if ns == "" {
 			fmt.Fprintln(os.Stderr, "Error: namespace is required. Provide --namespace or set it in llamafarm.yaml")
