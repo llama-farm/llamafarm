@@ -8,6 +8,7 @@ import {
 import Header from './components/Header'
 import { ToastProvider } from './components/ui/toast'
 import ProjectModal from './components/Project/ProjectModal'
+import CreateProjectModal from './components/Project/CreateProjectModal'
 import CopyProjectModal from './components/Project/CopyProjectModal'
 import DeleteProjectModal from './components/Project/DeleteProjectModal'
 import {
@@ -59,29 +60,52 @@ function ProjectModalRoot() {
   const { data: projectsResponse } = useProjects(namespace)
   const availableProjects = getProjectsList(projectsResponse)
 
-  // Only render the modal for edit mode; create is handled by Home form
-  if (modal.modalMode !== 'edit') return null
-  // Derive initial details from current project config
-  const cfg = (modal.currentProject?.config || {}) as Record<string, any>
-  const projectBrief = (cfg?.project_brief || {}) as Record<string, any>
-  const initialBrief = {
-    what: projectBrief?.what || '',
-  }
   return (
     <>
-      <ProjectModal
-        isOpen={modal.isModalOpen}
-        mode={modal.modalMode}
-        initialName={modal.projectName}
-        initialBrief={initialBrief}
-        onClose={modal.closeModal}
-        onSave={modal.saveProject}
-        onOpenDelete={modal.modalMode === 'edit' ? modal.openDeleteModal : undefined}
-        onCopy={() => modal.openCopyModal()}
-        isLoading={modal.isLoading}
-        projectError={modal.projectError}
-        onNameChange={modal.validateName}
-      />
+      {/* Create modal - shown when modalMode is 'create' */}
+      {modal.modalMode === 'create' && (
+        <CreateProjectModal
+          isOpen={modal.isModalOpen}
+          availableProjects={availableProjects}
+          copyFromProject={modal.copyFromProject}
+          onClose={modal.closeModal}
+          onCreate={modal.createProject}
+          isLoading={modal.isLoading}
+          projectError={modal.projectError}
+          onNameChange={modal.validateName}
+        />
+      )}
+      
+      {/* Edit modal - shown when modalMode is 'edit' */}
+      {modal.modalMode === 'edit' && (
+        <>
+          {/* Derive initial details from current project config */}
+          {(() => {
+            const cfg = (modal.currentProject?.config || {}) as Record<string, any>
+            const projectBrief = (cfg?.project_brief || {}) as Record<string, any>
+            const initialBrief = {
+              what: projectBrief?.what || '',
+            }
+            return (
+              <ProjectModal
+                isOpen={modal.isModalOpen}
+                mode={modal.modalMode}
+                initialName={modal.projectName}
+                initialBrief={initialBrief}
+                onClose={modal.closeModal}
+                onSave={modal.saveProject}
+                onOpenDelete={modal.openDeleteModal}
+                onCopy={() => modal.openCreateModal(modal.projectName)}
+                isLoading={modal.isLoading}
+                projectError={modal.projectError}
+                onNameChange={modal.validateName}
+              />
+            )
+          })()}
+        </>
+      )}
+      
+      {/* Legacy copy modal - kept for backward compatibility but should not be used */}
       <CopyProjectModal
         isOpen={modal.isCopyModalOpen}
         sourceProjectName={modal.projectName}
@@ -92,6 +116,7 @@ function ProjectModalRoot() {
         projectError={modal.projectError}
         onNameChange={modal.validateName}
       />
+      
       <DeleteProjectModal
         isOpen={modal.isDeleteModalOpen}
         projectName={modal.projectName}

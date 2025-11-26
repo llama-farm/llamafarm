@@ -39,8 +39,9 @@ export interface UseProjectModalReturn {
   modalMode: ProjectModalMode
   projectName: string
   currentProject: any
+  copyFromProject: string | null
 
-  // Copy modal state
+  // Copy modal state (deprecated, kept for backward compatibility)
   isCopyModalOpen: boolean
   
   // Delete modal state
@@ -54,7 +55,7 @@ export interface UseProjectModalReturn {
   isProjectLoading: boolean
 
   // Actions
-  openCreateModal: () => void
+  openCreateModal: (copyFromProjectName?: string) => void
   openEditModal: (name: string) => void
   closeModal: () => void
   openCopyModal: () => void
@@ -66,6 +67,11 @@ export interface UseProjectModalReturn {
   saveProject: (
     name: string,
     details?: { brief?: { what?: string } }
+  ) => Promise<void>
+  createProject: (
+    name: string,
+    copyFrom?: string | null,
+    deployment?: 'local' | 'cloud' | 'unsure'
   ) => Promise<void>
   deleteProject: () => Promise<void>
   copyProject: (newName: string, sourceProjectName: string) => Promise<void>
@@ -88,8 +94,9 @@ export const useProjectModal = ({
   const [modalMode, setModalMode] = useState<ProjectModalMode>('create')
   const [projectName, setProjectName] = useState('')
   const [projectError, setProjectError] = useState<string | null>(null)
+  const [copyFromProject, setCopyFromProject] = useState<string | null>(null)
   
-  // Copy modal state
+  // Copy modal state (deprecated, kept for backward compatibility)
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false)
   
   // Delete modal state
@@ -118,11 +125,12 @@ export const useProjectModal = ({
     isProjectLoading
 
   // Actions
-  const openCreateModal = () => {
-    // Redirect to Home and scroll to the creation form instead of opening a modal
-    try {
-      navigate('/', { state: { scrollTo: 'home-create-form' } })
-    } catch {}
+  const openCreateModal = (copyFromProjectName?: string) => {
+    setModalMode('create')
+    setProjectName('')
+    setProjectError(null)
+    setCopyFromProject(copyFromProjectName || null)
+    setIsModalOpen(true)
   }
 
   const openEditModal = (name: string) => {
@@ -136,13 +144,15 @@ export const useProjectModal = ({
     setIsModalOpen(false)
     setProjectName('')
     setProjectError(null)
+    setCopyFromProject(null)
   }
 
   const openCopyModal = () => {
-    // Close the edit modal first, then open copy modal
+    // Close the edit modal first, then open create modal with source project pre-filled
     setIsModalOpen(false)
     setProjectError(null)
-    setIsCopyModalOpen(true)
+    // Open create modal with current project as copy source
+    openCreateModal(projectName)
   }
 
   const closeCopyModal = () => {
@@ -541,15 +551,170 @@ export const useProjectModal = ({
     }
   }
 
+  // Create project (unified function for both regular and copy creation)
+  const createProject = async (
+    name: string,
+    copyFrom?: string | null,
+    deployment?: 'local' | 'cloud' | 'unsure'
+  ): Promise<void> => {
+    const sanitizedName = sanitizeProjectName(name)
+
+    // Validate name
+    if (!validateName(sanitizedName)) {
+      return
+    }
+
+    try {
+      toast({ message: `Creating "${sanitizedName}"...` })
+
+      // 1) Create the base project
+      await createProjectMutation.mutateAsync({
+        namespace,
+        request: { name: sanitizedName, config_template: 'default' },
+      })
+
+      // 2) If copying from existing project, fetch and copy config
+      // Also merge deployment preference if provided
+      if (copyFrom || deployment) {
+        let configToMerge: Record<string, any> = {
+          name: sanitizedName,
+          namespace,
+        }
+
+        if (deployment) {
+          configToMerge.project_brief = { deployment }
+        }
+
+        if (copyFrom) {
+          const sourceProjectResponse = await queryClient.fetchQuery({
+            queryKey: projectKeys.detail(namespace, copyFrom),
+            queryFn: async () => {
+              const response = await fetch(
+                `/api/projects/${namespace}/${copyFrom}`
+              )
+              if (!response.ok) throw new Error('Failed to fetch source project')
+              return response.json()
+            },
+          })
+
+          const sourceConfig = sourceProjectResponse?.project?.config || {}
+          
+          // Merge deployment into existing brief if copying
+          if (deployment && sourceConfig.project_brief) {
+            configToMerge.project_brief = {
+              ...sourceConfig.project_brief,
+              deployment,
+            }
+          }
+
+          const copiedConfig = mergeProjectConfig(sourceConfig, configToMerge)
+
+          if (!validateProjectConfig(copiedConfig)) {
+            setProjectError('Invalid project configuration')
+            return
+          }
+
+          await updateProjectMutation.mutateAsync({
+            namespace,
+            projectId: sanitizedName,
+            request: { config: copiedConfig },
+          })
+        } else if (deployment) {
+          // Just update deployment for new project
+          const currentProject = await queryClient.fetchQuery({
+            queryKey: projectKeys.detail(namespace, sanitizedName),
+            queryFn: async () => {
+              const response = await fetch(
+                `/api/projects/${namespace}/${sanitizedName}`
+              )
+              if (!response.ok) throw new Error('Failed to fetch project')
+              return response.json()
+            },
+          })
+
+          const mergedConfig = mergeProjectConfig(
+            currentProject.project.config || {},
+            configToMerge
+          )
+          try {
+            await updateProjectMutation.mutateAsync({
+              namespace,
+              projectId: sanitizedName,
+              request: { config: mergedConfig },
+            })
+          } catch (e) {
+            console.error('Failed to update project deployment:', e)
+            // Non-critical, continue anyway
+          }
+        }
+      }
+
+      // 4) Set as active project and update caches
+      setActiveProject(sanitizedName)
+      
+      try {
+        const prev = queryClient.getQueryData(projectKeys.list(namespace)) as
+          | { total?: number; projects?: Project[] }
+          | undefined
+        const nextProject: Project = {
+          namespace,
+          name: sanitizedName,
+          config: {},
+        }
+        const next = {
+          total: (prev?.total ?? 0) + 1,
+          projects: [...(prev?.projects ?? []), nextProject],
+        }
+        queryClient.setQueryData(projectKeys.list(namespace), next)
+      } catch {}
+
+      // Persist in local fallback list
+      try {
+        const raw = localStorage.getItem('lf_custom_projects')
+        const arr: string[] = raw ? JSON.parse(raw) : []
+        if (!arr.includes(sanitizedName)) {
+          localStorage.setItem(
+            'lf_custom_projects',
+            JSON.stringify([...arr, sanitizedName])
+          )
+        }
+      } catch {}
+
+      closeModal()
+      onSuccess?.(sanitizedName, 'create')
+      toast({ 
+        message: copyFrom 
+          ? `Project "${sanitizedName}" created from "${copyFrom}"`
+          : `Project "${sanitizedName}" created`
+      })
+
+      // Navigate to new project dashboard
+      navigate('/chat/dashboard')
+    } catch (error: any) {
+      console.error('Failed to create project:', error)
+
+      if (error?.response?.status === 409) {
+        setProjectError('Project name already exists')
+      } else if (error?.response?.status === 422) {
+        setProjectError('Invalid project configuration')
+      } else if (error?.response?.status === 400) {
+        setProjectError('Invalid request. Please check your input.')
+      } else {
+        setProjectError('Failed to create project. Please try again.')
+      }
+    }
+  }
+
   return {
     // State
     isModalOpen,
     modalMode,
     projectName,
     currentProject,
+    copyFromProject,
     projectError,
 
-    // Copy modal state
+    // Copy modal state (deprecated)
     isCopyModalOpen,
     
     // Delete modal state
@@ -570,6 +735,7 @@ export const useProjectModal = ({
 
     // Operations
     saveProject,
+    createProject,
     deleteProject,
     copyProject,
     validateName,
