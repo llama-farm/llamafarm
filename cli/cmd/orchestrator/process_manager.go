@@ -179,7 +179,7 @@ func (pm *ProcessManager) captureOutput(name string, reader io.Reader, logFile *
 		timestamp := time.Now().Format("2006-01-02 15:04:05")
 		logLine := fmt.Sprintf("[%s] [%s] %s\n", timestamp, streamName, line)
 
-		logFile.WriteString(logLine)
+		writer.WriteString(logLine)
 
 		// Sync every 10 lines to ensure writes are flushed periodically
 		// This prevents log loss if the process is killed abruptly
