@@ -152,12 +152,12 @@ func isValidService(serviceName string, validServices []string) bool {
 
 // getServiceLogFile returns the path to a service's log file
 func getServiceLogFile(serviceName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
+	dataDir, err := utils.GetLlamafarmDataDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+		return "", fmt.Errorf("failed to get llamafarm data directory: %w", err)
 	}
 
-	logsDir := filepath.Join(homeDir, ".llamafarm", "logs")
+	logsDir := filepath.Join(dataDir, "logs")
 	logFile := filepath.Join(logsDir, fmt.Sprintf("%s.log", serviceName))
 
 	return logFile, nil
