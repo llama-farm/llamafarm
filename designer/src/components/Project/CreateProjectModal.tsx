@@ -21,7 +21,11 @@ interface CreateProjectModalProps {
   availableProjects: string[]
   copyFromProject?: string | null
   onClose: () => void
-  onCreate: (name: string, copyFrom?: string | null, deployment?: 'local' | 'cloud' | 'unsure') => void
+  onCreate: (
+    name: string,
+    copyFrom?: string | null,
+    deployment?: 'local' | 'cloud' | 'unsure'
+  ) => void
   isLoading?: boolean
   projectError?: string | null
   onNameChange?: (name: string) => boolean
@@ -39,7 +43,9 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 }) => {
   const [name, setName] = useState('')
   const [selectedSource, setSelectedSource] = useState<string>('')
-  const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>('local')
+  const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>(
+    'local'
+  )
   const [hasAttemptedValidation, setHasAttemptedValidation] = useState(false)
 
   useEffect(() => {
@@ -85,7 +91,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const handleCreate = (e: React.MouseEvent) => {
     e.preventDefault()
     setHasAttemptedValidation(true)
-    
+
     // Validate name if validator is provided
     if (onNameChange) {
       const isValidName = onNameChange(name.trim())
@@ -93,7 +99,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         return // Validation failed, error will be shown via projectError prop
       }
     }
-    
+
     // Only proceed if name is valid
     if (name.trim().length > 0 && !isLoading) {
       onCreate(name.trim(), copyFromValue, deployment)
@@ -109,10 +115,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           if (!isLoading) onClose()
         }}
         onPointerDownOutside={e => {
+          // Allow clicking outside to close modal when not loading
           if (!isLoading) return
           e.preventDefault()
         }}
         onInteractOutside={e => {
+          // Allow clicking outside to close modal when not loading
           if (!isLoading) return
           e.preventDefault()
         }}
@@ -139,13 +147,18 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               }}
               placeholder="my-project"
               disabled={isLoading}
-              className={hasAttemptedValidation && projectError ? 'border-destructive' : ''}
+              className={
+                hasAttemptedValidation && projectError
+                  ? 'border-destructive'
+                  : ''
+              }
             />
             {hasAttemptedValidation && projectError ? (
               <p className="text-xs text-destructive">{projectError}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Only letters, numbers, underscores (_) and hyphens (-) allowed. No spaces.
+                Only letters, numbers, underscores (_) and hyphens (-) allowed.
+                No spaces.
               </p>
             )}
           </div>
@@ -259,4 +272,3 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 }
 
 export default CreateProjectModal
-
