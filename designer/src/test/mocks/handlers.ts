@@ -5,7 +5,6 @@ import {
 } from '../factories/projectFactory'
 import {
   createMockDatasetsList,
-  createMockDataset,
 } from '../factories/datasetFactory'
 import {
   createMockEmbeddingStrategies,
@@ -71,7 +70,7 @@ export const handlers = [
   // Datasets endpoints
   http.get(
     `${API_BASE}/projects/:namespace/:project/datasets/`,
-    ({ params }) => {
+    () => {
       return HttpResponse.json(createMockDatasetsList())
     }
   ),
@@ -88,7 +87,7 @@ export const handlers = [
 
   http.post(
     `${API_BASE}/projects/:namespace/:project/datasets/`,
-    async ({ request, params }) => {
+    async ({ request }) => {
       const body = (await request.json()) as any
       const dataset = {
         name: body.name,
@@ -124,7 +123,7 @@ export const handlers = [
 
   http.post(
     `${API_BASE}/projects/:namespace/:project/datasets/:dataset/data`,
-    async ({ request }) => {
+    async () => {
       return HttpResponse.json({
         filename: 'test-file.pdf',
         message: 'File uploaded successfully',
@@ -192,7 +191,7 @@ export const handlers = [
     })
   }),
 
-  http.get(`${API_BASE}/examples/:exampleId/datasets`, ({ params }) => {
+  http.get(`${API_BASE}/examples/:exampleId/datasets`, () => {
     return HttpResponse.json({
       datasets: [
         { id: 'dataset-1', name: 'Dataset 1' },
@@ -203,7 +202,7 @@ export const handlers = [
 
   http.post(
     `${API_BASE}/examples/:exampleId/import-dataset`,
-    async ({ request, params }) => {
+    async ({ request }) => {
       const body = (await request.json()) as any
       return HttpResponse.json({
         project: body.project || 'test-project',
