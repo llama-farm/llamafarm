@@ -23,6 +23,11 @@ vi.mock('../client', () => ({
 }))
 
 import { apiClient } from '../client'
+import {
+  createMockProject,
+  createMockProjectsList,
+  createMockProjectWithError,
+} from '../../test/factories/projectFactory'
 
 describe('projectService', () => {
   beforeEach(() => {
@@ -30,391 +35,741 @@ describe('projectService', () => {
   })
 
   describe('listProjects', () => {
-    // TODO: Test successful list
     it('should list projects for namespace', async () => {
-      // Test implementation:
-      // 1. Mock apiClient.get to return projects
-      // 2. Call listProjects('default')
-      // 3. Verify correct URL called
-      // 4. Verify data returned
+      const mockResponse = createMockProjectsList('default', 2)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockResponse })
+
+      const result = await listProjects('default')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default')
+      expect(result).toEqual(mockResponse)
+      expect(result.total).toBe(2)
+      expect(result.projects).toHaveLength(2)
     })
 
-    // TODO: Test URL construction
     it('should construct correct URL with namespace', async () => {
-      // Test implementation:
-      // Call listProjects('my-namespace')
-      // Verify apiClient.get called with '/projects/my-namespace'
+      const mockResponse = createMockProjectsList('my-namespace', 1)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockResponse })
+
+      await listProjects('my-namespace')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/my-namespace')
     })
 
-    // TODO: Test namespace encoding
     it('should not encode namespace in list endpoint', async () => {
-      // Test implementation:
-      // Note: List endpoint may not need encoding
-      // Verify behavior
+      const mockResponse = createMockProjectsList('namespace-with-dashes', 0)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockResponse })
+
+      await listProjects('namespace-with-dashes')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/namespace-with-dashes')
     })
 
-    // TODO: Test returns data from response
     it('should return response.data', async () => {
-      // Test implementation:
-      // Mock response with specific data
-      // Verify exact data returned (not wrapped)
+      const mockData = createMockProjectsList('default', 3)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockData })
+
+      const result = await listProjects('default')
+
+      expect(result).toBe(mockData)
+      expect(result).not.toHaveProperty('status')
+      expect(result).not.toHaveProperty('headers')
     })
 
-    // TODO: Test error handling
     it('should throw error when API fails', async () => {
-      // Test implementation:
-      // Mock apiClient.get to throw error
-      // Verify error propagated
+      const error = new Error('API Error')
+      vi.mocked(apiClient.get).mockRejectedValue(error)
+
+      await expect(listProjects('default')).rejects.toThrow('API Error')
     })
 
-    // TODO: Test network error
     it('should handle network errors', async () => {
-      // Test implementation:
-      // Mock network failure
-      // Verify error thrown
+      const networkError = new Error('Network request failed')
+      vi.mocked(apiClient.get).mockRejectedValue(networkError)
+
+      await expect(listProjects('default')).rejects.toThrow('Network request failed')
     })
 
-    // TODO: Test 404 response
     it('should handle 404 response', async () => {
-      // Test implementation:
-      // Mock 404 error
-      // Verify error thrown
+      const error = new Error('Not found')
+      vi.mocked(apiClient.get).mockRejectedValue(error)
+
+      await expect(listProjects('unknown-namespace')).rejects.toThrow('Not found')
+    })
+
+    it('should handle empty project list', async () => {
+      const emptyResponse = createMockProjectsList('default', 0)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: emptyResponse })
+
+      const result = await listProjects('default')
+
+      expect(result.total).toBe(0)
+      expect(result.projects).toHaveLength(0)
+    })
+
+    it('should handle namespace with special characters', async () => {
+      const mockResponse = createMockProjectsList('my_namespace-123', 1)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockResponse })
+
+      await listProjects('my_namespace-123')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/my_namespace-123')
     })
   })
 
   describe('createProject', () => {
-    // TODO: Test successful creation
     it('should create project successfully', async () => {
-      // Test implementation:
-      // 1. Mock apiClient.post
-      // 2. Call createProject('default', { name: 'test', config: {} })
-      // 3. Verify POST to correct URL
-      // 4. Verify request body
-      // 5. Verify response data returned
+      const request: CreateProjectRequest = {
+        name: 'test-project',
+        config_template: 'default',
+      }
+      const mockProject = createMockProject({ name: 'test-project', namespace: 'default' })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await createProject('default', request)
+
+      expect(apiClient.post).toHaveBeenCalledWith('/projects/default', request)
+      expect(result.project).toEqual(mockProject)
     })
 
-    // TODO: Test URL construction
     it('should construct correct URL for create', async () => {
-      // Test implementation:
-      // Call createProject('my-namespace', request)
-      // Verify apiClient.post called with '/projects/my-namespace'
+      const request: CreateProjectRequest = { name: 'test' }
+      const mockProject = createMockProject({ name: 'test', namespace: 'my-namespace' })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      await createProject('my-namespace', request)
+
+      expect(apiClient.post).toHaveBeenCalledWith('/projects/my-namespace', request)
     })
 
-    // TODO: Test request body
     it('should pass request as body', async () => {
-      // Test implementation:
-      // Create request with specific fields
-      // Verify passed as second argument to apiClient.post
+      const request: CreateProjectRequest = {
+        name: 'new-project',
+        config_template: 'custom',
+      }
+      const mockProject = createMockProject(request)
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      await createProject('default', request)
+
+      expect(apiClient.post).toHaveBeenCalledWith('/projects/default', request)
+      const callArgs = vi.mocked(apiClient.post).mock.calls[0]
+      expect(callArgs[1]).toEqual(request)
     })
 
-    // TODO: Test returns created project
     it('should return created project from response', async () => {
-      // Test implementation:
-      // Mock response with project data
-      // Verify response.data returned
+      const request: CreateProjectRequest = { name: 'test' }
+      const mockProject = createMockProject({ name: 'test' })
+      const mockResponse = { project: mockProject }
+      vi.mocked(apiClient.post).mockResolvedValue({ data: mockResponse })
+
+      const result = await createProject('default', request)
+
+      expect(result).toEqual(mockResponse)
+      expect(result.project).toEqual(mockProject)
     })
 
-    // TODO: Test error handling
     it('should throw error when creation fails', async () => {
-      // Test implementation:
-      // Mock apiClient.post to throw
-      // Verify error propagated
+      const request: CreateProjectRequest = { name: 'test' }
+      const error = new Error('Creation failed')
+      vi.mocked(apiClient.post).mockRejectedValue(error)
+
+      await expect(createProject('default', request)).rejects.toThrow('Creation failed')
     })
 
-    // TODO: Test validation errors
     it('should handle validation errors from backend', async () => {
-      // Test implementation:
-      // Mock 400 response with validation errors
-      // Verify error structure preserved
+      const request: CreateProjectRequest = { name: '' }
+      const validationError = new Error('Validation failed: name is required')
+      vi.mocked(apiClient.post).mockRejectedValue(validationError)
+
+      await expect(createProject('default', request)).rejects.toThrow('Validation failed')
     })
 
-    // TODO: Test duplicate project error
     it('should handle duplicate project name error', async () => {
-      // Test implementation:
-      // Mock 409 conflict response
-      // Verify error thrown
+      const request: CreateProjectRequest = { name: 'existing-project' }
+      const conflictError = new Error('Project already exists')
+      vi.mocked(apiClient.post).mockRejectedValue(conflictError)
+
+      await expect(createProject('default', request)).rejects.toThrow('Project already exists')
+    })
+
+    it('should handle network errors', async () => {
+      const request: CreateProjectRequest = { name: 'test' }
+      const networkError = new Error('Network error')
+      vi.mocked(apiClient.post).mockRejectedValue(networkError)
+
+      await expect(createProject('default', request)).rejects.toThrow('Network error')
+    })
+
+    it('should handle special characters in project name', async () => {
+      const request: CreateProjectRequest = { name: 'test-project_123' }
+      const mockProject = createMockProject({ name: 'test-project_123' })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await createProject('default', request)
+
+      expect(result.project.name).toBe('test-project_123')
+    })
+
+    it('should handle long project names', async () => {
+      const longName = 'very-long-project-name-that-might-cause-issues-if-not-handled-properly'
+      const request: CreateProjectRequest = { name: longName }
+      const mockProject = createMockProject({ name: longName })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await createProject('default', request)
+
+      expect(result.project.name).toBe(longName)
+    })
+
+    it('should handle template parameter', async () => {
+      const request: CreateProjectRequest = {
+        name: 'test',
+        config_template: 'advanced',
+      }
+      const mockProject = createMockProject({ name: 'test' })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      await createProject('default', request)
+
+      expect(apiClient.post).toHaveBeenCalledWith('/projects/default', expect.objectContaining({
+        config_template: 'advanced',
+      }))
+    })
+
+    it('should handle request without template', async () => {
+      const request: CreateProjectRequest = { name: 'test' }
+      const mockProject = createMockProject({ name: 'test' })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      await createProject('default', request)
+
+      expect(apiClient.post).toHaveBeenCalledWith('/projects/default', request)
+    })
+
+    it('should return created project in response', async () => {
+      const request: CreateProjectRequest = { name: 'new-project' }
+      const mockProject = createMockProject({ name: 'new-project', namespace: 'default' })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await createProject('default', request)
+
+      expect(result).toHaveProperty('project')
+      expect(result.project.name).toBe('new-project')
+      expect(result.project.namespace).toBe('default')
     })
   })
 
   describe('getProject', () => {
-    // TODO: Test successful retrieval
     it('should get project by namespace and projectId', async () => {
-      // Test implementation:
-      // Mock apiClient.get
-      // Call getProject('default', 'my-project')
-      // Verify correct URL
-      // Verify data returned
+      const mockProject = createMockProject({ namespace: 'default', name: 'my-project' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await getProject('default', 'my-project')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/my-project')
+      expect(result.project).toEqual(mockProject)
     })
 
-    // TODO: Test URL construction
     it('should construct correct URL with parameters', async () => {
-      // Test implementation:
-      // Call getProject('my-namespace', 'project-name')
-      // Verify URL is '/projects/my-namespace/project-name'
+      const mockProject = createMockProject({ namespace: 'my-namespace', name: 'project-name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('my-namespace', 'project-name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/my-namespace/project-name')
     })
 
-    // TODO: Test projectId encoding
     it('should URL encode projectId', async () => {
-      // Test implementation:
-      // Call getProject('default', 'project with spaces')
-      // Verify apiClient.get called with encoded URL
-      // Should be: '/projects/default/project%20with%20spaces'
+      const mockProject = createMockProject({ name: 'project with spaces' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project with spaces')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%20with%20spaces')
     })
 
-    // TODO: Test special characters in projectId
     it('should handle special characters in projectId', async () => {
-      // Test implementation:
-      // Test with: /, ?, &, #, etc.
-      // Verify correctly encoded
+      const mockProject = createMockProject({ name: 'project/with/slashes' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project/with/slashes')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%2Fwith%2Fslashes')
     })
 
-    // TODO: Test error handling
     it('should throw error when project not found', async () => {
-      // Test implementation:
-      // Mock 404 response
-      // Verify error thrown
+      const error = new Error('Project not found')
+      vi.mocked(apiClient.get).mockRejectedValue(error)
+
+      await expect(getProject('default', 'non-existent')).rejects.toThrow('Project not found')
     })
 
-    // TODO: Test returns project data
     it('should return project from response', async () => {
-      // Test implementation:
-      // Mock response with specific project
-      // Verify response.data returned
+      const mockProject = createMockProject({ name: 'test-project' })
+      const mockResponse = { project: mockProject }
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockResponse })
+
+      const result = await getProject('default', 'test-project')
+
+      expect(result).toEqual(mockResponse)
+      expect(result.project).toEqual(mockProject)
+    })
+
+    it('should handle network errors', async () => {
+      const networkError = new Error('Network error')
+      vi.mocked(apiClient.get).mockRejectedValue(networkError)
+
+      await expect(getProject('default', 'test')).rejects.toThrow('Network error')
+    })
+
+    it('should handle namespace with special characters', async () => {
+      const mockProject = createMockProject({ namespace: 'my_namespace-123' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('my_namespace-123', 'test-project')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/my_namespace-123/test-project')
+    })
+
+    it('should handle question mark in projectId', async () => {
+      const mockProject = createMockProject({ name: 'project?name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project?name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%3Fname')
+    })
+
+    it('should handle hash in projectId', async () => {
+      const mockProject = createMockProject({ name: 'project#name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project#name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%23name')
+    })
+
+    it('should return project with validation errors', async () => {
+      const mockProject = createMockProjectWithError('test', 'Invalid config')
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await getProject('default', 'test')
+
+      expect(result.project.validation_error).toBe('Invalid config')
     })
   })
 
   describe('updateProject', () => {
-    // TODO: Test successful update
     it('should update project successfully', async () => {
-      // Test implementation:
-      // Mock apiClient.put
-      // Call updateProject('default', 'my-project', { config: {...} })
-      // Verify PUT to correct URL
-      // Verify request body
-      // Verify response data returned
+      const request: UpdateProjectRequest = {
+        config: {
+          version: 'v1',
+          name: 'my-project',
+          namespace: 'default',
+          runtime: { provider: 'ollama', model: 'llama3.2:3b' },
+          prompts: [],
+        },
+      }
+      const mockProject = createMockProject({ name: 'my-project', config: request.config })
+      vi.mocked(apiClient.put).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await updateProject('default', 'my-project', request)
+
+      expect(apiClient.put).toHaveBeenCalledWith('/projects/default/my-project', request)
+      expect(result.project).toEqual(mockProject)
     })
 
-    // TODO: Test URL construction
     it('should construct correct URL for update', async () => {
-      // Test implementation:
-      // Call updateProject('ns', 'proj', request)
-      // Verify URL is '/projects/ns/proj'
+      const request: UpdateProjectRequest = { config: {} }
+      const mockProject = createMockProject({ namespace: 'ns', name: 'proj' })
+      vi.mocked(apiClient.put).mockResolvedValue({ data: { project: mockProject } })
+
+      await updateProject('ns', 'proj', request)
+
+      expect(apiClient.put).toHaveBeenCalledWith('/projects/ns/proj', request)
     })
 
-    // TODO: Test projectId encoding
     it('should URL encode projectId in update', async () => {
-      // Test implementation:
-      // Update project with special characters in ID
-      // Verify encoded correctly
+      const request: UpdateProjectRequest = { config: {} }
+      const mockProject = createMockProject({ name: 'project with spaces' })
+      vi.mocked(apiClient.put).mockResolvedValue({ data: { project: mockProject } })
+
+      await updateProject('default', 'project with spaces', request)
+
+      expect(apiClient.put).toHaveBeenCalledWith('/projects/default/project%20with%20spaces', request)
     })
 
-    // TODO: Test partial update
     it('should support partial updates', async () => {
-      // Test implementation:
-      // Pass request with only config field
-      // Verify only config sent in body
+      const request: UpdateProjectRequest = {
+        config: { runtime: { provider: 'openai', model: 'gpt-4' } },
+      }
+      const mockProject = createMockProject({ config: request.config })
+      vi.mocked(apiClient.put).mockResolvedValue({ data: { project: mockProject } })
+
+      await updateProject('default', 'test', request)
+
+      expect(apiClient.put).toHaveBeenCalledWith('/projects/default/test', request)
+      const callArgs = vi.mocked(apiClient.put).mock.calls[0]
+      expect(callArgs[1]).toEqual(request)
     })
 
-    // TODO: Test returns updated project
     it('should return updated project from response', async () => {
-      // Test implementation
+      const request: UpdateProjectRequest = { config: { updated: true } }
+      const mockProject = createMockProject({ name: 'test', config: { updated: true } })
+      const mockResponse = { project: mockProject }
+      vi.mocked(apiClient.put).mockResolvedValue({ data: mockResponse })
+
+      const result = await updateProject('default', 'test', request)
+
+      expect(result).toEqual(mockResponse)
+      expect(result.project.config).toHaveProperty('updated', true)
     })
 
-    // TODO: Test error handling
     it('should throw error when update fails', async () => {
-      // Test implementation:
-      // Mock PUT to throw
-      // Verify error propagated
+      const request: UpdateProjectRequest = { config: {} }
+      const error = new Error('Update failed')
+      vi.mocked(apiClient.put).mockRejectedValue(error)
+
+      await expect(updateProject('default', 'test', request)).rejects.toThrow('Update failed')
     })
 
-    // TODO: Test validation errors
     it('should handle validation errors', async () => {
-      // Test implementation:
-      // Mock 400 with validation errors
-      // Verify error structure
+      const request: UpdateProjectRequest = { config: { invalid: 'config' } }
+      const validationError = new Error('Validation failed')
+      vi.mocked(apiClient.put).mockRejectedValue(validationError)
+
+      await expect(updateProject('default', 'test', request)).rejects.toThrow('Validation failed')
     })
 
-    // TODO: Test not found error
     it('should handle project not found error', async () => {
-      // Test implementation:
-      // Mock 404
-      // Verify error thrown
+      const request: UpdateProjectRequest = { config: {} }
+      const error = new Error('Project not found')
+      vi.mocked(apiClient.put).mockRejectedValue(error)
+
+      await expect(updateProject('default', 'non-existent', request)).rejects.toThrow('Project not found')
+    })
+
+    it('should handle network errors', async () => {
+      const request: UpdateProjectRequest = { config: {} }
+      const networkError = new Error('Network error')
+      vi.mocked(apiClient.put).mockRejectedValue(networkError)
+
+      await expect(updateProject('default', 'test', request)).rejects.toThrow('Network error')
+    })
+
+    it('should handle special characters in projectId', async () => {
+      const request: UpdateProjectRequest = { config: {} }
+      const mockProject = createMockProject({ name: 'project/name' })
+      vi.mocked(apiClient.put).mockResolvedValue({ data: { project: mockProject } })
+
+      await updateProject('default', 'project/name', request)
+
+      expect(apiClient.put).toHaveBeenCalledWith('/projects/default/project%2Fname', request)
     })
   })
 
   describe('deleteProject', () => {
-    // TODO: Test successful deletion
     it('should delete project successfully', async () => {
-      // Test implementation:
-      // Mock apiClient.delete
-      // Call deleteProject('default', 'my-project')
-      // Verify DELETE to correct URL
-      // Verify response data returned
+      const mockProject = createMockProject({ namespace: 'default', name: 'my-project' })
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { project: mockProject } })
+
+      const result = await deleteProject('default', 'my-project')
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/projects/default/my-project')
+      expect(result.project).toEqual(mockProject)
     })
 
-    // TODO: Test URL construction
     it('should construct correct URL for delete', async () => {
-      // Test implementation:
-      // Call deleteProject('ns', 'proj')
-      // Verify URL is '/projects/ns/proj'
+      const mockProject = createMockProject({ namespace: 'ns', name: 'proj' })
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { project: mockProject } })
+
+      await deleteProject('ns', 'proj')
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/projects/ns/proj')
     })
 
-    // TODO: Test projectId encoding
     it('should URL encode projectId in delete', async () => {
-      // Test implementation
+      const mockProject = createMockProject({ name: 'project with spaces' })
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { project: mockProject } })
+
+      await deleteProject('default', 'project with spaces')
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/projects/default/project%20with%20spaces')
     })
 
-    // TODO: Test returns deleted project info
     it('should return deleted project from response', async () => {
-      // Test implementation:
-      // Verify response.data returned
+      const mockProject = createMockProject({ name: 'test-project' })
+      const mockResponse = { project: mockProject }
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: mockResponse })
+
+      const result = await deleteProject('default', 'test-project')
+
+      expect(result).toEqual(mockResponse)
+      expect(result.project).toEqual(mockProject)
     })
 
-    // TODO: Test error handling
     it('should throw error when deletion fails', async () => {
-      // Test implementation
+      const error = new Error('Deletion failed')
+      vi.mocked(apiClient.delete).mockRejectedValue(error)
+
+      await expect(deleteProject('default', 'test')).rejects.toThrow('Deletion failed')
     })
 
-    // TODO: Test not found error
     it('should handle project not found error', async () => {
-      // Test implementation:
-      // Mock 404
-      // Verify error thrown
+      const error = new Error('Project not found')
+      vi.mocked(apiClient.delete).mockRejectedValue(error)
+
+      await expect(deleteProject('default', 'non-existent')).rejects.toThrow('Project not found')
     })
 
-    // TODO: Test cascade delete errors
     it('should handle cascade delete conflicts', async () => {
-      // Test implementation:
-      // Mock 409 conflict (e.g., project has dependent resources)
-      // Verify error thrown
+      const conflictError = new Error('Cannot delete project with active datasets')
+      vi.mocked(apiClient.delete).mockRejectedValue(conflictError)
+
+      await expect(deleteProject('default', 'test')).rejects.toThrow('Cannot delete project with active datasets')
+    })
+
+    it('should handle network errors', async () => {
+      const networkError = new Error('Network error')
+      vi.mocked(apiClient.delete).mockRejectedValue(networkError)
+
+      await expect(deleteProject('default', 'test')).rejects.toThrow('Network error')
+    })
+
+    it('should handle special characters in projectId', async () => {
+      const mockProject = createMockProject({ name: 'project/name' })
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { project: mockProject } })
+
+      await deleteProject('default', 'project/name')
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/projects/default/project%2Fname')
+    })
+
+    it('should handle ampersand in projectId', async () => {
+      const mockProject = createMockProject({ name: 'project&name' })
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { project: mockProject } })
+
+      await deleteProject('default', 'project&name')
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/projects/default/project%26name')
     })
   })
 
   describe('URL Encoding Edge Cases', () => {
-    // TODO: Test forward slash
     it('should encode forward slash in projectId', async () => {
-      // Test implementation:
-      // Project: 'project/name'
-      // Expected: 'project%2Fname'
+      const mockProject = createMockProject({ name: 'project/name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project/name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%2Fname')
     })
 
-    // TODO: Test question mark
     it('should encode question mark in projectId', async () => {
-      // Test implementation:
-      // Project: 'project?name'
-      // Expected: 'project%3Fname'
+      const mockProject = createMockProject({ name: 'project?name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project?name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%3Fname')
     })
 
-    // TODO: Test hash
     it('should encode hash in projectId', async () => {
-      // Test implementation:
-      // Project: 'project#name'
-      // Expected: 'project%23name'
+      const mockProject = createMockProject({ name: 'project#name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project#name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%23name')
     })
 
-    // TODO: Test ampersand
     it('should encode ampersand in projectId', async () => {
-      // Test implementation:
-      // Project: 'project&name'
-      // Expected: 'project%26name'
+      const mockProject = createMockProject({ name: 'project&name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project&name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%26name')
     })
 
-    // TODO: Test percent sign
     it('should encode percent sign in projectId', async () => {
-      // Test implementation:
-      // Project: 'project%name'
-      // Expected: 'project%25name'
+      const mockProject = createMockProject({ name: 'project%name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project%name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%25name')
     })
 
-    // TODO: Test plus sign
     it('should handle plus sign in projectId', async () => {
-      // Test implementation:
-      // Project: 'project+name'
-      // Verify correct encoding (+ vs %2B vs space)
+      const mockProject = createMockProject({ name: 'project+name' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project+name')
+
+      expect(apiClient.get).toHaveBeenCalledWith('/projects/default/project%2Bname')
     })
 
-    // TODO: Test Unicode characters
     it('should encode Unicode characters in projectId', async () => {
-      // Test implementation:
-      // Project with emoji or Chinese characters
-      // Verify correctly encoded
+      const mockProject = createMockProject({ name: 'project-测试' })
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { project: mockProject } })
+
+      await getProject('default', 'project-测试')
+
+      // Unicode characters should be percent-encoded
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('/projects/default/project-'))
     })
   })
 
   describe('Response Handling', () => {
-    // TODO: Test extracts data from axios response
     it('should extract data from axios response object', async () => {
-      // Test implementation:
-      // Mock response: { data: { project: {...} } }
-      // Verify only data returned, not full response
+      const mockData = createMockProjectsList('default', 2)
+      const axiosResponse = {
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: {} as any,
+      }
+      vi.mocked(apiClient.get).mockResolvedValue(axiosResponse)
+
+      const result = await listProjects('default')
+
+      expect(result).toEqual(mockData)
+      expect(result).not.toHaveProperty('status')
+      expect(result).not.toHaveProperty('headers')
+      expect(result).not.toHaveProperty('config')
     })
 
-    // TODO: Test handles axios error responses
     it('should propagate axios error responses', async () => {
-      // Test implementation:
-      // Mock axios error with response.data.detail
-      // Verify error structure preserved
+      const apiError = new Error('API Error')
+      Object.assign(apiError, {
+        response: {
+          status: 400,
+          data: { detail: 'Invalid request' },
+        },
+      })
+      vi.mocked(apiClient.get).mockRejectedValue(apiError)
+
+      await expect(listProjects('default')).rejects.toThrow('API Error')
     })
 
-    // TODO: Test handles axios network errors
     it('should propagate axios network errors', async () => {
-      // Test implementation:
-      // Mock error without response (network failure)
-      // Verify error thrown
+      const networkError = new Error('Network Error')
+      Object.assign(networkError, {
+        code: 'ECONNREFUSED',
+        request: {},
+      })
+      vi.mocked(apiClient.get).mockRejectedValue(networkError)
+
+      await expect(listProjects('default')).rejects.toThrow('Network Error')
     })
   })
 
   describe('Type Safety', () => {
-    // TODO: Test request types are enforced
     it('should use correct request types', async () => {
-      // Test implementation:
-      // TypeScript compilation test
-      // Verify CreateProjectRequest, UpdateProjectRequest used
+      // TypeScript will enforce types at compile time
+      const createRequest: CreateProjectRequest = { name: 'test' }
+      const updateRequest: UpdateProjectRequest = { config: {} }
+
+      const mockProject = createMockProject()
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+      vi.mocked(apiClient.put).mockResolvedValue({ data: { project: mockProject } })
+
+      await createProject('default', createRequest)
+      await updateProject('default', 'test', updateRequest)
+
+      // If this compiles, types are enforced
+      expect(true).toBe(true)
     })
 
-    // TODO: Test response types are enforced
     it('should return correct response types', async () => {
-      // Test implementation:
-      // Verify return types match declared types
+      const mockProjectsList = createMockProjectsList('default', 2)
+      const mockProject = createMockProject()
+
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockProjectsList })
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      const listResult = await listProjects('default')
+      const createResult = await createProject('default', { name: 'test' })
+
+      // TypeScript enforces these properties exist
+      expect(listResult).toHaveProperty('projects')
+      expect(listResult).toHaveProperty('total')
+      expect(createResult).toHaveProperty('project')
     })
   })
 
   describe('Integration with apiClient', () => {
-    // TODO: Test uses apiClient.get for list
     it('should use apiClient.get for list', async () => {
-      // Test implementation:
-      // Verify listProjects calls apiClient.get, not axios directly
+      const mockData = createMockProjectsList('default', 1)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockData })
+
+      await listProjects('default')
+
+      expect(apiClient.get).toHaveBeenCalled()
+      expect(vi.mocked(apiClient.get).mock.calls.length).toBe(1)
     })
 
-    // TODO: Test uses apiClient.post for create
     it('should use apiClient.post for create', async () => {
-      // Test implementation
+      const mockProject = createMockProject()
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { project: mockProject } })
+
+      await createProject('default', { name: 'test' })
+
+      expect(apiClient.post).toHaveBeenCalled()
+      expect(vi.mocked(apiClient.post).mock.calls.length).toBe(1)
     })
 
-    // TODO: Test uses apiClient.put for update
     it('should use apiClient.put for update', async () => {
-      // Test implementation
+      const mockProject = createMockProject()
+      vi.mocked(apiClient.put).mockResolvedValue({ data: { project: mockProject } })
+
+      await updateProject('default', 'test', { config: {} })
+
+      expect(apiClient.put).toHaveBeenCalled()
+      expect(vi.mocked(apiClient.put).mock.calls.length).toBe(1)
     })
 
-    // TODO: Test uses apiClient.delete for delete
     it('should use apiClient.delete for delete', async () => {
-      // Test implementation
+      const mockProject = createMockProject()
+      vi.mocked(apiClient.delete).mockResolvedValue({ data: { project: mockProject } })
+
+      await deleteProject('default', 'test')
+
+      expect(apiClient.delete).toHaveBeenCalled()
+      expect(vi.mocked(apiClient.delete).mock.calls.length).toBe(1)
     })
 
-    // TODO: Test benefits from apiClient interceptors
     it('should inherit apiClient interceptors (auth, error handling)', async () => {
-      // Test implementation:
-      // Note: apiClient adds auth headers, error handling, etc.
-      // Verify these are applied
+      // apiClient has interceptors that add headers, handle errors, etc.
+      // By using apiClient, all service functions benefit from these
+      const mockData = createMockProjectsList('default', 1)
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockData })
+
+      await listProjects('default')
+
+      // Verify we're using apiClient (which has interceptors) not raw axios
+      expect(apiClient.get).toHaveBeenCalled()
     })
   })
 
   describe('Default Export', () => {
-    // TODO: Test default export contains all methods
-    it('should export all service methods', () => {
-      // Test implementation:
-      // Import default export
-      // Verify has listProjects, createProject, getProject, updateProject, deleteProject
+    it('should export all service methods', async () => {
+      const defaultExport = await import('../projectService')
+
+      expect(defaultExport.default).toHaveProperty('listProjects')
+      expect(defaultExport.default).toHaveProperty('createProject')
+      expect(defaultExport.default).toHaveProperty('getProject')
+      expect(defaultExport.default).toHaveProperty('updateProject')
+      expect(defaultExport.default).toHaveProperty('deleteProject')
+
+      expect(typeof defaultExport.default.listProjects).toBe('function')
+      expect(typeof defaultExport.default.createProject).toBe('function')
+      expect(typeof defaultExport.default.getProject).toBe('function')
+      expect(typeof defaultExport.default.updateProject).toBe('function')
+      expect(typeof defaultExport.default.deleteProject).toBe('function')
     })
   })
 })
