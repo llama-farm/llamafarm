@@ -8,6 +8,13 @@ import {
 } from '../ui/dialog'
 import { Label } from '../ui/label'
 import { Input } from '../ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu'
+import FontIcon from '../../common/FontIcon'
 
 interface CreateProjectModalProps {
   isOpen: boolean
@@ -145,20 +152,38 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
           <div className="grid gap-2.5">
             <Label htmlFor="copyFrom">Copy configuration from (optional)</Label>
-            <select
-              id="copyFrom"
-              className="pl-3 pr-10 py-2 rounded-lg border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
-              value={selectedSource}
-              onChange={e => setSelectedSource(e.target.value)}
-              disabled={isLoading}
-            >
-              <option value="">None, start from scratch</option>
-              {availableProjects.map(projectName => (
-                <option key={projectName} value={projectName}>
-                  {projectName}
-                </option>
-              ))}
-            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  id="copyFrom"
+                  type="button"
+                  disabled={isLoading}
+                  className="w-full h-9 rounded-lg border border-input bg-card px-3 text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed text-sm text-foreground"
+                >
+                  <span className="truncate">
+                    {selectedSource || 'None, start from scratch'}
+                  </span>
+                  <FontIcon type="chevron-down" className="w-4 h-4 shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-64 overflow-auto">
+                <DropdownMenuItem
+                  onClick={() => setSelectedSource('')}
+                  className="cursor-pointer"
+                >
+                  None, start from scratch
+                </DropdownMenuItem>
+                {availableProjects.map(projectName => (
+                  <DropdownMenuItem
+                    key={projectName}
+                    onClick={() => setSelectedSource(projectName)}
+                    className="cursor-pointer"
+                  >
+                    {projectName}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <p className="text-xs text-muted-foreground">
               {selectedSource
                 ? `Configuration will be copied from ${selectedSource} (runtime, prompts, RAG settings)`

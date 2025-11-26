@@ -666,9 +666,15 @@ function Home() {
             const modelNames = project?._sortModels || []
             const hasValidationError = project?.validation_error
 
-            // Show first 2 models, then "+N" for additional
-            const visibleModels = modelNames.slice(0, 2)
-            const additionalCount = modelNames.length - 2
+            // Extract just the part after "/" from model names
+            const getModelDisplayName = (modelName: string) => {
+              const parts = modelName.split('/')
+              return parts.length > 1 ? parts.slice(1).join('/') : modelName
+            }
+
+            // Show first 1 model, then "+N" for additional
+            const visibleModels = modelNames.slice(0, 1).map(getModelDisplayName)
+            const additionalCount = modelNames.length - 1
 
             return (
               <div
@@ -681,42 +687,39 @@ function Home() {
                     <div className="text-base text-foreground line-clamp-2 break-words">
                       {name}
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-col gap-2 w-full">
                       {visibleModels.length > 0 ? (
                         <>
                           {visibleModels.map((model, idx) => (
                             <span
                               key={idx}
-                              className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5"
+                              className="text-xs text-foreground/70 bg-muted rounded-xl px-3 py-0.5 w-full"
                             >
                               {model}
                             </span>
                           ))}
                           {additionalCount > 0 && (
                             <span
-                              className="text-xs text-primary-foreground bg-primary/70 rounded-xl px-3 py-0.5"
-                              title={modelNames.slice(2).join(', ')}
+                              className="text-xs text-foreground/70 bg-muted rounded-xl px-3 py-0.5 w-full"
+                              title={modelNames.slice(1).map(getModelDisplayName).join(', ')}
                             >
                               +{additionalCount}
                             </span>
                           )}
                         </>
                       ) : (
-                        <span className="text-xs text-foreground/60 bg-muted rounded-xl px-3 py-0.5">
+                        <span className="text-xs text-foreground/60 bg-muted rounded-xl px-3 py-0.5 w-full">
                           No model
                         </span>
                       )}
                       {hasValidationError && (
                         <span
-                          className="text-xs text-red-100 bg-red-600 rounded-xl px-3 py-0.5"
+                          className="text-xs text-red-100 bg-red-600 rounded-xl px-3 py-0.5 w-full"
                           title={hasValidationError}
                         >
                           Validation Error
                         </span>
                       )}
-                    </div>
-                    <div className="text-xs text-foreground/60 mt-2">
-                      {formatLastModified(project?.last_modified)}
                     </div>
                   </div>
                   <FontIcon
@@ -724,7 +727,10 @@ function Home() {
                     className="w-5 h-5 text-primary shrink-0 ml-2"
                   />
                 </div>
-                <div className="mt-auto pt-4 flex justify-end">
+                <div className="mt-auto pt-4 flex items-center justify-between">
+                  <div className="text-xs text-foreground/60">
+                    {formatLastModified(project?.last_modified)}
+                  </div>
                   <button
                     className="flex items-center gap-1 text-primary hover:opacity-80"
                     onClick={e => {
