@@ -68,7 +68,6 @@ properties:
       type: object
       required:
         - name
-        - files
         - data_processing_strategy
         - database
       properties:
@@ -81,13 +80,6 @@ properties:
         database:
           type: string
           description: RAG database to use for the dataset
-        files:
-          type: array
-          description: List of file hashes
-          items:
-            type: string
-            description: sha256 of the file content (e.g., "2b3e321d021e5c625a4a003f0624801fa46faab59b530caddcd65a5c106b8a17")
-          default: []
     default: []
 
   runtime:

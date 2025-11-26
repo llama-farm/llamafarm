@@ -139,30 +139,21 @@ class TestDatasetMetadataErrorHandling:
         )
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    @patch("services.dataset_service.logger")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_missing_metadata_file_graceful_handling(
-        self, mock_logger, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test graceful handling when metadata file is missing for some file hashes."""
         mock_load_config.return_value = self.mock_project_config_with_errors
 
-        # Configure metadata lookup to fail for missing files
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_valid:
-                return self.valid_metadata
-            elif file_content_hash == self.file_hash_missing:
-                raise FileNotFoundError(
-                    f"Metadata file not found for hash: {file_content_hash}"
-                )
-            elif file_content_hash == self.file_hash_corrupted:
-                raise FileNotFoundError(
-                    f"Metadata file not found for hash: {file_content_hash}"
-                )
-            else:
-                raise FileNotFoundError(f"Unexpected hash: {file_content_hash}")
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_with_missing_metadata":
+                return [self.valid_metadata]
+            if dataset == "dataset_with_corrupted_metadata":
+                return [self.valid_metadata]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -196,43 +187,25 @@ class TestDatasetMetadataErrorHandling:
         )
         assert len(dataset_all_missing.details.files_metadata) == 0
 
-        # Verify warning messages were logged for missing files
-        assert mock_logger.warning.call_count >= 2  # At least 2 missing files
-
-        # Verify warning messages contain correct information
-        warning_calls = [call[0][0] for call in mock_logger.warning.call_args_list]
-        missing_hash_warnings = [
-            call
-            for call in warning_calls
-            if "File metadata not found for hash" in call
-            and self.file_hash_missing in call
-        ]
-        assert len(missing_hash_warnings) >= 1
+        # No warnings expected in filesystem-based approach; missing metadata simply reduces results
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    @patch("services.dataset_service.logger")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_corrupted_metadata_file_handling(
-        self, mock_logger, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test handling of corrupted JSON in metadata file."""
         mock_load_config.return_value = self.mock_project_config_with_errors
 
         # Configure metadata lookup to raise JSON decode errors for corrupted files
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_valid:
-                return self.valid_metadata
-            elif file_content_hash == self.file_hash_corrupted:
-                # Simulate JSON decode error (like corrupted metadata file)
-                raise ValueError(
-                    f"Invalid JSON in metadata file for hash: {file_content_hash}"
-                )
-            else:
-                raise FileNotFoundError(
-                    f"Metadata file not found for hash: {file_content_hash}"
-                )
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_with_corrupted_metadata":
+                raise ValueError("Invalid JSON in metadata file")
+            if dataset == "dataset_with_missing_metadata":
+                return [self.valid_metadata]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute - should handle ValueError gracefully (though current implementation doesn't)
         # Note: Current implementation only catches FileNotFoundError, not ValueError
@@ -243,28 +216,22 @@ class TestDatasetMetadataErrorHandling:
             )
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    @patch("services.dataset_service.logger")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_permission_denied_metadata_access(
-        self, mock_logger, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test handling of permission issues when accessing metadata files."""
         mock_load_config.return_value = self.mock_project_config_with_errors
 
         # Configure metadata lookup to raise permission errors
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_valid:
-                return self.valid_metadata
-            elif file_content_hash == self.file_hash_missing:
-                raise PermissionError(
-                    f"Permission denied accessing metadata for hash: {file_content_hash}"
-                )
-            else:
-                raise FileNotFoundError(
-                    f"Metadata file not found for hash: {file_content_hash}"
-                )
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_with_missing_metadata":
+                raise PermissionError("Permission denied accessing metadata directory")
+            if dataset == "dataset_with_corrupted_metadata":
+                return [self.valid_metadata]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute - should handle permission errors gracefully
         # Note: Current implementation only catches FileNotFoundError
@@ -275,24 +242,22 @@ class TestDatasetMetadataErrorHandling:
             )
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_file_hash_in_dataset_but_no_raw_file(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test when dataset references file hash but raw file doesn't exist."""
         mock_load_config.return_value = self.mock_project_config_with_errors
 
-        # Simulate metadata exists but raw file is missing
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_valid:
-                return self.valid_metadata
-            else:
-                # Metadata lookup fails (as would happen if raw file is missing)
-                raise FileNotFoundError(
-                    f"Raw file missing for hash: {file_content_hash}"
-                )
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset in (
+                "dataset_with_missing_metadata",
+                "dataset_with_corrupted_metadata",
+            ):
+                return [self.valid_metadata]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -311,19 +276,16 @@ class TestDatasetMetadataErrorHandling:
         assert total_metadata_files == 2
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    def test_metadata_file_invalid_schema(self, mock_get_metadata, mock_load_config):
+    @patch.object(DatasetService, "list_dataset_files")
+    def test_metadata_file_invalid_schema(self, mock_list_files, mock_load_config):
         """Test handling when metadata file doesn't match MetadataFileContent schema."""
         mock_load_config.return_value = self.mock_project_config_with_errors
 
         # Create invalid metadata that would fail Pydantic validation
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_valid:
-                return self.valid_metadata
-            elif file_content_hash == self.file_hash_corrupted:
-                # Simulate Pydantic validation error with proper format
-                from pydantic_core import ValidationError as CoreValidationError
+        from pydantic_core import ValidationError as CoreValidationError
 
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_with_corrupted_metadata":
                 raise CoreValidationError.from_exception_data(
                     "ValidationError",
                     [
@@ -335,24 +297,24 @@ class TestDatasetMetadataErrorHandling:
                         }
                     ],
                 )
-            else:
-                raise FileNotFoundError(
-                    f"Metadata file not found for hash: {file_content_hash}"
-                )
+            if dataset == "dataset_with_missing_metadata":
+                return [self.valid_metadata]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute - should handle validation errors
         # Note: Current implementation doesn't explicitly catch ValidationError
-        from pydantic_core import ValidationError as CoreValidationError
-
         with pytest.raises(CoreValidationError):
             DatasetService.list_datasets_with_file_details(
                 "error_test_namespace", "error_test_project"
             )
 
     @patch.object(ProjectService, "load_config")
-    def test_dataset_files_list_contains_invalid_hashes(self, mock_load_config):
+    @patch.object(DatasetService, "list_dataset_files")
+    def test_dataset_files_list_contains_invalid_hashes(
+        self, mock_list_files, mock_load_config
+    ):
         """Test handling when dataset.files contains malformed hash values."""
         # Create config with invalid hashes
         config_with_invalid_hashes = LlamaFarmConfig(
@@ -437,51 +399,28 @@ class TestDatasetMetadataErrorHandling:
 
         mock_load_config.return_value = config_with_invalid_hashes
 
-        with patch(
-            "services.data_service.DataService.get_data_file_metadata_by_hash"
-        ) as mock_get_metadata:
-            # Configure metadata lookup to return valid metadata for valid hash
-            def metadata_side_effect(namespace, project_id, file_content_hash):
-                if file_content_hash == self.file_hash_valid:
-                    return self.valid_metadata
-                else:
-                    raise FileNotFoundError(f"Invalid hash: {file_content_hash}")
+        mock_list_files.return_value = [self.valid_metadata]
 
-            mock_get_metadata.side_effect = metadata_side_effect
+        datasets_with_details = DatasetService.list_datasets_with_file_details(
+            "error_test_namespace", "invalid_hash_project"
+        )
 
-            # Execute
-            datasets_with_details = DatasetService.list_datasets_with_file_details(
-                "error_test_namespace", "invalid_hash_project"
-            )
-
-            # Should handle invalid hashes gracefully
-            assert len(datasets_with_details) == 1
-            dataset = datasets_with_details[0]
-
-            # Should only have metadata for the valid hash
-            assert len(dataset.details.files_metadata) == 1
-            assert dataset.details.files_metadata[0].hash == self.file_hash_valid
+        assert len(datasets_with_details) == 1
+        dataset = datasets_with_details[0]
+        assert len(dataset.details.files_metadata) == 1
+        assert dataset.details.files_metadata[0].hash == self.file_hash_valid
 
     @patch.object(ProjectService, "load_config")
-    def test_data_service_unavailable(self, mock_load_config):
-        """Test behavior when DataService.get_data_file_metadata_by_hash() is completely unavailable."""
+    @patch.object(DatasetService, "list_dataset_files")
+    def test_metadata_listing_unavailable(self, mock_list_files, mock_load_config):
+        """Test behavior when dataset metadata listing is completely unavailable."""
         mock_load_config.return_value = self.mock_project_config_with_errors
+        mock_list_files.side_effect = Exception("Metadata service is down")
 
-        with patch(
-            "services.data_service.DataService.get_data_file_metadata_by_hash"
-        ) as mock_get_metadata:
-            # Simulate complete service failure
-            mock_get_metadata.side_effect = Exception(
-                "DataService is completely unavailable"
+        with pytest.raises(Exception, match="Metadata service is down"):
+            DatasetService.list_datasets_with_file_details(
+                "error_test_namespace", "error_test_project"
             )
-
-            # Execute - should propagate service errors
-            with pytest.raises(
-                Exception, match="DataService is completely unavailable"
-            ):
-                DatasetService.list_datasets_with_file_details(
-                    "error_test_namespace", "error_test_project"
-                )
 
     def test_project_service_load_config_failure(self):
         """Test behavior when ProjectService.load_config() fails."""
@@ -498,10 +437,9 @@ class TestDatasetMetadataErrorHandling:
                 )
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    @patch("services.dataset_service.logger")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_mixed_error_scenarios_resilience(
-        self, mock_logger, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test system resilience with multiple error types occurring simultaneously."""
         # Create config with various problematic scenarios
@@ -594,22 +532,12 @@ class TestDatasetMetadataErrorHandling:
 
         mock_load_config.return_value = mixed_error_config
 
-        # Configure metadata lookup with various error types
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == self.file_hash_valid:
-                return self.valid_metadata
-            elif file_content_hash == self.file_hash_missing:
-                raise FileNotFoundError(f"File not found: {file_content_hash}")
-            elif file_content_hash == self.file_hash_corrupted:
-                raise FileNotFoundError(f"Corrupted metadata: {file_content_hash}")
-            elif file_content_hash == "short_hash":
-                raise FileNotFoundError(f"Invalid hash format: {file_content_hash}")
-            elif file_content_hash == "":
-                raise FileNotFoundError(f"Empty hash: {file_content_hash}")
-            else:
-                raise FileNotFoundError(f"Unexpected hash: {file_content_hash}")
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_mixed_errors":
+                return [self.valid_metadata]
+            return []
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute - should handle mixed errors gracefully
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -632,8 +560,7 @@ class TestDatasetMetadataErrorHandling:
         )
         assert len(dataset_empty.details.files_metadata) == 0
 
-        # Verify multiple warnings were logged
-        assert mock_logger.warning.call_count >= 4  # For the 4 failed file lookups
+        # No warnings expected; metadata listing simply returns available files
 
     def test_empty_files_list_handling(self):
         """Test handling of datasets with empty files lists."""
@@ -733,10 +660,9 @@ class TestErrorHandlingIntegration:
     """Integration tests for error handling across the entire system."""
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    @patch("services.dataset_service.logger")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_production_like_error_scenario(
-        self, mock_logger, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test a production-like scenario with various real-world error conditions."""
         # Simulate a realistic production scenario
@@ -859,7 +785,7 @@ class TestErrorHandlingIntegration:
         mock_load_config.return_value = production_config
 
         # Simulate realistic production errors
-        def metadata_side_effect(namespace, project_id, file_content_hash):
+        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == production_hashes[0]:
                 return metadata_1
             elif file_content_hash == production_hashes[1]:
@@ -877,7 +803,14 @@ class TestErrorHandlingIntegration:
             else:
                 raise FileNotFoundError(f"Unexpected file hash: {file_content_hash}")
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "critical_documents":
+                return [metadata_1, metadata_2]
+            if dataset == "user_uploads":
+                return [metadata_2]
+            return []
+
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute - should handle production errors gracefully
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -912,9 +845,6 @@ class TestErrorHandlingIntegration:
             len(user_dataset.details.files_metadata) == 1
         )  # Only 1 of 2 files succeeded
         assert user_dataset.details.files_metadata[0].hash == production_hashes[1]
-
-        # Verify appropriate warnings were logged for production issues
-        assert mock_logger.warning.call_count >= 2
 
         # Verify system remains functional despite errors
         total_successful_files = sum(

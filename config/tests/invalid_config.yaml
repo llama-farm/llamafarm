@@ -45,7 +45,6 @@ models:
 
 datasets:
   - name: "test_dataset"
-    files: ["test_file.csv"]
     parser: "csv"
     embedder: "default"
     vector_store: "default"

@@ -169,8 +169,10 @@ curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/rag/query \
 curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/data \
   -F "file=@document.pdf"
 
-# Process dataset
-curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/process
+# Start async processing (returns Celery task info)
+curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/actions \
+  -H "Content-Type: application/json" \
+  -d '{"action_type":"process"}'
 ```
 
 ### Finding Your Namespace and Project
