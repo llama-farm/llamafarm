@@ -9,16 +9,13 @@ from typing import Any, cast
 
 from config.datamodel import LlamaFarmConfig
 
-from core.celery.tasks.rag_tasks import (
-    batch_search as batch_search_task,
-)
-from core.celery.tasks.rag_tasks import (
+from core.celery.rag_client import (
     handle_rag_query as query_task,
 )
-from core.celery.tasks.rag_tasks import (
+from core.celery.rag_client import (
     ingest_file_with_rag as ingest_task,
 )
-from core.celery.tasks.rag_tasks import (
+from core.celery.rag_client import (
     search_with_rag_database as search_task,
 )
 from core.logging import FastAPIStructLogger

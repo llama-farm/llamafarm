@@ -1,12 +1,29 @@
+import contextlib
+import os
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+
+from celery import group  # type: ignore[import-untyped]
 from config.datamodel import Dataset
+from fastapi import UploadFile
 from pydantic import BaseModel
 
-from api.errors import DatasetNotFoundError, NotFoundError
+from api.errors import DatasetNotFoundError
+from core.celery import app
+from core.celery.rag_client import build_ingest_signature
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, MetadataFileContent
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
+
+
+@dataclass
+class DatasetIngestLaunchResult:
+    task_id: str
+    message: str
+    files: list[str]
 
 
 class DatasetDetails(BaseModel):
@@ -39,38 +56,80 @@ class DatasetService:
         datasets_with_details: list[DatasetWithFileDetails] = []
 
         for dataset in datasets:
-            files_with_details: list[MetadataFileContent] = []
-            for file_hash in dataset.files:
-                try:
-                    metadata = DataService.get_data_file_metadata_by_hash(
-                        namespace=namespace,
-                        project_id=project,
-                        file_content_hash=file_hash,
-                    )
-                    file_detail = MetadataFileContent(
-                        hash=metadata.hash,
-                        original_file_name=metadata.original_file_name,
-                        resolved_file_name=metadata.resolved_file_name,
-                        size=metadata.size,
-                        mime_type=metadata.mime_type,
-                        timestamp=metadata.timestamp,
-                    )
-                    files_with_details.append(file_detail)
-                except FileNotFoundError:
-                    # Skip files that no longer exist on disk
-                    logger.warning(f"File metadata not found for hash: {file_hash}")
-                    continue
+            files_with_details = cls.list_dataset_files(
+                namespace, project, dataset.name
+            )
 
             dataset_with_details = DatasetWithFileDetails(
                 name=dataset.name,
                 data_processing_strategy=dataset.data_processing_strategy,
                 database=dataset.database,
-                files=dataset.files,
                 details=DatasetDetails(files_metadata=files_with_details),
             )
             datasets_with_details.append(dataset_with_details)
 
         return datasets_with_details
+
+    @classmethod
+    def list_dataset_files(
+        cls, namespace: str, project: str, dataset: str
+    ) -> list[MetadataFileContent]:
+        """
+        List all files in a dataset
+        """
+        dataset_dir = DataService.ensure_data_dir(namespace, project, dataset)
+        dataset_meta_dir = os.path.join(dataset_dir, "meta")
+        files: list[MetadataFileContent] = []
+
+        try:
+            file_list = os.listdir(dataset_meta_dir)
+        except FileNotFoundError:
+            logger.warning(
+                "Dataset metadata directory not found",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                path=dataset_meta_dir,
+            )
+            return files
+        except PermissionError as e:
+            logger.error(
+                "Permission denied reading dataset metadata directory",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                path=dataset_meta_dir,
+                error=str(e),
+            )
+            return files
+
+        for file in file_list:
+            file_path = os.path.join(dataset_meta_dir, file)
+            try:
+                with open(file_path) as f:
+                    metadata = MetadataFileContent.model_validate_json(f.read())
+                    files.append(metadata)
+            except (OSError, IOError) as e:
+                logger.warning(
+                    "Failed to read metadata file",
+                    namespace=namespace,
+                    project=project,
+                    dataset=dataset,
+                    file=file,
+                    error=str(e),
+                )
+            except ValueError as e:
+                # Pydantic validation errors (including JSON parsing) raise ValueError
+                logger.warning(
+                    "Failed to parse metadata file",
+                    namespace=namespace,
+                    project=project,
+                    dataset=dataset,
+                    file=file,
+                    error=str(e),
+                )
+
+        return files
 
     @classmethod
     def create_dataset(
@@ -114,14 +173,13 @@ class DatasetService:
         if database not in supported_databases:
             raise ValueError(f"RAG database {database} not supported")
 
-        # Create new dataset
         new_dataset = Dataset(
             name=name,
             data_processing_strategy=data_processing_strategy,
             database=database,
-            files=[],
         )
 
+        # Add the new dataset to the project config
         existing_datasets.append(new_dataset)
         project_config.datasets = existing_datasets
         ProjectService.save_config(namespace, project, project_config)
@@ -211,42 +269,55 @@ class DatasetService:
         return databases
 
     @classmethod
-    def add_file_to_dataset(
+    async def add_file_to_dataset(
         cls,
         namespace: str,
         project: str,
         dataset: str,
-        file: MetadataFileContent,
-    ) -> bool:
+        file: UploadFile,
+    ) -> tuple[bool, MetadataFileContent]:
         """
         Add a file to a dataset
-        
+
         Returns:
             bool: True if file was added, False if it was skipped (duplicate)
         """
+
         project_config = ProjectService.load_config(namespace, project)
         existing_datasets = project_config.datasets or []
-        dataset_to_update = next(
+        dataset_obj = next(
             (ds for ds in existing_datasets if ds.name == dataset),
             None,
         )
-        if dataset_to_update is None:
+        if dataset_obj is None:
             raise DatasetNotFoundError(dataset)
-        
+
         # Check if file already exists in dataset (duplicate detection)
-        if file.hash in dataset_to_update.files:
+        file_hash = DataService.hash_data(await file.read())
+        await file.seek(0)
+        existing_file: MetadataFileContent | None = None
+        with contextlib.suppress(FileNotFoundError):
+            existing_file = DataService.get_data_file_metadata_by_hash(
+                namespace, project, dataset, file_hash
+            )
+
+        if existing_file is not None:
             logger.info(
                 "File already exists in dataset, skipping",
                 dataset=dataset,
-                filename=file.original_file_name,
-                hash=file.hash,
+                filename=existing_file.original_file_name,
+                hash=existing_file.hash,
             )
-            return False
-        
-        dataset_to_update.files.append(file.hash)
-        project_config.datasets = existing_datasets
-        ProjectService.save_config(namespace, project, project_config)
-        return True
+            return False, existing_file
+
+        metadata_file_content = await DataService.add_data_file(
+            namespace=namespace,
+            project_id=project,
+            dataset=dataset,
+            file=file,
+        )
+
+        return True, metadata_file_content
 
     @classmethod
     def remove_file_from_dataset(
@@ -259,17 +330,109 @@ class DatasetService:
         """
         Remove a file from a dataset
         """
+
         project_config = ProjectService.load_config(namespace, project)
         existing_datasets = project_config.datasets or []
-        dataset_to_update = next(
+        dataset_obj = next(
             (ds for ds in existing_datasets if ds.name == dataset),
             None,
         )
-        if dataset_to_update is None:
+        if dataset_obj is None:
+            raise DatasetNotFoundError(dataset)
+
+        DataService.delete_data_file(
+            namespace=namespace,
+            project_id=project,
+            dataset=dataset,
+            file_hash=file_hash,
+        )
+
+    @classmethod
+    def start_dataset_ingestion(
+        cls, namespace: str, project: str, dataset: str
+    ) -> DatasetIngestLaunchResult:
+        """
+        Kick off ingestion tasks for all files in a dataset and return the tracking task id.
+        """
+        project_config = ProjectService.get_project(namespace, project).config
+        dataset_config = next(
+            (ds for ds in (project_config.datasets or []) if ds.name == dataset), None
+        )
+        if dataset_config is None:
             raise ValueError(f"Dataset {dataset} not found")
-        try:
-            dataset_to_update.files.remove(file_hash)
-        except ValueError as e:
-            raise NotFoundError(f"File {file_hash} not found in dataset") from e
-        project_config.datasets = existing_datasets
-        ProjectService.save_config(namespace, project, project_config)
+
+        dataset_files = cls.list_dataset_files(namespace, project, dataset)
+        dataset_file_hashes = [file.hash for file in dataset_files]
+        strategy_name = dataset_config.data_processing_strategy
+
+        if not dataset_files:
+            task_id = str(uuid.uuid4())
+            payload = {
+                "message": "Dataset processed successfully",
+                "namespace": namespace,
+                "project": project,
+                "dataset": dataset,
+                "strategy": strategy_name,
+                "files": [],
+                "total_files": 0,
+            }
+            app.backend.store_result(task_id, payload, "SUCCESS")
+            return DatasetIngestLaunchResult(
+                task_id=task_id, message=str(payload["message"]), files=[]
+            )
+
+        project_dir = ProjectService.get_project_dir(namespace, project)
+        raw_dir = Path(DataService.ensure_data_dir(namespace, project, dataset)) / "raw"
+        ingest_tasks = []
+        for file_metadata in dataset_files:
+            file_path = raw_dir / file_metadata.hash
+            if not file_path.exists():
+                raise FileNotFoundError(f"Raw file not found: {file_path}")
+
+            ingest_tasks.append(
+                build_ingest_signature(
+                    project_dir=project_dir,
+                    data_processing_strategy_name=strategy_name,
+                    database_name=dataset_config.database,
+                    source_path=str(file_path),
+                    filename=file_metadata.original_file_name,
+                    dataset_name=dataset,
+                )
+            )
+
+        job = group(*ingest_tasks)
+        result = job.apply_async()
+        child_task_ids = []
+        if result.results:
+            child_task_ids = [
+                child.id for child in result.results if hasattr(child, "id")
+            ]
+
+        app.backend.store_result(
+            result.id,
+            {
+                "type": "group",
+                "children": child_task_ids,
+                "file_hashes": dataset_file_hashes,
+                "namespace": namespace,
+                "project": project,
+                "dataset": dataset,
+                "strategy": strategy_name,
+            },
+            "PENDING",
+        )
+
+        logger.info(
+            "Started dataset ingestion",
+            dataset=dataset,
+            namespace=namespace,
+            project=project,
+            task_id=result.id,
+            file_count=len(dataset_file_hashes),
+        )
+
+        return DatasetIngestLaunchResult(
+            task_id=result.id,
+            message="Dataset ingestion started",
+            files=dataset_file_hashes,
+        )

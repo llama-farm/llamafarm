@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from config.datamodel import LlamaFarmConfig
-from core.celery.tasks.rag_tasks import get_rag_health
+from core.celery.rag_client import get_rag_health
 
 logger = structlog.get_logger()
 

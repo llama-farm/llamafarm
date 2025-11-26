@@ -14,7 +14,7 @@ runtime:
       base_url: http://127.0.0.1:11540/v1
       default: true
       prompt_format: unstructured
-      prompts: ['default']
+      prompts: ["default"]
 
 # =============================================================================
 # PROMPTS CONFIGURATION - Llama & Alpaca Encyclopedia Expert
@@ -43,7 +43,7 @@ prompts:
           - If information isn't in the knowledge base, state that clearly
           - Be thorough but organized - use bullet points and headings for complex topics
 
-          Always prioritize animal welfare and evidence-based practices based on the documents provided. 
+          Always prioritize animal welfare and evidence-based practices based on the documents provided.
 
 # =============================================================================
 # DATASETS CONFIGURATION - Llama encyclopedia demo dataset
@@ -52,7 +52,6 @@ datasets:
   - name: llama_encyclopedia
     database: llama_knowledge_db
     data_processing_strategy: default
-    files: []
 
 # =============================================================================
 # RAG CONFIGURATION - Optimized for structured markdown documents

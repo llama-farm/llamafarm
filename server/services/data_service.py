@@ -2,6 +2,7 @@ import hashlib
 import os
 from datetime import datetime
 
+from api.errors import NotFoundError
 from fastapi import UploadFile
 from pydantic import BaseModel
 
@@ -20,10 +21,6 @@ class MetadataFileContent(BaseModel):
     size: int
     mime_type: str
     hash: str
-
-
-class FileExistsInAnotherDatasetError(Exception):
-    pass
 
 
 class DataService:
@@ -56,16 +53,20 @@ class DataService:
     """
 
     @classmethod
-    def get_data_dir(cls, namespace: str, project_id: str):
+    def ensure_data_dir(cls, namespace: str, project_id: str, dataset: str):
         project_dir = ProjectService.get_project_dir(namespace, project_id)
-        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME), exist_ok=True)
-        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "meta"), exist_ok=True)
-        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "raw"), exist_ok=True)
-        os.makedirs(os.path.join(project_dir, DATA_DIR_NAME, "stores"), exist_ok=True)
-        os.makedirs(
-            os.path.join(project_dir, DATA_DIR_NAME, "index", "by_name"), exist_ok=True
-        )
-        return os.path.join(project_dir, DATA_DIR_NAME)
+        datasets_dir = os.path.join(project_dir, DATA_DIR_NAME, "datasets")
+        dataset_dir = os.path.join(datasets_dir, dataset)
+        norm_datasets_dir = os.path.abspath(os.path.normpath(datasets_dir))
+        norm_dataset_dir = os.path.abspath(os.path.normpath(dataset_dir))
+        if not norm_dataset_dir.startswith(norm_datasets_dir + os.sep):
+            raise ValueError(f"Invalid dataset name: {dataset!r}")
+        os.makedirs(norm_dataset_dir, exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "meta"), exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "raw"), exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "stores"), exist_ok=True)
+        os.makedirs(os.path.join(norm_dataset_dir, "index", "by_name"), exist_ok=True)
+        return norm_dataset_dir
 
     @classmethod
     def hash_data(cls, data: bytes):
@@ -81,11 +82,12 @@ class DataService:
         cls,
         namespace: str,
         project_id: str,
+        dataset: str,
         file: UploadFile,
     ) -> MetadataFileContent:
         import mimetypes
 
-        data_dir = cls.get_data_dir(namespace, project_id)
+        data_dir = cls.ensure_data_dir(namespace, project_id, dataset)
         file_data = await file.read()
         data_hash = cls.hash_data(file_data)
 
@@ -131,28 +133,20 @@ class DataService:
         return metadata_file_content
 
     @classmethod
-    def read_data_file(
-        cls,
-        namespace: str,
-        project_id: str,
-        file_content_hash: str,
-    ) -> bytes:
-        data_dir = cls.get_data_dir(namespace, project_id)
-        data_path = os.path.join(data_dir, "raw", file_content_hash)
-        with open(data_path, "rb") as f:
-            return f.read()
-
-    @classmethod
     def get_data_file_metadata_by_hash(
         cls,
         namespace: str,
         project_id: str,
+        dataset: str,
         file_content_hash: str,
-    ) -> MetadataFileContent:
-        data_dir = cls.get_data_dir(namespace, project_id)
+    ) -> MetadataFileContent | None:
+        data_dir = cls.ensure_data_dir(namespace, project_id, dataset)
         metadata_path = os.path.join(data_dir, "meta", f"{file_content_hash}.json")
-        with open(metadata_path) as f:
-            return MetadataFileContent.model_validate_json(f.read())
+        try:
+            with open(metadata_path) as f:
+                return MetadataFileContent.model_validate_json(f.read())
+        except FileNotFoundError:
+            return None
 
     @classmethod
     def delete_data_file(
@@ -160,36 +154,30 @@ class DataService:
         namespace: str,
         project_id: str,
         dataset: str,
-        file: MetadataFileContent,
+        file_hash: str,
     ) -> MetadataFileContent:
-        data_dir = cls.get_data_dir(namespace, project_id)
+        data_dir = cls.ensure_data_dir(namespace, project_id, dataset)
 
-        # Make sure the file is not in use by another dataset
-        project = ProjectService.get_project(namespace, project_id)
-        other_dataset = next(
-            (
-                ds
-                for ds in project.config.datasets
-                if ds.name != dataset and file.hash in ds.files
-            ),
-            None,
+        metadata_path = os.path.join(data_dir, "meta", f"{file_hash}.json")
+        metadata_file_content = cls.get_data_file_metadata_by_hash(
+            namespace, project_id, dataset, file_hash
         )
-        if other_dataset:
-            raise FileExistsInAnotherDatasetError(
-                f"File '{file.hash}' is in use by dataset '{other_dataset.name}'"
-            )
 
-        metadata_path = os.path.join(data_dir, "meta", f"{file.hash}.json")
+        if metadata_file_content is None:
+            raise NotFoundError(f"File {file_hash} not found")
+
         os.remove(metadata_path)
-        data_path = os.path.join(data_dir, "raw", file.hash)
+        data_path = os.path.join(data_dir, "raw", file_hash)
         os.remove(data_path)
-        index_path = os.path.join(data_dir, "index", "by_name", file.resolved_file_name)
+        index_path = os.path.join(
+            data_dir, "index", "by_name", metadata_file_content.resolved_file_name
+        )
         os.remove(index_path)
 
         logger.info(
-            f"Deleted file '{file.hash}' from disk",
-            metadata=file.model_dump(),
+            f"Deleted file '{file_hash}' from disk",
+            metadata=metadata_file_content.model_dump(),
             data_dir=data_dir,
         )
 
-        return file
+        return metadata_file_content

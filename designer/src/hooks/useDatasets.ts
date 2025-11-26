@@ -297,7 +297,7 @@ export function useTaskStatus(
     queryKey: ['task-status', namespace, project, taskId],
     queryFn: () => datasetService.getTaskStatus(namespace, project, taskId!),
     enabled: !!taskId && !!namespace && !!project && options?.enabled !== false,
-    refetchInterval: (query) => {
+    refetchInterval: query => {
       // Stop polling if task completed or failed
       const data = query.state.data as any
       if (data?.state === 'SUCCESS' || data?.state === 'FAILURE') {
@@ -328,7 +328,7 @@ export function useReIngestDataset() {
         data.namespace,
         data.project,
         data.dataset,
-        { action_type: 'ingest' }
+        { action_type: 'process' }
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh any status changes
@@ -352,10 +352,11 @@ export function useProcessDataset() {
       project: string
       dataset: string
     }) =>
-      datasetService.processDataset(
+      datasetService.executeDatasetAction(
         data.namespace,
         data.project,
-        data.dataset
+        data.dataset,
+        { action_type: 'process' }
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh any status changes

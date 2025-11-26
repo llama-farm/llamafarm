@@ -230,16 +230,16 @@ class TestDatasetServiceExtraDetails:
         )
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_list_datasets_with_file_details_success(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test successful retrieval of datasets with complete file metadata."""
         # Setup mocks
         mock_load_config.return_value = self.mock_project_config
 
         # Configure metadata lookup to return appropriate metadata for each hash
-        def metadata_side_effect(namespace, project_id, file_content_hash):
+        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -249,7 +249,14 @@ class TestDatasetServiceExtraDetails:
             else:
                 raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_with_files":
+                return [self.metadata_1, self.metadata_2]
+            if dataset == "dataset_single_file":
+                return [self.metadata_3]
+            return []
+
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -265,7 +272,6 @@ class TestDatasetServiceExtraDetails:
         assert dataset_1.name == "dataset_with_files"
         assert dataset_1.data_processing_strategy == "test_strategy"
         assert dataset_1.database == "test_db"
-        assert dataset_1.files == [self.file_hash_1, self.file_hash_2]
         assert isinstance(dataset_1.details, DatasetDetails)
         assert len(dataset_1.details.files_metadata) == 2
 
@@ -294,28 +300,11 @@ class TestDatasetServiceExtraDetails:
         assert dataset_3.name == "dataset_empty"
         assert len(dataset_3.details.files_metadata) == 0
 
-        # Verify metadata service was called correctly
-        assert mock_get_metadata.call_count == 3
-
-        # Check that the method was called with the expected file hashes
-        called_hashes = []
-        for call in mock_get_metadata.call_args_list:
-            # Extract file_content_hash from kwargs or args
-            if "file_content_hash" in call.kwargs:
-                called_hashes.append(call.kwargs["file_content_hash"])
-            elif len(call.args) >= 3:
-                called_hashes.append(
-                    call.args[2]
-                )  # file_content_hash is 3rd positional arg
-
-        assert self.file_hash_1 in called_hashes
-        assert self.file_hash_2 in called_hashes
-        assert self.file_hash_3 in called_hashes
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_list_datasets_with_file_details_multiple_file_types(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test datasets containing multiple files with different metadata types."""
         # Create config with files of various types
@@ -332,7 +321,7 @@ class TestDatasetServiceExtraDetails:
         mock_load_config.return_value = config_with_various_files
 
         # Configure metadata with different file types
-        def metadata_side_effect(namespace, project_id, file_content_hash):
+        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1  # PDF
             elif file_content_hash == self.file_hash_2:
@@ -340,7 +329,10 @@ class TestDatasetServiceExtraDetails:
             elif file_content_hash == self.file_hash_3:
                 return self.metadata_3  # TXT
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        def list_files_side_effect(namespace, project_id, dataset):
+            return [self.metadata_1, self.metadata_2, self.metadata_3]
+
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -395,16 +387,15 @@ class TestDatasetServiceExtraDetails:
         assert isinstance(datasets_with_details, list)
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
-    @patch("services.dataset_service.logger")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_list_datasets_with_file_details_missing_metadata(
-        self, mock_logger, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test behavior when metadata file is missing for a file hash."""
         mock_load_config.return_value = self.mock_project_config
 
         # Configure metadata lookup to fail for second file
-        def metadata_side_effect(namespace, project_id, file_content_hash):
+        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -412,7 +403,14 @@ class TestDatasetServiceExtraDetails:
             elif file_content_hash == self.file_hash_3:
                 return self.metadata_3
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_with_files":
+                return [self.metadata_1]
+            if dataset == "dataset_single_file":
+                return [self.metadata_3]
+            return []
+
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -436,11 +434,7 @@ class TestDatasetServiceExtraDetails:
         dataset_3 = datasets_with_details[2]
         assert len(dataset_3.details.files_metadata) == 0
 
-        # Verify warning was logged for missing metadata
-        mock_logger.warning.assert_called_once()
-        warning_call = mock_logger.warning.call_args[0][0]
-        assert "File metadata not found for hash" in warning_call
-        assert self.file_hash_2 in warning_call
+        # No warnings expected in filesystem-based flow; lists simply contain available metadata
 
     def test_file_metadata_fields_completeness(self):
         """Test that all required MetadataFileContent fields are present."""
@@ -481,14 +475,14 @@ class TestDatasetServiceExtraDetails:
         assert metadata.timestamp > 0
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_dataset_with_file_details_structure(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test DatasetWithFileDetails contains all expected fields."""
         mock_load_config.return_value = self.mock_project_config
 
-        def metadata_side_effect(namespace, project_id, file_content_hash):
+        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -498,7 +492,14 @@ class TestDatasetServiceExtraDetails:
             else:
                 raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        def list_files_side_effect(namespace, project_id, dataset):
+            if dataset == "dataset_with_files":
+                return [self.metadata_1, self.metadata_2]
+            if dataset == "dataset_single_file":
+                return [self.metadata_3]
+            return []
+
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -512,7 +513,6 @@ class TestDatasetServiceExtraDetails:
         assert hasattr(dataset, "name")
         assert hasattr(dataset, "data_processing_strategy")
         assert hasattr(dataset, "database")
-        assert hasattr(dataset, "files")
 
         # Verify it has the additional details field
         assert hasattr(dataset, "details")
@@ -532,9 +532,9 @@ class TestDatasetServiceExtraDetailsIntegration:
     """Integration tests for DatasetService extra details workflows."""
 
     @patch.object(ProjectService, "load_config")
-    @patch("services.data_service.DataService.get_data_file_metadata_by_hash")
+    @patch.object(DatasetService, "list_dataset_files")
     def test_comprehensive_dataset_metadata_workflow(
-        self, mock_get_metadata, mock_load_config
+        self, mock_list_files, mock_load_config
     ):
         """Test complete workflow with multiple datasets and files."""
         # Create comprehensive test data
@@ -664,18 +664,15 @@ class TestDatasetServiceExtraDetailsIntegration:
 
         mock_load_config.return_value = complex_config
 
-        # Configure metadata lookup
-        def metadata_side_effect(namespace, project_id, file_content_hash):
-            if file_content_hash == file_hash_a:
-                return metadata_a
-            elif file_content_hash == file_hash_b:
-                return metadata_b
-            elif file_content_hash == file_hash_c:
-                return metadata_c
-            else:
-                raise FileNotFoundError(f"Metadata not found for {file_content_hash}")
+        def list_files_side_effect(namespace, project_id, dataset):
+            mapping = {
+                "documents_dataset": [metadata_a, metadata_c],
+                "analytics_dataset": [metadata_b],
+                "mixed_dataset": [metadata_a, metadata_b, metadata_c],
+            }
+            return mapping.get(dataset, [])
 
-        mock_get_metadata.side_effect = metadata_side_effect
+        mock_list_files.side_effect = list_files_side_effect
 
         # Execute
         datasets_with_details = DatasetService.list_datasets_with_file_details(
@@ -720,5 +717,3 @@ class TestDatasetServiceExtraDetailsIntegration:
         assert file_hash_b in all_hashes
         assert file_hash_c in all_hashes
 
-        # Verify metadata service was called for all unique files
-        assert mock_get_metadata.call_count == 6  # 2 + 1 + 3 = 6 total calls

@@ -182,7 +182,6 @@ runtime:
 
 datasets:
   - name: "dev_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "dev_db"
 
@@ -243,7 +242,6 @@ runtime:
 
 datasets:
   - name: "prod_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "prod_db"
 

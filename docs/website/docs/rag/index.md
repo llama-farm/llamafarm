@@ -96,6 +96,15 @@ rag:
 
 Pair queries with `lf chat` to confirm the runtime consumes retrieved context correctly.
 
+### Advanced Retrieval Strategies
+
+For improved accuracy and handling of complex queries, LlamaFarm supports:
+
+- **Cross-Encoder Reranking** - Rerank initial candidates using specialized models (10-100x faster than LLM reranking)
+- **Multi-Turn RAG** - Decompose complex queries into sub-queries, retrieve in parallel, and merge results
+
+See [Advanced Retrieval Strategies](./advanced-retrieval.md) for detailed configuration and usage.
+
 ## Monitoring & Maintenance
 
 - `lf rag stats` – view vector counts and storage usage.
