@@ -86,7 +86,7 @@ const Projects = () => {
             </button>
             <button
               className="px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
-              onClick={projectModal.openCreateModal}
+              onClick={() => projectModal.openCreateModal()}
             >
               New project
             </button>
