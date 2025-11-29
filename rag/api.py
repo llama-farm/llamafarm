@@ -291,7 +291,7 @@ class BaseAPI:
                 }
                 # Resolve model references
                 strategy_config = self._resolve_model_references(strategy_config)
-                return create_retrieval_strategy_from_config(strategy_config)
+                return create_retrieval_strategy_from_config(strategy_config, self.project_dir)
 
         # If not found, return the default strategy
         return self.retrieval_strategy
@@ -521,7 +521,9 @@ class SearchAPI(BaseAPI):
                     "type": strategy.get("type"),
                     "config": strategy.get("config", {}),
                 }
-                return create_retrieval_strategy_from_config(strategy_config)
+                # Resolve model references for strategies that need them
+                strategy_config = self._resolve_model_references(strategy_config)
+                return create_retrieval_strategy_from_config(strategy_config, self.project_dir)
 
         # If not found, return default strategy
         return self.retrieval_strategy
