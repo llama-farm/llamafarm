@@ -1,13 +1,11 @@
 """Multi-turn RAG strategy with query decomposition and parallel retrieval."""
 
-import asyncio
-import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
+from components.retrievers.base import RetrievalResult, RetrievalStrategy
 from core.base import Document
 from core.logging import RAGStructLogger
 
@@ -36,7 +34,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
     def __init__(
         self,
         name: str = "MultiTurnRAGStrategy",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -72,8 +70,8 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         self.max_workers = config.get("max_workers", 3)
 
         # State
-        self._base_strategy: Optional[RetrievalStrategy] = None
-        self._reranker_strategy: Optional[RetrievalStrategy] = None
+        self._base_strategy: RetrievalStrategy | None = None
+        self._reranker_strategy: RetrievalStrategy | None = None
         self._llm_client = None
 
     def _initialize_base_strategy(self):
@@ -81,8 +79,12 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         if self._base_strategy is not None:
             return
 
-        from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
-        from components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
+        from components.retrievers.basic_similarity.basic_similarity import (
+            BasicSimilarityStrategy,
+        )
+        from components.retrievers.metadata_filtered.metadata_filtered import (
+            MetadataFilteredStrategy,
+        )
 
         strategy_map = {
             "BasicSimilarityStrategy": BasicSimilarityStrategy,
@@ -106,7 +108,9 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         if not self.enable_reranking or self._reranker_strategy is not None:
             return
 
-        from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import CrossEncoderRerankedStrategy
+        from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import (
+            CrossEncoderRerankedStrategy,
+        )
 
         strategy_map = {
             "CrossEncoderRerankedStrategy": CrossEncoderRerankedStrategy,
@@ -146,7 +150,9 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         try:
             # Get the reranker's internal rerank method
-            from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import CrossEncoderRerankedStrategy
+            from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import (
+                CrossEncoderRerankedStrategy,
+            )
 
             if isinstance(self._reranker_strategy, CrossEncoderRerankedStrategy):
                 # Use the reranker's internal method directly
@@ -158,14 +164,14 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
                 # Filter and select top_k
                 final_docs = reranked_docs[:top_k]
 
-                # Build new result
-                documents = [doc for doc, _ in final_docs]
-                scores = [score for _, score in final_docs]
-
-                # Add reranker metadata to documents
+                # Add reranker metadata to documents before building result
                 for i, (doc, score) in enumerate(final_docs):
                     doc.metadata["reranker_score"] = score
                     doc.metadata["rerank_position"] = i + 1
+
+                # Build result lists from annotated documents
+                documents = [doc for doc, _ in final_docs]
+                scores = [score for _, score in final_docs]
 
                 return RetrievalResult(
                     documents=documents,
@@ -201,11 +207,11 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         try:
             from openai import OpenAI
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "openai package is required for query decomposition. "
                 "Install with: pip install openai"
-            )
+            ) from e
 
         # Use configured API key, environment variable, or placeholder
         # Ollama and many local endpoints don't require authentication
@@ -218,7 +224,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         )
 
         logger.info(
-            f"Initialized LLM client for query decomposition",
+            "Initialized LLM client for query decomposition",
             model_name=self.model_name,
             base_url=self.model_base_url,
         )
@@ -253,7 +259,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         return False
 
-    def _decompose_query(self, query_text: str) -> List[str]:
+    def _decompose_query(self, query_text: str) -> list[str]:
         """
         Decompose a complex query into focused sub-queries using LLM.
 
@@ -358,7 +364,7 @@ Always use <question> tags. Be direct."""
         embedder,
         vector_store,
         **kwargs
-    ) -> Tuple[str, RetrievalResult]:
+    ) -> tuple[str, RetrievalResult]:
         """
         Retrieve documents for a single sub-query.
 
@@ -396,7 +402,7 @@ Always use <question> tags. Be direct."""
 
             return (sub_query, result)
 
-        except Exception as e:
+        except Exception:
             logger.error(f"Retrieval failed for sub-query: {sub_query}", exc_info=True)
             return (sub_query, RetrievalResult(documents=[], scores=[]))
 
@@ -434,7 +440,7 @@ Always use <question> tags. Be direct."""
 
     def _merge_and_deduplicate(
         self,
-        results: List[Tuple[str, RetrievalResult]],
+        results: list[tuple[str, RetrievalResult]],
         top_k: int
     ) -> RetrievalResult:
         """
@@ -451,13 +457,13 @@ Always use <question> tags. Be direct."""
         Returns:
             RetrievalResult with deduplicated documents
         """
-        all_docs: List[Document] = []
-        all_scores: List[float] = []
-        seen_ids: Set[str] = set()
+        all_docs: list[Document] = []
+        all_scores: list[float] = []
+        seen_ids: set[str] = set()
 
         # Collect all documents with their scores (ID-based deduplication)
-        for sub_query, result in results:
-            for doc, score in zip(result.documents, result.scores):
+        for _sub_query, result in results:
+            for doc, score in zip(result.documents, result.scores, strict=False):
                 if doc.id not in seen_ids:
                     seen_ids.add(doc.id)
                     all_docs.append(doc)
@@ -468,7 +474,7 @@ Always use <question> tags. Be direct."""
             deduplicated_docs = []
             deduplicated_scores = []
 
-            for i, (doc, score) in enumerate(zip(all_docs, all_scores)):
+            for doc, score in zip(all_docs, all_scores, strict=False):
                 is_duplicate = False
 
                 # Check against already selected documents
@@ -495,7 +501,7 @@ Always use <question> tags. Be direct."""
             effective_top_k = min(top_k, self.final_top_k)
 
             sorted_pairs = sorted(
-                zip(all_docs, all_scores),
+                zip(all_docs, all_scores, strict=False),
                 key=lambda x: x[1],
                 reverse=True
             )[:effective_top_k]
@@ -521,7 +527,7 @@ Always use <question> tags. Be direct."""
 
     def retrieve(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         vector_store,
         top_k: int = 5,
         query_text: str = "",
@@ -557,7 +563,7 @@ Always use <question> tags. Be direct."""
             result = self._base_strategy.retrieve(
                 query_embedding=query_embedding,
                 vector_store=vector_store,
-                top_k=self.initial_k if self.enable_reranking else top_k,
+                top_k=max(top_k, self.initial_k) if self.enable_reranking else top_k,
                 **kwargs
             )
 
@@ -580,7 +586,7 @@ Always use <question> tags. Be direct."""
             result = self._base_strategy.retrieve(
                 query_embedding=query_embedding,
                 vector_store=vector_store,
-                top_k=self.initial_k if self.enable_reranking else top_k,
+                top_k=max(top_k, self.initial_k) if self.enable_reranking else top_k,
                 **kwargs
             )
 
@@ -644,11 +650,9 @@ Always use <question> tags. Be direct."""
             return False
         if self.sub_query_top_k < 1:
             return False
-        if self.final_top_k < 1:
-            return False
-        return True
+        return self.final_top_k >= 1
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         """Get configuration schema."""
         return {
             "type": "object",
@@ -673,7 +677,7 @@ Always use <question> tags. Be direct."""
             },
         }
 
-    def get_performance_info(self) -> Dict[str, Any]:
+    def get_performance_info(self) -> dict[str, Any]:
         """Get performance characteristics."""
         return {
             "speed": "medium-slow",
