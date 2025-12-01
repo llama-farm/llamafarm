@@ -1,5 +1,6 @@
 """Service for managing RAG databases within projects."""
 
+import sys
 from pathlib import Path
 
 from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
@@ -9,6 +10,18 @@ from core.logging import FastAPIStructLogger
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
+
+
+def _import_rag_factory():
+    """Import RAG factory, adding rag directory to path if needed."""
+    # Add rag directory to path if not already present
+    rag_path = str(Path(__file__).parent.parent.parent / "rag")
+    if rag_path not in sys.path:
+        sys.path.insert(0, rag_path)
+
+    from core.factories import VectorStoreFactory
+
+    return VectorStoreFactory
 
 
 class DatabaseService:
@@ -188,120 +201,78 @@ class DatabaseService:
         project_dir: str,
     ) -> tuple[bool, str | None]:
         """
-        Delete the vector store collection for a database.
+        Delete the vector store collection for a database using RAG abstractions.
+
+        Uses VectorStoreFactory to create a store instance and delegates deletion
+        to the store's delete_collection() method.
 
         Returns:
             Tuple of (success, error_message)
         """
         db_type = database.type.value if hasattr(database.type, "value") else str(database.type)
-        collection_name = (database.config or {}).get("collection_name", "documents")
 
-        if db_type == "ChromaStore":
-            return cls._delete_chroma_collection(database, project_dir, collection_name)
-        elif db_type == "QdrantStore":
-            return cls._delete_qdrant_collection(database, project_dir, collection_name)
-        else:
-            # Unknown store type - just log warning and continue
-            logger.warning(
-                "Unknown store type, skipping collection deletion",
-                store_type=db_type,
-                database=database.name,
-            )
-            return True, None
-
-    @classmethod
-    def _delete_chroma_collection(
-        cls,
-        database: Database,
-        project_dir: str,
-        collection_name: str,
-    ) -> tuple[bool, str | None]:
-        """Delete a ChromaDB collection."""
         try:
-            import chromadb
+            VectorStoreFactory = _import_rag_factory()
 
-            config = database.config or {}
-            host = config.get("host")
-            port = config.get("port")
-
-            if host and port:
-                # HTTP client mode
-                client = chromadb.HttpClient(host=host, port=port)
-            else:
-                # Persistent client mode
-                persist_dir = config.get(
-                    "persist_directory",
-                    str(Path(project_dir) / "lf_data" / "stores" / database.name),
-                )
-                client = chromadb.PersistentClient(path=persist_dir)
-
-            # Delete the collection
-            try:
-                client.delete_collection(name=collection_name)
-                logger.info(
-                    "Deleted ChromaDB collection",
-                    collection=collection_name,
+            # Check if this store type is available
+            if db_type not in VectorStoreFactory.list_available():
+                logger.warning(
+                    "Vector store type not available, skipping collection deletion",
+                    store_type=db_type,
                     database=database.name,
+                    available_stores=VectorStoreFactory.list_available(),
                 )
-            except ValueError as e:
-                # Collection doesn't exist - that's fine
-                if "does not exist" in str(e).lower():
-                    logger.info(
-                        "Collection does not exist, nothing to delete",
-                        collection=collection_name,
-                        database=database.name,
-                    )
-                else:
-                    raise
+                return True, None
 
-            return True, None
+            # Build config for the vector store
+            # The store needs the database config plus project_dir for persist_directory
+            store_config = database.config or {}
 
-        except ImportError:
-            logger.warning("chromadb not installed, skipping collection deletion")
-            return True, None
-        except Exception as e:
-            error_msg = f"Failed to delete ChromaDB collection: {e}"
-            logger.error(error_msg, exc_info=True)
-            return False, error_msg
-
-    @classmethod
-    def _delete_qdrant_collection(
-        cls,
-        database: Database,
-        project_dir: str,
-        collection_name: str,
-    ) -> tuple[bool, str | None]:
-        """Delete a Qdrant collection."""
-        try:
-            from qdrant_client import QdrantClient
-
-            config = database.config or {}
-            host = config.get("host", "localhost")
-            port = config.get("port", 6333)
-
-            client = QdrantClient(host=host, port=port)
-            client.delete_collection(collection_name=collection_name)
-
-            logger.info(
-                "Deleted Qdrant collection",
-                collection=collection_name,
-                database=database.name,
+            # Create the vector store instance
+            vector_store = VectorStoreFactory.create(
+                component_type=db_type,
+                config=store_config,
+                project_dir=Path(project_dir),
             )
-            return True, None
 
-        except ImportError:
-            logger.warning("qdrant-client not installed, skipping collection deletion")
-            return True, None
-        except Exception as e:
-            # Collection might not exist
-            if "not found" in str(e).lower() or "doesn't exist" in str(e).lower():
+            # Use the abstraction's delete_collection method
+            success = vector_store.delete_collection()
+
+            if success:
                 logger.info(
-                    "Collection does not exist, nothing to delete",
-                    collection=collection_name,
+                    "Deleted vector store collection",
+                    store_type=db_type,
                     database=database.name,
                 )
                 return True, None
-            error_msg = f"Failed to delete Qdrant collection: {e}"
+            else:
+                error_msg = "Vector store delete_collection() returned False"
+                logger.error(error_msg, database=database.name)
+                return False, error_msg
+
+        except ImportError as e:
+            # Store dependencies not installed - that's okay, skip deletion
+            logger.warning(
+                "Vector store dependencies not installed, skipping collection deletion",
+                store_type=db_type,
+                database=database.name,
+                error=str(e),
+            )
+            return True, None
+        except ValueError as e:
+            # Collection might not exist - check for common "not found" messages
+            error_str = str(e).lower()
+            if "does not exist" in error_str or "not found" in error_str:
+                logger.info(
+                    "Collection does not exist, nothing to delete",
+                    database=database.name,
+                )
+                return True, None
+            error_msg = f"Failed to delete vector store collection: {e}"
+            logger.error(error_msg, exc_info=True)
+            return False, error_msg
+        except Exception as e:
+            error_msg = f"Failed to delete vector store collection: {e}"
             logger.error(error_msg, exc_info=True)
             return False, error_msg
 

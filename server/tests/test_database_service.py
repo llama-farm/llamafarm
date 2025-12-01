@@ -411,48 +411,51 @@ class TestDatabaseService:
 class TestDatabaseServiceCollectionDeletion:
     """Test cases for database collection deletion methods."""
 
-    def test_delete_chroma_collection_success(self):
-        """Test ChromaDB collection deletion success case."""
+    def test_delete_vector_store_collection_success(self):
+        """Test vector store collection deletion success case using RAG abstraction."""
         db = Database(
             name="test_db",
             type=Type.ChromaStore,
             config={"collection_name": "test_collection"},
         )
 
-        # Patch chromadb at the module level where it's imported
-        with patch.dict("sys.modules", {"chromadb": Mock()}) as mock_modules:
-            import sys
-            mock_chromadb = sys.modules["chromadb"]
-            mock_client = Mock()
-            mock_chromadb.PersistentClient.return_value = mock_client
+        # Mock the VectorStoreFactory and vector store
+        mock_vector_store = Mock()
+        mock_vector_store.delete_collection.return_value = True
 
-            success, error = DatabaseService._delete_chroma_collection(
-                db, "/tmp/project", "test_collection"
+        mock_factory = Mock()
+        mock_factory.list_available.return_value = ["ChromaStore", "QdrantStore"]
+        mock_factory.create.return_value = mock_vector_store
+
+        with patch(
+            "services.database_service._import_rag_factory", return_value=mock_factory
+        ):
+            success, error = DatabaseService._delete_vector_store_collection(
+                db, "/tmp/project"
             )
 
             assert success is True
             assert error is None
-            mock_client.delete_collection.assert_called_once_with(name="test_collection")
+            mock_vector_store.delete_collection.assert_called_once()
 
-    def test_delete_chroma_collection_not_exists(self):
-        """Test ChromaDB collection deletion when collection doesn't exist."""
+    def test_delete_vector_store_collection_not_exists(self):
+        """Test vector store collection deletion when collection doesn't exist."""
         db = Database(
             name="test_db",
             type=Type.ChromaStore,
             config={"collection_name": "nonexistent"},
         )
 
-        with patch.dict("sys.modules", {"chromadb": Mock()}) as mock_modules:
-            import sys
-            mock_chromadb = sys.modules["chromadb"]
-            mock_client = Mock()
-            mock_client.delete_collection.side_effect = ValueError(
-                "Collection does not exist"
-            )
-            mock_chromadb.PersistentClient.return_value = mock_client
+        # Mock the factory to raise ValueError indicating collection doesn't exist
+        mock_factory = Mock()
+        mock_factory.list_available.return_value = ["ChromaStore"]
+        mock_factory.create.side_effect = ValueError("Collection does not exist")
 
-            success, error = DatabaseService._delete_chroma_collection(
-                db, "/tmp/project", "nonexistent"
+        with patch(
+            "services.database_service._import_rag_factory", return_value=mock_factory
+        ):
+            success, error = DatabaseService._delete_vector_store_collection(
+                db, "/tmp/project"
             )
 
             # Should still succeed (collection already gone)
@@ -463,12 +466,68 @@ class TestDatabaseServiceCollectionDeletion:
         """Test that unknown store types are handled gracefully."""
         db = Mock()
         db.type.value = "UnknownStore"
+        db.name = "test_db"
         db.config = {"collection_name": "test"}
 
-        success, error = DatabaseService._delete_vector_store_collection(
-            db, "/tmp/project"
+        # Mock the factory to NOT include the unknown store type
+        mock_factory = Mock()
+        mock_factory.list_available.return_value = ["ChromaStore", "QdrantStore"]
+
+        with patch(
+            "services.database_service._import_rag_factory", return_value=mock_factory
+        ):
+            success, error = DatabaseService._delete_vector_store_collection(
+                db, "/tmp/project"
+            )
+
+            # Should succeed with warning (no-op for unknown types)
+            assert success is True
+            assert error is None
+
+    def test_delete_vector_store_collection_failure(self):
+        """Test vector store collection deletion failure case."""
+        db = Database(
+            name="test_db",
+            type=Type.ChromaStore,
+            config={"collection_name": "test_collection"},
         )
 
-        # Should succeed with warning (no-op for unknown types)
-        assert success is True
-        assert error is None
+        # Mock the vector store to return False (deletion failed)
+        mock_vector_store = Mock()
+        mock_vector_store.delete_collection.return_value = False
+
+        mock_factory = Mock()
+        mock_factory.list_available.return_value = ["ChromaStore"]
+        mock_factory.create.return_value = mock_vector_store
+
+        with patch(
+            "services.database_service._import_rag_factory", return_value=mock_factory
+        ):
+            success, error = DatabaseService._delete_vector_store_collection(
+                db, "/tmp/project"
+            )
+
+            assert success is False
+            assert error is not None
+            assert "returned False" in error
+
+    def test_delete_vector_store_import_error(self):
+        """Test that import errors are handled gracefully."""
+        db = Database(
+            name="test_db",
+            type=Type.ChromaStore,
+            config={"collection_name": "test_collection"},
+        )
+
+        # Mock the factory to raise ImportError
+        with patch(
+            "services.database_service._import_rag_factory",
+            side_effect=ImportError("chromadb not installed"),
+        ):
+            success, error = DatabaseService._delete_vector_store_collection(
+                db, "/tmp/project"
+            )
+
+            # Should succeed (skip deletion when dependencies not installed)
+            assert success is True
+            assert error is None
