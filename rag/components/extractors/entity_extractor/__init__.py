@@ -5,7 +5,7 @@ This component extracts named entities from text using NLP models with regex fal
 
 from .entity_extractor import EntityExtractor
 
-__all__ = ['EntityExtractor']
+__all__ = ["EntityExtractor"]
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "extractor"

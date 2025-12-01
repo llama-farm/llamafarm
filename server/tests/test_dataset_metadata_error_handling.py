@@ -11,12 +11,12 @@ import pytest
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    PromptSet,
+    Model,
     PromptMessage,
+    PromptSet,
     Provider,
     Runtime,
     Version,
-    Model,
 )
 
 from services.data_service import MetadataFileContent
@@ -191,9 +191,7 @@ class TestDatasetMetadataErrorHandling:
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")
-    def test_corrupted_metadata_file_handling(
-        self, mock_list_files, mock_load_config
-    ):
+    def test_corrupted_metadata_file_handling(self, mock_list_files, mock_load_config):
         """Test handling of corrupted JSON in metadata file."""
         mock_load_config.return_value = self.mock_project_config_with_errors
 
@@ -217,9 +215,7 @@ class TestDatasetMetadataErrorHandling:
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")
-    def test_permission_denied_metadata_access(
-        self, mock_list_files, mock_load_config
-    ):
+    def test_permission_denied_metadata_access(self, mock_list_files, mock_load_config):
         """Test handling of permission issues when accessing metadata files."""
         mock_load_config.return_value = self.mock_project_config_with_errors
 
@@ -438,9 +434,7 @@ class TestDatasetMetadataErrorHandling:
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")
-    def test_mixed_error_scenarios_resilience(
-        self, mock_list_files, mock_load_config
-    ):
+    def test_mixed_error_scenarios_resilience(self, mock_list_files, mock_load_config):
         """Test system resilience with multiple error types occurring simultaneously."""
         # Create config with various problematic scenarios
         mixed_error_config = LlamaFarmConfig(
@@ -661,9 +655,7 @@ class TestErrorHandlingIntegration:
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")
-    def test_production_like_error_scenario(
-        self, mock_list_files, mock_load_config
-    ):
+    def test_production_like_error_scenario(self, mock_list_files, mock_load_config):
         """Test a production-like scenario with various real-world error conditions."""
         # Simulate a realistic production scenario
         production_hashes = [

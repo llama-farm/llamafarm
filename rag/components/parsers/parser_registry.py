@@ -1,7 +1,5 @@
 """Auto-generated parser registry."""
 
-import json
-
 REGISTRY_DATA = {
     "file_extensions": {
         ".asc": [

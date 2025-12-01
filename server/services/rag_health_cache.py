@@ -221,14 +221,16 @@ class RAGHealthCache:
             logger.debug(f"Task completed with status: {final_status}")
         except Exception as e:
             logger.error(f"Error accessing final task status in health check: {e}")
-            raise Exception(f"Failed to get task status for health check: {e}")
+            raise Exception(f"Failed to get task status for health check: {e}") from e
 
         if final_status == "SUCCESS":
             try:
                 return result.result
             except Exception as e:
                 logger.error(f"Error accessing task result in health check: {e}")
-                raise Exception(f"Failed to get task result for health check: {e}")
+                raise Exception(
+                    f"Failed to get task result for health check: {e}"
+                ) from e
         elif final_status == "FAILURE":
             # Get the exception info and raise it
             try:
@@ -238,7 +240,9 @@ class RAGHealthCache:
                     raise Exception(f"Task failed with status: {final_status}")
             except Exception as e:
                 logger.error(f"Error accessing failure details in health check: {e}")
-                raise Exception(f"Task failed but couldn't get error details: {e}")
+                raise Exception(
+                    f"Task failed but couldn't get error details: {e}"
+                ) from e
         else:
             # Timeout or other status
             raise Exception(f"Task timed out or failed: {final_status}")

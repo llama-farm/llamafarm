@@ -111,11 +111,8 @@ class TestCoreModules:
 
         # Should handle unknown parser type
         config = {"type": "unknown_parser_type", "config": {}}
-        try:
-            parser = create_parser_from_config(config)
-            # If it doesn't raise, that's OK too
-        except (ValueError, KeyError):
-            pass  # Expected
+        with pytest.raises((ValueError, KeyError)):
+            create_parser_from_config(config)
 
     @pytest.mark.skip(reason="Requires complex setup with running services")
     def test_ingest_handler_file_processing(self):
@@ -142,7 +139,7 @@ class TestCoreModules:
             # Test ingestion (may need configuration)
             try:
                 result = handler.ingest(f.name)
-                assert result is not None or True  # Allow for various implementations
+                assert result is not None  # Allow for various implementations
             except Exception:
                 pass  # Some methods may require configuration
             finally:

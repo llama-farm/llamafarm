@@ -1,7 +1,7 @@
 """Universal Runtime-based embedding generator."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import requests  # type: ignore
@@ -21,7 +21,7 @@ class UniversalEmbedder(Embedder):
     def __init__(
         self,
         name: str = "UniversalEmbedder",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         # Ensure name is always a string
@@ -88,14 +88,14 @@ class UniversalEmbedder(Embedder):
                 logger.info(f"Universal Runtime available at {self.base_url}")
                 return True
             else:
-                logger.warning(f"Could not list models from Universal Runtime")
+                logger.warning("Could not list models from Universal Runtime")
                 return False
 
         except Exception as e:
             logger.warning(f"Failed to validate Universal Runtime embedder config: {e}")
             return False
 
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts using Universal Runtime."""
         if not texts:
             return []
@@ -110,7 +110,7 @@ class UniversalEmbedder(Embedder):
 
         return embeddings
 
-    def _embed_batch(self, texts: List[str]) -> List[List[float]]:
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of texts using Universal Runtime."""
         try:
             result = self._call_universal_api(texts)
@@ -132,7 +132,7 @@ class UniversalEmbedder(Embedder):
                 if embedding:
                     embeddings.append(embedding)
                 else:
-                    logger.warning(f"Empty embedding in response")
+                    logger.warning("Empty embedding in response")
                     embeddings.append([0.0] * self.get_embedding_dimension())
 
             # Ensure we have the right number of embeddings
@@ -168,7 +168,7 @@ class UniversalEmbedder(Embedder):
         # Default to 768 (most common)
         return 768
 
-    def _call_universal_api(self, texts: List[str]) -> Dict[str, Any]:
+    def _call_universal_api(self, texts: list[str]) -> dict[str, Any]:
         """Call Universal Runtime API for embedding generation."""
         url = f"{self.base_url}/embeddings"
 
@@ -202,7 +202,7 @@ class UniversalEmbedder(Embedder):
             logger.error(error_msg)
             raise Exception(error_msg)
 
-    def embed_text(self, text: str) -> List[float]:
+    def embed_text(self, text: str) -> list[float]:
         """Embed a single text string."""
         if not text or not text.strip():
             return [0.0] * self.get_embedding_dimension()

@@ -10,4 +10,3 @@ __all__ = ["UniversalEmbedder"]
 # Component metadata
 COMPONENT_TYPE = "embedder"
 COMPONENT_NAME = "universal_embedder"
-

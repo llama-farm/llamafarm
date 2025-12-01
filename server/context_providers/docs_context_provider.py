@@ -3,7 +3,6 @@ Context provider for injecting documentation into agent context.
 """
 
 from atomic_agents.context import BaseDynamicContextProvider
-from typing import List
 
 
 class DocsContextProvider(BaseDynamicContextProvider):
@@ -22,9 +21,9 @@ class DocsContextProvider(BaseDynamicContextProvider):
             title: Title for the context section
         """
         super().__init__(title=title)
-        self.docs: List[tuple[str, str]] = []  # List of (doc_path, content) tuples
+        self.docs: list[tuple[str, str]] = []  # List of (doc_path, content) tuples
 
-    def set_docs(self, docs: List[tuple[str, str]]) -> None:
+    def set_docs(self, docs: list[tuple[str, str]]) -> None:
         """
         Set the documentation to be injected.
 
@@ -49,6 +48,8 @@ class DocsContextProvider(BaseDynamicContextProvider):
 
         formatted_docs = []
         for doc_path, content in self.docs:
-            formatted_docs.append(f"## Documentation: {doc_path}\n\n{content}\n\n{'-' * 80}")
+            formatted_docs.append(
+                f"## Documentation: {doc_path}\n\n{content}\n\n{'-' * 80}"
+            )
 
         return "\n\n".join(formatted_docs)

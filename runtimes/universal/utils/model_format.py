@@ -59,10 +59,12 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
     """
     # Parse model ID to remove quantization suffix if present
     base_model_id, _ = parse_model_with_quantization(model_id)
-    
+
     # Check cache first (use base model ID for caching)
     if base_model_id in _format_cache:
-        logger.debug(f"Using cached format for {base_model_id}: {_format_cache[base_model_id]}")
+        logger.debug(
+            f"Using cached format for {base_model_id}: {_format_cache[base_model_id]}"
+        )
         return _format_cache[base_model_id]
 
     logger.info(f"Detecting format for model: {base_model_id}")
@@ -114,12 +116,14 @@ def list_gguf_files(model_id: str, token: str | None = None) -> list[str]:
     """
     # Parse model ID to remove quantization suffix if present
     base_model_id, _ = parse_model_with_quantization(model_id)
-    
+
     try:
         api = HfApi()
         all_files = api.list_repo_files(repo_id=base_model_id, token=token)
         gguf_files = [f for f in all_files if f.endswith(".gguf")]
-        logger.debug(f"Found {len(gguf_files)} GGUF files in {base_model_id}: {gguf_files}")
+        logger.debug(
+            f"Found {len(gguf_files)} GGUF files in {base_model_id}: {gguf_files}"
+        )
         return gguf_files
     except Exception as e:
         logger.error(f"Error listing files in {base_model_id}: {e}")
@@ -235,12 +239,12 @@ def get_gguf_file_path(
     """
     # Parse model ID to extract base model and quantization suffix if present
     base_model_id, model_quantization = parse_model_with_quantization(model_id)
-    
+
     # Use quantization from model_id if no explicit preference provided
     if preferred_quantization is None and model_quantization is not None:
         preferred_quantization = model_quantization
         logger.info(f"Using quantization from model ID: {preferred_quantization}")
-    
+
     logger.info(f"Locating GGUF file for model: {base_model_id}")
 
     # Step 1: List all GGUF files in the repository (without downloading)
@@ -248,7 +252,9 @@ def get_gguf_file_path(
     available_gguf_files = list_gguf_files(base_model_id, token)
 
     if not available_gguf_files:
-        raise FileNotFoundError(f"No GGUF files found in model repository: {base_model_id}")
+        raise FileNotFoundError(
+            f"No GGUF files found in model repository: {base_model_id}"
+        )
 
     # Step 2: Select the best GGUF file based on preference
     selected_filename = select_gguf_file_with_logging(

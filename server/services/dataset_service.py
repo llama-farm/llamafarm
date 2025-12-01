@@ -109,7 +109,7 @@ class DatasetService:
                 with open(file_path) as f:
                     metadata = MetadataFileContent.model_validate_json(f.read())
                     files.append(metadata)
-            except (OSError, IOError) as e:
+            except OSError as e:
                 logger.warning(
                     "Failed to read metadata file",
                     namespace=namespace,

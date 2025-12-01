@@ -1,12 +1,11 @@
 """Date and time extraction using multiple parsing strategies."""
 
 import re
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Union
+from datetime import datetime
+from typing import Any
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
-
 from core.logging import RAGStructLogger
 
 logger = RAGStructLogger(
@@ -23,7 +22,7 @@ class DateTimeExtractor(BaseExtractor):
     """
 
     def __init__(
-        self, name: str = "DateTimeExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "DateTimeExtractor", config: dict[str, Any] | None = None
     ):
         super().__init__(name, config)
 
@@ -54,7 +53,7 @@ class DateTimeExtractor(BaseExtractor):
             self.logger.warning("dateutil not available, using regex-only parsing")
             return False
 
-    def _initialize_patterns(self) -> Dict[str, re.Pattern]:
+    def _initialize_patterns(self) -> dict[str, re.Pattern]:
         """Initialize regex patterns for date/time extraction."""
         patterns = {}
 
@@ -115,7 +114,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return patterns
 
-    def _initialize_relative_mappings(self) -> Dict[str, str]:
+    def _initialize_relative_mappings(self) -> dict[str, str]:
         """Initialize mappings for relative date expressions."""
         return {
             "yesterday": "-1 day",
@@ -132,7 +131,7 @@ class DateTimeExtractor(BaseExtractor):
             "next year": "+1 year",
         }
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract dates and times from documents."""
         for doc in documents:
             try:
@@ -172,7 +171,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return documents
 
-    def _extract_datetime_info(self, text: str) -> Dict[str, List[Dict[str, Any]]]:
+    def _extract_datetime_info(self, text: str) -> dict[str, list[dict[str, Any]]]:
         """Extract comprehensive datetime information from text."""
         datetime_data = {
             "dates": [],
@@ -200,7 +199,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return datetime_data
 
-    def _extract_absolute_dates(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_absolute_dates(self, text: str) -> list[dict[str, Any]]:
         """Extract absolute date expressions."""
         dates = []
 
@@ -230,7 +229,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return dates
 
-    def _extract_times(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_times(self, text: str) -> list[dict[str, Any]]:
         """Extract time expressions."""
         times = []
 
@@ -255,7 +254,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return times
 
-    def _extract_relative_dates(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_relative_dates(self, text: str) -> list[dict[str, Any]]:
         """Extract relative date expressions."""
         relative_dates = []
 
@@ -279,7 +278,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return relative_dates
 
-    def _extract_combined_datetime(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_combined_datetime(self, text: str) -> list[dict[str, Any]]:
         """Extract combined date and time expressions."""
         combined = []
 
@@ -303,7 +302,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return combined
 
-    def _extract_fuzzy_dates(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_fuzzy_dates(self, text: str) -> list[dict[str, Any]]:
         """Extract dates using fuzzy parsing with dateutil."""
         fuzzy_dates = []
 
@@ -345,7 +344,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return fuzzy_dates
 
-    def _parse_date(self, date_text: str) -> Optional[datetime]:
+    def _parse_date(self, date_text: str) -> datetime | None:
         """Parse a date string into datetime object."""
         if self.dateutil_available:
             try:
@@ -375,7 +374,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return None
 
-    def _parse_time(self, time_text: str) -> Optional[str]:
+    def _parse_time(self, time_text: str) -> str | None:
         """Parse a time string."""
         # Remove extra spaces
         time_text = " ".join(time_text.split())
@@ -410,7 +409,7 @@ class DateTimeExtractor(BaseExtractor):
 
         return time_text  # Return as-is if parsing fails
 
-    def _parse_datetime(self, datetime_text: str) -> Optional[datetime]:
+    def _parse_datetime(self, datetime_text: str) -> datetime | None:
         """Parse a combined datetime string."""
         if self.dateutil_available:
             try:
@@ -453,8 +452,8 @@ class DateTimeExtractor(BaseExtractor):
         return relative_text  # Return original if can't interpret
 
     def _deduplicate_extractions(
-        self, datetime_data: Dict[str, List[Dict[str, Any]]]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        self, datetime_data: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, list[dict[str, Any]]]:
         """Remove duplicate and overlapping extractions."""
         all_extractions = []
 
@@ -489,14 +488,14 @@ class DateTimeExtractor(BaseExtractor):
                 filtered_extractions.append(extraction)
 
         # Reorganize by category
-        result = {category: [] for category in datetime_data.keys()}
+        result = {category: [] for category in datetime_data}
         for extraction in filtered_extractions:
             category = extraction.pop("category")
             result[category].append(extraction)
 
         return result
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get optional dependencies."""
         return ["python-dateutil"]  # Optional dependency
 

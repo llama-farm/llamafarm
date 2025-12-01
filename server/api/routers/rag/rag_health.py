@@ -1,13 +1,13 @@
 """RAG Health endpoint for system health checks."""
 
-from typing import Optional, Dict, Any
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import structlog
+from config.datamodel import LlamaFarmConfig
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from config.datamodel import LlamaFarmConfig
 from core.celery.rag_client import get_rag_health
 
 logger = structlog.get_logger()
@@ -19,7 +19,7 @@ class ComponentHealth(BaseModel):
     name: str
     status: str  # healthy, degraded, unhealthy
     latency_ms: float = Field(..., alias="latency")
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class RAGHealthResponse(BaseModel):
@@ -27,16 +27,16 @@ class RAGHealthResponse(BaseModel):
 
     status: str  # healthy, degraded, unhealthy
     database: str
-    components: Dict[str, ComponentHealth]
+    components: dict[str, ComponentHealth]
     last_check: datetime
-    issues: Optional[list[str]] = None
+    issues: list[str] | None = None
 
     class Config:
         populate_by_name = True
 
 
 async def handle_rag_health(
-    project_config: LlamaFarmConfig, project_dir: str, database: Optional[str] = None
+    project_config: LlamaFarmConfig, project_dir: str, database: str | None = None
 ) -> RAGHealthResponse:
     """Handle RAG health check request using Celery service."""
     start_time = time.time()
@@ -131,10 +131,12 @@ async def handle_rag_health(
             status=overall_status,
             database=database_name,
             components=components,
-            last_check=datetime.now(timezone.utc),
+            last_check=datetime.now(UTC),
             issues=issues if issues else None,
         )
 
     except Exception as e:
         logger.error(f"Error during RAG health check: {e}")
-        raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Health check failed: {str(e)}"
+        ) from e

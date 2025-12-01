@@ -1,7 +1,7 @@
 """DOCX parser using python-docx library."""
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import docx
 
@@ -26,7 +26,7 @@ class DocxParser_PythonDocx(BaseParser):
     def __init__(
         self,
         name: str = "DocxParser_PythonDocx",
-        config: Optional[dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         super().__init__(config or {})  # Call BaseParser init
         self.name = name

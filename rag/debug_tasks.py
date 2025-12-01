@@ -25,7 +25,7 @@ def main():
         print("   ✓ Successfully imported celery_app")
 
         # Check if tasks are registered
-        print(f"\n2. Checking registered tasks...")
+        print("\n2. Checking registered tasks...")
         registered_tasks = list(app.tasks.keys())
         print(f"   Total registered tasks: {len(registered_tasks)}")
 
@@ -34,45 +34,39 @@ def main():
         print(f"   RAG tasks found: {len(rag_tasks)}")
 
         # List all tasks
-        print(f"\n3. All registered tasks:")
+        print("\n3. All registered tasks:")
         for task in sorted(registered_tasks):
             marker = "🎯" if task.startswith("rag.") else "  "
             print(f"   {marker} {task}")
 
         # Show RAG tasks specifically
         if rag_tasks:
-            print(f"\n4. RAG tasks specifically:")
+            print("\n4. RAG tasks specifically:")
             for task in sorted(rag_tasks):
                 print(f"   ✓ {task}")
         else:
-            print(f"\n4. ❌ No RAG tasks found!")
+            print("\n4. ❌ No RAG tasks found!")
 
         # Try to import task modules directly
-        print(f"\n5. Testing direct task module imports...")
+        print("\n5. Testing direct task module imports...")
 
         try:
-            import tasks.search_tasks
-
             print("   ✓ tasks.search_tasks imported successfully")
         except Exception as e:
             print(f"   ❌ tasks.search_tasks failed: {e}")
 
         try:
-            import tasks.ingest_tasks
-
             print("   ✓ tasks.ingest_tasks imported successfully")
         except Exception as e:
             print(f"   ❌ tasks.ingest_tasks failed: {e}")
 
         try:
-            import tasks.query_tasks
-
             print("   ✓ tasks.query_tasks imported successfully")
         except Exception as e:
             print(f"   ❌ tasks.query_tasks failed: {e}")
 
         # Check task configuration
-        print(f"\n6. Celery configuration:")
+        print("\n6. Celery configuration:")
         print(f"   App name: {app.main}")
         print(f"   Broker URL: {app.conf.broker_url}")
         print(f"   Result backend: {app.conf.result_backend}")

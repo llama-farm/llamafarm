@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from .types import ChatCompletionRequest
 from .service import ChatCompletionsService
+from .types import ChatCompletionRequest
 
 router = APIRouter()
 

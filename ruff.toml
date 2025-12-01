@@ -28,3 +28,11 @@ ignore = ["E501"]
 # Per-file ignores
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]
+
+[lint.flake8-bugbear]
+extend-immutable-calls = [
+  # Whitelisted default arguments
+  "fastapi.Query",
+  "fastapi.Depends",
+  "fastapi.Header",
+]

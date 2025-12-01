@@ -7,7 +7,7 @@ Celery tasks for RAG file ingestion and processing operations.
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from celery import Task
 
@@ -45,8 +45,8 @@ def ingest_file_with_rag_task(
     data_processing_strategy_name: str,
     database_name: str,
     source_path: str,
-    filename: Optional[str] = None,
-    dataset_name: Optional[str] = None,
+    filename: str | None = None,
+    dataset_name: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """
     Ingest a single file using the RAG system via Celery task.
@@ -122,7 +122,7 @@ def ingest_file_with_rag_task(
             meta_file = meta_dir / f"{file_hash}.json"
 
             if meta_file.exists():
-                with open(meta_file, "r") as mf:
+                with open(meta_file) as mf:
                     meta_content = json.load(mf)
                     original_filename = meta_content.get(
                         "original_file_name", file_hash
@@ -181,10 +181,12 @@ def ingest_file_with_rag_task(
             details["skipped_count"] = result["skipped_count"]
 
         # Set reason if it's a duplicate
-        if status == "skipped" or result.get("reason") == "duplicate":
-            details["reason"] = "duplicate"
-            details["status"] = "skipped"
-        elif result.get("stored_count", 0) == 0 and result.get("skipped_count", 0) > 0:
+        if (
+            status == "skipped"
+            or result.get("reason") == "duplicate"
+            or result.get("stored_count", 0) == 0
+            and result.get("skipped_count", 0) > 0
+        ):
             details["reason"] = "duplicate"
             details["status"] = "skipped"
 

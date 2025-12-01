@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
-from typing import Literal, TypeAlias
+from typing import Literal
 
 from config.datamodel import Model, PromptMessage
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
@@ -25,8 +25,8 @@ class LFChatResponse(BaseModel):
     message: ChatCompletion
 
 
-LFChatCompletion: TypeAlias = ChatCompletion
-LFChatCompletionChunk: TypeAlias = ChatCompletionChunk
+type LFChatCompletion = ChatCompletion
+type LFChatCompletionChunk = ChatCompletionChunk
 
 
 class LFAgentClient(ABC):

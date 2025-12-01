@@ -3,7 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from core.base import Document
 from core.logging import RAGStructLogger
@@ -220,7 +220,7 @@ class DocxTempFileHandler:
 
     def __init__(self, data: bytes):
         self.data = data
-        self.tmp_path: Optional[str] = None
+        self.tmp_path: str | None = None
 
     def __enter__(self) -> str:
         """Create temporary file and return path."""
@@ -266,10 +266,12 @@ class DocxHeaderFooterExtractor:
 
         headers = []
         for section in doc.sections:
-            if header := section.header:
-                if header_text := "\n".join(
+            header = section.header
+            if header:
+                header_text = "\n".join(
                     p.text for p in header.paragraphs if p.text.strip()
-                ):
+                )
+                if header_text:
                     headers.append(f"Header: {header_text}")
         return headers
 
@@ -281,9 +283,11 @@ class DocxHeaderFooterExtractor:
 
         footers = []
         for section in doc.sections:
-            if footer := section.footer:
-                if footer_text := "\n".join(
+            footer = section.footer
+            if footer:
+                footer_text = "\n".join(
                     p.text for p in footer.paragraphs if p.text.strip()
-                ):
+                )
+                if footer_text:
                     footers.append(f"Footer: {footer_text}")
         return footers

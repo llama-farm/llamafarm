@@ -10,7 +10,7 @@ import socket
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 try:
     import yaml  # type: ignore
@@ -18,10 +18,7 @@ except ImportError:
     yaml = None
 
 try:
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        import tomli as tomllib
+    import tomllib
 except ImportError:
     tomllib = None  # type: ignore
 
@@ -107,7 +104,9 @@ def _replace_localhost_url(url: str) -> str:
 
     if re.match(localhost_pattern, url) and _is_host_docker_internal_resolvable():
         # Replace localhost or 127.0.0.1 with host.docker.internal
-        return re.sub(r"^(https?://)(localhost|127\.0\.0\.1)", r"\1host.docker.internal", url)
+        return re.sub(
+            r"^(https?://)(localhost|127\.0\.0\.1)", r"\1host.docker.internal", url
+        )
 
     return url
 
@@ -159,7 +158,9 @@ def _load_schema() -> dict:
         import importlib.util
 
         compile_schema_path = config_dir / "compile_schema.py"
-        spec = importlib.util.spec_from_file_location("compile_schema", compile_schema_path)
+        spec = importlib.util.spec_from_file_location(
+            "compile_schema", compile_schema_path
+        )
         compile_schema = importlib.util.module_from_spec(spec)  # type: ignore
         spec.loader.exec_module(compile_schema)  # type: ignore
 
@@ -203,10 +204,7 @@ def _load_yaml_file(file_path: Path) -> dict:
 def _load_toml_file(file_path: Path) -> dict:
     """Load configuration from a TOML file."""
     if tomllib is None:
-        if sys.version_info >= (3, 11):
-            raise ConfigError("tomllib module not available")
-        else:
-            raise ConfigError("tomli is required to load TOML files.")
+        raise ConfigError("tomllib module not available")
 
     try:
         with open(file_path, "rb") as f:
@@ -218,7 +216,7 @@ def _load_toml_file(file_path: Path) -> dict:
 def _load_json_file(file_path: Path) -> dict:
     """Load configuration from a JSON file."""
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             return json.load(f) or {}
     except Exception as e:
         raise ConfigError(f"Error loading JSON file {file_path}: {e}") from e
@@ -246,7 +244,12 @@ def find_config_file(directory: str | Path | None = None) -> Path | None:
         raise ConfigError(f"Directory does not exist: {directory}")
 
     # Check for config files in order of preference
-    for filename in ["llamafarm.yaml", "llamafarm.yml", "llamafarm.toml", "llamafarm.json"]:
+    for filename in [
+        "llamafarm.yaml",
+        "llamafarm.yml",
+        "llamafarm.toml",
+        "llamafarm.json",
+    ]:
         config_path = directory / filename
         if config_path.is_file():
             return config_path
@@ -306,7 +309,9 @@ def _resolve_config_file(
         if config_path_resolved.suffix:
             # It's a file path
             if not config_path_resolved.is_file():
-                raise ConfigError(f"Configuration file not found: {config_path_resolved}")
+                raise ConfigError(
+                    f"Configuration file not found: {config_path_resolved}"
+                )
         else:
             # It's a directory path, look for config file within it
             config_path_resolved = find_config_file(config_path_resolved)
@@ -403,7 +408,7 @@ def _save_json_file(config: dict, file_path: Path) -> None:
         raise ConfigError(f"Error saving JSON file {file_path}: {e}") from e
 
 
-def _create_backup(file_path: Path) -> Optional[Path]:
+def _create_backup(file_path: Path) -> Path | None:
     """Create a backup of an existing file."""
     if not file_path.exists():
         return None
@@ -476,9 +481,10 @@ def save_config(
 
     # Validate configuration before saving
     config_dict = config.model_dump(mode="json", exclude_none=True)
-    
+
     # Run custom validators for constraints beyond JSON Schema
     from config.validators import validate_llamafarm_config
+
     try:
         validate_llamafarm_config(config_dict)
     except ValueError as e:
@@ -491,7 +497,11 @@ def save_config(
 
     # Determine format
     if format is None:
-        suffix = config_file.suffix.lower() if config_file and config_file.suffix else ".yaml"
+        suffix = (
+            config_file.suffix.lower()
+            if config_file and config_file.suffix
+            else ".yaml"
+        )
         if suffix in [".yaml", ".yml"]:
             format = "yaml"
         elif suffix == ".toml":
@@ -564,7 +574,9 @@ def update_config(
         try:
             config_file = find_config_file(config_path)
             if config_file is None:
-                raise ConfigError(f"No configuration file found in directory: {config_path}")
+                raise ConfigError(
+                    f"No configuration file found in directory: {config_path}"
+                )
         except ConfigError as e:
             raise ConfigError(
                 f"Directory does not exist or contains no config file: {config_path}"

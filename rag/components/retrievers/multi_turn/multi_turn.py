@@ -1,13 +1,11 @@
 """Multi-turn RAG strategy with query decomposition and parallel retrieval."""
 
-import asyncio
-import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
+from components.retrievers.base import RetrievalResult, RetrievalStrategy
 from core.base import Document
 from core.logging import RAGStructLogger
 
@@ -36,7 +34,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
     def __init__(
         self,
         name: str = "MultiTurnRAGStrategy",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -61,7 +59,9 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         # Reranking settings (optional)
         self.enable_reranking = config.get("enable_reranking", False)
-        self.reranker_strategy_name = config.get("reranker_strategy", "CrossEncoderRerankedStrategy")
+        self.reranker_strategy_name = config.get(
+            "reranker_strategy", "CrossEncoderRerankedStrategy"
+        )
         self.reranker_config = config.get("reranker_config", {})
 
         # Deduplication settings
@@ -71,8 +71,8 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         self.max_workers = config.get("max_workers", 3)
 
         # State
-        self._base_strategy: Optional[RetrievalStrategy] = None
-        self._reranker_strategy: Optional[RetrievalStrategy] = None
+        self._base_strategy: RetrievalStrategy | None = None
+        self._reranker_strategy: RetrievalStrategy | None = None
         self._llm_client = None
 
     def _initialize_base_strategy(self):
@@ -80,8 +80,12 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         if self._base_strategy is not None:
             return
 
-        from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
-        from components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
+        from components.retrievers.basic_similarity.basic_similarity import (
+            BasicSimilarityStrategy,
+        )
+        from components.retrievers.metadata_filtered.metadata_filtered import (
+            MetadataFilteredStrategy,
+        )
 
         strategy_map = {
             "BasicSimilarityStrategy": BasicSimilarityStrategy,
@@ -105,7 +109,9 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         if not self.enable_reranking or self._reranker_strategy is not None:
             return
 
-        from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import CrossEncoderRerankedStrategy
+        from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import (
+            CrossEncoderRerankedStrategy,
+        )
 
         strategy_map = {
             "CrossEncoderRerankedStrategy": CrossEncoderRerankedStrategy,
@@ -113,7 +119,9 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         strategy_class = strategy_map.get(self.reranker_strategy_name)
         if not strategy_class:
-            raise ValueError(f"Unknown reranker strategy: {self.reranker_strategy_name}")
+            raise ValueError(
+                f"Unknown reranker strategy: {self.reranker_strategy_name}"
+            )
 
         self._reranker_strategy = strategy_class(
             name=f"{self.name}_reranker",
@@ -136,15 +144,16 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         try:
             from openai import OpenAI
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "openai package is required for query decomposition. "
                 "Install with: pip install openai"
-            )
+            ) from err
 
         # Use configured API key, environment variable, or placeholder
         # Ollama and many local endpoints don't require authentication
         import os
+
         api_key = self.api_key or os.environ.get("OPENAI_API_KEY", "not-needed")
 
         self._llm_client = OpenAI(
@@ -153,7 +162,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         )
 
         logger.info(
-            f"Initialized LLM client for query decomposition",
+            "Initialized LLM client for query decomposition",
             model_name=self.model_name,
             base_url=self.model_base_url,
         )
@@ -173,12 +182,12 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         # Multiple question markers
         multi_question_patterns = [
-            r'\band\b',
-            r'\balso\b',
-            r'\badditionally\b',
-            r'\bfurthermore\b',
-            r'\bmoreover\b',
-            r'\?.*\?',  # Multiple question marks
+            r"\band\b",
+            r"\balso\b",
+            r"\badditionally\b",
+            r"\bfurthermore\b",
+            r"\bmoreover\b",
+            r"\?.*\?",  # Multiple question marks
         ]
 
         for pattern in multi_question_patterns:
@@ -188,7 +197,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         return False
 
-    def _decompose_query(self, query_text: str) -> List[str]:
+    def _decompose_query(self, query_text: str) -> list[str]:
         """
         Decompose a complex query into focused sub-queries using LLM.
 
@@ -215,7 +224,7 @@ Always use <question> tags. Be direct."""
                 model=self.model_id,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.3,
                 max_tokens=200,
@@ -225,27 +234,29 @@ Always use <question> tags. Be direct."""
             content = response.choices[0].message.content.strip()
 
             # Extract questions using regex
-            question_pattern = r'<question>(.*?)</question>'
+            question_pattern = r"<question>(.*?)</question>"
             matches = re.findall(question_pattern, content, re.DOTALL | re.IGNORECASE)
 
             if matches:
                 # Clean up and filter questions
                 sub_queries = []
-                for match in matches[:self.max_sub_queries]:
+                for match in matches[: self.max_sub_queries]:
                     question = match.strip()
                     # Remove extra whitespace and newlines
-                    question = re.sub(r'\s+', ' ', question)
+                    question = re.sub(r"\s+", " ", question)
                     if len(question) >= self.min_query_length:
                         sub_queries.append(question)
 
                 if sub_queries:
                     logger.info(
                         f"Decomposed query into {len(sub_queries)} sub-queries",
-                        sub_queries=sub_queries
+                        sub_queries=sub_queries,
                     )
                     return sub_queries
             else:
-                logger.warning("No <question> tags found in LLM response", content=content[:200])
+                logger.warning(
+                    "No <question> tags found in LLM response", content=content[:200]
+                )
 
         except Exception as e:
             logger.error(f"Query decomposition failed: {e}", exc_info=True)
@@ -254,12 +265,8 @@ Always use <question> tags. Be direct."""
         return [query_text]
 
     def _retrieve_for_subquery(
-        self,
-        sub_query: str,
-        embedder,
-        vector_store,
-        **kwargs
-    ) -> Tuple[str, RetrievalResult]:
+        self, sub_query: str, embedder, vector_store, **kwargs
+    ) -> tuple[str, RetrievalResult]:
         """
         Retrieve documents for a single sub-query.
 
@@ -281,7 +288,7 @@ Always use <question> tags. Be direct."""
                 query_embedding=sub_query_embedding,
                 vector_store=vector_store,
                 top_k=self.sub_query_top_k,
-                **kwargs
+                **kwargs,
             )
 
             # Optionally rerank results
@@ -292,12 +299,12 @@ Always use <question> tags. Be direct."""
                     top_k=self.sub_query_top_k,
                     query_text=sub_query,
                     embedder=embedder,  # Pass embedder along
-                    **kwargs
+                    **kwargs,
                 )
 
             return (sub_query, result)
 
-        except Exception as e:
+        except Exception:
             logger.error(f"Retrieval failed for sub-query: {sub_query}", exc_info=True)
             return (sub_query, RetrievalResult(documents=[], scores=[]))
 
@@ -334,9 +341,7 @@ Always use <question> tags. Be direct."""
         return intersection / union
 
     def _merge_and_deduplicate(
-        self,
-        results: List[Tuple[str, RetrievalResult]],
-        top_k: int
+        self, results: list[tuple[str, RetrievalResult]], top_k: int
     ) -> RetrievalResult:
         """
         Merge results from multiple sub-queries and remove duplicates.
@@ -352,13 +357,13 @@ Always use <question> tags. Be direct."""
         Returns:
             RetrievalResult with deduplicated documents
         """
-        all_docs: List[Document] = []
-        all_scores: List[float] = []
-        seen_ids: Set[str] = set()
+        all_docs: list[Document] = []
+        all_scores: list[float] = []
+        seen_ids: set[str] = set()
 
         # Collect all documents with their scores (ID-based deduplication)
-        for sub_query, result in results:
-            for doc, score in zip(result.documents, result.scores):
+        for _sub_query, result in results:
+            for doc, score in zip(result.documents, result.scores, strict=False):
                 if doc.id not in seen_ids:
                     seen_ids.add(doc.id)
                     all_docs.append(doc)
@@ -369,12 +374,14 @@ Always use <question> tags. Be direct."""
             deduplicated_docs = []
             deduplicated_scores = []
 
-            for i, (doc, score) in enumerate(zip(all_docs, all_scores)):
+            for _i, (doc, score) in enumerate(zip(all_docs, all_scores, strict=False)):
                 is_duplicate = False
 
                 # Check against already selected documents
                 for existing_doc in deduplicated_docs:
-                    similarity = self._content_similarity(doc.content, existing_doc.content)
+                    similarity = self._content_similarity(
+                        doc.content, existing_doc.content
+                    )
 
                     if similarity >= self.dedup_similarity_threshold:
                         is_duplicate = True
@@ -396,9 +403,9 @@ Always use <question> tags. Be direct."""
             effective_top_k = min(top_k, self.final_top_k)
 
             sorted_pairs = sorted(
-                zip(all_docs, all_scores),
+                zip(all_docs, all_scores, strict=False),
                 key=lambda x: x[1],
-                reverse=True
+                reverse=True,
             )[:effective_top_k]
 
             final_docs = [doc for doc, _ in sorted_pairs]
@@ -417,12 +424,12 @@ Always use <question> tags. Be direct."""
                 "total_retrieved": len(all_docs),
                 "final_count": len(final_docs),
                 "dedup_threshold": self.dedup_similarity_threshold,
-            }
+            },
         )
 
     def retrieve(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         vector_store,
         top_k: int = 5,
         query_text: str = "",
@@ -459,7 +466,7 @@ Always use <question> tags. Be direct."""
                 query_embedding=query_embedding,
                 vector_store=vector_store,
                 top_k=top_k,
-                **kwargs
+                **kwargs,
             )
             result.strategy_metadata["strategy"] = self.name
             result.strategy_metadata["decomposed"] = False
@@ -476,7 +483,7 @@ Always use <question> tags. Be direct."""
                 query_embedding=query_embedding,
                 vector_store=vector_store,
                 top_k=top_k,
-                **kwargs
+                **kwargs,
             )
             result.strategy_metadata["strategy"] = self.name
             result.strategy_metadata["decomposed"] = False
@@ -486,15 +493,19 @@ Always use <question> tags. Be direct."""
         logger.info(f"Retrieving for {len(sub_queries)} sub-queries in parallel")
 
         # Extract embedder from kwargs (required for sub-query embedding)
-        embedder = kwargs.pop("embedder", None)  # Remove from kwargs to avoid duplicate argument
+        embedder = kwargs.pop(
+            "embedder", None
+        )  # Remove from kwargs to avoid duplicate argument
         if not embedder:
-            logger.warning("No embedder provided, falling back to base strategy with original embedding")
+            logger.warning(
+                "No embedder provided, falling back to base strategy with original embedding"
+            )
             # Fallback: use base strategy with original embedding
             result = self._base_strategy.retrieve(
                 query_embedding=query_embedding,
                 vector_store=vector_store,
                 top_k=top_k,
-                **kwargs
+                **kwargs,
             )
             result.strategy_metadata["strategy"] = self.name
             result.strategy_metadata["decomposed"] = False
@@ -508,7 +519,7 @@ Always use <question> tags. Be direct."""
                     sub_query,
                     embedder,
                     vector_store,
-                    **kwargs
+                    **kwargs,
                 )
                 for sub_query in sub_queries
             ]
@@ -533,11 +544,9 @@ Always use <question> tags. Be direct."""
             return False
         if self.sub_query_top_k < 1:
             return False
-        if self.final_top_k < 1:
-            return False
-        return True
+        return not self.final_top_k < 1
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         """Get configuration schema."""
         return {
             "type": "object",
@@ -546,8 +555,17 @@ Always use <question> tags. Be direct."""
                     "type": "string",
                     "description": "Name of model from runtime.models to use for query decomposition",
                 },
-                "max_sub_queries": {"type": "integer", "minimum": 1, "maximum": 5, "default": 3},
-                "complexity_threshold": {"type": "integer", "minimum": 20, "default": 50},
+                "max_sub_queries": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 3,
+                },
+                "complexity_threshold": {
+                    "type": "integer",
+                    "minimum": 20,
+                    "default": 50,
+                },
                 "min_query_length": {"type": "integer", "minimum": 10, "default": 20},
                 "base_strategy": {
                     "type": "string",
@@ -557,12 +575,20 @@ Always use <question> tags. Be direct."""
                 "sub_query_top_k": {"type": "integer", "minimum": 5, "default": 10},
                 "final_top_k": {"type": "integer", "minimum": 1, "default": 10},
                 "enable_reranking": {"type": "boolean", "default": False},
-                "reranker_strategy": {"type": "string", "default": "CrossEncoderRerankedStrategy"},
-                "max_workers": {"type": "integer", "minimum": 1, "maximum": 10, "default": 3},
+                "reranker_strategy": {
+                    "type": "string",
+                    "default": "CrossEncoderRerankedStrategy",
+                },
+                "max_workers": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "default": 3,
+                },
             },
         }
 
-    def get_performance_info(self) -> Dict[str, Any]:
+    def get_performance_info(self) -> dict[str, Any]:
         """Get performance characteristics."""
         return {
             "speed": "medium-slow",

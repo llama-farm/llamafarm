@@ -1,10 +1,9 @@
 """Progress tracking utilities with llama puns and motivational messages."""
 
 import random
-import time
-from typing import List
+
+from colorama import Fore, Style, init
 from tqdm import tqdm
-from colorama import init, Fore, Back, Style
 
 # Initialize colorama
 init(autoreset=True)
@@ -70,7 +69,7 @@ class LlamaProgressTracker:
         if self.quiet:
             # Return a no-op progress bar
             return tqdm(total=total, disable=True)
-        
+
         return tqdm(
             total=total,
             desc=f"{Fore.CYAN}{desc}{Style.RESET_ALL}",
@@ -96,9 +95,9 @@ class LlamaProgressTracker:
         """Print a fancy header."""
         if self.quiet:
             return
-        print(f"\n{Fore.YELLOW}{'='*60}{Style.RESET_ALL}")
+        print(f"\n{Fore.YELLOW}{'=' * 60}{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}{title.center(60)}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}{'='*60}{Style.RESET_ALL}\n")
+        print(f"{Fore.YELLOW}{'=' * 60}{Style.RESET_ALL}\n")
 
     def print_success(self, message: str):
         """Print a success message."""
@@ -125,16 +124,16 @@ class LlamaProgressTracker:
         """Print detailed results when in verbose mode."""
         if not self.verbose or self.quiet:
             return
-        
-        print(f"\n{Fore.CYAN}{'='*60}{Style.RESET_ALL}")
+
+        print(f"\n{Fore.CYAN}{'=' * 60}{Style.RESET_ALL}")
         print(f"{Fore.CYAN}{title.center(60)}{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}{'='*60}{Style.RESET_ALL}\n")
-        
+        print(f"{Fore.CYAN}{'=' * 60}{Style.RESET_ALL}\n")
+
         for i, result in enumerate(results, 1):
             print(f"{Fore.YELLOW}Result {i} - Raw Details:{Style.RESET_ALL}")
-            if hasattr(result, '__dict__'):
+            if hasattr(result, "__dict__"):
                 for key, value in result.__dict__.items():
-                    if key.startswith('_'):
+                    if key.startswith("_"):
                         continue
                     # Truncate very long values for readability
                     if isinstance(value, str) and len(value) > 200:
@@ -149,7 +148,7 @@ class LlamaProgressTracker:
             else:
                 print(f"  {result}")
             print()
-    
+
     def print_llama_art(self):
         """Print ASCII llama art."""
         if self.quiet:
