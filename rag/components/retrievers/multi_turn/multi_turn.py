@@ -56,6 +56,7 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
         self.base_strategy_config = config.get("base_strategy_config", {})
         self.sub_query_top_k = config.get("sub_query_top_k", 10)
         self.final_top_k = config.get("final_top_k", 10)
+        self.initial_k = config.get("initial_k", 30)  # Initial candidates for reranking
 
         # Reranking settings (optional)
         self.enable_reranking = config.get("enable_reranking", False)
@@ -131,6 +132,72 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         logger.info(f"Initialized reranker strategy: {self.reranker_strategy_name}")
 
+    def _rerank_results(
+        self,
+        result: RetrievalResult,
+        query_text: str,
+        top_k: int,
+    ) -> RetrievalResult:
+        """
+        Rerank retrieval results using the configured reranker strategy.
+
+        Args:
+            result: Initial retrieval result to rerank
+            query_text: Original query text for reranking
+            top_k: Number of final results to return
+
+        Returns:
+            RetrievalResult with reranked documents
+        """
+        if not self._reranker_strategy or not result.documents:
+            return result
+
+        try:
+            # Get the reranker's internal rerank method
+            from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import (
+                CrossEncoderRerankedStrategy,
+            )
+
+            if isinstance(self._reranker_strategy, CrossEncoderRerankedStrategy):
+                # Use the reranker's internal method directly
+                reranked_docs = self._reranker_strategy._rerank_with_universal_runtime(
+                    query_text=query_text,
+                    documents=result.documents,
+                )
+
+                # Filter and select top_k
+                final_docs = reranked_docs[:top_k]
+
+                # Add reranker metadata to documents before building result
+                for i, (doc, score) in enumerate(final_docs):
+                    doc.metadata["reranker_score"] = score
+                    doc.metadata["rerank_position"] = i + 1
+
+                # Build result lists from annotated documents
+                documents = [doc for doc, _ in final_docs]
+                scores = [score for _, score in final_docs]
+
+                return RetrievalResult(
+                    documents=documents,
+                    scores=scores,
+                    strategy_metadata={
+                        **result.strategy_metadata,
+                        "reranked": True,
+                        "reranker_model": self._reranker_strategy.model_id,
+                        "initial_count": len(result.documents),
+                        "final_count": len(documents),
+                    }
+                )
+            else:
+                logger.warning(f"Unknown reranker type: {type(self._reranker_strategy)}")
+                return result
+
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}", exc_info=True)
+            # Return original results on failure
+            result.strategy_metadata["reranking_error"] = str(e)
+            return result
+
     def _initialize_llm_client(self):
         """Initialize LLM client for query decomposition."""
         if self._llm_client is not None:
@@ -144,11 +211,11 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
 
         try:
             from openai import OpenAI
-        except ImportError as err:
+        except ImportError as e:
             raise ImportError(
                 "openai package is required for query decomposition. "
                 "Install with: pip install openai"
-            ) from err
+            ) from e
 
         # Use configured API key, environment variable, or placeholder
         # Ollama and many local endpoints don't require authentication
@@ -220,6 +287,12 @@ Always use <question> tags. Be direct."""
         user_prompt = f"Input: {query_text}\nOutput:"
 
         try:
+            logger.info(
+                "Calling LLM for query decomposition",
+                model_id=self.model_id,
+                query_preview=query_text[:100] + "..." if len(query_text) > 100 else query_text,
+            )
+
             response = self._llm_client.chat.completions.create(
                 model=self.model_id,
                 messages=[
@@ -231,11 +304,32 @@ Always use <question> tags. Be direct."""
                 stop=["Input:", "\n\n\n"],  # Stop if it starts rambling
             )
 
-            content = response.choices[0].message.content.strip()
+            # Debug: log full response structure
+            raw_content = response.choices[0].message.content
+            logger.info(
+                "LLM decomposition response received",
+                raw_content_type=type(raw_content).__name__,
+                raw_content_length=len(raw_content) if raw_content else 0,
+                raw_content_preview=repr(raw_content[:500]) if raw_content else "None/Empty",
+                finish_reason=response.choices[0].finish_reason,
+            )
+
+            content = raw_content.strip() if raw_content else ""
+
+            # Strip out <think>...</think> blocks (some models like Qwen3 use thinking mode)
+            # We only want the actual output, not the internal reasoning
+            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
+            content = content.strip()
 
             # Extract questions using regex
             question_pattern = r"<question>(.*?)</question>"
             matches = re.findall(question_pattern, content, re.DOTALL | re.IGNORECASE)
+
+            logger.info(
+                "Question extraction results",
+                matches_found=len(matches),
+                matches_preview=matches[:3] if matches else [],
+            )
 
             if matches:
                 # Clean up and filter questions
@@ -255,7 +349,12 @@ Always use <question> tags. Be direct."""
                     return sub_queries
             else:
                 logger.warning(
-                    "No <question> tags found in LLM response", content=content[:200]
+                    "No <question> tags found in LLM response. "
+                    "The model may not be following the prompt format, or may have a 'thinking mode' "
+                    "that produces empty visible output. Consider using a different model for query_decomposer.",
+                    content_preview=repr(content[:300]) if content else "EMPTY",
+                    content_length=len(content),
+                    model_id=self.model_id,
                 )
 
         except Exception as e:
@@ -265,7 +364,11 @@ Always use <question> tags. Be direct."""
         return [query_text]
 
     def _retrieve_for_subquery(
-        self, sub_query: str, embedder, vector_store, **kwargs
+        self,
+        sub_query: str,
+        embedder,
+        vector_store,
+        **kwargs
     ) -> tuple[str, RetrievalResult]:
         """
         Retrieve documents for a single sub-query.
@@ -341,7 +444,9 @@ Always use <question> tags. Be direct."""
         return intersection / union
 
     def _merge_and_deduplicate(
-        self, results: list[tuple[str, RetrievalResult]], top_k: int
+        self,
+        results: list[tuple[str, RetrievalResult]],
+        top_k: int
     ) -> RetrievalResult:
         """
         Merge results from multiple sub-queries and remove duplicates.
@@ -374,7 +479,7 @@ Always use <question> tags. Be direct."""
             deduplicated_docs = []
             deduplicated_scores = []
 
-            for _i, (doc, score) in enumerate(zip(all_docs, all_scores, strict=False)):
+            for doc, score in zip(all_docs, all_scores, strict=False):
                 is_duplicate = False
 
                 # Check against already selected documents
@@ -460,14 +565,20 @@ Always use <question> tags. Be direct."""
         is_complex = self._detect_query_complexity(query_text)
 
         if not is_complex:
-            # Simple query: use base strategy directly
+            # Simple query: use base strategy, then optionally rerank
             logger.info("Query is simple, using base strategy directly")
             result = self._base_strategy.retrieve(
                 query_embedding=query_embedding,
                 vector_store=vector_store,
-                top_k=top_k,
-                **kwargs,
+                top_k=max(top_k, self.initial_k) if self.enable_reranking else top_k,
+                **kwargs
             )
+
+            # Apply reranking if enabled
+            if self.enable_reranking and self._reranker_strategy:
+                logger.info("Applying reranking to simple query results")
+                result = self._rerank_results(result, query_text, top_k)
+
             result.strategy_metadata["strategy"] = self.name
             result.strategy_metadata["decomposed"] = False
             return result
@@ -477,14 +588,20 @@ Always use <question> tags. Be direct."""
         sub_queries = self._decompose_query(query_text)
 
         if len(sub_queries) == 1:
-            # Decomposition returned single query, use base strategy
+            # Decomposition returned single query, use base strategy then optionally rerank
             logger.info("Decomposition returned single query")
             result = self._base_strategy.retrieve(
                 query_embedding=query_embedding,
                 vector_store=vector_store,
-                top_k=top_k,
-                **kwargs,
+                top_k=max(top_k, self.initial_k) if self.enable_reranking else top_k,
+                **kwargs
             )
+
+            # Apply reranking if enabled
+            if self.enable_reranking and self._reranker_strategy:
+                logger.info("Applying reranking to fallback results")
+                result = self._rerank_results(result, query_text, top_k)
+
             result.strategy_metadata["strategy"] = self.name
             result.strategy_metadata["decomposed"] = False
             return result
@@ -544,7 +661,7 @@ Always use <question> tags. Be direct."""
             return False
         if self.sub_query_top_k < 1:
             return False
-        return not self.final_top_k < 1
+        return self.final_top_k >= 1
 
     def get_config_schema(self) -> dict[str, Any]:
         """Get configuration schema."""
