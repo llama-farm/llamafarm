@@ -4,14 +4,13 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import chromadb
 
 from core.base import Document, VectorStore
-from utils.hash_utils import DeduplicationTracker
-
 from core.logging import RAGStructLogger
+from utils.hash_utils import DeduplicationTracker
 
 logger = RAGStructLogger("rag.components.stores.chroma_store.chroma_store")
 
@@ -27,8 +26,8 @@ class ChromaStore(VectorStore):
     def __init__(
         self,
         name: str = "ChromaStore",
-        config: Optional[dict[str, Any]] = None,
-        project_dir: Optional[Path] = None,
+        config: dict[str, Any] | None = None,
+        project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)  # type: ignore
         config = config or {}
@@ -117,7 +116,7 @@ class ChromaStore(VectorStore):
             return cls._client_cache[client_key]
 
     @classmethod
-    def clear_client_cache(cls, client_key: Optional[str] = None) -> None:
+    def clear_client_cache(cls, client_key: str | None = None) -> None:
         """Clear the client cache.
 
         Args:
@@ -162,7 +161,7 @@ class ChromaStore(VectorStore):
                 f"Collection ready: {self.collection_name} with {self.distance_metric} distance"
             )
 
-    def _parse_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         """Parse JSON strings in metadata back to Python objects.
 
         ChromaDB stores nested objects as JSON strings, so we need to parse them
@@ -352,10 +351,10 @@ class ChromaStore(VectorStore):
         self,
         query: str = None,
         top_k: int = 10,
-        query_embedding: Optional[List[float]] = None,
-        where: Optional[Dict[str, Any]] = None,
+        query_embedding: list[float] | None = None,
+        where: dict[str, Any] | None = None,
         **kwargs,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Search for similar documents."""
         try:
             if query_embedding is None:
@@ -463,7 +462,7 @@ class ChromaStore(VectorStore):
             logger.error(f"Failed to delete collection: {e}")
             return False
 
-    def get_document(self, doc_id: str) -> Optional[Document]:
+    def get_document(self, doc_id: str) -> Document | None:
         """Get a specific document by ID."""
         try:
             results = self.collection.get(ids=[doc_id])
@@ -480,7 +479,7 @@ class ChromaStore(VectorStore):
             logger.error(f"Failed to get document {doc_id}: {e}")
             return None
 
-    def delete_documents(self, doc_ids: List[str]) -> bool:
+    def delete_documents(self, doc_ids: list[str]) -> bool:
         """Delete documents by IDs."""
         try:
             self.collection.delete(ids=doc_ids)
@@ -556,7 +555,7 @@ class ChromaStore(VectorStore):
         except Exception:
             return False
 
-    def get_collection_info(self) -> Dict[str, Any]:
+    def get_collection_info(self) -> dict[str, Any]:
         """Get information about the collection."""
         try:
             count = self.collection.count()

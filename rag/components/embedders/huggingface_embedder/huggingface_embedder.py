@@ -14,8 +14,9 @@ Status: Implementation in progress
 """
 
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from core.base import Embedder, Document
+from typing import Any
+
+from core.base import Document, Embedder
 
 
 class HuggingFaceEmbedder(Embedder):
@@ -30,7 +31,7 @@ class HuggingFaceEmbedder(Embedder):
     def __init__(
         self,
         name: str = "HuggingFaceEmbedder",
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -49,7 +50,7 @@ class HuggingFaceEmbedder(Embedder):
             "For now, please use OllamaEmbedder or OpenAIEmbedder."
         )
 
-    def embed_documents(self, documents: List[Document]) -> List[Document]:
+    def embed_documents(self, documents: list[Document]) -> list[Document]:
         """Generate embeddings for a batch of documents.
 
         This will use HuggingFace transformers to generate high-quality
@@ -66,7 +67,7 @@ class HuggingFaceEmbedder(Embedder):
         """
         raise NotImplementedError("HuggingFaceEmbedder coming soon!")
 
-    def embed_query(self, query: str) -> List[float]:
+    def embed_query(self, query: str) -> list[float]:
         """Generate embedding for a single query string.
 
         Args:

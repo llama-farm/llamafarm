@@ -1,15 +1,17 @@
 """Keyword extraction implementations using RAKE, YAKE, and TF-IDF."""
 
+import math
 import re
 from collections import Counter, defaultdict
-from typing import Dict, Any, List, Optional
-import math
+from typing import Any
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
-
 from core.logging import RAGStructLogger
-logger = RAGStructLogger("rag.components.extractors.keyword_extractor.keyword_extractor")
+
+logger = RAGStructLogger(
+    "rag.components.extractors.keyword_extractor.keyword_extractor"
+)
 
 
 class RAKEExtractor(BaseExtractor):
@@ -20,7 +22,7 @@ class RAKEExtractor(BaseExtractor):
     Works by identifying stop words as delimiters and scoring remaining phrases.
     """
 
-    def __init__(self, name: str = "RAKE", config: Optional[Dict[str, Any]] = None):
+    def __init__(self, name: str = "RAKE", config: dict[str, Any] | None = None):
         super().__init__(name, config)
 
         # Configuration with defaults
@@ -38,7 +40,7 @@ class RAKEExtractor(BaseExtractor):
         self.punctuation_pattern = re.compile(r"[^\w\s]")
         self.number_pattern = re.compile(r"\b\d+\b")
 
-    def _get_default_stop_words(self) -> List[str]:
+    def _get_default_stop_words(self) -> list[str]:
         """Get default English stop words."""
         return [
             "a",
@@ -105,7 +107,7 @@ class RAKEExtractor(BaseExtractor):
             "because",
         ]
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract keywords using RAKE algorithm."""
         for doc in documents:
             try:
@@ -129,7 +131,7 @@ class RAKEExtractor(BaseExtractor):
 
         return documents
 
-    def _extract_rake_keywords(self, text: str) -> List[tuple]:
+    def _extract_rake_keywords(self, text: str) -> list[tuple]:
         """Extract keywords using RAKE algorithm."""
         # Preprocess text
         text = text.lower()
@@ -197,7 +199,7 @@ class RAKEExtractor(BaseExtractor):
 
         return filtered_phrases[: self.max_keywords]
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """RAKE has no external dependencies."""
         return []
 
@@ -210,7 +212,7 @@ class YAKEExtractor(BaseExtractor):
     Lower scores indicate more important keywords.
     """
 
-    def __init__(self, name: str = "YAKE", config: Optional[Dict[str, Any]] = None):
+    def __init__(self, name: str = "YAKE", config: dict[str, Any] | None = None):
         super().__init__(name, config)
 
         # Configuration
@@ -225,7 +227,7 @@ class YAKEExtractor(BaseExtractor):
             self.config.get("stop_words", self._get_default_stop_words())
         )
 
-    def _get_default_stop_words(self) -> List[str]:
+    def _get_default_stop_words(self) -> list[str]:
         """Get default English stop words for YAKE."""
         return [
             "a",
@@ -287,7 +289,7 @@ class YAKEExtractor(BaseExtractor):
             "said",
         ]
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract keywords using YAKE algorithm."""
         for doc in documents:
             try:
@@ -311,7 +313,7 @@ class YAKEExtractor(BaseExtractor):
 
         return documents
 
-    def _extract_yake_keywords(self, text: str) -> List[tuple]:
+    def _extract_yake_keywords(self, text: str) -> list[tuple]:
         """Extract keywords using YAKE algorithm."""
         # Tokenize and clean
         words = self._tokenize_text(text)
@@ -339,7 +341,7 @@ class YAKEExtractor(BaseExtractor):
 
         return final_candidates[: self.top]
 
-    def _tokenize_text(self, text: str) -> List[str]:
+    def _tokenize_text(self, text: str) -> list[str]:
         """Tokenize text into words."""
         # Simple tokenization
         text = re.sub(r"[^\w\s]", " ", text.lower())
@@ -348,7 +350,7 @@ class YAKEExtractor(BaseExtractor):
         # Filter out stop words and short words
         return [word for word in words if word not in self.stop_words and len(word) > 2]
 
-    def _calculate_word_features(self, words: List[str]) -> Dict[str, Dict[str, float]]:
+    def _calculate_word_features(self, words: list[str]) -> dict[str, dict[str, float]]:
         """Calculate features for each word."""
         features = {}
 
@@ -370,7 +372,7 @@ class YAKEExtractor(BaseExtractor):
 
         return features
 
-    def _generate_candidates(self, words: List[str]) -> List[str]:
+    def _generate_candidates(self, words: list[str]) -> list[str]:
         """Generate candidate phrases."""
         candidates = set()
 
@@ -383,7 +385,7 @@ class YAKEExtractor(BaseExtractor):
         return list(candidates)
 
     def _score_candidate(
-        self, candidate: str, word_features: Dict[str, Dict[str, float]]
+        self, candidate: str, word_features: dict[str, dict[str, float]]
     ) -> float:
         """Score a candidate phrase."""
         words = candidate.split()
@@ -402,7 +404,7 @@ class YAKEExtractor(BaseExtractor):
 
         return score
 
-    def _deduplicate_candidates(self, candidates: List[tuple]) -> List[tuple]:
+    def _deduplicate_candidates(self, candidates: list[tuple]) -> list[tuple]:
         """Remove similar candidates."""
         final_candidates = []
 
@@ -434,7 +436,7 @@ class YAKEExtractor(BaseExtractor):
 
         return intersection / union if union > 0 else 0.0
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """YAKE has no external dependencies."""
         return []
 
@@ -447,7 +449,7 @@ class TFIDFExtractor(BaseExtractor):
     Best for finding unique terms in documents relative to a corpus.
     """
 
-    def __init__(self, name: str = "TFIDF", config: Optional[Dict[str, Any]] = None):
+    def __init__(self, name: str = "TFIDF", config: dict[str, Any] | None = None):
         super().__init__(name, config)
 
         # Configuration
@@ -466,7 +468,7 @@ class TFIDFExtractor(BaseExtractor):
         self.idf_scores = {}
         self.vocabulary = set()
 
-    def _get_default_stop_words(self) -> List[str]:
+    def _get_default_stop_words(self) -> list[str]:
         """Get default English stop words."""
         return [
             "a",
@@ -495,7 +497,7 @@ class TFIDFExtractor(BaseExtractor):
             "with",
         ]
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract keywords using TF-IDF."""
         # Build corpus from all documents
         self._build_corpus(documents)
@@ -528,7 +530,7 @@ class TFIDFExtractor(BaseExtractor):
 
         return documents
 
-    def _build_corpus(self, documents: List[Document]) -> None:
+    def _build_corpus(self, documents: list[Document]) -> None:
         """Build corpus from documents."""
         self.corpus = []
         for doc in documents:
@@ -552,7 +554,7 @@ class TFIDFExtractor(BaseExtractor):
 
         return text
 
-    def _extract_terms(self, text: str) -> List[str]:
+    def _extract_terms(self, text: str) -> list[str]:
         """Extract terms (n-grams) from text."""
         words = text.split()
         words = [
@@ -592,7 +594,7 @@ class TFIDFExtractor(BaseExtractor):
             idf = math.log(num_docs / doc_freq)
             self.idf_scores[term] = idf
 
-    def _extract_tfidf_keywords(self, text: str) -> List[tuple]:
+    def _extract_tfidf_keywords(self, text: str) -> list[tuple]:
         """Extract TF-IDF keywords from text."""
         processed_text = self._preprocess_text(text)
         terms = self._extract_terms(processed_text)
@@ -615,7 +617,7 @@ class TFIDFExtractor(BaseExtractor):
 
         return tfidf_scores[: self.max_features]
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """TF-IDF has no external dependencies."""
         return []
 
@@ -627,7 +629,7 @@ class KeywordExtractor(BaseExtractor):
     """
 
     def __init__(
-        self, name: str = "KeywordExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "KeywordExtractor", config: dict[str, Any] | None = None
     ):
         super().__init__(name, config)
 
@@ -672,9 +674,9 @@ class KeywordExtractor(BaseExtractor):
         # Log which extractors are being used
         self.logger.info(f"KeywordExtractor initialized with methods: {self.methods}")
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract keywords using all configured methods."""
-        for method_name, extractor in self.extractors.items():
+        for _method_name, extractor in self.extractors.items():
             documents = extractor.extract(documents)
 
         # Combine results if requested
@@ -690,7 +692,7 @@ class KeywordExtractor(BaseExtractor):
 
         return documents
 
-    def _combine_keywords(self, doc: Document) -> List[Dict[str, Any]]:
+    def _combine_keywords(self, doc: Document) -> list[dict[str, Any]]:
         """Combine keywords from all methods."""
         all_keywords = {}
 
@@ -718,7 +720,7 @@ class KeywordExtractor(BaseExtractor):
                     all_keywords[phrase]["scores"][method] = score
 
         # Calculate combined scores (average of normalized scores)
-        for phrase, data in all_keywords.items():
+        for _phrase, data in all_keywords.items():
             # Simple averaging for now
             scores = list(data["scores"].values())
             data["combined_score"] = sum(scores) / len(scores)
@@ -729,7 +731,7 @@ class KeywordExtractor(BaseExtractor):
 
         return combined[: self.config.get("max_combined_keywords", 15)]
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get dependencies from all configured extractors."""
         deps = []
         for extractor in self.extractors.values():

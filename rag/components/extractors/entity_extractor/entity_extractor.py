@@ -1,12 +1,12 @@
 """Entity extraction using spaCy and other local NLP libraries."""
 
 import re
-from typing import Dict, Any, List, Optional, Set
+from typing import Any
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
-
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.extractors.entity_extractor.entity_extractor")
 
 
@@ -19,7 +19,7 @@ class EntityExtractor(BaseExtractor):
     """
 
     def __init__(
-        self, name: str = "EntityExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "EntityExtractor", config: dict[str, Any] | None = None
     ):
         super().__init__(name, config)
 
@@ -68,7 +68,7 @@ class EntityExtractor(BaseExtractor):
                 f"spaCy model {self.model_name} not found, will use regex fallback"
             )
 
-    def _initialize_regex_patterns(self) -> Dict[str, re.Pattern]:
+    def _initialize_regex_patterns(self) -> dict[str, re.Pattern]:
         """Initialize regex patterns for entity extraction fallback."""
         patterns = {}
 
@@ -120,7 +120,7 @@ class EntityExtractor(BaseExtractor):
 
         return patterns
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract entities from documents."""
         for doc in documents:
             try:
@@ -155,7 +155,7 @@ class EntityExtractor(BaseExtractor):
 
         return documents
 
-    def _extract_spacy_entities(self, text: str) -> Dict[str, List[Dict[str, Any]]]:
+    def _extract_spacy_entities(self, text: str) -> dict[str, list[dict[str, Any]]]:
         """Extract entities using spaCy."""
         doc = self.nlp(text)
         entities = {}
@@ -187,7 +187,7 @@ class EntityExtractor(BaseExtractor):
 
         return entities
 
-    def _extract_regex_entities(self, text: str) -> Dict[str, List[Dict[str, Any]]]:
+    def _extract_regex_entities(self, text: str) -> dict[str, list[dict[str, Any]]]:
         """Extract entities using regex patterns as fallback."""
         entities = {}
 
@@ -223,7 +223,7 @@ class EntityExtractor(BaseExtractor):
 
     def _extract_capitalized_entities(
         self, text: str
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """Extract potential entities based on capitalization patterns."""
         entities = {"PERSON": [], "ORG": []}
 
@@ -273,7 +273,7 @@ class EntityExtractor(BaseExtractor):
 
         return entities
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get dependencies - spaCy is optional."""
         dependencies = []
         if not self.use_fallback:
@@ -287,7 +287,7 @@ class EntityExtractor(BaseExtractor):
 
         return super().validate_dependencies()
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get list of available spaCy models."""
         try:
             import spacy
@@ -296,7 +296,7 @@ class EntityExtractor(BaseExtractor):
         except ImportError:
             return []
 
-    def get_supported_entities(self) -> Dict[str, str]:
+    def get_supported_entities(self) -> dict[str, str]:
         """Get mapping of supported entity types to descriptions."""
         return {
             "PERSON": "People, including fictional characters",

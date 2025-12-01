@@ -4,10 +4,9 @@ Example: ONNX-enabled Encoder Model with Backend Switching
 This demonstrates how to modify EncoderModel to support both PyTorch and ONNX backends.
 """
 
-import os
 import logging
-from typing import List, Dict, Any
-from abc import ABC, abstractmethod
+import os
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -145,8 +144,8 @@ class EncoderModelWithONNX:
             return sum_embeddings / sum_mask
 
     async def embed(
-        self, texts: List[str], normalize: bool = True
-    ) -> List[List[float]]:
+        self, texts: list[str], normalize: bool = True
+    ) -> list[list[float]]:
         """
         Generate embeddings for input texts.
         Works with both PyTorch and ONNX backends.
@@ -196,7 +195,7 @@ class EncoderModelWithONNX:
 
             return embeddings.tolist()
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
         return {
             "model_id": self.model_id,
@@ -259,10 +258,11 @@ class PerformanceComparison:
 
     @staticmethod
     async def benchmark(
-        model_id: str, texts: List[str], iterations: int = 100, device: str = "cpu"
+        model_id: str, texts: list[str], iterations: int = 100, device: str = "cpu"
     ):
         """Compare performance of PyTorch vs ONNX backends."""
         import time
+
         import numpy as np
 
         results = {}

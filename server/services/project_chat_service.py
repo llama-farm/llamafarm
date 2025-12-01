@@ -1,33 +1,23 @@
-import asyncio
 import contextlib
-import time
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from agents.base.types import ToolDefinition
-
 from config.datamodel import LlamaFarmConfig  # noqa: E402
 from observability.event_logger import EventLogger
-from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
-from openai.types.chat.chat_completion_chunk import ChoiceDelta
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from openai.types.completion_usage import CompletionUsage
 
 from agents.base.agent import LFAgent
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
 from agents.base.history import (
     LFChatCompletionMessageParam,
-    LFChatCompletionUserMessageParam,
 )
+from agents.base.types import ToolDefinition
 from agents.chat_orchestrator import ChatOrchestratorAgent
 from context_providers.rag_context_provider import (
     ChunkItem,
     RAGContextProvider,
 )
 from core.logging import FastAPIStructLogger
-from core.settings import settings
 from services.rag_service import search_with_rag
 
 logger = FastAPIStructLogger()

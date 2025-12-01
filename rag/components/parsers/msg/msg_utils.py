@@ -1,7 +1,8 @@
 """Utility functions for MSG parsing."""
 
-import tempfile
+import contextlib
 import os
+import tempfile
 from contextlib import contextmanager
 from typing import Any
 
@@ -318,13 +319,9 @@ def MsgTempFileHandler(data: bytes):
     finally:
         # Clean up
         if tmp_fd is not None:
-            try:
+            with contextlib.suppress(Exception):
                 os.close(tmp_fd)
-            except Exception:
-                pass
 
         if tmp_path and os.path.exists(tmp_path):
-            try:
+            with contextlib.suppress(Exception):
                 os.unlink(tmp_path)
-            except Exception:
-                pass

@@ -2,16 +2,14 @@
 
 import sys
 from pathlib import Path
-from typing import Any, Optional
-
-from _pytest._code import source
+from typing import Any
 
 from rag.core.base import Parser
 
 # Use the common config module instead of direct YAML loading
-
 # Add the repo root to the path to find the config module
 from core.logging import RAGStructLogger
+
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
@@ -131,9 +129,7 @@ class SchemaHandler:
                 return strategy
         raise ValueError(f"Data processing strategy '{strategy_name}' not found")
 
-    def parse_strategy_name(
-        self, strategy_name: str
-    ) -> tuple[Optional[str], Optional[str]]:
+    def parse_strategy_name(self, strategy_name: str) -> tuple[str | None, str | None]:
         """Parse combined strategy name into processing and database parts.
 
         Strategy names are in format: {processing_strategy}_{database_name}
@@ -159,7 +155,7 @@ class SchemaHandler:
             return parts[0], parts[1]
         return None, None
 
-    def get_database_config(self, db_name: str) -> Optional[Database]:
+    def get_database_config(self, db_name: str) -> Database | None:
         """Get database configuration by name."""
         if not self.rag_config:
             return None
@@ -171,7 +167,7 @@ class SchemaHandler:
 
     def get_processing_strategy_config(
         self, proc_name: str
-    ) -> Optional[DataProcessingStrategy]:
+    ) -> DataProcessingStrategy | None:
         """Get processing strategy configuration by name."""
         if not self.rag_config:
             return None
@@ -186,7 +182,7 @@ class SchemaHandler:
         )
 
     def get_combined_config(
-        self, strategy_name: str, source_path: Optional[Path] = None
+        self, strategy_name: str, source_path: Path | None = None
     ) -> DbProcessingConfig:
         """Get combined configuration for a strategy (processing + database).
 
@@ -268,7 +264,7 @@ class SchemaHandler:
         return proc_config.parsers or []
 
     def get_parser_config(
-        self, proc_config: DataProcessingStrategy, source_path: Optional[Path] = None
+        self, proc_config: DataProcessingStrategy, source_path: Path | None = None
     ) -> Parser:
         """Get first parser configuration (for backward compatibility).
 
@@ -286,7 +282,7 @@ class SchemaHandler:
         return proc_config.extractors or []
 
     def create_component_config(
-        self, strategy_name: str, source_path: Optional[Path] = None
+        self, strategy_name: str, source_path: Path | None = None
     ) -> dict[str, Any]:
         """Create a component configuration that can be used by CLI.
 

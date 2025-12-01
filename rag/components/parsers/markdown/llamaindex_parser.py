@@ -1,10 +1,11 @@
 """Markdown parser using LlamaIndex."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional
-from components.parsers.base.base_parser import BaseParser, ParserConfig
+from typing import Any
 
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.markdown.llamaindex_parser")
 
 
@@ -14,7 +15,7 @@ class MarkdownParser_LlamaIndex(BaseParser):
     def __init__(
         self,
         name: str = "MarkdownParser_LlamaIndex",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         self.name = name
         self.config = config or {}
@@ -50,7 +51,9 @@ class MarkdownParser_LlamaIndex(BaseParser):
                 "link_extraction",
                 "metadata_extraction",
             ],
-            dependencies={"llama-index": ["llama-index-core", "llama-index-readers-file"]},
+            dependencies={
+                "llama-index": ["llama-index-core", "llama-index-readers-file"]
+            },
             default_config={
                 "chunk_size": 1000,
                 "chunk_overlap": 100,
@@ -60,7 +63,7 @@ class MarkdownParser_LlamaIndex(BaseParser):
                 "extract_links": True,
                 "extract_code_blocks": True,
                 "preserve_formatting": False,
-            }
+            },
         )
 
     def can_parse(self, file_path: str) -> bool:
@@ -73,9 +76,8 @@ class MarkdownParser_LlamaIndex(BaseParser):
         from core.base import Document, ProcessingResult
 
         try:
-            from llama_index.core import SimpleDirectoryReader
-            from llama_index.readers.file import MarkdownReader
             from llama_index.core.node_parser import MarkdownNodeParser
+            from llama_index.readers.file import MarkdownReader
         except ImportError:
             return ProcessingResult(
                 documents=[],

@@ -5,7 +5,7 @@ This module provides various extractors organized in a schema-driven architectur
 where each extractor is a self-contained component with its own configuration.
 """
 
-from .base import BaseExtractor, ExtractorRegistry, ExtractorPipeline
+from .base import BaseExtractor, ExtractorPipeline, ExtractorRegistry
 
 # Create a global registry instance
 registry = ExtractorRegistry()

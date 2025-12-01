@@ -1,6 +1,5 @@
 """Tests for model utility functions."""
 
-import pytest
 from llamafarm_common.model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
     parse_model_with_quantization,

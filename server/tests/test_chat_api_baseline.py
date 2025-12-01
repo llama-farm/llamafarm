@@ -2,20 +2,19 @@
 
 import time
 import uuid
-from types import SimpleNamespace
 
 import pytest
+from config.datamodel import (
+    LlamaFarmConfig,
+    Model,
+    PromptMessage,
+    PromptSet,
+    Provider,
+    Runtime,
+)
 from fastapi.testclient import TestClient
 
 from api.main import llama_farm_api
-from config.datamodel import (
-    LlamaFarmConfig,
-    PromptSet,
-    PromptMessage,
-    Provider,
-    Runtime,
-    Model,
-)
 from services.project_chat_service import FALLBACK_ECHO_RESPONSE
 
 

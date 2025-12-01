@@ -7,8 +7,7 @@ This test verifies that:
 3. The same model configuration reuses the same cache entry
 """
 
-import pytest
-from server import _make_language_cache_key, _make_encoder_cache_key
+from server import _make_encoder_cache_key, _make_language_cache_key
 
 
 class TestCacheKeys:

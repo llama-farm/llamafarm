@@ -16,10 +16,10 @@ import pytest
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.context_provider import LFAgentContextProvider
 from agents.base.history import (
+    LFAgentHistory,
     LFChatCompletionAssistantMessageParam,
     LFChatCompletionSystemMessageParam,
     LFChatCompletionUserMessageParam,
-    LFAgentHistory,
 )
 from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.base.types import (
@@ -234,8 +234,9 @@ class TestLFAgent:
     @pytest.fixture
     def mock_client(self):
         """Create mock client that inherits from LFAgentClient."""
-        from agents.base.clients.client import LFAgentClient
         from config.datamodel import Model, Provider
+
+        from agents.base.clients.client import LFAgentClient
 
         # Create a concrete mock that inherits from LFAgentClient
         class MockLFAgentClient(LFAgentClient):

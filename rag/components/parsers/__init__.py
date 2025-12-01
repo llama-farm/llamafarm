@@ -1,11 +1,13 @@
 """Parser components for RAG system - Unified architecture."""
 
+from pathlib import Path
+from typing import Any
+
 from core.logging import RAGStructLogger
 
-logger = RAGStructLogger("rag.components.parsers.__init__")
-
-# Import the unified parser factory
 from .parser_factory import ToolAwareParserFactory
+
+logger = RAGStructLogger("rag.components.parsers.__init__")
 
 # Import base components
 try:
@@ -72,16 +74,12 @@ MarkdownParser = LlamaIndexMarkdownParser
 HTMLParser = LlamaIndexWebParser
 MsgParser = LlamaIndexMsgParser
 
-# Directory parser - simplified to use ToolAwareParserFactory
-from pathlib import Path
-from typing import Any, Optional
-
 
 class DirectoryParser:
     """Directory parser that uses individual parsers for files."""
 
     def __init__(
-        self, name: str = "DirectoryParser", config: Optional[dict[str, Any]] = None
+        self, name: str = "DirectoryParser", config: dict[str, Any] | None = None
     ):
         self.name = name
         self.config = config or {}
@@ -102,8 +100,9 @@ class DirectoryParser:
 
     def parse(self, source: str, **kwargs):
         """Parse all files in a directory."""
-        from core.base import ProcessingResult
         import fnmatch
+
+        from core.base import ProcessingResult
 
         source_path = Path(source)
         if not source_path.exists():
@@ -137,20 +136,18 @@ class DirectoryParser:
                 break
 
             # Apply include patterns (if specified)
-            if self.include_patterns:
-                if not any(
-                    fnmatch.fnmatch(file_path.name, pattern)
-                    for pattern in self.include_patterns
-                ):
-                    continue
+            if self.include_patterns and not any(
+                fnmatch.fnmatch(file_path.name, pattern)
+                for pattern in self.include_patterns
+            ):
+                continue
 
             # Apply exclude patterns
-            if self.exclude_patterns:
-                if any(
-                    fnmatch.fnmatch(file_path.name, pattern)
-                    for pattern in self.exclude_patterns
-                ):
-                    continue
+            if self.exclude_patterns and any(
+                fnmatch.fnmatch(file_path.name, pattern)
+                for pattern in self.exclude_patterns
+            ):
+                continue
 
             filtered_files.append(file_path)
             files_processed += 1

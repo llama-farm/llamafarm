@@ -4,7 +4,8 @@ FastAPI router for event logs endpoints.
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Path as FastAPIPath, Query
+from fastapi import APIRouter, HTTPException, Query
+from fastapi import Path as FastAPIPath
 
 from services.event_log_service import EventLogService
 
@@ -120,11 +121,13 @@ async def get_event(
     - All sub-events with detailed timing and data
     - Error information (if event failed)
     """
-    if not (event := EventLogService.get_event(
-        namespace=namespace,
-        project=project_id,
-        event_id=event_id,
-    )):
+    if not (
+        event := EventLogService.get_event(
+            namespace=namespace,
+            project=project_id,
+            event_id=event_id,
+        )
+    ):
         raise HTTPException(
             status_code=404,
             detail=f"Event '{event_id}' not found in project '{namespace}/{project_id}'",

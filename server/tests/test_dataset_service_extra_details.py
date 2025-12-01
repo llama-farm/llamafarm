@@ -7,23 +7,22 @@ focusing on the list_datasets_with_file_details method and file metadata handlin
 
 from unittest.mock import patch
 
-import pytest
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    PromptSet,
+    Model,
     PromptMessage,
+    PromptSet,
     Provider,
     Runtime,
     Version,
-    Model,
 )
 
 from services.data_service import MetadataFileContent
 from services.dataset_service import (
+    DatasetDetails,
     DatasetService,
     DatasetWithFileDetails,
-    DatasetDetails,
 )
 from services.project_service import ProjectService
 
@@ -299,7 +298,6 @@ class TestDatasetServiceExtraDetails:
         dataset_3 = datasets_with_details[2]
         assert dataset_3.name == "dataset_empty"
         assert len(dataset_3.details.files_metadata) == 0
-
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")
@@ -716,4 +714,3 @@ class TestDatasetServiceExtraDetailsIntegration:
         assert file_hash_a in all_hashes
         assert file_hash_b in all_hashes
         assert file_hash_c in all_hashes
-

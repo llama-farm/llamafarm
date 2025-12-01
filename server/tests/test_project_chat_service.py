@@ -27,8 +27,8 @@ from config.datamodel import (
     Version,
 )
 
-from agents.chat_orchestrator import ChatOrchestratorAgent
 from agents.base.history import LFChatCompletionUserMessageParam
+from agents.chat_orchestrator import ChatOrchestratorAgent
 from services.project_chat_service import ProjectChatService, RAGParameters
 from services.project_service import ProjectService
 

@@ -37,7 +37,11 @@ class TestModuleIntegration:
         content_fields = parser_config["content_fields"]
         metadata_fields = parser_config["metadata_fields"]
 
-        assert parser_type in ["CSVParser_LlamaIndex", "CSVParser_Pandas", "CSVParser_Python"]
+        assert parser_type in [
+            "CSVParser_LlamaIndex",
+            "CSVParser_Pandas",
+            "CSVParser_Python",
+        ]
         assert isinstance(content_fields, list)
         assert isinstance(metadata_fields, list)
         assert len(content_fields) >= 1
@@ -362,8 +366,12 @@ def test_cross_module_config_sharing():
 
     # Verify each service extracted its configuration correctly (support enum or str)
     parser_type = getattr(rag_service.parser_type, "value", rag_service.parser_type)
-    embedder_type = getattr(rag_service.embedder_type, "value", rag_service.embedder_type)
-    collection_type = getattr(rag_service.collection_type, "value", rag_service.collection_type)
+    embedder_type = getattr(
+        rag_service.embedder_type, "value", rag_service.embedder_type
+    )
+    collection_type = getattr(
+        rag_service.collection_type, "value", rag_service.collection_type
+    )
     assert parser_type == "CSVParser_LlamaIndex"
     assert embedder_type == "OllamaEmbedder"
     assert collection_type == "ChromaStore"
@@ -372,10 +380,14 @@ def test_cross_module_config_sharing():
     if prompt_service.prompts:
         first_prompt = prompt_service.prompts[0]
         assert hasattr(first_prompt, "name")
-        assert hasattr(first_prompt, "messages") and isinstance(first_prompt.messages, list)
+        assert hasattr(first_prompt, "messages") and isinstance(
+            first_prompt.messages, list
+        )
         assert len(first_prompt.messages) > 0
         first_message = first_prompt.messages[0]
-        assert hasattr(first_message, "content") and isinstance(first_message.content, str)
+        assert hasattr(first_message, "content") and isinstance(
+            first_message.content, str
+        )
         assert "assistant" in first_message.content.lower()
 
     # Test that all services are working with the same config version

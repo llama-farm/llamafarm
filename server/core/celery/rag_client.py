@@ -236,13 +236,13 @@ def _run_sync_task_with_polling(task_signature, timeout: float, poll_interval: f
     try:
         final_status = result.status
     except Exception as exc:  # pragma: no cover - defensive
-        raise Exception(f"Failed to get task status: {exc}")  # noqa: BLE001
+        raise Exception(f"Failed to get task status: {exc}") from exc  # noqa: BLE001
 
     if final_status == "SUCCESS":
         try:
             return result.result
         except Exception as exc:  # pragma: no cover - defensive
-            raise Exception(f"Failed to get task result: {exc}")  # noqa: BLE001
+            raise Exception(f"Failed to get task result: {exc}") from exc  # noqa: BLE001
 
     if final_status == "FAILURE":
         if hasattr(result, "traceback") and result.traceback:
