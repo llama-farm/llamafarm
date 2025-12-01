@@ -124,22 +124,35 @@ Common HTTP status codes:
 ### RAG (Retrieval-Augmented Generation)
 - `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG system
 - `GET /v1/projects/{namespace}/{project}/rag/health` - Check RAG health
+- `GET /v1/projects/{namespace}/{project}/rag/databases` - List RAG databases
 
 ### Tasks
 - `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get async task status
 
+### Event Logs
+- `GET /v1/projects/{namespace}/{project}/event_logs` - List event logs
+- `GET /v1/projects/{namespace}/{project}/event_logs/{event_id}` - Get event details
+
 ### Examples
 - `GET /v1/examples` - List available examples
+- `GET /v1/examples/{example_id}/datasets` - List example datasets
 - `POST /v1/examples/{example_id}/import-project` - Import example as new project
 - `POST /v1/examples/{example_id}/import-data` - Import example data into existing project
+- `POST /v1/examples/{example_id}/import-dataset` - Import specific dataset from example
+
+### Models Cache
+- `GET /v1/models` - List cached models
+- `POST /v1/models/download` - Download/cache a model
+- `DELETE /v1/models/{model_name}` - Delete cached model
 
 ### Health
 - `GET /health` - Overall health check
 - `GET /health/liveness` - Liveness probe
 
-### System Info
+### System
 - `GET /` - Basic hello endpoint
 - `GET /info` - System information
+- `GET /v1/system/version-check` - Check for CLI updates
 
 ---
 
@@ -1216,6 +1229,213 @@ Get system version and configuration info.
 **Example:**
 ```bash
 curl http://localhost:8000/info
+```
+
+### Check for CLI Updates
+
+Check if a newer version of the CLI is available.
+
+**Endpoint:** `GET /v1/system/version-check`
+
+**Response:**
+```json
+{
+  "current_version": "0.0.17",
+  "latest_version": "0.0.18",
+  "name": "v0.0.18",
+  "release_notes": "### Features\n- New feature X\n- Improved Y",
+  "release_url": "https://github.com/llama-farm/llamafarm/releases/tag/v0.0.18",
+  "published_at": "2024-01-15T10:30:00Z",
+  "from_cache": false,
+  "install": {
+    "mac_linux": "curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash",
+    "windows": "winget install LlamaFarm.CLI"
+  }
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/system/version-check
+```
+
+---
+
+## Event Logs API
+
+The Event Logs API provides observability into project operations including inference calls, RAG processing, and other events.
+
+### List Event Logs
+
+List event logs for a project with optional filtering.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/event_logs`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `type` (query, optional): Filter by event type (e.g., "inference", "rag_processing")
+- `start_time` (query, optional): Filter events after this timestamp (ISO 8601 format)
+- `end_time` (query, optional): Filter events before this timestamp (ISO 8601 format)
+- `limit` (query, optional): Maximum number of events to return (1-100, default: 10)
+- `offset` (query, optional): Number of events to skip for pagination
+
+**Response:**
+```json
+{
+  "total": 42,
+  "events": [
+    {
+      "event_id": "evt_20240115_103000_inference_abc123",
+      "type": "inference",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "summary": {
+        "model": "llama3.2:3b",
+        "tokens": 150,
+        "duration_ms": 1200
+      }
+    }
+  ],
+  "limit": 10,
+  "offset": 0
+}
+```
+
+**Example:**
+```bash
+# List recent events
+curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs
+
+# Filter by type with pagination
+curl "http://localhost:8000/v1/projects/my-org/chatbot/event_logs?type=inference&limit=20"
+
+# Filter by time range
+curl "http://localhost:8000/v1/projects/my-org/chatbot/event_logs?start_time=2024-01-15T00:00:00Z"
+```
+
+### Get Event Details
+
+Get full details of a specific event including all sub-events.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/event_logs/{event_id}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `event_id` (path, required): Event ID
+
+**Response:**
+```json
+{
+  "event_id": "evt_20240115_103000_inference_abc123",
+  "type": "inference",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "model": "llama3.2:3b",
+    "messages": [...],
+    "response": {...},
+    "tokens": {
+      "prompt": 50,
+      "completion": 100,
+      "total": 150
+    },
+    "duration_ms": 1200
+  },
+  "sub_events": [...]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs/evt_20240115_103000_inference_abc123
+```
+
+---
+
+## Models Cache API
+
+The Models Cache API allows you to manage locally cached models (primarily HuggingFace models used by Universal Runtime).
+
+### List Cached Models
+
+List all models cached on disk.
+
+**Endpoint:** `GET /v1/models`
+
+**Parameters:**
+- `provider` (query, optional): Model provider (default: "universal")
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "model_id": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+      "size_bytes": 90000000,
+      "size_human": "90MB",
+      "last_modified": "2024-01-15T10:30:00Z",
+      "revisions": ["main"]
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/models
+```
+
+### Download/Cache Model
+
+Download and cache a model. Returns a streaming response with progress events.
+
+**Endpoint:** `POST /v1/models/download`
+
+**Request Body:**
+```json
+{
+  "provider": "universal",
+  "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"
+}
+```
+
+**Response:** Server-Sent Events stream with progress updates:
+```
+data: {"event": "progress", "downloaded": 45000000, "total": 90000000, "percent": 50}
+
+data: {"event": "complete", "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/models/download \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"}'
+```
+
+### Delete Cached Model
+
+Delete a cached model from disk.
+
+**Endpoint:** `DELETE /v1/models/{model_name}`
+
+**Parameters:**
+- `model_name` (path, required): The model identifier to delete
+- `provider` (query, optional): Model provider (default: "universal")
+
+**Response:**
+```json
+{
+  "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+  "revisions_deleted": 1,
+  "size_freed": 90000000,
+  "path": "/Users/username/.cache/huggingface/hub/models--cross-encoder--ms-marco-MiniLM-L-6-v2"
+}
+```
+
+**Example:**
+```bash
+curl -X DELETE "http://localhost:8000/v1/models/cross-encoder/ms-marco-MiniLM-L-6-v2"
 ```
 
 ---

@@ -37,7 +37,7 @@ Environment helpers:
 | [`lf datasets`](./lf-datasets.md) | Create, upload, process, and delete datasets. |
 | [`lf rag`](./lf-rag.md) | Query documents and access RAG maintenance tools. |
 | [`lf projects`](./lf-projects.md) | List projects by namespace. |
-| [`lf services`](#services-management) | Manage LlamaFarm services (server, RAG worker, universal runtime). |
+| [`lf services`](./lf-services.md) | Manage LlamaFarm services (server, RAG worker, universal runtime). |
 | [`lf version`](./lf-version.md) | Print CLI version/build info and check for updates. |
 
 ## Troubleshooting CLI Output
