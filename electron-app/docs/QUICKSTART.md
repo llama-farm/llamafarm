@@ -160,7 +160,7 @@ electron-app/
 
 **Problem**: Network error or GitHub rate limit
 
-**Solutions:**
+**Solutions**:
 
 - Check internet connection
 - Wait a few minutes and restart the app
@@ -170,7 +170,7 @@ electron-app/
 
 **Problem**: Docker not running or ports in use
 
-**Solutions:**
+**Solutions**:
 
 - Ensure Docker Desktop is running
 - Check that port 8000 is free
@@ -181,7 +181,7 @@ electron-app/
 
 **Problem**: Backend not ready yet
 
-**Solutions:**
+**Solutions**:
 
 - Wait 2-3 minutes (first launch can be slow)
 - Check status bar (should say "Backend Running")
@@ -228,7 +228,7 @@ electron-app/
 3. ✅ Complete first launch setup
 4. 🚀 Start building AI applications!
 
-**Learn More:**
+**Learn More**:
 
 - [Main Documentation](../../docs/website/docs/intro.md)
 - [Configuration Guide](../../docs/website/docs/configuration/index.md)
