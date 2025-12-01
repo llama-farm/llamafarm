@@ -269,35 +269,36 @@ class DiskSpaceService:
                 system_info=system_info,
             )
 
-        # Use the smaller of cache or system free space
-        available_bytes = min(cache_info.free_bytes, system_info.free_bytes)
+        # Models download to the cache directory, so we only block if cache doesn't have space
+        # System disk is only used for warnings (low space warnings)
+        cache_available_bytes = cache_info.free_bytes
 
-        # Check critical threshold (absolute minimum)
-        if available_bytes < CRITICAL_THRESHOLD_BYTES:
+        # Check critical threshold (absolute minimum) - only check cache disk
+        if cache_available_bytes < CRITICAL_THRESHOLD_BYTES:
             return ValidationResult(
                 can_download=False,
                 warning=False,
-                available_bytes=available_bytes,
+                available_bytes=cache_available_bytes,
                 required_bytes=model_size,
                 message=(
-                    f"Insufficient disk space. Required: {model_size / (1024**3):.2f} GB, "
-                    f"Available: {available_bytes / (1024**3):.2f} GB. "
+                    f"Insufficient disk space on cache disk. Required: {model_size / (1024**3):.2f} GB, "
+                    f"Available: {cache_available_bytes / (1024**3):.2f} GB. "
                     f"Please free up space before downloading."
                 ),
                 cache_info=cache_info,
                 system_info=system_info,
             )
 
-        # Check if model fits
-        if available_bytes < model_size:
+        # Check if model fits in cache - only check cache disk for blocking
+        if cache_available_bytes < model_size:
             return ValidationResult(
                 can_download=False,
                 warning=False,
-                available_bytes=available_bytes,
+                available_bytes=cache_available_bytes,
                 required_bytes=model_size,
                 message=(
-                    f"Insufficient disk space. Required: {model_size / (1024**3):.2f} GB, "
-                    f"Available: {available_bytes / (1024**3):.2f} GB. "
+                    f"Insufficient disk space on cache disk. Required: {model_size / (1024**3):.2f} GB, "
+                    f"Available: {cache_available_bytes / (1024**3):.2f} GB. "
                     f"Please free up space before downloading."
                 ),
                 cache_info=cache_info,
@@ -337,12 +338,12 @@ class DiskSpaceService:
                 f"Do you want to continue anyway?"
             )
         else:
-            message = f"Sufficient space available ({available_bytes / (1024**3):.2f} GB free)"
+            message = f"Sufficient space available ({cache_available_bytes / (1024**3):.2f} GB free on cache disk)"
 
         return ValidationResult(
             can_download=True,
             warning=warning,
-            available_bytes=available_bytes,
+            available_bytes=cache_available_bytes,
             required_bytes=model_size,
             message=message,
             cache_info=cache_info,

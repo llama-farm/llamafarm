@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from dataclasses import asdict
@@ -48,8 +49,11 @@ async def download_model(request: DownloadModelRequest):
     """Download/cache a model for the given provider and model name."""
 
     # Check disk space before starting download
+    # Run in thread pool to avoid blocking the async event loop (HuggingFace API calls are blocking)
     try:
-        validation = DiskSpaceService.validate_space_for_download(request.model_name)
+        validation = await asyncio.to_thread(
+            DiskSpaceService.validate_space_for_download, request.model_name
+        )
 
         # If critical (can't download), return error immediately
         if not validation.can_download:

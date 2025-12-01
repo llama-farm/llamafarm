@@ -591,6 +591,11 @@ function AddOrChangeModels({
     showRecommendedBackgroundDownload,
     setShowRecommendedBackgroundDownload,
   ] = useState(false)
+  // Use ref to track current value for closure access
+  const showRecommendedBackgroundDownloadRef = useRef(false)
+  useEffect(() => {
+    showRecommendedBackgroundDownloadRef.current = showRecommendedBackgroundDownload
+  }, [showRecommendedBackgroundDownload])
 
   // Disk space validation state
   const [diskSpaceWarningOpen, setDiskSpaceWarningOpen] = useState(false)
@@ -701,7 +706,8 @@ function AddOrChangeModels({
             setEstimatedTimeRemaining('')
             refetchCachedModels()
             setTimeout(() => {
-              if (!showRecommendedBackgroundDownload) {
+              // Use ref to read current value instead of stale closure value
+              if (!showRecommendedBackgroundDownloadRef.current) {
                 setConfirmOpen(false)
                 onGoToProject()
               }
