@@ -16,7 +16,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
 import { Label } from '../ui/label'
@@ -581,7 +580,7 @@ function AddOrChangeModels({
     null
   )
   const [submitState, setSubmitState] = useState<
-    'idle' | 'loading' | 'success' | 'checking'
+    'idle' | 'loading' | 'success' | 'checking' | 'error'
   >('idle')
   const [modelName, setModelName] = useState('')
   const [modelDescription, setModelDescription] = useState('')
@@ -1932,17 +1931,6 @@ const Models = () => {
   const [downloadedBytes, setDownloadedBytes] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
-
-  // Disk space validation state for custom downloads
-  const [customDiskSpaceWarningOpen, setCustomDiskSpaceWarningOpen] =
-    useState(false)
-  const [customDiskSpaceErrorOpen, setCustomDiskSpaceErrorOpen] =
-    useState(false)
-  const [customDiskSpaceValidation, setCustomDiskSpaceValidation] = useState<{
-    message: string
-    availableBytes: number
-    requiredBytes: number
-  } | null>(null)
 
   const projectConfig = (projectResponse as any)?.project?.config as
     | ProjectConfig

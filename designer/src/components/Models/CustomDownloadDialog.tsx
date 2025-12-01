@@ -1,11 +1,5 @@
 import { Button } from '../ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
-} from '../ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from '../ui/dialog'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import { PromptSetSelector } from './PromptSetSelector'
@@ -58,7 +52,7 @@ export function CustomDownloadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogTitle>Download model from HuggingFace</DialogTitle>
-        <DialogDescription>
+        <div className="text-sm text-muted-foreground">
           <div className="mt-2 flex flex-col gap-3">
             <p className="text-sm">
               Enter the model name from HuggingFace to download and add it to
@@ -208,7 +202,7 @@ export function CustomDownloadDialog({
               </div>
             )}
           </div>
-        </DialogDescription>
+        </div>
         <DialogFooter>
           {customDownloadState === 'downloading' ? (
             <Button variant="secondary" onClick={onMoveToBackground}>

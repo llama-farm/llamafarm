@@ -1,7 +1,6 @@
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -28,16 +27,13 @@ export function DiskSpaceWarningDialog({
   onContinue,
   onCancel,
 }: DiskSpaceWarningDialogProps) {
-  const availableGB = (availableBytes / 1024 ** 3).toFixed(2)
-  const requiredGB = (requiredBytes / 1024 ** 3).toFixed(2)
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader className="text-left">
           <DialogTitle>Low Disk Space Warning</DialogTitle>
         </DialogHeader>
-        <DialogDescription>
+        <div className="text-sm text-muted-foreground">
           <div className="mt-2 flex flex-col gap-4">
             <p className="text-sm text-foreground">{message}</p>
 
@@ -70,7 +66,7 @@ export function DiskSpaceWarningDialog({
               continue anyway, but we recommend freeing up space first.
             </p>
           </div>
-        </DialogDescription>
+        </div>
         <DialogFooter>
           <Button variant="secondary" onClick={onCancel}>
             Cancel
