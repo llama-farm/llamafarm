@@ -5,7 +5,7 @@ namespace: default
 runtime:
   models:
     - name: udo-chat
-      description: 'Primary model for UDO municipal ordinance queries'
+      description: "Primary model for UDO municipal ordinance queries"
       provider: ollama
       model: llama3.1:8b
       base_url: http://localhost:11434
@@ -59,8 +59,8 @@ rag:
       parsers:
         - type: PDFParser_LlamaIndex
           file_include_patterns:
-            - '*.pdf'
-            - '*.PDF'
+            - "*.pdf"
+            - "*.PDF"
           priority: 100
           config:
             chunk_size: 1100
@@ -70,8 +70,8 @@ rag:
             extract_tables: true
         - type: PDFParser_PyPDF2
           file_include_patterns:
-            - '*.pdf'
-            - '*.PDF'
+            - "*.pdf"
+            - "*.PDF"
           priority: 50
           config:
             chunk_size: 900
@@ -81,7 +81,7 @@ rag:
       extractors:
         - type: HeadingExtractor
           file_include_patterns:
-            - '*'
+            - "*"
           priority: 100
           config:
             max_level: 4
@@ -89,14 +89,14 @@ rag:
             extract_outline: true
         - type: ContentStatisticsExtractor
           file_include_patterns:
-            - '*'
+            - "*"
           priority: 90
           config:
             include_structure: true
             include_readability: true
         - type: EntityExtractor
           file_include_patterns:
-            - '*'
+            - "*"
           priority: 80
           config:
             entity_types:
@@ -112,4 +112,3 @@ datasets:
   - name: raleigh_udo_dataset
     database: raleigh_udo_db
     data_processing_strategy: udo_pdf_processor
-    files: []

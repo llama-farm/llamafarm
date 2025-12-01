@@ -164,7 +164,6 @@ rag:
 
 datasets:
   - name: "very_large_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "large_db"
 
@@ -244,7 +243,6 @@ runtime:
 
 datasets:
   - name: "unicode_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "unicode_db"
 """
@@ -305,7 +303,6 @@ runtime:
 
 datasets:
   - name: "deep_path_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "deep_path_db"
 
@@ -374,7 +371,6 @@ runtime:
 
 datasets:
   - name: "special_chars_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "special_chars_db"
 """

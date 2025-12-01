@@ -16,67 +16,67 @@ prompts:
   - name: default
     messages:
       - role: system
-        content: 'You are a concise engineering assistant. Answer in short paragraphs and
+        content:
+          "You are a concise engineering assistant. Answer in short paragraphs and
           cite file names when possible.
 
-          '
+          "
 
 rag:
   databases:
-  - name: quick_db
-    type: ChromaStore
-    config:
-      collection_name: quick_rag_documents
-      distance_function: cosine
-      persist_directory: ./data/quick_db
-      port: 8000
-    embedding_strategies:
-    - name: default_embeddings
-      type: UniversalEmbedder
+    - name: quick_db
+      type: ChromaStore
       config:
-        model: nomic-ai/nomic-embed-text-v2-moe
-        dimension: 768
-        batch_size: 8
-        timeout: 60
-        auto_pull: true
-      priority: 0
-    retrieval_strategies:
-    - name: quick_search
-      type: BasicSimilarityStrategy
-      config:
-        distance_metric: cosine
-        top_k: 5
-      default: true
-    default_embedding_strategy: default_embeddings
-    default_retrieval_strategy: quick_search
+        collection_name: quick_rag_documents
+        distance_function: cosine
+        persist_directory: ./data/quick_db
+        port: 8000
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v2-moe
+            dimension: 768
+            batch_size: 8
+            timeout: 60
+            auto_pull: true
+          priority: 0
+      retrieval_strategies:
+        - name: quick_search
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 5
+          default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: quick_search
   data_processing_strategies:
-  - name: universal_processor
-    description: Lightweight processor for short engineering notes.
-    parsers:
-    - type: MarkdownParser_LlamaIndex
-      file_include_patterns:
-      - '*.md'
-      priority: 100
-      config:
-        chunk_size: 400
-        chunk_overlap: 40
-    - type: TextParser_LlamaIndex
-      file_include_patterns:
-      - '*.txt'
-      priority: 90
-      config:
-        chunk_size: 400
-        chunk_overlap: 40
-    extractors:
-    - type: ContentStatisticsExtractor
-      file_include_patterns:
-      - '*'
-      priority: 80
-      config:
-        include_readability: true
+    - name: universal_processor
+      description: Lightweight processor for short engineering notes.
+      parsers:
+        - type: MarkdownParser_LlamaIndex
+          file_include_patterns:
+            - "*.md"
+          priority: 100
+          config:
+            chunk_size: 400
+            chunk_overlap: 40
+        - type: TextParser_LlamaIndex
+          file_include_patterns:
+            - "*.txt"
+          priority: 90
+          config:
+            chunk_size: 400
+            chunk_overlap: 40
+      extractors:
+        - type: ContentStatisticsExtractor
+          file_include_patterns:
+            - "*"
+          priority: 80
+          config:
+            include_readability: true
 
 datasets:
-- name: quick_notes
-  data_processing_strategy: universal_processor
-  database: quick_db
-  files: []
+  - name: quick_notes
+    data_processing_strategy: universal_processor
+    database: quick_db

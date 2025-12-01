@@ -278,30 +278,17 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         const processCallId = addApiCall({
           method: 'POST',
-          endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/process`,
+          endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/actions`,
           status: 'pending',
-          description: 'Processing dataset (embedding & indexing)',
+          description: 'Processing dataset (embedding & indexing via actions)',
         })
 
         const processStart = Date.now()
-        console.log(
-          `🚀 Starting dataset processing for project: ${newProjectName}, dataset: ${demo.datasetName}`
-        )
-
-        // Verify project exists before processing
-        try {
-          await projectService.getProject(namespace, newProjectName)
-        } catch (err) {
-          console.error('Project verification failed:', err)
-          throw new Error(
-            `Project ${newProjectName} was created but cannot be found. Please try again.`
-          )
-        }
-
-        const processResult = await datasetService.processDataset(
+        const processResult = await datasetService.executeDatasetAction(
           namespace,
           newProjectName,
-          demo.datasetName
+          demo.datasetName,
+          { action_type: 'process' }
         )
 
         // Poll for completion

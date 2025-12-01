@@ -3,6 +3,7 @@
 FastAPI application that powers project chat, dataset APIs, and health checks. The server provides a REST API consumed by the `lf` CLI, the Designer web UI, and custom integrations.
 
 ## Running Locally
+
 The CLI (`lf start`) will launch the server and RAG worker for you, but you can run it manually while developing inside `server/`.
 
 ```bash
@@ -15,13 +16,15 @@ To execute Celery ingestion jobs alongside it, start the worker from `rag/` (see
 ### API Clients
 
 The server API is consumed by:
+
 - **CLI**: Command-line interface (`lf`) for automation and scripting
-- **Designer**: Web-based visual interface at `http://localhost:7724` (see [Designer docs](../docs/website/docs/designer/index.md))
+- **Designer**: Web-based visual interface at `http://localhost:8000` (see [Designer docs](../docs/website/docs/designer/index.md))
 - **Custom integrations**: Any OpenAI-compatible client
 
 Interactive API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 ### Running via Nx from the Repository Root
+
 If you prefer to use the same orchestration as the CLI without Docker auto-start:
 
 ```bash
@@ -40,12 +43,15 @@ nx start server # Terminal 2
 ```
 
 ## Tests
+
 ```bash
 uv run --group test python -m pytest
 ```
 
 ## Configuration
+
 The server reads `llamafarm.yaml` via the config package. Ensure your project config includes:
+
 - `runtime` with provider/model/base_url/api_key as required.
 - `rag` strategies/databases that match datasets you plan to ingest.
 
