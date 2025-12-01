@@ -48,9 +48,9 @@ function Header({ currentVersion }: HeaderProps) {
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
   const queryClient = useQueryClient()
-  // Convert API projects to project names for dropdown with fallback
+  // Convert API projects to project names for dropdown with fallback, sorted A-Z
   const projects = useMemo(() => {
-    return getProjectsList(projectsResponse)
+    return getProjectsList(projectsResponse).sort((a, b) => a.localeCompare(b))
   }, [projectsResponse, isProjectOpen])
   const projectRef = useRef<HTMLDivElement>(null)
   // Project modal from centralized context
@@ -250,31 +250,40 @@ function Header({ currentVersion }: HeaderProps) {
                   {projects.map(name => (
                     <DropdownMenuItem
                       key={name}
-                      className={`px-4 py-3 transition-colors hover:bg-accent/20 ${
-                        name === activeProject ? 'opacity-100' : 'opacity-90'
+                      className={`relative px-4 py-3 text-base transition-colors hover:bg-accent/20 ${
+                        name === activeProject
+                          ? 'opacity-100 bg-accent/20'
+                          : 'opacity-90'
                       }`}
                       onClick={() => handleSelectProject(name)}
                     >
-                      <div className="w-full border-b border-border pb-3 last:border-b-0">
-                        {name}
-                      </div>
+                      {name === activeProject && (
+                        <>
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                          <FontIcon
+                            type="checkmark-filled"
+                            className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary"
+                          />
+                        </>
+                      )}
+                      {name}
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    className="px-0"
+                    className="px-0 focus:bg-transparent hover:bg-transparent"
                     onSelect={() => {
                       setIsProjectOpen(false)
                       projectModal.openCreateModal()
                     }}
                   >
                     <div className="w-full flex items-center justify-center gap-2 rounded-md border border-input text-primary hover:bg-primary hover:text-primary-foreground transition-colors px-3 py-2 cursor-pointer">
-                      <FontIcon type="add" className="w-4 h-4" />
                       <span>Create new project</span>
+                      <FontIcon type="add" className="w-4 h-4" />
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className="px-0"
+                    className="px-0 focus:bg-transparent hover:bg-transparent"
                     onSelect={() => {
                       setIsProjectOpen(false)
                       navigate('/', { state: { scrollTo: 'projects' } })
@@ -284,8 +293,8 @@ function Header({ currentVersion }: HeaderProps) {
                       }, 0)
                     }}
                   >
-                    <div className="w-full flex items-center justify-center gap-2 rounded-md text-primary hover:bg-accent/20 px-3 py-2 cursor-pointer">
-                      All projects
+                    <div className="w-full flex items-center justify-center gap-2 rounded-md border border-input text-primary hover:bg-primary hover:text-primary-foreground transition-colors px-3 py-2 cursor-pointer">
+                      <span>All projects</span>
                     </div>
                   </DropdownMenuItem>
                 </DropdownMenuContent>

@@ -4,7 +4,7 @@
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from core.base import Document
 from core.factories import (
@@ -35,7 +35,7 @@ class SearchResult:
     content: str
     score: float
     metadata: dict[str, Any]
-    source: Optional[str] = None
+    source: str | None = None
 
     @classmethod
     def from_document(cls, doc: Document) -> "SearchResult":
@@ -138,6 +138,66 @@ class BaseAPI:
             )
         return database_config
 
+    def _resolve_model_references(
+        self, strategy_config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Resolve model references in strategy config.
+
+        For strategies that reference models by name (e.g., CrossEncoderRerankedStrategy, MultiTurnRAGStrategy),
+        this looks up the model in runtime.models and adds the resolved base_url and model ID.
+        """
+        strategy_type = strategy_config.get("type")
+
+        # Strategies that need model resolution
+        if strategy_type in ["CrossEncoderRerankedStrategy", "MultiTurnRAGStrategy"]:
+            config = strategy_config.get("config", {})
+            model_name = config.get("model_name")
+
+            if (
+                model_name
+                and hasattr(self.config, "runtime")
+                and hasattr(self.config.runtime, "models")
+            ):
+                # Find the model in runtime.models
+                model_config = None
+                for model in self.config.runtime.models:
+                    if model.name == model_name:
+                        model_config = model
+                        break
+
+                if model_config:
+                    # Add resolved model details to the config
+                    config["model_base_url"] = model_config.base_url
+                    config["model_id"] = model_config.model
+
+            # For MultiTurnRAGStrategy, also resolve the reranker model if present
+            if strategy_type == "MultiTurnRAGStrategy" and config.get(
+                "enable_reranking"
+            ):
+                reranker_config = config.get("reranker_config", {})
+                reranker_model_name = reranker_config.get("model_name")
+
+                if (
+                    reranker_model_name
+                    and hasattr(self.config, "runtime")
+                    and hasattr(self.config.runtime, "models")
+                ):
+                    # Find the reranker model in runtime.models
+                    reranker_model_config = None
+                    for model in self.config.runtime.models:
+                        if model.name == reranker_model_name:
+                            reranker_model_config = model
+                            break
+
+                    if reranker_model_config:
+                        # Add resolved model details to the reranker config
+                        reranker_config["model_base_url"] = (
+                            reranker_model_config.base_url
+                        )
+                        reranker_config["model_id"] = reranker_model_config.model
+
+        return strategy_config
+
     def _build_traditional_config(self, database_config: Database) -> dict[str, Any]:
         """Build traditional RAG config format from database config."""
         traditional_config: dict[str, Any] = {}
@@ -169,7 +229,7 @@ class BaseAPI:
 
     def _build_embedder_config(
         self, database_config: Database
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Build embedder configuration from embedding strategies."""
         embedding_strategies = database_config.embedding_strategies or []
         default_embedding_strategy = database_config.default_embedding_strategy
@@ -194,7 +254,7 @@ class BaseAPI:
 
     def _build_retrieval_config(
         self, database_config: Database
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Build retrieval configuration from retrieval strategies."""
         retrieval_strategies = database_config.retrieval_strategies or []
         default_retrieval_strategy = database_config.default_retrieval_strategy
@@ -243,7 +303,9 @@ class BaseAPI:
                     "type": strategy.type.value,
                     "config": strategy.config,
                 }
-                return create_retrieval_strategy_from_config(strategy_config)
+                # Resolve model references
+                strategy_config = self._resolve_model_references(strategy_config)
+                return create_retrieval_strategy_from_config(strategy_config, self.project_dir)
 
         # If not found, return the default strategy
         return self.retrieval_strategy
@@ -267,8 +329,13 @@ class BaseAPI:
 
             # Initialize retrieval strategy
             if "retrieval_strategy" in self.rag_config:
+                strategy_config = self.rag_config["retrieval_strategy"]
+
+                # Resolve model references for strategies that need them
+                strategy_config = self._resolve_model_references(strategy_config)
+
                 self.retrieval_strategy = create_retrieval_strategy_from_config(
-                    self.rag_config["retrieval_strategy"]
+                    strategy_config, project_dir=self.project_dir
                 )
             else:
                 # Fallback to basic universal strategy
@@ -299,12 +366,12 @@ class DatabaseSearchAPI(BaseAPI):
         self,
         query: str,
         top_k: int = 5,
-        min_score: Optional[float] = None,
-        metadata_filter: Optional[dict[str, Any]] = None,
+        min_score: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
         return_raw_documents: bool = False,
-        retrieval_strategy: Optional[str] = None,
+        retrieval_strategy: str | None = None,
         **kwargs,
-    ) -> Union[list[SearchResult], list[Document]]:
+    ) -> list[SearchResult] | list[Document]:
         """Search for documents in the database using configured retrieval strategy."""
         # Embed the query
         query_embedding = self.embedder.embed([query])[0]
@@ -320,6 +387,8 @@ class DatabaseSearchAPI(BaseAPI):
             query_embedding=query_embedding,
             vector_store=self.vector_store,
             top_k=top_k,
+            query_text=query,  # Pass original query text for strategies that need it
+            embedder=self.embedder,  # Pass embedder for strategies that need to embed sub-queries
             **kwargs,
         )
 
@@ -327,7 +396,9 @@ class DatabaseSearchAPI(BaseAPI):
         if min_score is not None:
             filtered_docs = []
             filtered_scores = []
-            for doc, score in zip(retrieval_result.documents, retrieval_result.scores):
+            for doc, score in zip(
+                retrieval_result.documents, retrieval_result.scores, strict=False
+            ):
                 if score >= min_score:
                     filtered_docs.append(doc)
                     filtered_scores.append(score)
@@ -338,7 +409,9 @@ class DatabaseSearchAPI(BaseAPI):
         if metadata_filter:
             filtered_docs = []
             filtered_scores = []
-            for doc, score in zip(retrieval_result.documents, retrieval_result.scores):
+            for doc, score in zip(
+                retrieval_result.documents, retrieval_result.scores, strict=False
+            ):
                 if self._matches_metadata_filter(doc, metadata_filter):
                     filtered_docs.append(doc)
                     filtered_scores.append(score)
@@ -351,7 +424,9 @@ class DatabaseSearchAPI(BaseAPI):
 
         # Convert to SearchResult objects
         results = []
-        for doc, score in zip(retrieval_result.documents, retrieval_result.scores):
+        for doc, score in zip(
+            retrieval_result.documents, retrieval_result.scores, strict=False
+        ):
             # Update score in metadata for SearchResult creation
             doc.metadata["similarity_score"] = score
             results.append(SearchResult.from_document(doc))
@@ -381,12 +456,12 @@ class SearchAPI(BaseAPI):
         self,
         query: str,
         top_k: int = 5,
-        min_score: Optional[float] = None,
-        metadata_filter: Optional[dict[str, Any]] = None,
+        min_score: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
         return_raw_documents: bool = False,
-        retrieval_strategy: Optional[str] = None,
+        retrieval_strategy: str | None = None,
         **kwargs,
-    ) -> Union[list[SearchResult], list[Document]]:
+    ) -> list[SearchResult] | list[Document]:
         """Search for documents matching the query using configured retrieval strategy.
 
         Args:
@@ -431,7 +506,7 @@ class SearchAPI(BaseAPI):
         if min_score is not None:
             filtered_docs = []
             filtered_scores = []
-            for doc, score in zip(documents, retrieval_result.scores):
+            for doc, score in zip(documents, retrieval_result.scores, strict=False):
                 if score >= min_score:
                     filtered_docs.append(doc)
                     filtered_scores.append(score)
@@ -465,7 +540,9 @@ class SearchAPI(BaseAPI):
                     "type": strategy.get("type"),
                     "config": strategy.get("config", {}),
                 }
-                return create_retrieval_strategy_from_config(strategy_config)
+                # Resolve model references for strategies that need them
+                strategy_config = self._resolve_model_references(strategy_config)
+                return create_retrieval_strategy_from_config(strategy_config, self.project_dir)
 
         # If not found, return default strategy
         return self.retrieval_strategy
@@ -570,7 +647,7 @@ def search(
     query: str,
     project_dir: str,
     top_k: int = 5,
-    dataset: Optional[str] = None,
+    dataset: str | None = None,
     **kwargs,
 ) -> list[SearchResult]:
     """Convenience function for simple searches.

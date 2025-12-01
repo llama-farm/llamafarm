@@ -1,12 +1,11 @@
 """Essential extractor tests."""
 
-import pytest
-from core.base import Document
+from components.extractors.entity_extractor.entity_extractor import EntityExtractor
+from components.extractors.keyword_extractor.keyword_extractor import KeywordExtractor
 from components.extractors.statistics_extractor.statistics_extractor import (
     ContentStatisticsExtractor,
 )
-from components.extractors.entity_extractor.entity_extractor import EntityExtractor
-from components.extractors.keyword_extractor.keyword_extractor import KeywordExtractor
+from core.base import Document
 
 
 class TestExtractors:

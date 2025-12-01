@@ -11,25 +11,24 @@ def _client() -> TestClient:
 
 
 def test_dataset_actions_ingest_triggers_task_and_returns_task_uri(mocker):
-    # Patch the task object on the SUT import path
-    mocked_task = mocker.Mock()
-    mocked_task.delay.return_value = SimpleNamespace(id="task-123")
-    mocker.patch(
-        "api.routers.datasets.datasets.process_dataset_task",
-        mocked_task,
+    launch = SimpleNamespace(task_id="task-123", message="Dataset ingestion started")
+    start_ingest = mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.start_dataset_ingestion",
+        return_value=launch,
     )
 
     client = _client()
     resp = client.post(
         "/v1/projects/ns1/proj1/datasets/ds1/actions",
-        json={"action_type": "ingest"},
+        json={"action_type": "process"},
     )
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["message"] == "Accepted"
+    assert data["message"] == "Dataset ingestion started"
     assert data["task_uri"].endswith("/v1/projects/ns1/proj1/tasks/task-123")
-    mocked_task.delay.assert_called_once_with("ns1", "proj1", "ds1")
+    assert data["task_id"] == "task-123"
+    start_ingest.assert_called_once_with("ns1", "proj1", "ds1")
 
 
 def test_dataset_actions_invalid_type_returns_400():

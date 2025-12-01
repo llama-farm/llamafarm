@@ -2,15 +2,16 @@
 
 import re
 import string
-import math
 from collections import Counter
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
-
 from core.logging import RAGStructLogger
-logger = RAGStructLogger("rag.components.extractors.statistics_extractor.statistics_extractor")
+
+logger = RAGStructLogger(
+    "rag.components.extractors.statistics_extractor.statistics_extractor"
+)
 
 
 class ContentStatisticsExtractor(BaseExtractor):
@@ -22,7 +23,7 @@ class ContentStatisticsExtractor(BaseExtractor):
     """
 
     def __init__(
-        self, name: str = "ContentStatistics", config: Optional[Dict[str, Any]] = None
+        self, name: str = "ContentStatistics", config: dict[str, Any] | None = None
     ):
         super().__init__(name, config)
 
@@ -46,7 +47,7 @@ class ContentStatisticsExtractor(BaseExtractor):
         # Common English words for vocabulary analysis
         self.common_words = self._initialize_common_words()
 
-    def _initialize_sentiment_words(self) -> Dict[str, List[str]]:
+    def _initialize_sentiment_words(self) -> dict[str, list[str]]:
         """Initialize basic sentiment word lists."""
         return {
             "positive": [
@@ -171,7 +172,7 @@ class ContentStatisticsExtractor(BaseExtractor):
             ],
         }
 
-    def _initialize_common_words(self) -> List[str]:
+    def _initialize_common_words(self) -> list[str]:
         """Initialize list of common English words."""
         return [
             "the",
@@ -298,7 +299,7 @@ class ContentStatisticsExtractor(BaseExtractor):
             "tried",
         ]
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract content statistics from documents."""
         for doc in documents:
             try:
@@ -332,7 +333,7 @@ class ContentStatisticsExtractor(BaseExtractor):
 
         return documents
 
-    def _extract_content_statistics(self, text: str) -> Dict[str, Any]:
+    def _extract_content_statistics(self, text: str) -> dict[str, Any]:
         """Extract comprehensive content statistics."""
         stats = {}
 
@@ -359,7 +360,7 @@ class ContentStatisticsExtractor(BaseExtractor):
 
         return stats
 
-    def _calculate_basic_stats(self, text: str) -> Dict[str, Any]:
+    def _calculate_basic_stats(self, text: str) -> dict[str, Any]:
         """Calculate basic text statistics."""
         # Character counts
         char_count = len(text)
@@ -402,8 +403,8 @@ class ContentStatisticsExtractor(BaseExtractor):
         }
 
     def _calculate_readability_metrics(
-        self, text: str, basic_stats: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, text: str, basic_stats: dict[str, Any]
+    ) -> dict[str, Any]:
         """Calculate readability metrics."""
         word_count = basic_stats["word_count"]
         sentence_count = basic_stats["sentence_count"]
@@ -474,7 +475,7 @@ class ContentStatisticsExtractor(BaseExtractor):
             ),
         }
 
-    def _analyze_vocabulary(self, text: str) -> Dict[str, Any]:
+    def _analyze_vocabulary(self, text: str) -> dict[str, Any]:
         """Analyze vocabulary complexity and diversity."""
         # Clean and tokenize
         words = re.findall(r"\b[a-zA-Z]+\b", text.lower())
@@ -529,7 +530,7 @@ class ContentStatisticsExtractor(BaseExtractor):
             else "low",
         }
 
-    def _analyze_structure(self, text: str) -> Dict[str, Any]:
+    def _analyze_structure(self, text: str) -> dict[str, Any]:
         """Analyze document structure."""
         # Punctuation analysis
         punctuation_counts = {}
@@ -587,7 +588,7 @@ class ContentStatisticsExtractor(BaseExtractor):
             },
         }
 
-    def _analyze_sentiment_indicators(self, text: str) -> Dict[str, Any]:
+    def _analyze_sentiment_indicators(self, text: str) -> dict[str, Any]:
         """Analyze sentiment indicators in text."""
         text_lower = text.lower()
         words = re.findall(r"\b[a-zA-Z]+\b", text_lower)
@@ -633,7 +634,7 @@ class ContentStatisticsExtractor(BaseExtractor):
             "uncertainty_indicators": sentiment_counts.get("uncertainty", 0),
         }
 
-    def _split_sentences(self, text: str) -> List[str]:
+    def _split_sentences(self, text: str) -> list[str]:
         """Split text into sentences."""
         # Simple sentence splitting
         sentences = re.split(r"[.!?]+", text)
@@ -669,6 +670,6 @@ class ContentStatisticsExtractor(BaseExtractor):
 
         return count
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """No external dependencies required."""
         return []

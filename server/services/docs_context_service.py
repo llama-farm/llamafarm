@@ -5,16 +5,15 @@ Provides a lightweight alternative to full RAG by matching user queries to relev
 documentation using keyword-based heuristics.
 """
 
-import os
 from pathlib import Path
-from typing import Dict, List, Optional
+
 from core.logging import FastAPIStructLogger
 
 logger = FastAPIStructLogger(__name__)
 
 # Keyword to documentation file mappings
 # Keys are lowercase keywords/phrases, values are lists of doc paths relative to docs/website/docs/
-KEYWORD_TO_DOCS: Dict[str, List[str]] = {
+KEYWORD_TO_DOCS: dict[str, list[str]] = {
     "rag": ["rag/index.md"],
     "retrieval": ["rag/index.md"],
     "vector": ["rag/index.md"],
@@ -60,7 +59,7 @@ KEYWORD_TO_DOCS: Dict[str, List[str]] = {
 class DocsContextService:
     """Service for loading and matching documentation files."""
 
-    def __init__(self, docs_root: Optional[Path] = None):
+    def __init__(self, docs_root: Path | None = None):
         """
         Initialize the docs context service.
 
@@ -73,7 +72,7 @@ class DocsContextService:
             docs_root = server_dir.parent / "docs" / "website" / "docs"
 
         self.docs_root = docs_root
-        self._doc_cache: Dict[str, str] = {}
+        self._doc_cache: dict[str, str] = {}
         self._load_doc_cache()
 
     def _load_doc_cache(self) -> None:
@@ -112,7 +111,7 @@ class DocsContextService:
 
     def match_docs_for_query(
         self, query: str, max_docs: int = 2, max_lines_per_doc: int = 150
-    ) -> List[tuple[str, str]]:
+    ) -> list[tuple[str, str]]:
         """
         Match documentation files based on keywords in the query.
 
@@ -130,7 +129,7 @@ class DocsContextService:
         query_lower = query.lower()
 
         # Find matching docs using keyword mapping
-        matched_docs: Dict[str, int] = {}  # doc_path -> priority score
+        matched_docs: dict[str, int] = {}  # doc_path -> priority score
         for keyword, doc_paths in KEYWORD_TO_DOCS.items():
             if keyword in query_lower:
                 for doc_path in doc_paths:
@@ -159,7 +158,7 @@ class DocsContextService:
 
                 results.append((doc_path, content))
                 logger.debug(
-                    f"Matched doc for query",
+                    "Matched doc for query",
                     doc_path=doc_path,
                     score=score,
                     query_preview=query[:50],
@@ -185,7 +184,7 @@ class DocsContextService:
 ---
 """
 
-    def format_multiple_docs(self, docs: List[tuple[str, str]]) -> str:
+    def format_multiple_docs(self, docs: list[tuple[str, str]]) -> str:
         """
         Format multiple docs for context injection.
 
@@ -206,7 +205,7 @@ class DocsContextService:
 
 
 # Global service instance
-_service: Optional[DocsContextService] = None
+_service: DocsContextService | None = None
 
 
 def get_docs_service() -> DocsContextService:

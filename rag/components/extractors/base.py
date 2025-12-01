@@ -1,7 +1,7 @@
 """Base classes for extractors."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.base import Document
 from core.logging import RAGStructLogger
@@ -12,7 +12,7 @@ logger = RAGStructLogger("rag.components.extractors.base")
 class BaseExtractor(ABC):
     """Base class for all extractors."""
 
-    def __init__(self, name: str = None, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, name: str = None, config: dict[str, Any] | None = None):
         self.name = str(name) if name is not None else self.__class__.__name__
         self.config = config or {}
         # Ensure logger name is always a string
@@ -68,11 +68,11 @@ class BaseExtractor(ABC):
 
         return True
 
-    def configure(self, config: Dict[str, Any]) -> None:
+    def configure(self, config: dict[str, Any]) -> None:
         """Update extractor configuration."""
         self.config.update(config)
 
-    def get_extraction_info(self) -> Dict[str, Any]:
+    def get_extraction_info(self) -> dict[str, Any]:
         """Get information about what this extractor produces."""
         return {
             "name": self.name,
@@ -99,7 +99,7 @@ class ExtractorRegistry:
 
     def create(
         self, name: str, config: dict[str, Any] | None = None
-    ) -> Optional[BaseExtractor]:
+    ) -> BaseExtractor | None:
         """Create an extractor instance."""
         extractor_class = self.get(name)
         if extractor_class is None:
@@ -173,7 +173,7 @@ class ExtractorPipeline:
 
 
 def create_extractor_from_config(
-    extractor_config: Dict[str, Any], registry: ExtractorRegistry
+    extractor_config: dict[str, Any], registry: ExtractorRegistry
 ) -> BaseExtractor | None:
     """
     Create an extractor instance from configuration.

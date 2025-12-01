@@ -10,8 +10,9 @@ This file contains tests for functions specific to the universal runtime:
 - format detection caching
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 
 class TestDetectModelFormat:
@@ -20,7 +21,7 @@ class TestDetectModelFormat:
     @patch("utils.model_format.HfApi")
     def test_detect_model_format_gguf(self, mock_hf_api_class):
         """Test detecting GGUF format."""
-        from utils.model_format import detect_model_format, clear_format_cache
+        from utils.model_format import clear_format_cache, detect_model_format
 
         # Clear cache for fresh test
         clear_format_cache()
@@ -43,7 +44,7 @@ class TestDetectModelFormat:
     @patch("utils.model_format.HfApi")
     def test_detect_model_format_transformers(self, mock_hf_api_class):
         """Test detecting transformers format."""
-        from utils.model_format import detect_model_format, clear_format_cache
+        from utils.model_format import clear_format_cache, detect_model_format
 
         # Clear cache for fresh test
         clear_format_cache()
@@ -71,7 +72,7 @@ class TestDetectModelFormat:
         This ensures 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M' is passed to HF API as
         'unsloth/Qwen3-1.7B-GGUF' (without the ':Q4_K_M' suffix).
         """
-        from utils.model_format import detect_model_format, clear_format_cache
+        from utils.model_format import clear_format_cache, detect_model_format
 
         # Clear cache to ensure fresh API call
         clear_format_cache()
@@ -101,7 +102,7 @@ class TestDetectModelFormat:
         Both 'model:Q4_K_M' and 'model:Q8_0' should use the same cached result
         since they're the same base model.
         """
-        from utils.model_format import detect_model_format, clear_format_cache
+        from utils.model_format import clear_format_cache, detect_model_format
 
         # Clear cache for fresh test
         clear_format_cache()

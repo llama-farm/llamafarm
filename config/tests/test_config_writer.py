@@ -86,7 +86,6 @@ class TestConfigWriter:
             "datasets": [
                 {
                     "name": "test_dataset",
-                    "files": ["test_file.csv"],
                     "data_processing_strategy": "auto",
                     "database": "test_db",
                 }
@@ -266,7 +265,9 @@ class TestConfigWriter:
                     ],
                 },
                 "runtime": {
-                    "models": [{"name": "test_model", "model": "gpt-4", "provider": "openai"}]
+                    "models": [
+                        {"name": "test_model", "model": "gpt-4", "provider": "openai"}
+                    ]
                 },
             }
 
@@ -279,9 +280,9 @@ class TestConfigWriter:
             # Load and verify changes
             loaded_config = load_config_dict(config_path)
             assert (
-                loaded_config["rag"]["databases"][0]["embedding_strategies"][0]["config"][
-                    "batch_size"
-                ]
+                loaded_config["rag"]["databases"][0]["embedding_strategies"][0][
+                    "config"
+                ]["batch_size"]
                 == 32
             )
             assert loaded_config["runtime"]["models"][0]["model"] == "gpt-4"
@@ -358,9 +359,9 @@ class TestConfigWriter:
 
             # Load and verify deep merge worked
             loaded_config = load_config_dict(config_path)
-            embedder_config = loaded_config["rag"]["databases"][0]["embedding_strategies"][0][
-                "config"
-            ]
+            embedder_config = loaded_config["rag"]["databases"][0][
+                "embedding_strategies"
+            ][0]["config"]
 
             # Updated values
             assert embedder_config["batch_size"] == 64
@@ -370,7 +371,10 @@ class TestConfigWriter:
             assert embedder_config["model"] == "nomic-embed-text"
             assert embedder_config["base_url"] == "http://localhost:11434"
             # Runtime deep merge
-            assert loaded_config["runtime"]["models"][0]["model_api_parameters"]["top_p"] == 0.9
+            assert (
+                loaded_config["runtime"]["models"][0]["model_api_parameters"]["top_p"]
+                == 0.9
+            )
 
     def test_update_nonexistent_file(self):
         """Test updating a file that doesn't exist."""

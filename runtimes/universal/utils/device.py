@@ -2,9 +2,10 @@
 Device detection and optimization utilities.
 """
 
-import torch
-import platform
 import logging
+import platform
+
+import torch
 
 logger = logging.getLogger(__name__)
 

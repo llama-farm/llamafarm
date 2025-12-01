@@ -91,7 +91,7 @@ class Embedder(Component):
         texts = [doc.content for doc in documents]
         embeddings = self.embed(texts)
 
-        for doc, embedding in zip(documents, embeddings):
+        for doc, embedding in zip(documents, embeddings, strict=False):
             doc.embeddings = embedding
 
         # Calculate chunk metrics

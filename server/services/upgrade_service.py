@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Optional
 
 import httpx
 
@@ -17,16 +16,16 @@ CACHE_TTL = timedelta(hours=6)
 class CLIRelease:
     tag_name: str
     html_url: str
-    published_at: Optional[datetime]
-    name: Optional[str]
-    body: Optional[str]
+    published_at: datetime | None
+    name: str | None
+    body: str | None
     from_cache: bool = False
 
 
 # Thread-safe cache using asyncio.Lock
 _cache_lock = asyncio.Lock()
-_cached_release: Optional[CLIRelease] = None
-_cached_at: Optional[datetime] = None
+_cached_release: CLIRelease | None = None
+_cached_at: datetime | None = None
 
 
 async def get_latest_cli_release(force_refresh: bool = False) -> CLIRelease:

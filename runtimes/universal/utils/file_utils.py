@@ -2,10 +2,11 @@
 File I/O utilities for saving images and metadata.
 """
 
-from pathlib import Path
-from PIL import Image
 import json
 import logging
+from pathlib import Path
+
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 

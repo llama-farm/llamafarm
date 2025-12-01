@@ -58,7 +58,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }} (${{ matrix.arch }})
     needs: build-designer
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
@@ -66,19 +66,23 @@ jobs:
         include:
           - platform: macos
             arch: universal
+            os: macos-latest
 
           - platform: linux
             arch: amd64
+            os: macos-latest
 
           - platform: windows
             arch: amd64
+            os: windows-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Get version
-        id: version
+      - name: Get version (Unix)
+        if: runner.os != 'Windows'
+        id: version-unix
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             VERSION="${{ github.event.inputs.version }}"
@@ -90,6 +94,54 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
           echo "Using version: ${VERSION} (no v: ${VERSION_NO_V})"
+
+      - name: Get version (Windows)
+        if: runner.os == 'Windows'
+        id: version-windows
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $VERSION = "${{ github.event.inputs.version }}"
+          } else {
+            $VERSION = "${{ github.event.release.tag_name }}"
+          }
+          $VERSION_NO_V = $VERSION -replace '^v', ''
+
+          echo "version=$VERSION" >> $env:GITHUB_OUTPUT
+          echo "version_no_v=$VERSION_NO_V" >> $env:GITHUB_OUTPUT
+          echo "Using version: $VERSION (no v: $VERSION_NO_V)"
+
+      - name: Set version output
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            VERSION="${{ steps.version-windows.outputs.version }}"
+            VERSION_NO_V="${{ steps.version-windows.outputs.version_no_v }}"
+          else
+            VERSION="${{ steps.version-unix.outputs.version }}"
+            VERSION_NO_V="${{ steps.version-unix.outputs.version_no_v }}"
+          fi
+
+          # If version is empty, use last tag + branch name as fallback
+          if [ -z "$VERSION" ] || [ -z "$VERSION_NO_V" ]; then
+            echo "⚠️  Version is empty, generating fallback version..."
+
+            # Get last git tag, or use v0.0.0 if no tags exist
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+
+            # Get current branch name, sanitize it for version string
+            BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | sed 's/[^a-zA-Z0-9._-]/-/g')
+
+            # Construct fallback version
+            VERSION="${LAST_TAG}-${BRANCH_NAME}"
+            VERSION_NO_V="${VERSION#v}"
+
+            echo "✅ Using fallback version: ${VERSION} (no v: ${VERSION_NO_V})"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_no_v=${VERSION_NO_V}" >> $GITHUB_OUTPUT
 
       - name: Download Designer build
         uses: actions/download-artifact@v4
@@ -110,28 +162,92 @@ jobs:
 
       - name: Update app version in package.json
         working-directory: electron-app
+        shell: bash
         run: |
-          VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
-
           # Update version in package.json using Node.js
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.version = '$VERSION_NO_V';
+            pkg.version = '${{ steps.version.outputs.version_no_v }}';
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
-          echo "✅ Updated app version to $VERSION_NO_V"
+          echo "✅ Updated app version to ${{ steps.version.outputs.version_no_v }}"
+
+      - name: Setup Apple credentials for macOS
+        if: matrix.platform == 'macos'
+        run: |
+          # Create temporary directory for credentials
+          mkdir -p /tmp/certs
+
+          # Write P8 API key to file (electron-builder expects a file path)
+          # Try to decode from base64 first, if that fails, write as-is
+          if echo "${{ secrets.APPLE_NOTARY_KEY }}" | base64 -d > /tmp/certs/AuthKey_${{ secrets.APPLE_NOTARY_KEY_ID }}.p8 2>/dev/null; then
+            echo "✅ P8 API key decoded from base64 and written to file"
+          else
+            # Not base64, write directly
+            echo "${{ secrets.APPLE_NOTARY_KEY }}" > /tmp/certs/AuthKey_${{ secrets.APPLE_NOTARY_KEY_ID }}.p8
+            echo "✅ P8 API key written to file directly"
+          fi
+
+          # Verify the P8 file was created and has content
+          if [ ! -s /tmp/certs/AuthKey_${{ secrets.APPLE_NOTARY_KEY_ID }}.p8 ]; then
+            echo "❌ Failed to create P8 key file or file is empty"
+            exit 1
+          fi
+
+          # Show file info (without showing content)
+          ls -lh /tmp/certs/AuthKey_${{ secrets.APPLE_NOTARY_KEY_ID }}.p8
+          echo "✅ P8 API key file created successfully"
+
+      - name: Install Azure Trusted Signing for Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          Write-Host "📦 Installing Azure Trusted Signing PowerShell module..."
+
+          # Install the Trusted Signing module from PowerShell Gallery
+          Install-Module -Name TrustedSigning -Force -Scope CurrentUser -Repository PSGallery -AllowClobber
+
+          # Verify installation
+          $module = Get-Module -ListAvailable -Name TrustedSigning
+          if ($module) {
+            Write-Host "✅ Trusted Signing module installed successfully"
+            Write-Host "   Version: $($module.Version)"
+          } else {
+            Write-Host "❌ Failed to install Trusted Signing module"
+            exit 1
+          }
+
+          # Import the module
+          Import-Module TrustedSigning
+
+          # Verify the cmdlet is available
+          $cmdlet = Get-Command Invoke-TrustedSigning -ErrorAction SilentlyContinue
+          if ($cmdlet) {
+            Write-Host "✅ Invoke-TrustedSigning cmdlet is available"
+          } else {
+            Write-Host "❌ Invoke-TrustedSigning cmdlet not found"
+            exit 1
+          }
 
       - name: Build and Sign Electron app
         working-directory: electron-app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS signing
-          CSC_LINK: ${{ matrix.platform == 'macos' && secrets.APPLE_CERT_DATA || (matrix.platform == 'windows' && secrets.WINDOWS_CERT_DATA || '') }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_CERT_PASSWORD || (matrix.platform == 'windows' && secrets.WINDOWS_CERT_PASSWORD || '') }}
-          APPLE_API_KEY: ${{ matrix.platform == 'macos' && secrets.APPLE_NOTARY_KEY || '' }}
+          # macOS signing - using same secrets as CLI signing
+          CSC_LINK: ${{ matrix.platform == 'macos' && secrets.APPLE_CERT_DATA || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_CERT_PASSWORD || '' }}
+          # Pass P8 file path instead of content
+          APPLE_API_KEY: ${{ matrix.platform == 'macos' && format('/tmp/certs/AuthKey_{0}.p8', secrets.APPLE_NOTARY_KEY_ID) || '' }}
           APPLE_API_KEY_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_NOTARY_KEY_ID || '' }}
           APPLE_API_ISSUER: ${{ matrix.platform == 'macos' && secrets.APPLE_NOTARY_ISSUER || '' }}
+          # Windows Azure Trusted Signing credentials
+          AZURE_TENANT_ID: ${{ matrix.platform == 'windows' && secrets.AZURE_TENANT_ID || '' }}
+          AZURE_CLIENT_ID: ${{ matrix.platform == 'windows' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ matrix.platform == 'windows' && secrets.AZURE_CLIENT_SECRET || '' }}
+          AZURE_SIGNING_ENDPOINT: ${{ matrix.platform == 'windows' && 'https://eus.codesigning.azure.net/' || '' }}
+          AZURE_SIGNING_CERTIFICATE_PROFILE: ${{ matrix.platform == 'windows' && 'llamafarm-app' || '' }}
+          AZURE_SIGNING_ACCOUNT_NAME: ${{ matrix.platform == 'windows' && 'LlamaFarm' || '' }}
         run: |
           if [[ "${{ matrix.platform }}" == "macos" ]]; then
             # Remove identity: null from package.json to enable signing
@@ -141,20 +257,29 @@ jobs:
               delete pkg.build.mac.identity;
               fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
             "
+
+            # Verify P8 file exists
+            if [ ! -f "$APPLE_API_KEY" ]; then
+              echo "❌ P8 API key file not found at: $APPLE_API_KEY"
+              exit 1
+            fi
+            echo "✅ Using P8 API key at: $APPLE_API_KEY"
           fi
 
           echo "Building and signing Electron app for ${{ matrix.platform }}-${{ matrix.arch }}..."
           npm run build
           npx electron-builder --${{ matrix.platform }} --${{ matrix.arch == 'amd64' && 'x64' || matrix.arch }}
           echo "✅ Electron app built successfully"
+        shell: bash
 
-      - name: Generate checksums
+      - name: Generate checksums (Unix)
+        if: runner.os != 'Windows'
         working-directory: electron-app
         run: |
           VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
           cd "release/${VERSION_NO_V}"
 
-          # Generate SHA256 for all distributable files (using shasum on macOS)
+          # Generate SHA256 for all distributable files (using shasum on macOS/Linux)
           if [[ "${{ matrix.platform }}" == "macos" ]]; then
             for file in *.dmg *.zip; do
               if [ -f "$file" ]; then
@@ -169,23 +294,50 @@ jobs:
                 echo "✅ Generated checksum for $file"
               fi
             done
-          elif [[ "${{ matrix.platform }}" == "windows" ]]; then
-            for file in *.exe; do
-              if [ -f "$file" ]; then
-                shasum -a 256 "$file" > "$file.sha256"
-                echo "✅ Generated checksum for $file"
-              fi
-            done
           fi
+        shell: bash
 
-      - name: List build artifacts
+      - name: Generate checksums (Windows)
+        if: runner.os == 'Windows'
         working-directory: electron-app
+        shell: pwsh
+        run: |
+          $VERSION_NO_V = "${{ steps.version.outputs.version_no_v }}"
+          cd "release/$VERSION_NO_V"
+
+          # Generate SHA256 for all distributable files (using PowerShell on Windows)
+          Get-ChildItem -Filter "*.exe" | ForEach-Object {
+            $hash = Get-FileHash -Algorithm SHA256 -Path $_.FullName
+            "$($hash.Hash.ToLower())  $($_.Name)" | Out-File -FilePath "$($_.Name).sha256" -Encoding ascii
+            Write-Host "✅ Generated checksum for $($_.Name)"
+          }
+
+      - name: List build artifacts (Unix)
+        if: runner.os != 'Windows'
+        working-directory: electron-app
+        shell: bash
         run: |
           VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
           echo "Build artifacts in release/${VERSION_NO_V}:"
           ls -lh "release/${VERSION_NO_V}/" || echo "No artifacts found"
 
+      - name: List build artifacts (Windows)
+        if: runner.os == 'Windows'
+        working-directory: electron-app
+        shell: pwsh
+        run: |
+          $VERSION_NO_V = "${{ steps.version.outputs.version_no_v }}"
+          Write-Host "Build artifacts in release/${VERSION_NO_V}:"
+          Get-ChildItem -Path "release/$VERSION_NO_V" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+          if ($LASTEXITCODE -ne 0) { Write-Host "No artifacts found" }
+
       - name: Upload release assets
+        if: github.event_name != 'pull_request' &&
+          (
+          startsWith(github.ref, 'refs/heads/main') ||
+          startsWith(github.ref, 'refs/heads/release/') ||
+          startsWith(github.ref, 'refs/tags/v')
+          )
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}

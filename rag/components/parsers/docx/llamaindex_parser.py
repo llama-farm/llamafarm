@@ -1,7 +1,7 @@
 """DOCX parser using LlamaIndex."""
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import docx
 from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
@@ -26,7 +26,7 @@ class DocxParser_LlamaIndex(BaseParser):
     def __init__(
         self,
         name: str = "DocxParser_LlamaIndex",
-        config: Optional[dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         super().__init__(config or {})  # Call BaseParser init
         self.name = name

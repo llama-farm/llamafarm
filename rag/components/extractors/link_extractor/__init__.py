@@ -5,7 +5,7 @@ This component extracts URLs, email addresses, phone numbers, and other referenc
 
 from .link_extractor import LinkExtractor
 
-__all__ = ['LinkExtractor']
+__all__ = ["LinkExtractor"]
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "extractor"

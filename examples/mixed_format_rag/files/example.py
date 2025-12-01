@@ -1,12 +1,14 @@
 """Example Python module for testing RAG ingestion."""
 
+from typing import Any
+
 import numpy as np
-from typing import List, Dict, Any
+
 
 class DataProcessor:
     """Process and transform data for machine learning."""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         self.batch_size = config.get('batch_size', 32)
         self.normalize = config.get('normalize', True)
@@ -19,7 +21,7 @@ class DataProcessor:
             data = (data - mean) / (std + 1e-8)
         return data
     
-    def transform(self, inputs: List[np.ndarray]) -> List[np.ndarray]:
+    def transform(self, inputs: list[np.ndarray]) -> list[np.ndarray]:
         """Transform multiple inputs."""
         results = []
         for i in range(0, len(inputs), self.batch_size):

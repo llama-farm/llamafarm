@@ -3,7 +3,6 @@
 Test server ingestion directly
 """
 import sys
-import os
 from pathlib import Path
 
 # Get project root dynamically
@@ -28,8 +27,8 @@ def test_ingestion():
     config_path = home_dir / '.llamafarm' / 'projects' / 'default' / 'llamafarm-1' / 'llamafarm.yaml'
     
     print(f"Using config: {config_path}")
-    print(f"Strategy: universal_processor")
-    print(f"Database: main_database")
+    print("Strategy: universal_processor")
+    print("Database: main_database")
     
     try:
         # Initialize handler

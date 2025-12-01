@@ -1,14 +1,13 @@
 """Ollama-based embedding generator."""
 
 from pathlib import Path
-from core.settings import settings
+from typing import Any
+
 import requests
-import json
-from typing import List, Dict, Any, Optional
 
 from core.base import Embedder
-
 from core.logging import RAGStructLogger
+from core.settings import settings
 
 logger = RAGStructLogger("rag.components.embedders.ollama_embedder.ollama_embedder")
 
@@ -19,7 +18,7 @@ class OllamaEmbedder(Embedder):
     def __init__(
         self,
         name: str = "OllamaEmbedder",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         # Ensure name is always a string
@@ -71,7 +70,7 @@ class OllamaEmbedder(Embedder):
             logger.warning(f"Failed to validate Ollama embedder config: {e}")
             return False
 
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts using Ollama."""
         if not texts:
             return []
@@ -86,7 +85,7 @@ class OllamaEmbedder(Embedder):
 
         return embeddings
 
-    def _embed_batch(self, texts: List[str]) -> List[List[float]]:
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of texts."""
         embeddings = []
 
@@ -110,7 +109,7 @@ class OllamaEmbedder(Embedder):
         # Return the configured dimension from llamafarm.yaml
         return self.dimension
 
-    def _call_ollama_api(self, text: str) -> Dict[str, Any]:
+    def _call_ollama_api(self, text: str) -> dict[str, Any]:
         """Call Ollama API for a single text."""
         response = requests.post(
             f"{self.base_url}/api/embeddings",
@@ -125,7 +124,7 @@ class OllamaEmbedder(Embedder):
                 f"Ollama API error {response.status_code}: {response.text}"
             ) from response.raise_for_status()
 
-    def embed_text(self, text: str) -> List[float]:
+    def embed_text(self, text: str) -> list[float]:
         """Embed a single text string."""
         if not text or not text.strip():
             return [0.0] * self.get_embedding_dimension()

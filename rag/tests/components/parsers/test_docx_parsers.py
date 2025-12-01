@@ -409,12 +409,14 @@ class TestDocxParser_LlamaIndex:
         mock_reader_instance.load_data.return_value = [mock_llama_doc]
 
         # Mock file existence
-        with patch("pathlib.Path.exists", return_value=True):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_size = 1024
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+        ):
+            mock_stat.return_value.st_size = 1024
 
-                parser = DocxParser_LlamaIndex(config={"chunk_size": None})
-                result = parser.parse("test.docx")
+            parser = DocxParser_LlamaIndex(config={"chunk_size": None})
+            result = parser.parse("test.docx")
 
         assert isinstance(result, ProcessingResult)
         assert len(result.documents) == 1

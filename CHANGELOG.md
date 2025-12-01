@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.0.18](https://github.com/llama-farm/llamafarm/compare/v0.0.17...v0.0.18) (2025-11-25)
+
+
+### Features
+
+* **app:** sign windows and mac apps ([#502](https://github.com/llama-farm/llamafarm/issues/502)) ([f020648](https://github.com/llama-farm/llamafarm/commit/f0206487c86bee4524b2eea6e587fd63b7a43cba))
+* **rag:** Add advanced retrieval strategies with cross-encoder reranking and multi-turn RAG ([#476](https://github.com/llama-farm/llamafarm/issues/476)) ([9a18fe7](https://github.com/llama-farm/llamafarm/commit/9a18fe7a600dd40c0193445606ace201630e9c9e))
+
+
+### Bug Fixes
+
+* **cli:** ensure logs are on for services ([#505](https://github.com/llama-farm/llamafarm/issues/505)) ([81ab388](https://github.com/llama-farm/llamafarm/commit/81ab3882f3acab157d131b65df7b88d35bfcd2f2))
+
+
+### Miscellaneous Chores
+
+* release 0.0.18 ([37b7024](https://github.com/llama-farm/llamafarm/commit/37b70246e1866f59a3320e3748e0a5b6aecdb921))
+
+## [0.0.17](https://github.com/llama-farm/llamafarm/compare/v0.0.16...v0.0.17) (2025-11-24)
+
+
+### Bug Fixes
+
+* **designer:** fix empty prompts array for new projects, fix current version in designer ([#495](https://github.com/llama-farm/llamafarm/issues/495)) ([488313c](https://github.com/llama-farm/llamafarm/commit/488313cd239c2075f2adcce47b297e0b89005494))
+* **docs:** add troubleshooting and update styles ([#498](https://github.com/llama-farm/llamafarm/issues/498)) ([270af60](https://github.com/llama-farm/llamafarm/commit/270af6050c3007744aa1e8ea778afe6ce3f66177))
+* hf progress bars can crash runtime ([#499](https://github.com/llama-farm/llamafarm/issues/499)) ([50d66a8](https://github.com/llama-farm/llamafarm/commit/50d66a847062b5071e47b66231e1b9e9297f2e88))
+
 ## [0.0.16](https://github.com/llama-farm/llamafarm/compare/v0.0.15...v0.0.16) (2025-11-23)
 
 

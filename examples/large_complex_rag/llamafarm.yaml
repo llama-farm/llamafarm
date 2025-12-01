@@ -57,7 +57,7 @@ rag:
       description: Parser tuned for municipal ordinance PDFs with heading extraction.
       parsers:
         - type: PDFParser_LlamaIndex
-          file_include_patterns: ['*.pdf', '*.PDF']
+          file_include_patterns: ["*.pdf", "*.PDF"]
           priority: 100
           config:
             chunk_size: 1100
@@ -66,7 +66,7 @@ rag:
             extract_metadata: true
             extract_tables: true
         - type: PDFParser_PyPDF2
-          file_include_patterns: ['*.pdf', '*.PDF']
+          file_include_patterns: ["*.pdf", "*.PDF"]
           priority: 50
           config:
             chunk_size: 900
@@ -96,4 +96,3 @@ datasets:
   - name: large_docs
     database: large_docs_db
     data_processing_strategy: universal_processor
-    files: []

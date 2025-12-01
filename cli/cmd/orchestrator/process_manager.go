@@ -41,7 +41,13 @@ func NewProcessManager() (*ProcessManager, error) {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	logsDir := filepath.Join(homeDir, ".llamafarm", "logs")
+	// Use GetLFDataDir to respect LF_DATA_DIR environment variable
+	lfDataDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LF data directory: %w", err)
+	}
+
+	logsDir := filepath.Join(lfDataDir, "logs")
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create logs directory: %w", err)
 	}
@@ -80,12 +86,15 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 		return fmt.Errorf("working directory does not exist: %s", workDir)
 	}
 
+	// Add LOG_FILE to environment variables
+	env = append(env, fmt.Sprintf("LOG_FILE=%s", logFile))
+
 	// Create the command
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = workDir // Critical: processes must run in their project directory (e.g., ~/.llamafarm/src/server)
 	cmd.Env = env
 
-	utils.LogDebug(fmt.Sprintf("Starting %s in directory: %s\n", name, workDir))
+	utils.LogDebug(fmt.Sprintf("Starting %s in directory: %s with LOG_FILE=%s\n", name, workDir, logFile))
 
 	// Set up pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()
@@ -143,7 +152,7 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 		logF.Close()
 		// Note: pm.mu is already locked from line 55, no need to lock again
 		delete(pm.processes, name)
-		return fmt.Errorf("%s process failed to start or crashed immediately (see logs at %s)", name, logFile)
+		return fmt.Errorf("%s process failed to start or crashed immediately. (run `lf services logs -s %s` to view logs)", name, name)
 	}
 
 	utils.LogDebug(fmt.Sprintf("%s process started (PID: %d)\n", name, cmd.Process.Pid))
@@ -151,16 +160,26 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 }
 
 // captureOutput captures output from a pipe and writes to log file
+// Uses buffered writing with periodic flushing for performance and reliability
 func (pm *ProcessManager) captureOutput(name string, reader io.Reader, logFile *os.File, streamName string) {
+	// Create buffered writer for efficient disk I/O
+	writer := bufio.NewWriter(logFile)
+	defer func() {
+		// Ensure final flush on exit
+		writer.Flush()
+		logFile.Sync()
+	}()
+
 	scanner := bufio.NewScanner(reader)
 	lineCount := 0
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Write to log file
+		// Write to buffered writer
 		timestamp := time.Now().Format("2006-01-02 15:04:05")
 		logLine := fmt.Sprintf("[%s] [%s] %s\n", timestamp, streamName, line)
-		logFile.WriteString(logLine)
+
+		writer.WriteString(logLine)
 
 		// Sync every 10 lines to ensure writes are flushed periodically
 		// This prevents log loss if the process is killed abruptly

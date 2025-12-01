@@ -118,7 +118,6 @@ datasets:
   - name: default
     database: main_database
     data_processing_strategy: universal_processor
-    files: []
 
 # =============================================================================
 # RAG CONFIGURATION

@@ -30,6 +30,7 @@ LlamaFarm supports **MCP servers** – a standardized way to give AI models acce
 **Per-Model Tool Access Control**: Different models can have different capabilities. Give your production model access to read-only tools while your development model can modify data.
 
 **Multiple Transport Types**: Connect to tools running as:
+
 - **Local processes** (STDIO) – Python scripts, Node.js servers
 - **HTTP APIs** – Remote services with standard REST endpoints
 - **SSE streams** – Server-Sent Events for real-time data
@@ -46,9 +47,9 @@ mcp:
       transport: stdio
       command: npx
       args:
-        - "-y"
-        - "@modelcontextprotocol/server-filesystem"
-        - "/Users/myuser/documents"
+        - '-y'
+        - '@modelcontextprotocol/server-filesystem'
+        - '/Users/myuser/documents'
 
     - name: database
       transport: http
@@ -90,11 +91,11 @@ runtime:
 
 ## Choose Your Own Adventure
 
-| Get Started | Go Deeper | Build Your Own |
-| ----------- | --------- | -------------- |
-| [Quickstart](./quickstart/index.md) – install, init, chat, ingest your first dataset. | [Core Concepts](./concepts/index.md) – architecture, sessions, and components. | [Extending LlamaFarm](./extending/index.md) – add runtimes, stores, parsers, and CLI commands. |
-| [Designer Web UI](./designer/index.md) – visual interface for project management. | [Configuration Guide](./configuration/index.md) – schema-driven project settings. | [RAG Guide](./rag/index.md) – strategies, processing pipelines, and monitoring. |
-| [CLI Reference](./cli/index.md) – command matrix and examples. | [Models & Runtime](./models/index.md) – configure AI models and providers. | [Prompts](./prompts/index.md) – prompt engineering and management. |
+| Get Started                                                                           | Go Deeper                                                                         | Build Your Own                                                                                 |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [Quickstart](./quickstart/index.md) – install, init, chat, ingest your first dataset. | [Core Concepts](./concepts/index.md) – architecture, sessions, and components.    | [Extending LlamaFarm](./extending/index.md) – add runtimes, stores, parsers, and CLI commands. |
+| [Designer Web UI](./designer/index.md) – visual interface for project management.     | [Configuration Guide](./configuration/index.md) – schema-driven project settings. | [RAG Guide](./rag/index.md) – strategies, processing pipelines, and monitoring.                |
+| [CLI Reference](./cli/index.md) – command matrix and examples.                        | [Models & Runtime](./models/index.md) – configure AI models and providers.        | [Prompts](./prompts/index.md) – prompt engineering and management.                             |
 
 ## Philosophy
 
@@ -105,7 +106,7 @@ runtime:
 - **Open for extension** – documentation includes patterns for registering new providers, stores, and utilities.
 
 :::tip Prefer Visual Tools?
-The **Designer Web UI** provides a browser-based interface for managing projects, uploading datasets, and testing your AI—all without touching the command line. It's automatically available at `http://localhost:7724` when you run `lf start` (or `http://localhost:3123` if using Docker Compose directly). [Learn more →](./designer/index.md)
+The **Designer Web UI** provides a browser-based interface for managing projects, uploading datasets, and testing your AI—all without touching the command line. It's automatically available at `http://localhost:8000` when you run `lf start`. [Learn more →](./designer/index.md)
 :::
 
 ## 🎥 In-Depth Tutorial

@@ -5,7 +5,7 @@ This component generates document summaries using statistical approaches.
 
 from .summary_extractor import SummaryExtractor
 
-__all__ = ['SummaryExtractor']
+__all__ = ["SummaryExtractor"]
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "extractor"

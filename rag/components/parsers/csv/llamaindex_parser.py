@@ -1,9 +1,10 @@
 """CSV parser using LlamaIndex."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.csv.llamaindex_parser")
 
 
@@ -13,7 +14,7 @@ class CSVParser_LlamaIndex:
     def __init__(
         self,
         name: str = "CSVParser_LlamaIndex",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         self.name = name
         self.config = config or {}
@@ -43,9 +44,8 @@ class CSVParser_LlamaIndex:
         from core.base import Document, ProcessingResult
 
         try:
+            import pandas as pd  # noqa: F401 (needed for pandas readers)
             from llama_index.readers.file import PandasCSVReader
-            from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
-            import pandas as pd
         except ImportError:
             return ProcessingResult(
                 documents=[],

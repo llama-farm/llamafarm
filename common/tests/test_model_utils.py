@@ -2,9 +2,10 @@
 
 import os
 import tempfile
+from unittest.mock import Mock, patch
 
 import pytest
-from unittest.mock import Mock, patch
+
 from llamafarm_common.model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
     get_gguf_file_path,
