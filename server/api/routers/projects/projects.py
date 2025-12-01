@@ -845,17 +845,16 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             task_namespace = group_info.get("namespace")
             task_project = group_info.get("project")
             
-            if task_namespace and task_project:
-                if task_namespace != namespace or task_project != project_id:
-                    logger.warning(
-                        "Authorization failed: task does not belong to requested namespace/project",
-                        task_id=task_id,
-                        task_namespace=task_namespace,
-                        task_project=task_project,
-                        requested_namespace=namespace,
-                        requested_project=project_id,
-                    )
-                    raise HTTPException(
+            if task_namespace and task_project and (task_namespace != namespace or task_project != project_id):
+                logger.warning(
+                    "Authorization failed: task does not belong to requested namespace/project",
+                    task_id=task_id,
+                    task_namespace=task_namespace,
+                    task_project=task_project,
+                    requested_namespace=namespace,
+                    requested_project=project_id,
+                )
+                raise HTTPException(
                         status_code=404,
                         detail="Task not found"
                     )

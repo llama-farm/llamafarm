@@ -2,7 +2,7 @@
 
 import importlib
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 
 from core.logging import FastAPIStructLogger
 from services.project_service import ProjectService
@@ -19,7 +19,7 @@ class DatasetCleanupService:
         project: str,
         dataset: str,
         task_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Remove chunks for successfully processed files.
 
@@ -47,7 +47,7 @@ class DatasetCleanupService:
 
         files_reverted = 0
         files_failed = 0
-        errors: List[Dict[str, str]] = []
+        errors: list[dict[str, str]] = []
 
         try:
             # Get task status to find successfully processed files
@@ -85,7 +85,7 @@ class DatasetCleanupService:
             vector_store = self._initialize_vector_store(project_dir, database_config)
 
             # Initialize document manager
-            from rag.core.document_manager import DocumentManager, DeletionStrategy
+            from rag.core.document_manager import DeletionStrategy, DocumentManager
 
             doc_manager = DocumentManager(
                 vector_store=vector_store,
@@ -104,10 +104,9 @@ class DatasetCleanupService:
                     )
 
                     deleted_count = result.get("deleted_count", 0)
-                    if deleted_count > 0 or result.get("errors"):
-                        # Check if there were errors
-                        if result.get("errors"):
-                            raise Exception(f"Deletion errors: {result['errors']}")
+                    # Check if there were errors
+                    if (deleted_count > 0 or result.get("errors")) and result.get("errors"):
+                        raise Exception(f"Deletion errors: {result['errors']}")
 
                     logger.info(
                         f"Successfully deleted chunks for file {file_hash[:12]}...",
@@ -148,7 +147,7 @@ class DatasetCleanupService:
                 "errors": errors if errors else [{"file_hash": "unknown", "error": str(e)}],
             }
 
-    def _get_successful_files(self, task_id: str) -> List[str]:
+    def _get_successful_files(self, task_id: str) -> list[str]:
         """
         Get list of file hashes for successfully processed files.
 
@@ -158,8 +157,9 @@ class DatasetCleanupService:
         Returns:
             List of file hashes that were successfully processed
         """
-        from core.celery import app
         from celery.result import AsyncResult
+
+        from core.celery import app
 
         successful_files = []
 
@@ -170,9 +170,8 @@ class DatasetCleanupService:
             # Get stored metadata
             result_meta = None
             try:
-                if group_result.state == "PENDING":
-                    if isinstance(group_result.result, dict) and group_result.result.get("type") == "group":
-                        result_meta = group_result.result
+                if group_result.state == "PENDING" and isinstance(group_result.result, dict) and group_result.result.get("type") == "group":
+                    result_meta = group_result.result
             except Exception:
                 pass
 
@@ -250,7 +249,6 @@ class DatasetCleanupService:
 
     def _initialize_vector_store(self, project_dir: str, database_config):
         """Initialize vector store from database configuration."""
-        from pathlib import Path
 
         # Get vector store configuration
         vector_store_config = database_config.config

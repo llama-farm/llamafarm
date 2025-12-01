@@ -446,16 +446,15 @@ class PromptConversationManager:
                 "should handle well?"
             )
 
-        elif len(responses) >= 3:
+        elif len(responses) >= 3 and not any(
+            "example" in q.lower()
+            for q in self.conversation_state.questions_asked
+        ):
             # Final questions - refinement
-            if not any(
-                "example" in q.lower()
-                for q in self.conversation_state.questions_asked
-            ):
-                questions.append(
-                    "Should I include specific examples in the prompts to guide "
-                    "the AI's behavior?"
-                )
+            questions.append(
+                "Should I include specific examples in the prompts to guide "
+                "the AI's behavior?"
+            )
 
         return questions[:2]  # Limit to 2 questions at a time
 
@@ -869,12 +868,11 @@ class PromptOptimizer:
     ) -> GeneratedPrompt:
         """Optimize prompt for OpenAI models"""
         # OpenAI models work well with structured prompts
-        if prompt.prompt_type == PromptType.SYSTEM:
+        if prompt.prompt_type == PromptType.SYSTEM and "IDENTITY AND PURPOSE" in prompt.sections:
             # Add system role clarity
-            if "IDENTITY AND PURPOSE" in prompt.sections:
-                identity = prompt.sections["IDENTITY AND PURPOSE"]
-                if not identity.startswith("You are"):
-                    prompt.sections["IDENTITY AND PURPOSE"] = f"You are {identity}"
+            identity = prompt.sections["IDENTITY AND PURPOSE"]
+            if not identity.startswith("You are"):
+                prompt.sections["IDENTITY AND PURPOSE"] = f"You are {identity}"
 
         # OpenAI models benefit from explicit output format instructions
         if (
