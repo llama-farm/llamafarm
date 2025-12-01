@@ -272,6 +272,20 @@ class DatabaseService:
             logger.error(error_msg, exc_info=True)
             return False, error_msg
         except Exception as e:
+            # Check if the error is due to the collection not being found.
+            # This is often indicated by a 404 status code in the client's exceptions
+            # (e.g., Qdrant client), or by specific error messages.
+            is_not_found_error = (
+                hasattr(e, "status_code") and e.status_code == 404
+            ) or "not found" in str(e).lower() or "does not exist" in str(e).lower()
+
+            if is_not_found_error:
+                logger.info(
+                    "Collection does not exist, nothing to delete",
+                    database=database.name,
+                )
+                return True, None
+
             error_msg = f"Failed to delete vector store collection: {e}"
             logger.error(error_msg, exc_info=True)
             return False, error_msg

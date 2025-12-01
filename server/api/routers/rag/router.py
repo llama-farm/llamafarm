@@ -465,7 +465,11 @@ async def create_database(
     try:
         created_db = DatabaseService.create_database(namespace, project, database)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        error_msg = str(e)
+        # Return 409 Conflict for duplicate database names
+        if "already exists" in error_msg:
+            raise HTTPException(status_code=409, detail=error_msg)
+        raise HTTPException(status_code=400, detail=error_msg)
 
     return DatabaseResponse(database=_database_to_info(created_db))
 
