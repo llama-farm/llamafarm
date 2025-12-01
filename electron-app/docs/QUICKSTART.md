@@ -7,12 +7,14 @@ This guide will get you up and running with LlamaFarm Desktop in 5 minutes.
 ### Download & Install
 
 1. **Download the app**
+
    - Go to https://github.com/llama-farm/llamafarm/releases/latest
    - Download the appropriate version:
      - macOS Intel: `LlamaFarm-{version}.dmg`
      - macOS Apple Silicon: `LlamaFarm-{version}-arm64.dmg`
 
 2. **Install**
+
    - Open the downloaded DMG
    - Drag LlamaFarm to your Applications folder
    - Eject the DMG
@@ -28,6 +30,7 @@ This guide will get you up and running with LlamaFarm Desktop in 5 minutes.
 ### What Happens on First Launch?
 
 The app automatically:
+
 1. ✅ Downloads the LlamaFarm CLI (`lf`)
 2. ✅ Installs it to your user directory
 3. ✅ Downloads necessary Python dependencies
@@ -42,11 +45,13 @@ The app automatically:
 Once the app is running:
 
 - **Status Bar**: Shows backend health at the top
+
   - Green = All systems running
   - Yellow = Some services degraded
   - Red = Error or stopped
 
 - **Designer**: Full visual interface for:
+
   - Creating projects
   - Uploading datasets
   - Configuring models
@@ -59,11 +64,13 @@ Once the app is running:
 Before installing LlamaFarm Desktop, you need:
 
 1. **Docker Desktop**
+
    - Download: https://www.docker.com/products/docker-desktop
    - Required for backend services
    - Must be running when you start the app
 
 2. **Ollama** (recommended)
+
    - Download: https://ollama.com/download
    - For local LLM inference
    - Adjust context window in Settings → Advanced (recommend 100K tokens)
@@ -78,17 +85,20 @@ Before installing LlamaFarm Desktop, you need:
 ### Development Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/llama-farm/llamafarm.git
    cd llamafarm/electron-app
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 3. **Build the Designer** (required first time)
+
    ```bash
    cd ../designer
    npm install
@@ -97,6 +107,7 @@ Before installing LlamaFarm Desktop, you need:
    ```
 
 4. **Run in development mode**
+
    ```bash
    # Terminal 1: Start the backend
    cd ..
@@ -150,6 +161,7 @@ electron-app/
 **Problem**: Network error or GitHub rate limit
 
 **Solutions**:
+
 - Check internet connection
 - Wait a few minutes and restart the app
 - Install manually: `curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash`
@@ -159,8 +171,9 @@ electron-app/
 **Problem**: Docker not running or ports in use
 
 **Solutions**:
+
 - Ensure Docker Desktop is running
-- Check that ports 8000 and 7724 are free
+- Check that port 8000 is free
 - Try restarting Docker
 - View logs: Help → Show Logs
 
@@ -169,6 +182,7 @@ electron-app/
 **Problem**: Backend not ready yet
 
 **Solutions**:
+
 - Wait 2-3 minutes (first launch can be slow)
 - Check status bar (should say "Backend Running")
 - Try restarting: Click "Restart" button
@@ -215,6 +229,7 @@ electron-app/
 4. 🚀 Start building AI applications!
 
 **Learn More**:
+
 - [Main Documentation](../../docs/website/docs/intro.md)
 - [Configuration Guide](../../docs/website/docs/configuration/index.md)
 - [RAG Guide](../../docs/website/docs/rag/index.md)
