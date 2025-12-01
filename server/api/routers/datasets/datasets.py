@@ -16,12 +16,14 @@ router = APIRouter(
 )
 
 
+# Support both with and without trailing slash to avoid proxy redirect issues
 @router.get(
     "/",
     operation_id="dataset_list",
     tags=["mcp"],
     responses={200: {"model": ListDatasetsResponse}},
 )
+@router.get("", include_in_schema=False)
 async def list_datasets(
     namespace: str,
     project: str,
