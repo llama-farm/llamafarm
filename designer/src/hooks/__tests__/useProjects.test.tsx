@@ -1,35 +1,23 @@
-import React from 'react'
-import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import {
-  useProjects,
-  useProject,
-  useCreateProject,
-  useUpdateProject,
-  useDeleteProject,
-  useProjectMutations,
-  projectKeys,
-} from '../useProjects'
-import * as projectService from '../../api/projectService'
+import { describe, it, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock project service
 vi.mock('../../api/projectService')
 
-const createWrapper = () => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  })
-
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
-  )
-}
+// Helper for future test implementation
+// const createWrapper = () => {
+//   const queryClient = new QueryClient({
+//     defaultOptions: {
+//       queries: { retry: false },
+//       mutations: { retry: false },
+//     },
+//   })
+// 
+//   return ({ children }: { children: React.ReactNode }) => (
+//     <QueryClientProvider client={queryClient}>
+//       {children}
+//     </QueryClientProvider>
+//   )
+// }
 
 describe('useProjects', () => {
   beforeEach(() => {

@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import {
-  validateProjectConfig,
-  createMinimalConfig,
-  mergeProjectConfig,
-} from '../projectConfigUtils'
+import { describe, it } from 'vitest'
+
+// Imports for future test implementation:
+// import {
+//   validateProjectConfig,
+//   createMinimalConfig,
+//   mergeProjectConfig,
+// } from '../projectConfigUtils'
 
 describe('projectConfigUtils', () => {
   describe('validateProjectConfig', () => {

@@ -1,9 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter } from 'react-router-dom'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import userEvent from '@testing-library/user-event'
-import Databases from '../Databases'
+import { QueryClient } from '@tanstack/react-query'
+import { describe, it, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock hooks and APIs
 vi.mock('../../../hooks/useActiveProject')
@@ -20,13 +16,14 @@ const queryClient = new QueryClient({
   },
 })
 
-const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <QueryClientProvider client={queryClient}>
-    <BrowserRouter>
-      {children}
-    </BrowserRouter>
-  </QueryClientProvider>
-)
+// Wrapper for future test implementation
+// const wrapper = ({ children }: { children: React.ReactNode }) => (
+//   <QueryClientProvider client={queryClient}>
+//     <BrowserRouter>
+//       {children}
+//     </BrowserRouter>
+//   </QueryClientProvider>
+// )
 
 describe('Databases', () => {
   beforeEach(() => {

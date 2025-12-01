@@ -1,19 +1,21 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import {
-  getProjectsList,
-  saveProjectsList,
-  getActiveProject,
-  setActiveProject,
-  apiProjectsToProjectItems,
-  namesToProjectItems,
-  filterProjectsBySearch,
-  updateProjectInList,
-  removeProjectFromList,
-  addProjectToList,
-  DEFAULT_PROJECT_NAMES,
-  DEFAULT_PROJECTS,
-} from '../projectUtils'
-import type { Project } from '../../types/project'
+import { describe, it, vi, beforeEach, afterEach } from 'vitest'
+
+// Imports for future test implementation:
+// import {
+//   getProjectsList,
+//   saveProjectsList,
+//   getActiveProject,
+//   setActiveProject,
+//   apiProjectsToProjectItems,
+//   namesToProjectItems,
+//   filterProjectsBySearch,
+//   updateProjectInList,
+//   removeProjectFromList,
+//   addProjectToList,
+//   DEFAULT_PROJECT_NAMES,
+//   DEFAULT_PROJECTS,
+// } from '../projectUtils'
+// import type { Project } from '../../types/project'
 
 describe('projectUtils', () => {
   beforeEach(() => {

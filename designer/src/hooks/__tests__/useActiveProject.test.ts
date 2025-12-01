@@ -1,8 +1,10 @@
-import { renderHook, waitFor } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useActiveProject, useActiveProjectValues } from '../useActiveProject'
-import * as namespaceUtils from '../../utils/namespaceUtils'
-import * as projectUtils from '../../utils/projectUtils'
+import { describe, it, vi, beforeEach, afterEach } from 'vitest'
+
+// Imports for future test implementation:
+// import { renderHook, waitFor } from '@testing-library/react'
+// import { useActiveProject, useActiveProjectValues } from '../useActiveProject'
+// import * as namespaceUtils from '../../utils/namespaceUtils'
+// import * as projectUtils from '../../utils/projectUtils'
 
 // Mock utility functions
 vi.mock('../../utils/namespaceUtils')

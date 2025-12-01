@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  getCurrentNamespace,
-  setCurrentNamespace,
-  clearCurrentNamespace,
-} from '../namespaceUtils'
+import { describe, it, beforeEach } from 'vitest'
+
+// Imports for future test implementation:
+// import {
+//   getCurrentNamespace,
+//   setCurrentNamespace,
+//   clearCurrentNamespace,
+// } from '../namespaceUtils'
 
 describe('namespaceUtils', () => {
   beforeEach(() => {

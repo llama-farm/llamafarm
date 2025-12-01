@@ -1,9 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import userEvent from '@testing-library/user-event'
-import ConfigEditor from '../ConfigEditor'
-import { UnsavedChangesProvider } from '../../../contexts/UnsavedChangesContext'
+import { QueryClient } from '@tanstack/react-query'
+import { describe, it, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock hooks and utilities
 vi.mock('../../../hooks/useActiveProject')
@@ -19,13 +15,14 @@ const queryClient = new QueryClient({
   },
 })
 
-const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <QueryClientProvider client={queryClient}>
-    <UnsavedChangesProvider>
-      {children}
-    </UnsavedChangesProvider>
-  </QueryClientProvider>
-)
+// Wrapper for future test implementation
+// const wrapper = ({ children }: { children: React.ReactNode }) => (
+//   <QueryClientProvider client={queryClient}>
+//     <UnsavedChangesProvider>
+//       {children}
+//     </UnsavedChangesProvider>
+//   </QueryClientProvider>
+// )
 
 describe('ConfigEditor', () => {
   beforeEach(() => {
