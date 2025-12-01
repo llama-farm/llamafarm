@@ -51,7 +51,7 @@ func init() {
 
 	// Optional flags
 	servicesLogsCmd.Flags().BoolP("follow", "f", false, "Follow log output (like tail -f)")
-	servicesLogsCmd.Flags().IntP("tail", "n", 0, "Number of lines to show from the end (0 = show all)")
+	servicesLogsCmd.Flags().IntP("tail", "n", 100, "Number of lines to show from the end (Default: 100, 0 = show all)")
 }
 
 // runServicesLogs is the main entry point for the services logs command
