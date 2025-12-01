@@ -1137,6 +1137,7 @@ curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-a
 
 **Notes:**
 - Only group tasks (dataset processing) can be cancelled
+- **Security:** Tasks can only be cancelled by the namespace/project they belong to
 - Cancellation is idempotent (safe to call multiple times)
 - Cleanup failures don't prevent cancellation from succeeding
 - Successfully processed files are automatically reverted
