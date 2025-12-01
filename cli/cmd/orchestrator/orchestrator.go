@@ -125,7 +125,9 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 
 	for key, val := range envKeysWithDefaults {
 		if val != "" {
-			env = append(env, fmt.Sprintf("%s=%s", key, val))
+			// Expand environment variable placeholders like ${LF_DATA_DIR}
+			expandedVal := os.ExpandEnv(val)
+			env = append(env, fmt.Sprintf("%s=%s", key, expandedVal))
 		}
 	}
 	return append(env, extraEnv...)

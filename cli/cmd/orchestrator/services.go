@@ -135,6 +135,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			return []string{"run", "--managed-python", "--no-sync", "python", "server.py"}
 		}(),
 		Env: map[string]string{
+			"LOG_FILE":                     filepath.Join("${LF_DATA_DIR}", "logs", "universal-runtime.log"),
 			"LF_RUNTIME_PORT":              "11540",
 			"LF_RUNTIME_HOST":              "127.0.0.1",
 			"TRANSFORMERS_OUTPUT_DIR":      filepath.Join("${LF_DATA_DIR}", "outputs", "images"),
@@ -163,6 +164,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
 		Env: map[string]string{
+			"LOG_FILE":                     filepath.Join("${LF_DATA_DIR}", "logs", "server.log"),
 			"OLLAMA_HOST":                  "http://localhost:11434",
 			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 		},
@@ -177,6 +179,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Command:         "uv",
 		Args:            []string{"run", "--managed-python", "python", "main.py"},
 		Env: map[string]string{
+			"LOG_FILE":                     filepath.Join("${LF_DATA_DIR}", "logs", "rag.log"),
 			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 		},
 		HealthComponent: "rag-service",

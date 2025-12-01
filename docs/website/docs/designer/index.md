@@ -15,6 +15,7 @@ The Designer is a React-based web application that complements the `lf` CLI. Whi
 ## When to Use the Designer vs CLI
 
 Use the **Designer** when you want to:
+
 - Quickly prototype and experiment with configurations
 - Visualize your project structure and relationships
 - Upload and manage datasets interactively
@@ -22,16 +23,13 @@ Use the **Designer** when you want to:
 - Get immediate feedback on configuration errors
 
 Use the **CLI** when you want to:
+
 - Automate workflows and integrate with CI/CD
 - Process large batches of data
 - Script repetitive tasks
 - Work in headless/remote environments
 
 ## Accessing the Designer
-
-The Designer runs on different ports depending on how you start it. Both methods are fully functional—choose based on your workflow.
-
-### Via the CLI (Recommended)
 
 The easiest way to start the Designer is through the `lf start` command:
 
@@ -40,82 +38,79 @@ lf start
 ```
 
 This automatically launches:
+
 - The FastAPI server (port 8000)
 - The RAG worker
-- The Designer web UI (port **7724**)
+- The Designer web UI (port **8000**)
 
 Once started, open your browser to:
 
 ```
-http://localhost:7724
+http://localhost:8000
 ```
 
-**Why port 7724?** The CLI uses a dedicated port to avoid conflicts with other services and to allow running multiple LlamaFarm instances for different projects.
-
-### Via Docker Compose
-
-If you're using Docker Compose directly:
-
-```bash
-cd deployment/docker_compose
-docker-compose up -d
-```
-
-The Designer will be available at:
-
-```
-http://localhost:3123
-```
-
-**Why port 3123?** Docker Compose uses a different port to distinguish between CLI-managed and Docker Compose-managed deployments, allowing both to run simultaneously if needed.
+The Designer is served by the same FastAPI server, so it shares port 8000 with the API.
 
 ![Designer Home Page](./screenshots/designer-home.png)
-*The Designer home page where you can create and select projects*
+_The Designer home page where you can create and select projects_
 
 ## Main Sections
 
 The Designer is organized into several key sections:
 
 ### Projects
+
 Switch between projects or create new ones. Each project has its own configuration, datasets, and chat history.
 
 ### Dashboard
+
 Get an overview of your active project, including:
+
 - Project configuration summary
 - Dataset statistics
 - Quick actions for common tasks
 - Version history
 
 ### Data
+
 Manage your datasets and processing strategies:
+
 - Upload files via drag-and-drop or file picker
 - Create and configure data processing strategies
 - Monitor ingestion progress
 - View dataset details and file lists
 
 ### Models
+
 Configure runtime providers and models:
+
 - Select from available models (Ollama, OpenAI, etc.)
 - Configure model parameters (temperature, max tokens, etc.)
 - Test model connections
 - Download models for local use
 
 ### Databases
+
 Set up RAG (Retrieval-Augmented Generation):
+
 - Configure vector databases
 - Choose embedding models
 - Select retrieval strategies
 - Test queries against your data
 
 ### Prompts
+
 Design and test system prompts:
+
 - Create prompt templates
 - Test prompts with different inputs
 - Compare outputs across models
 - Save effective prompts to your configuration
 
 ### Chat
+
 Interactive testing with your AI project:
+
 - Chat with full project context
 - Toggle RAG on/off
 - View retrieved documents
@@ -124,6 +119,7 @@ Interactive testing with your AI project:
 ### Config Editor Mode
 
 Every section includes a toggle to switch between Designer (visual) mode and Config Editor (YAML) mode. In Config Editor mode, you can:
+
 - Directly edit the `llamafarm.yaml` file
 - See real-time validation errors
 - Search and navigate large configurations
@@ -138,16 +134,18 @@ Every section includes a toggle to switch between Designer (visual) mode and Con
 ## Troubleshooting
 
 **Designer won't load:**
+
 - Ensure the server is running (`lf start` or check Docker containers)
 - Verify the server is accessible at `http://localhost:8000/health/liveness`
 - Check browser console for connection errors
 
 **Can't connect to API:**
+
 - The Designer expects the server at `localhost:8000` by default
 - If using a custom setup, set the `VITE_APP_API_URL` environment variable
 
 **Changes not saving:**
+
 - Check for validation errors (red highlights in Config Editor)
 - Ensure you have write permissions to your project directory
 - Look for error messages in the top-right toast notifications
-

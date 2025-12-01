@@ -67,6 +67,9 @@ function Home() {
     [projectsResponse]
   )
 
+  // Determine view mode based on project count
+  const hasManyProjects = projectsList.length > 2
+
   // Get full project objects from API with precomputed sort keys
   // Uses namespace+name as key to avoid potential collisions
   const fullProjects = useMemo(() => {
@@ -343,18 +346,20 @@ function Home() {
   return (
     <div className="min-h-screen flex flex-col items-stretch pt-24 md:pt-28 pb-8 bg-background">
       <div className="max-w-6xl w-full mx-auto px-6 text-center space-y-8">
-        <div className="space-y-4">
-          <p className="text-sm font-medium tracking-wide text-foreground/80">
-            Welcome to LlamaFarm 🦙
-          </p>
+        {!hasManyProjects && (
+          <>
+            <div className="space-y-4">
+              <p className="text-sm font-medium tracking-wide text-foreground/80">
+                Welcome to LlamaFarm 🦙
+              </p>
 
-          <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-foreground">
-            Create a new project
-          </h1>
-        </div>
+              <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-foreground">
+                Create a new project
+              </h1>
+            </div>
 
-        {/* Split Screen Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            {/* Split Screen Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           {/* Left Side: Quick Start Demo */}
           <div className="rounded-xl border-2 border-primary/40 bg-card p-6 flex flex-col relative">
             {/* Center Recommended Tag */}
@@ -489,7 +494,7 @@ function Home() {
                         onChange={() => setDeployment('local')}
                         disabled={isCreatingProject}
                       />
-                      <span className="text-sm">Local</span>
+                      <span className="text-sm">Local machine</span>
                     </label>
                     <label className="flex-1 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 h-10 hover:bg-accent/20 cursor-pointer">
                       <input
@@ -566,41 +571,70 @@ function Home() {
           </div>
         </div>
 
-        {isCreatingProject && (
-          <p className="max-w-2xl mx-auto text-xs sm:text-sm leading-relaxed text-foreground/80">
-            Creating your project and setting up the dashboard...
-          </p>
+            {isCreatingProject && (
+              <p className="max-w-2xl mx-auto text-xs sm:text-sm leading-relaxed text-foreground/80">
+                Creating your project and setting up the dashboard...
+              </p>
+            )}
+            {/* Your projects removed here to place outside the narrow container */}
+          </>
         )}
-        {/* Your projects removed here to place outside the narrow container */}
+
+        {/* Condensed view for >2 projects */}
+        {hasManyProjects && (
+          <div className="space-y-6">
+            <p className="text-sm font-medium tracking-wide text-foreground/80">
+              Welcome to LlamaFarm 🦙
+            </p>
+            <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-foreground">
+              Your projects
+            </h1>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                className="flex-1 max-w-[200px] px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 font-medium transition-opacity"
+                onClick={() => projectModal.openCreateModal()}
+              >
+                Create new
+              </button>
+              <button
+                className="flex-1 max-w-[200px] px-4 py-2 rounded-lg border border-input bg-background text-foreground hover:bg-accent/20 font-medium transition-colors"
+                onClick={() => demoModal.openModal()}
+              >
+                Explore demo projects
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Your projects (moved outside to align with Resources width) */}
       <div
         id="projects"
-        className="w-full max-w-6xl mx-auto px-6 mt-16 lg:mt-24"
+        className={`w-full max-w-6xl mx-auto px-6 ${hasManyProjects ? 'mt-8' : 'mt-16 lg:mt-24'}`}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl text-primary text-left">Your projects</h3>
-          <div className="hidden md:flex items-center gap-2 shrink-0">
+        {!hasManyProjects && (
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl text-primary text-left">Your projects</h3>
+            <div className="hidden md:flex items-center gap-2 shrink-0">
+              <button
+                className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
+                onClick={() => demoModal.openModal()}
+              >
+                Explore demo projects
+              </button>
+            </div>
+          </div>
+        )}
+        {!hasManyProjects && (
+          <div className="md:hidden mb-4 flex items-center justify-between gap-3">
             <button
-              className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
+              className="flex-1 px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
               onClick={() => demoModal.openModal()}
             >
               Explore demo projects
             </button>
-            {/* New project button removed per design */}
           </div>
-        </div>
-        {/* Controls for small screens */}
-        <div className="md:hidden mb-4 flex items-center justify-between gap-3">
-          <button
-            className="flex-1 px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20"
-            onClick={() => demoModal.openModal()}
-          >
-            Explore demo projects
-          </button>
-          {/* New project button removed per design */}
-        </div>
+        )}
 
         {/* Search and Sort */}
         <div className="mb-4 flex flex-col sm:flex-row gap-3">
@@ -632,9 +666,15 @@ function Home() {
             const modelNames = project?._sortModels || []
             const hasValidationError = project?.validation_error
 
-            // Show first 2 models, then "+N" for additional
-            const visibleModels = modelNames.slice(0, 2)
-            const additionalCount = modelNames.length - 2
+            // Extract just the part after "/" from model names
+            const getModelDisplayName = (modelName: string) => {
+              const parts = modelName.split('/')
+              return parts.length > 1 ? parts.slice(1).join('/') : modelName
+            }
+
+            // Show first 1 model, then "+N" for additional
+            const visibleModels = modelNames.slice(0, 1).map(getModelDisplayName)
+            const additionalCount = modelNames.length - 1
 
             return (
               <div
@@ -647,42 +687,39 @@ function Home() {
                     <div className="text-base text-foreground line-clamp-2 break-words">
                       {name}
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-col gap-2 w-full">
                       {visibleModels.length > 0 ? (
                         <>
                           {visibleModels.map((model, idx) => (
                             <span
                               key={idx}
-                              className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5"
+                              className="text-xs text-foreground/70 bg-muted rounded-xl px-3 py-0.5 w-full"
                             >
                               {model}
                             </span>
                           ))}
                           {additionalCount > 0 && (
                             <span
-                              className="text-xs text-primary-foreground bg-primary/70 rounded-xl px-3 py-0.5"
-                              title={modelNames.slice(2).join(', ')}
+                              className="text-xs text-foreground/70 bg-muted rounded-xl px-3 py-0.5 w-full"
+                              title={modelNames.slice(1).map(getModelDisplayName).join(', ')}
                             >
                               +{additionalCount}
                             </span>
                           )}
                         </>
                       ) : (
-                        <span className="text-xs text-foreground/60 bg-muted rounded-xl px-3 py-0.5">
+                        <span className="text-xs text-foreground/60 bg-muted rounded-xl px-3 py-0.5 w-full">
                           No model
                         </span>
                       )}
                       {hasValidationError && (
                         <span
-                          className="text-xs text-red-100 bg-red-600 rounded-xl px-3 py-0.5"
+                          className="text-xs text-red-100 bg-red-600 rounded-xl px-3 py-0.5 w-full"
                           title={hasValidationError}
                         >
                           Validation Error
                         </span>
                       )}
-                    </div>
-                    <div className="text-xs text-foreground/60 mt-2">
-                      {formatLastModified(project?.last_modified)}
                     </div>
                   </div>
                   <FontIcon
@@ -690,7 +727,10 @@ function Home() {
                     className="w-5 h-5 text-primary shrink-0 ml-2"
                   />
                 </div>
-                <div className="mt-auto pt-4 flex justify-end">
+                <div className="mt-auto pt-4 flex items-center justify-between">
+                  <div className="text-xs text-foreground/60">
+                    {formatLastModified(project?.last_modified)}
+                  </div>
                   <button
                     className="flex items-center gap-1 text-primary hover:opacity-80"
                     onClick={e => {
