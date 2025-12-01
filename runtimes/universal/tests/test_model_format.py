@@ -1,14 +1,4 @@
-"""Tests for runtime-specific model format detection utilities.
-
-Note: Tests for llamafarm_common functions (parse_quantization_from_filename,
-parse_model_with_quantization, select_gguf_file, list_gguf_files,
-select_gguf_file_with_logging, get_gguf_file_path) have been moved to
-common/tests/test_model_utils.py.
-
-This file contains tests for functions specific to the universal runtime:
-- detect_model_format
-- format detection caching
-"""
+"""Tests for runtime-specific model format detection utilities."""
 
 from unittest.mock import Mock, patch
 
