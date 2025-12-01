@@ -1,9 +1,10 @@
 """Excel parser using Pandas library."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.excel.pandas_parser")
 
 
@@ -11,7 +12,7 @@ class ExcelParser_Pandas:
     """Excel parser using Pandas for data analysis."""
 
     def __init__(
-        self, name: str = "ExcelParser_Pandas", config: Optional[Dict[str, Any]] = None
+        self, name: str = "ExcelParser_Pandas", config: dict[str, Any] | None = None
     ):
         self.name = name
         self.config = config or {}

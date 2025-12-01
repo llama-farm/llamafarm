@@ -7,22 +7,21 @@ focusing on the include_extra_details parameter and file metadata handling.
 
 from unittest.mock import patch
 
-import pytest
-from fastapi.testclient import TestClient
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    PromptSet,
+    Model,
     PromptMessage,
+    PromptSet,
     Provider,
     Runtime,
     Version,
-    Model,
 )
+from fastapi.testclient import TestClient
 
 from main import app
-from services.dataset_service import DatasetService
 from services.data_service import MetadataFileContent
+from services.dataset_service import DatasetService
 from services.project_service import ProjectService
 
 # Configure pytest for async tests

@@ -1,10 +1,11 @@
 """Essential pytest configuration and fixtures."""
 
+import shutil
 import sys
 import tempfile
-import shutil
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
+
 import pytest
 
 # Add parent directories to path so 'rag' module can be imported
@@ -13,7 +14,7 @@ project_root = rag_dir.parent  # /path/to/llamafarm-1
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(rag_dir))
 
-from core.base import Document
+from core.base import Document  # noqa: E402
 
 
 @pytest.fixture

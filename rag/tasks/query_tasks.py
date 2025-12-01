@@ -6,7 +6,7 @@ Celery tasks for complex RAG query operations and processing.
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from celery import Task
 
@@ -42,10 +42,10 @@ def handle_rag_query_task(
     project_dir: str,
     database: str,
     query: str,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> Dict[str, Any]:
+    retrieval_strategy: str | None = None,
+) -> dict[str, Any]:
     """
     Handle complex RAG query operations via Celery task.
 
@@ -124,10 +124,10 @@ def batch_search_task(
     self,
     project_dir: str,
     database: str,
-    queries: List[str],
+    queries: list[str],
     top_k: int = 5,
-    retrieval_strategy: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    retrieval_strategy: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Handle batch search operations via Celery task.
 

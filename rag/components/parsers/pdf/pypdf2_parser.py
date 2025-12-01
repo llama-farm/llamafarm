@@ -1,7 +1,7 @@
 """PDF parser using PyPDF2 library."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from components.parsers.base.base_parser import BaseParser, ParserConfig
 from core.logging import RAGStructLogger
@@ -13,7 +13,7 @@ class PDFParser_PyPDF2(BaseParser):
     """PDF parser using PyPDF2 for text extraction with enhanced capabilities."""
 
     def __init__(
-        self, name: str = "PDFParser_PyPDF2", config: Optional[Dict[str, Any]] = None
+        self, name: str = "PDFParser_PyPDF2", config: dict[str, Any] | None = None
     ):
         super().__init__(config)  # Call BaseParser init
         self.name = name
@@ -74,9 +74,10 @@ class PDFParser_PyPDF2(BaseParser):
             raise ValueError("min_text_length must be non-negative")
         return True
 
-    def parse_blob(self, data: bytes, metadata: Dict[str, Any] = None) -> List:
+    def parse_blob(self, data: bytes, metadata: dict[str, Any] = None) -> list:
         """Parse PDF from raw bytes using in-memory buffer."""
         import io
+
         from core.base import Document
 
         try:
@@ -301,7 +302,7 @@ class PDFParser_PyPDF2(BaseParser):
                                 "pdf_keywords": xmp.pdf_keywords,
                                 "pdf_producer": xmp.pdf_producer,
                             }
-                    except:
+                    except Exception:
                         pass  # XMP metadata may not be available
 
                 # Extract document-level outlines/bookmarks if requested
@@ -312,7 +313,7 @@ class PDFParser_PyPDF2(BaseParser):
                             metadata["outlines"] = self._extract_outline_structure(
                                 outlines
                             )
-                    except:
+                    except Exception:
                         pass
 
                 # Extract form fields if requested
@@ -321,7 +322,7 @@ class PDFParser_PyPDF2(BaseParser):
                         fields = pdf_reader.get_form_text_fields()
                         if fields:
                             metadata["form_fields"] = fields
-                    except:
+                    except Exception:
                         pass
 
                 page_texts = []
@@ -358,7 +359,7 @@ class PDFParser_PyPDF2(BaseParser):
                                     annotations.append(str(annot_obj["/Contents"]))
                             if annotations:
                                 page_info["annotations"] = annotations
-                        except:
+                        except Exception:
                             pass  # Skip if annotations can't be extracted
 
                     # Extract images from page if requested
@@ -370,7 +371,7 @@ class PDFParser_PyPDF2(BaseParser):
                                     {"name": img.name, "data": img.data}
                                     for img in images
                                 ]
-                        except:
+                        except Exception:
                             pass  # Skip if images can't be extracted
 
                     if page_text:
@@ -485,7 +486,7 @@ class PDFParser_PyPDF2(BaseParser):
                 documents=[], errors=[{"error": str(e), "source": source}]
             )
 
-    def _chunk_text(self, text: str) -> List[str]:
+    def _chunk_text(self, text: str) -> list[str]:
         """Text chunking using PyPDF2 extracted structure."""
         if self.chunk_strategy == "paragraphs":
             # Split by double newlines (paragraph breaks that PyPDF2 preserves)
@@ -569,7 +570,7 @@ class PDFParser_PyPDF2(BaseParser):
                         # Get page number if available
                         if hasattr(item.page, "idnum"):
                             outline_info["page"] = item.page.idnum
-                    except:
+                    except Exception:
                         pass
                 outline_data.append(outline_info)
         return outline_data

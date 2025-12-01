@@ -290,4 +290,4 @@ async def handle_rag_query(
 
     except Exception as e:
         logger.error("Error during RAG query", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}") from e

@@ -5,7 +5,7 @@ This module provides various retrieval strategies organized in a schema-driven a
 where each strategy is a self-contained component with its own configuration.
 """
 
-from .base import RetrievalStrategy, RetrievalResult, HybridRetrievalStrategy
+from .base import HybridRetrievalStrategy, RetrievalResult, RetrievalStrategy
 
 # Individual strategies can be imported as needed from their subdirectories
 # Example: from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy

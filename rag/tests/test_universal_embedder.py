@@ -1,8 +1,6 @@
 """Tests for Universal Runtime embedder."""
 
-import pytest
 from unittest.mock import Mock, patch
-from pathlib import Path
 
 from components.embedders.universal_embedder.universal_embedder import UniversalEmbedder
 
@@ -223,4 +221,3 @@ class TestUniversalEmbedder:
 
         # Should not call API
         assert not mock_post.called
-

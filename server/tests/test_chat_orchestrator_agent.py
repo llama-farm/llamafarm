@@ -9,38 +9,35 @@ Tests the chat orchestrator including:
 - History persistence
 """
 
-import json
 import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from openai.types.chat.chat_completion_chunk import (
-    ChoiceDeltaToolCall,
-    ChoiceDeltaToolCallFunction,
-)
-
-from agents.chat_orchestrator import (
-    ChatOrchestratorAgent,
-    ChatOrchestratorAgentFactory,
-)
-from agents.base.history import (
-    LFChatCompletionAssistantMessageParam,
-    LFChatCompletionUserMessageParam,
-)
-from agents.base.types import StreamEvent, ToolCallRequest
 from config.datamodel import (
     LlamaFarmConfig,
     Mcp,
-    PromptMessage,
     Model,
+    PromptMessage,
     PromptSet,
     Provider,
     Runtime,
     Server,
     Transport,
     Version,
+)
+from openai.types.chat.chat_completion_chunk import (
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
+)
+
+from agents.base.history import (
+    LFChatCompletionAssistantMessageParam,
+    LFChatCompletionUserMessageParam,
+)
+from agents.chat_orchestrator import (
+    ChatOrchestratorAgent,
+    ChatOrchestratorAgentFactory,
 )
 
 
@@ -861,19 +858,21 @@ class TestChatOrchestratorAgentFactory:
     @pytest.mark.asyncio
     async def test_create_agent_with_mcp(self, config_with_mcp):
         """Test creating agent with MCP configuration."""
-        with tempfile.TemporaryDirectory() as project_dir:
-            with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
-                mock_factory_instance = AsyncMock()
-                mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
-                mock_factory.return_value = mock_factory_instance
+        with (
+            tempfile.TemporaryDirectory() as project_dir,
+            patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory,
+        ):
+            mock_factory_instance = AsyncMock()
+            mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
+            mock_factory.return_value = mock_factory_instance
 
-                agent = await ChatOrchestratorAgentFactory.create_agent(
-                    project_config=config_with_mcp,
-                    project_dir=project_dir,
-                )
+            agent = await ChatOrchestratorAgentFactory.create_agent(
+                project_config=config_with_mcp,
+                project_dir=project_dir,
+            )
 
-                assert isinstance(agent, ChatOrchestratorAgent)
-                assert agent._mcp_enabled
+            assert isinstance(agent, ChatOrchestratorAgent)
+            assert agent._mcp_enabled
 
     @pytest.mark.asyncio
     async def test_create_agent_with_model_name(self, base_config):

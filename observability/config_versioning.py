@@ -9,8 +9,7 @@ import hashlib
 import json
 import os
 import tempfile
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 def hash_config(config: Any) -> str:
@@ -124,7 +123,7 @@ def get_config_by_hash(
     config_hash: str,
     namespace: str,
     project: str,
-) -> Optional[dict]:
+) -> dict | None:
     """
     Retrieve config snapshot by hash.
 
@@ -161,6 +160,6 @@ def get_config_by_hash(
     try:
         with open(config_file) as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError):
+    except (OSError, json.JSONDecodeError):
         # Handle corrupted or unreadable config files
         return None

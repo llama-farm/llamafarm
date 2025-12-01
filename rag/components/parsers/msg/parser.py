@@ -2,7 +2,7 @@
 
 import mimetypes
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
 
@@ -24,7 +24,7 @@ class MsgParser(BaseParser):
     def __init__(
         self,
         name: str = "MsgParser",
-        config: Optional[dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         super().__init__(config or {})  # Call BaseParser init
         self.name = name
@@ -191,7 +191,8 @@ class MsgParser(BaseParser):
 
         # Extract headers if enabled
         if self.extract_headers:
-            if headers_content := self._extract_headers_from_properties(msg_properties):
+            headers_content = self._extract_headers_from_properties(msg_properties)
+            if headers_content:
                 content_parts.append(("headers", headers_content))
 
         # Extract body content
@@ -200,9 +201,10 @@ class MsgParser(BaseParser):
 
         # Extract attachments if enabled
         if self.extract_attachments:
-            if attachments_content := self._extract_attachments_from_properties(
+            attachments_content = self._extract_attachments_from_properties(
                 msg_properties
-            ):
+            )
+            if attachments_content:
                 content_parts.extend(attachments_content)
 
         return content_parts, metadata
@@ -415,7 +417,7 @@ class MsgParser(BaseParser):
                 if prop_name in attachment:
                     return attachment[prop_name]
                 # Try case-insensitive match
-                for key in attachment.keys():
+                for key in attachment:
                     if key.lower() == prop_name.lower():
                         return attachment[key]
         else:
@@ -441,9 +443,7 @@ class MsgParser(BaseParser):
         mime_type, _ = mimetypes.guess_type(filename)
         return mime_type or "application/octet-stream"
 
-    def _is_text_attachment(
-        self, filename: str, mime_type: Optional[str] = None
-    ) -> bool:
+    def _is_text_attachment(self, filename: str, mime_type: str | None = None) -> bool:
         """Check if attachment is a text-based file that should have content extracted."""
         if not filename:
             return False
@@ -501,9 +501,10 @@ class MsgParser(BaseParser):
 
         # Extract content if enabled
         if self.include_attachment_content:
-            if content_info := self._extract_attachment_content(
+            content_info = self._extract_attachment_content(
                 attachment, filename, content_type
-            ):
+            )
+            if content_info:
                 attachment_info.append(content_info)
 
         if attachment_info:
@@ -571,9 +572,7 @@ class MsgParser(BaseParser):
         ):
             try:
                 # Handle different content formats
-                if isinstance(content, bytes):
-                    content_str = content.decode("utf-8", errors="ignore")
-                elif hasattr(content, "decode"):  # bytes-like object
+                if isinstance(content, bytes) or hasattr(content, "decode"):
                     content_str = content.decode("utf-8", errors="ignore")
                 else:
                     content_str = str(content)
@@ -604,7 +603,7 @@ class MsgParser(BaseParser):
                 chunks, metadata, source, self.chunk_strategy
             )
 
-        splitter: Union[SentenceSplitter, TokenTextSplitter]
+        splitter: SentenceSplitter | TokenTextSplitter
         if self.chunk_strategy == "sentences":
             splitter = SentenceSplitter(
                 chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap

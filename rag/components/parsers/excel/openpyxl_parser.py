@@ -1,9 +1,10 @@
 """Excel parser using OpenPyXL library."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.excel.openpyxl_parser")
 
 
@@ -13,7 +14,7 @@ class ExcelParser_OpenPyXL:
     def __init__(
         self,
         name: str = "ExcelParser_OpenPyXL",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         self.name = name
         self.config = config or {}
@@ -175,7 +176,7 @@ class ExcelParser_OpenPyXL:
                 documents=[], errors=[{"error": str(e), "source": source}]
             )
 
-    def _format_sheet(self, rows: List[List[str]], sheet_name: str) -> str:
+    def _format_sheet(self, rows: list[list[str]], sheet_name: str) -> str:
         """Format sheet data as text table."""
         if not rows:
             return f"Sheet: {sheet_name}\n(empty)"

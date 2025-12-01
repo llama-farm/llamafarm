@@ -6,7 +6,7 @@ Provides context managers and helper functions to simplify event logging.
 
 import uuid
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any
 
 from .event_logger import EventLogger
 
@@ -17,7 +17,7 @@ def event_logging_context(
     namespace: str,
     project: str,
     config: Any,
-    request_id: Optional[str] = None,
+    request_id: str | None = None,
 ):
     """
     Context manager for event logging lifecycle.

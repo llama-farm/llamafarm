@@ -6,15 +6,14 @@ Tests hash determinism, deduplication, and storage.
 
 import json
 import os
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from observability.config_versioning import (
+    get_config_by_hash,
     hash_config,
     save_config_snapshot,
-    get_config_by_hash,
 )
 
 

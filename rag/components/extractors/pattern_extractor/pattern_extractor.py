@@ -6,10 +6,10 @@ Useful for extracting emails, phone numbers, URLs, IDs, and custom patterns.
 """
 
 import re
-from typing import Dict, Any, List, Optional, Tuple
-from collections import defaultdict
+from typing import Any
 
 from components.extractors.base import BaseExtractor
+from core.base import Document
 
 
 class PatternExtractor(BaseExtractor):
@@ -80,7 +80,7 @@ class PatternExtractor(BaseExtractor):
     }
 
     def __init__(
-        self, name: str = "PatternExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "PatternExtractor", config: dict[str, Any] | None = None
     ):
         """
         Initialize pattern extractor.
@@ -110,7 +110,7 @@ class PatternExtractor(BaseExtractor):
         # Compile regex patterns
         self._compiled_patterns = self._compile_patterns()
 
-    def extract(self, documents: List["Document"]) -> List["Document"]:
+    def extract(self, documents: list["Document"]) -> list["Document"]:
         """
         Extract patterns from documents.
 
@@ -144,8 +144,8 @@ class PatternExtractor(BaseExtractor):
         return enhanced_docs
 
     def _extract_from_text(
-        self, text: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, text: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Extract patterns from text.
 
@@ -191,7 +191,7 @@ class PatternExtractor(BaseExtractor):
                 results["_summary"] = {
                     "total_matches": len(all_matches),
                     "patterns_found": len(
-                        [k for k in results.keys() if not k.startswith("_")]
+                        [k for k in results if not k.startswith("_")]
                     ),
                     "pattern_types": list(results.keys()),
                 }
@@ -207,7 +207,7 @@ class PatternExtractor(BaseExtractor):
             self.logger.error(f"Error extracting patterns: {e}")
             return {}
 
-    def _compile_patterns(self) -> Dict[str, Dict[str, Any]]:
+    def _compile_patterns(self) -> dict[str, dict[str, Any]]:
         """Compile regex patterns for efficient matching."""
         compiled = {}
 
@@ -256,8 +256,8 @@ class PatternExtractor(BaseExtractor):
         return compiled
 
     def _find_pattern_matches(
-        self, text: str, pattern_info: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, text: str, pattern_info: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Find all matches for a specific pattern."""
         compiled_pattern = pattern_info["compiled"]
         matches = []
@@ -291,8 +291,8 @@ class PatternExtractor(BaseExtractor):
         return matches
 
     def _deduplicate_matches(
-        self, matches: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, matches: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Remove duplicate matches based on value."""
         seen_values = set()
         unique_matches = []
@@ -305,7 +305,7 @@ class PatternExtractor(BaseExtractor):
 
         return unique_matches
 
-    def validate_pattern(self, pattern: str) -> Tuple[bool, str]:
+    def validate_pattern(self, pattern: str) -> tuple[bool, str]:
         """
         Validate a regex pattern.
 
@@ -321,13 +321,13 @@ class PatternExtractor(BaseExtractor):
         except re.error as e:
             return False, f"Invalid regex pattern: {e}"
 
-    def get_available_predefined_patterns(self) -> Dict[str, str]:
+    def get_available_predefined_patterns(self) -> dict[str, str]:
         """Get list of available predefined patterns."""
         return {
             name: info["description"] for name, info in self.PREDEFINED_PATTERNS.items()
         }
 
-    def test_pattern(self, pattern: str, test_text: str) -> List[str]:
+    def test_pattern(self, pattern: str, test_text: str) -> list[str]:
         """
         Test a pattern against sample text.
 
@@ -346,11 +346,11 @@ class PatternExtractor(BaseExtractor):
             self.logger.error(f"Error testing pattern: {e}")
             return []
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get list of dependencies for this extractor."""
         return []  # No external dependencies
 
-    def get_feature_names(self) -> List[str]:
+    def get_feature_names(self) -> list[str]:
         """Get list of feature names this extractor produces."""
         features = []
 
@@ -370,7 +370,7 @@ class PatternExtractor(BaseExtractor):
         return features
 
     @staticmethod
-    def get_config_schema() -> Dict[str, Any]:
+    def get_config_schema() -> dict[str, Any]:
         """Get configuration schema for the extractor."""
         return {
             "type": "object",

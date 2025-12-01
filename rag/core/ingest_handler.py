@@ -7,16 +7,17 @@ import importlib
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.blob_processor import BlobProcessor
 from core.logging import RAGStructLogger
-from core.settings import settings
 from core.strategies.handler import SchemaHandler
 
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
+
+from observability.event_logger import EventLogger  # noqa: E402
 
 try:
     from config import load_config
@@ -25,8 +26,6 @@ except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
     ) from e
-
-from observability.event_logger import EventLogger
 
 logger = RAGStructLogger("rag.core.ingest_handler")
 
@@ -42,7 +41,7 @@ class IngestHandler:
         config_path: str,
         data_processing_strategy: str,
         database: str,
-        dataset_name: Optional[str] = None,
+        dataset_name: str | None = None,
     ):
         """
         Initialize the ingest handler.
@@ -92,7 +91,7 @@ class IngestHandler:
             self.data_processing_strategy
         )
 
-    def _get_database_config(self) -> Dict[str, Any]:
+    def _get_database_config(self) -> dict[str, Any]:
         """
         Get the database configuration.
 
@@ -101,7 +100,7 @@ class IngestHandler:
         """
         return self.schema_handler.create_database_config(self.database)
 
-    def _initialize_embedder(self, db_config: Dict[str, Any]):
+    def _initialize_embedder(self, db_config: dict[str, Any]):
         """
         Initialize the embedder from database configuration.
 
@@ -186,7 +185,7 @@ class IngestHandler:
                 f"Cannot initialize vector store {vector_store_type}: {e}"
             ) from e
 
-    def ingest_file(self, file_data: bytes, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def ingest_file(self, file_data: bytes, metadata: dict[str, Any]) -> dict[str, Any]:
         """
         Ingest a single file from the CLI.
 
@@ -216,14 +215,17 @@ class IngestHandler:
         )
 
         # Log processing start
-        event_logger.log_event("file_ingestion_start", {
-            "filename": filename,
-            "size_bytes": file_size,
-            "content_type": metadata.get("content_type", "unknown"),
-            "dataset_name": self.dataset_name,
-            "database": self.database,
-            "strategy": self.data_processing_strategy,
-        })
+        event_logger.log_event(
+            "file_ingestion_start",
+            {
+                "filename": filename,
+                "size_bytes": file_size,
+                "content_type": metadata.get("content_type", "unknown"),
+                "dataset_name": self.dataset_name,
+                "database": self.database,
+                "strategy": self.data_processing_strategy,
+            },
+        )
 
         # Print file info
         logger.info(
@@ -249,15 +251,17 @@ class IngestHandler:
 
             # Log file parsed
             # Extract parser names
-            parser_names = list(set(
-                doc.metadata.get("parser", "unknown")
-                for doc in documents
-            ))
-            event_logger.log_event("file_parsed", {
-                "filename": filename,
-                "parsers": parser_names,
-                "mime_type": metadata.get("content_type", "unknown"),
-            })
+            parser_names = list(
+                set(doc.metadata.get("parser", "unknown") for doc in documents)
+            )
+            event_logger.log_event(
+                "file_parsed",
+                {
+                    "filename": filename,
+                    "parsers": parser_names,
+                    "mime_type": metadata.get("content_type", "unknown"),
+                },
+            )
 
             # Generate file hash for deduplication
             import hashlib
@@ -265,12 +269,19 @@ class IngestHandler:
             file_hash = hashlib.sha256(file_data).hexdigest()
 
             # Log chunks created
-            avg_chunk_size = sum(len(doc.content) for doc in documents) / len(documents) if documents else 0
-            event_logger.log_event("chunks_created", {
-                "chunk_count": len(documents),
-                "avg_chunk_size": int(avg_chunk_size),
-                "file_hash": file_hash[:16],
-            })
+            avg_chunk_size = (
+                sum(len(doc.content) for doc in documents) / len(documents)
+                if documents
+                else 0
+            )
+            event_logger.log_event(
+                "chunks_created",
+                {
+                    "chunk_count": len(documents),
+                    "avg_chunk_size": int(avg_chunk_size),
+                    "file_hash": file_hash[:16],
+                },
+            )
 
             # Generate embeddings for each document
             embedded_documents = []
@@ -298,12 +309,19 @@ class IngestHandler:
                 embedded_documents.append(doc)
 
             # Log embeddings generated
-            embedding_dim = len(embedded_documents[0].embeddings) if embedded_documents and hasattr(embedded_documents[0], 'embeddings') else 0
-            event_logger.log_event("embeddings_generated", {
-                "embedding_count": len(embedded_documents),
-                "embedder": self.embedder.__class__.__name__,
-                "embedding_dimension": embedding_dim,
-            })
+            embedding_dim = (
+                len(embedded_documents[0].embeddings)
+                if embedded_documents and hasattr(embedded_documents[0], "embeddings")
+                else 0
+            )
+            event_logger.log_event(
+                "embeddings_generated",
+                {
+                    "embedding_count": len(embedded_documents),
+                    "embedder": self.embedder.__class__.__name__,
+                    "embedding_dimension": embedding_dim,
+                },
+            )
 
             # Store documents in vector store with duplicate detection
             # Try batch add first (more efficient)
@@ -405,12 +423,15 @@ class IngestHandler:
                         raise
 
             # Log chunks stored
-            event_logger.log_event("chunks_stored", {
-                "database": self.database,
-                "stored_count": stored_count,
-                "skipped_count": skipped_count,
-                "storage_type": self.vector_store.__class__.__name__,
-            })
+            event_logger.log_event(
+                "chunks_stored",
+                {
+                    "database": self.database,
+                    "stored_count": stored_count,
+                    "skipped_count": skipped_count,
+                    "storage_type": self.vector_store.__class__.__name__,
+                },
+            )
 
             # Calculate processing time
             elapsed_time = time.time() - start_time
@@ -468,13 +489,16 @@ class IngestHandler:
                 reason = None
 
             # Complete event logging
-            event_logger.log_event("processing_complete", {
-                "status": status,
-                "total_chunks": len(documents),
-                "stored_chunks": stored_count,
-                "skipped_chunks": skipped_count,
-                # Note: total_elapsed_time_ms is automatically added by EventLogger
-            })
+            event_logger.log_event(
+                "processing_complete",
+                {
+                    "status": status,
+                    "total_chunks": len(documents),
+                    "stored_chunks": stored_count,
+                    "skipped_chunks": skipped_count,
+                    # Note: total_elapsed_time_ms is automatically added by EventLogger
+                },
+            )
             event_logger.complete_event()
 
             return {
@@ -508,7 +532,7 @@ class IngestHandler:
                 "document_count": 0,
             }
 
-    def _get_applied_extractors(self, document) -> List[str]:
+    def _get_applied_extractors(self, document) -> list[str]:
         """
         Get list of extractors that were applied to a document.
 
@@ -531,7 +555,7 @@ class IngestHandler:
 
     def ingest_directory(
         self, directory_path: str, recursive: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Ingest all files from a directory.
 
@@ -626,7 +650,7 @@ class IngestHandler:
         content_type, _ = mimetypes.guess_type(str(file_path))
         return content_type or "application/octet-stream"
 
-    def query(self, query_text: str, top_k: int = 10) -> List[Dict[str, Any]]:
+    def query(self, query_text: str, top_k: int = 10) -> list[dict[str, Any]]:
         """
         Query the vector store for relevant documents.
 

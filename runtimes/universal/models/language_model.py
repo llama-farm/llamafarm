@@ -2,16 +2,18 @@
 Language model wrapper for text generation or embedding.
 """
 
+import logging
+from collections.abc import AsyncGenerator
+from threading import Thread
+from typing import cast
+
+import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     PreTrainedTokenizerBase,
     TextIteratorStreamer,
 )
-import torch
-from typing import List, Optional, AsyncGenerator, cast
-import logging
-from threading import Thread
 
 from .base import BaseModel
 
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 class LanguageModel(BaseModel):
     """Wrapper for HuggingFace language models (GPT-style text generation)."""
 
-    def __init__(self, model_id: str, device: str, token: Optional[str] = None):
+    def __init__(self, model_id: str, device: str, token: str | None = None):
         super().__init__(model_id, device, token=token)
         self.model_type = "language"
         self.supports_streaming = True
@@ -53,7 +55,7 @@ class LanguageModel(BaseModel):
 
         logger.info(f"Causal LM loaded on {self.device}")
 
-    def format_messages(self, messages: List[dict]) -> str:
+    def format_messages(self, messages: list[dict]) -> str:
         """Format chat messages into a prompt."""
         # Try to use tokenizer's chat template if available
         if self.tokenizer and hasattr(self.tokenizer, "apply_chat_template"):
@@ -80,10 +82,10 @@ class LanguageModel(BaseModel):
     async def generate(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
     ) -> str:
         """Generate text completion."""
         assert self.model is not None, "Model not loaded"
@@ -113,10 +115,10 @@ class LanguageModel(BaseModel):
     async def generate_stream(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         """Generate text completion with streaming (yields tokens as they're generated)."""
         assert self.model is not None, "Model not loaded"

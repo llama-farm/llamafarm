@@ -4,16 +4,14 @@ Smart Schema Validator for RAG System
 Provides detailed validation, diagnostics, and suggestions for configuration files.
 """
 
-import os
-import sys
-import yaml
-import json
 import argparse
-from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
-from collections import defaultdict
 import difflib
+import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -60,26 +58,26 @@ class SmartSchemaValidator:
         self.base_path = Path(__file__).parent.parent
         self.main_schema = self._load_main_schema()
         self.component_schemas = self._load_component_schemas()
-        self.issues: List[ValidationIssue] = []
-        self.suggestions: List[str] = []
+        self.issues: list[ValidationIssue] = []
+        self.suggestions: list[str] = []
 
-    def _load_main_schema(self) -> Dict[str, Any]:
+    def _load_main_schema(self) -> dict[str, Any]:
         """Load the main schema.yaml"""
         schema_path = self.base_path / "schema.yaml"
         if not schema_path.exists():
             return {}
 
-        with open(schema_path, "r") as f:
+        with open(schema_path) as f:
             return yaml.safe_load(f) or {}
 
-    def _load_component_schemas(self) -> Dict[str, Dict[str, Any]]:
+    def _load_component_schemas(self) -> dict[str, dict[str, Any]]:
         """Load all component schemas"""
         components = {}
 
         # First try to load consolidated schemas
         consolidated_path = self.base_path / "schemas" / "consolidated.yaml"
         if consolidated_path.exists():
-            with open(consolidated_path, "r") as f:
+            with open(consolidated_path) as f:
                 consolidated = yaml.safe_load(f) or {}
 
                 # Extract component schemas from consolidated file
@@ -120,14 +118,14 @@ class SmartSchemaValidator:
                     if comp_dir.is_dir():
                         schema_path = comp_dir / "schema.yaml"
                         if schema_path.exists():
-                            with open(schema_path, "r") as f:
+                            with open(schema_path) as f:
                                 schema = yaml.safe_load(f) or {}
                                 comp_key = f"{comp_type}/{comp_dir.name}"
                                 components[comp_key] = schema
 
         return components
 
-    def validate_file(self, file_path: str) -> Tuple[bool, List[ValidationIssue]]:
+    def validate_file(self, file_path: str) -> tuple[bool, list[ValidationIssue]]:
         """Validate a configuration file"""
         self.issues = []
         path = Path(file_path)
@@ -137,15 +135,15 @@ class SmartSchemaValidator:
                 ValidationIssue(
                     "ERROR",
                     file_path,
-                    f"File not found",
-                    f"Check the file path or create a new configuration file",
+                    "File not found",
+                    "Check the file path or create a new configuration file",
                 )
             )
             return False, self.issues
 
         # Load the configuration
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 config = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             self.issues.append(
@@ -168,7 +166,7 @@ class SmartSchemaValidator:
 
         return len([i for i in self.issues if i.level == "ERROR"]) == 0, self.issues
 
-    def _validate_strategy_config(self, config: Dict[str, Any]):
+    def _validate_strategy_config(self, config: dict[str, Any]):
         """Validate a strategy configuration file"""
         strategies = config.get("strategies", [])
 
@@ -187,7 +185,7 @@ class SmartSchemaValidator:
         for idx, strategy in enumerate(strategies):
             self._validate_single_strategy(strategy, f"strategies[{idx}]")
 
-    def _validate_single_strategy(self, strategy: Dict[str, Any], path: str):
+    def _validate_single_strategy(self, strategy: dict[str, Any], path: str):
         """Validate a single strategy configuration"""
 
         # Check required fields
@@ -230,7 +228,7 @@ class SmartSchemaValidator:
         if "components" in strategy:
             self._validate_components(strategy["components"], f"{path}.components")
 
-    def _validate_components(self, components: Dict[str, Any], path: str):
+    def _validate_components(self, components: dict[str, Any], path: str):
         """Validate strategy components configuration"""
 
         required_components = [
@@ -271,7 +269,7 @@ class SmartSchemaValidator:
                         extractor, "extractor", f"{path}.extractors[{idx}]"
                     )
 
-    def _validate_component(self, component: Dict[str, Any], comp_type: str, path: str):
+    def _validate_component(self, component: dict[str, Any], comp_type: str, path: str):
         """Validate a single component configuration"""
 
         if not isinstance(component, dict):
@@ -323,7 +321,7 @@ class SmartSchemaValidator:
 
     def _validate_component_config(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         comp_type_value: str,
         comp_category: str,
         path: str,
@@ -371,7 +369,7 @@ class SmartSchemaValidator:
                     )
                 )
 
-    def _validate_field_value(self, value: Any, schema: Dict[str, Any], path: str):
+    def _validate_field_value(self, value: Any, schema: dict[str, Any], path: str):
         """Validate a field value against its schema"""
 
         expected_type = schema.get("type")
@@ -427,7 +425,7 @@ class SmartSchemaValidator:
                     "ERROR",
                     path,
                     f"Invalid value '{value}', must be one of: {', '.join(map(str, schema['enum']))}",
-                    f"Use one of the allowed values",
+                    "Use one of the allowed values",
                 )
             )
 
@@ -468,11 +466,11 @@ class SmartSchemaValidator:
                         "ERROR",
                         path,
                         f"Value '{value}' doesn't match pattern {schema['pattern']}",
-                        f"Format the value according to the pattern",
+                        "Format the value according to the pattern",
                     )
                 )
 
-    def _get_valid_component_types(self, category: str) -> List[str]:
+    def _get_valid_component_types(self, category: str) -> list[str]:
         """Get valid component types for a category"""
 
         type_map = {
@@ -520,7 +518,7 @@ class SmartSchemaValidator:
 
         return type_map.get(category, [])
 
-    def _find_closest_match(self, value: str, valid_values: List[str]) -> Optional[str]:
+    def _find_closest_match(self, value: str, valid_values: list[str]) -> str | None:
         """Find the closest matching value using fuzzy matching"""
         if not valid_values:
             return None
@@ -528,9 +526,7 @@ class SmartSchemaValidator:
         matches = difflib.get_close_matches(value, valid_values, n=1, cutoff=0.6)
         return matches[0] if matches else None
 
-    def _find_component_schema_key(
-        self, comp_type: str, category: str
-    ) -> Optional[str]:
+    def _find_component_schema_key(self, comp_type: str, category: str) -> str | None:
         """Find the schema key for a component"""
 
         # Map category to directory name
@@ -574,12 +570,12 @@ class SmartSchemaValidator:
 
         return f"{dir_name}/{comp_name}"
 
-    def _validate_pipeline_config(self, config: Dict[str, Any]):
+    def _validate_pipeline_config(self, config: dict[str, Any]):
         """Validate a pipeline configuration"""
         # Implementation for pipeline configs
         pass
 
-    def _validate_generic_config(self, config: Dict[str, Any], filename: str):
+    def _validate_generic_config(self, config: dict[str, Any], filename: str):
         """Validate a generic configuration file"""
         # Implementation for other config types
         pass
@@ -690,7 +686,7 @@ class SmartSchemaValidator:
         }
         return suggestions.get(category, f"type: <{category.title()}Type>")
 
-    def suggest_improvements(self, config: Dict[str, Any]) -> List[str]:
+    def suggest_improvements(self, config: dict[str, Any]) -> list[str]:
         """Suggest improvements for a configuration"""
         suggestions = []
 
@@ -729,7 +725,7 @@ class SmartSchemaValidator:
 
         report = []
         report.append("=" * 60)
-        report.append(f"SCHEMA VALIDATION REPORT")
+        report.append("SCHEMA VALIDATION REPORT")
         report.append(f"File: {file_path}")
         report.append(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         report.append("=" * 60)
@@ -746,7 +742,7 @@ class SmartSchemaValidator:
             report.append("❌ VALIDATION FAILED")
 
         report.append("")
-        report.append(f"Issues Found:")
+        report.append("Issues Found:")
         report.append(f"  • Errors:   {error_count}")
         report.append(f"  • Warnings: {warning_count}")
         report.append(f"  • Info:     {info_count}")
@@ -764,7 +760,7 @@ class SmartSchemaValidator:
 
         # Suggestions
         try:
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 config = yaml.safe_load(f) or {}
             suggestions = self.suggest_improvements(config)
 
@@ -775,7 +771,7 @@ class SmartSchemaValidator:
                 for suggestion in suggestions:
                     report.append(suggestion)
                 report.append("")
-        except:
+        except Exception:
             pass
 
         report.append("=" * 60)

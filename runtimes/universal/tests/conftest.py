@@ -4,10 +4,6 @@ Shared pytest fixtures for Universal Runtime tests.
 
 import pytest
 import torch
-from PIL import Image
-import io
-import base64
-import numpy as np
 
 
 @pytest.fixture(scope="session")

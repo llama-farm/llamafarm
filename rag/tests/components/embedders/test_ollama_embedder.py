@@ -1,15 +1,16 @@
 """Tests for Ollama Embedder component."""
 
-import pytest
-from pathlib import Path
 import sys
-from unittest.mock import Mock, patch
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
 from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
+from core.base import Document
 
 
 class TestOllamaEmbedder:
@@ -191,7 +192,7 @@ class TestOllamaEmbedder:
             mock_check.return_value = True
 
             available = embedder._check_model_availability()
-            assert available == True
+            assert available is True
 
     def test_embedding_consistency(self, mock_embedder):
         """Test that same text produces consistent embeddings."""

@@ -24,33 +24,38 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
 **Prerequisites:**
 
 - [Docker](https://www.docker.com/get-started/)
-- [Ollama](https://ollama.com/download) *(local runtime)* **OR** [Lemonade](runtimes/lemonade/QUICKSTART.md) *(local GGUF models with NPU/GPU acceleration)*
+- [Ollama](https://ollama.com/download) _(local runtime)_ **OR** [Lemonade](runtimes/lemonade/QUICKSTART.md) _(local GGUF models with NPU/GPU acceleration)_
 
 1. **Install the CLI**
 
    macOS / Linux
+
    ```bash
    curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
    ```
 
    Windows (via winget)
+
    ```
    winget install LlamaFarm.CLI
    ```
 
 2. **Adjust Ollama context window**
+
    - Open the Ollama app, go to **Settings → Advanced**, and set the context window to match production (e.g., 100K tokens).
    - Larger context windows improve RAG answers when long documents are ingested.
 
 3. **Create and run a project**
+
    ```bash
    lf init my-project            # Generates llamafarm.yaml using the server template
    lf start                      # Spins up Docker services, opens dev chat UI & Designer web UI
    ```
-   
-   The Designer web interface will be available at `http://localhost:7724` for visual project management.
+
+   The Designer web interface will be available at `http://localhost:8000` for visual project management.
 
 4. **Start an interactive project chat or send a one-off message**
+
 ```bash
 # Interactive project chat (auto-detects namespace/project from llamafarm.yaml)
 lf chat
@@ -101,19 +106,19 @@ Open another terminal to run `lf` commands (installed or built from source). Thi
 
 ### CLI Commands
 
-| Task | Command | Notes |
-| ---- | ------- | ----- |
-| Initialize a project | `lf init my-project` | Creates `llamafarm.yaml` from server template. |
-| Start dev stack + chat TUI | `lf start` | Spins up server, rag worker, monitors Ollama/vLLM. |
-| Interactive project chat | `lf chat` | Opens TUI using project from `llamafarm.yaml`. |
-| List available models | `lf models list` | Shows all configured models (Ollama, Lemonade, OpenAI, etc.). |
-| Use specific model | `lf chat --model powerful "question"` | Switch between models in multi-model configs. |
-| Send single prompt | `lf chat "Explain retrieval augmented generation"` | Uses RAG by default; add `--no-rag` for pure LLM. |
-| Preview REST call | `lf chat --curl "What models are configured?"` | Prints sanitized `curl` command. |
-| Create dataset | `lf datasets create -s pdf_ingest -b main_db research-notes` | Validates strategy/database against project config. |
-| Upload files | `lf datasets upload research-notes ./docs/*.pdf` | Supports globs and directories. |
-| Process dataset | `lf datasets process research-notes` | Streams heartbeat dots during long processing. |
-| Semantic query | `lf rag query --database main_db "What did the 2024 FDA letters require?"` | Use `--filter`, `--include-metadata`, etc. |
+| Task                       | Command                                                                    | Notes                                                         |
+| -------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Initialize a project       | `lf init my-project`                                                       | Creates `llamafarm.yaml` from server template.                |
+| Start dev stack + chat TUI | `lf start`                                                                 | Spins up server, rag worker, monitors Ollama/vLLM.            |
+| Interactive project chat   | `lf chat`                                                                  | Opens TUI using project from `llamafarm.yaml`.                |
+| List available models      | `lf models list`                                                           | Shows all configured models (Ollama, Lemonade, OpenAI, etc.). |
+| Use specific model         | `lf chat --model powerful "question"`                                      | Switch between models in multi-model configs.                 |
+| Send single prompt         | `lf chat "Explain retrieval augmented generation"`                         | Uses RAG by default; add `--no-rag` for pure LLM.             |
+| Preview REST call          | `lf chat --curl "What models are configured?"`                             | Prints sanitized `curl` command.                              |
+| Create dataset             | `lf datasets create -s pdf_ingest -b main_db research-notes`               | Validates strategy/database against project config.           |
+| Upload files               | `lf datasets upload research-notes ./docs/*.pdf`                           | Supports globs and directories.                               |
+| Process dataset            | `lf datasets process research-notes`                                       | Streams heartbeat dots during long processing.                |
+| Semantic query             | `lf rag query --database main_db "What did the 2024 FDA letters require?"` | Use `--filter`, `--include-metadata`, etc.                    |
 
 See the [CLI reference](docs/website/docs/cli/index.md) for full command details and troubleshooting advice.
 
@@ -126,7 +131,7 @@ Prefer a visual interface? The Designer provides a browser-based way to manage p
 - **Integrated chat** – Test your AI with full RAG context directly in the browser
 - **Dual-mode editing** – Switch between visual designer and direct YAML editing
 
-Access the Designer at `http://localhost:7724` after running `lf start`, or at `http://localhost:3123` when using Docker Compose.
+Access the Designer at `http://localhost:8000` after running `lf start`.
 
 See the [Designer documentation](docs/website/docs/designer/index.md) for a complete feature walkthrough.
 
@@ -139,6 +144,7 @@ LlamaFarm provides a comprehensive REST API (compatible with OpenAI's format) fo
 ### Key Endpoints
 
 **Chat Completions** (OpenAI-compatible)
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/chat/completions \
   -H "Content-Type: application/json" \
@@ -153,6 +159,7 @@ curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/chat/comple
 ```
 
 **RAG Query**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/rag/query \
   -H "Content-Type: application/json" \
@@ -164,6 +171,7 @@ curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/rag/query \
 ```
 
 **Dataset Management**
+
 ```bash
 # Upload file
 curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/data \
@@ -178,9 +186,10 @@ curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{d
 ### Finding Your Namespace and Project
 
 Check your `llamafarm.yaml`:
+
 ```yaml
-name: my-project        # Your project name
-namespace: my-org       # Your namespace
+name: my-project # Your project name
+namespace: my-org # Your namespace
 ```
 
 Or inspect the file system: `~/.llamafarm/projects/{namespace}/{project}/`
@@ -201,24 +210,24 @@ name: fda-assistant
 namespace: default
 
 runtime:
-  default_model: fast                # Which model to use by default
+  default_model: fast # Which model to use by default
 
   models:
     fast:
-      description: "Fast Ollama model"
+      description: 'Fast Ollama model'
       provider: ollama
       model: gemma3:1b
 
     powerful:
-      description: "More capable Ollama model"
+      description: 'More capable Ollama model'
       provider: ollama
       model: qwen3:8b
 
     lemon:
-      description: "Lemonade local model with NPU/GPU"
+      description: 'Lemonade local model with NPU/GPU'
       provider: lemonade
       model: user.Qwen3-4B
-      base_url: "http://127.0.0.1:11534/v1"
+      base_url: 'http://127.0.0.1:11534/v1'
       lemonade:
         backend: llamacpp
         port: 11534
@@ -265,6 +274,7 @@ datasets:
 ```
 
 **Using your models:**
+
 ```bash
 lf models list                              # See all configured models
 lf chat "Question"                          # Uses default model (fast)
@@ -291,9 +301,9 @@ Check the [Extending guide](docs/website/docs/extending/index.md) for step-by-st
 
 ## 📚 Examples
 
-| Example | What it Shows | Location |
-| ------- | ------------- | -------- |
-| FDA Letters Assistant | Multi-document PDF ingestion, RAG queries, reference-style prompts | `examples/fda_rag/` & [Docs](docs/website/docs/examples/index.md#fda-letters-assistant) |
+| Example                     | What it Shows                                                               | Location                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| FDA Letters Assistant       | Multi-document PDF ingestion, RAG queries, reference-style prompts          | `examples/fda_rag/` & [Docs](docs/website/docs/examples/index.md#fda-letters-assistant)       |
 | Raleigh UDO Planning Helper | Large ordinance ingestion, long-running processing tips, geospatial queries | `examples/gov_rag/` & [Docs](docs/website/docs/examples/index.md#raleigh-udo-planning-helper) |
 
 Run `lf datasets` and `lf rag query` commands from each example folder to reproduce the flows demonstrated in the docs.

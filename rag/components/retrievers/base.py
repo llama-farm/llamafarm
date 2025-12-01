@@ -109,7 +109,7 @@ class HybridRetrievalStrategy(RetrievalStrategy):
         for i, result in enumerate(results):
             weight = self.weights[i] if i < len(self.weights) else 1.0
 
-            for doc, score in zip(result.documents, result.scores):
+            for doc, score in zip(result.documents, result.scores, strict=False):
                 if doc.id not in doc_scores:
                     doc_scores[doc.id] = 0.0
                     all_docs[doc.id] = doc

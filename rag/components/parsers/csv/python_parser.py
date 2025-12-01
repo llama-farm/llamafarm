@@ -1,10 +1,11 @@
 """CSV parser using native Python csv module."""
 
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 import csv
+from pathlib import Path
+from typing import Any
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.csvthon_parser")
 
 
@@ -12,7 +13,7 @@ class CSVParser_Python:
     """CSV parser using native Python csv module (no external dependencies)."""
 
     def __init__(
-        self, name: str = "CSVParser_Python", config: Optional[Dict[str, Any]] = None
+        self, name: str = "CSVParser_Python", config: dict[str, Any] | None = None
     ):
         self.name = name
         self.config = config or {}
@@ -40,7 +41,7 @@ class CSVParser_Python:
             rows = []
             headers = None
 
-            with open(source, "r", encoding=self.encoding) as f:
+            with open(source, encoding=self.encoding) as f:
                 reader = csv.reader(
                     f, delimiter=self.delimiter, quotechar=self.quotechar
                 )
@@ -118,7 +119,7 @@ class CSVParser_Python:
             )
 
     def _format_rows(
-        self, rows: List[List[str]], headers: Optional[List[str]] = None
+        self, rows: list[list[str]], headers: list[str] | None = None
     ) -> str:
         """Format rows as a text table."""
         if not rows:

@@ -3,7 +3,7 @@ Service layer for reading event logs from filesystem.
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from api.routers.event_logs.models import EventDetail, EventSummary, SubEvent
@@ -87,15 +87,13 @@ class EventLogService:
                 if start_time:
                     # Make start_time timezone-aware if it's naive
                     if start_time.tzinfo is None:
-                        from datetime import timezone
-                        start_time = start_time.replace(tzinfo=timezone.utc)
+                        start_time = start_time.replace(tzinfo=UTC)
                     if timestamp < start_time:
                         continue
                 if end_time:
                     # Make end_time timezone-aware if it's naive
                     if end_time.tzinfo is None:
-                        from datetime import timezone
-                        end_time = end_time.replace(tzinfo=timezone.utc)
+                        end_time = end_time.replace(tzinfo=UTC)
                     if timestamp > end_time:
                         continue
 
