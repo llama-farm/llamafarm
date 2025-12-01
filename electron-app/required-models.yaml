@@ -1,0 +1,29 @@
+# Required models for LlamaFarm Desktop
+# These models are derived from config/templates/default.yaml and server/seeds/project_seed/llamafarm.yaml
+# They will be automatically downloaded on first launch
+
+version: "1"
+
+models:
+  # Default language model from config/templates/default.yaml
+  - id: "unsloth/gemma-3-1b-it-gguf"
+    quantization: "Q4_K_M"
+    display_name: "Gemma 3 1B"
+    type: "language"
+    required: true
+    size_estimate_mb: 700
+
+  # Project seed language model from server/seeds/project_seed/llamafarm.yaml
+  - id: "unsloth/Qwen3-1.7B-GGUF"
+    quantization: "Q4_K_M"
+    display_name: "Qwen3 1.7B"
+    type: "language"
+    required: true
+    size_estimate_mb: 1200
+
+  # Embedding model used by both configs
+  - id: "nomic-ai/nomic-embed-text-v1.5"
+    display_name: "Nomic Embed v1.5"
+    type: "embedding"
+    required: true
+    size_estimate_mb: 550

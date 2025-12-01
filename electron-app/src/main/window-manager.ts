@@ -27,7 +27,7 @@ export class WindowManager {
       }
     })
 
-    // Load embedded splash HTML
+    // Load embedded splash HTML with model status support
     const splashHTML = `
       <!DOCTYPE html>
       <html>
@@ -54,7 +54,7 @@ export class WindowManager {
             h1 {
               font-size: 36px;
               font-weight: 600;
-              margin-bottom: 48px;
+              margin-bottom: 32px;
               background: linear-gradient(135deg, rgba(34, 211, 238, 1) 0%, rgba(59, 130, 246, 1) 100%);
               -webkit-background-clip: text;
               -webkit-text-fill-color: transparent;
@@ -65,6 +65,61 @@ export class WindowManager {
               opacity: 0.8;
               margin-bottom: 20px;
               color: hsl(215, 20%, 65%);
+            }
+            .models-container {
+              width: 380px;
+              margin-bottom: 20px;
+              display: none;
+            }
+            .model-item {
+              display: flex;
+              align-items: center;
+              padding: 10px 16px;
+              background: hsl(215, 28%, 17%);
+              border-radius: 8px;
+              margin-bottom: 8px;
+              font-size: 13px;
+            }
+            .model-icon {
+              width: 24px;
+              height: 24px;
+              margin-right: 12px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 16px;
+            }
+            .model-icon.checking {
+              animation: pulse 1s ease-in-out infinite;
+            }
+            .model-icon.present { color: #4ade80; }
+            .model-icon.downloading { color: #22d3ee; }
+            .model-icon.error { color: #ff6b6b; }
+            .model-name {
+              flex: 1;
+              color: hsl(210, 40%, 90%);
+            }
+            .model-status {
+              font-size: 11px;
+              color: hsl(215, 20%, 55%);
+            }
+            .model-progress {
+              width: 60px;
+              height: 4px;
+              background: hsl(215, 28%, 25%);
+              border-radius: 2px;
+              overflow: hidden;
+              margin-left: 8px;
+            }
+            .model-progress-bar {
+              height: 100%;
+              background: linear-gradient(90deg, #22d3ee, #3b82f6);
+              transition: width 0.2s ease;
+              width: 0%;
+            }
+            @keyframes pulse {
+              0%, 100% { opacity: 0.4; }
+              50% { opacity: 1; }
             }
             .progress-container {
               width: 320px;
@@ -110,13 +165,44 @@ export class WindowManager {
           <div class="logo">🦙</div>
           <h1>LlamaFarm</h1>
           <div class="status" id="status">Starting...</div>
+          <div class="models-container" id="models-container"></div>
           <div class="progress-container">
             <div class="progress-bar" id="progress"></div>
           </div>
-          <div class="spinner"></div>
+          <div class="spinner" id="spinner"></div>
           <div class="error" id="error" style="display: none;"></div>
 
           <script>
+            function getStatusIcon(status) {
+              switch (status) {
+                case 'present': return '✓';
+                case 'downloading': return '↓';
+                case 'checking': return '○';
+                case 'error': return '✗';
+                default: return '○';
+              }
+            }
+
+            function renderModels(models) {
+              const container = document.getElementById('models-container');
+              if (!models || models.length === 0) {
+                container.style.display = 'none';
+                return;
+              }
+              container.style.display = 'block';
+              container.innerHTML = models.map(model => {
+                const progressHtml = model.status === 'downloading' && model.progress !== undefined
+                  ? '<div class="model-progress"><div class="model-progress-bar" style="width: ' + model.progress + '%"></div></div>'
+                  : '';
+                return '<div class="model-item">' +
+                  '<div class="model-icon ' + model.status + '">' + getStatusIcon(model.status) + '</div>' +
+                  '<div class="model-name">' + model.display_name + '</div>' +
+                  '<div class="model-status">' + (model.status === 'present' ? 'Ready' : model.status === 'downloading' ? 'Downloading...' : model.status === 'error' ? 'Error' : '') + '</div>' +
+                  progressHtml +
+                '</div>';
+              }).join('');
+            }
+
             window.llamafarm.splash.onStatus((status) => {
               document.getElementById('status').textContent = status.message;
               if (status.progress !== undefined) {
@@ -125,6 +211,9 @@ export class WindowManager {
               if (status.error) {
                 document.getElementById('error').textContent = status.error;
                 document.getElementById('error').style.display = 'block';
+              }
+              if (status.models) {
+                renderModels(status.models);
               }
             });
           </script>
@@ -142,7 +231,17 @@ export class WindowManager {
   /**
    * Update splash screen with status
    */
-  updateSplash(status: { message: string; progress?: number; error?: string }): void {
+  updateSplash(status: {
+    message: string
+    progress?: number
+    error?: string
+    models?: Array<{
+      id: string
+      display_name: string
+      status: 'checking' | 'present' | 'downloading' | 'error'
+      progress?: number
+    }>
+  }): void {
     if (this.splashWindow && !this.splashWindow.isDestroyed()) {
       this.splashWindow.webContents.send('splash-status', status)
     }
