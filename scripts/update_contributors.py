@@ -17,15 +17,15 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+
 
 def fetch_contributors(
     owner: str = "llama-farm",
     repo: str = "llamafarm",
-    token: Optional[str] = None
-) -> List[Dict]:
+    token: str | None = None
+) -> list[dict]:
     """
     Fetch contributors from GitHub API.
     
@@ -60,7 +60,7 @@ def fetch_contributors(
             print(f"Error fetching contributors: {e}")
         return []
 
-def fetch_user_details(username: str, token: Optional[str] = None) -> Dict:
+def fetch_user_details(username: str, token: str | None = None) -> dict:
     """
     Fetch detailed user information from GitHub API.
     
@@ -88,7 +88,7 @@ def fetch_user_details(username: str, token: Optional[str] = None) -> Dict:
     except HTTPError:
         return {}
 
-def generate_contributor_html(contributors: List[Dict], token: Optional[str] = None) -> str:
+def generate_contributor_html(contributors: list[dict], token: str | None = None) -> str:
     """
     Generate HTML table for contributors in all-contributors format.
     
@@ -177,7 +177,7 @@ def update_readme(contributor_html: str, readme_path: Path = Path("README.md")) 
         print(f"README.md not found at {readme_path}")
         return False
     
-    with open(readme_path, "r", encoding="utf-8") as f:
+    with open(readme_path, encoding="utf-8") as f:
         content = f.read()
     
     # Find and replace the contributor section
@@ -294,7 +294,7 @@ def main():
         # Show statistics
         if contributors:
             total_contributions = sum(c.get("contributions", 0) for c in contributors)
-            print(f"\nStatistics:")
+            print("\nStatistics:")
             print(f"  Total contributors shown: {len(contributors)}")
             print(f"  Total contributions: {total_contributions}")
             print(f"  Top contributor: {contributors[0].get('login')} ({contributors[0].get('contributions')} contributions)")

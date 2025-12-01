@@ -117,7 +117,9 @@ class TestContentStatisticsExtractor:
                     assert 0 <= readability["flesch_reading_ease"] <= 100
 
                 if "flesch_kincaid_grade" in readability:
-                    assert isinstance(readability["flesch_kincaid_grade"], (int, float))
+                    assert isinstance(
+                        readability["flesch_kincaid_grade"], (int | float)
+                    )
 
     def test_vocabulary_analysis(self, default_extractor, sample_documents):
         """Test vocabulary diversity analysis."""

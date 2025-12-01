@@ -1039,7 +1039,9 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             response.meta = {"message": str(res.info)}
 
     if res.state == "SUCCESS":
-        if isinstance(res.result, (dict, list, str, int, float, bool, type(None))):
+        if isinstance(
+            res.result, (dict | list | str | int | float | bool | type(None))
+        ):
             response.result = res.result
         else:
             response.result = {"message": str(res.result)}

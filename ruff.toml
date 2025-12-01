@@ -22,8 +22,7 @@ exclude = [
 [lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
-# Ignore line-too-long errors (they require manual refactoring)
-ignore = ["E501"]
+ignore = ["E501", "UP040"]
 
 # Per-file ignores
 [lint.per-file-ignores]

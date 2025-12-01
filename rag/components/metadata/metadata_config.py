@@ -156,7 +156,10 @@ class DocumentMetadata(BaseModel):
                 # Handle nested dictionaries
                 if isinstance(field_value, dict):
                     for key, value in field_value.items():
-                        if isinstance(value, (str, int, float, bool)) or value is None:
+                        if (
+                            isinstance(value, (str, list, int, float, bool))
+                            or value is None
+                        ):
                             chroma_metadata[f"{field_name}_{key}"] = value
                         else:
                             chroma_metadata[f"{field_name}_{key}_json"] = json.dumps(

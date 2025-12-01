@@ -110,12 +110,14 @@ class BaseParser(ABC):
         finally:
             os.unlink(tmp_path)
 
-    @abstractmethod
-    def _validate_config(self):
-        """Validate configuration against parser schema."""
-        # This will use the individual parser's schema.json
-        # Implementation depends on jsonschema library
-        pass
+    def _validate_config(self) -> None:
+        """Validate configuration against parser schema.
+
+        Override in subclasses to implement custom validation.
+        Default implementation does nothing.
+        """
+        # Subclasses can override to validate against their schema.json
+        return None
 
     def detect_encoding(self, file_path: str) -> str:
         """Detect file encoding.

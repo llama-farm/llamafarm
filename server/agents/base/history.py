@@ -1,3 +1,5 @@
+from typing import TypeAlias
+
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionDeveloperMessageParam,
@@ -7,13 +9,13 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 
-type LFChatCompletionDeveloperMessageParam = ChatCompletionDeveloperMessageParam
-type LFChatCompletionSystemMessageParam = ChatCompletionSystemMessageParam
-type LFChatCompletionUserMessageParam = ChatCompletionUserMessageParam
-type LFChatCompletionAssistantMessageParam = ChatCompletionAssistantMessageParam
-type LFChatCompletionToolMessageParam = ChatCompletionToolMessageParam
-type LFChatCompletionFunctionMessageParam = ChatCompletionFunctionMessageParam
-type LFChatCompletionMessageParam = (
+LFChatCompletionDeveloperMessageParam: TypeAlias = ChatCompletionDeveloperMessageParam
+LFChatCompletionSystemMessageParam: TypeAlias = ChatCompletionSystemMessageParam
+LFChatCompletionUserMessageParam: TypeAlias = ChatCompletionUserMessageParam
+LFChatCompletionAssistantMessageParam: TypeAlias = ChatCompletionAssistantMessageParam
+LFChatCompletionToolMessageParam: TypeAlias = ChatCompletionToolMessageParam
+LFChatCompletionFunctionMessageParam: TypeAlias = ChatCompletionFunctionMessageParam
+LFChatCompletionMessageParam: TypeAlias = (
     LFChatCompletionDeveloperMessageParam
     | LFChatCompletionSystemMessageParam
     | LFChatCompletionUserMessageParam
