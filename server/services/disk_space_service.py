@@ -65,8 +65,18 @@ class DiskSpaceService:
             # If resolve fails, use original path
             resolved_path = path_obj
 
+        # If the path doesn't exist, use its parent directory for disk usage
+        # This handles cases where the cache directory hasn't been created yet
+        check_path = resolved_path
+        if not check_path.exists():
+            # Use parent directory if path doesn't exist
+            check_path = check_path.parent
+            # Keep going up until we find an existing directory or reach root
+            while not check_path.exists() and check_path != check_path.parent:
+                check_path = check_path.parent
+
         try:
-            usage = psutil.disk_usage(str(resolved_path))
+            usage = psutil.disk_usage(str(check_path))
             percent_free = (
                 (usage.free / usage.total) * 100.0 if usage.total > 0 else 0.0
             )
@@ -79,7 +89,7 @@ class DiskSpaceService:
                 percent_free=percent_free,
             )
         except OSError as e:
-            logger.warning(f"Failed to check disk space at {resolved_path}: {e}")
+            logger.warning(f"Failed to check disk space at {check_path}: {e}")
             raise
 
     @staticmethod
@@ -296,15 +306,17 @@ class DiskSpaceService:
 
         # Check warning threshold (percentage) - PROJECTED after download
         # Calculate what the free percentage will be after downloading the model
-        remaining_after_download = available_bytes - model_size
+        # Use each disk's individual free space for projection
+        remaining_cache_after_download = cache_info.free_bytes - model_size
+        remaining_system_after_download = system_info.free_bytes - model_size
 
         projected_cache_percent = (
-            (remaining_after_download / cache_info.total_bytes * 100)
+            (remaining_cache_after_download / cache_info.total_bytes * 100)
             if cache_info.total_bytes > 0
             else 0
         )
         projected_system_percent = (
-            (remaining_after_download / system_info.total_bytes * 100)
+            (remaining_system_after_download / system_info.total_bytes * 100)
             if system_info.total_bytes > 0
             else 0
         )
@@ -315,9 +327,11 @@ class DiskSpaceService:
         )
 
         if warning:
+            # Use the minimum remaining space for the message
+            min_remaining = min(remaining_cache_after_download, remaining_system_after_download)
             message = (
                 f"Downloading this model ({model_size / (1024**3):.2f} GB) will leave you with "
-                f"{remaining_after_download / (1024**3):.2f} GB free "
+                f"{min_remaining / (1024**3):.2f} GB free "
                 f"({min(projected_cache_percent, projected_system_percent):.1f}% free), "
                 f"which is below the 10% threshold. This could affect LlamaFarm's capabilities. "
                 f"Do you want to continue anyway?"

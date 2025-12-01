@@ -260,7 +260,7 @@ def test_download_model_low_space_warning(mocker):
         warning=True,
         available_bytes=5000000000,  # 5GB (< 10% threshold)
         required_bytes=1000000000,  # 1GB
-        message="Nearing disk space max - you have 5.00 GB available, it could alter LF capabilities. Do you want to continue anyway?",
+        message="Downloading this model (1.00 GB) will leave you with 4.00 GB free (4.0% free), which is below the 10% threshold. This could affect LlamaFarm's capabilities. Do you want to continue anyway?",
         cache_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
         system_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
     )
@@ -286,4 +286,4 @@ def test_download_model_low_space_warning(mocker):
     # Read the stream to check for warning event
     content = resp.text
     assert "warning" in content.lower()
-    assert "Nearing disk space max" in content
+    assert "below the 10% threshold" in content

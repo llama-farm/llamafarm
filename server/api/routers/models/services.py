@@ -130,13 +130,15 @@ def validate_download(request: ValidateDownloadRequest):
         }
     except Exception as e:
         logger.warning(
-            f"Disk space validation failed for model '{request.model_name}': {e}"
+            f"Disk space validation failed for model '{request.model_name}': {e}",
+            exc_info=True,
         )
         # On error, allow download but with warning
+        # Don't expose exception details to users for security
         return {
             "can_download": True,
             "warning": True,
-            "message": f"Could not validate disk space: {e}. Proceeding with download.",
+            "message": "Could not validate disk space. Proceeding with download.",
             "available_bytes": 0,
             "required_bytes": 0,
             "cache_info": {
