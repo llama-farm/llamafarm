@@ -27,7 +27,6 @@ LlamaFarm is an open-source framework for building retrieval-augmented and agent
 - [Ollama](https://ollama.com/download) _(local runtime)_ **OR** [Lemonade](runtimes/lemonade/QUICKSTART.md) _(local GGUF models with NPU/GPU acceleration)_
 
 1. **Install the CLI**
-
    macOS / Linux
 
    ```bash
