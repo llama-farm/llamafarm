@@ -6,6 +6,7 @@ from config.datamodel import Provider
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from server.services.disk_space_service import DiskSpaceService
 from server.services.model_service import ModelService
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,40 @@ def list_models(provider: Provider = Provider.universal):
 async def download_model(request: DownloadModelRequest):
     """Download/cache a model for the given provider and model name."""
 
+    # Check disk space before starting download
+    try:
+        validation = DiskSpaceService.validate_space_for_download(request.model_name)
+
+        # If critical (can't download), return error immediately
+        if not validation.can_download:
+            raise HTTPException(
+                status_code=400,
+                detail=validation.message,
+            )
+
+        # If warning (low space), we'll emit warning event in stream
+        warning_message = validation.message if validation.warning else None
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (critical errors)
+        raise
+    except Exception as e:
+        # If disk space check fails, log warning and proceed (graceful degradation)
+        logger.warning(
+            f"Disk space check failed for model '{request.model_name}': {e}. "
+            "Proceeding with download.",
+        )
+        warning_message = None
+
     async def event_stream():
+        # Emit warning event if space is low
+        if warning_message:
+            warning_event = {
+                "event": "warning",
+                "message": warning_message,
+            }
+            yield f"data: {json.dumps(warning_event)}\n\n"
+
         try:
             async for evt in ModelService.download_model(
                 request.provider, request.model_name
