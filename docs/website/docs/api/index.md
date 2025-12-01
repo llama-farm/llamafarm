@@ -1140,7 +1140,7 @@ curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-a
 - Cancellation is idempotent (safe to call multiple times)
 - Cleanup failures don't prevent cancellation from succeeding
 - Successfully processed files are automatically reverted
-- Manual cleanup is available via `POST /datasets/{dataset}/cleanup/{file_hash}` if automatic cleanup fails
+- Manual cleanup is available via `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/cleanup/{file_hash}` if automatic cleanup fails
 
 ---
 
