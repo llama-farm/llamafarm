@@ -149,68 +149,33 @@ class DiskSpaceService:
         """
         try:
             from huggingface_hub import HfApi
-
-            # Parse model ID to extract quantization if present
             from llamafarm_common import parse_model_with_quantization
 
             base_model_id, _ = parse_model_with_quantization(model_id)
             api = HfApi()
 
-            # Try to get model info for size estimation
+            # Primary method: use model_info with files_metadata to get sizes from siblings
             try:
-                # Request files_metadata=True to get file sizes in siblings
                 model_info = api.model_info(base_model_id, files_metadata=True)
-                if model_info:
-                    # First, try siblings attribute - this contains all files with sizes
-                    if hasattr(model_info, "siblings") and model_info.siblings:
-                        total_size = 0
-                        file_count = 0
-                        for sibling in model_info.siblings:
-                            # Check for size attribute (available when files_metadata=True)
-                            size = getattr(sibling, "size", None)
-                            if size and size > 0:
-                                total_size += size
-                                file_count += 1
-                        if total_size > 0:
-                            logger.info(
-                                f"Got model size from siblings: {total_size / (1024**4):.2f} TB "
-                                f"({file_count} files)"
-                            )
-                            return total_size
-
-                    # Check for safetensors files with sizes
-                    if hasattr(model_info, "safetensors") and model_info.safetensors:
-                        total_size = 0
-                        for st_file in model_info.safetensors:
-                            if hasattr(st_file, "size") and st_file.size:
-                                total_size += st_file.size
-                        if total_size > 0:
-                            logger.debug(
-                                f"Got model size from safetensors: {total_size / (1024**3):.2f} GB"
-                            )
-                            return total_size
-
-                    # Check for files attribute
-                    if hasattr(model_info, "files") and model_info.files:
-                        total_size = 0
-                        for file_info in model_info.files:
-                            if hasattr(file_info, "size") and file_info.size:
-                                total_size += file_info.size
-                        if total_size > 0:
-                            logger.debug(
-                                f"Got model size from files: {total_size / (1024**3):.2f} GB"
-                            )
-                            return total_size
-
+                if hasattr(model_info, "siblings") and model_info.siblings:
+                    total_size = sum(
+                        getattr(s, "size", 0) or 0
+                        for s in model_info.siblings
+                        if getattr(s, "size", None)
+                    )
+                    if total_size > 0:
+                        logger.info(
+                            f"Got model size from siblings: {total_size / (1024**3):.2f} GB"
+                        )
+                        return total_size
             except Exception as e:
                 logger.debug(f"Could not get model info for {base_model_id}: {e}")
 
-            # Alternative method: list repo files and sum their sizes
+            # Fallback: list repo files and sum their sizes
             try:
                 files = api.list_repo_files(repo_id=base_model_id, repo_type="model")
                 if files:
                     total_size = 0
-                    file_count = 0
                     for file_path in files:
                         try:
                             file_info = api.get_path_info(
@@ -218,18 +183,14 @@ class DiskSpaceService:
                             )
                             if hasattr(file_info, "size") and file_info.size:
                                 total_size += file_info.size
-                                file_count += 1
                         except Exception:
-                            # Skip files we can't get info for
                             continue
 
                     if total_size > 0:
                         logger.info(
-                            f"Got model size via file listing: {total_size / (1024**3):.2f} GB "
-                            f"({file_count} files)"
+                            f"Got model size via file listing: {total_size / (1024**3):.2f} GB"
                         )
                         return total_size
-
             except Exception as e:
                 logger.debug(f"Could not get model size via file listing: {e}")
 
@@ -267,59 +228,27 @@ class DiskSpaceService:
 
         # Get model size estimate
         model_size = DiskSpaceService.get_model_size(model_id)
+        available_bytes = min(cache_info.free_bytes, system_info.free_bytes)
+
         if model_size is None:
-            # Size could not be determined - only warn if we have reason to be concerned
-            available_bytes = min(cache_info.free_bytes, system_info.free_bytes)
-
-            # Try to get file count to assess if this might be a large model
-            file_count = None
-            try:
-                from huggingface_hub import HfApi
-                from llamafarm_common import parse_model_with_quantization
-
-                base_model_id, _ = parse_model_with_quantization(model_id)
-                api = HfApi()
-                files = api.list_repo_files(repo_id=base_model_id, repo_type="model")
-                file_count = len(files) if files else None
-            except Exception:
-                pass
-
-            # Only warn if:
-            # 1. We have low disk space (< 20% free), OR
-            # 2. The repo has many files (> 50), suggesting it might be large
-            should_warn = False
-            warning_message = ""
-
+            # Size could not be determined - warn if disk space is already low
             if cache_info.percent_free < 20.0 or system_info.percent_free < 20.0:
-                should_warn = True
-                warning_message = (
-                    f"Model size could not be determined and you have low disk space "
-                    f"({available_bytes / (1024**3):.2f} GB free, "
-                    f"{min(cache_info.percent_free, system_info.percent_free):.1f}% free). "
-                    f"Proceed with caution."
-                )
-            elif file_count and file_count > 50:
-                should_warn = True
-                warning_message = (
-                    f"Model size could not be determined (repo has {file_count} files). "
-                    f"You have {available_bytes / (1024**3):.2f} GB free. "
-                    f"Large models may exceed available space. Proceed with caution."
-                )
-
-            # If we should warn, return warning result
-            if should_warn:
                 return ValidationResult(
                     can_download=True,
                     warning=True,
                     available_bytes=available_bytes,
                     required_bytes=0,
-                    message=warning_message,
+                    message=(
+                        f"Model size could not be determined and you have low disk space "
+                        f"({available_bytes / (1024**3):.2f} GB free, "
+                        f"{min(cache_info.percent_free, system_info.percent_free):.1f}% free). "
+                        f"Proceed with caution."
+                    ),
                     cache_info=cache_info,
                     system_info=system_info,
                 )
 
-            # If size is unknown but we have plenty of space and it's not a huge repo,
-            # allow download without warning
+            # If size is unknown but we have plenty of space, allow without warning
             return ValidationResult(
                 can_download=True,
                 warning=False,

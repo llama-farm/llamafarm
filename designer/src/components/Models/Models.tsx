@@ -604,6 +604,48 @@ function AddOrChangeModels({
     'local' | 'custom' | null
   >(null)
 
+  // Shared validation helper
+  const handleDiskSpaceValidation = async (
+    modelName: string,
+    onSuccess: () => void,
+    actionType: 'local' | 'custom'
+  ) => {
+    try {
+      const validation = await validateModelDownload(modelName)
+
+      if (!validation.can_download) {
+        setDiskSpaceValidation({
+          message: validation.message,
+          availableBytes: validation.available_bytes,
+          requiredBytes: validation.required_bytes,
+        })
+        setPendingDownloadAction(actionType)
+        setDiskSpaceErrorOpen(true)
+        return false
+      }
+
+      if (validation.warning) {
+        setDiskSpaceValidation({
+          message: validation.message,
+          availableBytes: validation.available_bytes,
+          requiredBytes: validation.required_bytes,
+        })
+        setPendingDownloadAction(actionType)
+        setDiskSpaceWarningOpen(true)
+        return false
+      }
+
+      // Sufficient space - proceed
+      onSuccess()
+      return true
+    } catch (error: any) {
+      console.error('Disk space validation failed:', error)
+      // On error, proceed anyway (graceful degradation)
+      onSuccess()
+      return true
+    }
+  }
+
   // Helper function to proceed with download after validation
   const proceedWithDownload = async () => {
     if (!pendingVariant) return
@@ -1004,41 +1046,11 @@ function AddOrChangeModels({
 
   // Handle custom model download
   const handleCustomModelDownload = async () => {
-    // Check disk space before downloading
-    try {
-      const validation = await validateModelDownload(customModelInput.trim())
-
-      if (!validation.can_download) {
-        // Insufficient space - show error dialog
-        setDiskSpaceValidation({
-          message: validation.message,
-          availableBytes: validation.available_bytes,
-          requiredBytes: validation.required_bytes,
-        })
-        setPendingDownloadAction('custom')
-        setDiskSpaceErrorOpen(true)
-        return
-      }
-
-      if (validation.warning) {
-        // Low space warning - show warning dialog
-        setDiskSpaceValidation({
-          message: validation.message,
-          availableBytes: validation.available_bytes,
-          requiredBytes: validation.required_bytes,
-        })
-        setPendingDownloadAction('custom')
-        setDiskSpaceWarningOpen(true)
-        return
-      }
-
-      // Sufficient space - proceed with download
-      proceedWithCustomDownload()
-    } catch (error: any) {
-      console.error('Disk space validation failed:', error)
-      // On error, proceed anyway (graceful degradation)
-      proceedWithCustomDownload()
-    }
+    await handleDiskSpaceValidation(
+      customModelInput.trim(),
+      proceedWithCustomDownload,
+      'custom'
+    )
   }
 
   // Helper function to proceed with custom model download after validation
@@ -1077,8 +1089,6 @@ function AddOrChangeModels({
               }
             }
           } else if (event.event === 'warning') {
-            // Handle warning events from download stream
-            // Log warning - we already showed dialog before download started
             console.warn('Disk space warning during download:', event.message)
           } else if (event.event === 'done') {
             setCustomDownloadProgress(100)
@@ -1677,45 +1687,16 @@ function AddOrChangeModels({
 
                 // Check disk space before downloading
                 setSubmitState('checking')
-                try {
-                  const validation = await validateModelDownload(
-                    pendingVariant.label
-                  )
-
-                  if (!validation.can_download) {
-                    // Insufficient space - show error dialog
-                    setDiskSpaceValidation({
-                      message: validation.message,
-                      availableBytes: validation.available_bytes,
-                      requiredBytes: validation.required_bytes,
-                    })
-                    setPendingDownloadAction('local')
-                    setDiskSpaceErrorOpen(true)
-                    setSubmitState('idle')
-                    return
-                  }
-
-                  if (validation.warning) {
-                    // Low space warning - show warning dialog
-                    setDiskSpaceValidation({
-                      message: validation.message,
-                      availableBytes: validation.available_bytes,
-                      requiredBytes: validation.required_bytes,
-                    })
-                    setPendingDownloadAction('local')
-                    setDiskSpaceWarningOpen(true)
-                    setSubmitState('idle')
-                    return
-                  }
-
-                  // Sufficient space - proceed with download
-                  setConfirmOpen(false)
-                  proceedWithDownload()
-                } catch (error: any) {
-                  console.error('Disk space validation failed:', error)
-                  // On error, proceed anyway (graceful degradation)
-                  setConfirmOpen(false)
-                  proceedWithDownload()
+                const shouldProceed = await handleDiskSpaceValidation(
+                  pendingVariant.label,
+                  () => {
+                    setConfirmOpen(false)
+                    proceedWithDownload()
+                  },
+                  'local'
+                )
+                if (!shouldProceed) {
+                  setSubmitState('idle')
                 }
               }}
             >
@@ -1748,36 +1729,40 @@ function AddOrChangeModels({
         </DialogContent>
       </Dialog>
 
-      {/* Disk space warning dialog (shared for both local models and custom downloads) */}
-      <DiskSpaceWarningDialog
-        open={diskSpaceWarningOpen}
-        onOpenChange={setDiskSpaceWarningOpen}
-        message={diskSpaceValidation?.message || ''}
-        availableBytes={diskSpaceValidation?.availableBytes || 0}
-        requiredBytes={diskSpaceValidation?.requiredBytes || 0}
-        onContinue={() => {
-          setDiskSpaceWarningOpen(false)
-          if (pendingDownloadAction === 'local') {
-            proceedWithDownload()
-          } else if (pendingDownloadAction === 'custom') {
-            proceedWithCustomDownload()
-          }
-          setPendingDownloadAction(null)
-        }}
-        onCancel={() => {
-          setDiskSpaceWarningOpen(false)
-          setDiskSpaceValidation(null)
-        }}
-      />
+      {/* Disk space warning dialog */}
+      {diskSpaceValidation && (
+        <DiskSpaceWarningDialog
+          open={diskSpaceWarningOpen}
+          onOpenChange={setDiskSpaceWarningOpen}
+          message={diskSpaceValidation.message}
+          availableBytes={diskSpaceValidation.availableBytes}
+          requiredBytes={diskSpaceValidation.requiredBytes}
+          onContinue={() => {
+            setDiskSpaceWarningOpen(false)
+            if (pendingDownloadAction === 'local') {
+              proceedWithDownload()
+            } else if (pendingDownloadAction === 'custom') {
+              proceedWithCustomDownload()
+            }
+            setPendingDownloadAction(null)
+          }}
+          onCancel={() => {
+            setDiskSpaceWarningOpen(false)
+            setDiskSpaceValidation(null)
+          }}
+        />
+      )}
 
-      {/* Disk space error dialog (shared for both local models and custom downloads) */}
-      <DiskSpaceErrorDialog
-        open={diskSpaceErrorOpen}
-        onOpenChange={setDiskSpaceErrorOpen}
-        message={diskSpaceValidation?.message || ''}
-        availableBytes={diskSpaceValidation?.availableBytes || 0}
-        requiredBytes={diskSpaceValidation?.requiredBytes || 0}
-      />
+      {/* Disk space error dialog */}
+      {diskSpaceValidation && (
+        <DiskSpaceErrorDialog
+          open={diskSpaceErrorOpen}
+          onOpenChange={setDiskSpaceErrorOpen}
+          message={diskSpaceValidation.message}
+          availableBytes={diskSpaceValidation.availableBytes}
+          requiredBytes={diskSpaceValidation.requiredBytes}
+        />
+      )}
 
       {/* Background download indicator - minimized */}
       {showRecommendedBackgroundDownload && submitState === 'loading' && (
