@@ -7,9 +7,9 @@ from collections.abc import AsyncIterator
 import requests  # type: ignore
 from huggingface_hub import scan_cache_dir, snapshot_download
 from huggingface_hub.errors import RepositoryNotFoundError
-from llamafarm_common import parse_model_with_quantization
-from runtimes.universal.utils.model_format import (
+from llamafarm_common import (
     list_gguf_files,
+    parse_model_with_quantization,
     select_gguf_file_with_logging,
 )
 from tqdm.asyncio import tqdm  # type: ignore
