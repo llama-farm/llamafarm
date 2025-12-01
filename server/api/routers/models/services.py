@@ -17,6 +17,10 @@ class DownloadModelRequest(BaseModel):
     model_name: str
 
 
+class ValidateDownloadRequest(BaseModel):
+    model_name: str
+
+
 router = APIRouter(prefix="/models", tags=["models"])
 
 
@@ -95,6 +99,61 @@ async def download_model(request: DownloadModelRequest):
             yield f"data: {json.dumps(error_event)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post("/validate-download")
+def validate_download(request: ValidateDownloadRequest):
+    """Validate if there's sufficient disk space for a model download.
+
+    Returns validation result with can_download, warning, message, and space info.
+    """
+    logger.info(f"Validating disk space for model download: {request.model_name}")
+    try:
+        validation = DiskSpaceService.validate_space_for_download(request.model_name)
+
+        logger.info(
+            f"Validation result for {request.model_name}: "
+            f"can_download={validation.can_download}, "
+            f"warning={validation.warning}, "
+            f"required={validation.required_bytes / (1024**3):.2f} GB, "
+            f"available={validation.available_bytes / (1024**3):.2f} GB"
+        )
+
+        return {
+            "can_download": validation.can_download,
+            "warning": validation.warning,
+            "message": validation.message,
+            "available_bytes": validation.available_bytes,
+            "required_bytes": validation.required_bytes,
+            "cache_info": asdict(validation.cache_info),
+            "system_info": asdict(validation.system_info),
+        }
+    except Exception as e:
+        logger.warning(
+            f"Disk space validation failed for model '{request.model_name}': {e}"
+        )
+        # On error, allow download but with warning
+        return {
+            "can_download": True,
+            "warning": True,
+            "message": f"Could not validate disk space: {e}. Proceeding with download.",
+            "available_bytes": 0,
+            "required_bytes": 0,
+            "cache_info": {
+                "total_bytes": 0,
+                "used_bytes": 0,
+                "free_bytes": 0,
+                "path": "",
+                "percent_free": 0.0,
+            },
+            "system_info": {
+                "total_bytes": 0,
+                "used_bytes": 0,
+                "free_bytes": 0,
+                "path": "",
+                "percent_free": 0.0,
+            },
+        }
 
 
 @router.delete("/{model_name:path}")

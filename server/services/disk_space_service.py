@@ -67,7 +67,9 @@ class DiskSpaceService:
 
         try:
             usage = psutil.disk_usage(str(resolved_path))
-            percent_free = (usage.free / usage.total) * 100.0 if usage.total > 0 else 0.0
+            percent_free = (
+                (usage.free / usage.total) * 100.0 if usage.total > 0 else 0.0
+            )
 
             return DiskSpaceInfo(
                 total_bytes=usage.total,
@@ -156,8 +158,26 @@ class DiskSpaceService:
 
             # Try to get model info for size estimation
             try:
-                model_info = api.model_info(base_model_id)
+                # Request files_metadata=True to get file sizes in siblings
+                model_info = api.model_info(base_model_id, files_metadata=True)
                 if model_info:
+                    # First, try siblings attribute - this contains all files with sizes
+                    if hasattr(model_info, "siblings") and model_info.siblings:
+                        total_size = 0
+                        file_count = 0
+                        for sibling in model_info.siblings:
+                            # Check for size attribute (available when files_metadata=True)
+                            size = getattr(sibling, "size", None)
+                            if size and size > 0:
+                                total_size += size
+                                file_count += 1
+                        if total_size > 0:
+                            logger.info(
+                                f"Got model size from siblings: {total_size / (1024**4):.2f} TB "
+                                f"({file_count} files)"
+                            )
+                            return total_size
+
                     # Check for safetensors files with sizes
                     if hasattr(model_info, "safetensors") and model_info.safetensors:
                         total_size = 0
@@ -165,6 +185,9 @@ class DiskSpaceService:
                             if hasattr(st_file, "size") and st_file.size:
                                 total_size += st_file.size
                         if total_size > 0:
+                            logger.debug(
+                                f"Got model size from safetensors: {total_size / (1024**3):.2f} GB"
+                            )
                             return total_size
 
                     # Check for files attribute
@@ -174,10 +197,41 @@ class DiskSpaceService:
                             if hasattr(file_info, "size") and file_info.size:
                                 total_size += file_info.size
                         if total_size > 0:
+                            logger.debug(
+                                f"Got model size from files: {total_size / (1024**3):.2f} GB"
+                            )
                             return total_size
 
             except Exception as e:
                 logger.debug(f"Could not get model info for {base_model_id}: {e}")
+
+            # Alternative method: list repo files and sum their sizes
+            try:
+                files = api.list_repo_files(repo_id=base_model_id, repo_type="model")
+                if files:
+                    total_size = 0
+                    file_count = 0
+                    for file_path in files:
+                        try:
+                            file_info = api.get_path_info(
+                                repo_id=base_model_id, path=file_path, repo_type="model"
+                            )
+                            if hasattr(file_info, "size") and file_info.size:
+                                total_size += file_info.size
+                                file_count += 1
+                        except Exception:
+                            # Skip files we can't get info for
+                            continue
+
+                    if total_size > 0:
+                        logger.info(
+                            f"Got model size via file listing: {total_size / (1024**3):.2f} GB "
+                            f"({file_count} files)"
+                        )
+                        return total_size
+
+            except Exception as e:
+                logger.debug(f"Could not get model size via file listing: {e}")
 
         except ImportError:
             logger.warning("huggingface_hub not available for model size estimation")
@@ -214,24 +268,64 @@ class DiskSpaceService:
         # Get model size estimate
         model_size = DiskSpaceService.get_model_size(model_id)
         if model_size is None:
-            # If we can't estimate size, use cache disk free space as available
-            # and don't block, but warn if space is low
+            # Size could not be determined - only warn if we have reason to be concerned
             available_bytes = min(cache_info.free_bytes, system_info.free_bytes)
-            warning = (
-                cache_info.percent_free < WARNING_THRESHOLD_PERCENT
-                or system_info.percent_free < WARNING_THRESHOLD_PERCENT
-            )
 
-            message = "Model size unavailable, checking available space"
-            if warning:
-                message += f" - Low disk space detected ({cache_info.percent_free:.1f}% cache, {system_info.percent_free:.1f}% system)"
+            # Try to get file count to assess if this might be a large model
+            file_count = None
+            try:
+                from huggingface_hub import HfApi
+                from llamafarm_common import parse_model_with_quantization
 
+                base_model_id, _ = parse_model_with_quantization(model_id)
+                api = HfApi()
+                files = api.list_repo_files(repo_id=base_model_id, repo_type="model")
+                file_count = len(files) if files else None
+            except Exception:
+                pass
+
+            # Only warn if:
+            # 1. We have low disk space (< 20% free), OR
+            # 2. The repo has many files (> 50), suggesting it might be large
+            should_warn = False
+            warning_message = ""
+
+            if cache_info.percent_free < 20.0 or system_info.percent_free < 20.0:
+                should_warn = True
+                warning_message = (
+                    f"Model size could not be determined and you have low disk space "
+                    f"({available_bytes / (1024**3):.2f} GB free, "
+                    f"{min(cache_info.percent_free, system_info.percent_free):.1f}% free). "
+                    f"Proceed with caution."
+                )
+            elif file_count and file_count > 50:
+                should_warn = True
+                warning_message = (
+                    f"Model size could not be determined (repo has {file_count} files). "
+                    f"You have {available_bytes / (1024**3):.2f} GB free. "
+                    f"Large models may exceed available space. Proceed with caution."
+                )
+
+            # If we should warn, return warning result
+            if should_warn:
+                return ValidationResult(
+                    can_download=True,
+                    warning=True,
+                    available_bytes=available_bytes,
+                    required_bytes=0,
+                    message=warning_message,
+                    cache_info=cache_info,
+                    system_info=system_info,
+                )
+
+            # If size is unknown but we have plenty of space and it's not a huge repo,
+            # allow download without warning
             return ValidationResult(
                 can_download=True,
-                warning=warning,
+                warning=False,
                 available_bytes=available_bytes,
                 required_bytes=0,
-                message=message,
+                message=f"Sufficient space available ({available_bytes / (1024**3):.2f} GB free)",
                 cache_info=cache_info,
                 system_info=system_info,
             )
@@ -271,16 +365,33 @@ class DiskSpaceService:
                 system_info=system_info,
             )
 
-        # Check warning threshold (percentage)
+        # Check warning threshold (percentage) - PROJECTED after download
+        # Calculate what the free percentage will be after downloading the model
+        remaining_after_download = available_bytes - model_size
+
+        projected_cache_percent = (
+            (remaining_after_download / cache_info.total_bytes * 100)
+            if cache_info.total_bytes > 0
+            else 0
+        )
+        projected_system_percent = (
+            (remaining_after_download / system_info.total_bytes * 100)
+            if system_info.total_bytes > 0
+            else 0
+        )
+
         warning = (
-            cache_info.percent_free < WARNING_THRESHOLD_PERCENT
-            or system_info.percent_free < WARNING_THRESHOLD_PERCENT
+            projected_cache_percent < WARNING_THRESHOLD_PERCENT
+            or projected_system_percent < WARNING_THRESHOLD_PERCENT
         )
 
         if warning:
             message = (
-                f"Nearing disk space max - you have {available_bytes / (1024**3):.2f} GB available, "
-                f"it could alter LF capabilities. Do you want to continue anyway?"
+                f"Downloading this model ({model_size / (1024**3):.2f} GB) will leave you with "
+                f"{remaining_after_download / (1024**3):.2f} GB free "
+                f"({min(projected_cache_percent, projected_system_percent):.1f}% free), "
+                f"which is below the 10% threshold. This could affect LlamaFarm's capabilities. "
+                f"Do you want to continue anyway?"
             )
         else:
             message = f"Sufficient space available ({available_bytes / (1024**3):.2f} GB free)"
@@ -294,4 +405,3 @@ class DiskSpaceService:
             cache_info=cache_info,
             system_info=system_info,
         )
-

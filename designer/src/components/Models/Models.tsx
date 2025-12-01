@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
 import { Label } from '../ui/label'
@@ -30,9 +31,13 @@ import { ModelSelector } from './ModelSelector'
 import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
 import { CustomDownloadDialog } from './CustomDownloadDialog'
 import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
+import { DiskSpaceWarningDialog } from './DiskSpaceWarningDialog'
+import { DiskSpaceErrorDialog } from './DiskSpaceErrorDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { useToast } from '../ui/toast'
+import { validateModelDownload } from '../../api/modelService'
+import { formatBytes, formatETA } from '../../utils/modelUtils'
 
 interface TabBarProps {
   activeTab: string
@@ -172,23 +177,17 @@ function ModelCard({
                   ref={inputRef}
                   type="text"
                   value={editedName}
-                  onChange={(e) => setEditedName(e.target.value)}
+                  onChange={e => setEditedName(e.target.value)}
                   onBlur={handleSaveName}
                   onKeyDown={handleKeyDown}
-                  className="w-full text-lg font-medium bg-background border border-input rounded px-1 py-0 focus:outline-none focus:ring-1 focus:ring-ring min-h-[28px]"
+                  className="text-lg font-medium bg-transparent border-b border-primary focus:outline-none focus:border-primary-foreground w-full"
                 />
               ) : (
-                <div className="flex items-center gap-1.5 group">
-                  <div className="text-lg font-medium min-h-[28px] flex items-center">{model.name}</div>
-                  {onRename && (
-                    <button
-                      onClick={() => setIsEditingName(true)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-accent/30 rounded"
-                      aria-label="Rename model"
-                    >
-                      <FontIcon type="edit" className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
-                  )}
+                <div
+                  className="text-lg font-medium min-h-[28px] flex items-center cursor-pointer hover:underline"
+                  onClick={() => onRename && setIsEditingName(true)}
+                >
+                  {model.name}
                 </div>
               )}
             </div>
@@ -283,14 +282,16 @@ function ProjectInferenceModels({
           model={m}
           onMakeDefault={() => onMakeDefault(m.id)}
           onDelete={() => onDelete(m.id)}
-          onRename={(newName) => onRename(m.id, newName)}
+          onRename={newName => onRename(m.id, newName)}
           promptSetNames={promptSetNames}
           selectedPromptSets={getSelected(m.id)}
           onTogglePromptSet={(name, checked) => onToggle(m.id, name, checked)}
           onClearPromptSets={() => onClear(m.id)}
           availableProjectModels={availableProjectModels}
           availableDeviceModels={availableDeviceModels}
-          onModelChange={(newModelIdentifier) => onModelChange(m.id, newModelIdentifier)}
+          onModelChange={newModelIdentifier =>
+            onModelChange(m.id, newModelIdentifier)
+          }
         />
       ))}
     </div>
@@ -531,28 +532,6 @@ function CloudModelsForm({
   )
 }
 
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-  let i = Math.floor(Math.log(bytes) / Math.log(1024))
-  if (i >= units.length) i = units.length - 1
-  const val = bytes / Math.pow(1024, i)
-  return `${val.toFixed(i >= 2 ? 1 : 0)} ${units[i]}`
-}
-
-function formatETA(seconds: number): string {
-  if (!isFinite(seconds) || seconds <= 0) return ''
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  if (m >= 60) {
-    const h = Math.floor(m / 60)
-    const rm = m % 60
-    return `~${h}h ${rm}m`
-  }
-  if (m > 0) return `~${m}m ${s}s`
-  return `~${s}s`
-}
-
 function AddOrChangeModels({
   onAddModel,
   onGoToProject,
@@ -602,11 +581,114 @@ function AddOrChangeModels({
     null
   )
   const [submitState, setSubmitState] = useState<
-    'idle' | 'loading' | 'success'
+    'idle' | 'loading' | 'success' | 'checking'
   >('idle')
   const [modelName, setModelName] = useState('')
   const [modelDescription, setModelDescription] = useState('')
   const [selectedPromptSets, setSelectedPromptSets] = useState<string[]>([])
+  const [downloadProgress, setDownloadProgress] = useState(0)
+  const [downloadError, setDownloadError] = useState('')
+  const [
+    showRecommendedBackgroundDownload,
+    setShowRecommendedBackgroundDownload,
+  ] = useState(false)
+
+  // Disk space validation state
+  const [diskSpaceWarningOpen, setDiskSpaceWarningOpen] = useState(false)
+  const [diskSpaceErrorOpen, setDiskSpaceErrorOpen] = useState(false)
+  const [diskSpaceValidation, setDiskSpaceValidation] = useState<{
+    message: string
+    availableBytes: number
+    requiredBytes: number
+  } | null>(null)
+  const [pendingDownloadAction, setPendingDownloadAction] = useState<
+    'local' | 'custom' | null
+  >(null)
+
+  // Helper function to proceed with download after validation
+  const proceedWithDownload = async () => {
+    if (!pendingVariant) return
+
+    setSubmitState('loading')
+    setDownloadProgress(5)
+    setDownloadError('')
+    setDownloadedBytes(0)
+    setTotalBytes(0)
+    setEstimatedTimeRemaining('')
+    const start = Date.now()
+
+    // Show download and add a placeholder card with user-entered data
+    onAddModel(
+      {
+        id: `dl-${pendingVariant.id}`,
+        name: modelName.trim(),
+        modelIdentifier: pendingVariant.label,
+        meta: modelDescription.trim() || 'Downloading…',
+        badges: ['Local', 'Ollama'],
+        status: 'downloading',
+      },
+      selectedPromptSets.length > 0 ? selectedPromptSets : undefined
+    )
+
+    const downloadAsync = async () => {
+      try {
+        for await (const event of modelService.downloadModel({
+          model_name: pendingVariant.label,
+          provider: 'universal',
+        })) {
+          if (event.event === 'progress') {
+            const d = Number(event.downloaded || 0)
+            const t = Number(event.total || 0)
+            setDownloadedBytes(d)
+            setTotalBytes(t)
+            if (t > 0 && isFinite(d) && d >= 0) {
+              const percent = Math.max(
+                5,
+                Math.min(95, Math.round((d / t) * 90) + 5)
+              )
+              setDownloadProgress(percent)
+              const elapsedSec = (Date.now() - start) / 1000
+              if (elapsedSec > 0) {
+                const speed = d / elapsedSec
+                const remain = (t - d) / (speed || 1)
+                setEstimatedTimeRemaining(formatETA(remain))
+              }
+            }
+          } else if (event.event === 'done') {
+            setDownloadProgress(100)
+            setSubmitState('success')
+            setEstimatedTimeRemaining('')
+            refetchCachedModels()
+            setTimeout(() => {
+              if (!showRecommendedBackgroundDownload) {
+                setConfirmOpen(false)
+                onGoToProject()
+              }
+              setSubmitState('idle')
+              setDownloadProgress(0)
+              setShowRecommendedBackgroundDownload(false)
+            }, 1000)
+          } else if (event.event === 'error') {
+            setSubmitState('error')
+            setDownloadError(
+              event.message ||
+                'Failed to download model. Please check the model name and try again.'
+            )
+          } else if (event.event === 'warning') {
+            console.warn('Download warning:', event.message)
+          }
+        }
+      } catch (error: any) {
+        setSubmitState('error')
+        setDownloadError(
+          error.message ||
+            'Failed to download model. Please check the model name and try again.'
+        )
+      }
+    }
+
+    downloadAsync()
+  }
 
   // Device model state
   const [deviceConfirmOpen, setDeviceConfirmOpen] = useState(false)
@@ -923,6 +1005,45 @@ function AddOrChangeModels({
 
   // Handle custom model download
   const handleCustomModelDownload = async () => {
+    // Check disk space before downloading
+    try {
+      const validation = await validateModelDownload(customModelInput.trim())
+
+      if (!validation.can_download) {
+        // Insufficient space - show error dialog
+        setDiskSpaceValidation({
+          message: validation.message,
+          availableBytes: validation.available_bytes,
+          requiredBytes: validation.required_bytes,
+        })
+        setPendingDownloadAction('custom')
+        setDiskSpaceErrorOpen(true)
+        return
+      }
+
+      if (validation.warning) {
+        // Low space warning - show warning dialog
+        setDiskSpaceValidation({
+          message: validation.message,
+          availableBytes: validation.available_bytes,
+          requiredBytes: validation.required_bytes,
+        })
+        setPendingDownloadAction('custom')
+        setDiskSpaceWarningOpen(true)
+        return
+      }
+
+      // Sufficient space - proceed with download
+      proceedWithCustomDownload()
+    } catch (error: any) {
+      console.error('Disk space validation failed:', error)
+      // On error, proceed anyway (graceful degradation)
+      proceedWithCustomDownload()
+    }
+  }
+
+  // Helper function to proceed with custom model download after validation
+  const proceedWithCustomDownload = async () => {
     setCustomDownloadState('downloading')
     setCustomDownloadProgress(5)
     setCustomDownloadError('')
@@ -956,6 +1077,10 @@ function AddOrChangeModels({
                 setEstimatedTimeRemaining(formatETA(remain))
               }
             }
+          } else if (event.event === 'warning') {
+            // Handle warning events from download stream
+            // Log warning - we already showed dialog before download started
+            console.warn('Disk space warning during download:', event.message)
           } else if (event.event === 'done') {
             setCustomDownloadProgress(100)
             setCustomDownloadState('success')
@@ -1444,14 +1569,23 @@ function AddOrChangeModels({
       <Dialog
         open={confirmOpen}
         onOpenChange={open => {
-          setConfirmOpen(open)
-          if (!open) {
+          // If closing while downloading, minimize to background
+          if (!open && submitState === 'loading') {
+            setShowRecommendedBackgroundDownload(true)
+          }
+          if (!open && submitState !== 'loading') {
             setSubmitState('idle')
             setPendingVariant(null)
             setModelName('')
             setModelDescription('')
             setSelectedPromptSets([])
+            setDownloadProgress(0)
+            setDownloadError('')
+            setDownloadedBytes(0)
+            setTotalBytes(0)
+            setEstimatedTimeRemaining('')
           }
+          setConfirmOpen(open)
         }}
       >
         <DialogContent>
@@ -1534,32 +1668,66 @@ function AddOrChangeModels({
               Cancel
             </Button>
             <Button
-              disabled={submitState === 'loading' || !modelName.trim()}
-              onClick={() => {
+              disabled={
+                submitState === 'loading' ||
+                submitState === 'checking' ||
+                !modelName.trim()
+              }
+              onClick={async () => {
                 if (!pendingVariant) return
-                // Show download and add a placeholder card with user-entered data
-                onAddModel(
-                  {
-                    id: `dl-${pendingVariant.id}`,
-                    name: modelName.trim(),
-                    modelIdentifier: pendingVariant.label,
-                    meta: modelDescription.trim() || 'Downloading…',
-                    badges: ['Local', 'Ollama'],
-                    status: 'downloading',
-                  },
-                  selectedPromptSets.length > 0 ? selectedPromptSets : undefined
-                )
-                setSubmitState('loading')
-                setTimeout(() => {
-                  setSubmitState('success')
-                  setTimeout(() => {
-                    setConfirmOpen(false)
-                    onGoToProject()
+
+                // Check disk space before downloading
+                setSubmitState('checking')
+                try {
+                  const validation = await validateModelDownload(
+                    pendingVariant.label
+                  )
+
+                  if (!validation.can_download) {
+                    // Insufficient space - show error dialog
+                    setDiskSpaceValidation({
+                      message: validation.message,
+                      availableBytes: validation.available_bytes,
+                      requiredBytes: validation.required_bytes,
+                    })
+                    setPendingDownloadAction('local')
+                    setDiskSpaceErrorOpen(true)
                     setSubmitState('idle')
-                  }, 600)
-                }, 1000)
+                    return
+                  }
+
+                  if (validation.warning) {
+                    // Low space warning - show warning dialog
+                    setDiskSpaceValidation({
+                      message: validation.message,
+                      availableBytes: validation.available_bytes,
+                      requiredBytes: validation.required_bytes,
+                    })
+                    setPendingDownloadAction('local')
+                    setDiskSpaceWarningOpen(true)
+                    setSubmitState('idle')
+                    return
+                  }
+
+                  // Sufficient space - proceed with download
+                  setConfirmOpen(false)
+                  proceedWithDownload()
+                } catch (error: any) {
+                  console.error('Disk space validation failed:', error)
+                  // On error, proceed anyway (graceful degradation)
+                  setConfirmOpen(false)
+                  proceedWithDownload()
+                }
               }}
             >
+              {submitState === 'checking' && (
+                <span className="mr-2 inline-flex">
+                  <Loader
+                    size={14}
+                    className="border-blue-400 dark:border-blue-100"
+                  />
+                </span>
+              )}
               {submitState === 'loading' && (
                 <span className="mr-2 inline-flex">
                   <Loader
@@ -1573,11 +1741,154 @@ function AddOrChangeModels({
                   <FontIcon type="checkmark-filled" className="w-4 h-4" />
                 </span>
               )}
-              Download and add
+              {submitState === 'checking'
+                ? 'Checking disk space...'
+                : 'Download and add'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Disk space warning dialog (shared for both local models and custom downloads) */}
+      <DiskSpaceWarningDialog
+        open={diskSpaceWarningOpen}
+        onOpenChange={setDiskSpaceWarningOpen}
+        message={diskSpaceValidation?.message || ''}
+        availableBytes={diskSpaceValidation?.availableBytes || 0}
+        requiredBytes={diskSpaceValidation?.requiredBytes || 0}
+        onContinue={() => {
+          setDiskSpaceWarningOpen(false)
+          if (pendingDownloadAction === 'local') {
+            proceedWithDownload()
+          } else if (pendingDownloadAction === 'custom') {
+            proceedWithCustomDownload()
+          }
+          setPendingDownloadAction(null)
+        }}
+        onCancel={() => {
+          setDiskSpaceWarningOpen(false)
+          setDiskSpaceValidation(null)
+        }}
+      />
+
+      {/* Disk space error dialog (shared for both local models and custom downloads) */}
+      <DiskSpaceErrorDialog
+        open={diskSpaceErrorOpen}
+        onOpenChange={setDiskSpaceErrorOpen}
+        message={diskSpaceValidation?.message || ''}
+        availableBytes={diskSpaceValidation?.availableBytes || 0}
+        requiredBytes={diskSpaceValidation?.requiredBytes || 0}
+      />
+
+      {/* Background download indicator - minimized */}
+      {showRecommendedBackgroundDownload && submitState === 'loading' && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            setShowRecommendedBackgroundDownload(false)
+            setConfirmOpen(true)
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setShowRecommendedBackgroundDownload(false)
+              setConfirmOpen(true)
+            }
+          }}
+          className="fixed bottom-4 right-4 z-[100] w-[320px] rounded-lg border border-border bg-card text-card-foreground shadow-lg p-3 text-left"
+          aria-label="Show download progress"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium">
+              {pendingVariant
+                ? `Downloading ${modelName || pendingVariant.label}...`
+                : 'Downloading model...'}
+            </div>
+            <button
+              type="button"
+              className="h-7 px-2 rounded-md border border-input text-xs hover:bg-accent/30"
+              onClick={e => {
+                e.stopPropagation()
+                setShowRecommendedBackgroundDownload(false)
+                setConfirmOpen(true)
+              }}
+            >
+              View
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-full rounded-full bg-accent/20">
+              <div
+                className="h-2 rounded-full bg-primary transition-all"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
+              {Math.floor(downloadProgress)}%
+            </div>
+          </div>
+          {estimatedTimeRemaining && (
+            <div className="mt-2 text-xs text-muted-foreground truncate">
+              {estimatedTimeRemaining} remaining
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Background download success notification */}
+      {showRecommendedBackgroundDownload && submitState === 'success' && (
+        <div className="fixed bottom-4 right-4 z-[100] w-[320px] rounded-lg border border-border bg-card text-card-foreground shadow-lg p-3 flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <FontIcon
+              type="checkmark-filled"
+              className="w-5 h-5 text-primary"
+            />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-medium">Download complete</div>
+            <div className="text-xs text-muted-foreground">
+              {modelName || pendingVariant?.label || 'Model'} is ready to use
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setShowRecommendedBackgroundDownload(false)
+              onGoToProject()
+            }}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <FontIcon type="close" className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Background download error notification */}
+      {showRecommendedBackgroundDownload && submitState === 'error' && (
+        <div className="fixed bottom-4 right-4 z-[100] w-[320px] rounded-lg border border-destructive/20 bg-card text-card-foreground shadow-lg p-3 flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <FontIcon type="close" className="w-5 h-5 text-destructive" />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-medium text-destructive">
+              Download failed
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {downloadError || 'Failed to download model'}
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setShowRecommendedBackgroundDownload(false)
+              setSubmitState('idle')
+              setDownloadError('')
+            }}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <FontIcon type="close" className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </>
   )
 }
@@ -1621,7 +1932,21 @@ const Models = () => {
   const [downloadedBytes, setDownloadedBytes] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
-  const projectConfig = (projectResponse as any)?.project?.config as ProjectConfig | undefined
+
+  // Disk space validation state for custom downloads
+  const [customDiskSpaceWarningOpen, setCustomDiskSpaceWarningOpen] =
+    useState(false)
+  const [customDiskSpaceErrorOpen, setCustomDiskSpaceErrorOpen] =
+    useState(false)
+  const [customDiskSpaceValidation, setCustomDiskSpaceValidation] = useState<{
+    message: string
+    availableBytes: number
+    requiredBytes: number
+  } | null>(null)
+
+  const projectConfig = (projectResponse as any)?.project?.config as
+    | ProjectConfig
+    | undefined
   const getModelsLocation = useCallback(
     () => ({ type: 'runtime.models' as const }),
     []
@@ -1632,7 +1957,6 @@ const Models = () => {
     config: projectConfig,
     getLocation: getModelsLocation,
   })
-
 
   // Load models from config
   useEffect(() => {
@@ -1906,7 +2230,10 @@ const Models = () => {
       if (model.name === id) {
         return {
           ...model,
-          prompts: updatedMap[id] && updatedMap[id].length > 0 ? updatedMap[id] : ['default'],
+          prompts:
+            updatedMap[id] && updatedMap[id].length > 0
+              ? updatedMap[id]
+              : ['default'],
         }
       }
       return model
@@ -1982,7 +2309,10 @@ const Models = () => {
     }
   }
 
-  const handleModelChange = async (modelId: string, newModelIdentifier: string) => {
+  const handleModelChange = async (
+    modelId: string,
+    newModelIdentifier: string
+  ) => {
     if (
       !activeProject?.namespace ||
       !activeProject?.project ||
@@ -1994,9 +2324,7 @@ const Models = () => {
     const prevModels = [...projectModels]
     setProjectModels(prev =>
       prev.map(m =>
-        m.id === modelId
-          ? { ...m, modelIdentifier: newModelIdentifier }
-          : m
+        m.id === modelId ? { ...m, modelIdentifier: newModelIdentifier } : m
       )
     )
 
@@ -2052,7 +2380,7 @@ const Models = () => {
 
     // Validate input
     const trimmedName = newName.trim()
-    
+
     // Check for empty name
     if (!trimmedName) {
       toast({
@@ -2061,7 +2389,7 @@ const Models = () => {
       })
       return
     }
-    
+
     // Check for duplicate name
     if (projectModels.some(m => m.id === trimmedName && m.id !== modelId)) {
       toast({
@@ -2070,7 +2398,7 @@ const Models = () => {
       })
       return
     }
-    
+
     // Check for length (reasonable limit)
     if (trimmedName.length > 100) {
       toast({
@@ -2083,12 +2411,10 @@ const Models = () => {
     // Optimistically update local state
     const prevModels = [...projectModels]
     const prevModelSetMap = { ...modelSetMap }
-    
+
     setProjectModels(prev =>
       prev.map(m =>
-        m.id === modelId
-          ? { ...m, name: trimmedName, id: trimmedName }
-          : m
+        m.id === modelId ? { ...m, name: trimmedName, id: trimmedName } : m
       )
     )
 
@@ -2120,7 +2446,9 @@ const Models = () => {
         ...currentConfig.runtime,
         models: updatedModels,
         // Update default_model if this was the default
-        default_model: wasDefault ? trimmedName : currentConfig.runtime?.default_model,
+        default_model: wasDefault
+          ? trimmedName
+          : currentConfig.runtime?.default_model,
       },
     }
 
