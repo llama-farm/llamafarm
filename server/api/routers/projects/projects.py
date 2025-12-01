@@ -1276,6 +1276,14 @@ async def cancel_task(
             # Get previous cleanup results if available
             cleanup_status = result_meta.get("cleanup_status", {})
             
+            # Convert errors to CleanupError objects if present
+            cleanup_errors = None
+            if cleanup_status.get("errors"):
+                cleanup_errors = [
+                    CleanupError(file_hash=e["file_hash"], error=e["error"])
+                    for e in cleanup_status["errors"]
+                ]
+            
             return CancelTaskResponse(
                 message="Task already cancelled",
                 task_id=task_id,
@@ -1284,6 +1292,7 @@ async def cancel_task(
                 running_tasks_at_cancel=running_count,
                 files_reverted=cleanup_status.get("files_reverted", 0),
                 files_failed_to_revert=cleanup_status.get("files_failed_to_revert", 0),
+                errors=cleanup_errors,
                 already_cancelled=True,
             )
         
