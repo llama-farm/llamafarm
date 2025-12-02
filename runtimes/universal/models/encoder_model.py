@@ -5,7 +5,7 @@ Supports modern encoder architectures including:
 - ModernBERT (8,192 token context, RoPE, Flash Attention)
 - Classic BERT variants (512 token context)
 - sentence-transformers models
-- Cross-encoder rerankers
+- Cross-encoder rerankers.
 """
 
 import logging
@@ -357,7 +357,9 @@ class EncoderModel(BaseModel):
             entities = []
             current_entity = None
 
-            for idx, (pred_id, offset) in enumerate(zip(predictions, offset_mapping)):
+            for idx, (pred_id, offset) in enumerate(
+                zip(predictions, offset_mapping, strict=False)
+            ):
                 pred_id = pred_id.item()
                 label = id2label.get(pred_id, f"LABEL_{pred_id}")
                 score = scores[idx][pred_id].item()
