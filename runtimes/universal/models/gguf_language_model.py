@@ -475,7 +475,7 @@ class GGUFLanguageModel(BaseModel):
                         # Log warning if thinking budget exceeded (can't stop mid-stream)
                         if (
                             thinking_budget
-                            and thinking_tokens >= thinking_budget
+                            and thinking_tokens == thinking_budget
                             and in_thinking
                             and not thinking_ended
                         ):
