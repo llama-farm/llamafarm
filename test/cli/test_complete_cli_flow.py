@@ -4,12 +4,11 @@ Complete CLI Flow Test
 Tests the entire dataset + RAG pipeline through the CLI
 """
 
-import subprocess
-import json
-import time
-import sys
 import os
+import subprocess
+import sys
 from pathlib import Path
+
 
 def run_command(cmd, description):
     """Run a command and return its output."""
@@ -21,7 +20,7 @@ def run_command(cmd, description):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     
     if result.returncode == 0:
-        print(f"✅ SUCCESS")
+        print("✅ SUCCESS")
         if result.stdout.strip():
             print(f"Output:\n{result.stdout}")
     else:
@@ -138,10 +137,10 @@ def main():
                 print(f"✅ Search for '{query}' returned {len(results_search['ids'][0])} results")
                 results.append(("ChromaDB verification", True))
             else:
-                print(f"❌ Search returned no results")
+                print("❌ Search returned no results")
                 results.append(("ChromaDB verification", False))
         else:
-            print(f"❌ Failed to generate embeddings")
+            print("❌ Failed to generate embeddings")
             results.append(("ChromaDB verification", False))
             
     except Exception as e:

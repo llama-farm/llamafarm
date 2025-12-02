@@ -1,12 +1,12 @@
 """Source path extractor to ensure file path information is preserved in document metadata."""
 
 from pathlib import Path
-from typing import List
+
+from core.base import Document
+from core.logging import RAGStructLogger
 
 from ..base import BaseExtractor
-from core.base import Document
 
-from core.logging import RAGStructLogger
 logger = RAGStructLogger("rag.components.extractors.path_extractor.path_extractor")
 
 
@@ -27,11 +27,11 @@ class PathExtractor(BaseExtractor):
         self.normalize_paths = config.get("normalize_paths", False)
         self.relative_to = config.get("relative_to", None)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Return list of dependencies (none for path extractor)."""
         return []
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """Extract path information from documents and store in metadata."""
 
         for doc in documents:

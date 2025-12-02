@@ -4,7 +4,7 @@ Base model class for all HuggingFace models (transformers & diffusers).
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from transformers import PreTrainedTokenizerBase
@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 class BaseModel(ABC):
     """Base class for all model types (transformers, diffusers, etc.)."""
 
-    def __init__(self, model_id: str, device: str, token: Optional[str] = None):
+    def __init__(self, model_id: str, device: str, token: str | None = None):
         self.model_id = model_id
         self.device = device
         self.token = token  # HuggingFace authentication token
-        self.model: Optional[Any] = None
-        self.tokenizer: Optional["PreTrainedTokenizerBase"] = None
-        self.processor: Optional[Any] = None  # For vision/audio models
-        self.feature_extractor: Optional[Any] = None  # For audio models
-        self.pipe: Optional[Any] = None  # For diffusion models
+        self.model: Any | None = None
+        self.tokenizer: PreTrainedTokenizerBase | None = None
+        self.processor: Any | None = None  # For vision/audio models
+        self.feature_extractor: Any | None = None  # For audio models
+        self.pipe: Any | None = None  # For diffusion models
         self.model_type = "unknown"
         self.supports_streaming = False
 
@@ -80,9 +80,7 @@ class BaseModel(ABC):
 
     def get_dtype(self):
         """Get optimal torch dtype for the device."""
-        if self.device == "cuda":
-            return torch.float16
-        elif self.device == "mps":
+        if self.device == "cuda" or self.device == "mps":
             return torch.float16
         else:
             return torch.float32

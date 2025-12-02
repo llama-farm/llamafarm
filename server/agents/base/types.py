@@ -1,10 +1,7 @@
 """Types for LLamaFarm Agent framework."""
 
 from dataclasses import dataclass
-import json
 from typing import Any, Literal
-
-from openai.types.chat import ChatCompletionFunctionToolParam, ChatCompletionToolParam
 
 from config.datamodel import Tool
 

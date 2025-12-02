@@ -1,9 +1,11 @@
 """Text parser using native Python (no external dependencies)."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 
+from core.base import Document, ProcessingResult
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.textthon_parser")
 
 
@@ -11,7 +13,7 @@ class TextParser_Python:
     """Text parser using pure Python for maximum compatibility."""
 
     def __init__(
-        self, name: str = "TextParser_Python", config: Optional[Dict[str, Any]] = None
+        self, name: str = "TextParser_Python", config: dict[str, Any] | None = None
     ):
         self.name = name
         self.config = config or {}
@@ -26,11 +28,10 @@ class TextParser_Python:
         return True
 
     def parse_blob(
-        self, blob_data: bytes, metadata: Dict[str, Any]
-    ) -> List["Document"]:
+        self, blob_data: bytes, metadata: dict[str, Any]
+    ) -> list["Document"]:
         """Parse raw blob data by writing to temp file and calling parse."""
         import tempfile
-        from core.base import Document
 
         # Write blob to temp file
         suffix = f".{metadata.get('filename', 'temp.txt').split('.')[-1]}"
@@ -54,7 +55,6 @@ class TextParser_Python:
 
     def parse(self, source: str, **kwargs):
         """Parse text file using native Python."""
-        from core.base import Document, ProcessingResult
 
         path = Path(source)
         if not path.exists():
@@ -71,7 +71,7 @@ class TextParser_Python:
 
             for encoding in encodings:
                 try:
-                    with open(path, "r", encoding=encoding) as f:
+                    with open(path, encoding=encoding) as f:
                         text = f.read()
                         used_encoding = encoding
                         break
@@ -80,7 +80,7 @@ class TextParser_Python:
 
             if text is None:
                 # Last resort: read with error replacement
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                with open(path, encoding="utf-8", errors="replace") as f:
                     text = f.read()
                     used_encoding = "utf-8 (with replacements)"
 
@@ -147,7 +147,7 @@ class TextParser_Python:
                 documents=[], errors=[{"error": str(e), "source": source}]
             )
 
-    def _chunk_text(self, text: str) -> List[str]:
+    def _chunk_text(self, text: str) -> list[str]:
         """Text chunking implementation."""
         if self.chunk_strategy == "sentences":
             return self._chunk_by_sentences(text)
@@ -156,7 +156,7 @@ class TextParser_Python:
         else:  # characters
             return self._chunk_by_characters(text)
 
-    def _chunk_by_sentences(self, text: str) -> List[str]:
+    def _chunk_by_sentences(self, text: str) -> list[str]:
         """Chunk by sentences."""
         # Simple sentence detection
         sentence_endings = [". ", "! ", "? ", ".\n", "!\n", "?\n"]
@@ -189,7 +189,7 @@ class TextParser_Python:
 
         return chunks
 
-    def _chunk_by_paragraphs(self, text: str) -> List[str]:
+    def _chunk_by_paragraphs(self, text: str) -> list[str]:
         """Chunk by paragraphs."""
         paragraphs = text.split("\n\n")
         chunks = []
@@ -212,7 +212,7 @@ class TextParser_Python:
 
         return chunks
 
-    def _chunk_by_characters(self, text: str) -> List[str]:
+    def _chunk_by_characters(self, text: str) -> list[str]:
         """Simple character-based chunking with overlap."""
         chunks = []
         for i in range(0, len(text), self.chunk_size - self.chunk_overlap):

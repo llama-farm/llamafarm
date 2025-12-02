@@ -5,7 +5,7 @@ This component extracts structured tabular data from documents using multiple fo
 
 from .table_extractor import TableExtractor
 
-__all__ = ['TableExtractor']
+__all__ = ["TableExtractor"]
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "extractor"

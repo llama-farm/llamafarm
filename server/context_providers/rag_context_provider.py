@@ -56,5 +56,5 @@ class RAGContextProvider(BaseDynamicContextProvider):
             "tags in your response. Only provide the actual information and insights based on the content.\n\n"
             "<chunks>\n"
         )
-        
+
         return instruction + "\n\n".join(formatted_chunks) + "\n</chunks>"

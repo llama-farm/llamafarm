@@ -1,8 +1,9 @@
 """Metadata filtered strategy - vector search with intelligent filtering."""
 
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
+from typing import Any
+
+from components.retrievers.base import RetrievalResult, RetrievalStrategy
 from core.base import Document
 
 
@@ -26,7 +27,7 @@ class MetadataFilteredStrategy(RetrievalStrategy):
     def __init__(
         self,
         name: str = "MetadataFilteredStrategy",
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -39,10 +40,10 @@ class MetadataFilteredStrategy(RetrievalStrategy):
 
     def retrieve(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         vector_store,
         top_k: int = 5,
-        metadata_filter: Optional[Dict[str, Any]] = None,
+        metadata_filter: dict[str, Any] | None = None,
         **kwargs,
     ) -> RetrievalResult:
         """Search with metadata filtering.
@@ -99,8 +100,8 @@ class MetadataFilteredStrategy(RetrievalStrategy):
         )
 
     def _filter_documents(
-        self, documents: List[Document], filters: Dict[str, Any]
-    ) -> List[Document]:
+        self, documents: list[Document], filters: dict[str, Any]
+    ) -> list[Document]:
         """Filter documents by metadata - universal implementation.
 
         Args:
@@ -116,7 +117,7 @@ class MetadataFilteredStrategy(RetrievalStrategy):
                 filtered.append(doc)
         return filtered
 
-    def _matches_filters(self, doc: Document, filters: Dict[str, Any]) -> bool:
+    def _matches_filters(self, doc: Document, filters: dict[str, Any]) -> bool:
         """Check if document matches all filter criteria.
 
         Args:
@@ -172,7 +173,7 @@ class MetadataFilteredStrategy(RetrievalStrategy):
         except ValueError:
             return False
 
-    def _validate_filters(self, filters: Dict[str, Any]) -> None:
+    def _validate_filters(self, filters: dict[str, Any]) -> None:
         """Validate filter format."""
         for key, value in filters.items():
             if not isinstance(key, str):
@@ -181,11 +182,11 @@ class MetadataFilteredStrategy(RetrievalStrategy):
             if isinstance(value, dict):
                 # Validate operators
                 valid_ops = {"$ne", "$in", "$nin", "$gt", "$gte", "$lt", "$lte"}
-                for op in value.keys():
+                for op in value:
                     if op not in valid_ops:
                         raise ValueError(f"Invalid filter operator: {op}")
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         """Get configuration schema for this strategy."""
         return {
             "type": "object",
@@ -210,7 +211,7 @@ class MetadataFilteredStrategy(RetrievalStrategy):
             "additionalProperties": False,
         }
 
-    def get_performance_info(self) -> Dict[str, Any]:
+    def get_performance_info(self) -> dict[str, Any]:
         """Get performance characteristics of this strategy."""
         return {
             "speed": "medium",

@@ -27,11 +27,14 @@ def test_windows_file_url_construction():
         result_backend_url = f"file://{result_backend_path}"
 
     # Should produce a valid file:// URL
-    assert result_backend_url == "file:///C:/Users/runneradmin/.llamafarm/broker/results"
+    assert (
+        result_backend_url == "file:///C:/Users/runneradmin/.llamafarm/broker/results"
+    )
     # Should not contain backslashes
     assert "\\" not in result_backend_url
     # Should be parseable by urllib
     from urllib.parse import urlparse
+
     parsed = urlparse(result_backend_url)
     assert parsed.scheme == "file"
 
@@ -54,6 +57,7 @@ def test_unix_file_url_construction():
     assert result_backend_url == "file:///home/user/.llamafarm/broker/results"
     # Should be parseable by urllib
     from urllib.parse import urlparse
+
     parsed = urlparse(result_backend_url)
     assert parsed.scheme == "file"
 
@@ -76,6 +80,7 @@ def test_relative_path_file_url_construction():
     assert result_backend_url == "file://.llamafarm/broker/results"
     # Should be parseable by urllib
     from urllib.parse import urlparse
+
     parsed = urlparse(result_backend_url)
     assert parsed.scheme == "file"
 
@@ -88,7 +93,9 @@ def test_celery_module_loads_on_windows():
         try:
             # Import should not raise ValueError about port casting
             import importlib
+
             from core.celery import celery
+
             importlib.reload(celery)
         except ValueError as e:
             if "Port could not be cast" in str(e):

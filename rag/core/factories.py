@@ -3,42 +3,16 @@
 from pathlib import Path
 from typing import Any
 
-# Import the unified parser system
-from components.parsers import (
-    ToolAwareParserFactory,
-    DirectoryParser,
-)
-from core.base import Embedder, Parser, VectorStore
-from core.logging import RAGStructLogger
-
-
-# Create parser factory functions for backward compatibility
-def _create_parser_factory(parser_name: str):
-    """Create a parser factory function for a specific parser type."""
-
-    def parser_factory(*args, **kwargs):
-        return ToolAwareParserFactory.create_parser(
-            parser_name=parser_name, config=kwargs.get("config")
-        )
-
-    return parser_factory
-
-
-# Legacy parser factory functions
-PlainTextParser = _create_parser_factory("TextParser_Python")
-PDFParser = _create_parser_factory("PDFParser_LlamaIndex")
-CSVParser = _create_parser_factory("CSVParser_Pandas")
-DocxParser = _create_parser_factory("DocxParser_LlamaIndex")
-MarkdownParser = _create_parser_factory("MarkdownParser_LlamaIndex")
-HTMLParser = _create_parser_factory("TextParser_LlamaIndex")  # Web fallback to text
-ExcelParser = _create_parser_factory("ExcelParser_Pandas")
-CustomerSupportCSVParser = _create_parser_factory("CSVParser_Pandas")
-
-PDF_AVAILABLE = True  # Always available through fallback
-
 # Import embedders
 from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
 from components.embedders.universal_embedder.universal_embedder import UniversalEmbedder
+
+# Import the unified parser system
+from components.parsers import (
+    ToolAwareParserFactory,
+)
+from core.base import Embedder, Parser, VectorStore
+from core.logging import RAGStructLogger
 
 # Conditional imports for embedders with dependencies
 try:
@@ -118,6 +92,9 @@ from components.extractors.table_extractor.table_extractor import TableExtractor
 from components.retrievers.basic_similarity.basic_similarity import (
     BasicSimilarityStrategy,
 )
+from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import (
+    CrossEncoderRerankedStrategy,
+)
 from components.retrievers.hybrid_universal.hybrid_universal import (
     HybridUniversalStrategy,
 )
@@ -125,8 +102,32 @@ from components.retrievers.metadata_filtered.metadata_filtered import (
     MetadataFilteredStrategy,
 )
 from components.retrievers.multi_query.multi_query import MultiQueryStrategy
-from components.retrievers.cross_encoder_reranked.cross_encoder_reranked import CrossEncoderRerankedStrategy
 from components.retrievers.multi_turn.multi_turn import MultiTurnRAGStrategy
+
+
+# Create parser factory functions for backward compatibility
+def _create_parser_factory(parser_name: str):
+    """Create a parser factory function for a specific parser type."""
+
+    def parser_factory(*args, **kwargs):
+        return ToolAwareParserFactory.create_parser(
+            parser_name=parser_name, config=kwargs.get("config")
+        )
+
+    return parser_factory
+
+
+# Legacy parser factory functions
+PlainTextParser = _create_parser_factory("TextParser_Python")
+PDFParser = _create_parser_factory("PDFParser_LlamaIndex")
+CSVParser = _create_parser_factory("CSVParser_Pandas")
+DocxParser = _create_parser_factory("DocxParser_LlamaIndex")
+MarkdownParser = _create_parser_factory("MarkdownParser_LlamaIndex")
+HTMLParser = _create_parser_factory("TextParser_LlamaIndex")  # Web fallback to text
+ExcelParser = _create_parser_factory("ExcelParser_Pandas")
+CustomerSupportCSVParser = _create_parser_factory("CSVParser_Pandas")
+
+PDF_AVAILABLE = True  # Always available through fallback
 
 
 class ComponentFactory:
@@ -311,6 +312,10 @@ def create_extractor_from_config(extractor_config: dict[str, Any]):
     return create_component_from_config(extractor_config, ExtractorFactory)
 
 
-def create_retrieval_strategy_from_config(strategy_config: dict[str, Any], project_dir: Path | None = None):
+def create_retrieval_strategy_from_config(
+    strategy_config: dict[str, Any], project_dir: Path | None = None
+):
     """Create a retrieval strategy from configuration."""
-    return create_component_from_config(strategy_config, RetrievalStrategyFactory, project_dir)
+    return create_component_from_config(
+        strategy_config, RetrievalStrategyFactory, project_dir
+    )

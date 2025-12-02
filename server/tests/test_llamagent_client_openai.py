@@ -11,12 +11,12 @@ Tests the OpenAI client implementation including:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from config.datamodel import Model, PromptMessage, PromptSet, Provider
 
 from agents.base.clients.client import LFAgentClient
 from agents.base.clients.openai import LFAgentClientOpenAI
 from agents.base.history import LFChatCompletionUserMessageParam
 from agents.base.types import ToolDefinition
-from config.datamodel import Model, PromptMessage, PromptSet, Provider
 
 
 @pytest.fixture

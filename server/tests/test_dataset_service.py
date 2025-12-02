@@ -5,23 +5,23 @@ This module contains comprehensive tests for the DatasetService class,
 including unit tests for all public methods and edge cases.
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import UploadFile
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    PromptSet,
+    Model,
     PromptMessage,
+    PromptSet,
     Provider,
     Runtime,
     Version,
-    Model,
 )
+from fastapi import UploadFile
 
 from api.errors import DatasetNotFoundError
-from services.data_service import DataService, MetadataFileContent
+from services.data_service import MetadataFileContent
 from services.dataset_service import DatasetService
 from services.project_service import ProjectService
 
@@ -591,7 +591,7 @@ class TestDatasetService:
         mock_load_config.return_value = self.mock_project_config.model_copy()
         mock_hash_data.return_value = "new_file_hash"
         mock_get_metadata.side_effect = FileNotFoundError  # Simulate file not existing
-        
+
         # Mock MetadataFileContent response from add_data_file
         mock_metadata = MetadataFileContent(
             original_file_name="new_file.pdf",
@@ -617,7 +617,7 @@ class TestDatasetService:
         mock_file.seek.assert_awaited_with(0)
         # With current implementation, save_config is not called in add_file_to_dataset
         # mock_save_config.assert_called_once()
-        
+
         # Verify file was added to dataset
         # call_args = mock_save_config.call_args[0]
         # updated_config = call_args[2]
@@ -647,7 +647,7 @@ class TestDatasetService:
         mock_load_config.return_value = self.mock_project_config
         # Hash matches existing file
         mock_hash_data.return_value = "file1.pdf"  # file1.pdf is in dataset1
-        
+
         existing_metadata = MetadataFileContent(
             original_file_name="existing.pdf",
             resolved_file_name="existing_123.pdf",
@@ -691,9 +691,9 @@ class TestDatasetService:
             file_hash="file1.pdf",
         )
         # Note: remove_file_from_dataset doesn't save config anymore as DataService handles deletion
-        # Wait, checking source code... 
+        # Wait, checking source code...
         # It calls DataService.delete_data_file.
-        # Does it verify file removal from config? 
+        # Does it verify file removal from config?
         # No, DataService.delete_data_file deletes physical files.
         # DatasetService needs to remove it from dataset.files list too?
         # Let me check the source code again.

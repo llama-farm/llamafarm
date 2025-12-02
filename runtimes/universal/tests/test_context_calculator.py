@@ -1,13 +1,9 @@
 """Tests for context_calculator module."""
 
-import os
-import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 
 from utils.context_calculator import (
     clear_config_cache,
@@ -346,7 +342,7 @@ class TestClearConfigCache:
         """Test that cache is properly cleared."""
         # Load config to populate cache
         clear_config_cache()
-        config1 = load_model_context_config()
+        load_model_context_config()
 
         # Clear cache
         clear_config_cache()

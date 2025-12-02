@@ -2,10 +2,10 @@ import hashlib
 import os
 from datetime import datetime
 
-from api.errors import NotFoundError
 from fastapi import UploadFile
 from pydantic import BaseModel
 
+from api.errors import NotFoundError
 from core.logging import FastAPIStructLogger
 from services.project_service import ProjectService
 

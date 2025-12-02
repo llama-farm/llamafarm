@@ -1,12 +1,13 @@
 """LlamaIndex-based parser wrapper with unified chunking."""
 
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-
-from .base_parser import BaseParser, ParserConfig
 import sys
+from pathlib import Path
+from typing import Any
 
 from core.logging import RAGStructLogger
+
+from .base_parser import BaseParser, ParserConfig
+
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from core.base import Document, ProcessingResult
 
@@ -15,12 +16,12 @@ logger = RAGStructLogger("rag.components.parsers.base.llama_parser")
 # Lazy imports to avoid missing dependencies
 LLAMA_INDEX_AVAILABLE = False
 try:
-    from llama_index.core import SimpleDirectoryReader, Document as LlamaDocument
+    from llama_index.core import Document as LlamaDocument
     from llama_index.core.node_parser import (
-        SentenceSplitter,
-        TokenTextSplitter,
         MarkdownNodeParser,
         SemanticSplitterNodeParser,
+        SentenceSplitter,
+        TokenTextSplitter,
     )
 
     LLAMA_INDEX_AVAILABLE = True
@@ -31,7 +32,7 @@ except ImportError:
 class LlamaIndexParser(BaseParser):
     """Base parser using LlamaIndex for document loading and chunking."""
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         """Initialize LlamaIndex parser.
 
         Args:
@@ -87,7 +88,7 @@ class LlamaIndexParser(BaseParser):
                     breakpoint_percentile_threshold=95,
                     embed_model=OpenAIEmbedding(),  # Can be configured
                 )
-            except:
+            except Exception:
                 logger.warning(
                     "Semantic chunking unavailable, falling back to sentence splitting"
                 )
@@ -102,7 +103,7 @@ class LlamaIndexParser(BaseParser):
                 backup_separators=["\n", ".", "!", "?", ",", ";", ":", " ", ""],
             )
 
-    def _llama_to_rag_documents(self, llama_docs: List) -> List[Document]:
+    def _llama_to_rag_documents(self, llama_docs: list) -> list[Document]:
         """Convert LlamaIndex documents to RAG documents.
 
         Args:
@@ -137,7 +138,7 @@ class LlamaIndexParser(BaseParser):
 
         return rag_docs
 
-    def _apply_chunking(self, documents: List[Document]) -> List[Document]:
+    def _apply_chunking(self, documents: list[Document]) -> list[Document]:
         """Apply chunking to documents if configured.
 
         Args:
@@ -249,19 +250,25 @@ class LlamaIndexParser(BaseParser):
         path = Path(file_path)
 
         # Check extension
-        if hasattr(self, "metadata") and self.metadata:
-            if path.suffix.lower() in self.metadata.supported_extensions:
-                return True
+        if (
+            hasattr(self, "metadata")
+            and self.metadata
+            and path.suffix.lower() in self.metadata.supported_extensions
+        ):
+            return True
 
         # Check mime type
         try:
             import magic
 
             mime = magic.from_file(str(file_path), mime=True)
-            if hasattr(self, "metadata") and self.metadata:
-                if mime in self.metadata.mime_types:
-                    return True
-        except:
+            if (
+                hasattr(self, "metadata")
+                and self.metadata
+                and mime in self.metadata.mime_types
+            ):
+                return True
+        except Exception:
             pass
 
         return False

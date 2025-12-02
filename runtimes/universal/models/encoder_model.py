@@ -3,7 +3,7 @@ Encoder model wrapper for embeddings and classification.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -27,7 +27,7 @@ class EncoderModel(BaseModel):
         model_id: str,
         device: str,
         task: str = "embedding",
-        token: Optional[str] = None,
+        token: str | None = None,
     ):
         """
         Initialize encoder model.
@@ -95,8 +95,8 @@ class EncoderModel(BaseModel):
         )
 
     async def embed(
-        self, texts: List[str], normalize: bool = True
-    ) -> List[List[float]]:
+        self, texts: list[str], normalize: bool = True
+    ) -> list[list[float]]:
         """
         Generate embeddings for input texts.
 
@@ -136,7 +136,7 @@ class EncoderModel(BaseModel):
 
         return embeddings.cpu().tolist()
 
-    async def classify(self, texts: List[str]) -> List[Dict[str, Any]]:
+    async def classify(self, texts: list[str]) -> list[dict[str, Any]]:
         """
         Classify input texts.
 
@@ -187,11 +187,8 @@ class EncoderModel(BaseModel):
         return results
 
     async def rerank(
-        self,
-        query: str,
-        documents: List[str],
-        top_k: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+        self, query: str, documents: list[str], top_k: int | None = None
+    ) -> list[dict[str, Any]]:
         """
         Rerank documents using cross-encoder scoring.
 
@@ -242,14 +239,10 @@ class EncoderModel(BaseModel):
                     # Multi-class output, take the positive class (usually index 1 or last)
                     score = logits[0][-1].item()
 
-            scores.append({
-                'index': doc_idx,
-                'document': doc,
-                'relevance_score': score
-            })
+            scores.append({"index": doc_idx, "document": doc, "relevance_score": score})
 
         # Sort by relevance score (descending)
-        scores.sort(key=lambda x: x['relevance_score'], reverse=True)
+        scores.sort(key=lambda x: x["relevance_score"], reverse=True)
 
         # Apply top_k if specified
         if top_k is not None:

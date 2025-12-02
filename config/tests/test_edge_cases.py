@@ -315,7 +315,7 @@ prompts:
 
         temp_path = temp_config_file(deep_path_config, ".yaml")
 
-        config = load_config_dict(config_path=temp_path)
+        load_config_dict(config_path=temp_path)
         # Path is validated by schema; skip explicit assertion
 
     def test_config_with_special_characters(self, temp_config_file):

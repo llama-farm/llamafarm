@@ -1,7 +1,8 @@
 """Tests for RAG health endpoint."""
 
+from datetime import UTC, datetime
 from unittest.mock import Mock
-from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 from api.main import llama_farm_api
@@ -58,7 +59,7 @@ def test_rag_health_endpoint_success(mocker):
                 "message": "RAG worker processing tasks",
             }
         },
-        "last_check": datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        "last_check": datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         "issues": None,
     }
 
@@ -104,7 +105,7 @@ def test_rag_health_endpoint_with_database_param(mocker):
                 "message": "Database connection issues",
             }
         },
-        "last_check": datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        "last_check": datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
         "issues": ["Database connection error: Connection timeout"],
     }
 

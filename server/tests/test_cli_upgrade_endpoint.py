@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from fastapi.testclient import TestClient
@@ -7,7 +7,6 @@ from api.main import app
 from api.routers.system import upgrades as upgrades_router
 from services.upgrade_service import CLIRelease
 
-
 client = TestClient(app)
 
 
@@ -15,7 +14,7 @@ def test_cli_upgrade_success(monkeypatch):
     release = CLIRelease(
         tag_name="v1.2.3",
         html_url="https://example.com/release",
-        published_at=datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc),
+        published_at=datetime(2025, 1, 1, 12, 0, tzinfo=UTC),
         name="LlamaFarm v1.2.3",
         body="- Improvements",
         from_cache=False,

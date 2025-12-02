@@ -2,8 +2,9 @@
 Tests for EncoderModel (embeddings & classification).
 """
 
-import pytest
 import numpy as np
+import pytest
+
 from models.encoder_model import EncoderModel
 
 

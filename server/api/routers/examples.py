@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import json
+import contextlib
 import os
 from glob import glob
 from typing import Any
 
+from config.datamodel import LlamaFarmConfig
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core.logging import FastAPIStructLogger
-from config.datamodel import LlamaFarmConfig
-from services.project_service import ProjectService
-from services.dataset_service import DatasetService
 from services.data_service import DataService, MetadataFileContent
+from services.dataset_service import DatasetService
+from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
 
@@ -90,26 +90,20 @@ def _scan_manifests() -> list[dict[str, Any]]:
                         os.path.join(_repo_root(), pattern)
                     )
                     for path in glob(abs_glob):
-                        try:
+                        with contextlib.suppress(OSError):
                             data_bytes += os.path.getsize(path)
-                        except OSError:
-                            pass
 
             # Project size approximation: manifest + referenced cfg
             proj_bytes = 0
-            try:
+            with contextlib.suppress(OSError):
                 proj_bytes += os.path.getsize(manifest_path)
-            except OSError:
-                pass
             cfg_path = m.get("config", {}).get("yaml_path")
             if cfg_path:
                 cfg_abs = _ensure_path_under_examples(
                     os.path.join(_repo_root(), cfg_path)
                 )
-                try:
+                with contextlib.suppress(OSError):
                     proj_bytes += os.path.getsize(cfg_abs)
-                except OSError:
-                    pass
 
             # Updated at: directory mtime
             try:
@@ -190,17 +184,13 @@ def _scan_manifests() -> list[dict[str, Any]]:
             for root_dir, _dirs, files in os.walk(files_dir):
                 for fn in files:
                     fp = os.path.join(root_dir, fn)
-                    try:
+                    with contextlib.suppress(OSError):
                         data_bytes += os.path.getsize(fp)
-                    except OSError:
-                        pass
 
         proj_bytes = 0
         if cfg_guess:
-            try:
+            with contextlib.suppress(OSError):
                 proj_bytes += os.path.getsize(cfg_guess)
-            except OSError:
-                pass
 
         try:
             import datetime as _dt
@@ -404,10 +394,8 @@ def _add_file_from_path(
     index_dir = os.path.join(data_dir, "index", "by_name")
     os.makedirs(index_dir, exist_ok=True)
     index_path = os.path.join(index_dir, resolved_file_name)
-    try:
+    with contextlib.suppress(FileExistsError):
         os.symlink(raw_path, index_path)
-    except FileExistsError:
-        pass
 
     DatasetService.add_file_to_dataset(namespace, project, dataset, meta)
     return meta
@@ -455,7 +443,6 @@ async def import_project(
     import yaml
 
     m = _load_manifest_by_id(example_id)
-    base_dir = m.get("_base_dir")
     cfg_path = m.get("config", {}).get("yaml_path")
     if not cfg_path:
         raise HTTPException(status_code=400, detail="Manifest missing config.yaml_path")

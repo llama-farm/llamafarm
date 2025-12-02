@@ -6,10 +6,8 @@ Tests thread safety, file I/O, and event structure.
 
 import json
 import os
-import tempfile
 import threading
 import time
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest

@@ -161,7 +161,7 @@ class TestDeleteProjectAPI:
         from unittest.mock import MagicMock
 
         from api.routers.projects import projects
-        
+
         with patch("core.settings.settings.lf_data_dir", temp_data_dir):
             # Create project with session
             namespace = "test_ns"
@@ -202,9 +202,7 @@ class TestDeleteProjectAPI:
             assert not sessions_dir.exists()
             assert session_key not in projects.agent_sessions
 
-    def test_delete_project_with_data_via_api(
-        self, client, temp_data_dir, mock_config
-    ):
+    def test_delete_project_with_data_via_api(self, client, temp_data_dir, mock_config):
         """Test that deleting a project via API removes entire directory with data."""
         with patch("core.settings.settings.lf_data_dir", temp_data_dir):
             # Create project with data files
@@ -282,4 +280,3 @@ class TestDeleteProjectAPI:
                 # Verify 500 response
                 assert response.status_code == 500
                 assert "failed to delete project" in response.json()["detail"].lower()
-

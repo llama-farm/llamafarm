@@ -138,22 +138,24 @@ async def test_load_language_tracks_access(reset_server_globals):
     """Test that loading a language model tracks access."""
     import server
 
-    with patch("server.get_device", return_value="cpu"):
-        with patch("server.detect_model_format", return_value="transformers"):
-            with patch("server.LanguageModel") as MockLanguageModel:
-                # Create mock model instance
-                mock_instance = MagicMock()
-                mock_instance.load = AsyncMock()
-                MockLanguageModel.return_value = mock_instance
+    with (
+        patch("server.get_device", return_value="cpu"),
+        patch("server.detect_model_format", return_value="transformers"),
+        patch("server.LanguageModel") as MockLanguageModel,
+    ):
+        # Create mock model instance
+        mock_instance = MagicMock()
+        mock_instance.load = AsyncMock()
+        MockLanguageModel.return_value = mock_instance
 
-                # Load model
-                model_id = "test/model"
-                await server.load_language(model_id)
+        # Load model
+        model_id = "test/model"
+        await server.load_language(model_id)
 
-                # Verify model is tracked (new cache key includes quantization)
-                cache_key = f"language:{model_id}:ctxauto:quantdefault"
-                assert cache_key in server._model_last_access
-                assert cache_key in server._models
+        # Verify model is tracked (new cache key includes quantization)
+        cache_key = f"language:{model_id}:ctxauto:quantdefault"
+        assert cache_key in server._model_last_access
+        assert cache_key in server._models
 
 
 @pytest.mark.asyncio
@@ -161,22 +163,24 @@ async def test_load_encoder_tracks_access(reset_server_globals):
     """Test that loading an encoder model tracks access."""
     import server
 
-    with patch("server.get_device", return_value="cpu"):
-        with patch("server.detect_model_format", return_value="transformers"):
-            with patch("server.EncoderModel") as MockEncoderModel:
-                # Create mock model instance
-                mock_instance = MagicMock()
-                mock_instance.load = AsyncMock()
-                MockEncoderModel.return_value = mock_instance
+    with (
+        patch("server.get_device", return_value="cpu"),
+        patch("server.detect_model_format", return_value="transformers"),
+        patch("server.EncoderModel") as MockEncoderModel,
+    ):
+        # Create mock model instance
+        mock_instance = MagicMock()
+        mock_instance.load = AsyncMock()
+        MockEncoderModel.return_value = mock_instance
 
-                # Load model
-                model_id = "test/embedding-model"
-                await server.load_encoder(model_id, task="embedding")
+        # Load model
+        model_id = "test/embedding-model"
+        await server.load_encoder(model_id, task="embedding")
 
-                # Verify model is tracked (new cache key includes quantization)
-                cache_key = "encoder:embedding:transformers:test/embedding-model:quantdefault"
-                assert cache_key in server._model_last_access
-                assert cache_key in server._models
+        # Verify model is tracked (new cache key includes quantization)
+        cache_key = "encoder:embedding:transformers:test/embedding-model:quantdefault"
+        assert cache_key in server._model_last_access
+        assert cache_key in server._models
 
 
 @pytest.mark.asyncio
@@ -184,42 +188,45 @@ async def test_model_reaccess_updates_timestamp(reset_server_globals):
     """Test that re-accessing a cached model updates the timestamp."""
     import server
 
-    with patch("server.get_device", return_value="cpu"):
-        with patch("server.detect_model_format", return_value="transformers"):
-            with patch("server.LanguageModel") as MockLanguageModel:
-                # Create mock model instance
-                mock_instance = MagicMock()
-                mock_instance.load = AsyncMock()
-                MockLanguageModel.return_value = mock_instance
+    with (
+        patch("server.get_device", return_value="cpu"),
+        patch("server.detect_model_format", return_value="transformers"),
+        patch("server.LanguageModel") as MockLanguageModel,
+    ):
+        # Create mock model instance
+        mock_instance = MagicMock()
+        mock_instance.load = AsyncMock()
+        MockLanguageModel.return_value = mock_instance
 
-                # Load model first time
-                model_id = "test/model"
-                await server.load_language(model_id)
-                # New cache key includes quantization
-                cache_key = f"language:{model_id}:ctxauto:quantdefault"
-                first_access = server._model_last_access[cache_key]
+        # Load model first time
+        model_id = "test/model"
+        await server.load_language(model_id)
+        # New cache key includes quantization
+        cache_key = f"language:{model_id}:ctxauto:quantdefault"
+        first_access = server._model_last_access[cache_key]
 
-                # Wait a bit
-                await asyncio.sleep(0.1)
+        # Wait a bit
+        await asyncio.sleep(0.1)
 
-                # Load model second time (should use cache)
-                await server.load_language(model_id)
-                second_access = server._model_last_access[cache_key]
+        # Load model second time (should use cache)
+        await server.load_language(model_id)
+        second_access = server._model_last_access[cache_key]
 
-                # Verify timestamp was updated
-                assert second_access > first_access
+        # Verify timestamp was updated
+        assert second_access > first_access
 
 
 @pytest.mark.asyncio
 async def test_environment_variables_override_defaults():
     """Test that environment variables override default timeout values."""
-    with patch.dict(os.environ, {
-        "MODEL_UNLOAD_TIMEOUT": "600",
-        "CLEANUP_CHECK_INTERVAL": "60"
-    }):
+    with patch.dict(
+        os.environ, {"MODEL_UNLOAD_TIMEOUT": "600", "CLEANUP_CHECK_INTERVAL": "60"}
+    ):
         # Reload server module to pick up new env vars
         import importlib
+
         import server
+
         importlib.reload(server)
 
         # Verify new values

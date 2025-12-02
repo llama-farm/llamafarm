@@ -1,7 +1,7 @@
 """LlamaIndex text parser with advanced chunking capabilities."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.logging import RAGStructLogger
 
@@ -14,7 +14,7 @@ class TextParser_LlamaIndex:
     def __init__(
         self,
         name: str = "TextParser_LlamaIndex",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         self.name = name
         self.config = config or {}
@@ -198,7 +198,7 @@ class TextParser_LlamaIndex:
 
         for encoding in encodings:
             try:
-                with open(path, "r", encoding=encoding) as f:
+                with open(path, encoding=encoding) as f:
                     text = f.read()
                 if self.clean_text:
                     text = self._clean_text(text)
@@ -207,7 +207,7 @@ class TextParser_LlamaIndex:
                 continue
 
         # Last resort with error replacement
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             return f.read()
 
     def _clean_text(self, text: str) -> str:
@@ -317,7 +317,7 @@ class TextParser_LlamaIndex:
 
     def _extract_metadata(
         self, path: Path, text: str, is_code_file: bool
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Extract comprehensive metadata."""
         metadata = {
             "source": str(path),
@@ -348,7 +348,7 @@ class TextParser_LlamaIndex:
 
         return metadata
 
-    def _extract_code_metadata(self, text: str, extension: str) -> Dict[str, Any]:
+    def _extract_code_metadata(self, text: str, extension: str) -> dict[str, Any]:
         """Extract code-specific metadata."""
         lines = text.split("\n")
         code_metadata = {

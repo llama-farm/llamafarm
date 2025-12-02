@@ -1,11 +1,12 @@
 """Markdown parser using native Python."""
 
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 import re
-from components.parsers.base.base_parser import BaseParser, ParserConfig
+from pathlib import Path
+from typing import Any
 
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.markdownthon_parser")
 
 
@@ -15,7 +16,7 @@ class MarkdownParser_Python(BaseParser):
     def __init__(
         self,
         name: str = "MarkdownParser_Python",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         self.name = name
         self.config = config or {}
@@ -52,7 +53,7 @@ class MarkdownParser_Python(BaseParser):
                 "extract_metadata": True,
                 "extract_code_blocks": True,
                 "extract_links": True,
-            }
+            },
         )
 
     def can_parse(self, file_path: str) -> bool:
@@ -72,7 +73,7 @@ class MarkdownParser_Python(BaseParser):
             )
 
         try:
-            with open(source, "r", encoding="utf-8") as f:
+            with open(source, encoding="utf-8") as f:
                 content = f.read()
 
             if not content.strip():
@@ -184,7 +185,7 @@ class MarkdownParser_Python(BaseParser):
                 documents=[], errors=[{"error": str(e), "source": source}]
             )
 
-    def _extract_frontmatter(self, content: str) -> Optional[Dict[str, Any]]:
+    def _extract_frontmatter(self, content: str) -> dict[str, Any] | None:
         """Extract YAML frontmatter from Markdown."""
         match = re.match(r"^---\n(.*?)\n---\n", content, re.DOTALL)
         if match:
@@ -198,7 +199,7 @@ class MarkdownParser_Python(BaseParser):
             return frontmatter
         return None
 
-    def _extract_headers(self, content: str) -> List[Dict[str, Any]]:
+    def _extract_headers(self, content: str) -> list[dict[str, Any]]:
         """Extract all headers from Markdown."""
         headers = []
         pattern = r"^(#{1,6})\s+(.+)$"
@@ -208,7 +209,7 @@ class MarkdownParser_Python(BaseParser):
             headers.append({"level": level, "title": title})
         return headers
 
-    def _extract_code_blocks(self, content: str) -> List[Dict[str, Any]]:
+    def _extract_code_blocks(self, content: str) -> list[dict[str, Any]]:
         """Extract code blocks from Markdown."""
         code_blocks = []
         pattern = r"```(\w*)\n(.*?)\n```"
@@ -218,7 +219,7 @@ class MarkdownParser_Python(BaseParser):
             code_blocks.append({"language": language, "code": code})
         return code_blocks
 
-    def _extract_links(self, content: str) -> List[str]:
+    def _extract_links(self, content: str) -> list[str]:
         """Extract all links from Markdown."""
         links = []
         # Markdown links [text](url)
@@ -231,7 +232,7 @@ class MarkdownParser_Python(BaseParser):
             links.append(match.group(0))
         return list(set(links))  # Remove duplicates
 
-    def _split_by_sections(self, content: str) -> List[Dict[str, Any]]:
+    def _split_by_sections(self, content: str) -> list[dict[str, Any]]:
         """Split Markdown by headers/sections."""
         sections = []
         current_section = {"title": "Introduction", "level": 0, "content": ""}
@@ -284,7 +285,7 @@ class MarkdownParser_Python(BaseParser):
 
         return sections
 
-    def _chunk_by_size(self, content: str) -> List[str]:
+    def _chunk_by_size(self, content: str) -> list[str]:
         """Simple size-based chunking."""
         chunks = []
         for i in range(0, len(content), self.chunk_size):
