@@ -98,6 +98,8 @@ func copyFile(src, dst string) error {
 	defer dstFile.Close()
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		// Clean up the partially written destination file on copy failure.
+		os.Remove(dst)
 		return fmt.Errorf("failed to copy file contents: %w", err)
 	}
 
