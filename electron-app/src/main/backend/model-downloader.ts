@@ -1,37 +1,51 @@
 /**
  * Model Downloader - Handles checking and downloading required ML models
- * Uses the LlamaFarm CLI for all model operations with periodic status checking
+ * Communicates directly with the server's SSE endpoint for reliable progress tracking
  */
 
 import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as yaml from 'js-yaml'
-import { exec, spawn, ChildProcess } from 'child_process'
-import { promisify } from 'util'
 import { promises as fsPromises } from 'fs'
 
-const execAsync = promisify(exec)
+// Server URL - defaults to localhost:8000
+const DEFAULT_SERVER_URL = 'http://127.0.0.1:8000'
 
 /**
- * Validate and sanitize model ID to prevent command injection.
- * Model IDs should only contain alphanumeric characters, hyphens, underscores,
- * forward slashes (for org/repo format), colons (for quantization), and periods.
+ * SSE event structure from the server's download endpoint
  */
-function validateModelId(modelId: string): string {
-  // Only allow safe characters for model IDs
-  const safePattern = /^[a-zA-Z0-9\-_\/\.:]+$/
-  if (!safePattern.test(modelId)) {
-    throw new Error(`Invalid model ID: contains unsafe characters: ${modelId}`)
+interface DownloadEvent {
+  event: 'start' | 'progress' | 'end' | 'done' | 'error'
+  desc?: string
+  total?: number
+  n?: number
+  message?: string
+}
+
+/**
+ * Model info from the server's list endpoint
+ */
+interface CachedModel {
+  id: string
+  name: string
+  path?: string
+  size_on_disk?: number
+}
+
+/**
+ * Parse SSE event from a data line
+ */
+function parseSseEvent(line: string): DownloadEvent | null {
+  const trimmed = line.trim()
+  if (!trimmed.startsWith('data: ')) {
+    return null
   }
-  // Additional check: no shell metacharacters or sequences
-  const dangerousPatterns = ['..', '$(', '`', '|', ';', '&', '>', '<', '\n', '\r']
-  for (const pattern of dangerousPatterns) {
-    if (modelId.includes(pattern)) {
-      throw new Error(`Invalid model ID: contains forbidden sequence: ${modelId}`)
-    }
+  try {
+    return JSON.parse(trimmed.slice(6)) as DownloadEvent
+  } catch {
+    return null
   }
-  return modelId
 }
 
 export interface ModelConfig {
@@ -67,12 +81,11 @@ export interface ModelDownloadProgress {
 export class ModelDownloader {
   private config: RequiredModelsConfig | null = null
   private configPath: string
-  private cliPath: string
-  private statusCheckInterval: NodeJS.Timeout | null = null
+  private serverUrl: string
 
-  constructor(cliPath?: string) {
-    // CLI path - use provided or find it
-    this.cliPath = cliPath || this.findCLIPath()
+  constructor(serverUrl?: string) {
+    // Server URL for direct API communication
+    this.serverUrl = serverUrl || DEFAULT_SERVER_URL
 
     // Config file location - check multiple paths
     const possiblePaths = [
@@ -83,22 +96,6 @@ export class ModelDownloader {
     ]
 
     this.configPath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0]
-  }
-
-  /**
-   * Find the CLI path
-   */
-  private findCLIPath(): string {
-    // Check local installation first
-    const userDataPath = app.getPath('userData')
-    const localPath = path.join(userDataPath, 'bin', 'lf')
-
-    if (fs.existsSync(localPath)) {
-      return localPath
-    }
-
-    // Fallback to system PATH
-    return 'lf'
   }
 
   /**
@@ -155,23 +152,33 @@ export class ModelDownloader {
   }
 
   /**
-   * Check if a model is cached using CLI
+   * Check if a model is cached using the server's models API
    */
   async isModelCached(model: ModelConfig): Promise<boolean> {
     const modelId = this.getFullModelId(model)
+    // Strip quantization suffix for comparison (e.g., "org/repo:Q4_K_M" -> "org/repo")
+    const baseModelId = modelId.includes(':') ? modelId.split(':')[0] : modelId
 
     try {
-      // Validate model ID to prevent command injection
-      const safeModelId = validateModelId(modelId)
-
-      // Use lf models status command
-      await execAsync(`"${this.cliPath}" models status "${safeModelId}"`, {
-        timeout: 30000
+      const response = await fetch(`${this.serverUrl}/v1/models`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(30000)
       })
-      // Exit code 0 means model is cached
-      return true
+
+      if (!response.ok) {
+        console.error(`Failed to check model cache: HTTP ${response.status}`)
+        return false
+      }
+
+      const result = await response.json() as { data: CachedModel[] }
+
+      // Check if model is in the cache (compare with or without quantization)
+      return result.data.some(
+        cached => cached.id === baseModelId || cached.id === modelId
+      )
     } catch (error) {
-      // Exit code 1 means model is not cached, or validation failed
+      console.error('Error checking model cache:', error)
       return false
     }
   }
@@ -215,7 +222,7 @@ export class ModelDownloader {
   }
 
   /**
-   * Download a model using CLI with periodic status checking
+   * Download a model using the server's SSE endpoint for reliable progress tracking
    */
   async downloadModel(
     model: ModelConfig,
@@ -223,118 +230,99 @@ export class ModelDownloader {
   ): Promise<void> {
     const modelId = this.getFullModelId(model)
 
-    // Validate model ID to prevent command injection
-    const safeModelId = validateModelId(modelId)
+    console.log(`Starting download for ${modelId} via server SSE...`)
+    onProgress?.(0, `Starting ${model.display_name}...`)
 
-    return new Promise((resolve, reject) => {
-      console.log(`Starting download for ${safeModelId} via CLI...`)
-      onProgress?.(0, `Starting ${model.display_name}...`)
+    // Create abort controller for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30 * 60 * 1000) // 30 min timeout
 
-      let downloadProcess: ChildProcess | null = null
-      let isComplete = false
-      let lastProgressUpdate = Date.now()
-      let estimatedProgress = 0
+    try {
+      const response = await fetch(`${this.serverUrl}/v1/models/download`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify({
+          provider: 'universal',
+          model_name: modelId
+        }),
+        signal: controller.signal
+      })
 
-      // Start periodic status checking as backup
-      const statusCheckInterval = setInterval(async () => {
-        if (isComplete) {
-          clearInterval(statusCheckInterval)
-          return
-        }
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`)
+      }
 
-        // Check if model is now cached (download completed)
-        try {
-          const cached = await this.isModelCached(model)
-          if (cached && !isComplete) {
-            console.log(`Model ${modelId} detected as cached via status check`)
-            isComplete = true
-            clearInterval(statusCheckInterval)
-            onProgress?.(100, 'Complete')
+      if (!response.body) {
+        throw new Error('No response body received')
+      }
 
-            // Kill the download process if still running
-            if (downloadProcess && !downloadProcess.killed) {
-              downloadProcess.kill()
-            }
-            resolve()
-            return
+      // Read and parse the SSE stream
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let currentDesc = ''
+      let currentTotal = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        // Append new data to buffer and process complete lines
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          const event = parseSseEvent(line)
+          if (!event) continue
+
+          switch (event.event) {
+            case 'start':
+              currentDesc = event.desc || model.display_name
+              currentTotal = event.total || 0
+              if (currentTotal > 1024 * 1024) {
+                const totalMB = (currentTotal / 1024 / 1024).toFixed(1)
+                onProgress?.(0, `${currentDesc} (${totalMB} MB)...`)
+              } else {
+                onProgress?.(0, `${currentDesc}...`)
+              }
+              break
+
+            case 'progress':
+              if (currentTotal > 0 && event.n !== undefined) {
+                const progress = Math.round((event.n / currentTotal) * 100)
+                onProgress?.(progress, `Downloading ${model.display_name}... ${progress}%`)
+              }
+              break
+
+            case 'end':
+              // File completed, progress continues with next file
+              break
+
+            case 'done':
+              onProgress?.(100, 'Complete')
+              clearTimeout(timeoutId)
+              return
+
+            case 'error':
+              throw new Error(event.message || 'Download failed')
           }
-        } catch (e) {
-          // Ignore status check errors
         }
+      }
 
-        // Update estimated progress if no updates from CLI
-        const timeSinceUpdate = Date.now() - lastProgressUpdate
-        if (timeSinceUpdate > 3000) {
-          // Slowly increment progress to show activity (max 95%)
-          estimatedProgress = Math.min(95, estimatedProgress + 2)
-          onProgress?.(estimatedProgress, `Downloading ${model.display_name}...`)
-        }
-      }, 2000) // Check every 2 seconds
-
-      // Use spawn to get real-time output
-      // Note: safeModelId has been validated to prevent command injection
-      downloadProcess = spawn(this.cliPath, ['models', 'pull', safeModelId], {
-        shell: true
-      })
-
-      downloadProcess.stdout?.on('data', (data: Buffer) => {
-        const output = data.toString()
-        console.log('CLI output:', output)
-        lastProgressUpdate = Date.now()
-
-        // Parse progress from output (e.g., "Progress: 45%")
-        const progressMatch = output.match(/Progress:\s*(\d+)%/)
-        if (progressMatch) {
-          const progress = parseInt(progressMatch[1], 10)
-          estimatedProgress = progress
-          onProgress?.(progress, `Downloading ${model.display_name}... ${progress}%`)
-        }
-
-        // Check for completion indicators
-        if (output.includes('Download complete') || output.includes('✓')) {
-          estimatedProgress = 100
-          onProgress?.(100, 'Complete')
-        }
-      })
-
-      downloadProcess.stderr?.on('data', (data: Buffer) => {
-        console.error('CLI stderr:', data.toString())
-      })
-
-      downloadProcess.on('close', (code) => {
-        if (isComplete) return // Already resolved via status check
-
-        isComplete = true
-        clearInterval(statusCheckInterval)
-
-        if (code === 0) {
-          onProgress?.(100, 'Complete')
-          resolve()
-        } else {
-          reject(new Error(`Download failed with exit code ${code}`))
-        }
-      })
-
-      downloadProcess.on('error', (error) => {
-        if (isComplete) return
-
-        isComplete = true
-        clearInterval(statusCheckInterval)
-        reject(error)
-      })
-
-      // Timeout after 30 minutes
-      setTimeout(() => {
-        if (!isComplete) {
-          isComplete = true
-          clearInterval(statusCheckInterval)
-          if (downloadProcess && !downloadProcess.killed) {
-            downloadProcess.kill()
-          }
-          reject(new Error('Download timed out after 30 minutes'))
-        }
-      }, 30 * 60 * 1000)
-    })
+      // If we reach here without 'done', consider it complete
+      onProgress?.(100, 'Complete')
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Download timed out after 30 minutes')
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutId)
+    }
   }
 
   /**
