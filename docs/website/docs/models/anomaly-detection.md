@@ -203,8 +203,7 @@ curl -X POST http://localhost:11540/v1/anomaly/save \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
-    "backend": "isolation_forest",
-    "filename": "api_detector_v1"
+    "backend": "isolation_forest"
   }'
 ```
 
@@ -212,12 +211,16 @@ Response:
 ```json
 {
   "object": "save_result",
-  "filename": "api_detector_v1.joblib",
-  "path": "./anomaly_models/api_detector_v1.joblib",
-  "encoder_path": "./anomaly_models/api_detector_v1_encoder.json",
+  "model": "api-log-detector",
+  "backend": "isolation_forest",
+  "filename": "api-log-detector_isolation_forest.joblib",
+  "path": "~/.llamafarm/models/anomaly/api-log-detector_isolation_forest.joblib",
+  "encoder_path": "~/.llamafarm/models/anomaly/api-log-detector_isolation_forest_encoder.json",
   "status": "saved"
 }
 ```
+
+Models are saved to `~/.llamafarm/models/anomaly/` with auto-generated filenames based on the model name and backend.
 
 ### Load Saved Model
 
@@ -227,13 +230,12 @@ Load a pre-trained model (e.g., after server restart):
 curl -X POST http://localhost:11540/v1/anomaly/load \
   -H "Content-Type: application/json" \
   -d '{
-    "filename": "api_detector_v1.joblib",
     "model": "api-log-detector",
     "backend": "isolation_forest"
   }'
 ```
 
-The encoder is automatically loaded if it exists.
+The model is loaded from the standard location based on its name. The encoder is automatically loaded if it exists.
 
 ### List Saved Models
 
@@ -246,10 +248,10 @@ Response:
 {
   "object": "list",
   "data": [
-    {"filename": "api_detector_v1.joblib", "size_bytes": 45678, "modified": 1705312345.0, "backend": "sklearn"},
-    {"filename": "sensor_model.pt", "size_bytes": 123456, "modified": 1705312000.0, "backend": "autoencoder"}
+    {"filename": "api-log-detector_isolation_forest.joblib", "size_bytes": 45678, "modified": 1705312345.0, "backend": "sklearn"},
+    {"filename": "sensor-model_autoencoder.pt", "size_bytes": 123456, "modified": 1705312000.0, "backend": "autoencoder"}
   ],
-  "models_dir": "./anomaly_models",
+  "models_dir": "~/.llamafarm/models/anomaly",
   "total": 2
 }
 ```
@@ -335,27 +337,25 @@ Same request format as `/score`, but response only includes points where `is_ano
 
 ### POST /v1/anomaly/save
 
-Save a fitted model to disk.
+Save a fitted model to disk. Models are saved to `~/.llamafarm/models/anomaly/` with auto-generated filenames.
 
 **Request Body:**
 ```json
 {
-  "model": "string",
-  "backend": "string",
-  "filename": "string"         // Optional custom filename
+  "model": "string",           // Model identifier (must be fitted)
+  "backend": "string"          // Backend type
 }
 ```
 
 ### POST /v1/anomaly/load
 
-Load a pre-trained model from disk.
+Load a pre-trained model from disk. The file is automatically located based on model name and backend.
 
 **Request Body:**
 ```json
 {
-  "filename": "string",        // Filename in models directory
-  "model": "string",           // Model identifier to cache as
-  "backend": "string"
+  "model": "string",           // Model identifier to load/cache as
+  "backend": "string"          // Backend type
 }
 ```
 
@@ -363,7 +363,7 @@ Load a pre-trained model from disk.
 
 List all saved models.
 
-### DELETE /v1/anomaly/models/{filename}
+### DELETE /v1/anomaly/models/\{filename\}
 
 Delete a saved model.
 
@@ -475,8 +475,9 @@ Detect fraudulent transactions:
 ## Environment Variables
 
 ```bash
-# Directory for saved models (default: ./anomaly_models)
-ANOMALY_MODELS_DIR=/path/to/models
+# Base data directory (default: ~/.llamafarm)
+# Anomaly models are saved to $LF_DATA_DIR/models/anomaly/
+LF_DATA_DIR=/path/to/llamafarm/data
 ```
 
 ---
