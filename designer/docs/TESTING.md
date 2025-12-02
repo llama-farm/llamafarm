@@ -127,8 +127,8 @@ describe('Button', () => {
 ### Testing Async Behavior
 
 ```tsx
-import { describe, it, expect, waitFor } from 'vitest'
-import { screen } from '@/test/utils'
+import { describe, it, expect } from 'vitest'
+import { screen, waitFor } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import { ProjectsList } from './ProjectsList'
 
