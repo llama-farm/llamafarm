@@ -1662,6 +1662,29 @@ def _sanitize_model_name(name: str) -> str:
     return "".join(c for c in name if c.isalnum() or c in "-_")
 
 
+def _validate_path_within_directory(path: Path, safe_dir: Path) -> Path:
+    """Validate that a path is within the allowed directory.
+
+    This is a security function to prevent path traversal attacks.
+    Returns the resolved (absolute) path if valid.
+
+    Raises:
+        ValueError: If path is outside the allowed directory
+    """
+    resolved = path.resolve()
+    safe_resolved = safe_dir.resolve()
+
+    # Use Path.is_relative_to for Python 3.9+ compatibility
+    try:
+        resolved.relative_to(safe_resolved)
+    except ValueError:
+        raise ValueError(
+            f"Security error: Path '{path}' resolves outside allowed directory"
+        ) from None
+
+    return resolved
+
+
 def _get_model_path(model_name: str, backend: str) -> Path:
     """Get the path for a model file based on name and backend.
 
@@ -1903,19 +1926,42 @@ async def delete_anomaly_model(filename: str):
     Removes the model file from disk. Does not affect cached models.
     """
     try:
-        model_path = ANOMALY_MODELS_DIR / filename
-
-        if not model_path.exists():
+        # Sanitize filename to prevent path traversal attacks
+        safe_filename = _sanitize_model_name(filename)
+        if not safe_filename:
             raise HTTPException(
-                status_code=404,
-                detail=f"Model file not found: {filename}",
+                status_code=400,
+                detail="Invalid filename",
             )
 
-        model_path.unlink()
+        # Also reject any path separators that might have survived
+        if "/" in filename or "\\" in filename or ".." in filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid filename: path separators not allowed",
+            )
+
+        model_path = ANOMALY_MODELS_DIR / safe_filename
+
+        # Validate the resolved path is still within the safe directory
+        try:
+            resolved_path = _validate_path_within_directory(
+                model_path, ANOMALY_MODELS_DIR
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+        if not resolved_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model file not found: {safe_filename}",
+            )
+
+        resolved_path.unlink()
 
         return {
             "object": "delete_result",
-            "filename": filename,
+            "filename": safe_filename,
             "deleted": True,
         }
 
@@ -2325,9 +2371,25 @@ async def delete_classifier_model(model_name: str):
     Removes the model directory from disk. Does not affect cached models.
     """
     try:
+        # Reject any path separators to prevent traversal attempts
+        if "/" in model_name or "\\" in model_name or ".." in model_name:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid model name: path separators not allowed",
+            )
+
+        # _get_classifier_path already sanitizes via _sanitize_model_name
         model_path = _get_classifier_path(model_name)
 
-        if not model_path.exists():
+        # Validate the resolved path is still within the safe directory
+        try:
+            resolved_path = _validate_path_within_directory(
+                model_path, CLASSIFIER_MODELS_DIR
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+        if not resolved_path.exists():
             raise HTTPException(
                 status_code=404,
                 detail=f"Classifier model not found: {model_name}",
@@ -2336,7 +2398,7 @@ async def delete_classifier_model(model_name: str):
         # Remove directory and contents
         import shutil
 
-        shutil.rmtree(model_path)
+        shutil.rmtree(resolved_path)
 
         return {
             "object": "delete_result",

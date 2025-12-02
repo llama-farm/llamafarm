@@ -42,13 +42,24 @@ ANOMALY_MODELS_DIR = (_LF_DATA_DIR / "models" / "anomaly").resolve()
 def _validate_model_path(model_path: Path) -> Path:
     """Validate that model path is within the safe directory.
 
+    Security: This function prevents path traversal attacks by ensuring
+    the model path resolves to a location within ANOMALY_MODELS_DIR.
+
     Raises:
         ValueError: If path is outside the safe directory or uses path traversal
     """
-    # Resolve to absolute path to catch ".." traversal attempts
+    # Check for path traversal patterns
+    path_str = str(model_path)
+    if ".." in path_str:
+        raise ValueError(
+            f"Security error: Model path '{model_path}' contains '..' "
+            "Path traversal is not allowed."
+        )
+
+    # Resolve to absolute path
     resolved_path = model_path.resolve()
 
-    # Check that the resolved path is within the safe directory
+    # Verify the resolved path is within the safe directory
     try:
         resolved_path.relative_to(ANOMALY_MODELS_DIR)
     except ValueError:

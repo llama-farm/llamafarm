@@ -627,10 +627,19 @@ class FeatureEncoder:
     def load(cls, path: str | Path) -> "FeatureEncoder":
         """Load encoder from disk using JSON (safe deserialization).
 
-        Security Note: Uses JSON instead of pickle/joblib to prevent
-        arbitrary code execution during deserialization.
+        Security Notes:
+        - Uses JSON instead of pickle/joblib to prevent arbitrary code execution
+        - Path validation prevents path traversal attacks
+        - This method should only be called with paths derived from validated sources
         """
         path = Path(path)
+
+        # Security: Reject obvious path traversal patterns
+        path_str = str(path)
+        if ".." in path_str:
+            raise ValueError(
+                f"Security error: Path '{path}' contains '..' which is not allowed"
+            )
 
         # Use JSON for safe deserialization
         with open(path) as f:
