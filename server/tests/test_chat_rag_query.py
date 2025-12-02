@@ -122,8 +122,8 @@ class TestResolveRAGParameters:
         assert result.rag_queries == ["single custom query"]
 
 
-class TestPerformRAGSearchWithCustomQueries:
-    """Tests for _perform_rag_search_with_custom_queries method."""
+class TestPerformRAGSearch:
+    """Tests for _perform_rag_search method (unified RAG search with custom query support)."""
 
     @pytest.fixture
     def service(self):
@@ -148,12 +148,11 @@ class TestPerformRAGSearchWithCustomQueries:
             rag_queries=["custom search query"],
         )
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             mock_search.return_value = [mock_result]
 
-            results = await service._perform_rag_search_with_custom_queries(
+            results = await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="user message ignored",
                 rag_params=rag_params,
             )
@@ -161,7 +160,7 @@ class TestPerformRAGSearchWithCustomQueries:
             # Verify custom query was used
             mock_search.assert_called_once()
             call_kwargs = mock_search.call_args.kwargs
-            assert call_kwargs["message"] == "custom search query"
+            assert call_kwargs["query"] == "custom search query"
             assert len(results) == 1
 
     @pytest.mark.asyncio
@@ -173,12 +172,11 @@ class TestPerformRAGSearchWithCustomQueries:
             rag_top_k=5,
         )
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             mock_search.return_value = [mock_result]
 
-            await service._perform_rag_search_with_custom_queries(
+            await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="user message used",
                 rag_params=rag_params,
             )
@@ -186,7 +184,7 @@ class TestPerformRAGSearchWithCustomQueries:
             # Verify user message was used
             mock_search.assert_called_once()
             call_kwargs = mock_search.call_args.kwargs
-            assert call_kwargs["message"] == "user message used"
+            assert call_kwargs["query"] == "user message used"
 
     @pytest.mark.asyncio
     async def test_multiple_queries_executed_and_merged(self, service):
@@ -209,13 +207,12 @@ class TestPerformRAGSearchWithCustomQueries:
         result2.metadata = {"source": "doc2.pdf"}
         result2.score = 0.8
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             # Return different results for each call
             mock_search.side_effect = [[result1], [result2]]
 
-            results = await service._perform_rag_search_with_custom_queries(
+            results = await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="ignored",
                 rag_params=rag_params,
             )
@@ -242,13 +239,12 @@ class TestPerformRAGSearchWithCustomQueries:
         result.metadata = {"source": "doc.pdf"}
         result.score = 0.9
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             # Return same result for both queries
             mock_search.return_value = [result]
 
-            results = await service._perform_rag_search_with_custom_queries(
+            results = await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="ignored",
                 rag_params=rag_params,
             )
@@ -277,12 +273,11 @@ class TestPerformRAGSearchWithCustomQueries:
         result2.metadata = {}
         result2.score = 0.95
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             mock_search.side_effect = [[result1], [result2]]
 
-            results = await service._perform_rag_search_with_custom_queries(
+            results = await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="ignored",
                 rag_params=rag_params,
             )
@@ -311,13 +306,12 @@ class TestPerformRAGSearchWithCustomQueries:
             r.score = 0.9 - (i * 0.1)
             results_list.append(r)
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             # First query returns 3 results, second returns 2
             mock_search.side_effect = [results_list[:3], results_list[3:]]
 
-            results = await service._perform_rag_search_with_custom_queries(
+            results = await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="ignored",
                 rag_params=rag_params,
             )
@@ -335,12 +329,11 @@ class TestPerformRAGSearchWithCustomQueries:
             rag_queries=["", "  "],  # All empty
         )
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             mock_search.return_value = [mock_result]
 
-            await service._perform_rag_search_with_custom_queries(
+            await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="fallback to this message",
                 rag_params=rag_params,
             )
@@ -348,7 +341,7 @@ class TestPerformRAGSearchWithCustomQueries:
             # Verify user message was used as fallback
             mock_search.assert_called_once()
             call_kwargs = mock_search.call_args.kwargs
-            assert call_kwargs["message"] == "fallback to this message"
+            assert call_kwargs["query"] == "fallback to this message"
 
     @pytest.mark.asyncio
     async def test_mixed_empty_and_valid_queries(self, service, mock_result):
@@ -360,12 +353,11 @@ class TestPerformRAGSearchWithCustomQueries:
             rag_queries=["valid query", "", "  ", "another valid"],
         )
 
-        with patch.object(service, "_perform_rag_search") as mock_search:
+        with patch.object(service, "_execute_single_rag_query") as mock_search:
             mock_search.return_value = [mock_result]
 
-            await service._perform_rag_search_with_custom_queries(
+            await service._perform_rag_search(
                 project_dir="/test/dir",
-                project_config=MagicMock(),
                 message="ignored",
                 rag_params=rag_params,
             )
