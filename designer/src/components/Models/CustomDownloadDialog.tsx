@@ -88,6 +88,10 @@ export function CustomDownloadDialog({
                   if (!customModelName) {
                     const sanitized = sanitizeModelName(e.target.value)
                     setCustomModelName(sanitized)
+                    // Clear any existing name error since we're auto-filling a valid sanitized name
+                    if (customModelNameError && onClearModelNameError) {
+                      onClearModelNameError()
+                    }
                   }
                 }}
                 disabled={customDownloadState === 'downloading'}
