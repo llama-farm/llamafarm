@@ -30,6 +30,8 @@ export interface TestChatProps {
     seed?: number | ''
     streaming: boolean
     jsonMode: boolean
+    enableThinking: boolean
+    thinkingBudget: number
   }
   ragEnabled?: boolean
   ragTopK?: number
@@ -570,6 +572,12 @@ export default function TestChat({
               typeof genSettings?.frequencyPenalty === 'number'
                 ? genSettings?.frequencyPenalty
                 : undefined,
+            // Thinking/reasoning model parameters
+            think: genSettings?.enableThinking === true ? true : undefined,
+            thinking_budget:
+              genSettings?.enableThinking && genSettings?.thinkingBudget
+                ? genSettings.thinkingBudget
+                : undefined,
             model:
               selectedModel ||
               (defaultModel as any)?.name ||
@@ -807,6 +815,12 @@ export default function TestChat({
             frequency_penalty:
               typeof genSettings?.frequencyPenalty === 'number'
                 ? genSettings?.frequencyPenalty
+                : undefined,
+            // Thinking/reasoning model parameters
+            think: genSettings?.enableThinking === true ? true : undefined,
+            thinking_budget:
+              genSettings?.enableThinking && genSettings?.thinkingBudget
+                ? genSettings.thinkingBudget
                 : undefined,
             model:
               selectedModel ||
@@ -1204,9 +1218,9 @@ export function TestChatMessage({
                   </span>
                 </button>
                 {openThinking && (
-                  <div className="px-3 py-2 text-sm border-t border-border">
+                  <div className="px-3 py-2 text-sm border-t border-border text-muted-foreground/70">
                     {thinkingFromTags ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none leading-normal prose-p:my-4 prose-li:my-0.5 prose-ul:my-3 prose-ol:my-3 prose-headings:my-4 prose-pre:my-3">
+                      <div className="prose prose-sm max-w-none leading-normal prose-p:my-4 prose-li:my-0.5 prose-ul:my-3 prose-ol:my-3 prose-headings:my-4 prose-pre:my-3 [&_*]:text-muted-foreground/70">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {thinkingFromTags.replace(/\n{3,}/g, '\n\n')}
                         </ReactMarkdown>
@@ -1223,7 +1237,7 @@ export function TestChatMessage({
                         )}
                       </ul>
                     ) : (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground/50">
                         No thinking steps
                       </div>
                     )}

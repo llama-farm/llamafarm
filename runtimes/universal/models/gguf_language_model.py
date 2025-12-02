@@ -312,6 +312,203 @@ class GGUFLanguageModel(BaseModel):
                 # Regular token
                 yield item
 
+    async def chat(
+        self,
+        messages: list[dict],
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        stop: list[str] | None = None,
+        thinking_budget: int | None = None,
+    ) -> str:
+        """Generate chat completion using the model's native chat template.
+
+        This method uses llama-cpp-python's create_chat_completion() which
+        automatically applies the chat template embedded in the GGUF metadata.
+        This is essential for models like Qwen that use special tokens
+        (e.g., <|im_start|>, <|im_end|>) and thinking tags (<think>).
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature (0.0 = greedy, higher = more random)
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences to end generation
+            thinking_budget: Maximum tokens for thinking before forcing </think>
+                            If None, no budget is enforced.
+
+        Returns:
+            Generated text as a string
+
+        Raises:
+            AssertionError: If model not loaded
+        """
+        assert self.llama is not None, "Model not loaded. Call load() first."
+
+        max_tokens = max_tokens or 512
+
+        # Run generation in thread pool (blocking call)
+        loop = asyncio.get_running_loop()
+
+        def _chat():
+            try:
+                # Set up logits processor list for thinking budget if specified
+                # llama-cpp-python expects a list of processors
+                logits_processor = None
+                if thinking_budget is not None:
+                    from utils.thinking import ThinkingBudgetProcessor
+
+                    logits_processor = [
+                        ThinkingBudgetProcessor(
+                            self.llama, max_thinking_tokens=thinking_budget
+                        )
+                    ]
+
+                # Use create_chat_completion which applies the model's chat template
+                # from GGUF metadata (tokenizer.chat_template)
+                return self.llama.create_chat_completion(
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                    logits_processor=logits_processor,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error during llama-cpp-python chat completion: {e}", exc_info=True
+                )
+                raise RuntimeError(f"Chat completion failed: {e}") from e
+
+        try:
+            result = await loop.run_in_executor(self._executor, _chat)
+            # Extract content from chat completion result
+            content = result["choices"][0]["message"]["content"]
+            return content.strip() if content else ""
+        except Exception as e:
+            logger.error(f"Error extracting chat completion result: {e}", exc_info=True)
+            raise ValueError(f"Unexpected result structure: {e}") from e
+
+    async def chat_stream(
+        self,
+        messages: list[dict],
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        stop: list[str] | None = None,
+        thinking_budget: int | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Generate streaming chat completion using the model's native chat template.
+
+        This method uses llama-cpp-python's create_chat_completion() with streaming,
+        which automatically applies the chat template embedded in the GGUF metadata.
+        This is essential for models like Qwen that use special tokens and thinking tags.
+
+        Note: For streaming, thinking_budget is enforced by tracking tokens client-side
+        and cannot force </think> mid-stream. Consider using non-streaming for strict
+        budget enforcement.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature (0.0 = greedy, higher = more random)
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences to end generation
+            thinking_budget: Maximum tokens for thinking (advisory for streaming)
+
+        Yields:
+            Generated text tokens as strings
+
+        Raises:
+            AssertionError: If model not loaded
+        """
+        assert self.llama is not None, "Model not loaded. Call load() first."
+
+        max_tokens = max_tokens or 512
+
+        # Create a queue for passing tokens and exceptions between threads
+        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def _chat_stream():
+            """Run chat completion in separate thread."""
+            try:
+                # For streaming, we track thinking tokens but can't force stop
+                # The logits_processor approach doesn't work with streaming
+                thinking_tokens = 0
+                in_thinking = False
+                thinking_ended = False
+                accumulated_text = ""
+
+                # Use create_chat_completion with stream=True
+                for chunk in self.llama.create_chat_completion(
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                    stream=True,
+                ):
+                    # Extract delta content from streaming chunk
+                    delta = chunk["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        accumulated_text += content
+
+                        # Track thinking state
+                        if "<think>" in accumulated_text.lower() and not in_thinking:
+                            in_thinking = True
+                        if "</think>" in accumulated_text.lower():
+                            thinking_ended = True
+                            in_thinking = False
+
+                        # Count thinking tokens (rough estimate - 1 chunk ≈ 1 token)
+                        if in_thinking and not thinking_ended:
+                            thinking_tokens += 1
+
+                        # Put token in queue (thread-safe via run_coroutine_threadsafe)
+                        future = asyncio.run_coroutine_threadsafe(
+                            queue.put(content), loop
+                        )
+                        future.result()  # Wait for put to complete
+
+                        # Log warning if thinking budget exceeded (can't stop mid-stream)
+                        if (
+                            thinking_budget
+                            and thinking_tokens >= thinking_budget
+                            and in_thinking
+                            and not thinking_ended
+                        ):
+                            logger.warning(
+                                f"Thinking budget ({thinking_budget}) exceeded in streaming mode. "
+                                "Consider using non-streaming for strict budget enforcement."
+                            )
+            except Exception as e:
+                logger.error(f"Error in GGUF chat stream: {e}", exc_info=True)
+                # Put exception in queue so it can be propagated to caller
+                future = asyncio.run_coroutine_threadsafe(queue.put(e), loop)
+                future.result()
+            finally:
+                # Signal completion (None sentinel)
+                future = asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+                future.result()
+
+        # Start generation in thread pool
+        loop.run_in_executor(self._executor, _chat_stream)
+
+        # Yield tokens as they arrive, propagate exceptions
+        while True:
+            item = await queue.get()
+            if item is None:
+                # Completion sentinel
+                break
+            elif isinstance(item, Exception):
+                # Propagate exception from streaming thread
+                raise item
+            else:
+                # Regular token
+                yield item
+
     async def unload(self) -> None:
         """Unload GGUF model and free resources."""
         logger.info(f"Unloading GGUF language model: {self.model_id}")
