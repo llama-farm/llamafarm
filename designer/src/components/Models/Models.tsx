@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -31,12 +31,9 @@ import { ModelSelector } from './ModelSelector'
 import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
 import { CustomDownloadDialog } from './CustomDownloadDialog'
 import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
-import { DiskSpaceWarningDialog } from './DiskSpaceWarningDialog'
-import { DiskSpaceErrorDialog } from './DiskSpaceErrorDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { useToast } from '../ui/toast'
-import { validateModelDownload } from '../../api/modelService'
 import {
   sanitizeModelName,
   formatBytes,
@@ -658,7 +655,7 @@ function AddOrChangeModels({
     null
   )
   const [submitState, setSubmitState] = useState<
-    'idle' | 'loading' | 'success' | 'checking' | 'error'
+    'idle' | 'loading' | 'success' | 'error'
   >('idle')
   const [modelName, setModelName] = useState('')
   const [modelDescription, setModelDescription] = useState('')
@@ -669,155 +666,8 @@ function AddOrChangeModels({
     showRecommendedBackgroundDownload,
     setShowRecommendedBackgroundDownload,
   ] = useState(false)
-  // Use ref to track current value for closure access
-  const showRecommendedBackgroundDownloadRef = useRef(false)
-  useEffect(() => {
-    showRecommendedBackgroundDownloadRef.current = showRecommendedBackgroundDownload
-  }, [showRecommendedBackgroundDownload])
-
-  // Disk space validation state
-  const [diskSpaceWarningOpen, setDiskSpaceWarningOpen] = useState(false)
-  const [diskSpaceErrorOpen, setDiskSpaceErrorOpen] = useState(false)
-  const [diskSpaceValidation, setDiskSpaceValidation] = useState<{
-    message: string
-    availableBytes: number
-    requiredBytes: number
-  } | null>(null)
-  const [pendingDownloadAction, setPendingDownloadAction] = useState<
-    'local' | 'custom' | null
-  >(null)
-
-  // Model name validation state
   const [modelNameError, setModelNameError] = useState<string>('')
   const [deviceModelNameError, setDeviceModelNameError] = useState<string>('')
-
-  // Shared validation helper
-  const handleDiskSpaceValidation = async (
-    modelName: string,
-    onSuccess: () => void,
-    actionType: 'local' | 'custom'
-  ) => {
-    try {
-      const validation = await validateModelDownload(modelName)
-
-      if (!validation.can_download) {
-        setDiskSpaceValidation({
-          message: validation.message,
-          availableBytes: validation.available_bytes,
-          requiredBytes: validation.required_bytes,
-        })
-        setPendingDownloadAction(actionType)
-        setDiskSpaceErrorOpen(true)
-        return false
-      }
-
-      if (validation.warning) {
-        setDiskSpaceValidation({
-          message: validation.message,
-          availableBytes: validation.available_bytes,
-          requiredBytes: validation.required_bytes,
-        })
-        setPendingDownloadAction(actionType)
-        setDiskSpaceWarningOpen(true)
-        return false
-      }
-
-      // Sufficient space - proceed
-      onSuccess()
-      return true
-    } catch (error: any) {
-      console.error('Disk space validation failed:', error)
-      // On error, proceed anyway (graceful degradation)
-      onSuccess()
-      return true
-    }
-  }
-
-  // Helper function to proceed with download after validation
-  const proceedWithDownload = async () => {
-    if (!pendingVariant) return
-
-    setSubmitState('loading')
-    setDownloadProgress(5)
-    setDownloadError('')
-    setDownloadedBytes(0)
-    setTotalBytes(0)
-    setEstimatedTimeRemaining('')
-    const start = Date.now()
-
-    // Show download and add a placeholder card with user-entered data
-    onAddModel(
-      {
-        id: `dl-${pendingVariant.id}`,
-        name: modelName.trim(),
-        modelIdentifier: pendingVariant.modelIdentifier,
-        meta: modelDescription.trim() || 'Downloading…',
-        badges: ['Local'],
-        status: 'downloading',
-      },
-      selectedPromptSets.length > 0 ? selectedPromptSets : undefined
-    )
-
-    const downloadAsync = async () => {
-      try {
-        for await (const event of modelService.downloadModel({
-          model_name: pendingVariant.modelIdentifier,
-          provider: 'universal',
-        })) {
-          if (event.event === 'progress') {
-            const d = Number(event.downloaded || 0)
-            const t = Number(event.total || 0)
-            setDownloadedBytes(d)
-            setTotalBytes(t)
-            if (t > 0 && isFinite(d) && d >= 0) {
-              const percent = Math.max(
-                5,
-                Math.min(95, Math.round((d / t) * 90) + 5)
-              )
-              setDownloadProgress(percent)
-              const elapsedSec = (Date.now() - start) / 1000
-              if (elapsedSec > 0) {
-                const speed = d / elapsedSec
-                const remain = (t - d) / (speed || 1)
-                setEstimatedTimeRemaining(formatETA(remain))
-              }
-            }
-          } else if (event.event === 'done') {
-            setDownloadProgress(100)
-            setSubmitState('success')
-            setEstimatedTimeRemaining('')
-            refetchCachedModels()
-            setTimeout(() => {
-              // Use ref to read current value instead of stale closure value
-              if (!showRecommendedBackgroundDownloadRef.current) {
-                setConfirmOpen(false)
-                onGoToProject()
-              }
-              setSubmitState('idle')
-              setDownloadProgress(0)
-              setShowRecommendedBackgroundDownload(false)
-            }, 1000)
-          } else if (event.event === 'error') {
-            setSubmitState('error')
-            setDownloadError(
-              event.message ||
-                'Failed to download model. Please check the model name and try again.'
-            )
-          } else if (event.event === 'warning') {
-            console.warn('Download warning:', event.message)
-          }
-        }
-      } catch (error: any) {
-        setSubmitState('error')
-        setDownloadError(
-          error.message ||
-            'Failed to download model. Please check the model name and try again.'
-        )
-      }
-    }
-
-    downloadAsync()
-  }
 
   // Device model state
   const [deviceConfirmOpen, setDeviceConfirmOpen] = useState(false)
@@ -996,7 +846,7 @@ function AddOrChangeModels({
 
   // Handle custom model download
   const handleCustomModelDownload = async () => {
-    // Validate model name first
+    // Validate model name
     const existingNames = projectModels.map(m => m.name)
     const validation = validateModelName(customModelName.trim(), existingNames)
     if (!validation.isValid) {
@@ -1005,16 +855,6 @@ function AddOrChangeModels({
     }
     setCustomModelNameError('')
 
-    // Then check disk space
-    await handleDiskSpaceValidation(
-      customModelInput.trim(),
-      proceedWithCustomDownload,
-      'custom'
-    )
-  }
-
-  // Helper function to proceed with custom model download after validation
-  const proceedWithCustomDownload = async () => {
     setCustomDownloadState('downloading')
     setCustomDownloadProgress(5)
     setCustomDownloadError('')
@@ -1048,8 +888,6 @@ function AddOrChangeModels({
                 setEstimatedTimeRemaining(formatETA(remain))
               }
             }
-          } else if (event.event === 'warning') {
-            console.warn('Disk space warning during download:', event.message)
           } else if (event.event === 'done') {
             setCustomDownloadProgress(100)
             setCustomDownloadState('success')
@@ -1694,15 +1532,11 @@ function AddOrChangeModels({
               </Button>
             )}
             <Button
-              disabled={
-                submitState === 'loading' ||
-                submitState === 'checking' ||
-                !modelName.trim()
-              }
+              disabled={submitState === 'loading' || !modelName.trim()}
               onClick={async () => {
                 if (!pendingVariant) return
 
-                // Validate model name first
+                // Validate model name
                 const existingNames = projectModels.map(m => m.name)
                 const validation = validateModelName(
                   modelName.trim(),
@@ -1714,29 +1548,85 @@ function AddOrChangeModels({
                 }
                 setModelNameError('')
 
-                // Then check disk space before downloading
-                setSubmitState('checking')
-                const shouldProceed = await handleDiskSpaceValidation(
-                  pendingVariant.modelIdentifier,
-                  () => {
-                    setConfirmOpen(false)
-                    proceedWithDownload()
+                setSubmitState('loading')
+                setDownloadProgress(5)
+                setDownloadError('')
+                setDownloadedBytes(0)
+                setTotalBytes(0)
+                setEstimatedTimeRemaining('')
+                const start = Date.now()
+
+                // Show download and add a placeholder card with user-entered data
+                onAddModel(
+                  {
+                    id: `dl-${pendingVariant.id}`,
+                    name: modelName.trim(),
+                    modelIdentifier: pendingVariant.modelIdentifier,
+                    meta: modelDescription.trim() || 'Downloading…',
+                    badges: ['Local'],
+                    status: 'downloading',
                   },
-                  'local'
+                  selectedPromptSets.length > 0 ? selectedPromptSets : undefined
                 )
-                if (!shouldProceed) {
-                  setSubmitState('idle')
+
+                const downloadAsync = async () => {
+                  try {
+                    for await (const event of modelService.downloadModel({
+                      model_name: pendingVariant.modelIdentifier,
+                      provider: 'universal',
+                    })) {
+                      if (event.event === 'progress') {
+                        const d = Number(event.downloaded || 0)
+                        const t = Number(event.total || 0)
+                        setDownloadedBytes(d)
+                        setTotalBytes(t)
+                        if (t > 0 && isFinite(d) && d >= 0) {
+                          const percent = Math.max(
+                            5,
+                            Math.min(95, Math.round((d / t) * 90) + 5)
+                          )
+                          setDownloadProgress(percent)
+                          const elapsedSec = (Date.now() - start) / 1000
+                          if (elapsedSec > 0) {
+                            const speed = d / elapsedSec
+                            const remain = (t - d) / (speed || 1)
+                            setEstimatedTimeRemaining(formatETA(remain))
+                          }
+                        }
+                      } else if (event.event === 'done') {
+                        setDownloadProgress(100)
+                        setSubmitState('success')
+                        setEstimatedTimeRemaining('')
+                        refetchCachedModels()
+                        setTimeout(() => {
+                          if (!showRecommendedBackgroundDownload) {
+                            setConfirmOpen(false)
+                            onGoToProject()
+                          }
+                          setSubmitState('idle')
+                          setDownloadProgress(0)
+                          setShowRecommendedBackgroundDownload(false)
+                        }, 1000)
+                      } else if (event.event === 'error') {
+                        setSubmitState('error')
+                        setDownloadError(
+                          event.message ||
+                            'Failed to download model. Please check the model name and try again.'
+                        )
+                      }
+                    }
+                  } catch (error: any) {
+                    setSubmitState('error')
+                    setDownloadError(
+                      error.message ||
+                        'Failed to download model. Please check the model name and try again.'
+                    )
+                  }
                 }
+
+                downloadAsync()
               }}
             >
-              {submitState === 'checking' && (
-                <span className="mr-2 inline-flex">
-                  <Loader
-                    size={14}
-                    className="border-blue-400 dark:border-blue-100"
-                  />
-                </span>
-              )}
               {submitState === 'loading' && (
                 <span className="mr-2 inline-flex">
                   <Loader
@@ -1750,48 +1640,11 @@ function AddOrChangeModels({
                   <FontIcon type="checkmark-filled" className="w-4 h-4" />
                 </span>
               )}
-              {submitState === 'checking'
-                ? 'Checking disk space...'
-                : 'Download and add'}
+              Download and add
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Disk space warning dialog */}
-      {diskSpaceValidation && (
-        <DiskSpaceWarningDialog
-          open={diskSpaceWarningOpen}
-          onOpenChange={setDiskSpaceWarningOpen}
-          message={diskSpaceValidation.message}
-          availableBytes={diskSpaceValidation.availableBytes}
-          requiredBytes={diskSpaceValidation.requiredBytes}
-          onContinue={() => {
-            setDiskSpaceWarningOpen(false)
-            if (pendingDownloadAction === 'local') {
-              proceedWithDownload()
-            } else if (pendingDownloadAction === 'custom') {
-              proceedWithCustomDownload()
-            }
-            setPendingDownloadAction(null)
-          }}
-          onCancel={() => {
-            setDiskSpaceWarningOpen(false)
-            setDiskSpaceValidation(null)
-          }}
-        />
-      )}
-
-      {/* Disk space error dialog */}
-      {diskSpaceValidation && (
-        <DiskSpaceErrorDialog
-          open={diskSpaceErrorOpen}
-          onOpenChange={setDiskSpaceErrorOpen}
-          message={diskSpaceValidation.message}
-          availableBytes={diskSpaceValidation.availableBytes}
-          requiredBytes={diskSpaceValidation.requiredBytes}
-        />
-      )}
 
       {/* Background download indicator - minimized */}
       {showRecommendedBackgroundDownload && submitState === 'loading' && (
@@ -1945,7 +1798,6 @@ const Models = () => {
   const [downloadedBytes, setDownloadedBytes] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
-
   const projectConfig = (projectResponse as any)?.project?.config as
     | ProjectConfig
     | undefined
