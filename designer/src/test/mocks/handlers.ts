@@ -111,12 +111,11 @@ export const handlers = [
   ),
 
   http.post(
-    `${API_BASE}/projects/:namespace/:project/datasets/:dataset/process`,
-    ({ params }) => {
-      const { dataset } = params
+    `${API_BASE}/projects/:namespace/:project/datasets/:dataset/actions`,
+    async () => {
       return HttpResponse.json({
-        message: `Processing dataset: ${dataset}`,
-        task_id: `task-${Date.now()}`,
+        message: 'Accepted',
+        task_uri: `/tasks/task-${Date.now()}`,
       })
     }
   ),
