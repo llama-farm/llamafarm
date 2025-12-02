@@ -193,6 +193,31 @@ def get_rag_health(project_dir: str, database: str) -> dict[str, Any]:
     }
 
 
+def get_rag_stats(project_dir: str, database: str) -> dict[str, Any]:
+    """
+    Fetch RAG database statistics via rag.get_database_stats.
+    """
+    from datetime import UTC, datetime
+
+    task = signature(
+        "rag.get_database_stats",
+        args=[project_dir, database],
+        app=app,
+    )
+    return _run_sync_task_with_polling(task, timeout=30, poll_interval=0.5) or {
+        "database": database,
+        "vector_count": 0,
+        "document_count": 0,
+        "chunk_count": 0,
+        "collection_size_bytes": 0,
+        "index_size_bytes": 0,
+        "embedding_dimension": 0,
+        "distance_metric": "unknown",
+        "last_updated": datetime.now(UTC).isoformat(),
+        "metadata": {"error": "Stats retrieval task timed out or failed"},
+    }
+
+
 def batch_search(
     project_dir: str,
     database: str,

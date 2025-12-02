@@ -13,6 +13,7 @@ from .health_tasks import rag_health_check_task, rag_ping_task
 from .ingest_tasks import ingest_file_with_rag_task
 from .query_tasks import handle_rag_query_task
 from .search_tasks import search_with_rag_database_task
+from .stats_tasks import rag_get_database_stats_task
 
 __all__ = [
     "search_with_rag_database_task",
@@ -20,4 +21,5 @@ __all__ = [
     "handle_rag_query_task",
     "rag_health_check_task",
     "rag_ping_task",
+    "rag_get_database_stats_task",
 ]
