@@ -8,9 +8,9 @@ import requests  # type: ignore
 from huggingface_hub import scan_cache_dir, snapshot_download
 from huggingface_hub.errors import RepositoryNotFoundError
 from llamafarm_common import (
+    list_gguf_files,
     parse_model_with_quantization,
-    parse_quantization_from_filename,
-    select_gguf_file,
+    select_gguf_file_with_logging,
 )
 from tqdm.asyncio import tqdm  # type: ignore
 
@@ -209,56 +209,16 @@ class UniversalProvider(RuntimeProvider):
                 huggingface_hub.file_download.tqdm = custom_class
 
                 try:
-                    from huggingface_hub import HfApi
-
-                    # Check if this is a GGUF model repository
-                    api = HfApi()
+                    # Check if this is a GGUF model repository using shared utility
                     try:
-                        files = api.list_repo_files(repo_id=model_id, repo_type="model")
-                        gguf_files = [f for f in files if f.endswith(".gguf")]
+                        gguf_files = list_gguf_files(model_id)
 
                         if gguf_files:
                             # This is a GGUF repo - use intelligent selection
                             # to download only one quantization variant
-                            selected_file = None
-
-                            if quantization:
-                                # User specified a quantization - find matching file
-                                matching_files = [
-                                    f
-                                    for f in gguf_files
-                                    if quantization.upper() in f.upper()
-                                ]
-
-                                if matching_files:
-                                    selected_file = matching_files[0]
-                                    logger.info(
-                                        f"Downloading GGUF with quantization {quantization}: {selected_file}"
-                                    )
-                                else:
-                                    logger.warning(
-                                        f"Quantization {quantization} not found in {model_id}. "
-                                        f"Available: {gguf_files}"
-                                    )
-
-                            if not selected_file:
-                                # No quantization specified or not found - use smart selection
-                                # Use common selection logic from llamafarm_common
-                                selected_file = select_gguf_file(
-                                    gguf_files, preferred_quantization=None
-                                )
-                                if selected_file:
-                                    quant = parse_quantization_from_filename(
-                                        selected_file
-                                    )
-                                    if quant:
-                                        logger.info(
-                                            f"Auto-selected GGUF quantization {quant}: {selected_file}"
-                                        )
-                                    else:
-                                        logger.info(
-                                            f"No preferred quantization found, using first file: {selected_file}"
-                                        )
+                            selected_file = select_gguf_file_with_logging(
+                                gguf_files, preferred_quantization=quantization
+                            )
 
                             # Download only the selected GGUF file
                             local_dir = snapshot_download(

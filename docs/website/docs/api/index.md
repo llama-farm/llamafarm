@@ -124,7 +124,11 @@ Common HTTP status codes:
 ### RAG (Retrieval-Augmented Generation)
 - `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG system
 - `GET /v1/projects/{namespace}/{project}/rag/health` - Check RAG health
-- `GET /v1/projects/{namespace}/{project}/rag/databases` - List RAG databases
+- `GET /v1/projects/{namespace}/{project}/rag/databases` - List databases
+- `GET /v1/projects/{namespace}/{project}/rag/databases/{database}` - Get database details
+- `POST /v1/projects/{namespace}/{project}/rag/databases` - Create database
+- `PATCH /v1/projects/{namespace}/{project}/rag/databases/{database}` - Update database
+- `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database}` - Delete database
 
 ### Tasks
 - `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get async task status
@@ -914,20 +918,242 @@ List all configured RAG databases and their associated strategies for a project.
     {
       "name": "main_db",
       "type": "ChromaStore",
-      "strategies": ["universal_processor", "custom_strategy"]
-    },
-    {
-      "name": "research_db",
-      "type": "ChromaStore",
-      "strategies": ["universal_processor"]
+      "is_default": true,
+      "embedding_strategies": [
+        {
+          "name": "default_embeddings",
+          "type": "OllamaEmbedder",
+          "priority": 0,
+          "is_default": true
+        }
+      ],
+      "retrieval_strategies": [
+        {
+          "name": "basic_search",
+          "type": "BasicSimilarityStrategy",
+          "is_default": true
+        }
+      ]
     }
-  ]
+  ],
+  "default_database": "main_db"
 }
 ```
 
 **Example:**
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases
+```
+
+### Get Database Details
+
+Get detailed information about a specific RAG database including its configuration and dependent datasets.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/databases/{database_name}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database_name` (path, required): Name of the database
+
+**Response:**
+```json
+{
+  "name": "main_db",
+  "type": "ChromaStore",
+  "config": {
+    "collection_name": "documents",
+    "distance_function": "cosine"
+  },
+  "embedding_strategies": [
+    {
+      "name": "default_embeddings",
+      "type": "OllamaEmbedder",
+      "config": {
+        "model": "nomic-embed-text",
+        "dimension": 768
+      },
+      "priority": 0
+    }
+  ],
+  "retrieval_strategies": [
+    {
+      "name": "basic_search",
+      "type": "BasicSimilarityStrategy",
+      "config": {"top_k": 10},
+      "default": true
+    }
+  ],
+  "default_embedding_strategy": "default_embeddings",
+  "default_retrieval_strategy": "basic_search",
+  "dependent_datasets": ["research_papers", "documentation"]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db
+```
+
+### Create Database
+
+Create a new RAG database in the project configuration.
+
+**Endpoint:** `POST /v1/projects/{namespace}/{project}/rag/databases`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+
+**Request Body:**
+```json
+{
+  "name": "new_database",
+  "type": "ChromaStore",
+  "config": {
+    "collection_name": "my_collection",
+    "distance_function": "cosine"
+  },
+  "embedding_strategies": [
+    {
+      "name": "embeddings",
+      "type": "OllamaEmbedder",
+      "config": {
+        "model": "nomic-embed-text",
+        "dimension": 768
+      }
+    }
+  ],
+  "retrieval_strategies": [
+    {
+      "name": "basic_search",
+      "type": "BasicSimilarityStrategy",
+      "config": {"top_k": 10},
+      "default": true
+    }
+  ]
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "database": {
+    "name": "new_database",
+    "type": "ChromaStore",
+    "is_default": false,
+    "embedding_strategies": [...],
+    "retrieval_strategies": [...]
+  }
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/databases \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "new_database",
+    "type": "ChromaStore",
+    "embedding_strategies": [
+      {"name": "embeddings", "type": "OllamaEmbedder", "config": {"model": "nomic-embed-text"}}
+    ],
+    "retrieval_strategies": [
+      {"name": "basic", "type": "BasicSimilarityStrategy", "config": {}, "default": true}
+    ]
+  }'
+```
+
+### Update Database
+
+Update a RAG database's mutable fields. Note: `name` and `type` are immutable.
+
+**Endpoint:** `PATCH /v1/projects/{namespace}/{project}/rag/databases/{database_name}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database_name` (path, required): Name of the database
+
+**Request Body (all fields optional):**
+```json
+{
+  "config": {
+    "distance_function": "euclidean"
+  },
+  "embedding_strategies": [...],
+  "retrieval_strategies": [...],
+  "default_embedding_strategy": "new_default",
+  "default_retrieval_strategy": "reranked_search"
+}
+```
+
+**Response:**
+```json
+{
+  "name": "main_db",
+  "type": "ChromaStore",
+  "config": {...},
+  "embedding_strategies": [...],
+  "retrieval_strategies": [...],
+  "default_embedding_strategy": "new_default",
+  "default_retrieval_strategy": "reranked_search",
+  "dependent_datasets": []
+}
+```
+
+**Example - Add a reranking strategy:**
+```bash
+curl -X PATCH http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db \
+  -H "Content-Type: application/json" \
+  -d '{
+    "retrieval_strategies": [
+      {"name": "basic_search", "type": "BasicSimilarityStrategy", "config": {"top_k": 10}},
+      {"name": "reranked_search", "type": "CrossEncoderRerankedStrategy", "config": {"model_name": "reranker", "initial_k": 30}}
+    ],
+    "default_retrieval_strategy": "reranked_search"
+  }'
+```
+
+### Delete Database
+
+Delete a RAG database from the project. Fails if any datasets depend on this database.
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database_name}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database_name` (path, required): Name of the database
+- `delete_collection` (query, optional): Whether to delete the underlying vector store collection. Set to `false` to only remove from config. Default: `true`
+
+**Response (200 OK):**
+```json
+{
+  "message": "Database 'old_db' deleted successfully",
+  "database": {
+    "name": "old_db",
+    "type": "ChromaStore",
+    ...
+  },
+  "collection_deleted": true
+}
+```
+
+**Error Response (409 Conflict - has dependent datasets):**
+```json
+{
+  "detail": "Cannot delete database 'main_db': 2 dataset(s) depend on it. Delete or reassign these datasets first: ['dataset1', 'dataset2']"
+}
+```
+
+**Example:**
+```bash
+# Delete database and its collection
+curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/old_db
+
+# Only remove from config, keep the vector store data
+curl -X DELETE "http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/old_db?delete_collection=false"
 ```
 
 ### Check RAG Health
@@ -1535,6 +1761,10 @@ LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI
 
 **RAG Operations:**
 - `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG (operation ID: `rag_query`)
+- `POST /v1/projects/{namespace}/{project}/rag/databases` - Create database (operation ID: `database_create`)
+- `GET /v1/projects/{namespace}/{project}/rag/databases/{database}` - Get database (operation ID: `database_get`)
+- `PATCH /v1/projects/{namespace}/{project}/rag/databases/{database}` - Update database (operation ID: `database_update`)
+- `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database}` - Delete database (operation ID: `database_delete`)
 
 **Task Management:**
 - `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get task status (operation ID: `task_get`)

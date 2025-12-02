@@ -24,6 +24,12 @@ class DatasetNotFoundError(NotFoundError):
         super().__init__(f"Dataset {dataset} not found")
 
 
+class DatabaseNotFoundError(NotFoundError):
+    def __init__(self, database: str):
+        self.database = database
+        super().__init__(f"Database '{database}' not found")
+
+
 class ProjectNotFoundError(NotFoundError):
     """Raised when a project doesn't exist."""
 
