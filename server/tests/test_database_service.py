@@ -11,15 +11,10 @@ import pytest
 from config.datamodel import (
     Database,
     EmbeddingStrategy,
-    LlamaFarmConfig,
-    PromptMessage,
-    PromptSet,
     RetrievalStrategy,
-    Runtime,
     Type,
     Type1,
     Type2,
-    Version,
 )
 
 from api.errors import DatabaseNotFoundError
@@ -299,7 +294,9 @@ class TestDatabaseService:
         ]
         mock_load_config.return_value = self.mock_project_config
 
-        result = DatabaseService.get_dependent_datasets("test_ns", "test_proj", "main_db")
+        result = DatabaseService.get_dependent_datasets(
+            "test_ns", "test_proj", "main_db"
+        )
 
         assert len(result) == 2
         assert "dataset1" in result
@@ -312,7 +309,9 @@ class TestDatabaseService:
         self.mock_project_config.datasets = []
         mock_load_config.return_value = self.mock_project_config
 
-        result = DatabaseService.get_dependent_datasets("test_ns", "test_proj", "main_db")
+        result = DatabaseService.get_dependent_datasets(
+            "test_ns", "test_proj", "main_db"
+        )
 
         assert result == []
 
@@ -332,7 +331,9 @@ class TestDatabaseService:
 
         # Mock the collection deletion to succeed
         with patch.object(
-            DatabaseService, "_delete_vector_store_collection", return_value=(True, None)
+            DatabaseService,
+            "_delete_vector_store_collection",
+            return_value=(True, None),
         ):
             result = DatabaseService.delete_database(
                 "test_ns", "test_proj", "secondary_db"
@@ -380,7 +381,9 @@ class TestDatabaseService:
         self.mock_rag_config.default_database = "secondary_db"
 
         with patch.object(
-            DatabaseService, "_delete_vector_store_collection", return_value=(True, None)
+            DatabaseService,
+            "_delete_vector_store_collection",
+            return_value=(True, None),
         ):
             DatabaseService.delete_database("test_ns", "test_proj", "secondary_db")
 

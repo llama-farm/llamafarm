@@ -38,4 +38,3 @@ def get_disk_space():
             status_code=500,
             detail="An unexpected error occurred while checking disk space.",
         ) from e
-

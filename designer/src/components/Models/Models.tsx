@@ -31,6 +31,8 @@ import { ModelSelector } from './ModelSelector'
 import { DeviceModelsSection, type DeviceModel } from './DeviceModelsSection'
 import { CustomDownloadDialog } from './CustomDownloadDialog'
 import { DeleteDeviceModelDialog } from './DeleteDeviceModelDialog'
+import { DiskSpaceWarningDialog } from './DiskSpaceWarningDialog'
+import { DiskSpaceErrorDialog } from './DiskSpaceErrorDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { useToast } from '../ui/toast'
@@ -686,6 +688,10 @@ function AddOrChangeModels({
     Record<string, { can_download: boolean; warning: boolean }>
   >({})
   const [downloadProgress, setDownloadProgress] = useState(0)
+  // Track quantization counts and size ranges for each model
+  const [modelMetadata, setModelMetadata] = useState<
+    Record<string, { count: number; minSize: string; maxSize: string } | null>
+  >({})
   const [downloadError, setDownloadError] = useState('')
   const [
     showRecommendedBackgroundDownload,
@@ -731,15 +737,54 @@ function AddOrChangeModels({
           if (data && data.options && data.options.length > 0) {
             const validOptions = data.options.filter(opt => opt.quantization)
             setGgufOptions(data.options)
-            // Set default quantization if available
-            const defaultOption = validOptions.find(
-              opt => opt.quantization === selectedModelGroup.defaultQuantization
-            )
-            if (defaultOption) {
-              setSelectedQuantization(selectedModelGroup.defaultQuantization)
-            } else {
-              setSelectedQuantization(validOptions[0]?.quantization || null)
+
+            // Determine recommended quantization (will be set after disk space validation)
+            const recommendation =
+              recommendedQuantizations[selectedModelGroup.baseModelId]
+            let initialQuantization: string | null = null
+
+            if (recommendation) {
+              // Check if recommended option exists
+              const recommendedOption = validOptions.find(
+                opt => opt.quantization === recommendation.quantization
+              )
+              if (recommendedOption) {
+                initialQuantization = recommendation.quantization
+              } else {
+                // Try fallback order
+                const fallbackOrder = [
+                  'Q4_K_M',
+                  'Q4_K_S',
+                  'Q3_K_M',
+                  'Q3_K_S',
+                  'Q2_K',
+                ]
+                for (const fallbackQuant of fallbackOrder) {
+                  const fallbackOption = validOptions.find(
+                    opt => opt.quantization === fallbackQuant
+                  )
+                  if (fallbackOption) {
+                    initialQuantization = fallbackQuant
+                    break
+                  }
+                }
+              }
             }
+
+            // Fallback to defaultQuantization or first option
+            if (!initialQuantization) {
+              const defaultOption = validOptions.find(
+                opt =>
+                  opt.quantization === selectedModelGroup.defaultQuantization
+              )
+              if (defaultOption) {
+                initialQuantization = selectedModelGroup.defaultQuantization
+              } else {
+                initialQuantization = validOptions[0]?.quantization || null
+              }
+            }
+
+            setSelectedQuantization(initialQuantization)
 
             // Validate disk space for each option
             validOptions.forEach(option => {
@@ -767,13 +812,63 @@ function AddOrChangeModels({
                 .validateModelDownload(modelIdentifier)
                 .then(
                   (validation: { can_download: boolean; warning: boolean }) => {
-                    setDiskSpaceValidations(prev => ({
-                      ...prev,
-                      [option.quantization!]: {
-                        can_download: validation.can_download,
-                        warning: validation.warning,
-                      },
-                    }))
+                    setDiskSpaceValidations(prev => {
+                      const updated = {
+                        ...prev,
+                        [option.quantization!]: {
+                          can_download: validation.can_download,
+                          warning: validation.warning,
+                        },
+                      }
+
+                      // After validation, check if we should update selection
+                      // If recommended doesn't fit, switch to a fallback
+                      const recommendation =
+                        recommendedQuantizations[selectedModelGroup.baseModelId]
+                      if (recommendation) {
+                        const recommendedValidation =
+                          updated[recommendation.quantization]
+
+                        // If recommended is validated and doesn't fit, find a fallback
+                        if (
+                          option.quantization === recommendation.quantization &&
+                          recommendedValidation &&
+                          (!recommendedValidation.can_download ||
+                            recommendedValidation.warning)
+                        ) {
+                          // Find a fallback that fits
+                          const fallbackOrder = [
+                            'Q4_K_M',
+                            'Q4_K_S',
+                            'Q3_K_M',
+                            'Q3_K_S',
+                            'Q2_K',
+                          ]
+                          for (const fallbackQuant of fallbackOrder) {
+                            const fallbackValidation = updated[fallbackQuant]
+                            if (
+                              fallbackValidation &&
+                              fallbackValidation.can_download &&
+                              !fallbackValidation.warning
+                            ) {
+                              setSelectedQuantization(fallbackQuant)
+                              break
+                            }
+                          }
+                        }
+                        // If recommended fits and we haven't selected it yet, select it
+                        else if (
+                          option.quantization === recommendation.quantization &&
+                          recommendedValidation &&
+                          recommendedValidation.can_download &&
+                          !recommendedValidation.warning
+                        ) {
+                          setSelectedQuantization(recommendation.quantization)
+                        }
+                      }
+
+                      return updated
+                    })
                   }
                 )
                 .catch((err: unknown) => {
@@ -839,6 +934,47 @@ function AddOrChangeModels({
     }
   }, [selectedQuantization])
 
+  // Fetch quantization counts and size ranges for all recommended models
+  useEffect(() => {
+    const fetchModelMetadata = async () => {
+      const metadata: Record<
+        string,
+        { count: number; minSize: string; maxSize: string }
+      > = {}
+
+      await Promise.all(
+        localGroups.map(async group => {
+          try {
+            const data = await modelService.getGGUFOptions(group.baseModelId)
+            if (data?.options && data.options.length > 0) {
+              const validOptions = data.options.filter(opt => opt.quantization)
+              if (validOptions.length > 0) {
+                const sizes = validOptions.map(opt => opt.size_bytes)
+                const minSize = Math.min(...sizes)
+                const maxSize = Math.max(...sizes)
+                metadata[group.baseModelId] = {
+                  count: validOptions.length,
+                  minSize: formatBytes(minSize),
+                  maxSize: formatBytes(maxSize),
+                }
+              }
+            }
+          } catch (err) {
+            // Silently fail - metadata is optional
+            console.debug(
+              `Could not fetch metadata for ${group.baseModelId}:`,
+              err
+            )
+          }
+        })
+      )
+
+      setModelMetadata(metadata)
+    }
+
+    fetchModelMetadata()
+  }, []) // Only run once on mount
+
   // Custom model local state (not shared)
   const [customModelInput, setCustomModelInput] = useState('')
   const [customModelName, setCustomModelName] = useState('')
@@ -848,6 +984,20 @@ function AddOrChangeModels({
   >([])
   const [customDownloadError, setCustomDownloadError] = useState('')
   const [customModelNameError, setCustomModelNameError] = useState<string>('')
+
+  // Disk space warning/error dialog state
+  const [warningDialogOpen, setWarningDialogOpen] = useState(false)
+  const [warningDialogMessage, setWarningDialogMessage] = useState('')
+  const [warningDialogAvailableBytes, setWarningDialogAvailableBytes] =
+    useState(0)
+  const [warningDialogRequiredBytes, setWarningDialogRequiredBytes] =
+    useState(0)
+  const warningDialogResolveRef = useRef<(() => void) | null>(null)
+  const warningDialogRejectRef = useRef<(() => void) | null>(null)
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false)
+  const [errorDialogMessage, setErrorDialogMessage] = useState('')
+  const [errorDialogAvailableBytes, setErrorDialogAvailableBytes] = useState(0)
+  const [errorDialogRequiredBytes, setErrorDialogRequiredBytes] = useState(0)
 
   interface ModelVariant {
     id: number
@@ -863,6 +1013,37 @@ function AddOrChangeModels({
     baseModelId: string // Base model ID without quantization (e.g., "unsloth/Qwen3-1.7B-GGUF")
     defaultQuantization: string // Default quantization to show (e.g., "Q4_K_M")
     variants: ModelVariant[]
+  }
+
+  // Recommended quantizations with descriptions
+  const recommendedQuantizations: Record<
+    string,
+    { quantization: string; description: string }
+  > = {
+    'unsloth/Qwen3-1.7B-GGUF': {
+      quantization: 'Q5_K_M',
+      description: 'Best balance of speed + accuracy.',
+    },
+    'unsloth/granite-4.0-h-1b-GGUF': {
+      quantization: 'Q5_K_M',
+      description:
+        'Granite benefits a lot from higher precision; Q5 is the sweet spot.',
+    },
+    'unsloth/Llama-3.2-1B-Instruct-GGUF': {
+      quantization: 'Q5_K_M',
+      description:
+        'Best general choice — higher quality than Q4 without being huge.',
+    },
+    'unsloth/gpt-oss-20b-GGUF': {
+      quantization: 'Q4_K_M',
+      description:
+        'This model already runs fast; Q4 keeps it snappy without big quality loss.',
+    },
+    'unsloth/gemma-3-4b-it-GGUF': {
+      quantization: 'Q4_K_M',
+      description:
+        'Gemma performs well at Q4; Q5 is good but not required unless added.',
+    },
   }
 
   const localGroups: LocalModelGroup[] = [
@@ -1003,6 +1184,90 @@ function AddOrChangeModels({
   }
 
   // Handle custom model download
+  // Helper function to handle disk space warnings
+  // Returns a promise that resolves if user continues, rejects if user cancels
+  const handleDiskSpaceWarning = async (
+    modelId: string,
+    message: string
+  ): Promise<void> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Get full validation details for the dialog
+        const validation = await modelService.validateModelDownload(modelId)
+        setWarningDialogMessage(message)
+        setWarningDialogAvailableBytes(validation.available_bytes || 0)
+        setWarningDialogRequiredBytes(validation.required_bytes || 0)
+        warningDialogResolveRef.current = () => {
+          setWarningDialogOpen(false)
+          warningDialogResolveRef.current = null
+          warningDialogRejectRef.current = null
+          resolve()
+        }
+        warningDialogRejectRef.current = () => {
+          setWarningDialogOpen(false)
+          warningDialogResolveRef.current = null
+          warningDialogRejectRef.current = null
+          reject(new Error('User cancelled download'))
+        }
+        setWarningDialogOpen(true)
+      } catch (err) {
+        // If validation fails, show dialog with message only
+        setWarningDialogMessage(message)
+        setWarningDialogAvailableBytes(0)
+        setWarningDialogRequiredBytes(0)
+        warningDialogResolveRef.current = () => {
+          setWarningDialogOpen(false)
+          warningDialogResolveRef.current = null
+          warningDialogRejectRef.current = null
+          resolve()
+        }
+        warningDialogRejectRef.current = () => {
+          setWarningDialogOpen(false)
+          warningDialogResolveRef.current = null
+          warningDialogRejectRef.current = null
+          reject(new Error('User cancelled download'))
+        }
+        setWarningDialogOpen(true)
+      }
+    })
+  }
+
+  // Handle warning dialog cancel
+  const handleWarningDialogCancel = () => {
+    if (warningDialogRejectRef.current) {
+      warningDialogRejectRef.current()
+    }
+  }
+
+  // Helper function to check if error is disk space related
+  const isDiskSpaceError = (message: string): boolean => {
+    const lowerMessage = message.toLowerCase()
+    return (
+      lowerMessage.includes('insufficient disk space') ||
+      lowerMessage.includes('disk space') ||
+      lowerMessage.includes('not enough space') ||
+      lowerMessage.includes('free up space')
+    )
+  }
+
+  // Helper function to handle disk space errors
+  const handleDiskSpaceError = async (modelId: string, message: string) => {
+    try {
+      // Get full validation details for the dialog
+      const validation = await modelService.validateModelDownload(modelId)
+      setErrorDialogMessage(message)
+      setErrorDialogAvailableBytes(validation.available_bytes || 0)
+      setErrorDialogRequiredBytes(validation.required_bytes || 0)
+      setErrorDialogOpen(true)
+    } catch (err) {
+      // If validation fails, show dialog with message only
+      setErrorDialogMessage(message)
+      setErrorDialogAvailableBytes(0)
+      setErrorDialogRequiredBytes(0)
+      setErrorDialogOpen(true)
+    }
+  }
+
   const handleCustomModelDownload = async () => {
     // Validate model name
     const existingNames = projectModels.map(m => m.name)
@@ -1028,7 +1293,28 @@ function AddOrChangeModels({
           model_name: customModelInput.trim(),
           provider: 'universal',
         })) {
-          if (event.event === 'progress') {
+          if (event.event === 'warning') {
+            // Show warning dialog and wait for user decision
+            try {
+              await Promise.race([
+                handleDiskSpaceWarning(
+                  customModelInput.trim(),
+                  event.message || 'Low disk space warning'
+                ),
+                // Timeout after 5 minutes (user should have made a decision)
+                new Promise<void>((_, timeoutReject) =>
+                  setTimeout(() => timeoutReject(new Error('Timeout')), 300000)
+                ),
+              ])
+              // User chose to continue, proceed with download
+            } catch {
+              // User cancelled or timeout
+              setCustomDownloadState('idle')
+              setCustomDownloadProgress(0)
+              setShowBackgroundDownload(false)
+              return
+            }
+          } else if (event.event === 'progress') {
             const d = Number(event.downloaded || 0)
             const t = Number(event.total || 0)
             setDownloadedBytes(d)
@@ -1075,20 +1361,30 @@ function AddOrChangeModels({
               setCustomDownloadState('idle')
             }, 4000)
           } else if (event.event === 'error') {
-            setCustomDownloadState('error')
-            setCustomDownloadError(
+            const errorMessage =
               event.message ||
-                'Failed to download model. Please check the model name and try again.'
-            )
+              'Failed to download model. Please check the model name and try again.'
+            // Check if it's a disk space error
+            if (isDiskSpaceError(errorMessage)) {
+              await handleDiskSpaceError(customModelInput.trim(), errorMessage)
+            } else {
+              setCustomDownloadState('error')
+              setCustomDownloadError(errorMessage)
+            }
             setShowBackgroundDownload(false)
           }
         }
       } catch (error: any) {
-        setCustomDownloadState('error')
-        setCustomDownloadError(
+        const errorMessage =
           error.message ||
-            'Failed to download model. Please check the model name and try again.'
-        )
+          'Failed to download model. Please check the model name and try again.'
+        // Check if it's a disk space error
+        if (isDiskSpaceError(errorMessage)) {
+          await handleDiskSpaceError(customModelInput.trim(), errorMessage)
+        } else {
+          setCustomDownloadState('error')
+          setCustomDownloadError(errorMessage)
+        }
         setShowBackgroundDownload(false)
       }
     }
@@ -1194,8 +1490,8 @@ function AddOrChangeModels({
           {sourceTab === 'local' && (
             <div className="w-full overflow-hidden rounded-lg border border-border">
               <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-3">
-                <div className="col-span-4">Provider</div>
-                <div className="col-span-7">Model</div>
+                <div className="col-span-5">Model</div>
+                <div className="col-span-6">Size Range</div>
                 <div className="col-span-1" />
               </div>
               {filteredGroups.length === 0 ? (
@@ -1221,42 +1517,66 @@ function AddOrChangeModels({
                   </Button>
                 </div>
               ) : (
-                filteredGroups.map(group => (
-                  <div
-                    key={group.id}
-                    className="grid grid-cols-12 items-center px-3 py-3 text-sm border-t border-border hover:bg-accent/40"
-                  >
-                    <div className="col-span-4">
-                      <span className="font-medium">{group.name}</span>
+                filteredGroups.map(group => {
+                  const baseModelName = group.baseModelId.replace(
+                    'unsloth/',
+                    ''
+                  )
+                  const metadata = modelMetadata[group.baseModelId]
+                  const quantizationCount = metadata?.count ?? null
+
+                  return (
+                    <div
+                      key={group.id}
+                      className="grid grid-cols-12 items-center px-3 py-3 text-sm border-t border-border hover:bg-accent/40"
+                    >
+                      <div className="col-span-5 truncate">
+                        <span className="font-bold text-foreground">
+                          {baseModelName}
+                        </span>
+                        {quantizationCount !== null && (
+                          <span className="text-muted-foreground/70 font-normal">
+                            {' '}
+                            ({quantizationCount})
+                          </span>
+                        )}
+                      </div>
+                      <div className="col-span-6 text-muted-foreground text-xs">
+                        {metadata ? (
+                          <span>
+                            {metadata.minSize === metadata.maxSize
+                              ? metadata.minSize
+                              : `${metadata.minSize} - ${metadata.maxSize}`}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
+                      </div>
+                      <div className="col-span-1 flex items-center justify-end pr-2">
+                        <Button
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => {
+                            setSelectedModelGroup(group)
+                            // Prepopulate name from base model ID
+                            const rawName =
+                              group.baseModelId
+                                .split('/')
+                                .pop()
+                                ?.replace(/-GGUF.*$/, '') || group.name
+                            const sanitized = sanitizeModelName(rawName)
+                            setModelName(sanitized)
+                            setModelNameError('')
+                            setSelectedQuantization(group.defaultQuantization)
+                            setConfirmOpen(true)
+                          }}
+                        >
+                          Add
+                        </Button>
+                      </div>
                     </div>
-                    <div className="col-span-7 text-muted-foreground truncate">
-                      {group.baseModelId.replace('unsloth/', '')} (
-                      {group.defaultQuantization})
-                    </div>
-                    <div className="col-span-1 flex items-center justify-end pr-2">
-                      <Button
-                        size="sm"
-                        className="h-8 px-3"
-                        onClick={() => {
-                          setSelectedModelGroup(group)
-                          // Prepopulate name from base model ID
-                          const rawName =
-                            group.baseModelId
-                              .split('/')
-                              .pop()
-                              ?.replace(/-GGUF.*$/, '') || group.name
-                          const sanitized = sanitizeModelName(rawName)
-                          setModelName(sanitized)
-                          setModelNameError('')
-                          setSelectedQuantization(group.defaultQuantization)
-                          setConfirmOpen(true)
-                        }}
-                      >
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
           )}
@@ -1328,6 +1648,38 @@ function AddOrChangeModels({
           setShowBackgroundDownload(true)
           setCustomModelOpen(false)
         }}
+      />
+
+      {/* Disk space warning dialog */}
+      <DiskSpaceWarningDialog
+        open={warningDialogOpen}
+        onOpenChange={open => {
+          if (!open) {
+            // If dialog closes and we still have a reject callback, user cancelled
+            if (warningDialogRejectRef.current) {
+              warningDialogRejectRef.current()
+            }
+            setWarningDialogOpen(false)
+          }
+        }}
+        message={warningDialogMessage}
+        availableBytes={warningDialogAvailableBytes}
+        requiredBytes={warningDialogRequiredBytes}
+        onContinue={() => {
+          if (warningDialogResolveRef.current) {
+            warningDialogResolveRef.current()
+          }
+        }}
+        onCancel={handleWarningDialogCancel}
+      />
+
+      {/* Disk space error dialog */}
+      <DiskSpaceErrorDialog
+        open={errorDialogOpen}
+        onOpenChange={setErrorDialogOpen}
+        message={errorDialogMessage}
+        availableBytes={errorDialogAvailableBytes}
+        requiredBytes={errorDialogRequiredBytes}
       />
 
       {/* Device model confirmation dialog */}
@@ -1683,82 +2035,169 @@ function AddOrChangeModels({
                               ref={optionsScrollRef}
                               className="h-full max-h-[400px] overflow-y-auto space-y-2 border border-border rounded-lg p-2"
                             >
-                              {validOptions.map((option, index) => {
-                                const isSelected =
-                                  option.quantization === selectedQuantization
-                                return (
-                                  <button
-                                    key={`${option.quantization}-${index}`}
-                                    type="button"
-                                    data-selected={isSelected}
-                                    onClick={() =>
-                                      setSelectedQuantization(
-                                        option.quantization
+                              {(() => {
+                                // Determine recommended quantization
+                                const recommendation =
+                                  recommendedQuantizations[
+                                    selectedModelGroup.baseModelId
+                                  ]
+                                let recommendedQuantization: string | null =
+                                  null
+                                let recommendationDescription: string | null =
+                                  null
+
+                                if (recommendation) {
+                                  // Check if recommended option exists and has no disk space issues
+                                  const recommendedOption = validOptions.find(
+                                    opt =>
+                                      opt.quantization ===
+                                      recommendation.quantization
+                                  )
+                                  const recommendedValidation =
+                                    recommendedOption &&
+                                    diskSpaceValidations[
+                                      recommendation.quantization
+                                    ]
+
+                                  if (
+                                    recommendedOption &&
+                                    (!recommendedValidation ||
+                                      (recommendedValidation.can_download &&
+                                        !recommendedValidation.warning))
+                                  ) {
+                                    // Recommended option is available and fits
+                                    recommendedQuantization =
+                                      recommendation.quantization
+                                    recommendationDescription =
+                                      recommendation.description
+                                  } else {
+                                    // Recommended option doesn't fit, find next best that fits
+                                    // Try smaller quantizations in order: Q4_K_M, Q4_K_S, Q3_K_M, Q3_K_S, Q2_K
+                                    const fallbackOrder = [
+                                      'Q4_K_M',
+                                      'Q4_K_S',
+                                      'Q3_K_M',
+                                      'Q3_K_S',
+                                      'Q2_K',
+                                    ]
+                                    for (const fallbackQuant of fallbackOrder) {
+                                      const fallbackOption = validOptions.find(
+                                        opt =>
+                                          opt.quantization === fallbackQuant
                                       )
+                                      if (fallbackOption) {
+                                        const fallbackValidation =
+                                          diskSpaceValidations[fallbackQuant]
+                                        if (
+                                          !fallbackValidation ||
+                                          (fallbackValidation.can_download &&
+                                            !fallbackValidation.warning)
+                                        ) {
+                                          recommendedQuantization =
+                                            fallbackQuant
+                                          recommendationDescription =
+                                            recommendation.description
+                                          break
+                                        }
+                                      }
                                     }
-                                    className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
-                                      isSelected
-                                        ? 'bg-accent/80 border-primary'
-                                        : 'border-border hover:bg-accent/50'
-                                    }`}
-                                  >
-                                    <div className="flex-shrink-0">
-                                      {isSelected ? (
-                                        <FontIcon
-                                          type="checkmark-filled"
-                                          className="w-5 h-5 text-primary"
-                                        />
-                                      ) : (
-                                        <div className="w-5 h-5 rounded-full border-2 border-muted-foreground" />
-                                      )}
-                                    </div>
-                                    <div className="flex-1 min-w-0 flex items-center gap-3">
-                                      <span className="text-sm font-medium px-3 py-1 rounded-md bg-primary/10 text-primary border border-primary/20">
-                                        {option.quantization || 'Unknown'}
-                                      </span>
-                                      <span className="text-sm text-muted-foreground flex-1 truncate">
-                                        {selectedModelGroup.name}
-                                      </span>
-                                      <div className="flex-shrink-0 flex items-center gap-2">
-                                        {diskSpaceValidations[
-                                          option.quantization!
-                                        ] &&
-                                          (!diskSpaceValidations[
-                                            option.quantization!
-                                          ].can_download ||
-                                            diskSpaceValidations[
-                                              option.quantization!
-                                            ].warning) && (
-                                            <TooltipProvider>
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <span className="cursor-help">
-                                                    <FontIcon
-                                                      type="alert-triangle"
-                                                      className="w-4 h-4 text-amber-500"
-                                                    />
-                                                  </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                  <p className="text-sm">
-                                                    {!diskSpaceValidations[
-                                                      option.quantization!
-                                                    ].can_download
-                                                      ? 'Insufficient disk space: This model is too large for your available disk space.'
-                                                      : 'Low disk space warning: Your disk space is running low. Consider freeing up space before downloading.'}
-                                                  </p>
-                                                </TooltipContent>
-                                              </Tooltip>
-                                            </TooltipProvider>
+                                    // If no fallback found, don't show recommendation
+                                  }
+                                }
+
+                                return validOptions.map((option, index) => {
+                                  const isSelected =
+                                    option.quantization === selectedQuantization
+                                  const isRecommended =
+                                    option.quantization ===
+                                    recommendedQuantization
+                                  return (
+                                    <button
+                                      key={`${option.quantization}-${index}`}
+                                      type="button"
+                                      data-selected={isSelected}
+                                      onClick={() =>
+                                        setSelectedQuantization(
+                                          option.quantization
+                                        )
+                                      }
+                                      className={`w-full flex flex-col gap-2 p-3 rounded-lg border transition-colors text-left ${
+                                        isSelected
+                                          ? 'bg-accent/80 border-primary'
+                                          : 'border-border hover:bg-accent/50'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex-shrink-0">
+                                          {isSelected ? (
+                                            <FontIcon
+                                              type="checkmark-filled"
+                                              className="w-5 h-5 text-primary"
+                                            />
+                                          ) : (
+                                            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground" />
                                           )}
-                                        <div className="text-sm font-medium text-foreground">
-                                          {option.size_human}
+                                        </div>
+                                        <div className="flex-1 min-w-0 flex items-center gap-3">
+                                          <span className="text-sm font-medium px-3 py-1 rounded-md bg-primary/10 text-primary border border-primary/20">
+                                            {option.quantization || 'Unknown'}
+                                          </span>
+                                          <span className="text-sm text-muted-foreground flex-1 truncate">
+                                            {selectedModelGroup.name}
+                                          </span>
+                                          {isRecommended && (
+                                            <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-teal-500/20 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400 border border-teal-500/40 dark:border-teal-500/30">
+                                              Recommended
+                                            </span>
+                                          )}
+                                          <div className="flex-shrink-0 flex items-center gap-2">
+                                            {diskSpaceValidations[
+                                              option.quantization!
+                                            ] &&
+                                              (!diskSpaceValidations[
+                                                option.quantization!
+                                              ].can_download ||
+                                                diskSpaceValidations[
+                                                  option.quantization!
+                                                ].warning) && (
+                                                <TooltipProvider>
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <span className="cursor-help">
+                                                        <FontIcon
+                                                          type="alert-triangle"
+                                                          className="w-4 h-4 text-amber-500"
+                                                        />
+                                                      </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      <p className="text-sm">
+                                                        {!diskSpaceValidations[
+                                                          option.quantization!
+                                                        ].can_download
+                                                          ? 'Insufficient disk space: This model is too large for your available disk space.'
+                                                          : 'Low disk space warning: Your disk space is running low. Consider freeing up space before downloading.'}
+                                                      </p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                </TooltipProvider>
+                                              )}
+                                            <div className="text-sm font-medium text-foreground">
+                                              {option.size_human}
+                                            </div>
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  </button>
-                                )
-                              })}
+                                      {isRecommended &&
+                                        recommendationDescription && (
+                                          <div className="ml-8 text-xs text-muted-foreground">
+                                            {recommendationDescription}
+                                          </div>
+                                        )}
+                                    </button>
+                                  )
+                                })
+                              })()}
                             </div>
                           ) : (
                             <div className="text-sm text-muted-foreground py-4">
@@ -1879,7 +2318,30 @@ function AddOrChangeModels({
                       model_name: modelIdentifier,
                       provider: 'universal',
                     })) {
-                      if (event.event === 'progress') {
+                      if (event.event === 'warning') {
+                        // Show warning dialog and wait for user decision
+                        try {
+                          await Promise.race([
+                            handleDiskSpaceWarning(
+                              modelIdentifier,
+                              event.message || 'Low disk space warning'
+                            ),
+                            // Timeout after 5 minutes (user should have made a decision)
+                            new Promise<void>((_, timeoutReject) =>
+                              setTimeout(
+                                () => timeoutReject(new Error('Timeout')),
+                                300000
+                              )
+                            ),
+                          ])
+                          // User chose to continue, proceed with download
+                        } catch {
+                          // User cancelled or timeout
+                          setSubmitState('idle')
+                          setDownloadProgress(0)
+                          return
+                        }
+                      } else if (event.event === 'progress') {
                         const d = Number(event.downloaded || 0)
                         const t = Number(event.total || 0)
                         setDownloadedBytes(d)
@@ -1912,19 +2374,32 @@ function AddOrChangeModels({
                           setShowRecommendedBackgroundDownload(false)
                         }, 1000)
                       } else if (event.event === 'error') {
-                        setSubmitState('error')
-                        setDownloadError(
+                        const errorMessage =
                           event.message ||
-                            'Failed to download model. Please check the model name and try again.'
-                        )
+                          'Failed to download model. Please check the model name and try again.'
+                        // Check if it's a disk space error
+                        if (isDiskSpaceError(errorMessage)) {
+                          await handleDiskSpaceError(
+                            modelIdentifier,
+                            errorMessage
+                          )
+                        } else {
+                          setSubmitState('error')
+                          setDownloadError(errorMessage)
+                        }
                       }
                     }
                   } catch (error: any) {
-                    setSubmitState('error')
-                    setDownloadError(
+                    const errorMessage =
                       error.message ||
-                        'Failed to download model. Please check the model name and try again.'
-                    )
+                      'Failed to download model. Please check the model name and try again.'
+                    // Check if it's a disk space error
+                    if (isDiskSpaceError(errorMessage)) {
+                      await handleDiskSpaceError(modelIdentifier, errorMessage)
+                    } else {
+                      setSubmitState('error')
+                      setDownloadError(errorMessage)
+                    }
                   }
                 }
 
@@ -1953,10 +2428,47 @@ function AddOrChangeModels({
                     opt => opt.quantization === selectedQuantization
                   )
                   if (selectedOption) {
-                    return `Download ${selectedOption.size_human}`
+                    return (
+                      <>
+                        Download and add {selectedOption.size_human}
+                        {submitState !== 'loading' &&
+                          submitState !== 'success' && (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 32 32"
+                              fill="none"
+                              className="ml-2"
+                              style={{ width: '16px', height: '16px' }}
+                            >
+                              <path
+                                d="M26 24V28H6V24H4V28C4 28.5304 4.21071 29.0391 4.58579 29.4142C4.96086 29.7893 5.46957 30 6 30H26C26.5304 30 27.0391 29.7893 27.4142 29.4142C27.7893 29.0391 28 28.5304 28 28V24H26ZM26 14L24.59 12.59L17 20.17V2H15V20.17L7.41 12.59L6 14L16 24L26 14Z"
+                                fill="currentColor"
+                              />
+                            </svg>
+                          )}
+                      </>
+                    )
                   }
                 }
-                return 'Download and add'
+                return (
+                  <>
+                    Download and add
+                    {submitState !== 'loading' && submitState !== 'success' && (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 32 32"
+                        fill="none"
+                        className="ml-2"
+                        style={{ width: '16px', height: '16px' }}
+                      >
+                        <path
+                          d="M26 24V28H6V24H4V28C4 28.5304 4.21071 29.0391 4.58579 29.4142C4.96086 29.7893 5.46957 30 6 30H26C26.5304 30 27.0391 29.7893 27.4142 29.4142C27.7893 29.0391 28 28.5304 28 28V24H26ZM26 14L24.59 12.59L17 20.17V2H15V20.17L7.41 12.59L6 14L16 24L26 14Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    )}
+                  </>
+                )
               })()}
             </Button>
           </DialogFooter>
