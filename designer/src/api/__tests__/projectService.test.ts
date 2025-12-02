@@ -44,7 +44,6 @@ describe('projectService', () => {
     })
 
     it('should return data for different namespaces', async () => {
-      const mockResponse = createMockProjectsList('my-namespace', 1)
       server.use(
         http.get(`${API_BASE}/projects/:namespace`, ({ params }) => {
           const { namespace } = params
@@ -114,8 +113,6 @@ describe('projectService', () => {
         name: 'test-project',
         config_template: 'default',
       }
-      const mockProject = createMockProject({ name: 'test-project', namespace: 'default' })
-      
       server.use(
         http.post(`${API_BASE}/projects/:namespace`, async ({ request: req }) => {
           const body = await req.json() as CreateProjectRequest
@@ -236,8 +233,6 @@ describe('projectService', () => {
 
   describe('getProject', () => {
     it('should get project by namespace and projectId', async () => {
-      const mockProject = createMockProject({ namespace: 'default', name: 'my-project' })
-      
       server.use(
         http.get(`${API_BASE}/projects/:namespace/:projectId`, ({ params }) => {
           const project = createMockProject({ 
@@ -423,8 +418,6 @@ describe('projectService', () => {
 
   describe('deleteProject', () => {
     it('should delete project successfully', async () => {
-      const mockProject = createMockProject({ namespace: 'default', name: 'my-project' })
-      
       server.use(
         http.delete(`${API_BASE}/projects/:namespace/:projectId`, ({ params }) => {
           const project = createMockProject({ 
