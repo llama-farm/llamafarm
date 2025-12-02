@@ -49,7 +49,7 @@ rag:
           type: UniversalEmbedder
           config:
             model: sentence-transformers/all-MiniLM-L6-v2
-            dimension: 768
+            dimension: 384
             batch_size: 16
             timeout: 60
             auto_pull: true
