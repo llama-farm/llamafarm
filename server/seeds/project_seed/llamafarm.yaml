@@ -48,7 +48,7 @@ rag:
         - name: default_embeddings
           type: UniversalEmbedder
           config:
-            model: nomic-ai/nomic-embed-text-v1.5
+            model: sentence-transformers/all-MiniLM-L6-v2
             dimension: 768
             batch_size: 16
             timeout: 60

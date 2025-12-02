@@ -7,7 +7,7 @@
 #   - ../server/seeds/project_seed/llamafarm.yaml
 #
 # To update: npm run sync-models
-# Generated: 2025-12-02T00:06:55.324Z
+# Generated: 2025-12-02T00:09:14.878Z
 
 version: "1"
 models:
@@ -28,8 +28,3 @@ models:
     type: "embedding"
     required: true
     size_estimate_mb: 90
-  - id: "nomic-ai/nomic-embed-text-v1.5"
-    display_name: "Nomic Embed Text V1.5"
-    type: "embedding"
-    required: true
-    size_estimate_mb: 550
