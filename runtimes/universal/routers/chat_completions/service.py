@@ -13,7 +13,7 @@ from openai.types.chat.chat_completion_chunk import (
     Choice as ChoiceChunk,
 )
 
-from models import GGUFLanguageModel, LanguageModel
+from models import GGUFLanguageModel
 from utils.thinking import inject_thinking_control, parse_thinking_response
 
 from .types import ChatCompletionRequest, ThinkingContent
@@ -95,10 +95,6 @@ class ChatCompletionsService:
                 total_max_tokens = answer_tokens
                 thinking_tokens = 0
 
-            # For non-GGUF models, format messages into a prompt
-            if not is_gguf and isinstance(model, LanguageModel):
-                prompt = model.format_messages(messages_dict)
-
             # Handle streaming if requested
             if chat_request.stream:
                 logger.info(
@@ -126,29 +122,17 @@ class ChatCompletionsService:
                     )
                     yield f"data: {initial_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
 
-                    # Stream tokens - use chat_stream for GGUF (proper chat template)
-                    # or generate_stream for transformers models
-                    if is_gguf:
-                        token_stream = model.chat_stream(
-                            messages=messages_dict,
-                            max_tokens=total_max_tokens,  # thinking + answer budget
-                            temperature=chat_request.temperature
-                            if chat_request.temperature is not None
-                            else 0.7,
-                            top_p=chat_request.top_p,
-                            stop=chat_request.stop,
-                            thinking_budget=thinking_tokens,
-                        )
-                    else:
-                        token_stream = model.generate_stream(
-                            prompt=prompt,
-                            max_tokens=total_max_tokens,
-                            temperature=chat_request.temperature
-                            if chat_request.temperature is not None
-                            else 0.7,
-                            top_p=chat_request.top_p,
-                            stop=chat_request.stop,
-                        )
+                    # Stream tokens using unified generate_stream API
+                    token_stream = model.generate_stream(
+                        messages=messages_dict,
+                        max_tokens=total_max_tokens,
+                        temperature=chat_request.temperature
+                        if chat_request.temperature is not None
+                        else 0.7,
+                        top_p=chat_request.top_p,
+                        stop=chat_request.stop,
+                        thinking_budget=thinking_tokens if is_gguf else None,
+                    )
 
                     async for token in token_stream:
                         chunk = ChatCompletionChunk(
@@ -199,29 +183,17 @@ class ChatCompletionsService:
                     },
                 )
 
-            # Non-streaming response - use chat() for GGUF (proper chat template)
-            # or generate() for transformers models
-            if is_gguf:
-                response_text = await model.chat(
-                    messages=messages_dict,
-                    max_tokens=total_max_tokens,  # thinking + answer budget
-                    temperature=chat_request.temperature
-                    if chat_request.temperature is not None
-                    else 0.7,
-                    top_p=chat_request.top_p,
-                    stop=chat_request.stop,
-                    thinking_budget=thinking_tokens,
-                )
-            else:
-                response_text = await model.generate(
-                    prompt=prompt,
-                    max_tokens=total_max_tokens,
-                    temperature=chat_request.temperature
-                    if chat_request.temperature is not None
-                    else 0.7,
-                    top_p=chat_request.top_p,
-                    stop=chat_request.stop,
-                )
+            # Non-streaming response using unified generate API
+            response_text = await model.generate(
+                messages=messages_dict,
+                max_tokens=total_max_tokens,
+                temperature=chat_request.temperature
+                if chat_request.temperature is not None
+                else 0.7,
+                top_p=chat_request.top_p,
+                stop=chat_request.stop,
+                thinking_budget=thinking_tokens if is_gguf else None,
+            )
 
             # Parse thinking content from response (like Ollama does)
             # This separates <think>...</think> into a separate field

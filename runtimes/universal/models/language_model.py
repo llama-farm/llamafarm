@@ -81,15 +81,33 @@ class LanguageModel(BaseModel):
 
     async def generate(
         self,
-        prompt: str,
+        messages: list[dict],
         max_tokens: int | None = None,
-        temperature: float = 1.0,
+        temperature: float = 0.7,
         top_p: float = 1.0,
         stop: list[str] | None = None,
+        thinking_budget: int | None = None,
     ) -> str:
-        """Generate text completion."""
+        """Generate chat completion.
+
+        Uses the tokenizer's chat template to format messages before generation.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature (0.0 = greedy, higher = more random)
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences to end generation
+            thinking_budget: Not used for transformers models (included for API compatibility)
+
+        Returns:
+            Generated text as a string
+        """
         assert self.model is not None, "Model not loaded"
         assert self.tokenizer is not None, "Tokenizer not loaded"
+
+        # Format messages using chat template
+        prompt = self.format_messages(messages)
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
@@ -114,21 +132,38 @@ class LanguageModel(BaseModel):
 
     async def generate_stream(
         self,
-        prompt: str,
+        messages: list[dict],
         max_tokens: int | None = None,
-        temperature: float = 1.0,
+        temperature: float = 0.7,
         top_p: float = 1.0,
         stop: list[str] | None = None,
+        thinking_budget: int | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Generate text completion with streaming (yields tokens as they're generated)."""
+        """Generate chat completion with streaming (yields tokens as they're generated).
+
+        Uses the tokenizer's chat template to format messages before generation.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature (0.0 = greedy, higher = more random)
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences to end generation
+            thinking_budget: Not used for transformers models (included for API compatibility)
+
+        Yields:
+            Generated text tokens as strings
+        """
         assert self.model is not None, "Model not loaded"
         assert self.tokenizer is not None, "Tokenizer not loaded"
+
+        # Format messages using chat template
+        prompt = self.format_messages(messages)
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
         max_new_tokens = max_tokens or 512
 
         # Create a streamer that will yield tokens as they're generated
-        # TextIteratorStreamer type hints expect AutoTokenizer but works with base class
         streamer = TextIteratorStreamer(
             cast(AutoTokenizer, self.tokenizer),
             skip_prompt=True,
