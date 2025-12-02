@@ -39,6 +39,7 @@ from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     AnomalyModel,
     BaseModel,
+    ClassifierModel,
     DocumentModel,
     EncoderModel,
     GGUFEncoderModel,
@@ -1922,6 +1923,431 @@ async def delete_anomaly_model(filename: str):
         raise
     except Exception as e:
         logger.error(f"Error in delete_anomaly_model: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# Text Classification Endpoints (SetFit-based few-shot learning)
+# ============================================================================
+
+# Classifier model storage directory
+CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
+
+# Classifier model cache (separate from _models to avoid conflicts)
+_classifiers: dict[str, "ClassifierModel"] = {}
+
+
+def _make_classifier_cache_key(model_name: str) -> str:
+    """Create a cache key for classifier models."""
+    return f"classifier:{model_name}"
+
+
+def _get_classifier_path(model_name: str) -> Path:
+    """Get the path for a classifier model directory.
+
+    The path is always within CLASSIFIER_MODELS_DIR - users cannot control it.
+    """
+    safe_name = _sanitize_model_name(model_name)
+    return CLASSIFIER_MODELS_DIR / safe_name
+
+
+async def load_classifier(
+    model_id: str,
+    base_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+) -> "ClassifierModel":
+    """Load or get cached classifier model."""
+    cache_key = _make_classifier_cache_key(model_id)
+
+    if cache_key in _classifiers:
+        _track_model_access(cache_key)
+        return _classifiers[cache_key]
+
+    async with _model_load_lock:
+        # Double-check after acquiring lock
+        if cache_key in _classifiers:
+            _track_model_access(cache_key)
+            return _classifiers[cache_key]
+
+        logger.info(f"Loading classifier model: {model_id}")
+        device = get_device()
+
+        model = ClassifierModel(
+            model_id=model_id,
+            device=device,
+            base_model=base_model,
+        )
+
+        await model.load()
+        _classifiers[cache_key] = model
+        _track_model_access(cache_key)
+
+        return model
+
+
+class ClassifierFitRequest(PydanticBaseModel):
+    """Request to fit a text classifier."""
+
+    model: str  # Model identifier (for caching/saving)
+    base_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    training_data: list[dict]  # List of {"text": "...", "label": "..."}
+    num_iterations: int = 20
+    batch_size: int = 16
+
+
+class ClassifierPredictRequest(PydanticBaseModel):
+    """Request to classify texts."""
+
+    model: str  # Model identifier (must be fitted or loaded)
+    texts: list[str]
+
+
+class ClassifierSaveRequest(PydanticBaseModel):
+    """Request to save a fitted classifier."""
+
+    model: str  # Model identifier (must be fitted)
+
+
+class ClassifierLoadRequest(PydanticBaseModel):
+    """Request to load a pre-trained classifier."""
+
+    model: str  # Model identifier to load
+
+
+@app.post("/v1/classifier/fit")
+async def fit_classifier(request: ClassifierFitRequest):
+    """
+    Fit a text classifier using few-shot learning (SetFit).
+
+    Train a classifier with as few as 8-16 examples per class.
+    SetFit uses contrastive learning to fine-tune a sentence-transformer,
+    then trains a small classification head.
+
+    Example request:
+    ```json
+    {
+        "model": "intent-classifier",
+        "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+        "training_data": [
+            {"text": "I need to book a flight", "label": "booking"},
+            {"text": "Cancel my reservation", "label": "cancellation"},
+            {"text": "What's the weather?", "label": "weather"}
+        ],
+        "num_iterations": 20
+    }
+    ```
+
+    After fitting, use /v1/classifier/predict to classify new texts.
+    """
+    try:
+        # Extract texts and labels from training data
+        texts = [item["text"] for item in request.training_data]
+        labels = [item["label"] for item in request.training_data]
+
+        if len(texts) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 training examples required",
+            )
+
+        model = await load_classifier(
+            model_id=request.model,
+            base_model=request.base_model,
+        )
+
+        # Fit the classifier
+        result = await model.fit(
+            texts=texts,
+            labels=labels,
+            num_iterations=request.num_iterations,
+            batch_size=request.batch_size,
+        )
+
+        return {
+            "object": "fit_result",
+            "model": request.model,
+            "base_model": result.base_model,
+            "samples_fitted": result.samples_fitted,
+            "num_classes": result.num_classes,
+            "labels": result.labels,
+            "training_time_ms": result.training_time_ms,
+            "status": "fitted",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in fit_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/classifier/predict")
+async def predict_classifier(request: ClassifierPredictRequest):
+    """
+    Classify texts using a fitted classifier.
+
+    Example request:
+    ```json
+    {
+        "model": "intent-classifier",
+        "texts": ["I want to cancel my trip", "Book me a hotel"]
+    }
+    ```
+
+    Returns predictions with confidence scores for each text.
+    """
+    try:
+        cache_key = _make_classifier_cache_key(request.model)
+
+        if cache_key not in _classifiers:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier '{request.model}' not found. "
+                "Fit with /v1/classifier/fit or load with /v1/classifier/load first.",
+            )
+
+        model = _classifiers[cache_key]
+        _track_model_access(cache_key)
+
+        if not model.is_fitted:
+            raise HTTPException(
+                status_code=400,
+                detail="Model not fitted. Call /v1/classifier/fit first.",
+            )
+
+        results = await model.classify(request.texts)
+
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "text": r.text,
+                    "label": r.label,
+                    "score": r.score,
+                    "all_scores": r.all_scores,
+                }
+                for r in results
+            ],
+            "model": request.model,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in predict_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/classifier/save")
+async def save_classifier(request: ClassifierSaveRequest):
+    """
+    Save a fitted classifier to disk for production use.
+
+    After fitting a model with /v1/classifier/fit, save it to disk so it
+    persists across server restarts.
+
+    Example request:
+    ```json
+    {
+        "model": "intent-classifier"
+    }
+    ```
+
+    Models are saved to ~/.llamafarm/models/classifier/ with auto-generated
+    directory names based on the model name.
+    """
+    try:
+        cache_key = _make_classifier_cache_key(request.model)
+
+        if cache_key not in _classifiers:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier '{request.model}' not found in cache. "
+                "Fit the model first with /v1/classifier/fit",
+            )
+
+        model = _classifiers[cache_key]
+
+        if not model.is_fitted:
+            raise HTTPException(
+                status_code=400,
+                detail="Model not fitted. Call /v1/classifier/fit first.",
+            )
+
+        # Create models directory if needed
+        CLASSIFIER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Generate path from model name (no user-controlled paths)
+        save_path = _get_classifier_path(request.model)
+        await model.save(str(save_path))
+
+        return {
+            "object": "save_result",
+            "model": request.model,
+            "path": str(save_path),
+            "labels": model.labels,
+            "status": "saved",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in save_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/classifier/load")
+async def load_classifier_endpoint(request: ClassifierLoadRequest):
+    """
+    Load a pre-trained classifier from disk.
+
+    Load a previously saved model for production inference without
+    re-training. The model path is automatically determined from the
+    model name - no user control over file paths.
+
+    Example request:
+    ```json
+    {
+        "model": "intent-classifier"
+    }
+    ```
+
+    The model will be loaded from ~/.llamafarm/models/classifier/ and cached
+    for subsequent /v1/classifier/predict calls.
+    """
+    try:
+        # Generate path from model name (no user-controlled paths)
+        model_path = _get_classifier_path(request.model)
+
+        if not model_path.exists():
+            available = (
+                [f.name for f in CLASSIFIER_MODELS_DIR.glob("*") if f.is_dir()]
+                if CLASSIFIER_MODELS_DIR.exists()
+                else []
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier '{request.model}' not found. "
+                f"Available classifiers: {available}",
+            )
+
+        cache_key = _make_classifier_cache_key(request.model)
+
+        # Remove existing model from cache if present
+        if cache_key in _classifiers:
+            await _classifiers[cache_key].unload()
+            del _classifiers[cache_key]
+
+        async with _model_load_lock:
+            logger.info(f"Loading pre-trained classifier: {model_path}")
+            device = get_device()
+
+            model = ClassifierModel(
+                model_id=str(model_path),  # Pass path as model_id for loading
+                device=device,
+            )
+
+            await model.load()
+            _classifiers[cache_key] = model
+            _track_model_access(cache_key)
+
+        return {
+            "object": "load_result",
+            "model": request.model,
+            "path": str(model_path),
+            "is_fitted": model.is_fitted,
+            "labels": model.labels,
+            "num_classes": len(model.labels),
+            "status": "loaded",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in load_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/classifier/models")
+async def list_classifier_models():
+    """
+    List all saved classifier models available for loading.
+
+    Returns models saved in the CLASSIFIER_MODELS_DIR directory.
+
+    Response includes:
+    - name: Name of the saved model
+    - path: Full path to the model directory
+    - labels: Class labels (if labels.txt exists)
+    """
+    try:
+        CLASSIFIER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        models = []
+        for path in CLASSIFIER_MODELS_DIR.glob("*"):
+            if path.is_dir():
+                # Try to read labels
+                labels = []
+                labels_file = path / "labels.txt"
+                if labels_file.exists():
+                    labels = labels_file.read_text().strip().split("\n")
+
+                stat = path.stat()
+                models.append(
+                    {
+                        "name": path.name,
+                        "path": str(path),
+                        "labels": labels,
+                        "num_classes": len(labels),
+                        "modified": stat.st_mtime,
+                    }
+                )
+
+        # Sort by modification time (newest first)
+        models.sort(key=lambda x: x["modified"], reverse=True)
+
+        return {
+            "object": "list",
+            "data": models,
+            "models_dir": str(CLASSIFIER_MODELS_DIR),
+            "total": len(models),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in list_classifier_models: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.delete("/v1/classifier/models/{model_name}")
+async def delete_classifier_model(model_name: str):
+    """
+    Delete a saved classifier model.
+
+    Removes the model directory from disk. Does not affect cached models.
+    """
+    try:
+        model_path = _get_classifier_path(model_name)
+
+        if not model_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier model not found: {model_name}",
+            )
+
+        # Remove directory and contents
+        import shutil
+
+        shutil.rmtree(model_path)
+
+        return {
+            "object": "delete_result",
+            "model": model_name,
+            "deleted": True,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in delete_classifier_model: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

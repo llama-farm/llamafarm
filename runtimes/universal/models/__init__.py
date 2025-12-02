@@ -2,11 +2,12 @@
 Model wrappers for Universal Runtime.
 
 Supports HuggingFace Transformers, Diffusers, GGUF models, OCR, document understanding,
-and anomaly detection.
+anomaly detection, and text classification.
 """
 
 from .anomaly_model import AnomalyModel
 from .base import BaseModel
+from .classifier_model import ClassifierModel
 from .document_model import DocumentModel
 from .encoder_model import EncoderModel
 from .gguf_encoder_model import GGUFEncoderModel
@@ -23,4 +24,5 @@ __all__ = [
     "OCRModel",
     "DocumentModel",
     "AnomalyModel",
+    "ClassifierModel",
 ]
