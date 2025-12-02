@@ -387,7 +387,7 @@ class GGUFLanguageModel(BaseModel):
             return content.strip() if content else ""
         except Exception as e:
             logger.error(f"Error extracting chat completion result: {e}", exc_info=True)
-            raise ValueError(f"Unexpected result structure: {e}") from e
+            raise ValueError(f"Unexpected result from chat completion: {e}") from e
 
     async def chat_stream(
         self,
@@ -472,7 +472,7 @@ class GGUFLanguageModel(BaseModel):
                         )
                         future.result()  # Wait for put to complete
 
-                        # Log warning if thinking budget exceeded (can't stop mid-stream)
+                        # Log warning once if thinking budget exceeded (can't stop mid-stream)
                         if (
                             thinking_budget
                             and thinking_tokens == thinking_budget

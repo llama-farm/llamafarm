@@ -216,7 +216,9 @@ class ChatCompletionsService:
                 response_text = await model.generate(
                     prompt=prompt,
                     max_tokens=total_max_tokens,
-                    temperature=chat_request.temperature,
+                    temperature=chat_request.temperature
+                    if chat_request.temperature is not None
+                    else 0.7,
                     top_p=chat_request.top_p,
                     stop=chat_request.stop,
                 )
