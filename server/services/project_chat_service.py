@@ -618,46 +618,28 @@ class ProjectChatService:
             },
         }
 
-    def _perform_rag_search(
+    def _execute_single_rag_query(
         self,
         project_dir: str,
-        project_config: LlamaFarmConfig,
-        message: str,
+        query: str,
+        database: str,
         top_k: int = 5,
-        database: str | None = None,
         retrieval_strategy: str | None = None,
         score_threshold: float | None = None,
     ) -> list[Any]:
-        """Perform RAG search using the project's RAG configuration.
+        """Execute a single RAG query and return normalized results.
 
-        This implementation searches the database directly, not through datasets.
+        This is the low-level search method that calls the RAG service directly.
+        For most use cases, use _perform_rag_search which handles custom queries
+        and concurrent execution.
         """
-
-        # First, make sure rag is enabled
-        if not project_config.rag:
-            logger.warning("RAG is not enabled in project config. Skipping.")
-            return []
-
-        logger.info(f"Performing RAG search for message: {message}")
-
-        # Find the database configuration
-        if not database:
-            # Check for explicit default_database first, then fall back to first database
-            if project_config.rag.default_database:
-                database = str(project_config.rag.default_database)
-                logger.info(f"Using configured default database: {database}")
-            elif project_config.rag.databases:
-                database = str(project_config.rag.databases[0].name)
-                logger.info(f"Using first database as default: {database}")
-            else:
-                logger.error("No databases found in project config")
-                return []
+        logger.info(f"Executing RAG query: {query[:50]}...")
 
         # Use shared helper to run RAG search on database
         results = search_with_rag(
             project_dir,
             database,
-            message,
+            query,
             top_k=top_k,
             retrieval_strategy=retrieval_strategy,
             score_threshold=score_threshold,
@@ -677,7 +659,7 @@ class ProjectChatService:
             )()
             for item in results
         ]
-        logger.info(f"RAG search returned {len(normalized)} results")
+        logger.info(f"RAG query returned {len(normalized)} results")
         return normalized
 
     def _clear_rag_context_provider(self, chat_agent: LFAgent) -> None:
@@ -716,9 +698,8 @@ class ProjectChatService:
 
         rag_results = []
         if rag_params.rag_enabled:
-            rag_results = await self._perform_rag_search_with_custom_queries(
+            rag_results = await self._perform_rag_search(
                 project_dir=project_dir,
-                project_config=project_config,
                 message=message,
                 rag_params=rag_params,
             )
@@ -736,110 +717,88 @@ class ProjectChatService:
             )
             context_provider.chunks.append(chunk_item)
 
-    async def _perform_rag_search_with_custom_queries(
+    async def _perform_rag_search(
         self,
         project_dir: str,
-        project_config: LlamaFarmConfig,
         message: str,
         rag_params: RAGParameters,
     ) -> list[Any]:
         """
-        Perform RAG search with support for custom queries.
+        Perform RAG search using the project's RAG configuration.
 
         Handles two cases:
         1. rag_queries (list): Execute queries concurrently and merge/deduplicate results
         2. Default: Use the user message as the query
+
+        Args:
+            project_dir: Path to the project directory
+            message: The user message (used as default query if no custom queries)
+            rag_params: Resolved RAG parameters including database, strategy, and queries
         """
+        if not rag_params.rag_enabled or not rag_params.database:
+            return []
+
         top_k = rag_params.rag_top_k or 5
 
-        # Case 1: Custom queries provided - execute concurrently and merge results
+        # Determine queries to execute
+        queries = [message]  # Default to user message
         if rag_params.rag_queries:
-            # Filter out empty queries
             valid_queries = [q for q in rag_params.rag_queries if q and q.strip()]
+            if valid_queries:
+                queries = valid_queries
 
-            if not valid_queries:
-                # Fall back to user message if all queries were empty
-                return self._perform_rag_search(
-                    project_dir=project_dir,
-                    project_config=project_config,
-                    message=message,
-                    top_k=top_k,
-                    database=rag_params.database,
-                    retrieval_strategy=rag_params.retrieval_strategy,
-                    score_threshold=rag_params.rag_score_threshold,
-                )
-
-            # Single query - execute directly without concurrent overhead
-            if len(valid_queries) == 1:
-                logger.info(
-                    f"Performing RAG search with custom query: {valid_queries[0][:50]}..."
-                )
-                return self._perform_rag_search(
-                    project_dir=project_dir,
-                    project_config=project_config,
-                    message=valid_queries[0],
-                    top_k=top_k,
-                    database=rag_params.database,
-                    retrieval_strategy=rag_params.retrieval_strategy,
-                    score_threshold=rag_params.rag_score_threshold,
-                )
-
-            # Multiple queries - execute concurrently
-            logger.info(
-                f"Performing RAG search with {len(valid_queries)} custom queries concurrently"
+        # Single query - execute directly without concurrent overhead
+        if len(queries) == 1:
+            logger.info(f"Performing RAG search with query: {queries[0][:50]}...")
+            return self._execute_single_rag_query(
+                project_dir=project_dir,
+                query=queries[0],
+                database=rag_params.database,
+                top_k=top_k,
+                retrieval_strategy=rag_params.retrieval_strategy,
+                score_threshold=rag_params.rag_score_threshold,
             )
 
-            # Create concurrent search tasks using asyncio.to_thread for sync function
-            search_tasks = [
-                asyncio.to_thread(
-                    self._perform_rag_search,
-                    project_dir=project_dir,
-                    project_config=project_config,
-                    message=query,
-                    top_k=top_k,
-                    database=rag_params.database,
-                    retrieval_strategy=rag_params.retrieval_strategy,
-                    score_threshold=rag_params.rag_score_threshold,
-                )
-                for query in valid_queries
-            ]
+        # Multiple queries - execute concurrently
+        logger.info(f"Performing RAG search with {len(queries)} queries concurrently")
 
-            # Execute all searches concurrently
-            list_of_results = await asyncio.gather(
-                *search_tasks, return_exceptions=True
+        # Create concurrent search tasks using asyncio.to_thread for sync function
+        search_tasks = [
+            asyncio.to_thread(
+                self._execute_single_rag_query,
+                project_dir=project_dir,
+                query=query,
+                database=rag_params.database,
+                top_k=top_k,
+                retrieval_strategy=rag_params.retrieval_strategy,
+                score_threshold=rag_params.rag_score_threshold,
             )
+            for query in queries
+        ]
 
-            # Flatten, deduplicate, and sort the aggregated results
-            all_results = []
-            seen_content_hashes: set[str] = set()
+        # Execute all searches concurrently
+        list_of_results = await asyncio.gather(*search_tasks, return_exceptions=True)
 
-            for results in list_of_results:
-                # Skip failed searches
-                if isinstance(results, Exception):
-                    logger.warning(f"RAG search failed for one query: {results}")
-                    continue
+        # Flatten, deduplicate, and sort the aggregated results
+        all_results = []
+        seen_content_hashes: set[str] = set()
 
-                for result in results:
-                    # Create a hash from the first 200 chars of content for deduplication
-                    content_hash = hash(result.content[:200] if result.content else "")
-                    if content_hash not in seen_content_hashes:
-                        seen_content_hashes.add(content_hash)
-                        all_results.append(result)
+        for results in list_of_results:
+            # Skip failed searches
+            if isinstance(results, Exception):
+                logger.warning(f"RAG search failed for one query: {results}")
+                continue
 
-            # Sort by score (descending) and limit to top_k
-            all_results.sort(key=lambda x: getattr(x, "score", 0.0), reverse=True)
-            return all_results[:top_k]
+            for result in results:
+                # Create a hash from the first 200 chars of content for deduplication
+                content_hash = hash(result.content[:200] if result.content else "")
+                if content_hash not in seen_content_hashes:
+                    seen_content_hashes.add(content_hash)
+                    all_results.append(result)
 
-        # Case 2: Default - use the user message as the query
-        return self._perform_rag_search(
-            project_dir=project_dir,
-            project_config=project_config,
-            message=message,
-            top_k=top_k,
-            database=rag_params.database,
-            retrieval_strategy=rag_params.retrieval_strategy,
-            score_threshold=rag_params.rag_score_threshold,
-        )
+        # Sort by score (descending) and limit to top_k
+        all_results.sort(key=lambda x: getattr(x, "score", 0.0), reverse=True)
+        return all_results[:top_k]
 
 
 project_chat_service = ProjectChatService()
