@@ -307,33 +307,36 @@ class DiskSpaceService:
 
         # Check warning threshold (percentage) - PROJECTED after download
         # Calculate what the free percentage will be after downloading the model
-        # Use each disk's individual free space for projection
+        # Only project cache disk since that's where the model downloads
+        # System disk warning is based on current free space (not projected) since
+        # cache and system may be on different volumes
         remaining_cache_after_download = cache_info.free_bytes - model_size
-        remaining_system_after_download = system_info.free_bytes - model_size
 
         projected_cache_percent = (
             (remaining_cache_after_download / cache_info.total_bytes * 100)
             if cache_info.total_bytes > 0
             else 0
         )
-        projected_system_percent = (
-            (remaining_system_after_download / system_info.total_bytes * 100)
-            if system_info.total_bytes > 0
-            else 0
-        )
+        # System disk warning uses current free space, not projected
+        # (since model downloads to cache, not system disk)
+        current_system_percent = system_info.percent_free
 
         warning = (
             projected_cache_percent < WARNING_THRESHOLD_PERCENT
-            or projected_system_percent < WARNING_THRESHOLD_PERCENT
+            or current_system_percent < WARNING_THRESHOLD_PERCENT
         )
 
         if warning:
-            # Use the minimum remaining space for the message
-            min_remaining = min(remaining_cache_after_download, remaining_system_after_download)
+            # For cache disk, use projected remaining space
+            # For system disk, use current free space
+            cache_remaining = remaining_cache_after_download
+            system_remaining = system_info.free_bytes
+            min_remaining = min(cache_remaining, system_remaining)
+            min_percent = min(projected_cache_percent, current_system_percent)
             message = (
                 f"Downloading this model ({model_size / (1024**3):.2f} GB) will leave you with "
                 f"{min_remaining / (1024**3):.2f} GB free "
-                f"({min(projected_cache_percent, projected_system_percent):.1f}% free), "
+                f"({min_percent:.1f}% free), "
                 f"which is below the 10% threshold. This could affect LlamaFarm's capabilities. "
                 f"Do you want to continue anyway?"
             )

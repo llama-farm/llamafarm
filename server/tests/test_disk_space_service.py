@@ -25,11 +25,14 @@ def test_check_disk_space(tmp_path):
 
 
 def test_check_disk_space_invalid_path():
-    """Test checking disk space with invalid path."""
+    """Test checking disk space with invalid path that causes psutil to fail."""
     invalid_path = Path("/nonexistent/path/that/does/not/exist")
 
-    with pytest.raises(OSError):
-        DiskSpaceService.check_disk_space(invalid_path)
+    # Mock psutil.disk_usage to raise OSError since the actual method
+    # walks up parent directories and would succeed for non-existent paths
+    with patch("server.services.disk_space_service.psutil.disk_usage", side_effect=OSError("Permission denied")):
+        with pytest.raises(OSError):
+            DiskSpaceService.check_disk_space(invalid_path)
 
 
 def test_get_cache_directory():
