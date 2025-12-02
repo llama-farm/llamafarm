@@ -1,11 +1,11 @@
 """Essential vector store tests."""
 
-import pytest
 import tempfile
-import shutil
 
-from core.base import Document
+import pytest
+
 from components.stores.chroma_store.chroma_store import ChromaStore
+from core.base import Document
 
 
 class TestVectorStores:

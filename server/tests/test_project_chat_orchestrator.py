@@ -1,19 +1,18 @@
 import tempfile
 from types import SimpleNamespace
 
-from agents.base.history import LFChatCompletionUserMessageParam
 import pytest
-
 from config.datamodel import (
     LlamaFarmConfig,
-    PromptMessage,
     Model,
+    PromptMessage,
     PromptSet,
     Provider,
     Runtime,
     Version,
 )
 
+from agents.base.history import LFChatCompletionUserMessageParam
 from agents.chat_orchestrator import (
     ChatOrchestratorAgent,
     ChatOrchestratorAgentFactory,

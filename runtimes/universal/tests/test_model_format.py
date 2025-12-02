@@ -1,12 +1,14 @@
 """Tests for model format detection and GGUF file selection."""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 from llamafarm_common import (
-    parse_quantization_from_filename,
     parse_model_with_quantization,
+    parse_quantization_from_filename,
     select_gguf_file,
 )
+
 from utils.model_format import list_gguf_files
 
 
@@ -236,11 +238,11 @@ class TestQuantizationSuffixParsing:
     """
     Test that utility functions correctly parse quantization suffixes from model IDs
     before calling HuggingFace APIs.
-    
+
     This test class specifically catches the bug where model IDs like
     'unsloth/Qwen3-1.7B-GGUF:Q4_K_M' were passed directly to HuggingFace APIs,
     which don't allow colons in repo IDs, causing validation errors.
-    
+
     Regression test for: HuggingFace API calls with quantization suffixes
     """
 
@@ -248,15 +250,15 @@ class TestQuantizationSuffixParsing:
     def test_detect_model_format_strips_quantization_suffix(self, mock_hf_api_class):
         """
         Test that detect_model_format() strips quantization suffix before calling HF API.
-        
+
         This ensures 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M' is passed to HF API as
         'unsloth/Qwen3-1.7B-GGUF' (without the ':Q4_K_M' suffix).
         """
-        from utils.model_format import detect_model_format, clear_format_cache
-        
+        from utils.model_format import clear_format_cache, detect_model_format
+
         # Clear cache to ensure fresh API call
         clear_format_cache()
-        
+
         # Setup mock
         mock_api = Mock()
         mock_api.list_repo_files.return_value = ["model.Q4_K_M.gguf", "model.Q8_0.gguf"]
@@ -268,9 +270,9 @@ class TestQuantizationSuffixParsing:
         # Verify HF API was called with CLEAN model ID (no suffix)
         mock_api.list_repo_files.assert_called_once_with(
             repo_id="unsloth/Qwen3-1.7B-GGUF",  # Should NOT have :Q4_K_M
-            token=None
+            token=None,
         )
-        
+
         # Verify correct format was detected
         assert result == "gguf"
 
@@ -280,7 +282,7 @@ class TestQuantizationSuffixParsing:
         Test that list_gguf_files() strips quantization suffix before calling HF API.
         """
         from utils.model_format import list_gguf_files
-        
+
         # Setup mock
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
@@ -296,9 +298,9 @@ class TestQuantizationSuffixParsing:
         # Verify HF API was called with CLEAN model ID (no suffix)
         mock_api.list_repo_files.assert_called_once_with(
             repo_id="unsloth/Qwen3-1.7B-GGUF",  # Should NOT have :Q8_0
-            token=None
+            token=None,
         )
-        
+
         # Verify correct files were returned
         assert len(result) == 3
         assert "qwen3-1.7b.Q4_K_M.gguf" in result
@@ -310,14 +312,15 @@ class TestQuantizationSuffixParsing:
     ):
         """
         Test that get_gguf_file_path() strips quantization suffix before calling HF APIs.
-        
+
         This test ensures both list_repo_files() and snapshot_download() receive
         clean model IDs without quantization suffixes.
         """
-        from utils.model_format import get_gguf_file_path
-        import tempfile
         import os
-        
+        import tempfile
+
+        from utils.model_format import get_gguf_file_path
+
         # Setup mocks
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
@@ -325,13 +328,13 @@ class TestQuantizationSuffixParsing:
             "qwen3-1.7b.Q8_0.gguf",
         ]
         mock_hf_api_class.return_value = mock_api
-        
+
         # Create temp directory and file for snapshot_download
         with tempfile.TemporaryDirectory() as tmpdir:
             gguf_file = os.path.join(tmpdir, "qwen3-1.7b.Q4_K_M.gguf")
-            with open(gguf_file, 'w') as f:
+            with open(gguf_file, "w") as f:
                 f.write("fake gguf")
-            
+
             mock_snapshot_download.return_value = tmpdir
 
             # Test with quantization suffix in model ID
@@ -340,17 +343,19 @@ class TestQuantizationSuffixParsing:
             # Verify list_repo_files was called with CLEAN model ID
             mock_api.list_repo_files.assert_called_once_with(
                 repo_id="unsloth/Qwen3-1.7B-GGUF",  # Should NOT have :Q4_K_M
-                token=None
+                token=None,
             )
-            
+
             # Verify snapshot_download was called with CLEAN model ID
             mock_snapshot_download.assert_called_once()
             call_kwargs = mock_snapshot_download.call_args[1]
-            assert call_kwargs["repo_id"] == "unsloth/Qwen3-1.7B-GGUF"  # Should NOT have :Q4_K_M
-            
+            assert (
+                call_kwargs["repo_id"] == "unsloth/Qwen3-1.7B-GGUF"
+            )  # Should NOT have :Q4_K_M
+
             # Verify the quantization from the suffix was used for file selection
             assert call_kwargs["allow_patterns"] == ["qwen3-1.7b.Q4_K_M.gguf"]
-            
+
             # Verify correct path was returned
             assert result == gguf_file
 
@@ -358,15 +363,15 @@ class TestQuantizationSuffixParsing:
     def test_caching_with_quantization_suffix(self, mock_hf_api_class):
         """
         Test that format detection cache works correctly with quantization suffixes.
-        
+
         Both 'model:Q4_K_M' and 'model:Q8_0' should use the same cached result
         since they're the same base model.
         """
-        from utils.model_format import detect_model_format, clear_format_cache
-        
+        from utils.model_format import clear_format_cache, detect_model_format
+
         # Clear cache for fresh test
         clear_format_cache()
-        
+
         # Setup mock
         mock_api = Mock()
         mock_api.list_repo_files.return_value = ["model.Q4_K_M.gguf"]

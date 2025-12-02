@@ -1,14 +1,12 @@
 """Path resolution utilities for config files and data sources."""
 
-import os
 from pathlib import Path
-from typing import Union, List, Optional
 
 
 class PathResolver:
     """Utility class for resolving file and directory paths."""
 
-    def __init__(self, base_dir: Optional[Union[str, Path]] = None):
+    def __init__(self, base_dir: str | Path | None = None):
         """Initialize with optional base directory.
 
         Args:
@@ -17,7 +15,7 @@ class PathResolver:
         """
         self.base_dir = Path(base_dir) if base_dir else Path.cwd()
 
-    def resolve_path(self, path: Union[str, Path]) -> Path:
+    def resolve_path(self, path: str | Path) -> Path:
         """Resolve a path, handling both absolute and relative paths.
 
         Args:
@@ -31,12 +29,8 @@ class PathResolver:
         """
         path = Path(path)
 
-        # If already absolute, use as-is
-        if path.is_absolute():
-            resolved = path
-        else:
-            # Resolve relative to base directory
-            resolved = self.base_dir / path
+        # If already absolute, use as-is; otherwise resolve relative to base directory
+        resolved = path if path.is_absolute() else self.base_dir / path
 
         # Resolve any .. or . components
         resolved = resolved.resolve()
@@ -46,7 +40,7 @@ class PathResolver:
 
         return resolved
 
-    def resolve_config_path(self, config_path: Union[str, Path]) -> Path:
+    def resolve_config_path(self, config_path: str | Path) -> Path:
         """Resolve configuration file path with standard search locations.
 
         Args:
@@ -84,7 +78,7 @@ class PathResolver:
             f"Config file '{config_path}' not found in any of these locations:\n  {searched}"
         )
 
-    def resolve_data_source(self, source: Union[str, Path]) -> Path:
+    def resolve_data_source(self, source: str | Path) -> Path:
         """Resolve data source path (file or directory).
 
         Args:
@@ -112,11 +106,8 @@ class PathResolver:
                 resolved = base_relative
             else:
                 cwd_relative = Path.cwd() / path
-                if cwd_relative.exists():
-                    resolved = cwd_relative
-                else:
-                    # Neither exists, use base directory relative for error
-                    resolved = base_relative
+                # Use cwd_relative if it exists, otherwise base_relative for error
+                resolved = cwd_relative if cwd_relative.exists() else base_relative
 
         resolved = resolved.resolve()
 
@@ -126,8 +117,8 @@ class PathResolver:
         return resolved
 
     def find_files_by_pattern(
-        self, pattern: str, search_dirs: Optional[List[Union[str, Path]]] = None
-    ) -> List[Path]:
+        self, pattern: str, search_dirs: list[str | Path] | None = None
+    ) -> list[Path]:
         """Find files matching a glob pattern in specified directories.
 
         Args:
@@ -151,7 +142,7 @@ class PathResolver:
 
         return sorted(set(matches))  # Remove duplicates and sort
 
-    def validate_directory_writable(self, dir_path: Union[str, Path]) -> Path:
+    def validate_directory_writable(self, dir_path: str | Path) -> Path:
         """Validate that a directory exists and is writable.
 
         Args:
@@ -174,8 +165,8 @@ class PathResolver:
         try:
             test_file.touch()
             test_file.unlink()  # Clean up
-        except (PermissionError, OSError):
-            raise PermissionError(f"Directory not writable: {resolved}")
+        except (PermissionError, OSError) as err:
+            raise PermissionError(f"Directory not writable: {resolved}") from err
 
         return resolved
 

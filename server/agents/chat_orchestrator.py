@@ -665,9 +665,7 @@ class ChatOrchestratorAgentFactory:
                 namespace=active_project_namespace,
                 name=active_project_name,
             )
-            agent.register_context_provider(
-                "project_context", project_context_provider
-                )
+            agent.register_context_provider("project_context", project_context_provider)
 
         await agent.setup_tools()
 

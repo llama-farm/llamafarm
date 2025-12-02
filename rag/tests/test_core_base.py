@@ -1,7 +1,6 @@
 """Essential core functionality tests."""
 
-import pytest
-from core.base import Document, ProcessingResult, Pipeline
+from core.base import Document, Pipeline, ProcessingResult
 
 
 class TestCoreBase:

@@ -1,10 +1,11 @@
 """Cross-encoder reranked retrieval strategy."""
 
-import requests
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
+import requests
+
+from components.retrievers.base import RetrievalResult, RetrievalStrategy
 from core.base import Document
 from core.logging import RAGStructLogger
 
@@ -34,7 +35,7 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
     def __init__(
         self,
         name: str = "CrossEncoderRerankedStrategy",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -52,7 +53,7 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
         self.timeout = config.get("timeout", 60)  # Request timeout in seconds
 
         # Model state
-        self._base_strategy: Optional[RetrievalStrategy] = None
+        self._base_strategy: RetrievalStrategy | None = None
 
     def _initialize_base_strategy(self):
         """Lazy initialization of base strategy."""
@@ -60,8 +61,12 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
             return
 
         # Import dynamically to avoid circular dependencies
-        from components.retrievers.basic_similarity.basic_similarity import BasicSimilarityStrategy
-        from components.retrievers.metadata_filtered.metadata_filtered import MetadataFilteredStrategy
+        from components.retrievers.basic_similarity.basic_similarity import (
+            BasicSimilarityStrategy,
+        )
+        from components.retrievers.metadata_filtered.metadata_filtered import (
+            MetadataFilteredStrategy,
+        )
 
         strategy_map = {
             "BasicSimilarityStrategy": BasicSimilarityStrategy,
@@ -82,7 +87,7 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
 
     def retrieve(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         vector_store,
         top_k: int = 5,
         query_text: str = "",
@@ -147,7 +152,9 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
 
         # Step 3: Filter and select top_k
         filtered_docs = [
-            (doc, score) for doc, score in reranked_docs if score >= self.relevance_threshold
+            (doc, score)
+            for doc, score in reranked_docs
+            if score >= self.relevance_threshold
         ]
 
         final_docs = filtered_docs[: min(top_k, self.final_k)]
@@ -179,8 +186,8 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
     def _rerank_with_universal_runtime(
         self,
         query_text: str,
-        documents: List[Document],
-    ) -> List[tuple[Document, float]]:
+        documents: list[Document],
+    ) -> list[tuple[Document, float]]:
         """
         Rerank documents using Universal Runtime's /v1/rerank endpoint.
 
@@ -194,8 +201,8 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
             doc_texts = [doc.content for doc in documents]
 
             # Construct URL - add /v1 if not already present
-            base_url = self.model_base_url.rstrip('/')
-            if base_url.endswith('/v1'):
+            base_url = self.model_base_url.rstrip("/")
+            if base_url.endswith("/v1"):
                 url = f"{base_url}/rerank"
             else:
                 url = f"{base_url}/v1/rerank"
@@ -247,14 +254,16 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
 
             logger.info(
                 f"Successfully reranked {len(reranked)} documents",
-                raw_score_range=f"{min(raw_scores):.2f} to {max(raw_scores):.2f}" if raw_scores else "N/A",
-                normalized_top_score=reranked[0][1] if reranked else None
+                raw_score_range=f"{min(raw_scores):.2f} to {max(raw_scores):.2f}"
+                if raw_scores
+                else "N/A",
+                normalized_top_score=reranked[0][1] if reranked else None,
             )
 
             return reranked
 
         except requests.exceptions.Timeout:
-            logger.error(f"Timeout calling Universal Runtime rerank endpoint")
+            logger.error("Timeout calling Universal Runtime rerank endpoint")
             # Fallback: return documents with neutral scores
             return [(doc, 0.5) for doc in documents]
 
@@ -280,11 +289,9 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
             return False
         if not self.model_id:
             return False
-        if not self.model_base_url:
-            return False
-        return True
+        return bool(self.model_base_url)
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         """Get configuration schema."""
         return {
             "type": "object",
@@ -293,8 +300,18 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
                     "type": "string",
                     "description": "Name of model from runtime.models to use for reranking",
                 },
-                "initial_k": {"type": "integer", "minimum": 10, "maximum": 100, "default": 30},
-                "final_k": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+                "initial_k": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 100,
+                    "default": 30,
+                },
+                "final_k": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
+                },
                 "base_strategy": {
                     "type": "string",
                     "enum": ["BasicSimilarityStrategy", "MetadataFilteredStrategy"],
@@ -306,11 +323,16 @@ class CrossEncoderRerankedStrategy(RetrievalStrategy):
                     "maximum": 1.0,
                     "default": 0.0,
                 },
-                "timeout": {"type": "integer", "minimum": 10, "maximum": 300, "default": 60},
+                "timeout": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 300,
+                    "default": 60,
+                },
             },
         }
 
-    def get_performance_info(self) -> Dict[str, Any]:
+    def get_performance_info(self) -> dict[str, Any]:
         """Get performance characteristics."""
         return {
             "speed": "fast",

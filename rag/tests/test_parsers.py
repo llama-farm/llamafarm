@@ -1,12 +1,11 @@
 """Essential parser tests - real tests with minimal mocking."""
 
-import pytest
 import tempfile
 from pathlib import Path
 
-from components.parsers.text.python_parser import TextParser_Python
 from components.parsers.csv.python_parser import CSVParser_Python
 from components.parsers.markdown.python_parser import MarkdownParser_Python
+from components.parsers.text.python_parser import TextParser_Python
 
 
 class TestParsers:

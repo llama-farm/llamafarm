@@ -5,19 +5,20 @@ Extracts summaries and key information from text content without using LLMs.
 Uses statistical and rule-based approaches for summarization.
 """
 
-import re
-from typing import Dict, Any, List, Optional
-from collections import Counter
 import math
+import re
+from collections import Counter
+from typing import Any
 
 from components.extractors.base import BaseExtractor
+from core.base import Document
 
 
 class SummaryExtractor(BaseExtractor):
     """Extractor for generating document summaries using statistical methods."""
 
     def __init__(
-        self, name: str = "SummaryExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "SummaryExtractor", config: dict[str, Any] | None = None
     ):
         """
         Initialize summary extractor.
@@ -139,9 +140,8 @@ class SummaryExtractor(BaseExtractor):
             ]
         )
 
-    def extract(self, documents: List["Document"]) -> List["Document"]:
+    def extract(self, documents: list["Document"]) -> list["Document"]:
         """Extract summaries from documents."""
-        from core.base import Document
 
         for doc in documents:
             try:
@@ -163,8 +163,8 @@ class SummaryExtractor(BaseExtractor):
         return documents
 
     def _extract_from_text(
-        self, text: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, text: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Extract summary information from text.
 
@@ -221,7 +221,7 @@ class SummaryExtractor(BaseExtractor):
             self.logger.error(f"Error extracting summary: {e}")
             return {}
 
-    def _split_sentences(self, text: str) -> List[str]:
+    def _split_sentences(self, text: str) -> list[str]:
         """Split text into sentences."""
         # Basic sentence splitting using regex
         # This is a simplified approach - for production, consider using spaCy or NLTK
@@ -240,7 +240,7 @@ class SummaryExtractor(BaseExtractor):
 
         return cleaned_sentences
 
-    def _calculate_sentence_scores(self, sentences: List[str]) -> Dict[int, float]:
+    def _calculate_sentence_scores(self, sentences: list[str]) -> dict[int, float]:
         """Calculate importance scores for sentences using TF-IDF-like approach."""
         if not sentences:
             return {}
@@ -292,8 +292,8 @@ class SummaryExtractor(BaseExtractor):
         return sentence_scores
 
     def _select_summary_sentences(
-        self, sentences: List[str], scores: Dict[int, float]
-    ) -> List[str]:
+        self, sentences: list[str], scores: dict[int, float]
+    ) -> list[str]:
         """Select top sentences for summary based on scores."""
         if not sentences or not scores:
             return []
@@ -308,7 +308,7 @@ class SummaryExtractor(BaseExtractor):
 
         return [sentences[i] for i in selected_indices if i < len(sentences)]
 
-    def _extract_key_phrases(self, text: str) -> List[str]:
+    def _extract_key_phrases(self, text: str) -> list[str]:
         """Extract key phrases using simple n-gram analysis."""
         words = self._tokenize(text)
         if len(words) < 2:
@@ -337,8 +337,8 @@ class SummaryExtractor(BaseExtractor):
         return [phrase for phrase, count in phrase_counts.most_common(10) if count > 1]
 
     def _calculate_text_statistics(
-        self, text: str, sentences: List[str]
-    ) -> Dict[str, Any]:
+        self, text: str, sentences: list[str]
+    ) -> dict[str, Any]:
         """Calculate various text statistics."""
         words = self._tokenize(text)
 
@@ -384,7 +384,7 @@ class SummaryExtractor(BaseExtractor):
 
         return stats
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Simple tokenization - split on whitespace and punctuation."""
         # Convert to lowercase and split on whitespace/punctuation
         tokens = re.findall(r"\b[a-zA-Z]+\b", text.lower())
@@ -394,7 +394,7 @@ class SummaryExtractor(BaseExtractor):
             token for token in tokens if token not in self.stop_words and len(token) > 2
         ]
 
-    def get_feature_names(self) -> List[str]:
+    def get_feature_names(self) -> list[str]:
         """Get list of feature names this extractor produces."""
         features = [
             "extractive_summary",
@@ -429,7 +429,7 @@ class SummaryExtractor(BaseExtractor):
         return features
 
     @staticmethod
-    def get_config_schema() -> Dict[str, Any]:
+    def get_config_schema() -> dict[str, Any]:
         """Get configuration schema for the extractor."""
         return {
             "type": "object",
@@ -464,6 +464,6 @@ class SummaryExtractor(BaseExtractor):
             },
         }
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get list of required dependencies."""
         return []  # No external dependencies required

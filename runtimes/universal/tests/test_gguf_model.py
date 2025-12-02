@@ -1,13 +1,15 @@
 """Tests for GGUF model support in Universal Runtime."""
 
-import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+
 from models.gguf_language_model import GGUFLanguageModel
 from utils.model_format import (
+    clear_format_cache,
     detect_model_format,
     get_gguf_file_path,
-    clear_format_cache,
 )
 
 
@@ -29,12 +31,12 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model.gguf", "config.json"]
 
-        with patch("utils.model_format.HfApi", return_value=mock_api):
-            with patch(
-                "utils.model_format.snapshot_download", return_value=str(model_dir)
-            ):
-                format_type = detect_model_format("test/model")
-                assert format_type == "gguf"
+        with (
+            patch("utils.model_format.HfApi", return_value=mock_api),
+            patch("utils.model_format.snapshot_download", return_value=str(model_dir)),
+        ):
+            format_type = detect_model_format("test/model")
+            assert format_type == "gguf"
 
     def test_detect_transformers_format_with_mock(self, tmp_path):
         """Test detection of transformers format with mocked filesystem."""
@@ -51,12 +53,12 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["config.json", "pytorch_model.bin"]
 
-        with patch("utils.model_format.HfApi", return_value=mock_api):
-            with patch(
-                "utils.model_format.snapshot_download", return_value=str(model_dir)
-            ):
-                format_type = detect_model_format("test/model")
-                assert format_type == "transformers"
+        with (
+            patch("utils.model_format.HfApi", return_value=mock_api),
+            patch("utils.model_format.snapshot_download", return_value=str(model_dir)),
+        ):
+            format_type = detect_model_format("test/model")
+            assert format_type == "transformers"
 
     def test_format_detection_caching(self, tmp_path):
         """Test that format detection results are cached."""
@@ -71,19 +73,19 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model.gguf"]
 
-        with patch("utils.model_format.HfApi", return_value=mock_api) as mock_hf_api:
-            with patch(
-                "utils.model_format.snapshot_download", return_value=str(model_dir)
-            ):
-                # First call should trigger API call
-                format1 = detect_model_format("test/model")
-                assert format1 == "gguf"
-                assert mock_hf_api.call_count == 1
+        with (
+            patch("utils.model_format.HfApi", return_value=mock_api) as mock_hf_api,
+            patch("utils.model_format.snapshot_download", return_value=str(model_dir)),
+        ):
+            # First call should trigger API call
+            format1 = detect_model_format("test/model")
+            assert format1 == "gguf"
+            assert mock_hf_api.call_count == 1
 
-                # Second call should use cache (no additional API call)
-                format2 = detect_model_format("test/model")
-                assert format2 == "gguf"
-                assert mock_hf_api.call_count == 1  # Still just 1 call
+            # Second call should use cache (no additional API call)
+            format2 = detect_model_format("test/model")
+            assert format2 == "gguf"
+            assert mock_hf_api.call_count == 1  # Still just 1 call
 
     def test_get_gguf_file_path_with_mock(self, tmp_path):
         """Test getting GGUF file path with mocked filesystem."""
@@ -96,13 +98,13 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model-q4_k_m.gguf"]
 
-        with patch("utils.model_format.HfApi", return_value=mock_api):
-            with patch(
-                "utils.model_format.snapshot_download", return_value=str(model_dir)
-            ):
-                gguf_path = get_gguf_file_path("test/model")
-                assert gguf_path.endswith(".gguf")
-                assert os.path.exists(gguf_path)
+        with (
+            patch("utils.model_format.HfApi", return_value=mock_api),
+            patch("utils.model_format.snapshot_download", return_value=str(model_dir)),
+        ):
+            gguf_path = get_gguf_file_path("test/model")
+            assert gguf_path.endswith(".gguf")
+            assert os.path.exists(gguf_path)
 
     def test_get_gguf_file_path_not_found(self, tmp_path):
         """Test error when no GGUF file found."""
@@ -114,14 +116,14 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["config.json"]
 
-        with patch("utils.model_format.HfApi", return_value=mock_api):
-            with patch(
-                "utils.model_format.snapshot_download", return_value=str(model_dir)
-            ):
-                with pytest.raises(
-                    FileNotFoundError, match="No GGUF files found in model repository"
-                ):
-                    get_gguf_file_path("test/model")
+        with (
+            patch("utils.model_format.HfApi", return_value=mock_api),
+            patch("utils.model_format.snapshot_download", return_value=str(model_dir)),
+            pytest.raises(
+                FileNotFoundError, match="No GGUF files found in model repository"
+            ),
+        ):
+            get_gguf_file_path("test/model")
 
     def test_get_gguf_file_path_multiple_files(self, tmp_path):
         """Test handling of multiple GGUF files (should use first one)."""
@@ -134,13 +136,13 @@ class TestModelFormatDetection:
         mock_api = MagicMock()
         mock_api.list_repo_files.return_value = ["model-q4.gguf", "model-q8.gguf"]
 
-        with patch("utils.model_format.HfApi", return_value=mock_api):
-            with patch(
-                "utils.model_format.snapshot_download", return_value=str(model_dir)
-            ):
-                gguf_path = get_gguf_file_path("test/model")
-                assert gguf_path.endswith(".gguf")
-                assert os.path.exists(gguf_path)
+        with (
+            patch("utils.model_format.HfApi", return_value=mock_api),
+            patch("utils.model_format.snapshot_download", return_value=str(model_dir)),
+        ):
+            gguf_path = get_gguf_file_path("test/model")
+            assert gguf_path.endswith(".gguf")
+            assert os.path.exists(gguf_path)
 
 
 class TestGGUFLanguageModel:
@@ -204,16 +206,19 @@ class TestGGUFLanguageModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch(
-            "models.gguf_language_model.get_gguf_file_path", return_value=str(gguf_file)
-        ):
-            with patch(
+        with (
+            patch(
+                "models.gguf_language_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch(
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
-            ):
-                with patch("models.gguf_language_model.Llama", return_value=mock_llama):
-                    await model.load()
-                    assert model.llama is not None
+            ),
+            patch("models.gguf_language_model.Llama", return_value=mock_llama),
+        ):
+            await model.load()
+            assert model.llama is not None
 
     @pytest.mark.asyncio
     async def test_load_model_gpu(self, tmp_path):
@@ -229,21 +234,24 @@ class TestGGUFLanguageModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch(
-            "models.gguf_language_model.get_gguf_file_path", return_value=str(gguf_file)
-        ):
-            with patch(
+        with (
+            patch(
+                "models.gguf_language_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch(
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
-            ):
-                with patch(
-                    "models.gguf_language_model.Llama", return_value=mock_llama
-                ) as mock_llama_cls:
-                    await model.load()
-                    assert model.llama is not None
-                    # Verify that n_gpu_layers=-1 was passed for GPU
-                    call_kwargs = mock_llama_cls.call_args[1]
-                    assert call_kwargs["n_gpu_layers"] == -1
+            ),
+            patch(
+                "models.gguf_language_model.Llama", return_value=mock_llama
+            ) as mock_llama_cls,
+        ):
+            await model.load()
+            assert model.llama is not None
+            # Verify that n_gpu_layers=-1 was passed for GPU
+            call_kwargs = mock_llama_cls.call_args[1]
+            assert call_kwargs["n_gpu_layers"] == -1
 
     @pytest.mark.asyncio
     async def test_generate_not_loaded(self):
@@ -267,17 +275,20 @@ class TestGGUFLanguageModel:
         mock_llama = MagicMock()
         mock_llama.return_value = {"choices": [{"text": "Hello! How can I help?"}]}
 
-        with patch(
-            "models.gguf_language_model.get_gguf_file_path", return_value=str(gguf_file)
-        ):
-            with patch(
+        with (
+            patch(
+                "models.gguf_language_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch(
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
-            ):
-                with patch("models.gguf_language_model.Llama", return_value=mock_llama):
-                    await model.load()
-                    result = await model.generate("Hi", max_tokens=10)
-                    assert result == "Hello! How can I help?"
+            ),
+            patch("models.gguf_language_model.Llama", return_value=mock_llama),
+        ):
+            await model.load()
+            result = await model.generate("Hi", max_tokens=10)
+            assert result == "Hello! How can I help?"
 
     @pytest.mark.asyncio
     async def test_generate_stream_not_loaded(self):

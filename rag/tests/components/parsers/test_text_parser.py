@@ -1,16 +1,17 @@
 """Tests for Text Parser component."""
 
-import pytest
-from pathlib import Path
+import os
 import sys
 import tempfile
-import os
+from pathlib import Path
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
 from components.parsers.text.python_parser import TextParser_Python
+from core.base import Document
 
 
 class TestPlainTextParser:
@@ -237,9 +238,9 @@ The document concludes with this final section that summarizes the content."""
         can_parse = getattr(default_parser, "can_parse", None)
         if callable(can_parse):
             # Should handle text file extensions
-            assert default_parser.can_parse("document.txt") == True
+            assert default_parser.can_parse("document.txt") is True
             # Should reject other file types
-            assert default_parser.can_parse("document.pdf") == False
+            assert default_parser.can_parse("document.pdf") is False
         else:
             # Fallback: ensure parser can parse a .txt file without error
             with tempfile.NamedTemporaryFile(

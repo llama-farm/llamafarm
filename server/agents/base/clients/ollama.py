@@ -2,7 +2,7 @@ import datetime
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any, Literal
+from typing import Literal
 
 from ollama import AsyncClient, Message
 from openai.types.chat import (

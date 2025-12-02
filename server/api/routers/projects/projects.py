@@ -875,8 +875,6 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             progress = _process_group_children(children, file_hashes, task_id, logger)
             total = progress["total"]
             completed = progress["completed"]
-            failed = progress["failed"]
-            successful = progress["successful"]
             file_statuses = progress["file_statuses"]
 
             # Determine overall state
@@ -1009,8 +1007,6 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             progress = _process_group_children(children, file_hashes, task_id, logger)
             total = progress["total"]
             completed = progress["completed"]
-            failed = progress["failed"]
-            successful = progress["successful"]
             file_statuses = progress["file_statuses"]
 
             # Determine overall state
@@ -1167,7 +1163,9 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             response.meta = {"message": str(res.info)}
 
     if res.state == "SUCCESS":
-        if isinstance(res.result, (dict, list, str, int, float, bool, type(None))):
+        if isinstance(
+            res.result, (dict | list | str | int | float | bool | type(None))
+        ):
             response.result = res.result
         else:
             response.result = {"message": str(res.result)}

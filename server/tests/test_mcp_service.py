@@ -5,7 +5,6 @@ Unit tests for MCPService (using official Python MCP SDK)
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from config.datamodel import (
     LlamaFarmConfig,
     Mcp,
@@ -16,7 +15,8 @@ from config.datamodel import (
     Transport,
     Version,
 )
-from services.mcp_service import MCPService, ToolSchema
+
+from services.mcp_service import MCPService
 
 
 @pytest.fixture

@@ -1,5 +1,5 @@
-from pydantic import BaseModel
 from openai.types.chat import ChatCompletionMessageParam
+from pydantic import BaseModel
 
 
 class ChatCompletionRequest(BaseModel):

@@ -1,9 +1,10 @@
 """Excel parser using LlamaIndex."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.excel.llamaindex_parser")
 
 
@@ -13,7 +14,7 @@ class ExcelParser_LlamaIndex:
     def __init__(
         self,
         name: str = "ExcelParser_LlamaIndex",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         self.name = name
         self.config = config or {}
@@ -42,8 +43,8 @@ class ExcelParser_LlamaIndex:
         from core.base import Document, ProcessingResult
 
         try:
-            from llama_index.readers.file import PandasExcelReader
             import pandas as pd
+            from llama_index.readers.file import PandasExcelReader
         except ImportError:
             return ProcessingResult(
                 documents=[],

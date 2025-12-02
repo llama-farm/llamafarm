@@ -1,16 +1,11 @@
 """Tests for GGUF encoder model support in Universal Runtime."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
 from models.gguf_encoder_model import GGUFEncoderModel
-from utils.model_format import (
-    clear_format_cache,
-    detect_model_format,
-    get_gguf_file_path,
-)
 
 
 class TestGGUFEncoderModel:
@@ -39,18 +34,21 @@ class TestGGUFEncoderModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch(
-            "models.gguf_encoder_model.get_gguf_file_path", return_value=str(gguf_file)
-        ):
-            with patch(
+        with (
+            patch(
+                "models.gguf_encoder_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch(
                 "models.gguf_encoder_model.Llama", return_value=mock_llama
-            ) as mock_llama_cls:
-                await model.load()
-                assert model.llama is not None
-                # Verify embedding=True was passed
-                call_kwargs = mock_llama_cls.call_args[1]
-                assert call_kwargs["embedding"] is True
-                assert call_kwargs["n_gpu_layers"] == 0  # CPU mode
+            ) as mock_llama_cls,
+        ):
+            await model.load()
+            assert model.llama is not None
+            # Verify embedding=True was passed
+            call_kwargs = mock_llama_cls.call_args[1]
+            assert call_kwargs["embedding"] is True
+            assert call_kwargs["n_gpu_layers"] == 0  # CPU mode
 
     @pytest.mark.asyncio
     async def test_load_model_gpu(self, tmp_path):
@@ -66,18 +64,21 @@ class TestGGUFEncoderModel:
         # Mock the Llama class
         mock_llama = MagicMock()
 
-        with patch(
-            "models.gguf_encoder_model.get_gguf_file_path", return_value=str(gguf_file)
-        ):
-            with patch(
+        with (
+            patch(
+                "models.gguf_encoder_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch(
                 "models.gguf_encoder_model.Llama", return_value=mock_llama
-            ) as mock_llama_cls:
-                await model.load()
-                assert model.llama is not None
-                # Verify that n_gpu_layers=-1 was passed for GPU
-                call_kwargs = mock_llama_cls.call_args[1]
-                assert call_kwargs["n_gpu_layers"] == -1
-                assert call_kwargs["embedding"] is True
+            ) as mock_llama_cls,
+        ):
+            await model.load()
+            assert model.llama is not None
+            # Verify that n_gpu_layers=-1 was passed for GPU
+            call_kwargs = mock_llama_cls.call_args[1]
+            assert call_kwargs["n_gpu_layers"] == -1
+            assert call_kwargs["embedding"] is True
 
     @pytest.mark.asyncio
     async def test_embed_not_loaded(self):
@@ -105,17 +106,20 @@ class TestGGUFEncoderModel:
             "data": [{"embedding": mock_embedding}]
         }
 
-        with patch(
-            "models.gguf_encoder_model.get_gguf_file_path", return_value=str(gguf_file)
+        with (
+            patch(
+                "models.gguf_encoder_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
         ):
-            with patch("models.gguf_encoder_model.Llama", return_value=mock_llama):
-                await model.load()
-                embeddings = await model.embed(["Hello world"], normalize=False)
+            await model.load()
+            embeddings = await model.embed(["Hello world"], normalize=False)
 
-                assert isinstance(embeddings, list)
-                assert len(embeddings) == 1
-                assert isinstance(embeddings[0], list)
-                assert len(embeddings[0]) == 5
+            assert isinstance(embeddings, list)
+            assert len(embeddings) == 1
+            assert isinstance(embeddings[0], list)
+            assert len(embeddings[0]) == 5
 
     @pytest.mark.asyncio
     async def test_embed_batch(self, tmp_path):
@@ -141,20 +145,21 @@ class TestGGUFEncoderModel:
 
         mock_llama.create_embedding.side_effect = mock_create_embedding
 
-        with patch(
-            "models.gguf_encoder_model.get_gguf_file_path", return_value=str(gguf_file)
+        with (
+            patch(
+                "models.gguf_encoder_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
         ):
-            with patch("models.gguf_encoder_model.Llama", return_value=mock_llama):
-                await model.load()
-                embeddings = await model.embed(
-                    ["Hello", "World", "Test"], normalize=False
-                )
+            await model.load()
+            embeddings = await model.embed(["Hello", "World", "Test"], normalize=False)
 
-                assert isinstance(embeddings, list)
-                assert len(embeddings) == 3
-                # All embeddings should have same dimension
-                dims = [len(emb) for emb in embeddings]
-                assert dims == [3, 3, 3]
+            assert isinstance(embeddings, list)
+            assert len(embeddings) == 3
+            # All embeddings should have same dimension
+            dims = [len(emb) for emb in embeddings]
+            assert dims == [3, 3, 3]
 
     @pytest.mark.asyncio
     async def test_embed_normalization(self, tmp_path):
@@ -173,23 +178,26 @@ class TestGGUFEncoderModel:
             "data": [{"embedding": mock_embedding}]
         }
 
-        with patch(
-            "models.gguf_encoder_model.get_gguf_file_path", return_value=str(gguf_file)
+        with (
+            patch(
+                "models.gguf_encoder_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
         ):
-            with patch("models.gguf_encoder_model.Llama", return_value=mock_llama):
-                await model.load()
+            await model.load()
 
-                # Get normalized embedding
-                embeddings_normalized = await model.embed(["Test"], normalize=True)
+            # Get normalized embedding
+            embeddings_normalized = await model.embed(["Test"], normalize=True)
 
-                # Check that it's normalized (L2 norm should be 1.0)
-                emb_array = np.array(embeddings_normalized[0])
-                norm = np.linalg.norm(emb_array)
-                assert np.isclose(norm, 1.0, atol=1e-6)
+            # Check that it's normalized (L2 norm should be 1.0)
+            emb_array = np.array(embeddings_normalized[0])
+            norm = np.linalg.norm(emb_array)
+            assert np.isclose(norm, 1.0, atol=1e-6)
 
-                # Expected normalized values: [3/5, 4/5] = [0.6, 0.8]
-                assert np.isclose(embeddings_normalized[0][0], 0.6, atol=1e-6)
-                assert np.isclose(embeddings_normalized[0][1], 0.8, atol=1e-6)
+            # Expected normalized values: [3/5, 4/5] = [0.6, 0.8]
+            assert np.isclose(embeddings_normalized[0][0], 0.6, atol=1e-6)
+            assert np.isclose(embeddings_normalized[0][1], 0.8, atol=1e-6)
 
     @pytest.mark.asyncio
     async def test_embed_no_normalization(self, tmp_path):
@@ -208,18 +216,21 @@ class TestGGUFEncoderModel:
             "data": [{"embedding": mock_embedding}]
         }
 
-        with patch(
-            "models.gguf_encoder_model.get_gguf_file_path", return_value=str(gguf_file)
+        with (
+            patch(
+                "models.gguf_encoder_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
         ):
-            with patch("models.gguf_encoder_model.Llama", return_value=mock_llama):
-                await model.load()
+            await model.load()
 
-                # Get unnormalized embedding
-                embeddings_unnormalized = await model.embed(["Test"], normalize=False)
+            # Get unnormalized embedding
+            embeddings_unnormalized = await model.embed(["Test"], normalize=False)
 
-                # Should preserve original values
-                assert embeddings_unnormalized[0][0] == 3.0
-                assert embeddings_unnormalized[0][1] == 4.0
+            # Should preserve original values
+            assert embeddings_unnormalized[0][0] == 3.0
+            assert embeddings_unnormalized[0][1] == 4.0
 
     @pytest.mark.asyncio
     async def test_generate_not_supported(self):

@@ -117,7 +117,7 @@ def get_project_path(namespace: str, project: str) -> str:
     # This is the same check used by ProjectService (project_service.py:79-82)
     if not norm_path.startswith(os.path.abspath(base_path) + os.sep):
         raise ValueError(
-            f"Invalid namespace or project: path traversal detected"
+            "Invalid namespace or project: path traversal detected"
         )
 
     return norm_path

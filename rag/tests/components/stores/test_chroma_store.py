@@ -1,17 +1,17 @@
 """Tests for Chroma Store component."""
 
-import pytest
-from pathlib import Path
+import shutil
 import sys
 import tempfile
-import shutil
-from unittest.mock import Mock, patch
+from pathlib import Path
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
 from components.stores.chroma_store.chroma_store import ChromaStore
+from core.base import Document
 
 
 class TestChromaStore:
@@ -166,7 +166,7 @@ class TestChromaStore:
 
         # Delete collection
         success = test_store.delete_collection()
-        assert success == True
+        assert success is True
 
         # Collection should no longer exist
         info = test_store.get_collection_info()
@@ -318,7 +318,7 @@ class TestChromaStoreIntegration:
     def test_real_chroma_operations(self):
         """Test with real ChromaDB (skipped by default)."""
         try:
-            import chromadb
+            import chromadb  # noqa: F401
 
             temp_dir = tempfile.mkdtemp()
             store = ChromaStore("integration", {"persist_directory": temp_dir})
@@ -335,7 +335,7 @@ class TestChromaStoreIntegration:
             ]
 
             success = store.add_documents(docs)
-            assert success == True
+            assert success is True
 
             # Cleanup
             shutil.rmtree(temp_dir)

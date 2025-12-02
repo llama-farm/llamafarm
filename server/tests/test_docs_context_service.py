@@ -2,9 +2,9 @@
 Tests for the DocsContextService.
 """
 
-import pytest
 from pathlib import Path
-from services.docs_context_service import DocsContextService, KEYWORD_TO_DOCS
+
+from services.docs_context_service import KEYWORD_TO_DOCS, DocsContextService
 
 
 class TestDocsContextService:
@@ -87,7 +87,9 @@ class TestDocsContextService:
         service = DocsContextService(docs_root=docs_root)
 
         # Query with multiple keywords
-        results = service.match_docs_for_query("How do I use CLI commands for datasets?")
+        results = service.match_docs_for_query(
+            "How do I use CLI commands for datasets?"
+        )
 
         # Should match both CLI and datasets docs (limited by max_docs default of 2)
         assert len(results) <= 2
@@ -161,8 +163,7 @@ class TestDocsContextService:
         service = DocsContextService(docs_root=Path("/fake"))
 
         formatted = service.format_doc_for_context(
-            "rag/index.md",
-            "# RAG Guide\n\nContent here"
+            "rag/index.md", "# RAG Guide\n\nContent here"
         )
 
         assert "## Documentation: rag/index.md" in formatted
@@ -195,7 +196,7 @@ class TestDocsContextService:
 
     def test_keyword_mappings_are_lowercase(self):
         """Test that all keyword mappings are lowercase for case-insensitive matching."""
-        for keyword in KEYWORD_TO_DOCS.keys():
+        for keyword in KEYWORD_TO_DOCS:
             assert keyword == keyword.lower(), f"Keyword '{keyword}' is not lowercase"
 
     def test_case_insensitive_matching(self, tmp_path):

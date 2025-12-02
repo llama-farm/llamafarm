@@ -1,11 +1,11 @@
 """Tests for MultiTurnRAGStrategy."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import Mock, patch
 
-from components.retrievers.multi_turn.multi_turn import MultiTurnRAGStrategy
+import pytest
+
 from components.retrievers.base import RetrievalResult
+from components.retrievers.multi_turn.multi_turn import MultiTurnRAGStrategy
 from core.base import Document
 
 
@@ -127,7 +127,11 @@ class TestMultiTurnRAGStrategy:
             # Mock LLM response with XML format
             mock_response = Mock()
             mock_response.choices = [
-                Mock(message=Mock(content='<question>What is llama fiber?</question>\n<question>What is alpaca fiber?</question>'))
+                Mock(
+                    message=Mock(
+                        content="<question>What is llama fiber?</question>\n<question>What is alpaca fiber?</question>"
+                    )
+                )
             ]
             mock_client = Mock()
             mock_client.chat.completions.create.return_value = mock_response
@@ -182,15 +186,18 @@ class TestMultiTurnRAGStrategy:
                 RetrievalResult(
                     documents=[sample_documents[0], sample_documents[1]],
                     scores=[0.9, 0.8],
-                    strategy_metadata={}
+                    strategy_metadata={},
                 ),
             ),
             (
                 "sub_query_2",
                 RetrievalResult(
-                    documents=[sample_documents[1], sample_documents[2]],  # doc1 is duplicate
+                    documents=[
+                        sample_documents[1],
+                        sample_documents[2],
+                    ],  # doc1 is duplicate
                     scores=[0.85, 0.7],
-                    strategy_metadata={}
+                    strategy_metadata={},
                 ),
             ),
         ]
@@ -205,17 +212,15 @@ class TestMultiTurnRAGStrategy:
         assert merged.strategy_metadata["strategy"] == "MultiTurnRAGStrategy"
         assert merged.strategy_metadata["sub_queries_count"] == 2
 
-    def test_retrieve_simple_query(self, mock_vector_store, sample_embedding, sample_documents):
+    def test_retrieve_simple_query(
+        self, mock_vector_store, sample_embedding, sample_documents
+    ):
         """Test retrieval for a simple query (no decomposition)."""
-        with patch.object(
-            MultiTurnRAGStrategy, "_initialize_base_strategy"
-        ) as mock_init:
+        with patch.object(MultiTurnRAGStrategy, "_initialize_base_strategy"):
             # Mock base strategy
             mock_base = Mock()
             mock_base.retrieve.return_value = RetrievalResult(
-                documents=sample_documents[:2],
-                scores=[0.9, 0.8],
-                strategy_metadata={}
+                documents=sample_documents[:2], scores=[0.9, 0.8], strategy_metadata={}
             )
 
             strategy = MultiTurnRAGStrategy(
@@ -241,13 +246,18 @@ class TestMultiTurnRAGStrategy:
         self, mock_vector_store, sample_embedding, sample_documents
     ):
         """Test retrieval for a complex query with decomposition."""
-        with patch("concurrent.futures.ThreadPoolExecutor") as mock_executor, \
-             patch("openai.OpenAI") as mock_openai:
-
+        with (
+            patch("concurrent.futures.ThreadPoolExecutor") as mock_executor,
+            patch("openai.OpenAI") as mock_openai,
+        ):
             # Mock LLM response for decomposition (XML format)
             mock_llm_response = Mock()
             mock_llm_response.choices = [
-                Mock(message=Mock(content='<question>What is llama fiber?</question>\n<question>What is alpaca fiber?</question>'))
+                Mock(
+                    message=Mock(
+                        content="<question>What is llama fiber?</question>\n<question>What is alpaca fiber?</question>"
+                    )
+                )
             ]
             mock_llm_client = Mock()
             mock_llm_client.chat.completions.create.return_value = mock_llm_response
@@ -257,7 +267,11 @@ class TestMultiTurnRAGStrategy:
             mock_future = Mock()
             mock_future.result.return_value = (
                 "sub_query",
-                RetrievalResult(documents=sample_documents[:2], scores=[0.9, 0.8], strategy_metadata={}),
+                RetrievalResult(
+                    documents=sample_documents[:2],
+                    scores=[0.9, 0.8],
+                    strategy_metadata={},
+                ),
             )
             mock_pool = Mock()
             mock_pool.__enter__ = Mock(return_value=mock_pool)
@@ -268,9 +282,7 @@ class TestMultiTurnRAGStrategy:
             # Mock base strategy
             mock_base = Mock()
             mock_base.retrieve.return_value = RetrievalResult(
-                documents=sample_documents[:2],
-                scores=[0.9, 0.8],
-                strategy_metadata={}
+                documents=sample_documents[:2], scores=[0.9, 0.8], strategy_metadata={}
             )
 
             strategy = MultiTurnRAGStrategy(

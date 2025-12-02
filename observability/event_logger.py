@@ -10,9 +10,8 @@ import os
 import tempfile
 import threading
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from observability.config_versioning import hash_config, save_config_snapshot
 
@@ -59,7 +58,7 @@ class EventLogger:
         # Event storage (internal buffer)
         self._events: list[dict[str, Any]] = []
         self._lock = threading.Lock()  # Thread safety
-        self._start_time = datetime.now(timezone.utc)
+        self._start_time = datetime.now(UTC)
         self._last_event_time = self._start_time  # Track last event for delta duration
         self._metadata: dict[str, Any] = {}
         self._summary_data: dict[str, Any] = {}  # Summary data from final event
@@ -83,7 +82,7 @@ class EventLogger:
             })
         """
         with self._lock:  # Thread-safe
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # Calculate duration as time since last event (not from start)
             duration_ms = (now - self._last_event_time).total_seconds() * 1000
             self._last_event_time = now  # Update for next event
@@ -142,7 +141,7 @@ class EventLogger:
         with self._lock:
             self._write_to_disk(status="failed", error=error)
 
-    def _write_to_disk(self, status: str, error: Optional[str]) -> None:
+    def _write_to_disk(self, status: str, error: str | None) -> None:
         """
         Internal method - handles all JSON serialization and I/O.
 

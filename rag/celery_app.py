@@ -5,9 +5,9 @@ This module configures the Celery application for the RAG service worker.
 It sets up the broker connection, task routing, and imports all RAG tasks.
 """
 
+import multiprocessing
 import os
 import sys
-import multiprocessing
 
 from celery import Celery, signals
 

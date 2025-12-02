@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 # Import from rag module
 from core.base import Document, ProcessingResult
@@ -19,17 +19,17 @@ class ParserConfig:
     name: str
     display_name: str
     version: str
-    supported_extensions: List[str]
-    mime_types: List[str]
-    capabilities: List[str]
-    dependencies: Dict[str, List[str]]
-    default_config: Dict[str, Any]
+    supported_extensions: list[str]
+    mime_types: list[str]
+    capabilities: list[str]
+    dependencies: dict[str, list[str]]
+    default_config: dict[str, Any]
 
 
 class BaseParser(ABC):
     """Abstract base class for all parsers."""
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         """Initialize parser with configuration.
 
         Args:
@@ -77,7 +77,7 @@ class BaseParser(ABC):
         """
         pass
 
-    def parse_blob(self, blob_data: bytes, metadata: Dict[str, Any]) -> List[Document]:
+    def parse_blob(self, blob_data: bytes, metadata: dict[str, Any]) -> list[Document]:
         """Parse raw blob data.
 
         Args:
@@ -88,8 +88,8 @@ class BaseParser(ABC):
             List of Document objects
         """
         # Default implementation writes to temp file and calls parse
-        import tempfile
         import os
+        import tempfile
 
         filename = metadata.get("filename", "temp")
         suffix = Path(filename).suffix if filename else ".txt"
@@ -110,11 +110,14 @@ class BaseParser(ABC):
         finally:
             os.unlink(tmp_path)
 
-    def _validate_config(self):
-        """Validate configuration against parser schema."""
-        # This will use the individual parser's schema.json
-        # Implementation depends on jsonschema library
-        pass
+    def _validate_config(self) -> None:
+        """Validate configuration against parser schema.
+
+        Override in subclasses to implement custom validation.
+        Default implementation does nothing.
+        """
+        # Subclasses can override to validate against their schema.json
+        return None
 
     def detect_encoding(self, file_path: str) -> str:
         """Detect file encoding.
@@ -131,13 +134,13 @@ class BaseParser(ABC):
             with open(file_path, "rb") as f:
                 result = chardet.detect(f.read(10000))
                 return result["encoding"] or "utf-8"
-        except:
+        except Exception:
             return "utf-8"
 
     def create_document(
         self,
         content: str,
-        metadata: Dict[str, Any] = None,
+        metadata: dict[str, Any] = None,
         doc_id: str = None,
         source: str = None,
     ) -> Document:
