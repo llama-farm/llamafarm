@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from api.errors import DatabaseNotFoundError
+from core.celery.rag_client import list_rag_documents
 from core.logging import FastAPIStructLogger
 from services.database_service import DatabaseService
 from services.project_service import ProjectService
@@ -128,6 +129,114 @@ async def get_rag_stats(
 
     # Use the handler function from rag_stats.py
     return await handle_rag_stats(project_obj.config, str(project_dir), database)
+
+
+# ============================================================================
+# Document Listing Endpoint
+# ============================================================================
+
+
+class RAGDocumentResponse(BaseModel):
+    """Response model for a single RAG document."""
+
+    id: str = Field(..., description="Document identifier")
+    filename: str = Field(..., description="Document filename")
+    chunk_count: int = Field(..., description="Number of chunks for this document")
+    size_bytes: int = Field(default=0, description="Document size in bytes")
+    parser_used: str = Field(default="unknown", description="Parser used to process")
+    date_ingested: str = Field(default="", description="Date document was ingested")
+    metadata: dict[str, Any] | None = Field(
+        default=None, description="Additional metadata"
+    )
+
+
+@router.get(
+    "/documents",
+    response_model=list[RAGDocumentResponse],
+    operation_id="rag_list_documents",
+    summary="List documents in a RAG database",
+)
+async def list_documents(
+    namespace: str,
+    project: str,
+    database: str | None = Query(None, description="Database to list documents from"),
+    limit: int = Query(50, ge=1, le=1000, description="Maximum documents to return"),
+    offset: int = Query(0, ge=0, description="Number of documents to skip"),
+):
+    """
+    List all documents stored in a RAG database with their metadata.
+
+    Documents are aggregated from chunks - each unique source file is returned
+    as a single document entry with the total chunk count.
+
+    Returns a list of documents sorted alphabetically by filename.
+    """
+    logger.bind(namespace=namespace, project=project, database=database)
+
+    # Get project configuration
+    project_obj = ProjectService.get_project(namespace, project)
+    project_dir = ProjectService.get_project_dir(namespace, project)
+
+    if not project_obj.config.rag:
+        raise HTTPException(
+            status_code=400, detail="RAG not configured for this project"
+        )
+
+    # Determine which database to use
+    database_name = database
+    if not database_name and project_obj.config.rag.databases:
+        # Use first database as default
+        database_name = project_obj.config.rag.databases[0].name
+        logger.info(f"Using default database: {database_name}")
+
+    if not database_name:
+        raise HTTPException(
+            status_code=400, detail="No database specified and no default available"
+        )
+
+    # Validate database exists
+    database_exists = False
+    for db in project_obj.config.rag.databases or []:
+        if db.name == database_name:
+            database_exists = True
+            break
+
+    if not database_exists:
+        raise HTTPException(
+            status_code=404, detail=f"Database '{database_name}' not found"
+        )
+
+    try:
+        # Call Celery task to list documents
+        result = list_rag_documents(
+            project_dir=str(project_dir),
+            database=database_name,
+            limit=limit,
+            offset=offset,
+        )
+
+        # Convert to response model
+        documents = []
+        for doc in result.get("documents", []):
+            documents.append(
+                RAGDocumentResponse(
+                    id=doc.get("id", ""),
+                    filename=doc.get("filename", "unknown"),
+                    chunk_count=doc.get("chunk_count", 0),
+                    size_bytes=doc.get("size_bytes", 0),
+                    parser_used=doc.get("parser_used", "unknown"),
+                    date_ingested=doc.get("date_ingested", ""),
+                    metadata=doc.get("metadata"),
+                )
+            )
+
+        return documents
+
+    except Exception as e:
+        logger.error(f"Failed to list documents: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list documents: {str(e)}"
+        ) from e
 
 
 def _build_embedding_strategies(db, db_name: str) -> list[EmbeddingStrategyInfo]:

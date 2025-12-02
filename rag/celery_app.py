@@ -61,6 +61,7 @@ if celery_broker_url and celery_result_backend:
             "tasks.ingest_tasks",
             "tasks.query_tasks",
             "tasks.health_tasks",
+            "tasks.stats_tasks",
         ),
     )
 else:
@@ -103,6 +104,7 @@ else:
             "tasks.ingest_tasks",
             "tasks.query_tasks",
             "tasks.health_tasks",
+            "tasks.stats_tasks",
         ),
     )
 
@@ -149,6 +151,7 @@ try:
     import tasks.ingest_tasks  # noqa: F401
     import tasks.query_tasks  # noqa: F401
     import tasks.search_tasks  # noqa: F401
+    import tasks.stats_tasks  # noqa: F401
 
     logger.info("RAG task modules imported successfully")
 except Exception as e:

@@ -319,6 +319,36 @@ def get_rag_stats(project_dir: str, database: str) -> dict[str, Any]:
     }
 
 
+def list_rag_documents(
+    project_dir: str,
+    database: str,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """
+    List documents in a RAG database via rag.list_database_documents.
+
+    Args:
+        project_dir: Path to the project directory
+        database: Name of the database to list documents from
+        limit: Maximum number of documents to return
+        offset: Number of documents to skip for pagination
+
+    Returns:
+        Dict with 'documents' list, 'total_count', and 'database' name
+    """
+    task = signature(
+        "rag.list_database_documents",
+        args=[project_dir, database, limit, offset],
+        app=app,
+    )
+    return _run_sync_task_with_polling(task, timeout=60, poll_interval=0.5) or {
+        "documents": [],
+        "total_count": 0,
+        "database": database,
+    }
+
+
 def batch_search(
     project_dir: str,
     database: str,

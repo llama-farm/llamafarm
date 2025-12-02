@@ -401,6 +401,80 @@ class TestChromaStore:
         assert len(description) > 0
         assert "chroma" in description.lower()
 
+    def test_list_documents_empty_collection(self, test_store):
+        """Test listing documents from empty collection."""
+        docs, total = test_store.list_documents()
+
+        assert isinstance(docs, list)
+        assert len(docs) == 0
+        assert total == 0
+
+    def test_list_documents_returns_all(self, test_store, sample_documents):
+        """Test listing all documents."""
+        test_store.add_documents(sample_documents)
+
+        docs, total = test_store.list_documents()
+
+        assert total == len(sample_documents)
+        assert len(docs) == len(sample_documents)
+        for doc in docs:
+            assert isinstance(doc, Document)
+            assert doc.id in ["doc1", "doc2", "doc3"]
+
+    def test_list_documents_with_pagination(self, test_store, sample_documents):
+        """Test listing documents with limit and offset."""
+        test_store.add_documents(sample_documents)
+
+        # Get first 2 documents
+        docs, total = test_store.list_documents(limit=2, offset=0)
+        assert len(docs) == 2
+        assert total == 3  # Total should still be 3
+
+        # Get next document with offset
+        docs, total = test_store.list_documents(limit=2, offset=2)
+        assert len(docs) == 1  # Only 1 remaining
+        assert total == 3
+
+    def test_list_documents_preserves_metadata(self, test_store, sample_documents):
+        """Test that listing preserves document metadata."""
+        test_store.add_documents(sample_documents)
+
+        docs, _ = test_store.list_documents()
+
+        for doc in docs:
+            assert "category" in doc.metadata
+            assert "priority" in doc.metadata
+
+    def test_list_documents_with_content(self, test_store, sample_documents):
+        """Test listing with content included."""
+        test_store.add_documents(sample_documents)
+
+        docs, _ = test_store.list_documents(include_content=True)
+
+        for doc in docs:
+            assert doc.content  # Content should be present
+            assert len(doc.content) > 0
+
+    def test_list_documents_without_content(self, test_store, sample_documents):
+        """Test listing without content (default)."""
+        test_store.add_documents(sample_documents)
+
+        docs, _ = test_store.list_documents(include_content=False)
+
+        for doc in docs:
+            # Content should be empty when not requested
+            assert doc.content == ""
+
+    def test_list_documents_source_preserved(self, test_store, sample_documents):
+        """Test that source is correctly set from metadata."""
+        test_store.add_documents(sample_documents)
+
+        docs, _ = test_store.list_documents()
+
+        sources = {doc.source for doc in docs}
+        expected_sources = {"test1.txt", "test2.txt", "test3.txt"}
+        assert sources == expected_sources
+
 
 # Integration tests (may require actual ChromaDB)
 class TestChromaStoreIntegration:

@@ -299,6 +299,112 @@ class TestGetEmbeddingDimension:
         assert _get_embedding_dimension(mock_db) == 1024
 
 
+class TestExtractFilename:
+    """Tests for the _extract_filename helper."""
+
+    def test_extract_simple_filename(self):
+        """Test extracting filename from simple path."""
+        from tasks.stats_tasks import _extract_filename
+
+        assert _extract_filename("document.pdf") == "document.pdf"
+
+    def test_extract_from_unix_path(self):
+        """Test extracting filename from Unix path."""
+        from tasks.stats_tasks import _extract_filename
+
+        assert _extract_filename("/path/to/document.pdf") == "document.pdf"
+
+    def test_extract_from_windows_path(self):
+        """Test extracting filename from Windows path."""
+        from tasks.stats_tasks import _extract_filename
+
+        assert _extract_filename("C:\\Users\\docs\\document.pdf") == "document.pdf"
+
+    def test_extract_from_mixed_path(self):
+        """Test extracting filename from mixed path separators."""
+        from tasks.stats_tasks import _extract_filename
+
+        assert _extract_filename("/path/to\\document.pdf") == "document.pdf"
+
+    def test_extract_empty_source(self):
+        """Test extracting filename from empty string."""
+        from tasks.stats_tasks import _extract_filename
+
+        assert _extract_filename("") == "unknown"
+
+    def test_extract_none_source(self):
+        """Test extracting filename from None."""
+        from tasks.stats_tasks import _extract_filename
+
+        assert _extract_filename(None) == "unknown"
+
+
+class TestListDocumentsTaskImport:
+    """Test that list documents task can be imported and has correct metadata."""
+
+    def test_list_documents_task_is_registered(self):
+        """Test that the list documents task is properly registered."""
+        from tasks.stats_tasks import rag_list_database_documents_task
+
+        assert rag_list_database_documents_task.name == "rag.list_database_documents"
+
+    def test_list_documents_task_can_be_imported(self):
+        """Test that the list documents task can be imported."""
+        from tasks.stats_tasks import rag_list_database_documents_task
+
+        assert rag_list_database_documents_task is not None
+        assert callable(rag_list_database_documents_task)
+
+
+class TestListDocumentsTaskAggregation:
+    """Tests for document aggregation logic in list_database_documents task."""
+
+    def test_aggregates_chunks_by_source(self):
+        """Test that chunks from the same source are aggregated."""
+        # This tests the aggregation logic by simulating what the task does
+        from core.base import Document
+
+        # Simulate chunks from two documents
+        chunks = [
+            Document(
+                id="chunk1",
+                content="",
+                source="doc1.pdf",
+                metadata={"size": 1000, "parser": "PDFParser"},
+            ),
+            Document(
+                id="chunk2",
+                content="",
+                source="doc1.pdf",
+                metadata={"size": 1000, "parser": "PDFParser"},
+            ),
+            Document(
+                id="chunk3",
+                content="",
+                source="doc2.pdf",
+                metadata={"size": 2000, "parser": "TextParser"},
+            ),
+        ]
+
+        # Simulate aggregation logic
+        documents_map = {}
+        for chunk in chunks:
+            source = chunk.source or "unknown"
+            if source not in documents_map:
+                documents_map[source] = {
+                    "filename": source.split("/")[-1],
+                    "chunk_count": 0,
+                    "size_bytes": chunk.metadata.get("size", 0),
+                }
+            documents_map[source]["chunk_count"] += 1
+
+        assert len(documents_map) == 2
+        assert documents_map["doc1.pdf"]["chunk_count"] == 2
+        assert documents_map["doc2.pdf"]["chunk_count"] == 1
+        assert documents_map["doc1.pdf"]["size_bytes"] == 1000
+        assert documents_map["doc2.pdf"]["size_bytes"] == 2000
+
+
 class TestStatsTaskTaskImport:
     """Test that stats task can be imported and has correct metadata."""
 
@@ -313,14 +419,18 @@ class TestStatsTaskTaskImport:
         from tasks.stats_tasks import (
             StatsTask,
             _estimate_document_count,
+            _extract_filename,
             _get_storage_sizes,
             rag_get_database_stats_task,
+            rag_list_database_documents_task,
         )
 
         assert StatsTask is not None
         assert rag_get_database_stats_task is not None
+        assert rag_list_database_documents_task is not None
         assert callable(_estimate_document_count)
         assert callable(_get_storage_sizes)
+        assert callable(_extract_filename)
 
     def test_task_exported_from_package(self):
         """Test that task is exported from tasks package."""

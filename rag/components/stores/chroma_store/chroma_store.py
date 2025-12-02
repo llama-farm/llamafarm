@@ -552,6 +552,77 @@ class ChromaStore(VectorStore):
             logger.error(f"Failed to get collection info: {e}")
             return {"error": str(e)}
 
+    def list_documents(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        include_content: bool = False,
+    ) -> tuple[list[Document], int]:
+        """List documents in the collection with pagination.
+
+        Note: ChromaDB stores chunks, not documents. This method returns all chunks
+        and lets the caller aggregate them into documents if needed.
+
+        Args:
+            limit: Maximum number of chunks to return
+            offset: Number of chunks to skip
+            include_content: Whether to include document content in results
+
+        Returns:
+            Tuple of (list of Document objects, total count in collection)
+        """
+        try:
+            total_count = self.collection.count()
+
+            if total_count == 0:
+                return [], 0
+
+            # Build include list
+            include = ["metadatas"]
+            if include_content:
+                include.append("documents")
+
+            # Get documents with pagination
+            results = self.collection.get(
+                limit=limit,
+                offset=offset,
+                include=include,
+            )
+
+            documents = []
+            if results and results["ids"]:
+                for i, doc_id in enumerate(results["ids"]):
+                    metadata = (
+                        results["metadatas"][i] if results.get("metadatas") else {}
+                    )
+                    content = ""
+                    if include_content and results.get("documents"):
+                        content = results["documents"][i] or ""
+
+                    # Parse JSON strings in metadata
+                    metadata = self._parse_metadata(metadata)
+
+                    # Get source from metadata
+                    source = (
+                        metadata.get("file_path")
+                        or metadata.get("source")
+                        or metadata.get("file_name")
+                    )
+
+                    doc = Document(
+                        id=doc_id,
+                        content=content,
+                        metadata=metadata,
+                        source=source,
+                    )
+                    documents.append(doc)
+
+            return documents, total_count
+
+        except Exception as e:
+            logger.error(f"Failed to list documents from ChromaDB: {e}")
+            return [], 0
+
     @classmethod
     def get_description(cls) -> str:
         """Get store description."""

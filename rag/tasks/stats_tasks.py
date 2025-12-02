@@ -202,6 +202,175 @@ def rag_get_database_stats_task(
         }
 
 
+@app.task(bind=True, base=StatsTask, name="rag.list_database_documents")
+def rag_list_database_documents_task(
+    self,
+    project_dir: str,
+    database: str,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """
+    List documents in a RAG database with metadata.
+
+    This task retrieves chunks from the vector store and aggregates them
+    by source file to provide document-level information.
+
+    Args:
+        project_dir: Directory containing llamafarm.yaml config
+        database: Database name to list documents from
+        limit: Maximum number of documents to return
+        offset: Number of documents to skip (for pagination)
+
+    Returns:
+        Dict containing 'documents' list and 'total_count'
+    """
+    start_time = time.time()
+
+    logger.info(
+        "Starting document list retrieval",
+        extra={
+            "task_id": self.request.id,
+            "project_dir": project_dir,
+            "database": database,
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+
+    result = {
+        "documents": [],
+        "total_count": 0,
+        "database": database,
+    }
+
+    try:
+        # Load project configuration
+        config = load_config(config_path=project_dir, validate=True)
+
+        if not config or not config.rag or not config.rag.databases:
+            logger.warning("RAG not configured in project")
+            return result
+
+        # Find the specific database configuration
+        database_config = None
+        for db_cfg in config.rag.databases:
+            if db_cfg.name == database:
+                database_config = db_cfg
+                break
+
+        if not database_config:
+            logger.warning(f"Database '{database}' not found in configuration")
+            return result
+
+        # Initialize search API to access vector store
+        search_api = DatabaseSearchAPI(project_dir=project_dir, database=database)
+
+        # Get all chunks to aggregate by source
+        # We need to fetch all chunks because multiple chunks can belong
+        # to the same document, and we need to aggregate them first
+        # before applying document-level pagination
+        chunks, total_chunks = search_api.vector_store.list_documents(
+            limit=10000,  # Fetch up to 10k chunks to aggregate
+            offset=0,
+            include_content=False,
+        )
+
+        # Aggregate chunks by source file
+        documents_map: dict[str, dict[str, Any]] = {}
+
+        for chunk in chunks:
+            source = chunk.source or chunk.metadata.get("source") or "unknown"
+
+            if source not in documents_map:
+                # Get date_ingested from various metadata fields, with fallback
+                date_ingested = (
+                    chunk.metadata.get("processing_timestamp")
+                    or chunk.metadata.get("processing_date")
+                    or chunk.metadata.get("ingested_at")
+                    or datetime.now(UTC).isoformat()
+                )
+                # Get file size - this is stored per chunk but represents the whole file
+                file_size = (
+                    chunk.metadata.get("size") or chunk.metadata.get("file_size") or 0
+                )
+                if isinstance(file_size, str):
+                    try:
+                        file_size = int(file_size)
+                    except ValueError:
+                        file_size = 0
+                documents_map[source] = {
+                    "id": chunk.metadata.get("document_hash")
+                    or chunk.metadata.get("file_hash")
+                    or chunk.id,
+                    "filename": _extract_filename(source),
+                    "source": source,
+                    "chunk_count": 0,
+                    "size_bytes": int(file_size)
+                    if isinstance(file_size, (int, float))
+                    else 0,
+                    "parser_used": chunk.metadata.get("parser_type")
+                    or chunk.metadata.get("parser")
+                    or "unknown",
+                    "date_ingested": date_ingested,
+                    "metadata": {},
+                }
+
+            doc_info = documents_map[source]
+            doc_info["chunk_count"] += 1
+
+            # Collect interesting metadata from any chunk
+            for key in ["category", "language", "source_type", "title"]:
+                if key in chunk.metadata and key not in doc_info["metadata"]:
+                    doc_info["metadata"][key] = chunk.metadata[key]
+
+        # Convert to list and apply pagination
+        documents_list = list(documents_map.values())
+        result["total_count"] = len(documents_list)
+
+        # Sort by filename for consistent ordering
+        documents_list.sort(key=lambda d: d["filename"].lower())
+
+        # Apply pagination at document level
+        paginated_docs = documents_list[offset : offset + limit]
+        result["documents"] = paginated_docs
+
+        duration_ms = int((time.time() - start_time) * 1000)
+        logger.info(
+            "Document list retrieval completed",
+            extra={
+                "task_id": self.request.id,
+                "database": database,
+                "documents_returned": len(paginated_docs),
+                "total_documents": result["total_count"],
+                "duration_ms": duration_ms,
+            },
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(
+            "Document list retrieval failed",
+            extra={
+                "task_id": self.request.id,
+                "database": database,
+                "error": str(e),
+            },
+            exc_info=True,
+        )
+        return result
+
+
+def _extract_filename(source: str) -> str:
+    """Extract filename from a source path."""
+    if not source:
+        return "unknown"
+    # Handle both forward and back slashes
+    parts = source.replace("\\", "/").split("/")
+    return parts[-1] if parts else source
+
+
 def _get_embedding_dimension(database_config) -> int:
     """
     Extract embedding dimension from database config.
