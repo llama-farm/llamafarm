@@ -30,9 +30,14 @@ def test_check_disk_space_invalid_path():
 
     # Mock psutil.disk_usage to raise OSError since the actual method
     # walks up parent directories and would succeed for non-existent paths
-    with patch("server.services.disk_space_service.psutil.disk_usage", side_effect=OSError("Permission denied")):
-        with pytest.raises(OSError):
-            DiskSpaceService.check_disk_space(invalid_path)
+    with (
+        patch(
+            "server.services.disk_space_service.psutil.disk_usage",
+            side_effect=OSError("Permission denied"),
+        ),
+        pytest.raises(OSError),
+    ):
+        DiskSpaceService.check_disk_space(invalid_path)
 
 
 def test_get_cache_directory():
@@ -297,4 +302,7 @@ def test_validate_space_for_download_size_unavailable_low_space(tmp_path):
         assert result.can_download is True
         assert result.warning is True
         assert result.required_bytes == 0
-        assert "low disk space" in result.message.lower() or "model size could not be determined" in result.message.lower()
+        assert (
+            "low disk space" in result.message.lower()
+            or "model size could not be determined" in result.message.lower()
+        )
