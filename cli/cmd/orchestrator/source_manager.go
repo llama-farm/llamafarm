@@ -468,8 +468,8 @@ func (m *SourceManager) DownloadSource(version string) error {
 		return fmt.Errorf("failed to remove old source directory: %w", err)
 	}
 
-	// Move extracted source to final location
-	if err := os.Rename(extractedSrcDir, m.srcDir); err != nil {
+	// Move extracted source to final location (handles cross-filesystem moves)
+	if err := utils.MoveDir(extractedSrcDir, m.srcDir); err != nil {
 		return fmt.Errorf("failed to move source to final location: %w", err)
 	}
 
