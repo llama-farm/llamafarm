@@ -1629,8 +1629,11 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-# Model storage directory (configurable via env var)
-ANOMALY_MODELS_DIR = Path(os.environ.get("ANOMALY_MODELS_DIR", "./anomaly_models"))
+# Model storage directory - uses standard LlamaFarm data directory structure
+# ~/.llamafarm/models/anomaly/ (or LF_DATA_DIR/models/anomaly/)
+# This is a controlled directory - users cannot specify arbitrary paths
+_LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
+ANOMALY_MODELS_DIR = _LF_DATA_DIR / "models" / "anomaly"
 
 
 class AnomalySaveRequest(PydanticBaseModel):
@@ -1638,15 +1641,35 @@ class AnomalySaveRequest(PydanticBaseModel):
 
     model: str  # Model identifier (must be fitted)
     backend: str = "isolation_forest"
-    filename: str | None = None  # Optional custom filename
+    # Note: filename is auto-generated from model name, no user control over paths
 
 
 class AnomalyLoadRequest(PydanticBaseModel):
     """Request to load a pre-trained anomaly model."""
 
-    filename: str  # Filename in models directory
-    model: str  # Model identifier to cache as
+    model: str  # Model identifier to load/cache as
     backend: str = "isolation_forest"
+    # Note: filename is derived from model name, no user control over paths
+
+
+def _sanitize_model_name(name: str) -> str:
+    """Sanitize model name to create a safe filename.
+
+    Only allows alphanumeric characters, hyphens, and underscores.
+    This prevents path traversal and ensures consistent naming.
+    """
+    return "".join(c for c in name if c.isalnum() or c in "-_")
+
+
+def _get_model_path(model_name: str, backend: str) -> Path:
+    """Get the path for a model file based on name and backend.
+
+    The path is always within ANOMALY_MODELS_DIR - users cannot control it.
+    """
+    safe_name = _sanitize_model_name(model_name)
+    safe_backend = _sanitize_model_name(backend)
+    filename = f"{safe_name}_{safe_backend}"
+    return ANOMALY_MODELS_DIR / filename
 
 
 @app.post("/v1/anomaly/save")
@@ -1661,12 +1684,12 @@ async def save_anomaly_model(request: AnomalySaveRequest):
     ```json
     {
         "model": "sensor-detector",
-        "backend": "isolation_forest",
-        "filename": "sensor_detector_v1"
+        "backend": "isolation_forest"
     }
     ```
 
-    Models are saved to the ANOMALY_MODELS_DIR directory (default: ./anomaly_models).
+    Models are saved to ~/.llamafarm/models/anomaly/ with auto-generated
+    filenames based on the model name and backend.
     """
     try:
         cache_key = _make_anomaly_cache_key(request.model, request.backend)
@@ -1689,12 +1712,8 @@ async def save_anomaly_model(request: AnomalySaveRequest):
         # Create models directory if needed
         ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Generate filename
-        filename = request.filename or f"{request.model}_{request.backend}"
-        # Sanitize filename
-        filename = "".join(c for c in filename if c.isalnum() or c in "-_")
-
-        save_path = ANOMALY_MODELS_DIR / filename
+        # Generate path from model name (no user-controlled paths)
+        save_path = _get_model_path(request.model, request.backend)
         await model.save(str(save_path))
 
         # Determine actual saved file
@@ -1709,7 +1728,7 @@ async def save_anomaly_model(request: AnomalySaveRequest):
         encoder_path = None
         if cache_key in _encoders:
             encoder = _encoders[cache_key]
-            encoder_save_path = ANOMALY_MODELS_DIR / f"{filename}_encoder.json"
+            encoder_save_path = save_path.parent / f"{save_path.name}_encoder.json"
             encoder.save(encoder_save_path)
             encoder_path = str(encoder_save_path)
             logger.info(f"Saved feature encoder to {encoder_save_path}")
@@ -1737,47 +1756,42 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
     Load a pre-trained anomaly model from disk.
 
     Load a previously saved model for production inference without
-    re-training.
+    re-training. The model path is automatically determined from the
+    model name and backend - no user control over file paths.
 
     Example request:
     ```json
     {
-        "filename": "sensor_detector_v1.joblib",
         "model": "sensor-detector",
         "backend": "isolation_forest"
     }
     ```
 
-    The model will be loaded and cached for subsequent /v1/anomaly/score
-    and /v1/anomaly/detect calls.
+    The model will be loaded from ~/.llamafarm/models/anomaly/ and cached
+    for subsequent /v1/anomaly/score and /v1/anomaly/detect calls.
     """
     try:
-        # Sanitize filename to prevent path traversal attacks
-        # Only use the base filename, stripping any directory components
-        safe_filename = os.path.basename(request.filename)
-        if safe_filename != request.filename:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid filename: path components are not allowed",
+        # Generate path from model name (no user-controlled paths)
+        base_path = _get_model_path(request.model, request.backend)
+
+        # Determine actual file (check for different extensions)
+        model_path = None
+        for ext in [".joblib", ".pkl", ".pt"]:
+            candidate = base_path.with_suffix(ext)
+            if candidate.exists():
+                model_path = candidate
+                break
+
+        if model_path is None:
+            available = (
+                [f.name for f in ANOMALY_MODELS_DIR.glob("*") if f.is_file()]
+                if ANOMALY_MODELS_DIR.exists()
+                else []
             )
-
-        model_path = ANOMALY_MODELS_DIR / safe_filename
-
-        # Verify the resolved path is within the safe directory
-        resolved_path = model_path.resolve()
-        try:
-            resolved_path.relative_to(ANOMALY_MODELS_DIR.resolve())
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid filename: path traversal is not allowed",
-            ) from None
-
-        if not model_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Model file not found: {safe_filename}. "
-                f"Available models: {[f.name for f in ANOMALY_MODELS_DIR.glob('*') if f.is_file()]}",
+                detail=f"Model '{request.model}' with backend '{request.backend}' not found. "
+                f"Available models: {available}",
             )
 
         cache_key = _make_anomaly_cache_key(request.model, request.backend)
@@ -1804,11 +1818,8 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
         # Try to load encoder if one exists
         encoder_loaded = False
         encoder_schema = None
-        # Derive encoder path from model filename
-        base_filename = (
-            model_path.stem
-        )  # e.g., "sensor_detector_v1" from "sensor_detector_v1.joblib"
-        encoder_path = ANOMALY_MODELS_DIR / f"{base_filename}_encoder.json"
+        # Derive encoder path from base path (same name pattern)
+        encoder_path = base_path.parent / f"{base_path.name}_encoder.json"
         if encoder_path.exists():
             encoder = FeatureEncoder.load(encoder_path)
             _encoders[cache_key] = encoder
@@ -1820,7 +1831,7 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
             "object": "load_result",
             "model": request.model,
             "backend": request.backend,
-            "filename": request.filename,
+            "filename": model_path.name,
             "is_fitted": model.is_fitted,
             "threshold": model.threshold,
             "encoder_loaded": encoder_loaded,

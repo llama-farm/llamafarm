@@ -97,8 +97,7 @@ SAVE_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/save" \
     --max-time 60 \
     -d '{
         "model": "sensor_anomaly_detector",
-        "backend": "isolation_forest",
-        "filename": "sensor_detector_v1"
+        "backend": "isolation_forest"
     }')
 
 echo "Save Response:"
@@ -496,8 +495,7 @@ LOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/load" \
     -H "Content-Type: application/json" \
     --max-time 60 \
     -d '{
-        "filename": "sensor_detector_v1.joblib",
-        "model": "loaded_sensor_detector",
+        "model": "sensor_anomaly_detector",
         "backend": "isolation_forest"
     }')
 
@@ -516,7 +514,7 @@ if echo "$LOAD_RESPONSE" | grep -q '"loaded"'; then
         -H "Content-Type: application/json" \
         --max-time 60 \
         -d '{
-            "model": "loaded_sensor_detector",
+            "model": "sensor_anomaly_detector",
             "backend": "isolation_forest",
             "data": [[22.5], [100.0], [23.0]],
             "threshold": 0.5
