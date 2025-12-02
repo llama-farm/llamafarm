@@ -3,6 +3,7 @@ import { Button } from '../ui/button'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import { SearchInput } from '../ui/search-input'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface DeviceModel {
   id: string
@@ -164,23 +165,32 @@ export function DeviceModelsSection({
       ) : filteredModels.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 flex items-center justify-center">
           <div className="text-sm text-muted-foreground text-center">
-            No models found matching "{searchQuery}"
+            {`No models found matching "${searchQuery}"`}
           </div>
         </div>
       ) : (
         <>
           <div className="min-h-[280px]">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start transition-opacity duration-200">
-              {paginatedModels.map(m => (
-                <DeviceModelCard
-                  key={m.id}
-                  model={m}
-                  onUse={() => onUse(m)}
-                  onDelete={() => onDelete(m)}
-                  isInUse={isModelInUse(m.id)}
-                />
-              ))}
-            </div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={effectivePage}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start"
+              >
+                {paginatedModels.map(m => (
+                  <DeviceModelCard
+                    key={m.id}
+                    model={m}
+                    onUse={() => onUse(m)}
+                    onDelete={() => onDelete(m)}
+                    isInUse={isModelInUse(m.id)}
+                  />
+                ))}
+              </motion.div>
+            </AnimatePresence>
           </div>
 
           {/* Pagination controls */}

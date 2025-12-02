@@ -3,7 +3,10 @@ name = "llamafarm-common"
 version = "0.1.0"
 description = "Common utilities shared across LlamaFarm Python services"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "huggingface_hub>=0.24.0",
+    "hf-transfer>=0.1.9",  # High-speed downloads (set HF_HUB_ENABLE_HF_TRANSFER=1)
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]

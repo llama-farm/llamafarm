@@ -26,6 +26,8 @@ interface CustomDownloadDialogProps {
   customDownloadState: 'idle' | 'downloading' | 'success' | 'error'
   customDownloadProgress: number
   customDownloadError: string
+  customModelNameError?: string
+  onClearModelNameError?: () => void
   downloadedBytes: number
   totalBytes: number
   estimatedTimeRemaining: string
@@ -48,6 +50,8 @@ export function CustomDownloadDialog({
   customDownloadState,
   customDownloadProgress,
   customDownloadError,
+  customModelNameError,
+  onClearModelNameError,
   downloadedBytes,
   totalBytes,
   estimatedTimeRemaining,
@@ -84,6 +88,10 @@ export function CustomDownloadDialog({
                   if (!customModelName) {
                     const sanitized = sanitizeModelName(e.target.value)
                     setCustomModelName(sanitized)
+                    // Clear any existing name error since we're auto-filling a valid sanitized name
+                    if (customModelNameError && onClearModelNameError) {
+                      onClearModelNameError()
+                    }
                   }
                 }}
                 disabled={customDownloadState === 'downloading'}
@@ -118,10 +126,21 @@ export function CustomDownloadDialog({
                 onChange={e => {
                   const sanitized = sanitizeModelName(e.target.value)
                   setCustomModelName(sanitized)
+                  // Clear error when user types
+                  if (customModelNameError && onClearModelNameError) {
+                    onClearModelNameError()
+                  }
                 }}
                 disabled={customDownloadState === 'downloading'}
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border ${
+                  customModelNameError ? 'border-destructive' : 'border-input'
+                } text-foreground`}
               />
+              {customModelNameError && (
+                <div className="text-xs text-destructive mt-1">
+                  {customModelNameError}
+                </div>
+              )}
               <div className="text-xs text-muted-foreground mt-1">
                 Only letters, numbers, underscores (_), and hyphens (-) are
                 allowed. No spaces.

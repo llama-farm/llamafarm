@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
 import { Label } from '../ui/label'
@@ -36,7 +37,12 @@ import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { useToast } from '../ui/toast'
 import { validateModelDownload } from '../../api/modelService'
-import { formatBytes, formatETA } from '../../utils/modelUtils'
+import {
+  sanitizeModelName,
+  formatBytes,
+  formatETA,
+  validateModelName,
+} from '../../utils/modelUtils'
 
 interface TabBarProps {
   activeTab: string
@@ -90,6 +96,100 @@ interface ModelCardProps {
   onModelChange: (newModelIdentifier: string) => void
 }
 
+function RenameModelModal({
+  open,
+  onOpenChange,
+  currentName,
+  existingNames,
+  onRename,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  currentName: string
+  existingNames: string[]
+  onRename: (newName: string) => void
+}) {
+  const [editedName, setEditedName] = useState(currentName)
+  const [nameError, setNameError] = useState<string>('')
+
+  useEffect(() => {
+    if (open) {
+      setEditedName(currentName)
+      setNameError('')
+    }
+  }, [open, currentName])
+
+  const handleSave = () => {
+    const validation = validateModelName(
+      editedName.trim(),
+      existingNames,
+      currentName
+    )
+    if (!validation.isValid) {
+      setNameError(validation.error || 'Invalid model name')
+      return
+    }
+
+    if (editedName.trim() !== currentName) {
+      onRename(editedName.trim())
+    }
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rename model</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3 pt-1">
+          <div>
+            <label className="text-xs text-muted-foreground">Model name</label>
+            <input
+              className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border text-foreground ${
+                nameError ? 'border-destructive' : 'border-input'
+              }`}
+              placeholder="Enter model name"
+              value={editedName}
+              onChange={e => {
+                const sanitized = sanitizeModelName(e.target.value)
+                setEditedName(sanitized)
+                if (nameError) {
+                  setNameError('')
+                }
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  handleSave()
+                }
+              }}
+              autoFocus
+            />
+            {nameError && (
+              <p className="text-xs text-destructive mt-1">{nameError}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Only letters, numbers, underscores (_), and hyphens (-) allowed.
+              No spaces.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!editedName.trim() || editedName.trim() === currentName}
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function ModelCard({
   model,
   onMakeDefault,
@@ -102,41 +202,9 @@ function ModelCard({
   availableProjectModels,
   availableDeviceModels,
   onModelChange,
-}: ModelCardProps) {
-  const [isEditingName, setIsEditingName] = useState(false)
-  const [editedName, setEditedName] = useState(model.name)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (isEditingName && inputRef.current) {
-      inputRef.current.focus()
-      // Place cursor at the beginning
-      inputRef.current.setSelectionRange(0, 0)
-    }
-  }, [isEditingName])
-
-  const handleSaveName = () => {
-    const trimmedName = editedName.trim()
-    if (trimmedName && trimmedName !== model.name && onRename) {
-      onRename(trimmedName)
-    } else {
-      setEditedName(model.name)
-    }
-    setIsEditingName(false)
-  }
-
-  const handleCancelEdit = () => {
-    setEditedName(model.name)
-    setIsEditingName(false)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSaveName()
-    } else if (e.key === 'Escape') {
-      handleCancelEdit()
-    }
-  }
+  existingModelNames = [],
+}: ModelCardProps & { existingModelNames?: string[] }) {
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false)
 
   return (
     <div className="w-full bg-card rounded-lg border border-border flex flex-col gap-3 p-4 relative">
@@ -171,24 +239,23 @@ function ModelCard({
 
           <div className="flex items-center gap-2 mb-2">
             <div className="flex-1 min-w-0">
-              {isEditingName ? (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={editedName}
-                  onChange={e => setEditedName(e.target.value)}
-                  onBlur={handleSaveName}
-                  onKeyDown={handleKeyDown}
-                  className="text-lg font-medium bg-transparent border-b border-primary focus:outline-none focus:border-primary-foreground w-full"
-                />
-              ) : (
-                <div
-                  className="text-lg font-medium min-h-[28px] flex items-center cursor-pointer hover:underline"
-                  onClick={() => onRename && setIsEditingName(true)}
-                >
+              <div className="flex items-center gap-1.5 group">
+                <div className="text-lg font-medium min-h-[28px] flex items-center">
                   {model.name}
                 </div>
-              )}
+                {onRename && (
+                  <button
+                    onClick={() => setIsRenameModalOpen(true)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-accent/30 rounded"
+                    aria-label="Rename model"
+                  >
+                    <FontIcon
+                      type="edit"
+                      className="w-3.5 h-3.5 text-muted-foreground"
+                    />
+                  </button>
+                )}
+              </div>
             </div>
             {model.isDefault && (
               <div className="text-[10px] leading-4 rounded-xl px-2 py-0.5 bg-teal-600 text-teal-50 dark:bg-teal-400 dark:text-teal-900">
@@ -244,6 +311,16 @@ function ModelCard({
           />
         </div>
       </div>
+
+      {onRename && (
+        <RenameModelModal
+          open={isRenameModalOpen}
+          onOpenChange={setIsRenameModalOpen}
+          currentName={model.name}
+          existingNames={existingModelNames}
+          onRename={onRename}
+        />
+      )}
     </div>
   )
 }
@@ -273,8 +350,10 @@ function ProjectInferenceModels({
   availableDeviceModels: Array<{ identifier: string; name: string }>
   onModelChange: (modelId: string, newModelIdentifier: string) => void
 }) {
+  const existingNames = models.map(m => m.name)
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-1 gap-2 mb-6 pb-8">
       {models.map((m, index) => (
         <ModelCard
           key={`${m.modelIdentifier}-${index}`}
@@ -291,6 +370,7 @@ function ProjectInferenceModels({
           onModelChange={newModelIdentifier =>
             onModelChange(m.id, newModelIdentifier)
           }
+          existingModelNames={existingNames}
         />
       ))}
     </div>
@@ -352,13 +432,12 @@ function CloudModelsForm({
   const handleAddCloud = () => {
     if (!canAdd || submitState === 'loading') return
     const name = model === 'Custom' ? customModel || 'Custom model' : `${model}`
-    const providerLabel = provider
     setSubmitState('loading')
     onAddModel({
       id: `cloud-${provider}-${name}`.toLowerCase().replace(/\s+/g, '-'),
       name,
       meta: `Added on ${new Date().toLocaleDateString()}`,
-      badges: ['Cloud', providerLabel],
+      badges: ['Cloud'],
       status: 'ready',
     })
     setTimeout(() => {
@@ -574,7 +653,6 @@ function AddOrChangeModels({
 }) {
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
   const [query, setQuery] = useState('')
-  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingVariant, setPendingVariant] = useState<ModelVariant | null>(
     null
@@ -608,6 +686,10 @@ function AddOrChangeModels({
   const [pendingDownloadAction, setPendingDownloadAction] = useState<
     'local' | 'custom' | null
   >(null)
+
+  // Model name validation state
+  const [modelNameError, setModelNameError] = useState<string>('')
+  const [deviceModelNameError, setDeviceModelNameError] = useState<string>('')
 
   // Shared validation helper
   const handleDiskSpaceValidation = async (
@@ -668,9 +750,9 @@ function AddOrChangeModels({
       {
         id: `dl-${pendingVariant.id}`,
         name: modelName.trim(),
-        modelIdentifier: pendingVariant.label,
+        modelIdentifier: pendingVariant.modelIdentifier,
         meta: modelDescription.trim() || 'Downloading…',
-        badges: ['Local', 'Ollama'],
+        badges: ['Local'],
         status: 'downloading',
       },
       selectedPromptSets.length > 0 ? selectedPromptSets : undefined
@@ -679,7 +761,7 @@ function AddOrChangeModels({
     const downloadAsync = async () => {
       try {
         for await (const event of modelService.downloadModel({
-          model_name: pendingVariant.label,
+          model_name: pendingVariant.modelIdentifier,
           provider: 'universal',
         })) {
           if (event.event === 'progress') {
@@ -769,223 +851,82 @@ function AddOrChangeModels({
     string[]
   >([])
   const [customDownloadError, setCustomDownloadError] = useState('')
+  const [customModelNameError, setCustomModelNameError] = useState<string>('')
 
   interface ModelVariant {
     id: number
     label: string
-    parameterSize: string
-    downloadSize: string
+    parameterSize?: string
+    downloadSize?: string
+    modelIdentifier: string
   }
 
   interface LocalModelGroup {
     id: number
     name: string
-    parameterSummary: string
-    downloadSummary: string
     variants: ModelVariant[]
   }
 
   const localGroups: LocalModelGroup[] = [
     {
       id: 1,
-      name: 'deepseek-r1',
-      parameterSummary: '1b, 7b, 70b, 100b',
-      downloadSummary: '4.5–45 GB',
+      name: 'Qwen3',
       variants: [
         {
           id: 11,
-          label: 'deepseek-r1,1b',
-          parameterSize: '1b',
-          downloadSize: '4.5 GB',
-        },
-        {
-          id: 12,
-          label: 'deepseek-r1,7b',
-          parameterSize: '7b',
-          downloadSize: '13 GB',
-        },
-        {
-          id: 13,
-          label: 'deepseek-r1,70b',
-          parameterSize: '70b',
-          downloadSize: '25 GB',
-        },
-        {
-          id: 14,
-          label: 'deepseek-r1,100b',
-          parameterSize: '100b',
-          downloadSize: '45 GB',
+          label: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
+          modelIdentifier: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
         },
       ],
     },
     {
       id: 2,
-      name: 'tinyllama',
-      parameterSummary: '1.1b',
-      downloadSummary: '1–2 GB',
+      name: 'IBM Granite',
       variants: [
         {
           id: 21,
-          label: 'tinyllama,1.1b',
-          parameterSize: '1.1b',
-          downloadSize: '1.6 GB',
+          label: 'unsloth/granite-4.0-h-1b-GGUF:Q5_K_M',
+          modelIdentifier: 'unsloth/granite-4.0-h-1b-GGUF:Q5_K_M',
         },
       ],
     },
     {
       id: 3,
-      name: 'mistral',
-      parameterSummary: '7b, 8x7b, 22b',
-      downloadSummary: '2.5–12 GB',
+      name: 'Llama 3.2',
       variants: [
         {
           id: 31,
-          label: 'mistral,7b',
-          parameterSize: '7b',
-          downloadSize: '2.5 GB',
-        },
-        {
-          id: 32,
-          label: 'mistral,8x7b',
-          parameterSize: '8x7b',
-          downloadSize: '8.0 GB',
-        },
-        {
-          id: 33,
-          label: 'mistral,22b',
-          parameterSize: '22b',
-          downloadSize: '12 GB',
+          label: 'unsloth/Llama-3.2-1B-Instruct-GGUF:Q5_K_M',
+          modelIdentifier: 'unsloth/Llama-3.2-1B-Instruct-GGUF:Q5_K_M',
         },
       ],
     },
     {
       id: 4,
-      name: 'qwen2.5',
-      parameterSummary: '1.5b, 7b, 32b, 72b',
-      downloadSummary: '3.4–20 GB',
+      name: 'GPT-OSS',
       variants: [
         {
           id: 41,
-          label: 'qwen2.5,1.5b',
-          parameterSize: '1.5b',
-          downloadSize: '3.4 GB',
-        },
-        {
-          id: 42,
-          label: 'qwen2.5,7b',
-          parameterSize: '7b',
-          downloadSize: '7 GB',
-        },
-        {
-          id: 43,
-          label: 'qwen2.5,32b',
-          parameterSize: '32b',
-          downloadSize: '14 GB',
-        },
-        {
-          id: 44,
-          label: 'qwen2.5,72b',
-          parameterSize: '72b',
-          downloadSize: '20 GB',
+          label: 'unsloth/gpt-oss-20b-GGUF:Q4_K_M',
+          modelIdentifier: 'unsloth/gpt-oss-20b-GGUF:Q4_K_M',
         },
       ],
     },
     {
       id: 5,
-      name: 'llama3.2',
-      parameterSummary: '1b, 3b, 11b',
-      downloadSummary: '2–8 GB',
+      name: 'Gemma 3',
       variants: [
         {
           id: 51,
-          label: 'llama3.2,1b',
-          parameterSize: '1b',
-          downloadSize: '2 GB',
-        },
-        {
-          id: 52,
-          label: 'llama3.2,3b',
-          parameterSize: '3b',
-          downloadSize: '3.5 GB',
-        },
-        {
-          id: 53,
-          label: 'llama3.2,11b',
-          parameterSize: '11b',
-          downloadSize: '8 GB',
-        },
-      ],
-    },
-    {
-      id: 6,
-      name: 'llama3.1',
-      parameterSummary: '8b, 70b',
-      downloadSummary: '4–42 GB',
-      variants: [
-        {
-          id: 61,
-          label: 'llama3.1,8b',
-          parameterSize: '8b',
-          downloadSize: '4.1 GB',
-        },
-        {
-          id: 62,
-          label: 'llama3.1,70b',
-          parameterSize: '70b',
-          downloadSize: '42 GB',
-        },
-      ],
-    },
-    {
-      id: 7,
-      name: 'phi-3',
-      parameterSummary: '3.8b, 14b',
-      downloadSummary: '2.8–10 GB',
-      variants: [
-        {
-          id: 71,
-          label: 'phi-3,3.8b',
-          parameterSize: '3.8b',
-          downloadSize: '2.8 GB',
-        },
-        {
-          id: 72,
-          label: 'phi-3,14b',
-          parameterSize: '14b',
-          downloadSize: '10 GB',
-        },
-      ],
-    },
-    {
-      id: 8,
-      name: 'codellama',
-      parameterSummary: '7b, 13b, 34b',
-      downloadSummary: '7–24 GB',
-      variants: [
-        {
-          id: 81,
-          label: 'codellama,7b',
-          parameterSize: '7b',
-          downloadSize: '7 GB',
-        },
-        {
-          id: 82,
-          label: 'codellama,13b',
-          parameterSize: '13b',
-          downloadSize: '13 GB',
-        },
-        {
-          id: 83,
-          label: 'codellama,34b',
-          parameterSize: '34b',
-          downloadSize: '24 GB',
+          label: 'unsloth/gemma-3-4b-it-GGUF:Q4_K_M',
+          modelIdentifier: 'unsloth/gemma-3-4b-it-GGUF:Q4_K_M',
         },
       ],
     },
   ]
 
   const filteredGroups = localGroups.filter(g =>
-    [g.name, g.parameterSummary].some(v =>
+    [g.name, ...g.variants.map(v => v.modelIdentifier || v.label)].some(v =>
       v.toLowerCase().includes(query.toLowerCase())
     )
   )
@@ -1004,12 +945,15 @@ function AddOrChangeModels({
       name: cachedModel.name,
       modelIdentifier: cachedModel.name,
       meta: formatBytes(cachedModel.size),
-      badges: ['Local', 'Disk'],
+      badges: ['Local'],
     })) || []
 
   const handleUseDeviceModel = (model: DeviceModel) => {
     setPendingDeviceModel(model)
-    setDeviceModelName(model.name)
+    // Sanitize the model name to remove spaces and special characters
+    const sanitized = sanitizeModelName(model.name)
+    setDeviceModelName(sanitized)
+    setDeviceModelNameError('')
     setDeviceConfirmOpen(true)
   }
 
@@ -1052,6 +996,16 @@ function AddOrChangeModels({
 
   // Handle custom model download
   const handleCustomModelDownload = async () => {
+    // Validate model name first
+    const existingNames = projectModels.map(m => m.name)
+    const validation = validateModelName(customModelName.trim(), existingNames)
+    if (!validation.isValid) {
+      setCustomModelNameError(validation.error || 'Invalid model name')
+      return
+    }
+    setCustomModelNameError('')
+
+    // Then check disk space
     await handleDiskSpaceValidation(
       customModelInput.trim(),
       proceedWithCustomDownload,
@@ -1108,7 +1062,7 @@ function AddOrChangeModels({
                 meta:
                   customModelDescription.trim() ||
                   'Downloaded from HuggingFace',
-                badges: ['Local', 'HuggingFace'],
+                badges: ['Local'],
                 status: 'ready',
               },
               customSelectedPromptSets.length > 0
@@ -1168,14 +1122,13 @@ function AddOrChangeModels({
         isModelInUse={isModelInUse}
       />
 
-      {/* Download or use other models section */}
+      {/* Download recommended models section */}
       <div className="flex flex-col gap-4">
         <div>
-          <h3 className="font-medium">Download or use other models</h3>
+          <h3 className="font-medium">Download recommended models</h3>
           <div className="h-1" />
           <div className="text-sm text-muted-foreground">
-            Add a new model provider or switch which models are enabled for this
-            project.
+            Download and add recommended GGUF models to your project.
           </div>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 md:p-6 flex flex-col gap-4 mb-12">
@@ -1232,6 +1185,7 @@ function AddOrChangeModels({
                   setCustomSelectedPromptSets([])
                   setCustomDownloadState('idle')
                   setCustomDownloadError('')
+                  setCustomModelNameError('')
                 }}
                 className="h-10 whitespace-nowrap"
               >
@@ -1243,12 +1197,9 @@ function AddOrChangeModels({
           {/* Table */}
           {sourceTab === 'local' && (
             <div className="w-full overflow-hidden rounded-lg border border-border">
-              <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
-                <div className="col-span-6">Model</div>
-                <div className="col-span-3">Parameter size</div>
-                <div className="col-span-2 text-right pr-4 sm:pr-10">
-                  Download size
-                </div>
+              <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-3">
+                <div className="col-span-4">Provider</div>
+                <div className="col-span-7">Model</div>
                 <div className="col-span-1" />
               </div>
               {filteredGroups.length === 0 ? (
@@ -1267,89 +1218,50 @@ function AddOrChangeModels({
                       setCustomSelectedPromptSets([])
                       setCustomDownloadState('idle')
                       setCustomDownloadError('')
+                      setCustomModelNameError('')
                     }}
                   >
                     Add HuggingFace model
                   </Button>
                 </div>
               ) : (
-                filteredGroups.map(group => {
-                  const isOpen = expandedGroupId === group.id
-                  return (
-                    <div key={group.id} className="border-t border-border">
-                      <div
-                        className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
-                        onClick={() =>
-                          setExpandedGroupId(prev =>
-                            prev === group.id ? null : group.id
-                          )
-                        }
-                      >
-                        <div className="col-span-6 flex items-center gap-2">
-                          <FontIcon
-                            type="chevron-down"
-                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                          />
-                          <span className="truncate">{group.name}</span>
-                        </div>
-                        <div className="col-span-3 text-xs">
-                          {group.parameterSummary}
-                        </div>
-                        <div className="col-span-2 text-xs text-right pr-4 sm:pr-10">
-                          <span className="inline-block min-w-[3.5rem] truncate">
-                            {group.downloadSummary}
-                          </span>
-                        </div>
-                        <div className="col-span-1" />
+                filteredGroups.map(group =>
+                  group.variants.map(variant => (
+                    <div
+                      key={variant.id}
+                      className="grid grid-cols-12 items-center px-3 py-3 text-sm border-t border-border hover:bg-accent/40"
+                    >
+                      <div className="col-span-4">
+                        <span className="font-medium">{group.name}</span>
                       </div>
-                      {isOpen && (
-                        <div className="px-3 pb-2">
-                          {group.variants.map(variant => (
-                            <div
-                              key={variant.id}
-                              className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                            >
-                              <div className="col-span-6 flex items-center text-muted-foreground">
-                                <span className="inline-block w-4" />
-                                <span className="ml-2 truncate">
-                                  {variant.label}
-                                </span>
-                              </div>
-                              <div className="col-span-3 text-xs">
-                                {variant.parameterSize}
-                              </div>
-                              <div className="col-span-2 flex items-center justify-end pr-4 sm:pr-10">
-                                <div className="text-xs text-muted-foreground min-w-[3.5rem] text-right whitespace-nowrap">
-                                  {variant.downloadSize}
-                                </div>
-                              </div>
-                              <div className="col-span-1 flex items-center justify-end pr-2">
-                                <Button
-                                  size="sm"
-                                  className="h-8 px-3"
-                                  onClick={() => {
-                                    setPendingVariant(variant)
-                                    setConfirmOpen(true)
-                                  }}
-                                >
-                                  Add
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                          <div className="flex justify-end pr-3">
-                            <button
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() => setExpandedGroupId(null)}
-                            >
-                              Hide
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      <div className="col-span-7 text-muted-foreground truncate">
+                        {variant.label}
+                      </div>
+                      <div className="col-span-1 flex items-center justify-end pr-2">
+                        <Button
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => {
+                            setPendingVariant(variant)
+                            // Prepopulate name from model identifier - sanitize to remove spaces and special chars
+                            const rawName = variant.modelIdentifier
+                              ? variant.modelIdentifier
+                                  .split('/')
+                                  .pop()
+                                  ?.replace(/-GGUF.*$/, '') || variant.label
+                              : variant.label
+                            const sanitized = sanitizeModelName(rawName)
+                            setModelName(sanitized)
+                            setModelNameError('')
+                            setConfirmOpen(true)
+                          }}
+                        >
+                          Add
+                        </Button>
+                      </div>
                     </div>
-                  )
-                })
+                  ))
+                )
               )}
             </div>
           )}
@@ -1395,6 +1307,7 @@ function AddOrChangeModels({
               setCustomDownloadState('idle')
               setCustomDownloadProgress(0)
               setCustomDownloadError('')
+              setCustomModelNameError('')
             }
           }
         }}
@@ -1410,6 +1323,8 @@ function AddOrChangeModels({
         customDownloadState={customDownloadState}
         customDownloadProgress={customDownloadProgress}
         customDownloadError={customDownloadError}
+        customModelNameError={customModelNameError}
+        onClearModelNameError={() => setCustomModelNameError('')}
         downloadedBytes={downloadedBytes}
         totalBytes={totalBytes}
         estimatedTimeRemaining={estimatedTimeRemaining}
@@ -1459,9 +1374,29 @@ function AddOrChangeModels({
                     type="text"
                     placeholder="Enter model name"
                     value={deviceModelName}
-                    onChange={e => setDeviceModelName(e.target.value)}
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                    onChange={e => {
+                      const sanitized = sanitizeModelName(e.target.value)
+                      setDeviceModelName(sanitized)
+                      // Clear error when user types
+                      if (deviceModelNameError) {
+                        setDeviceModelNameError('')
+                      }
+                    }}
+                    className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border ${
+                      deviceModelNameError
+                        ? 'border-destructive'
+                        : 'border-input'
+                    } text-foreground`}
                   />
+                  {deviceModelNameError && (
+                    <div className="text-xs text-destructive mt-1">
+                      {deviceModelNameError}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Only letters, numbers, underscores (_), and hyphens (-) are
+                    allowed. No spaces.
+                  </div>
                 </div>
 
                 <div>
@@ -1520,13 +1455,28 @@ function AddOrChangeModels({
               }
               onClick={() => {
                 if (!pendingDeviceModel) return
+
+                // Validate model name
+                const existingNames = projectModels.map(m => m.name)
+                const validation = validateModelName(
+                  deviceModelName.trim(),
+                  existingNames
+                )
+                if (!validation.isValid) {
+                  setDeviceModelNameError(
+                    validation.error || 'Invalid model name'
+                  )
+                  return
+                }
+                setDeviceModelNameError('')
+
                 onAddModel(
                   {
                     id: `disk-${pendingDeviceModel.id}`,
                     name: deviceModelName.trim(),
                     modelIdentifier: pendingDeviceModel.modelIdentifier,
                     meta: deviceModelDescription.trim() || 'Model from disk',
-                    badges: ['Local', 'Disk'],
+                    badges: ['Local'],
                     status: 'ready',
                   },
                   deviceSelectedPromptSets.length > 0
@@ -1584,6 +1534,7 @@ function AddOrChangeModels({
       <Dialog
         open={confirmOpen}
         onOpenChange={open => {
+          setConfirmOpen(open)
           // If closing while downloading, minimize to background
           if (!open && submitState === 'loading') {
             setShowRecommendedBackgroundDownload(true)
@@ -1596,11 +1547,11 @@ function AddOrChangeModels({
             setSelectedPromptSets([])
             setDownloadProgress(0)
             setDownloadError('')
+            setModelNameError('')
             setDownloadedBytes(0)
             setTotalBytes(0)
             setEstimatedTimeRemaining('')
           }
-          setConfirmOpen(open)
         }}
       >
         <DialogContent>
@@ -1628,9 +1579,27 @@ function AddOrChangeModels({
                     type="text"
                     placeholder="Enter model name"
                     value={modelName}
-                    onChange={e => setModelName(e.target.value)}
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
+                    onChange={e => {
+                      const sanitized = sanitizeModelName(e.target.value)
+                      setModelName(sanitized)
+                      // Clear error when user types
+                      if (modelNameError) {
+                        setModelNameError('')
+                      }
+                    }}
+                    className={`w-full mt-1 bg-transparent rounded-lg py-2 px-3 border ${
+                      modelNameError ? 'border-destructive' : 'border-input'
+                    } text-foreground`}
                   />
+                  {modelNameError && (
+                    <div className="text-xs text-destructive mt-1">
+                      {modelNameError}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Only letters, numbers, underscores (_), and hyphens (-) are
+                    allowed. No spaces.
+                  </div>
                 </div>
 
                 <div>
@@ -1669,19 +1638,61 @@ function AddOrChangeModels({
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="text-muted-foreground">Provider</div>
-                  <div>Ollama</div>
-                  <div className="text-muted-foreground">Parameter size</div>
-                  <div>{pendingVariant.parameterSize}</div>
-                  <div className="text-muted-foreground">Download size</div>
-                  <div>{pendingVariant.downloadSize}</div>
+                  <div>Universal</div>
+                  <div className="text-muted-foreground">Model</div>
+                  <div className="truncate">
+                    {pendingVariant.modelIdentifier}
+                  </div>
                 </div>
+
+                {/* Progress bar */}
+                {submitState === 'loading' && (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Downloading... {formatBytes(downloadedBytes)} /{' '}
+                        {formatBytes(totalBytes)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {downloadProgress}%{' '}
+                        {estimatedTimeRemaining &&
+                          `• ${estimatedTimeRemaining}`}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${downloadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Error message */}
+                {submitState === 'error' && downloadError && (
+                  <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                    <p className="text-sm text-destructive">{downloadError}</p>
+                  </div>
+                )}
               </div>
             ) : null}
           </DialogDescription>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
+            {submitState === 'loading' ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowRecommendedBackgroundDownload(true)
+                  setConfirmOpen(false)
+                }}
+              >
+                Continue in background
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </Button>
+            )}
             <Button
               disabled={
                 submitState === 'loading' ||
@@ -1691,10 +1702,22 @@ function AddOrChangeModels({
               onClick={async () => {
                 if (!pendingVariant) return
 
-                // Check disk space before downloading
+                // Validate model name first
+                const existingNames = projectModels.map(m => m.name)
+                const validation = validateModelName(
+                  modelName.trim(),
+                  existingNames
+                )
+                if (!validation.isValid) {
+                  setModelNameError(validation.error || 'Invalid model name')
+                  return
+                }
+                setModelNameError('')
+
+                // Then check disk space before downloading
                 setSubmitState('checking')
                 const shouldProceed = await handleDiskSpaceValidation(
-                  pendingVariant.label,
+                  pendingVariant.modelIdentifier,
                   () => {
                     setConfirmOpen(false)
                     proceedWithDownload()
@@ -1953,21 +1976,19 @@ const Models = () => {
         (model && (model.name || model.model)) || 'unnamed-model'
       const provider: string =
         typeof model?.provider === 'string' ? model.provider : ''
-      const providerBadge = provider
-        ? provider.charAt(0).toUpperCase() + provider.slice(1)
-        : 'Unknown'
-      const localityBadge = provider
-        ? provider === 'ollama'
-          ? 'Local'
-          : 'Cloud'
-        : 'Unknown'
+
+      // Determine if model is Local or Cloud
+      // Local: ollama, universal (both run locally)
+      // Cloud: everything else (openai, anthropic, etc.)
+      const isLocal = provider === 'ollama' || provider === 'universal'
+      const localityBadge = isLocal ? 'Local' : 'Cloud'
 
       return {
         id: name,
         name,
         modelIdentifier: typeof model?.model === 'string' ? model.model : '',
         meta: (model && model.description) || 'Model from config',
-        badges: [localityBadge, providerBadge],
+        badges: [localityBadge],
         isDefault: name === defaultModelName,
         status: 'ready' as ModelStatus,
       }
@@ -1994,12 +2015,20 @@ const Models = () => {
     const currentConfig = projectResponse.project.config
     const runtimeModels = currentConfig.runtime?.models || []
 
+    // Determine provider based on model identifier
+    // If model identifier contains '/', it's a HuggingFace path (universal provider)
+    // Otherwise, use ollama for backward compatibility
+    const modelId = m.modelIdentifier || m.name
+    const provider = modelId.includes('/') ? 'universal' : 'ollama'
+    const baseUrl =
+      provider === 'universal' ? undefined : 'http://localhost:11434'
+
     const newModel = {
       name: m.name,
       description: m.meta === 'Downloading…' ? '' : m.meta,
-      provider: 'ollama',
-      model: m.modelIdentifier || m.name,
-      base_url: 'http://localhost:11434',
+      provider,
+      model: modelId,
+      ...(baseUrl && { base_url: baseUrl }),
       prompt_format: 'unstructured',
       provider_config: {},
       prompts: promptSets && promptSets.length > 0 ? promptSets : ['default'],
@@ -2357,35 +2386,27 @@ const Models = () => {
     )
       return
 
-    // Validate input
+    // Find the model to rename to get its current name
+    const modelToRename = projectModels.find(m => m.id === modelId)
+    if (!modelToRename) return
+
+    // Validate input using the same validation as other dialogs
+    // Pass the model's current name (not modelId) to validateModelName
+    const existingNames = projectModels.map(m => m.name)
+    const validation = validateModelName(
+      newName.trim(),
+      existingNames,
+      modelToRename.name
+    )
+    if (!validation.isValid) {
+      toast({
+        message: validation.error || 'Invalid model name',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const trimmedName = newName.trim()
-
-    // Check for empty name
-    if (!trimmedName) {
-      toast({
-        message: 'Model name cannot be empty',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Check for duplicate name
-    if (projectModels.some(m => m.id === trimmedName && m.id !== modelId)) {
-      toast({
-        message: 'A model with this name already exists',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Check for length (reasonable limit)
-    if (trimmedName.length > 100) {
-      toast({
-        message: 'Model name must be 100 characters or less',
-        variant: 'destructive',
-      })
-      return
-    }
 
     // Optimistically update local state
     const prevModels = [...projectModels]
@@ -2410,7 +2431,8 @@ const Models = () => {
     const wasDefault = currentConfig.runtime?.default_model === modelId
 
     const updatedModels = runtimeModels.map((model: any) => {
-      if (model.name === modelId) {
+      // Use the model's current name (not modelId) to find the model in config
+      if (model.name === modelToRename.name) {
         return {
           ...model,
           name: trimmedName,
