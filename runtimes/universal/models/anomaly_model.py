@@ -465,6 +465,10 @@ class AnomalyModel(BaseModel):
 
         normalized = (scores - median) / (2 * iqr) if iqr > 0 else scores - median
 
+        # Clip to prevent numerical overflow in np.exp
+        # np.exp(-x) overflows for x < -709, so we clip to safe range
+        normalized = np.clip(normalized, -700, 700)
+
         # Apply sigmoid to get 0-1 range
         return 1 / (1 + np.exp(-normalized))
 

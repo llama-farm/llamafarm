@@ -178,7 +178,8 @@ def get_file(file_id: str) -> StoredFile | None:
 
     # Check if expired
     if time.time() - stored.created_at > FILE_TTL:
-        del _file_cache[file_id]
+        # Use pop for atomic, race-condition-safe deletion
+        _file_cache.pop(file_id, None)
         return None
 
     return stored
@@ -221,10 +222,8 @@ def delete_file(file_id: str) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    if file_id in _file_cache:
-        del _file_cache[file_id]
-        return True
-    return False
+    # Use pop for atomic, race-condition-safe deletion
+    return _file_cache.pop(file_id, None) is not None
 
 
 def list_files() -> list[dict]:
@@ -240,7 +239,8 @@ def list_files() -> list[dict]:
     for file_id, stored in list(_file_cache.items()):
         # Check if expired
         if now - stored.created_at > FILE_TTL:
-            del _file_cache[file_id]
+            # Use pop for atomic, race-condition-safe deletion
+            _file_cache.pop(file_id, None)
             continue
 
         result.append(
@@ -272,7 +272,8 @@ async def _cleanup_expired_files():
         ]
 
         for file_id in expired:
-            del _file_cache[file_id]
+            # Use pop for atomic, race-condition-safe deletion
+            _file_cache.pop(file_id, None)
 
         if expired:
             logger.info(f"Cleaned up {len(expired)} expired files")

@@ -286,13 +286,15 @@ class OCRModel(BaseModel):
         self, image: Image.Image, return_boxes: bool
     ) -> OCRResult:
         """Run EasyOCR."""
+        import asyncio
+
         import numpy as np
 
         # Convert PIL to numpy array
         img_array = np.array(image)
 
-        # Run OCR
-        results = self._reader.readtext(img_array)
+        # Run OCR in thread pool to avoid blocking the event loop
+        results = await asyncio.to_thread(self._reader.readtext, img_array)
 
         text_lines = []
         boxes = []
@@ -330,13 +332,15 @@ class OCRModel(BaseModel):
         self, image: Image.Image, return_boxes: bool
     ) -> OCRResult:
         """Run PaddleOCR."""
+        import asyncio
+
         import numpy as np
 
         # Convert PIL to numpy array
         img_array = np.array(image)
 
-        # Run OCR
-        results = self._ocr.ocr(img_array, cls=True)
+        # Run OCR in thread pool to avoid blocking the event loop
+        results = await asyncio.to_thread(self._ocr.ocr, img_array, cls=True)
 
         text_lines = []
         boxes = []
@@ -376,6 +380,8 @@ class OCRModel(BaseModel):
         self, image: Image.Image, languages: list[str], return_boxes: bool
     ) -> OCRResult:
         """Run Tesseract OCR."""
+        import asyncio
+
         import pytesseract
 
         # Join languages with + for tesseract
@@ -383,8 +389,12 @@ class OCRModel(BaseModel):
 
         if return_boxes:
             # Get detailed output with bounding boxes
-            data = pytesseract.image_to_data(
-                image, lang=lang_str, output_type=pytesseract.Output.DICT
+            # Run in thread pool to avoid blocking the event loop
+            data = await asyncio.to_thread(
+                pytesseract.image_to_data,
+                image,
+                lang=lang_str,
+                output_type=pytesseract.Output.DICT,
             )
 
             text_lines = []
@@ -419,7 +429,10 @@ class OCRModel(BaseModel):
             )
         else:
             # Simple text extraction
-            text = pytesseract.image_to_string(image, lang=lang_str)
+            # Run in thread pool to avoid blocking the event loop
+            text = await asyncio.to_thread(
+                pytesseract.image_to_string, image, lang=lang_str
+            )
             return OCRResult(
                 text=text.strip(),
                 confidence=0.9,  # Tesseract doesn't provide overall confidence
