@@ -165,7 +165,7 @@ export function DeviceModelsSection({
       ) : filteredModels.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 flex items-center justify-center">
           <div className="text-sm text-muted-foreground text-center">
-            No models found matching "{searchQuery}"
+            {`No models found matching "${searchQuery}"`}
           </div>
         </div>
       ) : (
