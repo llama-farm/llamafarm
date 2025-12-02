@@ -204,6 +204,10 @@ class OneHotEncoder(BaseFeatureEncoderStrategy):
         logger.debug(f"OneHotEncoder fit with {len(self.categories)} categories")
 
     def transform(self, value: Any) -> list[float]:
+        # If no categories were learned, return a single zero placeholder
+        # to keep schema in sync with get_output_dim() and get_feature_names()
+        if not self.categories:
+            return [0.0]
         result = [0.0] * len(self.categories)
         if value is not None:
             str_value = str(value)

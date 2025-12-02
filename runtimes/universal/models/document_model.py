@@ -453,7 +453,7 @@ class DocumentModel(BaseModel):
                     key=field_type,
                     value=word,
                     confidence=score,
-                    bbox=tuple(bbox) if bbox else None,
+                    bbox=tuple(bbox.tolist()) if bbox is not None else None,
                 )
             elif label.startswith("I-") and current_field:
                 current_field.value += " " + word
@@ -467,7 +467,7 @@ class DocumentModel(BaseModel):
                         key=label,
                         value=word,
                         confidence=score,
-                        bbox=tuple(bbox) if bbox else None,
+                        bbox=tuple(bbox.tolist()) if bbox is not None else None,
                     )
                 )
             else:

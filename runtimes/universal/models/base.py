@@ -99,8 +99,19 @@ class BaseModel(ABC):
 
         Args:
             tensor: Tensor to move
-            dtype: Optional dtype override (defaults to get_dtype())
+            dtype: Optional dtype override. If None, only moves to device without
+                   changing dtype for integer tensors, or uses get_dtype() for floats.
         """
+        # Don't change dtype for integer tensors (e.g., input_ids, attention_mask)
+        if tensor.dtype in (
+            torch.int32,
+            torch.int64,
+            torch.long,
+            torch.int,
+            torch.bool,
+        ):
+            return tensor.to(device=self.device)
+
         if dtype is None:
             dtype = self.get_dtype()
         return tensor.to(device=self.device, dtype=dtype)

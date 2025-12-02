@@ -213,7 +213,7 @@ else
 import csv
 import json
 data = []
-with open('$TRAINING_CSV', 'r') as f:
+with open(\"$TRAINING_CSV\", 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         data.append([
@@ -255,7 +255,7 @@ except Exception as e:
 import csv
 import json
 data = []
-with open('$TEST_CSV', 'r') as f:
+with open(\"$TEST_CSV\", 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         data.append([
@@ -283,7 +283,7 @@ import sys, json, csv
 
 # Load test CSV for context
 test_rows = []
-with open('$TEST_CSV', 'r') as f:
+with open(\"$TEST_CSV\", 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         test_rows.append(row)
@@ -356,7 +356,7 @@ else
 import csv
 import json
 data = []
-with open('$TRAINING_CSV', 'r') as f:
+with open(\"$TRAINING_CSV\", 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         data.append({
@@ -406,7 +406,7 @@ except Exception as e:
 import csv
 import json
 data = []
-with open('$TEST_CSV', 'r') as f:
+with open(\"$TEST_CSV\", 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         data.append({
@@ -437,7 +437,7 @@ import sys, json, csv
 
 # Load test CSV for context
 test_rows = []
-with open('$TEST_CSV', 'r') as f:
+with open(\"$TEST_CSV\", 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         test_rows.append(row)

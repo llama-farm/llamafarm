@@ -89,6 +89,7 @@ class EncoderModel(BaseModel):
         self.supports_streaming = False
         self._max_length = max_length
         self._use_flash_attention = use_flash_attention
+        self._flash_attention_enabled: bool = False  # Track actual activation
         self._detected_max_length: int = 512  # Will be updated on load
 
     @property
@@ -124,6 +125,7 @@ class EncoderModel(BaseModel):
         # Enable Flash Attention 2 if available and requested
         if self._use_flash_attention and self._supports_flash_attention(config):
             model_kwargs["attn_implementation"] = "flash_attention_2"
+            self._flash_attention_enabled = True
             logger.info("Flash Attention 2 enabled")
 
         # Load tokenizer
@@ -498,7 +500,7 @@ class EncoderModel(BaseModel):
             {
                 "task": self.task,
                 "max_length": self.max_length,
-                "flash_attention": self._use_flash_attention,
+                "flash_attention": self._flash_attention_enabled,
             }
         )
         return info

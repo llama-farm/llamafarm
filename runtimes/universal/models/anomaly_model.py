@@ -226,11 +226,13 @@ class AnomalyModel(BaseModel):
         self._is_fitted = True
 
         # Auto-determine threshold if not set
+        # Threshold is computed on normalized scores (0-1 range) for consistency
         if self._threshold is None:
-            scores = await self._compute_raw_scores(X_scaled)
-            # Set threshold at (1 - contamination) percentile
+            raw_scores = await self._compute_raw_scores(X_scaled)
+            normalized_scores = self._normalize_scores(raw_scores)
+            # Set threshold at (1 - contamination) percentile of normalized scores
             self._threshold = float(
-                np.percentile(scores, (1 - self.contamination) * 100)
+                np.percentile(normalized_scores, (1 - self.contamination) * 100)
             )
 
         training_time = (time.time() - start_time) * 1000

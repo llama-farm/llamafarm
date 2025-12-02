@@ -171,7 +171,7 @@ log_id,timestamp,user_id,endpoint,method,response_code,response_time_ms,bytes_tr
 170,2024-12-09T12:39:18,USR01181,/api/v1/products/{id},GET,200,102,704,10.0.8.35,CompanyApp/2.1.0 (Android 14; Pixel 8),SES177649,29,0
 171,2024-12-09T12:45:31,USR01177,/api/v1/products,GET,200,84,2762,10.0.19.57,Mozilla/5.0 (Linux; Android 14) Chrome/120.0.0.0 Mobile,SES825391,16,0
 172,2024-12-09T17:00:42,USR01132,/api/v1/orders,POST,400,336,411,10.0.4.49,Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/121.0,SES479353,40,0
-173,2024-12-10T11:27:38,USR01187,/api/v1/users/settings,GET,500,53,758,10.0.19.83,Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0,SES183958,21,0
+173,2024-12-10T11:27:38,USR01187,/api/v1/users/settings,GET,200,53,758,10.0.19.83,Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0,SES183958,21,0
 174,2024-12-10T12:27:52,USR01199,/api/v1/cart,POST,201,118,265,10.0.16.213,Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0,SES392477,29,0
 175,2024-12-10T13:19:51,USR01060,/api/v1/cart,GET,201,54,676,10.0.44.243,Mozilla/5.0 (Windows NT 10.0; Win64; x64) Firefox/121.0,SES561999,30,0
 176,2024-12-10T13:42:23,USR01089,/api/v1/users/profile,GET,200,137,525,10.0.27.211,Mozilla/5.0 (Linux; Android 14) Chrome/120.0.0.0 Mobile,SES210665,28,0

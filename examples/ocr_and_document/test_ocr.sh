@@ -30,7 +30,7 @@ echo ""
 
 # Check if server is running
 echo -e "${YELLOW}Checking server health...${NC}"
-if ! curl -s "${BASE_URL}/health" > /dev/null 2>&1; then
+if ! curl -sf "${BASE_URL}/health" > /dev/null 2>&1; then
     echo -e "${RED}Error: Universal Runtime not running on port ${PORT}${NC}"
     echo "Start it with: nx start universal"
     exit 1

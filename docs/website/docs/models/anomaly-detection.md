@@ -457,10 +457,11 @@ Detect fraudulent transactions:
 
 ### Threshold Tuning
 
-1. **Start with default (0.5)**: Works well for most cases
-2. **Lower threshold**: More sensitive (more false positives)
-3. **Higher threshold**: Less sensitive (may miss anomalies)
-4. **Test with known anomalies**: Tune based on your false positive tolerance
+1. **Use the learned threshold**: The runtime automatically computes a threshold during training based on the `contamination` parameter (percentile of normalized scores). This learned threshold is returned in the fit response and used by default.
+2. **Override when needed**: You can pass a custom `threshold` parameter (0-1 range) to `/v1/anomaly/score` or `/v1/anomaly/detect` endpoints.
+3. **Lower threshold**: More sensitive (more false positives)
+4. **Higher threshold**: Less sensitive (may miss anomalies)
+5. **Test with known anomalies**: Tune based on your false positive tolerance
 
 ### Production Deployment
 
