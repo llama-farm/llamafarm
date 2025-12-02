@@ -6,10 +6,10 @@ from typing import Any
 from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from services.database_service import DatabaseService
 
 from api.errors import DatabaseNotFoundError
 from core.logging import FastAPIStructLogger
+from services.database_service import DatabaseService
 from services.project_service import ProjectService
 
 from .rag_health import RAGHealthResponse, handle_rag_health
