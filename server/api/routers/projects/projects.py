@@ -413,14 +413,10 @@ class ChatRequest(BaseModel):
     rag_score_threshold: float | None = None
     n_ctx: int | None = None  # Context window size for GGUF models (universal runtime)
 
-    # Custom RAG query overrides
-    rag_query: str | None = Field(
-        default=None,
-        description="Custom query for RAG retrieval. Overrides using the user message.",
-    )
+    # Custom RAG query override
     rag_queries: list[str] | None = Field(
         default=None,
-        description="Multiple custom queries for RAG retrieval. Results are merged and deduplicated.",
+        description="Custom queries for RAG retrieval. Overrides using the user message. Can be a single query or multiple queries - results are merged and deduplicated.",
     )
 
 
@@ -538,7 +534,6 @@ async def chat(
                 rag_top_k=request.rag_top_k,
                 rag_score_threshold=request.rag_score_threshold,
                 n_ctx=request.n_ctx,
-                rag_query=request.rag_query,
                 rag_queries=request.rag_queries,
             ),
             session_id if not stateless else "",
@@ -558,7 +553,6 @@ async def chat(
             rag_top_k=request.rag_top_k,
             n_ctx=request.n_ctx,
             rag_score_threshold=request.rag_score_threshold,
-            rag_query=request.rag_query,
             rag_queries=request.rag_queries,
         )
     except Exception as e:

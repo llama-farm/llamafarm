@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import uuid
 from collections.abc import AsyncGenerator
@@ -49,16 +50,14 @@ class RAGParameters:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
-        custom_query: str | None = None,
-        custom_queries: list[str] | None = None,
+        rag_queries: list[str] | None = None,
     ):
         self.rag_enabled = rag_enabled
         self.database = database
         self.retrieval_strategy = retrieval_strategy
         self.rag_top_k = rag_top_k
         self.rag_score_threshold = rag_score_threshold
-        self.custom_query = custom_query
-        self.custom_queries = custom_queries
+        self.rag_queries = rag_queries
 
 
 class ProjectChatService:
@@ -127,7 +126,6 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
-        rag_query: str | None = None,
         rag_queries: list[str] | None = None,
     ) -> None:
         """
@@ -144,7 +142,6 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
-            rag_query=rag_query,
             rag_queries=rag_queries,
         )
 
@@ -153,10 +150,11 @@ class ProjectChatService:
 
         # Determine the query for logging
         log_query = message
-        if rag_params.custom_queries:
-            log_query = f"[{len(rag_params.custom_queries)} custom queries]"
-        elif rag_params.custom_query:
-            log_query = rag_params.custom_query
+        if rag_params.rag_queries:
+            if len(rag_params.rag_queries) == 1:
+                log_query = rag_params.rag_queries[0]
+            else:
+                log_query = f"[{len(rag_params.rag_queries)} custom queries]"
 
         # Log RAG query start if enabled
         self._log_event(
@@ -167,9 +165,8 @@ class ProjectChatService:
                 "query": log_query,
                 "top_k": rag_params.rag_top_k,
                 "retrieval_strategy": rag_params.retrieval_strategy,
-                "custom_query": rag_params.custom_query is not None,
-                "custom_queries_count": len(rag_params.custom_queries)
-                if rag_params.custom_queries
+                "rag_queries_count": len(rag_params.rag_queries)
+                if rag_params.rag_queries
                 else 0,
             },
         )
@@ -185,7 +182,6 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
-            rag_query=rag_query,
             rag_queries=rag_queries,
         )
 
@@ -250,7 +246,6 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
         n_ctx: int | None = None,
-        rag_query: str | None = None,
         rag_queries: list[str] | None = None,
     ) -> LFChatCompletion:
         # Create event logger (gracefully handles test mocks)
@@ -290,7 +285,6 @@ class ProjectChatService:
                     retrieval_strategy=retrieval_strategy,
                     rag_top_k=rag_top_k,
                     rag_score_threshold=rag_score_threshold,
-                    rag_query=rag_query,
                     rag_queries=rag_queries,
                 )
             except Exception as e:
@@ -362,7 +356,6 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
         n_ctx: int | None = None,
-        rag_query: str | None = None,
         rag_queries: list[str] | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
@@ -405,7 +398,6 @@ class ProjectChatService:
                     retrieval_strategy=retrieval_strategy,
                     rag_top_k=rag_top_k,
                     rag_score_threshold=rag_score_threshold,
-                    rag_query=rag_query,
                     rag_queries=rag_queries,
                 )
 
@@ -464,7 +456,6 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
-        rag_query: str | None = None,
         rag_queries: list[str] | None = None,
     ) -> RAGParameters:
         """
@@ -567,8 +558,7 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
-            custom_query=rag_query,
-            custom_queries=rag_queries,
+            rag_queries=rag_queries,
         )
 
     def _extract_config_value(
@@ -707,7 +697,6 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
-        rag_query: str | None = None,
         rag_queries: list[str] | None = None,
     ) -> None:
         self._clear_rag_context_provider(chat_agent)
@@ -722,13 +711,12 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
-            rag_query=rag_query,
             rag_queries=rag_queries,
         )
 
         rag_results = []
         if rag_params.rag_enabled:
-            rag_results = self._perform_rag_search_with_custom_queries(
+            rag_results = await self._perform_rag_search_with_custom_queries(
                 project_dir=project_dir,
                 project_config=project_config,
                 message=message,
@@ -748,7 +736,7 @@ class ProjectChatService:
             )
             context_provider.chunks.append(chunk_item)
 
-    def _perform_rag_search_with_custom_queries(
+    async def _perform_rag_search_with_custom_queries(
         self,
         project_dir: str,
         project_config: LlamaFarmConfig,
@@ -758,26 +746,53 @@ class ProjectChatService:
         """
         Perform RAG search with support for custom queries.
 
-        Handles three cases:
-        1. custom_queries (list): Execute each query and merge/deduplicate results
-        2. custom_query (str): Use this single custom query instead of user message
-        3. Default: Use the user message as the query
+        Handles two cases:
+        1. rag_queries (list): Execute queries concurrently and merge/deduplicate results
+        2. Default: Use the user message as the query
         """
         top_k = rag_params.rag_top_k or 5
 
-        # Case 1: Multiple custom queries - execute each and merge results
-        if rag_params.custom_queries:
+        # Case 1: Custom queries provided - execute concurrently and merge results
+        if rag_params.rag_queries:
+            # Filter out empty queries
+            valid_queries = [q for q in rag_params.rag_queries if q and q.strip()]
+
+            if not valid_queries:
+                # Fall back to user message if all queries were empty
+                return self._perform_rag_search(
+                    project_dir=project_dir,
+                    project_config=project_config,
+                    message=message,
+                    top_k=top_k,
+                    database=rag_params.database,
+                    retrieval_strategy=rag_params.retrieval_strategy,
+                    score_threshold=rag_params.rag_score_threshold,
+                )
+
+            # Single query - execute directly without concurrent overhead
+            if len(valid_queries) == 1:
+                logger.info(
+                    f"Performing RAG search with custom query: {valid_queries[0][:50]}..."
+                )
+                return self._perform_rag_search(
+                    project_dir=project_dir,
+                    project_config=project_config,
+                    message=valid_queries[0],
+                    top_k=top_k,
+                    database=rag_params.database,
+                    retrieval_strategy=rag_params.retrieval_strategy,
+                    score_threshold=rag_params.rag_score_threshold,
+                )
+
+            # Multiple queries - execute concurrently
             logger.info(
-                f"Performing RAG search with {len(rag_params.custom_queries)} custom queries"
+                f"Performing RAG search with {len(valid_queries)} custom queries concurrently"
             )
-            all_results = []
-            seen_content_hashes: set[str] = set()
 
-            for query in rag_params.custom_queries:
-                if not query or not query.strip():
-                    continue
-
-                results = self._perform_rag_search(
+            # Create concurrent search tasks using asyncio.to_thread for sync function
+            search_tasks = [
+                asyncio.to_thread(
+                    self._perform_rag_search,
                     project_dir=project_dir,
                     project_config=project_config,
                     message=query,
@@ -786,8 +801,24 @@ class ProjectChatService:
                     retrieval_strategy=rag_params.retrieval_strategy,
                     score_threshold=rag_params.rag_score_threshold,
                 )
+                for query in valid_queries
+            ]
 
-                # Deduplicate by content hash
+            # Execute all searches concurrently
+            list_of_results = await asyncio.gather(
+                *search_tasks, return_exceptions=True
+            )
+
+            # Flatten, deduplicate, and sort the aggregated results
+            all_results = []
+            seen_content_hashes: set[str] = set()
+
+            for results in list_of_results:
+                # Skip failed searches
+                if isinstance(results, Exception):
+                    logger.warning(f"RAG search failed for one query: {results}")
+                    continue
+
                 for result in results:
                     # Create a hash from the first 200 chars of content for deduplication
                     content_hash = hash(result.content[:200] if result.content else "")
@@ -799,20 +830,11 @@ class ProjectChatService:
             all_results.sort(key=lambda x: getattr(x, "score", 0.0), reverse=True)
             return all_results[:top_k]
 
-        # Case 2: Single custom query
-        if rag_params.custom_query:
-            logger.info(
-                f"Performing RAG search with custom query: {rag_params.custom_query[:50]}..."
-            )
-            query = rag_params.custom_query
-        else:
-            # Case 3: Default - use the user message
-            query = message
-
+        # Case 2: Default - use the user message as the query
         return self._perform_rag_search(
             project_dir=project_dir,
             project_config=project_config,
-            message=query,
+            message=message,
             top_k=top_k,
             database=rag_params.database,
             retrieval_strategy=rag_params.retrieval_strategy,

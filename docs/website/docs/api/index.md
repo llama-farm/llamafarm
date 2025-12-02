@@ -380,8 +380,7 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 - `database` (optional): Database to use for RAG queries
 - `rag_top_k` (optional): Number of RAG results to retrieve
 - `rag_score_threshold` (optional): Minimum similarity score for RAG results
-- `rag_query` (optional): Custom query for RAG retrieval, overriding the user message
-- `rag_queries` (optional): Array of multiple custom queries for RAG retrieval; results are merged and deduplicated
+- `rag_queries` (optional): Array of custom queries for RAG retrieval, overriding the user message. Can be a single query `["my query"]` or multiple queries `["query1", "query2"]` - results from multiple queries are executed concurrently, merged, and deduplicated
 
 **Response (Non-Streaming):**
 ```json
@@ -485,13 +484,13 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
     ],
     "rag_enabled": true,
     "database": "research_db",
-    "rag_query": "clinical trial results primary endpoints efficacy safety"
+    "rag_queries": ["clinical trial results primary endpoints efficacy safety"]
   }'
 ```
 
 **Example (Multiple Custom RAG Queries):**
 
-Execute multiple search queries and merge the results. This is useful for comparative analysis or comprehensive retrieval:
+Execute multiple search queries concurrently and merge the results. This is useful for comparative analysis or comprehensive retrieval:
 
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
@@ -510,7 +509,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   }'
 ```
 
-Results from multiple queries are automatically merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
+Results from multiple queries are automatically executed concurrently, merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
 
 ### Get Chat History
 
