@@ -60,7 +60,7 @@ export async function parseSSEStream<T = any>(
       const { done, value } = await reader.read()
 
       if (done) break
-
+ 
       const decodedChunk = decoder.decode(value, { stream: true })
       buffer += decodedChunk
 
