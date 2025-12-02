@@ -380,6 +380,8 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 - `database` (optional): Database to use for RAG queries
 - `rag_top_k` (optional): Number of RAG results to retrieve
 - `rag_score_threshold` (optional): Minimum similarity score for RAG results
+- `rag_query` (optional): Custom query for RAG retrieval, overriding the user message
+- `rag_queries` (optional): Array of multiple custom queries for RAG retrieval; results are merged and deduplicated
 
 **Response (Non-Streaming):**
 ```json
@@ -469,6 +471,46 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
     "rag_top_k": 10
   }'
 ```
+
+**Example (Custom RAG Query):**
+
+Override the default RAG query (which uses the user message) with a custom search query. This is useful when the user's question is conversational but you want specific technical retrieval:
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Can you summarize the key findings?"}
+    ],
+    "rag_enabled": true,
+    "database": "research_db",
+    "rag_query": "clinical trial results primary endpoints efficacy safety"
+  }'
+```
+
+**Example (Multiple Custom RAG Queries):**
+
+Execute multiple search queries and merge the results. This is useful for comparative analysis or comprehensive retrieval:
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Compare the two approaches"}
+    ],
+    "rag_enabled": true,
+    "database": "research_db",
+    "rag_queries": [
+      "machine learning neural network methodology",
+      "traditional statistical analysis regression"
+    ],
+    "rag_top_k": 10
+  }'
+```
+
+Results from multiple queries are automatically merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
 
 ### Get Chat History
 
