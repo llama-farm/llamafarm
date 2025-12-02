@@ -1,4 +1,4 @@
-import React, { ReactElement } from 'react'
+import React, { ReactElement, useState } from 'react'
 import { render, RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
@@ -30,9 +30,12 @@ interface AllTheProvidersProps {
 /**
  * Wrapper component that provides all necessary context providers
  * Used by renderWithProviders to wrap test components
+ * 
+ * Note: QueryClient is memoized with useState to prevent recreation on re-renders,
+ * which would reset React Query caches and break tests relying on persisted state.
  */
 function AllTheProviders({ children }: AllTheProvidersProps) {
-  const queryClient = createTestQueryClient()
+  const [queryClient] = useState(() => createTestQueryClient())
 
   return (
     <QueryClientProvider client={queryClient}>
