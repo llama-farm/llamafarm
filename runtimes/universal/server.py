@@ -24,11 +24,15 @@ import base64
 import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 from fastapi import (
     FastAPI,
+    File,
+    Form,
     HTTPException,
+    UploadFile,
 )
 from pydantic import BaseModel as PydanticBaseModel
 
@@ -45,6 +49,14 @@ from models import (
 )
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
+from utils.feature_encoder import FeatureEncoder
+from utils.file_handler import (
+    delete_file,
+    get_file,
+    get_file_images,
+    list_files,
+    store_file,
+)
 from utils.model_format import detect_model_format
 
 # Configure logging FIRST, before anything else
@@ -108,6 +120,9 @@ _models: dict[str, BaseModel] = {}
 _model_last_access: dict[str, datetime] = {}  # Track last access time for each model
 _model_load_lock = asyncio.Lock()
 _current_device = None
+
+# Feature encoder cache for anomaly detection with mixed data types
+_encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
 
 # Model unload timeout configuration (in seconds)
@@ -412,6 +427,155 @@ async def list_models():
         )
 
     return {"object": "list", "data": models_list}
+
+
+# ============================================================================
+# File Upload Endpoints
+# ============================================================================
+
+
+@app.post("/v1/files")
+async def upload_file(
+    file: UploadFile = File(...),
+    convert_pdf: bool = Form(default=True),
+    pdf_dpi: int = Form(default=150),
+):
+    """
+    Upload a file for use with OCR, document extraction, or image generation.
+
+    Uploaded files are stored temporarily (5 minutes TTL) and can be referenced
+    by their file ID in subsequent API calls.
+
+    For PDFs, pages are automatically converted to images for OCR/document processing.
+
+    Args:
+        file: The file to upload (images, PDFs supported)
+        convert_pdf: If True, convert PDF pages to images (default: True)
+        pdf_dpi: DPI for PDF to image conversion (default: 150)
+
+    Returns:
+        File metadata including ID for referencing in other endpoints
+
+    Example:
+        ```bash
+        curl -X POST http://localhost:8000/v1/files \\
+            -F "file=@document.pdf" \\
+            -F "convert_pdf=true" \\
+            -F "pdf_dpi=150"
+        ```
+    """
+    try:
+        content = await file.read()
+        stored = await store_file(
+            content=content,
+            filename=file.filename or "unknown",
+            content_type=file.content_type,
+            convert_pdf_to_images=convert_pdf,
+            pdf_dpi=pdf_dpi,
+        )
+
+        return {
+            "id": stored.id,
+            "object": "file",
+            "filename": stored.filename,
+            "content_type": stored.content_type,
+            "size": stored.size,
+            "created_at": stored.created_at,
+            "has_images": stored.page_images is not None or stored.filename.lower().endswith(
+                (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif")
+            ),
+            "page_count": len(stored.page_images) if stored.page_images else None,
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/files")
+async def get_uploaded_files():
+    """
+    List all uploaded files with their metadata.
+
+    Returns:
+        List of file metadata
+    """
+    return {"object": "list", "data": list_files()}
+
+
+@app.get("/v1/files/{file_id}")
+async def get_uploaded_file(file_id: str):
+    """
+    Get metadata for a specific uploaded file.
+
+    Args:
+        file_id: The file ID returned from upload
+
+    Returns:
+        File metadata
+    """
+    stored = get_file(file_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
+
+    return {
+        "id": stored.id,
+        "object": "file",
+        "filename": stored.filename,
+        "content_type": stored.content_type,
+        "size": stored.size,
+        "created_at": stored.created_at,
+        "has_images": stored.page_images is not None,
+        "page_count": len(stored.page_images) if stored.page_images else None,
+    }
+
+
+@app.get("/v1/files/{file_id}/images")
+async def get_file_as_images(file_id: str):
+    """
+    Get base64-encoded images for a file.
+
+    For PDFs, returns one image per page.
+    For image files, returns the image itself.
+
+    Args:
+        file_id: The file ID returned from upload
+
+    Returns:
+        List of base64-encoded images
+    """
+    stored = get_file(file_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
+
+    images = get_file_images(file_id)
+    if not images:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File {file_id} cannot be converted to images",
+        )
+
+    return {
+        "object": "list",
+        "file_id": file_id,
+        "data": [{"index": i, "base64": img} for i, img in enumerate(images)],
+    }
+
+
+@app.delete("/v1/files/{file_id}")
+async def delete_uploaded_file(file_id: str):
+    """
+    Delete an uploaded file.
+
+    Args:
+        file_id: The file ID to delete
+
+    Returns:
+        Deletion confirmation
+    """
+    if delete_file(file_id):
+        return {"deleted": True, "id": file_id}
+    raise HTTPException(status_code=404, detail=f"File not found: {file_id}")
 
 
 # ============================================================================
@@ -763,7 +927,8 @@ class DocumentExtractRequest(PydanticBaseModel):
     """Document extraction request."""
 
     model: str  # HuggingFace model ID (e.g., "naver-clova-ix/donut-base-finetuned-cord-v2")
-    images: list[str]  # Base64-encoded document images
+    images: list[str] | None = None  # Base64-encoded document images
+    file_id: str | None = None  # File ID from /v1/files upload
     prompts: list[str] | None = None  # Optional prompts for each image
     task: str = "extraction"  # extraction, vqa, classification
 
@@ -785,7 +950,11 @@ async def extract_from_documents(request: DocumentExtractRequest):
     - vqa: Answer questions about document content
     - classification: Classify document types
 
-    Example request:
+    You can provide images either as:
+    1. Base64-encoded strings in the `images` field
+    2. A file ID from a previous upload via `file_id` field
+
+    Example with base64:
     ```json
     {
         "model": "naver-clova-ix/donut-base-finetuned-cord-v2",
@@ -794,17 +963,41 @@ async def extract_from_documents(request: DocumentExtractRequest):
     }
     ```
 
+    Example with file_id (from /v1/files upload):
+    ```json
+    {
+        "model": "naver-clova-ix/donut-base-finetuned-cord-v2",
+        "file_id": "file_abc123_def456",
+        "task": "extraction"
+    }
+    ```
+
     For VQA, include prompts:
     ```json
     {
         "model": "microsoft/layoutlmv3-base-finetuned-docvqa",
-        "images": ["base64_encoded_image..."],
+        "file_id": "file_abc123_def456",
         "prompts": ["What is the total amount?"],
         "task": "vqa"
     }
     ```
     """
     try:
+        # Resolve images from file_id or direct base64
+        images = request.images
+        if request.file_id:
+            images = get_file_images(request.file_id)
+            if not images:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No images found for file_id: {request.file_id}",
+                )
+        elif not images:
+            raise HTTPException(
+                status_code=400,
+                detail="Either 'images' or 'file_id' must be provided",
+            )
+
         # Load document model
         model = await load_document(
             model_id=request.model,
@@ -813,7 +1006,7 @@ async def extract_from_documents(request: DocumentExtractRequest):
 
         # Extract from documents
         results = await model.extract(
-            images=request.images,
+            images=images,
             prompts=request.prompts,
         )
 
@@ -854,7 +1047,7 @@ async def extract_from_documents(request: DocumentExtractRequest):
             "model": request.model,
             "task": request.task,
             "usage": {
-                "documents_processed": len(request.images),
+                "documents_processed": len(images),
             },
         }
 
@@ -921,7 +1114,8 @@ class OCRRequest(PydanticBaseModel):
     """OCR request for text extraction from images."""
 
     model: str = "surya"  # Backend: surya, easyocr, paddleocr, tesseract
-    images: list[str]  # Base64-encoded images
+    images: list[str] | None = None  # Base64-encoded images
+    file_id: str | None = None  # File ID from /v1/files upload
     languages: list[str] | None = None  # Language codes (e.g., ['en', 'fr'])
     return_boxes: bool = False  # Return bounding boxes for detected text
 
@@ -937,7 +1131,11 @@ async def extract_text_from_images(request: OCRRequest):
     - paddleocr: Fast, optimized for production, excellent for Asian languages
     - tesseract: Classic OCR engine, CPU-only, widely deployed
 
-    Example request:
+    You can provide images either as:
+    1. Base64-encoded strings in the `images` field
+    2. A file ID from a previous upload via `file_id` field
+
+    Example with base64:
     ```json
     {
         "model": "surya",
@@ -946,8 +1144,32 @@ async def extract_text_from_images(request: OCRRequest):
         "return_boxes": false
     }
     ```
+
+    Example with file_id (from /v1/files upload):
+    ```json
+    {
+        "model": "surya",
+        "file_id": "file_abc123_def456",
+        "languages": ["en"]
+    }
+    ```
     """
     try:
+        # Resolve images from file_id or direct base64
+        images = request.images
+        if request.file_id:
+            images = get_file_images(request.file_id)
+            if not images:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No images found for file_id: {request.file_id}",
+                )
+        elif not images:
+            raise HTTPException(
+                status_code=400,
+                detail="Either 'images' or 'file_id' must be provided",
+            )
+
         # Load OCR model
         model = await load_ocr(
             backend=request.model,
@@ -956,7 +1178,7 @@ async def extract_text_from_images(request: OCRRequest):
 
         # Run OCR
         results = await model.recognize(
-            images=request.images,
+            images=images,
             languages=request.languages,
             return_boxes=request.return_boxes,
         )
@@ -988,7 +1210,7 @@ async def extract_text_from_images(request: OCRRequest):
             "data": data,
             "model": request.model,
             "usage": {
-                "images_processed": len(request.images),
+                "images_processed": len(images),
             },
         }
 
@@ -1055,21 +1277,98 @@ async def load_anomaly(
     return _models[cache_key]
 
 
+def _prepare_anomaly_data(
+    data: list[list[float]] | list[dict],
+    schema: dict[str, str] | None,
+    cache_key: str,
+    fit_mode: bool = False,
+) -> list[list[float]]:
+    """
+    Prepare data for anomaly detection by encoding if needed.
+
+    Args:
+        data: Raw data (numeric arrays or dicts)
+        schema: Feature encoding schema (required for dict data during fit)
+        cache_key: Cache key for storing/retrieving encoder
+        fit_mode: If True, fit the encoder on the data. If False, use existing encoder.
+
+    Returns:
+        Encoded numeric data as list of lists
+    """
+    # If data is already numeric, return as-is
+    if not data:
+        return []
+
+    if isinstance(data[0], list):
+        # Already numeric arrays
+        return data
+
+    # Dict-based data - need to encode
+    if fit_mode:
+        # Require schema for training
+        if schema is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Schema is required when fitting with dict-based data. "
+                "Example: schema = {'time_ms': 'numeric', 'user_agent': 'hash'}",
+            )
+        # Fit encoder on training data
+        encoder = FeatureEncoder()
+        encoder.fit(data, schema)
+        _encoders[cache_key] = encoder
+        logger.info(f"Fitted feature encoder for {cache_key} with schema: {schema}")
+    else:
+        # Use existing encoder (schema already learned during fit)
+        if cache_key not in _encoders:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No encoder found for model '{cache_key}'. "
+                "Train with /v1/anomaly/fit using dict data first, or pass schema.",
+            )
+        encoder = _encoders[cache_key]
+
+    # Transform data
+    encoded = encoder.transform(data)
+    return encoded.tolist()
+
+
 class AnomalyScoreRequest(PydanticBaseModel):
-    """Anomaly scoring request."""
+    """Anomaly scoring request.
+
+    Supports two data formats:
+    1. Numeric arrays: data = [[1.0, 2.0], [3.0, 4.0]]
+    2. Dict-based with schema: data = [{"time_ms": 100, "user_agent": "curl"}]
+       with schema = {"time_ms": "numeric", "user_agent": "hash"}
+    """
 
     model: str = "default"  # Model identifier
     backend: str = "isolation_forest"  # isolation_forest, one_class_svm, local_outlier_factor, autoencoder
-    data: list[list[float]]  # Data points to score
+    data: list[list[float]] | list[dict]  # Data points (numeric arrays or dicts)
+    schema: dict[str, str] | None = None  # Feature encoding schema (required for dict data)
     threshold: float | None = None  # Override default threshold
 
 
 class AnomalyFitRequest(PydanticBaseModel):
-    """Anomaly model fitting request."""
+    """Anomaly model fitting request.
+
+    Supports two data formats:
+    1. Numeric arrays: data = [[1.0, 2.0], [3.0, 4.0]]
+    2. Dict-based with schema: data = [{"time_ms": 100, "user_agent": "curl"}]
+       with schema = {"time_ms": "numeric", "user_agent": "hash"}
+
+    Schema encoding types:
+    - numeric: Pass through as-is (int/float)
+    - hash: MD5 hash to integer (good for high-cardinality like user_agent)
+    - label: Category → integer mapping (learned from training data)
+    - onehot: One-hot encoding (for low-cardinality categoricals)
+    - binary: Boolean-like values (yes/no, true/false → 0/1)
+    - frequency: Encode as occurrence frequency from training data
+    """
 
     model: str = "default"  # Model identifier (for caching)
     backend: str = "isolation_forest"  # Backend to use
-    data: list[list[float]]  # Training data (assumed mostly normal)
+    data: list[list[float]] | list[dict]  # Training data (numeric arrays or dicts)
+    schema: dict[str, str] | None = None  # Feature encoding schema (required for dict data)
     contamination: float = 0.1  # Expected proportion of anomalies
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
@@ -1104,6 +1403,8 @@ async def score_anomalies(request: AnomalyScoreRequest):
     - raw_score: Backend-specific raw score
     """
     try:
+        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
@@ -1115,9 +1416,17 @@ async def score_anomalies(request: AnomalyScoreRequest):
                 detail="Model not fitted. Call /v1/anomaly/fit first or load a pre-trained model.",
             )
 
+        # Prepare data (encode if dict-based)
+        prepared_data = _prepare_anomaly_data(
+            data=request.data,
+            schema=request.schema,
+            cache_key=cache_key,
+            fit_mode=False,  # Use existing encoder
+        )
+
         # Score data
         results = await model.score(
-            data=request.data,
+            data=prepared_data,
             threshold=request.threshold,
         )
 
@@ -1182,6 +1491,16 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
     After fitting, use /v1/anomaly/score to detect anomalies in new data.
     """
     try:
+        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+
+        # Prepare data (encode if dict-based, and fit the encoder)
+        prepared_data = _prepare_anomaly_data(
+            data=request.data,
+            schema=request.schema,
+            cache_key=cache_key,
+            fit_mode=True,  # Fit encoder on training data
+        )
+
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
@@ -1190,10 +1509,19 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
 
         # Fit model
         result = await model.fit(
-            data=request.data,
+            data=prepared_data,
             epochs=request.epochs,
             batch_size=request.batch_size,
         )
+
+        # Include encoder info in response if used
+        encoder_info = None
+        if cache_key in _encoders:
+            encoder = _encoders[cache_key]
+            encoder_info = {
+                "schema": encoder.schema.features if encoder.schema else {},
+                "features": list(encoder.schema.features.keys()) if encoder.schema else [],
+            }
 
         return {
             "object": "fit_result",
@@ -1202,6 +1530,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             "samples_fitted": result.samples_fitted,
             "training_time_ms": result.training_time_ms,
             "model_params": result.model_params,
+            "encoder": encoder_info,
             "status": "fitted",
         }
 
@@ -1229,6 +1558,8 @@ async def detect_anomalies(request: AnomalyScoreRequest):
     ```
     """
     try:
+        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
@@ -1240,9 +1571,17 @@ async def detect_anomalies(request: AnomalyScoreRequest):
                 detail="Model not fitted. Call /v1/anomaly/fit first.",
             )
 
+        # Prepare data (encode if dict-based)
+        prepared_data = _prepare_anomaly_data(
+            data=request.data,
+            schema=request.schema,
+            cache_key=cache_key,
+            fit_mode=False,  # Use existing encoder
+        )
+
         # Detect anomalies
         results = await model.detect(
-            data=request.data,
+            data=prepared_data,
             threshold=request.threshold,
         )
 
@@ -1271,6 +1610,271 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         raise
     except Exception as e:
         logger.error(f"Error in detect_anomalies: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# Model storage directory (configurable via env var)
+ANOMALY_MODELS_DIR = Path(os.environ.get("ANOMALY_MODELS_DIR", "./anomaly_models"))
+
+
+class AnomalySaveRequest(PydanticBaseModel):
+    """Request to save a fitted anomaly model."""
+
+    model: str  # Model identifier (must be fitted)
+    backend: str = "isolation_forest"
+    filename: str | None = None  # Optional custom filename
+
+
+class AnomalyLoadRequest(PydanticBaseModel):
+    """Request to load a pre-trained anomaly model."""
+
+    filename: str  # Filename in models directory
+    model: str  # Model identifier to cache as
+    backend: str = "isolation_forest"
+
+
+@app.post("/v1/anomaly/save")
+async def save_anomaly_model(request: AnomalySaveRequest):
+    """
+    Save a fitted anomaly model to disk for production use.
+
+    After fitting a model with /v1/anomaly/fit, save it to disk so it
+    persists across server restarts.
+
+    Example request:
+    ```json
+    {
+        "model": "sensor-detector",
+        "backend": "isolation_forest",
+        "filename": "sensor_detector_v1"
+    }
+    ```
+
+    Models are saved to the ANOMALY_MODELS_DIR directory (default: ./anomaly_models).
+    """
+    try:
+        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+
+        if cache_key not in _models:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model '{request.model}' with backend '{request.backend}' not found in cache. "
+                "Fit the model first with /v1/anomaly/fit",
+            )
+
+        model = _models[cache_key]
+
+        if not model.is_fitted:
+            raise HTTPException(
+                status_code=400,
+                detail="Model not fitted. Call /v1/anomaly/fit first.",
+            )
+
+        # Create models directory if needed
+        ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Generate filename
+        filename = request.filename or f"{request.model}_{request.backend}"
+        # Sanitize filename
+        filename = "".join(c for c in filename if c.isalnum() or c in "-_")
+
+        save_path = ANOMALY_MODELS_DIR / filename
+        await model.save(str(save_path))
+
+        # Determine actual saved file
+        if request.backend == "autoencoder":
+            actual_path = save_path.with_suffix(".pt")
+        else:
+            actual_path = save_path.with_suffix(".joblib")
+            if not actual_path.exists():
+                actual_path = save_path.with_suffix(".pkl")
+
+        # Save encoder if one exists for this model
+        encoder_path = None
+        if cache_key in _encoders:
+            encoder = _encoders[cache_key]
+            encoder_save_path = ANOMALY_MODELS_DIR / f"{filename}_encoder.json"
+            encoder.save(encoder_save_path)
+            encoder_path = str(encoder_save_path)
+            logger.info(f"Saved feature encoder to {encoder_save_path}")
+
+        return {
+            "object": "save_result",
+            "model": request.model,
+            "backend": request.backend,
+            "filename": actual_path.name,
+            "path": str(actual_path),
+            "encoder_path": encoder_path,
+            "status": "saved",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in save_anomaly_model: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/anomaly/load")
+async def load_anomaly_model(request: AnomalyLoadRequest):
+    """
+    Load a pre-trained anomaly model from disk.
+
+    Load a previously saved model for production inference without
+    re-training.
+
+    Example request:
+    ```json
+    {
+        "filename": "sensor_detector_v1.joblib",
+        "model": "sensor-detector",
+        "backend": "isolation_forest"
+    }
+    ```
+
+    The model will be loaded and cached for subsequent /v1/anomaly/score
+    and /v1/anomaly/detect calls.
+    """
+    try:
+        model_path = ANOMALY_MODELS_DIR / request.filename
+
+        if not model_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model file not found: {request.filename}. "
+                f"Available models: {[f.name for f in ANOMALY_MODELS_DIR.glob('*') if f.is_file()]}",
+            )
+
+        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+
+        # Remove existing model from cache if present
+        if cache_key in _models:
+            await _models[cache_key].unload()
+            del _models[cache_key]
+
+        async with _model_load_lock:
+            logger.info(f"Loading pre-trained anomaly model: {model_path}")
+            device = get_device()
+
+            model = AnomalyModel(
+                model_id=str(model_path),  # Pass path as model_id for loading
+                device=device,
+                backend=request.backend,
+            )
+
+            await model.load()
+            _models[cache_key] = model
+            _track_model_access(cache_key)
+
+        # Try to load encoder if one exists
+        encoder_loaded = False
+        encoder_schema = None
+        # Derive encoder path from model filename
+        base_filename = model_path.stem  # e.g., "sensor_detector_v1" from "sensor_detector_v1.joblib"
+        encoder_path = ANOMALY_MODELS_DIR / f"{base_filename}_encoder.json"
+        if encoder_path.exists():
+            encoder = FeatureEncoder.load(encoder_path)
+            _encoders[cache_key] = encoder
+            encoder_loaded = True
+            encoder_schema = encoder.schema
+            logger.info(f"Loaded feature encoder from {encoder_path}")
+
+        return {
+            "object": "load_result",
+            "model": request.model,
+            "backend": request.backend,
+            "filename": request.filename,
+            "is_fitted": model.is_fitted,
+            "threshold": model.threshold,
+            "encoder_loaded": encoder_loaded,
+            "encoder_schema": encoder_schema,
+            "status": "loaded",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in load_anomaly_model: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/anomaly/models")
+async def list_anomaly_models():
+    """
+    List all saved anomaly models available for loading.
+
+    Returns models saved in the ANOMALY_MODELS_DIR directory.
+
+    Response includes:
+    - filename: Name of the saved model file
+    - size_bytes: File size
+    - modified: Last modification timestamp
+    - backend: Detected backend type (from file extension)
+    """
+    try:
+        ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        models = []
+        for path in ANOMALY_MODELS_DIR.glob("*"):
+            if path.is_file() and path.suffix in (".pt", ".pkl", ".joblib"):
+                stat = path.stat()
+
+                # Detect backend from extension
+                if path.suffix == ".pt":
+                    backend = "autoencoder"
+                else:
+                    backend = "sklearn"  # Could be any sklearn backend
+
+                models.append({
+                    "filename": path.name,
+                    "size_bytes": stat.st_size,
+                    "modified": stat.st_mtime,
+                    "backend": backend,
+                })
+
+        # Sort by modification time (newest first)
+        models.sort(key=lambda x: x["modified"], reverse=True)
+
+        return {
+            "object": "list",
+            "data": models,
+            "models_dir": str(ANOMALY_MODELS_DIR),
+            "total": len(models),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in list_anomaly_models: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.delete("/v1/anomaly/models/{filename}")
+async def delete_anomaly_model(filename: str):
+    """
+    Delete a saved anomaly model.
+
+    Removes the model file from disk. Does not affect cached models.
+    """
+    try:
+        model_path = ANOMALY_MODELS_DIR / filename
+
+        if not model_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model file not found: {filename}",
+            )
+
+        model_path.unlink()
+
+        return {
+            "object": "delete_result",
+            "filename": filename,
+            "deleted": True,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in delete_anomaly_model: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

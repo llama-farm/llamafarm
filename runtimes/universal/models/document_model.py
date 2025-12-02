@@ -222,20 +222,63 @@ class DocumentModel(BaseModel):
 
         return results
 
+    # Prompt format registry - extensible mapping of model patterns to prompt formatters
+    # Each entry: pattern -> (format_func, default_prompt)
+    # format_func takes (prompt: str | None) -> str
+    PROMPT_FORMATS: dict[str, tuple[callable, str]] = {
+        "docvqa": (
+            lambda p: f"<s_docvqa><s_question>{p}</s_question><s_answer>" if p else "<s_docvqa><s_question>What is this document about?</s_question><s_answer>",
+            "What is this document about?",
+        ),
+        "cord": (
+            lambda p: p if p else "<s_cord-v2>",
+            "<s_cord-v2>",
+        ),
+        "rvlcdip": (
+            lambda p: p if p else "<s_rvlcdip>",
+            "<s_rvlcdip>",
+        ),
+        "zhtrainticket": (
+            lambda p: p if p else "<s_zhtrainticket>",
+            "<s_zhtrainticket>",
+        ),
+        "synthdog": (
+            lambda p: p if p else "<s_synthdog>",
+            "<s_synthdog>",
+        ),
+    }
+
+    def _format_prompt(self, prompt: str | None) -> str:
+        """Format prompt based on model type using the prompt format registry.
+
+        Args:
+            prompt: User-provided prompt or None
+
+        Returns:
+            Formatted prompt string for the model
+        """
+        model_lower = self.model_id.lower()
+
+        # Find matching format
+        for pattern, (formatter, _) in self.PROMPT_FORMATS.items():
+            if pattern in model_lower:
+                return formatter(prompt)
+
+        # Default - use prompt as-is or generic start token
+        return prompt if prompt else "<s>"
+
     async def _extract_donut(
         self, image: Image.Image, prompt: str | None
     ) -> DocumentResult:
         """Extract using Donut model."""
-        # Default task prompt based on model
-        if prompt is None:
-            prompt = "<s_cord>"  # Default CORD extraction prompt
+        task_prompt = self._format_prompt(prompt)
+        logger.debug(f"Using task prompt: {task_prompt[:100]}...")
 
-        # Prepare pixel values
+        # Prepare pixel values and move to device with correct dtype
         pixel_values = self.processor(image, return_tensors="pt").pixel_values
-        pixel_values = pixel_values.to(self.device)
+        pixel_values = self.to_device(pixel_values)
 
         # Prepare decoder input
-        task_prompt = prompt
         decoder_input_ids = self.processor.tokenizer(
             task_prompt, add_special_tokens=False, return_tensors="pt"
         ).input_ids

@@ -21,6 +21,11 @@ dependencies = [
   "pyyaml>=6.0",
   "gguf>=0.17.1",
   "hf-transfer>=0.1.9",
+  "pymupdf>=1.26.6",
+  "easyocr>=1.7.2",
+  "scikit-learn>=1.7.2",
+  "protobuf>=6.33.1",
+  "sentencepiece>=0.2.1",
 ]
 
 [dependency-groups]

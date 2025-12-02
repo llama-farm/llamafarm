@@ -78,12 +78,34 @@ class BaseModel(ABC):
             "supports_streaming": self.supports_streaming,
         }
 
-    def get_dtype(self):
-        """Get optimal torch dtype for the device."""
-        if self.device == "cuda" or self.device == "mps":
+    def get_dtype(self, force_float32: bool = False):
+        """Get optimal torch dtype for the device.
+
+        Args:
+            force_float32: Force float32 for models with MPS compatibility issues
+        """
+        if force_float32:
+            return torch.float32
+        if self.device == "cuda":
+            return torch.float16
+        elif self.device == "mps":
             return torch.float16
         else:
             return torch.float32
+
+    def to_device(self, tensor: torch.Tensor, dtype: torch.dtype | None = None):
+        """Move tensor to device with correct dtype.
+
+        This helper ensures tensors are moved to device with matching dtype
+        to avoid MPS mixed precision issues.
+
+        Args:
+            tensor: Tensor to move
+            dtype: Optional dtype override (defaults to get_dtype())
+        """
+        if dtype is None:
+            dtype = self.get_dtype()
+        return tensor.to(device=self.device, dtype=dtype)
 
     def apply_optimizations(self):
         """Apply platform-specific optimizations."""

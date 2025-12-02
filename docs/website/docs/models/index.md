@@ -456,8 +456,27 @@ To add a new provider enum:
 - **Advanced agent handler configuration** – choose handlers per command and dataset.
 - **Fine-tuning pipeline integration** – track status in the roadmap.
 
+## Specialized ML Models
+
+Beyond text generation, the Universal Runtime provides specialized ML capabilities:
+
+| Capability | Endpoint | Use Case |
+|-----------|----------|----------|
+| **OCR** | `POST /v1/ocr` | Extract text from images/PDFs |
+| **Document Extraction** | `POST /v1/documents/extract` | Extract structured data from forms |
+| **Text Classification** | `POST /v1/classify` | Sentiment analysis, routing |
+| **Named Entity Recognition** | `POST /v1/ner` | Extract people, places, organizations |
+| **Reranking** | `POST /v1/rerank` | Improve RAG retrieval accuracy |
+| **Anomaly Detection** | `POST /v1/anomaly/*` | Detect outliers in data |
+
+See the detailed guides:
+- [Specialized ML Models](./specialized-ml.md) - OCR, document extraction, classification, NER, reranking
+- [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
+
 ## Next Steps
 
+- [Specialized ML Models](./specialized-ml.md) – OCR, document extraction, and more.
+- [Anomaly Detection](./anomaly-detection.md) – detect outliers in your data.
 - [Configuration Guide](../configuration/index.md) – runtime schema details.
 - [Extending runtimes](../extending/index.md#extend-runtimes) – step-by-step provider integration.
 - [Prompts](../prompts/index.md) – control how system prompts interact with runtime capabilities.

@@ -64,8 +64,9 @@ class TestCacheKeys:
 
         # Cache keys should be different
         assert cache_key1 != cache_key2
-        assert cache_key1 == f"encoder:{task}:{model_format}:{model_id}:quantQ4_K_M"
-        assert cache_key2 == f"encoder:{task}:{model_format}:{model_id}:quantQ8_0"
+        # Note: cache keys now include max_length suffix (lenauto when not specified)
+        assert cache_key1 == f"encoder:{task}:{model_format}:{model_id}:quantQ4_K_M:lenauto"
+        assert cache_key2 == f"encoder:{task}:{model_format}:{model_id}:quantQ8_0:lenauto"
 
     def test_load_encoder_cache_key_none_quantization(self):
         """Test that encoder models with None quantization use 'default' in cache key."""
@@ -76,7 +77,8 @@ class TestCacheKeys:
         # Test case 5: None quantization should use "default"
         cache_key = _make_encoder_cache_key(model_id, task, model_format, None)
 
-        assert cache_key == f"encoder:{task}:{model_format}:{model_id}:quantdefault"
+        # Note: cache keys now include max_length suffix (lenauto when not specified)
+        assert cache_key == f"encoder:{task}:{model_format}:{model_id}:quantdefault:lenauto"
 
     def test_same_configuration_uses_same_cache_key(self):
         """Test that identical configurations produce identical cache keys."""
