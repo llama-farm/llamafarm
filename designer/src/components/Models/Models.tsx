@@ -19,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
-import { Label } from '../ui/label'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import { parsePromptSets } from '../../utils/promptSets'
@@ -48,6 +47,14 @@ import {
   formatETA,
   validateModelName,
 } from '../../utils/modelUtils'
+import {
+  recommendedQuantizations,
+  localGroups,
+  type LocalModelGroup,
+  type ModelVariant,
+} from './modelConstants'
+import type { InferenceModel, ModelStatus } from './types'
+import { CloudModelsForm } from './CloudModelsForm'
 
 interface TabBarProps {
   activeTab: string
@@ -73,18 +80,6 @@ function TabBar({ activeTab, onChange, tabs }: TabBarProps) {
       ))}
     </div>
   )
-}
-
-type ModelStatus = 'ready' | 'downloading'
-
-interface InferenceModel {
-  id: string
-  name: string
-  modelIdentifier?: string
-  meta: string
-  badges: string[]
-  isDefault?: boolean
-  status?: ModelStatus
 }
 
 interface ModelCardProps {
@@ -382,237 +377,94 @@ function ProjectInferenceModels({
   )
 }
 
-function CloudModelsForm({
-  onAddModel,
-  onGoToProject,
-  promptSetNames: _promptSetNames,
-}: {
-  onAddModel: (m: InferenceModel, promptSets?: string[]) => void
-  onGoToProject: () => void
-  promptSetNames: string[]
-}) {
-  const providerOptions = [
-    'OpenAI',
-    'Anthropic',
-    'Google',
-    'Cohere',
-    'Mistral',
-    'Azure OpenAI',
-    'Groq',
-    'Together',
-    'AWS Bedrock',
-    'Ollama (remote)',
-  ] as const
-  type Provider = (typeof providerOptions)[number]
-  const modelMap: Record<Provider, string[]> = {
-    OpenAI: ['GPT-4.1', 'GPT-4.1-mini', 'o3-mini', 'GPT-4o'],
-    Anthropic: ['Claude 3.5 Sonnet', 'Claude 3 Haiku'],
-    Google: ['Gemini 2.0 Flash', 'Gemini 1.5 Pro'],
-    Cohere: ['Command R', 'Command R+'],
-    Mistral: ['Mistral Large', 'Mixtral 8x7B'],
-    'Azure OpenAI': ['GPT-4.1', 'GPT-4o'],
-    Groq: ['Llama 3 70B', 'Mixtral 8x7B'],
-    Together: ['Llama 3 8B', 'Qwen2-72B'],
-    'AWS Bedrock': ['Claude 3 Sonnet', 'Llama 3 8B Instruct'],
-    'Ollama (remote)': ['llama3.1:8b', 'qwen2.5:7b'],
+// Constants and helpers for quantization selection
+const QUANTIZATION_FALLBACK_ORDER = [
+  'Q4_K_M',
+  'Q4_K_S',
+  'Q3_K_M',
+  'Q3_K_S',
+  'Q2_K',
+] as const
+
+/**
+ * Finds a fallback quantization from available options
+ */
+function findFallbackQuantization(
+  validOptions: Array<{ quantization: string | null }>,
+  diskSpaceValidations?: Record<
+    string,
+    { can_download: boolean; warning: boolean }
+  >
+): string | null {
+  for (const fallbackQuant of QUANTIZATION_FALLBACK_ORDER) {
+    const fallbackOption = validOptions.find(
+      opt => opt.quantization === fallbackQuant
+    )
+    if (fallbackOption) {
+      // If disk space validations provided, check if it fits
+      if (diskSpaceValidations) {
+        const validation = diskSpaceValidations[fallbackQuant]
+        if (validation && validation.can_download && !validation.warning) {
+          return fallbackQuant
+        }
+      } else {
+        return fallbackQuant
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Determines the recommended quantization for a model
+ */
+function getRecommendedQuantization(
+  baseModelId: string,
+  validOptions: Array<{ quantization: string | null }>,
+  diskSpaceValidations: Record<
+    string,
+    { can_download: boolean; warning: boolean }
+  >,
+  recommendedQuantizations: Record<
+    string,
+    { quantization: string; description: string }
+  >
+): { quantization: string | null; description: string | null } {
+  const recommendation = recommendedQuantizations[baseModelId]
+  if (!recommendation) {
+    return { quantization: null, description: null }
   }
 
-  const [provider, setProvider] = useState<Provider>('OpenAI')
-  const [model, setModel] = useState<string>(modelMap['OpenAI'][0])
-  const [customModel, setCustomModel] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [showApiKey, setShowApiKey] = useState(false)
-  const [maxTokens, setMaxTokens] = useState<number | null>(null)
-  const [baseUrl, setBaseUrl] = useState('')
-  const [submitState, setSubmitState] = useState<
-    'idle' | 'loading' | 'success'
-  >('idle')
-
-  const modelsForProvider = [...modelMap[provider], 'Custom']
-  const canAdd =
-    model === 'Custom'
-      ? apiKey.trim().length > 0 || baseUrl.trim().length > 0
-      : apiKey.trim().length > 0
-
-  const handleAddCloud = () => {
-    if (!canAdd || submitState === 'loading') return
-    const name = model === 'Custom' ? customModel || 'Custom model' : `${model}`
-    setSubmitState('loading')
-    onAddModel({
-      id: `cloud-${provider}-${name}`.toLowerCase().replace(/\s+/g, '-'),
-      name,
-      meta: `Added on ${new Date().toLocaleDateString()}`,
-      badges: ['Cloud'],
-      status: 'ready',
-    })
-    setTimeout(() => {
-      setSubmitState('success')
-      setTimeout(() => {
-        setSubmitState('idle')
-        onGoToProject()
-      }, 500)
-    }, 800)
-  }
-
-  return (
-    <div className="w-full rounded-lg border border-border p-4 md:p-6 flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">
-          Select cloud provider
-        </Label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
-              <span>{provider}</span>
-              <FontIcon type="chevron-down" className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64">
-            {providerOptions.map(p => (
-              <DropdownMenuItem
-                key={p}
-                className="w-full justify-start text-left"
-                onClick={() => {
-                  setProvider(p)
-                  setModel(modelMap[p][0])
-                }}
-              >
-                {p}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">Select model</Label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
-              <span>{model}</span>
-              <FontIcon type="chevron-down" className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
-            {modelsForProvider.map(m => (
-              <DropdownMenuItem
-                key={m}
-                className="w-full justify-start text-left"
-                onClick={() => setModel(m)}
-              >
-                {m}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {model === 'Custom' && (
-          <Input
-            placeholder="Enter model name/id"
-            value={customModel}
-            onChange={e => setCustomModel(e.target.value)}
-            className="h-9"
-          />
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">API Key</Label>
-        <div className="relative">
-          <Input
-            type={showApiKey ? 'text' : 'password'}
-            placeholder="enter here"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            className="h-9 pr-9"
-          />
-          <button
-            type="button"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            onClick={() => setShowApiKey(v => !v)}
-            aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
-          >
-            <FontIcon
-              type={showApiKey ? 'eye-off' : 'eye'}
-              className="w-4 h-4"
-            />
-          </button>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Your API key can be found in your {provider} account settings
-        </div>
-      </div>
-
-      {model === 'Custom' && (
-        <div className="flex flex-col gap-2">
-          <Label className="text-xs text-muted-foreground">
-            Base URL override (optional)
-          </Label>
-          <Input
-            placeholder="https://api.example.com"
-            value={baseUrl}
-            onChange={e => setBaseUrl(e.target.value)}
-            className="h-9"
-          />
-          <div className="text-xs text-muted-foreground">
-            Use to point to a proxy or self-hosted endpoint.
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        <Label className="text-xs text-muted-foreground">
-          Max tokens (optional)
-        </Label>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 text-sm px-3 py-2 rounded-md border border-border bg-background">
-            {maxTokens === null ? 'n / a' : maxTokens}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 w-8"
-              onClick={() =>
-                setMaxTokens(prev => (prev ? Math.max(prev - 500, 0) : null))
-              }
-            >
-              –
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 w-8"
-              onClick={() => setMaxTokens(prev => (prev ? prev + 500 : 500))}
-            >
-              +
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <Button
-          onClick={handleAddCloud}
-          disabled={!canAdd || submitState === 'loading'}
-        >
-          {submitState === 'loading' && (
-            <span className="mr-2 inline-flex">
-              <Loader
-                size={14}
-                className="border-blue-400 dark:border-blue-100"
-              />
-            </span>
-          )}
-          {submitState === 'success' && (
-            <span className="mr-2 inline-flex">
-              <FontIcon type="checkmark-filled" className="w-4 h-4" />
-            </span>
-          )}
-          Add new Cloud model to project
-        </Button>
-      </div>
-    </div>
+  const recommendedOption = validOptions.find(
+    opt => opt.quantization === recommendation.quantization
   )
+  const recommendedValidation =
+    recommendedOption && diskSpaceValidations[recommendation.quantization]
+
+  if (
+    recommendedOption &&
+    (!recommendedValidation ||
+      (recommendedValidation.can_download && !recommendedValidation.warning))
+  ) {
+    return {
+      quantization: recommendation.quantization,
+      description: recommendation.description,
+    }
+  }
+
+  // Recommended option doesn't fit, find next best that fits
+  const fallbackQuant = findFallbackQuantization(
+    validOptions,
+    diskSpaceValidations
+  )
+  if (fallbackQuant) {
+    return {
+      quantization: fallbackQuant,
+      description: recommendation.description,
+    }
+  }
+
+  return { quantization: null, description: null }
 }
 
 function AddOrChangeModels({
@@ -752,22 +604,7 @@ function AddOrChangeModels({
                 initialQuantization = recommendation.quantization
               } else {
                 // Try fallback order
-                const fallbackOrder = [
-                  'Q4_K_M',
-                  'Q4_K_S',
-                  'Q3_K_M',
-                  'Q3_K_S',
-                  'Q2_K',
-                ]
-                for (const fallbackQuant of fallbackOrder) {
-                  const fallbackOption = validOptions.find(
-                    opt => opt.quantization === fallbackQuant
-                  )
-                  if (fallbackOption) {
-                    initialQuantization = fallbackQuant
-                    break
-                  }
-                }
+                initialQuantization = findFallbackQuantization(validOptions)
               }
             }
 
@@ -789,23 +626,6 @@ function AddOrChangeModels({
             // Validate disk space for each option
             validOptions.forEach(option => {
               const modelIdentifier = `${selectedModelGroup.baseModelId}:${option.quantization}`
-
-              // TEST MODE: Simulate warnings for testing (remove this block after testing)
-              // Uncomment the block below to test warning icons
-              // For testing: simulate warnings for first 2-3 options
-              const TEST_MODE = false // Set to true to enable test mode
-              if (TEST_MODE && validOptions.indexOf(option) < 3) {
-                // Simulate different scenarios
-                const testIndex = validOptions.indexOf(option)
-                setDiskSpaceValidations(prev => ({
-                  ...prev,
-                  [option.quantization!]: {
-                    can_download: testIndex === 0 ? false : true, // First one can't download, others have warning
-                    warning: testIndex > 0,
-                  },
-                }))
-                return // Skip real validation in test mode
-              }
 
               // Validate asynchronously - don't block UI
               modelService
@@ -837,23 +657,12 @@ function AddOrChangeModels({
                             recommendedValidation.warning)
                         ) {
                           // Find a fallback that fits
-                          const fallbackOrder = [
-                            'Q4_K_M',
-                            'Q4_K_S',
-                            'Q3_K_M',
-                            'Q3_K_S',
-                            'Q2_K',
-                          ]
-                          for (const fallbackQuant of fallbackOrder) {
-                            const fallbackValidation = updated[fallbackQuant]
-                            if (
-                              fallbackValidation &&
-                              fallbackValidation.can_download &&
-                              !fallbackValidation.warning
-                            ) {
-                              setSelectedQuantization(fallbackQuant)
-                              break
-                            }
+                          const fallbackQuant = findFallbackQuantization(
+                            validOptions,
+                            updated
+                          )
+                          if (fallbackQuant) {
+                            setSelectedQuantization(fallbackQuant)
                           }
                         }
                         // If recommended fits and we haven't selected it yet, select it
@@ -998,121 +807,6 @@ function AddOrChangeModels({
   const [errorDialogMessage, setErrorDialogMessage] = useState('')
   const [errorDialogAvailableBytes, setErrorDialogAvailableBytes] = useState(0)
   const [errorDialogRequiredBytes, setErrorDialogRequiredBytes] = useState(0)
-
-  interface ModelVariant {
-    id: number
-    label: string
-    parameterSize?: string
-    downloadSize?: string
-    modelIdentifier: string
-  }
-
-  interface LocalModelGroup {
-    id: number
-    name: string
-    baseModelId: string // Base model ID without quantization (e.g., "unsloth/Qwen3-1.7B-GGUF")
-    defaultQuantization: string // Default quantization to show (e.g., "Q4_K_M")
-    variants: ModelVariant[]
-  }
-
-  // Recommended quantizations with descriptions
-  const recommendedQuantizations: Record<
-    string,
-    { quantization: string; description: string }
-  > = {
-    'unsloth/Qwen3-1.7B-GGUF': {
-      quantization: 'Q5_K_M',
-      description: 'Best balance of speed + accuracy.',
-    },
-    'unsloth/granite-4.0-h-1b-GGUF': {
-      quantization: 'Q5_K_M',
-      description:
-        'Granite benefits a lot from higher precision; Q5 is the sweet spot.',
-    },
-    'unsloth/Llama-3.2-1B-Instruct-GGUF': {
-      quantization: 'Q5_K_M',
-      description:
-        'Best general choice — higher quality than Q4 without being huge.',
-    },
-    'unsloth/gpt-oss-20b-GGUF': {
-      quantization: 'Q4_K_M',
-      description:
-        'This model already runs fast; Q4 keeps it snappy without big quality loss.',
-    },
-    'unsloth/gemma-3-4b-it-GGUF': {
-      quantization: 'Q4_K_M',
-      description:
-        'Gemma performs well at Q4; Q5 is good but not required unless added.',
-    },
-  }
-
-  const localGroups: LocalModelGroup[] = [
-    {
-      id: 1,
-      name: 'Qwen3',
-      baseModelId: 'unsloth/Qwen3-1.7B-GGUF',
-      defaultQuantization: 'Q4_K_M',
-      variants: [
-        {
-          id: 11,
-          label: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
-          modelIdentifier: 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M',
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'IBM Granite',
-      baseModelId: 'unsloth/granite-4.0-h-1b-GGUF',
-      defaultQuantization: 'Q5_K_M',
-      variants: [
-        {
-          id: 21,
-          label: 'unsloth/granite-4.0-h-1b-GGUF:Q5_K_M',
-          modelIdentifier: 'unsloth/granite-4.0-h-1b-GGUF:Q5_K_M',
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: 'Llama 3.2',
-      baseModelId: 'unsloth/Llama-3.2-1B-Instruct-GGUF',
-      defaultQuantization: 'Q5_K_M',
-      variants: [
-        {
-          id: 31,
-          label: 'unsloth/Llama-3.2-1B-Instruct-GGUF:Q5_K_M',
-          modelIdentifier: 'unsloth/Llama-3.2-1B-Instruct-GGUF:Q5_K_M',
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'GPT-OSS',
-      baseModelId: 'unsloth/gpt-oss-20b-GGUF',
-      defaultQuantization: 'Q4_K_M',
-      variants: [
-        {
-          id: 41,
-          label: 'unsloth/gpt-oss-20b-GGUF:Q4_K_M',
-          modelIdentifier: 'unsloth/gpt-oss-20b-GGUF:Q4_K_M',
-        },
-      ],
-    },
-    {
-      id: 5,
-      name: 'Gemma 3',
-      baseModelId: 'unsloth/gemma-3-4b-it-GGUF',
-      defaultQuantization: 'Q4_K_M',
-      variants: [
-        {
-          id: 51,
-          label: 'unsloth/gemma-3-4b-it-GGUF:Q4_K_M',
-          modelIdentifier: 'unsloth/gemma-3-4b-it-GGUF:Q4_K_M',
-        },
-      ],
-    },
-  ]
 
   const filteredGroups = localGroups.filter(g =>
     [g.name, ...g.variants.map(v => v.modelIdentifier || v.label)].some(v =>
@@ -1535,8 +1229,7 @@ function AddOrChangeModels({
                           {baseModelName}
                         </span>
                         {quantizationCount !== null && (
-                          <span className="text-muted-foreground/70 font-normal">
-                            {' '}
+                          <span className="text-muted-foreground/70 font-normal ml-2.5">
                             ({quantizationCount})
                           </span>
                         )}
@@ -2037,73 +1730,15 @@ function AddOrChangeModels({
                             >
                               {(() => {
                                 // Determine recommended quantization
-                                const recommendation =
-                                  recommendedQuantizations[
-                                    selectedModelGroup.baseModelId
-                                  ]
-                                let recommendedQuantization: string | null =
-                                  null
-                                let recommendationDescription: string | null =
-                                  null
-
-                                if (recommendation) {
-                                  // Check if recommended option exists and has no disk space issues
-                                  const recommendedOption = validOptions.find(
-                                    opt =>
-                                      opt.quantization ===
-                                      recommendation.quantization
-                                  )
-                                  const recommendedValidation =
-                                    recommendedOption &&
-                                    diskSpaceValidations[
-                                      recommendation.quantization
-                                    ]
-
-                                  if (
-                                    recommendedOption &&
-                                    (!recommendedValidation ||
-                                      (recommendedValidation.can_download &&
-                                        !recommendedValidation.warning))
-                                  ) {
-                                    // Recommended option is available and fits
-                                    recommendedQuantization =
-                                      recommendation.quantization
-                                    recommendationDescription =
-                                      recommendation.description
-                                  } else {
-                                    // Recommended option doesn't fit, find next best that fits
-                                    // Try smaller quantizations in order: Q4_K_M, Q4_K_S, Q3_K_M, Q3_K_S, Q2_K
-                                    const fallbackOrder = [
-                                      'Q4_K_M',
-                                      'Q4_K_S',
-                                      'Q3_K_M',
-                                      'Q3_K_S',
-                                      'Q2_K',
-                                    ]
-                                    for (const fallbackQuant of fallbackOrder) {
-                                      const fallbackOption = validOptions.find(
-                                        opt =>
-                                          opt.quantization === fallbackQuant
-                                      )
-                                      if (fallbackOption) {
-                                        const fallbackValidation =
-                                          diskSpaceValidations[fallbackQuant]
-                                        if (
-                                          !fallbackValidation ||
-                                          (fallbackValidation.can_download &&
-                                            !fallbackValidation.warning)
-                                        ) {
-                                          recommendedQuantization =
-                                            fallbackQuant
-                                          recommendationDescription =
-                                            recommendation.description
-                                          break
-                                        }
-                                      }
-                                    }
-                                    // If no fallback found, don't show recommendation
-                                  }
-                                }
+                                const {
+                                  quantization: recommendedQuantization,
+                                  description: recommendationDescription,
+                                } = getRecommendedQuantization(
+                                  selectedModelGroup.baseModelId,
+                                  validOptions,
+                                  diskSpaceValidations,
+                                  recommendedQuantizations
+                                )
 
                                 return validOptions.map((option, index) => {
                                   const isSelected =
