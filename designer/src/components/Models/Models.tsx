@@ -2652,6 +2652,11 @@ const Models = () => {
     const defaultModelName =
       projectResponse.project.config.runtime.default_model
 
+    // If no explicit default_model is set, use the first model as default
+    const effectiveDefaultModelName =
+      defaultModelName ||
+      (runtimeModels.length > 0 ? runtimeModels[0]?.name : null)
+
     const mappedModels: InferenceModel[] = runtimeModels.map((model: any) => {
       const name: string =
         (model && (model.name || model.model)) || 'unnamed-model'
@@ -2664,13 +2669,19 @@ const Models = () => {
       const isLocal = provider === 'ollama' || provider === 'universal'
       const localityBadge = isLocal ? 'Local' : 'Cloud'
 
+      // Check if model is default: via runtime.default_model, model.default flag, or first model if none set
+      const isDefault =
+        name === defaultModelName ||
+        model?.default === true ||
+        (!defaultModelName && name === effectiveDefaultModelName)
+
       return {
         id: name,
         name,
         modelIdentifier: typeof model?.model === 'string' ? model.model : '',
         meta: (model && model.description) || 'Model from config',
         badges: [localityBadge],
-        isDefault: name === defaultModelName,
+        isDefault,
         status: 'ready' as ModelStatus,
       }
     })
