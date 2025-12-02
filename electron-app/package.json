@@ -29,6 +29,8 @@
     }
   ],
   "scripts": {
+    "sync-models": "node scripts/sync-required-models.js",
+    "prebuild": "npm run sync-models",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
