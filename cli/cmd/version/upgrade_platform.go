@@ -285,7 +285,7 @@ func (w *WindowsUpgradeStrategy) atomicReplace(current, new string) error {
 	err = utils.MoveFile(new, current)
 	if err != nil {
 		// Restore original if new binary move failed
-		os.Rename(tempBackup, current)
+		utils.MoveFile(tempBackup, current)
 		return fmt.Errorf("failed to move new binary to final location: %w", err)
 	}
 

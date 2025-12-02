@@ -95,12 +95,17 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
-	defer dstFile.Close()
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		// Clean up the partially written destination file on copy failure.
-		os.Remove(dst)
+		dstFile.Close()
+		os.Remove(dst) // Clean up partial file
 		return fmt.Errorf("failed to copy file contents: %w", err)
+	}
+
+	// Explicitly close and check error - Close() can fail if data cannot be flushed to disk
+	if err := dstFile.Close(); err != nil {
+		os.Remove(dst) // Clean up potentially incomplete file
+		return fmt.Errorf("failed to finalize destination file: %w", err)
 	}
 
 	return nil
