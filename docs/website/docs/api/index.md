@@ -373,13 +373,15 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 - `model` (optional): Select which model to use (OpenAI-compatible, added in PR #263 multi-model support)
 - `stream` (optional): Enable streaming responses (Server-Sent Events)
 - `temperature` (optional): Sampling temperature (0.0-2.0)
-- `max_tokens` (optional): Maximum tokens to generate
+- `max_tokens` (optional): Maximum tokens to generate for the **answer** (thinking tokens are separate)
 - `top_p` (optional): Nucleus sampling parameter
 - `top_k` (optional): Top-k sampling parameter
 - `rag_enabled` (optional): Enable/disable RAG (uses config default if not specified)
 - `database` (optional): Database to use for RAG queries
 - `rag_top_k` (optional): Number of RAG results to retrieve
 - `rag_score_threshold` (optional): Minimum similarity score for RAG results
+- `think` (optional): Enable thinking/reasoning mode for supported models like Qwen3 (default: `false`)
+- `thinking_budget` (optional): Maximum tokens for thinking process when `think: true` (default: `1024`)
 
 **Response (Non-Streaming):**
 ```json
@@ -469,6 +471,54 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
     "rag_top_k": 10
   }'
 ```
+
+**Example (With Thinking/Reasoning):**
+
+For models that support chain-of-thought reasoning (like Qwen3), enable thinking mode to see the model's reasoning process:
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "What is 15% of 85?"}
+    ],
+    "think": true,
+    "thinking_budget": 512,
+    "max_tokens": 200
+  }'
+```
+
+**Response with Thinking:**
+```json
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "model": "Qwen3-1.7B",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "15% of 85 is **12.75**."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "thinking": {
+    "content": "To find 15% of 85, I need to multiply 85 by 0.15. Let me calculate: 85 × 0.15 = 12.75.",
+    "tokens": null
+  }
+}
+```
+
+**Token Allocation with Thinking:**
+- `max_tokens`: Controls the **answer** length (default: 512)
+- `thinking_budget`: Controls the **thinking** length (default: 1024 when enabled)
+- Total generation = `thinking_budget` + `max_tokens`
+
+This ensures your answer isn't cut short by the thinking process.
 
 ### Get Chat History
 
