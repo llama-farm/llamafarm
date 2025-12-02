@@ -13,6 +13,27 @@ import { promises as fsPromises } from 'fs'
 
 const execAsync = promisify(exec)
 
+/**
+ * Validate and sanitize model ID to prevent command injection.
+ * Model IDs should only contain alphanumeric characters, hyphens, underscores,
+ * forward slashes (for org/repo format), colons (for quantization), and periods.
+ */
+function validateModelId(modelId: string): string {
+  // Only allow safe characters for model IDs
+  const safePattern = /^[a-zA-Z0-9\-_\/\.:]+$/
+  if (!safePattern.test(modelId)) {
+    throw new Error(`Invalid model ID: contains unsafe characters: ${modelId}`)
+  }
+  // Additional check: no shell metacharacters or sequences
+  const dangerousPatterns = ['..', '$(', '`', '|', ';', '&', '>', '<', '\n', '\r']
+  for (const pattern of dangerousPatterns) {
+    if (modelId.includes(pattern)) {
+      throw new Error(`Invalid model ID: contains forbidden sequence: ${modelId}`)
+    }
+  }
+  return modelId
+}
+
 export interface ModelConfig {
   id: string
   quantization?: string
@@ -140,14 +161,17 @@ export class ModelDownloader {
     const modelId = this.getFullModelId(model)
 
     try {
+      // Validate model ID to prevent command injection
+      const safeModelId = validateModelId(modelId)
+
       // Use lf models status command
-      await execAsync(`"${this.cliPath}" models status "${modelId}"`, {
+      await execAsync(`"${this.cliPath}" models status "${safeModelId}"`, {
         timeout: 30000
       })
       // Exit code 0 means model is cached
       return true
     } catch (error) {
-      // Exit code 1 means model is not cached
+      // Exit code 1 means model is not cached, or validation failed
       return false
     }
   }
@@ -199,8 +223,11 @@ export class ModelDownloader {
   ): Promise<void> {
     const modelId = this.getFullModelId(model)
 
+    // Validate model ID to prevent command injection
+    const safeModelId = validateModelId(modelId)
+
     return new Promise((resolve, reject) => {
-      console.log(`Starting download for ${modelId} via CLI...`)
+      console.log(`Starting download for ${safeModelId} via CLI...`)
       onProgress?.(0, `Starting ${model.display_name}...`)
 
       let downloadProcess: ChildProcess | null = null
@@ -245,7 +272,8 @@ export class ModelDownloader {
       }, 2000) // Check every 2 seconds
 
       // Use spawn to get real-time output
-      downloadProcess = spawn(this.cliPath, ['models', 'pull', modelId], {
+      // Note: safeModelId has been validated to prevent command injection
+      downloadProcess = spawn(this.cliPath, ['models', 'pull', safeModelId], {
         shell: true
       })
 
