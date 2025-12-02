@@ -12,9 +12,15 @@ Designed for:
 - Network intrusion detection
 - Fraud detection
 - Manufacturing quality control
+
+Security Notes:
+- Model loading is restricted to a designated safe directory (ANOMALY_MODELS_DIR)
+- Path traversal attacks are prevented by validating paths are within the safe directory
+- Pickle/joblib deserialization is only performed on trusted files from the safe directory
 """
 
 import logging
+import os
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +31,34 @@ import numpy as np
 from .base import BaseModel
 
 logger = logging.getLogger(__name__)
+
+# Safe directory for anomaly models - only files within this directory can be loaded
+# This prevents path traversal attacks
+ANOMALY_MODELS_DIR = Path(
+    os.environ.get("ANOMALY_MODELS_DIR", "./anomaly_models")
+).resolve()
+
+
+def _validate_model_path(model_path: Path) -> Path:
+    """Validate that model path is within the safe directory.
+
+    Raises:
+        ValueError: If path is outside the safe directory or uses path traversal
+    """
+    # Resolve to absolute path to catch ".." traversal attempts
+    resolved_path = model_path.resolve()
+
+    # Check that the resolved path is within the safe directory
+    try:
+        resolved_path.relative_to(ANOMALY_MODELS_DIR)
+    except ValueError:
+        raise ValueError(
+            f"Security error: Model path '{model_path}' is outside the allowed "
+            f"directory '{ANOMALY_MODELS_DIR}'. Path traversal is not allowed."
+        ) from None
+
+    return resolved_path
+
 
 AnomalyBackend = Literal[
     "autoencoder", "isolation_forest", "one_class_svm", "local_outlier_factor"
@@ -117,19 +151,39 @@ class AnomalyModel(BaseModel):
         # Check if model_id is a path to a pre-trained model
         model_path = Path(self.model_id)
         if model_path.exists() and model_path.suffix in (".pkl", ".joblib", ".pt"):
-            await self._load_pretrained(model_path)
+            # Validate path is within safe directory before loading
+            try:
+                validated_path = _validate_model_path(model_path)
+                await self._load_pretrained(validated_path)
+            except ValueError as e:
+                logger.error(f"Security validation failed: {e}")
+                raise
         else:
             await self._initialize_backend()
 
         logger.info(f"Anomaly model initialized: {self.backend}")
 
     async def _load_pretrained(self, model_path: Path) -> None:
-        """Load a pre-trained model from disk."""
+        """Load a pre-trained model from disk.
+
+        Security Note: This method should only be called with validated paths
+        from _validate_model_path() to prevent path traversal attacks.
+        The deserialization is considered safe because:
+        1. Paths are validated to be within ANOMALY_MODELS_DIR
+        2. Only administrators can place files in this directory
+        3. The model files are created by the save() method of this class
+        """
+        logger.info(f"Loading pretrained model from validated path: {model_path}")
+
         if model_path.suffix == ".pt":
             # PyTorch autoencoder
             import torch
 
-            checkpoint = torch.load(model_path, map_location=self.device)
+            # Note: weights_only=False is required for loading nn.Module objects
+            # Security is ensured by path validation above
+            checkpoint = torch.load(
+                model_path, map_location=self.device, weights_only=False
+            )
             self._encoder = checkpoint.get("encoder")
             self._decoder = checkpoint.get("decoder")
             self._threshold = checkpoint.get("threshold", 0.5)
@@ -137,13 +191,15 @@ class AnomalyModel(BaseModel):
             self._is_fitted = True
         else:
             # Sklearn model (pickle or joblib)
+            # Security is ensured by path validation - only trusted files
+            # from ANOMALY_MODELS_DIR can be loaded
             try:
                 import joblib
 
                 data = joblib.load(model_path)
             except ImportError:
                 with open(model_path, "rb") as f:
-                    data = pickle.load(f)
+                    data = pickle.load(f)  # noqa: S301 - path is validated
 
             self._detector = data.get("detector")
             self._scaler = data.get("scaler")

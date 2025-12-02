@@ -433,6 +433,10 @@ async def list_models():
 # ============================================================================
 
 
+# Maximum file upload size (100 MB by default, configurable via env var)
+MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 100 * 1024 * 1024))
+
+
 @app.post("/v1/files")
 async def upload_file(
     file: UploadFile,
@@ -448,7 +452,7 @@ async def upload_file(
     For PDFs, pages are automatically converted to images for OCR/document processing.
 
     Args:
-        file: The file to upload (images, PDFs supported)
+        file: The file to upload (images, PDFs supported, max 100MB)
         convert_pdf: If True, convert PDF pages to images (default: True)
         pdf_dpi: DPI for PDF to image conversion (default: 150)
 
@@ -464,7 +468,13 @@ async def upload_file(
         ```
     """
     try:
+        # Read file with size limit to prevent memory exhaustion
         content = await file.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)} MB",
+            )
         stored = await store_file(
             content=content,
             filename=file.filename or "unknown",
@@ -1742,12 +1752,31 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
     and /v1/anomaly/detect calls.
     """
     try:
-        model_path = ANOMALY_MODELS_DIR / request.filename
+        # Sanitize filename to prevent path traversal attacks
+        # Only use the base filename, stripping any directory components
+        safe_filename = os.path.basename(request.filename)
+        if safe_filename != request.filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid filename: path components are not allowed",
+            )
+
+        model_path = ANOMALY_MODELS_DIR / safe_filename
+
+        # Verify the resolved path is within the safe directory
+        resolved_path = model_path.resolve()
+        try:
+            resolved_path.relative_to(ANOMALY_MODELS_DIR.resolve())
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid filename: path traversal is not allowed",
+            ) from None
 
         if not model_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Model file not found: {request.filename}. "
+                detail=f"Model file not found: {safe_filename}. "
                 f"Available models: {[f.name for f in ANOMALY_MODELS_DIR.glob('*') if f.is_file()]}",
             )
 

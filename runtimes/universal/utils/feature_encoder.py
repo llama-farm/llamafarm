@@ -35,8 +35,8 @@ Usage:
 """
 
 import hashlib
+import json
 import logging
-import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -599,11 +599,16 @@ class FeatureEncoder:
         return names
 
     def save(self, path: str | Path) -> None:
-        """Save encoder to disk."""
+        """Save encoder to disk using JSON (safe serialization).
+
+        Security Note: Uses JSON instead of pickle/joblib to prevent
+        arbitrary code execution during deserialization.
+        """
         if not self._is_fitted:
             raise RuntimeError("Cannot save unfitted encoder")
 
         state = {
+            "version": 1,  # For future compatibility
             "schema": self.schema.features if self.schema else {},
             "feature_order": self.feature_order,
             "encoders": {
@@ -612,28 +617,24 @@ class FeatureEncoder:
         }
 
         path = Path(path)
-        try:
-            import joblib
-
-            joblib.dump(state, path)
-        except ImportError:
-            with open(path, "wb") as f:
-                pickle.dump(state, f)
+        # Use JSON for safe serialization - all encoder state is JSON-compatible
+        with open(path, "w") as f:
+            json.dump(state, f, indent=2)
 
         logger.info(f"FeatureEncoder saved to {path}")
 
     @classmethod
     def load(cls, path: str | Path) -> "FeatureEncoder":
-        """Load encoder from disk."""
+        """Load encoder from disk using JSON (safe deserialization).
+
+        Security Note: Uses JSON instead of pickle/joblib to prevent
+        arbitrary code execution during deserialization.
+        """
         path = Path(path)
 
-        try:
-            import joblib
-
-            state = joblib.load(path)
-        except ImportError:
-            with open(path, "rb") as f:
-                state = pickle.load(f)
+        # Use JSON for safe deserialization
+        with open(path) as f:
+            state = json.load(f)
 
         encoder = cls()
         encoder.schema = FeatureSchema.from_dict(state.get("schema", {}))
