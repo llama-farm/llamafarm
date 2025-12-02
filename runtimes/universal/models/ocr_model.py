@@ -12,7 +12,7 @@ import base64
 import io
 import logging
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from PIL import Image
 
@@ -106,10 +106,14 @@ class OCRModel(BaseModel):
         try:
             from surya.model.detection.model import (
                 load_model as load_det_model,
+            )
+            from surya.model.detection.model import (
                 load_processor as load_det_processor,
             )
             from surya.model.recognition.model import load_model as load_rec_model
-            from surya.model.recognition.processor import load_processor as load_rec_processor
+            from surya.model.recognition.processor import (
+                load_processor as load_rec_processor,
+            )
 
             # Load detection model
             self._surya_det_model = load_det_model()
@@ -406,9 +410,7 @@ class OCRModel(BaseModel):
                         )
 
             full_text = " ".join(text_lines)
-            avg_confidence = (
-                sum(confidences) / len(confidences) if confidences else 0.0
-            )
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
             return OCRResult(
                 text=full_text,

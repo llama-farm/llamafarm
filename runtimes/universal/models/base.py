@@ -86,9 +86,7 @@ class BaseModel(ABC):
         """
         if force_float32:
             return torch.float32
-        if self.device == "cuda":
-            return torch.float16
-        elif self.device == "mps":
+        if self.device == "cuda" or self.device == "mps":
             return torch.float16
         else:
             return torch.float32

@@ -11,15 +11,12 @@ Provides:
 import asyncio
 import base64
 import hashlib
-import io
 import logging
 import mimetypes
-import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -117,9 +114,7 @@ async def store_file(
     return stored
 
 
-async def _convert_pdf_to_images(
-    pdf_content: bytes, dpi: int = 150
-) -> list[str]:
+async def _convert_pdf_to_images(pdf_content: bytes, dpi: int = 150) -> list[str]:
     """
     Convert PDF pages to base64-encoded PNG images.
 
@@ -248,16 +243,18 @@ def list_files() -> list[dict]:
             del _file_cache[file_id]
             continue
 
-        result.append({
-            "id": stored.id,
-            "filename": stored.filename,
-            "content_type": stored.content_type,
-            "size": stored.size,
-            "created_at": stored.created_at,
-            "ttl_remaining": FILE_TTL - (now - stored.created_at),
-            "has_page_images": stored.page_images is not None,
-            "page_count": len(stored.page_images) if stored.page_images else None,
-        })
+        result.append(
+            {
+                "id": stored.id,
+                "filename": stored.filename,
+                "content_type": stored.content_type,
+                "size": stored.size,
+                "created_at": stored.created_at,
+                "ttl_remaining": FILE_TTL - (now - stored.created_at),
+                "has_page_images": stored.page_images is not None,
+                "page_count": len(stored.page_images) if stored.page_images else None,
+            }
+        )
 
     return result
 

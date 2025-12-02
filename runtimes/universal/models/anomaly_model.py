@@ -18,7 +18,7 @@ import logging
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
 import numpy as np
 
@@ -47,7 +47,7 @@ class FitResult:
 
     samples_fitted: int
     training_time_ms: float
-    model_params: Dict[str, Any]
+    model_params: dict[str, Any]
 
 
 class AnomalyModel(BaseModel):
@@ -193,7 +193,7 @@ class AnomalyModel(BaseModel):
 
     async def fit(
         self,
-        data: Union[List[List[float]], np.ndarray],
+        data: list[list[float]] | np.ndarray,
         epochs: int = 100,
         batch_size: int = 32,
     ) -> FitResult:
@@ -229,7 +229,9 @@ class AnomalyModel(BaseModel):
         if self._threshold is None:
             scores = await self._compute_raw_scores(X_scaled)
             # Set threshold at (1 - contamination) percentile
-            self._threshold = float(np.percentile(scores, (1 - self.contamination) * 100))
+            self._threshold = float(
+                np.percentile(scores, (1 - self.contamination) * 100)
+            )
 
         training_time = (time.time() - start_time) * 1000
 
@@ -302,16 +304,18 @@ class AnomalyModel(BaseModel):
                 epoch_loss += loss.item()
 
             if (epoch + 1) % 20 == 0:
-                logger.debug(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss/len(dataloader):.4f}")
+                logger.debug(
+                    f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss / len(dataloader):.4f}"
+                )
 
         self._encoder.eval()
         self._decoder.eval()
 
     async def score(
         self,
-        data: Union[List[List[float]], np.ndarray],
+        data: list[list[float]] | np.ndarray,
         threshold: float | None = None,
-    ) -> List[AnomalyScore]:
+    ) -> list[AnomalyScore]:
         """Score data points for anomalies.
 
         Args:
@@ -322,7 +326,9 @@ class AnomalyModel(BaseModel):
             List of AnomalyScore objects
         """
         if not self._is_fitted:
-            raise RuntimeError("Model not fitted. Call fit() first or load a pre-trained model.")
+            raise RuntimeError(
+                "Model not fitted. Call fit() first or load a pre-trained model."
+            )
 
         # Convert to numpy array
         X = np.array(data) if not isinstance(data, np.ndarray) else data
@@ -344,7 +350,9 @@ class AnomalyModel(BaseModel):
         thresh = threshold if threshold is not None else self.threshold
 
         results = []
-        for i, (raw, norm) in enumerate(zip(raw_scores, normalized_scores)):
+        for i, (raw, norm) in enumerate(
+            zip(raw_scores, normalized_scores, strict=True)
+        ):
             results.append(
                 AnomalyScore(
                     index=i,
@@ -397,19 +405,16 @@ class AnomalyModel(BaseModel):
         median = np.median(scores)
         iqr = np.percentile(scores, 75) - np.percentile(scores, 25)
 
-        if iqr > 0:
-            normalized = (scores - median) / (2 * iqr)
-        else:
-            normalized = scores - median
+        normalized = (scores - median) / (2 * iqr) if iqr > 0 else scores - median
 
         # Apply sigmoid to get 0-1 range
         return 1 / (1 + np.exp(-normalized))
 
     async def detect(
         self,
-        data: Union[List[List[float]], np.ndarray],
+        data: list[list[float]] | np.ndarray,
         threshold: float | None = None,
-    ) -> List[AnomalyScore]:
+    ) -> list[AnomalyScore]:
         """Detect anomalies in data (alias for score with anomaly filtering).
 
         Returns only data points classified as anomalies.
@@ -470,7 +475,7 @@ class AnomalyModel(BaseModel):
         self._is_fitted = False
         await super().unload()
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the model."""
         info = super().get_model_info()
         info.update(

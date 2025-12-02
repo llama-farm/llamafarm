@@ -11,7 +11,7 @@ import base64
 import io
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 import torch
 from PIL import Image
@@ -67,7 +67,7 @@ class DocumentModel(BaseModel):
         model_id: str,
         device: str,
         task: DocumentTask = "extraction",
-        token: Optional[str] = None,
+        token: str | None = None,
     ):
         """Initialize document model.
 
@@ -190,9 +190,9 @@ class DocumentModel(BaseModel):
 
     async def extract(
         self,
-        images: List[str | bytes],
-        prompts: List[str] | None = None,
-    ) -> List[DocumentResult]:
+        images: list[str | bytes],
+        prompts: list[str] | None = None,
+    ) -> list[DocumentResult]:
         """Extract information from document images.
 
         For Donut models: Uses prompts to guide extraction
@@ -227,7 +227,9 @@ class DocumentModel(BaseModel):
     # format_func takes (prompt: str | None) -> str
     PROMPT_FORMATS: dict[str, tuple[callable, str]] = {
         "docvqa": (
-            lambda p: f"<s_docvqa><s_question>{p}</s_question><s_answer>" if p else "<s_docvqa><s_question>What is this document about?</s_question><s_answer>",
+            lambda p: f"<s_docvqa><s_question>{p}</s_question><s_answer>"
+            if p
+            else "<s_docvqa><s_question>What is this document about?</s_question><s_answer>",
             "What is this document about?",
         ),
         "cord": (
@@ -316,7 +318,7 @@ class DocumentModel(BaseModel):
             confidence=0.9,  # Donut doesn't provide per-field confidence
         )
 
-    def _parse_donut_output(self, text: str) -> List[ExtractedField]:
+    def _parse_donut_output(self, text: str) -> list[ExtractedField]:
         """Parse Donut's structured output into fields."""
         import re
 
@@ -352,9 +354,7 @@ class DocumentModel(BaseModel):
         else:
             return await self._layoutlm_extract(image)
 
-    async def _layoutlm_vqa(
-        self, image: Image.Image, question: str
-    ) -> DocumentResult:
+    async def _layoutlm_vqa(self, image: Image.Image, question: str) -> DocumentResult:
         """Answer question about document."""
         # Process image with OCR
         encoding = self.processor(
@@ -436,7 +436,7 @@ class DocumentModel(BaseModel):
         fields = []
         current_field = None
 
-        for idx, (pred_id, word) in enumerate(zip(predictions, words)):
+        for idx, (pred_id, word) in enumerate(zip(predictions, words, strict=False)):
             if idx >= len(predictions):
                 break
 
@@ -484,8 +484,8 @@ class DocumentModel(BaseModel):
         )
 
     async def answer_question(
-        self, images: List[str | bytes], questions: List[str]
-    ) -> List[DocumentResult]:
+        self, images: list[str | bytes], questions: list[str]
+    ) -> list[DocumentResult]:
         """Answer questions about documents (VQA task).
 
         Args:
@@ -500,7 +500,7 @@ class DocumentModel(BaseModel):
 
         return await self.extract(images, prompts=questions)
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
         info = super().get_model_info()
         info.update(

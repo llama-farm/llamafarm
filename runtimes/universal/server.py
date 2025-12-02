@@ -29,7 +29,6 @@ from typing import Literal
 
 from fastapi import (
     FastAPI,
-    File,
     Form,
     HTTPException,
     UploadFile,
@@ -436,7 +435,7 @@ async def list_models():
 
 @app.post("/v1/files")
 async def upload_file(
-    file: UploadFile = File(...),
+    file: UploadFile,
     convert_pdf: bool = Form(default=True),
     pdf_dpi: int = Form(default=150),
 ):
@@ -481,7 +480,8 @@ async def upload_file(
             "content_type": stored.content_type,
             "size": stored.size,
             "created_at": stored.created_at,
-            "has_images": stored.page_images is not None or stored.filename.lower().endswith(
+            "has_images": stored.page_images is not None
+            or stored.filename.lower().endswith(
                 (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif")
             ),
             "page_count": len(stored.page_images) if stored.page_images else None,
@@ -1344,7 +1344,9 @@ class AnomalyScoreRequest(PydanticBaseModel):
     model: str = "default"  # Model identifier
     backend: str = "isolation_forest"  # isolation_forest, one_class_svm, local_outlier_factor, autoencoder
     data: list[list[float]] | list[dict]  # Data points (numeric arrays or dicts)
-    schema: dict[str, str] | None = None  # Feature encoding schema (required for dict data)
+    schema: dict[str, str] | None = (
+        None  # Feature encoding schema (required for dict data)
+    )
     threshold: float | None = None  # Override default threshold
 
 
@@ -1368,7 +1370,9 @@ class AnomalyFitRequest(PydanticBaseModel):
     model: str = "default"  # Model identifier (for caching)
     backend: str = "isolation_forest"  # Backend to use
     data: list[list[float]] | list[dict]  # Training data (numeric arrays or dicts)
-    schema: dict[str, str] | None = None  # Feature encoding schema (required for dict data)
+    schema: dict[str, str] | None = (
+        None  # Feature encoding schema (required for dict data)
+    )
     contamination: float = 0.1  # Expected proportion of anomalies
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
@@ -1520,7 +1524,9 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             encoder = _encoders[cache_key]
             encoder_info = {
                 "schema": encoder.schema.features if encoder.schema else {},
-                "features": list(encoder.schema.features.keys()) if encoder.schema else [],
+                "features": list(encoder.schema.features.keys())
+                if encoder.schema
+                else [],
             }
 
         return {
@@ -1770,7 +1776,9 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
         encoder_loaded = False
         encoder_schema = None
         # Derive encoder path from model filename
-        base_filename = model_path.stem  # e.g., "sensor_detector_v1" from "sensor_detector_v1.joblib"
+        base_filename = (
+            model_path.stem
+        )  # e.g., "sensor_detector_v1" from "sensor_detector_v1.joblib"
         encoder_path = ANOMALY_MODELS_DIR / f"{base_filename}_encoder.json"
         if encoder_path.exists():
             encoder = FeatureEncoder.load(encoder_path)
@@ -1820,17 +1828,16 @@ async def list_anomaly_models():
                 stat = path.stat()
 
                 # Detect backend from extension
-                if path.suffix == ".pt":
-                    backend = "autoencoder"
-                else:
-                    backend = "sklearn"  # Could be any sklearn backend
+                backend = "autoencoder" if path.suffix == ".pt" else "sklearn"
 
-                models.append({
-                    "filename": path.name,
-                    "size_bytes": stat.st_size,
-                    "modified": stat.st_mtime,
-                    "backend": backend,
-                })
+                models.append(
+                    {
+                        "filename": path.name,
+                        "size_bytes": stat.st_size,
+                        "modified": stat.st_mtime,
+                        "backend": backend,
+                    }
+                )
 
         # Sort by modification time (newest first)
         models.sort(key=lambda x: x["modified"], reverse=True)

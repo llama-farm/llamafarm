@@ -40,7 +40,7 @@ import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Union
+from typing import Any, Literal
 
 import numpy as np
 
@@ -54,16 +54,17 @@ EncodingType = Literal["numeric", "hash", "label", "onehot", "binary", "frequenc
 # Encoder Registry - Extensible pattern for adding new encoders
 # =============================================================================
 
+
 class BaseFeatureEncoderStrategy(ABC):
     """Base class for feature encoding strategies."""
 
     @abstractmethod
-    def fit(self, values: List[Any]) -> None:
+    def fit(self, values: list[Any]) -> None:
         """Learn encoding from training data."""
         pass
 
     @abstractmethod
-    def transform(self, value: Any) -> Union[float, List[float]]:
+    def transform(self, value: Any) -> float | list[float]:
         """Transform a single value to numeric."""
         pass
 
@@ -73,13 +74,13 @@ class BaseFeatureEncoderStrategy(ABC):
         pass
 
     @abstractmethod
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Get serializable state for saving."""
         pass
 
     @classmethod
     @abstractmethod
-    def from_state(cls, state: Dict[str, Any]) -> "BaseFeatureEncoderStrategy":
+    def from_state(cls, state: dict[str, Any]) -> "BaseFeatureEncoderStrategy":
         """Restore from saved state."""
         pass
 
@@ -87,7 +88,7 @@ class BaseFeatureEncoderStrategy(ABC):
 class NumericEncoder(BaseFeatureEncoderStrategy):
     """Pass-through encoder for numeric values."""
 
-    def fit(self, values: List[Any]) -> None:
+    def fit(self, values: list[Any]) -> None:
         pass  # No fitting needed
 
     def transform(self, value: Any) -> float:
@@ -99,11 +100,11 @@ class NumericEncoder(BaseFeatureEncoderStrategy):
     def get_output_dim(self) -> int:
         return 1
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {"type": "numeric"}
 
     @classmethod
-    def from_state(cls, state: Dict[str, Any]) -> "NumericEncoder":
+    def from_state(cls, state: dict[str, Any]) -> "NumericEncoder":
         return cls()
 
 
@@ -117,7 +118,7 @@ class HashEncoder(BaseFeatureEncoderStrategy):
     def __init__(self, max_value: int = 1_000_000):
         self.max_value = max_value
 
-    def fit(self, values: List[Any]) -> None:
+    def fit(self, values: list[Any]) -> None:
         pass  # No fitting needed - hash is deterministic
 
     def transform(self, value: Any) -> float:
@@ -130,11 +131,11 @@ class HashEncoder(BaseFeatureEncoderStrategy):
     def get_output_dim(self) -> int:
         return 1
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {"type": "hash", "max_value": self.max_value}
 
     @classmethod
-    def from_state(cls, state: Dict[str, Any]) -> "HashEncoder":
+    def from_state(cls, state: dict[str, Any]) -> "HashEncoder":
         return cls(max_value=state.get("max_value", 1_000_000))
 
 
@@ -146,10 +147,10 @@ class LabelEncoder(BaseFeatureEncoderStrategy):
     """
 
     def __init__(self):
-        self.label_map: Dict[str, int] = {}
+        self.label_map: dict[str, int] = {}
         self.unknown_value: int = 0
 
-    def fit(self, values: List[Any]) -> None:
+    def fit(self, values: list[Any]) -> None:
         unique_values = sorted(set(str(v) for v in values if v is not None))
         # Reserve 0 for unknown
         self.label_map = {v: i + 1 for i, v in enumerate(unique_values)}
@@ -165,15 +166,15 @@ class LabelEncoder(BaseFeatureEncoderStrategy):
     def get_output_dim(self) -> int:
         return 1
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {
             "type": "label",
             "label_map": self.label_map,
-            "unknown_value": self.unknown_value
+            "unknown_value": self.unknown_value,
         }
 
     @classmethod
-    def from_state(cls, state: Dict[str, Any]) -> "LabelEncoder":
+    def from_state(cls, state: dict[str, Any]) -> "LabelEncoder":
         encoder = cls()
         encoder.label_map = state.get("label_map", {})
         encoder.unknown_value = state.get("unknown_value", 0)
@@ -188,21 +189,21 @@ class OneHotEncoder(BaseFeatureEncoderStrategy):
     """
 
     def __init__(self, max_categories: int = 100):
-        self.categories: List[str] = []
+        self.categories: list[str] = []
         self.max_categories = max_categories
 
-    def fit(self, values: List[Any]) -> None:
+    def fit(self, values: list[Any]) -> None:
         unique_values = sorted(set(str(v) for v in values if v is not None))
         if len(unique_values) > self.max_categories:
             logger.warning(
                 f"OneHotEncoder: {len(unique_values)} categories exceeds max "
                 f"{self.max_categories}, truncating"
             )
-            unique_values = unique_values[:self.max_categories]
+            unique_values = unique_values[: self.max_categories]
         self.categories = unique_values
         logger.debug(f"OneHotEncoder fit with {len(self.categories)} categories")
 
-    def transform(self, value: Any) -> List[float]:
+    def transform(self, value: Any) -> list[float]:
         result = [0.0] * len(self.categories)
         if value is not None:
             str_value = str(value)
@@ -213,15 +214,15 @@ class OneHotEncoder(BaseFeatureEncoderStrategy):
     def get_output_dim(self) -> int:
         return max(len(self.categories), 1)
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {
             "type": "onehot",
             "categories": self.categories,
-            "max_categories": self.max_categories
+            "max_categories": self.max_categories,
         }
 
     @classmethod
-    def from_state(cls, state: Dict[str, Any]) -> "OneHotEncoder":
+    def from_state(cls, state: dict[str, Any]) -> "OneHotEncoder":
         encoder = cls(max_categories=state.get("max_categories", 100))
         encoder.categories = state.get("categories", [])
         return encoder
@@ -240,7 +241,7 @@ class BinaryEncoder(BaseFeatureEncoderStrategy):
     TRUTHY = {"true", "yes", "1", "on", "t", "y"}
     FALSY = {"false", "no", "0", "off", "f", "n", ""}
 
-    def fit(self, values: List[Any]) -> None:
+    def fit(self, values: list[Any]) -> None:
         pass  # No fitting needed
 
     def transform(self, value: Any) -> float:
@@ -258,11 +259,11 @@ class BinaryEncoder(BaseFeatureEncoderStrategy):
     def get_output_dim(self) -> int:
         return 1
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {"type": "binary"}
 
     @classmethod
-    def from_state(cls, state: Dict[str, Any]) -> "BinaryEncoder":
+    def from_state(cls, state: dict[str, Any]) -> "BinaryEncoder":
         return cls()
 
 
@@ -274,12 +275,12 @@ class FrequencyEncoder(BaseFeatureEncoderStrategy):
     """
 
     def __init__(self, normalize: bool = True):
-        self.frequency_map: Dict[str, float] = {}
+        self.frequency_map: dict[str, float] = {}
         self.normalize = normalize
         self.default_value: float = 0.0
 
-    def fit(self, values: List[Any]) -> None:
-        counts: Dict[str, int] = {}
+    def fit(self, values: list[Any]) -> None:
+        counts: dict[str, int] = {}
         for v in values:
             if v is not None:
                 str_value = str(v)
@@ -305,16 +306,16 @@ class FrequencyEncoder(BaseFeatureEncoderStrategy):
     def get_output_dim(self) -> int:
         return 1
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {
             "type": "frequency",
             "frequency_map": self.frequency_map,
             "normalize": self.normalize,
-            "default_value": self.default_value
+            "default_value": self.default_value,
         }
 
     @classmethod
-    def from_state(cls, state: Dict[str, Any]) -> "FrequencyEncoder":
+    def from_state(cls, state: dict[str, Any]) -> "FrequencyEncoder":
         encoder = cls(normalize=state.get("normalize", True))
         encoder.frequency_map = state.get("frequency_map", {})
         encoder.default_value = state.get("default_value", 0.0)
@@ -326,7 +327,7 @@ class FrequencyEncoder(BaseFeatureEncoderStrategy):
 # =============================================================================
 
 # Registry mapping encoding type names to encoder classes
-ENCODER_REGISTRY: Dict[str, type] = {
+ENCODER_REGISTRY: dict[str, type] = {
     "numeric": NumericEncoder,
     "hash": HashEncoder,
     "label": LabelEncoder,
@@ -350,7 +351,7 @@ def register_encoder(name: str, encoder_class: type) -> None:
         register_encoder("my_encoder", MyEncoder)
     """
     if not issubclass(encoder_class, BaseFeatureEncoderStrategy):
-        raise ValueError(f"Encoder class must extend BaseFeatureEncoderStrategy")
+        raise ValueError("Encoder class must extend BaseFeatureEncoderStrategy")
     ENCODER_REGISTRY[name] = encoder_class
     logger.info(f"Registered custom encoder: {name}")
 
@@ -369,17 +370,19 @@ def get_encoder(encoding_type: str) -> BaseFeatureEncoderStrategy:
 # Main FeatureEncoder class
 # =============================================================================
 
+
 @dataclass
 class FeatureSchema:
     """Schema defining how to encode each feature."""
-    features: Dict[str, EncodingType] = field(default_factory=dict)
+
+    features: dict[str, EncodingType] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, str]) -> "FeatureSchema":
+    def from_dict(cls, d: dict[str, str]) -> "FeatureSchema":
         return cls(features=d)
 
     @classmethod
-    def infer(cls, data: List[Dict[str, Any]]) -> "FeatureSchema":
+    def infer(cls, data: list[dict[str, Any]]) -> "FeatureSchema":
         """Infer schema from data by examining types.
 
         Heuristics:
@@ -393,7 +396,7 @@ class FeatureSchema:
 
         # Collect all keys and sample values
         all_keys = set()
-        value_samples: Dict[str, List[Any]] = {}
+        value_samples: dict[str, list[Any]] = {}
 
         for row in data:
             for k, v in row.items():
@@ -410,7 +413,7 @@ class FeatureSchema:
         return cls(features=features)
 
     @staticmethod
-    def _infer_type(samples: List[Any]) -> EncodingType:
+    def _infer_type(samples: list[Any]) -> EncodingType:
         """Infer encoding type from sample values."""
         non_null = [s for s in samples if s is not None]
         if not non_null:
@@ -459,8 +462,8 @@ class FeatureEncoder:
 
     def __init__(self):
         self.schema: FeatureSchema | None = None
-        self.encoders: Dict[str, BaseFeatureEncoderStrategy] = {}
-        self.feature_order: List[str] = []
+        self.encoders: dict[str, BaseFeatureEncoderStrategy] = {}
+        self.feature_order: list[str] = []
         self._is_fitted: bool = False
 
     @property
@@ -476,8 +479,8 @@ class FeatureEncoder:
 
     def fit(
         self,
-        data: List[Dict[str, Any]],
-        schema: Dict[str, str] | FeatureSchema | None = None
+        data: list[dict[str, Any]],
+        schema: dict[str, str] | FeatureSchema | None = None,
     ) -> "FeatureEncoder":
         """Fit encoder on training data.
 
@@ -522,10 +525,7 @@ class FeatureEncoder:
         )
         return self
 
-    def transform(
-        self,
-        data: List[Dict[str, Any]] | Dict[str, Any]
-    ) -> np.ndarray:
+    def transform(self, data: list[dict[str, Any]] | dict[str, Any]) -> np.ndarray:
         """Transform data to numeric array.
 
         Args:
@@ -561,13 +561,13 @@ class FeatureEncoder:
 
     def fit_transform(
         self,
-        data: List[Dict[str, Any]],
-        schema: Dict[str, str] | FeatureSchema | None = None
+        data: list[dict[str, Any]],
+        schema: dict[str, str] | FeatureSchema | None = None,
     ) -> np.ndarray:
         """Fit and transform in one step."""
         return self.fit(data, schema).transform(data)
 
-    def get_feature_names(self) -> List[str]:
+    def get_feature_names(self) -> list[str]:
         """Get output feature names after encoding.
 
         Useful for debugging and understanding output structure.
@@ -585,7 +585,9 @@ class FeatureEncoder:
             else:
                 # Multi-dimensional (onehot)
                 for i in range(dim):
-                    if isinstance(encoder, OneHotEncoder) and i < len(encoder.categories):
+                    if isinstance(encoder, OneHotEncoder) and i < len(
+                        encoder.categories
+                    ):
                         names.append(f"{feature_name}_{encoder.categories[i]}")
                     else:
                         names.append(f"{feature_name}_{i}")
@@ -601,14 +603,14 @@ class FeatureEncoder:
             "schema": self.schema.features if self.schema else {},
             "feature_order": self.feature_order,
             "encoders": {
-                name: encoder.get_state()
-                for name, encoder in self.encoders.items()
-            }
+                name: encoder.get_state() for name, encoder in self.encoders.items()
+            },
         }
 
         path = Path(path)
         try:
             import joblib
+
             joblib.dump(state, path)
         except ImportError:
             with open(path, "wb") as f:
@@ -623,6 +625,7 @@ class FeatureEncoder:
 
         try:
             import joblib
+
             state = joblib.load(path)
         except ImportError:
             with open(path, "rb") as f:
@@ -643,7 +646,7 @@ class FeatureEncoder:
         logger.info(f"FeatureEncoder loaded from {path}")
         return encoder
 
-    def get_schema_info(self) -> Dict[str, Any]:
+    def get_schema_info(self) -> dict[str, Any]:
         """Get information about the encoder schema."""
         if not self._is_fitted:
             return {"is_fitted": False}
