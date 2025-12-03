@@ -234,8 +234,7 @@ ${CONFIG_PATHS.map(p => `#   - ${p}`).join('\n')}
   const yamlContent = yaml.dump(output, {
     indent: 2,
     lineWidth: 120,
-    quotingType: '"',
-    forceQuotes: true
+    quotingType: '"'
   });
 
   const outputPath = path.resolve(__dirname, '..', OUTPUT_PATH);

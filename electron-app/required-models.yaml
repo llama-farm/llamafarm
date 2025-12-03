@@ -7,18 +7,18 @@
 #   - ../server/seeds/project_seed/llamafarm.yaml
 #
 # To update: npm run sync-models
-# Generated: 2025-12-02T00:10:38.705Z
+# Generated: 2025-12-03T17:46:52.264Z
 
 version: "1"
 models:
-  - id: "unsloth/Qwen3-1.7B-GGUF"
-    quantization: "Q4_K_M"
-    display_name: "Default Universal model"
-    type: "language"
+  - id: unsloth/Qwen3-1.7B-GGUF
+    quantization: Q4_K_M
+    display_name: Default Universal model
+    type: language
     required: true
     size_estimate_mb: 1200
-  - id: "sentence-transformers/all-MiniLM-L6-v2"
-    display_name: "All MiniLM L6 V2"
-    type: "embedding"
+  - id: sentence-transformers/all-MiniLM-L6-v2
+    display_name: All MiniLM L6 V2
+    type: embedding
     required: true
     size_estimate_mb: 90

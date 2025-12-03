@@ -152,13 +152,9 @@ export class ModelDownloader {
   }
 
   /**
-   * Check if a model is cached using the server's models API
+   * Fetch the list of cached models from the server
    */
-  async isModelCached(model: ModelConfig): Promise<boolean> {
-    const modelId = this.getFullModelId(model)
-    // Strip quantization suffix for comparison (e.g., "org/repo:Q4_K_M" -> "org/repo")
-    const baseModelId = modelId.includes(':') ? modelId.split(':')[0] : modelId
-
+  private async fetchCachedModels(): Promise<CachedModel[]> {
     try {
       const response = await fetch(`${this.serverUrl}/v1/models`, {
         method: 'GET',
@@ -167,20 +163,39 @@ export class ModelDownloader {
       })
 
       if (!response.ok) {
-        console.error(`Failed to check model cache: HTTP ${response.status}`)
-        return false
+        console.error(`Failed to fetch model list: HTTP ${response.status}`)
+        return []
       }
 
       const result = await response.json() as { data: CachedModel[] }
-
-      // Check if model is in the cache (compare with or without quantization)
-      return result.data.some(
-        cached => cached.id === baseModelId || cached.id === modelId
-      )
+      return result.data
     } catch (error) {
-      console.error('Error checking model cache:', error)
-      return false
+      console.error('Error fetching model list:', error)
+      return []
     }
+  }
+
+  /**
+   * Check if a model is cached against a provided list of cached models
+   */
+  private isModelInCache(model: ModelConfig, cachedModels: CachedModel[]): boolean {
+    const modelId = this.getFullModelId(model)
+    // Strip quantization suffix for comparison (e.g., "org/repo:Q4_K_M" -> "org/repo")
+    const baseModelId = modelId.includes(':') ? modelId.split(':')[0] : modelId
+
+    // Check if model is in the cache (compare with or without quantization)
+    return cachedModels.some(
+      cached => cached.id === baseModelId || cached.id === modelId
+    )
+  }
+
+  /**
+   * Check if a model is cached using the server's models API
+   * @deprecated Use checkModels() or getModelStatus() instead to avoid redundant API calls
+   */
+  async isModelCached(model: ModelConfig): Promise<boolean> {
+    const cachedModels = await this.fetchCachedModels()
+    return this.isModelInCache(model, cachedModels)
   }
 
   /**
@@ -189,6 +204,9 @@ export class ModelDownloader {
   async checkModels(onProgress?: (progress: ModelDownloadProgress) => void): Promise<ModelStatus[]> {
     const config = await this.loadConfig()
     const statuses: ModelStatus[] = []
+
+    // Fetch the cached models list ONCE for all checks
+    const cachedModels = await this.fetchCachedModels()
 
     for (let i = 0; i < config.models.length; i++) {
       const model = config.models[i]
@@ -207,7 +225,7 @@ export class ModelDownloader {
         message: `Checking ${model.display_name}...`
       })
 
-      const isCached = await this.isModelCached(model)
+      const isCached = this.isModelInCache(model, cachedModels)
       status.status = isCached ? 'present' : 'downloading'
 
       onProgress?.({
@@ -410,8 +428,11 @@ export class ModelDownloader {
     const config = await this.loadConfig()
     const statuses: ModelStatus[] = []
 
+    // Fetch the cached models list ONCE for all checks
+    const cachedModels = await this.fetchCachedModels()
+
     for (const model of config.models) {
-      const isCached = await this.isModelCached(model)
+      const isCached = this.isModelInCache(model, cachedModels)
       statuses.push({
         id: model.id,
         display_name: model.display_name,
