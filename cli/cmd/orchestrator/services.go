@@ -153,6 +153,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		HardwarePackages: []HardwarePackageSpec{
 			PyTorchSpec,
 			LlamaCppSpec,
+			MLXSpec, // Apple Silicon only - will be skipped on other platforms
 		},
 	},
 	"server": {

@@ -111,14 +111,49 @@ func TestLlamaCppSpec(t *testing.T) {
 	}
 }
 
+func TestMLXSpec(t *testing.T) {
+	// MLXSpec should only be available on Metal hardware
+	t.Run("MLXSpec is restricted to Metal only", func(t *testing.T) {
+		if len(MLXSpec.RestrictedTo) != 1 {
+			t.Errorf("MLXSpec.RestrictedTo should have 1 item, got %d", len(MLXSpec.RestrictedTo))
+		}
+		if MLXSpec.RestrictedTo[0] != HardwareMetal {
+			t.Errorf("MLXSpec.RestrictedTo[0] = %v, want Metal", MLXSpec.RestrictedTo[0])
+		}
+	})
+
+	t.Run("MLXSpec only has Metal wheel URL", func(t *testing.T) {
+		gotURL, ok := MLXSpec.WheelURLs[HardwareMetal]
+		if !ok {
+			t.Error("MLXSpec.WheelURLs[Metal] not found")
+		}
+		// Empty URL means use default PyPI
+		if gotURL != "" {
+			t.Errorf("MLXSpec.WheelURLs[Metal] = %v, want empty (default PyPI)", gotURL)
+		}
+	})
+
+	// Verify package properties
+	if MLXSpec.Name != "mlx-lm" {
+		t.Errorf("MLXSpec.Name = %v, want mlx-lm", MLXSpec.Name)
+	}
+	if MLXSpec.UseIndexURL {
+		t.Error("MLXSpec.UseIndexURL should be false")
+	}
+	if !MLXSpec.FallbackToDefault {
+		t.Error("MLXSpec.FallbackToDefault should be true")
+	}
+}
+
 func TestGetComponentPackages(t *testing.T) {
 	t.Run("universal-runtime has hardware packages", func(t *testing.T) {
 		packages := GetComponentPackages("universal-runtime")
 		if len(packages) == 0 {
 			t.Error("universal-runtime should have hardware-specific packages")
 		}
-		if len(packages) != 2 {
-			t.Errorf("universal-runtime should have 2 packages, got %d", len(packages))
+		// PyTorchSpec, LlamaCppSpec, and MLXSpec
+		if len(packages) != 3 {
+			t.Errorf("universal-runtime should have 3 packages, got %d", len(packages))
 		}
 
 		// Verify we have PyTorch and llama-cpp-python
@@ -177,8 +212,9 @@ func TestServiceGraphIntegration(t *testing.T) {
 			t.Fatal("universal-runtime not found in ServiceGraph")
 		}
 
-		if len(svc.HardwarePackages) != 2 {
-			t.Errorf("universal-runtime.HardwarePackages should have 2 items, got %d", len(svc.HardwarePackages))
+		// PyTorchSpec, LlamaCppSpec, and MLXSpec
+		if len(svc.HardwarePackages) != 3 {
+			t.Errorf("universal-runtime.HardwarePackages should have 3 items, got %d", len(svc.HardwarePackages))
 		}
 	})
 

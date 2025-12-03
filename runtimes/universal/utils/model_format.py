@@ -40,10 +40,10 @@ __all__ = [
 
 def detect_model_format(model_id: str, token: str | None = None) -> str:
     """
-    Detect if a HuggingFace model is GGUF or transformers format.
+    Detect if a HuggingFace model is GGUF, MLX, or transformers format.
 
     This function uses the HuggingFace Hub API to list files in the repository
-    and checks for .gguf files to determine the format, without downloading anything.
+    and checks for .gguf files or MLX indicators to determine the format, without downloading anything.
     Results are cached to avoid repeated API calls.
 
     Args:
@@ -51,7 +51,7 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
         token: Optional HuggingFace authentication token for gated models
 
     Returns:
-        "gguf" if model contains .gguf files, "transformers" otherwise
+        "gguf" if model contains .gguf files, "mlx" if MLX format, "transformers" otherwise
 
     Raises:
         Exception: If model cannot be accessed
@@ -61,6 +61,8 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
         "gguf"
         >>> detect_model_format("unsloth/Qwen3-0.6B-GGUF:Q4_K_M")
         "gguf"
+        >>> detect_model_format("Qwen/Qwen3-4B-MLX-4bit")
+        "mlx"
         >>> detect_model_format("google/gemma-3-1b-it")
         "transformers"
     """
@@ -89,8 +91,25 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
             _format_cache[base_model_id] = "gguf"
             return "gguf"
 
-        # No GGUF files found - assume transformers format
-        logger.info("Detected transformers format (no .gguf files found)")
+        # Check for MLX format indicators
+        # MLX models typically have:
+        # 1. "-MLX" in the model name OR
+        # 2. model.safetensors with MLX-specific metadata OR
+        # 3. weights.npz file (older MLX format)
+        has_mlx_name = "-mlx" in base_model_id.lower()
+        has_mlx_files = any(
+            f == "weights.npz" or f == "model.safetensors" for f in all_files
+        )
+
+        if has_mlx_name and has_mlx_files:
+            logger.info(
+                "Detected MLX format (found MLX indicator in name and MLX files)"
+            )
+            _format_cache[base_model_id] = "mlx"
+            return "mlx"
+
+        # No GGUF or MLX files found - assume transformers format
+        logger.info("Detected transformers format (no .gguf or MLX files found)")
         _format_cache[base_model_id] = "transformers"
         return "transformers"
 

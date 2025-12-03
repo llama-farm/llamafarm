@@ -22,6 +22,7 @@ Environment Variables:
 import asyncio
 import base64
 import os
+import platform
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from typing import Literal
@@ -39,6 +40,7 @@ from models import (
     GGUFEncoderModel,
     GGUFLanguageModel,
     LanguageModel,
+    MLXLanguageModel,
 )
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
@@ -222,12 +224,13 @@ def _make_language_cache_key(
 async def load_language(
     model_id: str, n_ctx: int | None = None, preferred_quantization: str | None = None
 ):
-    """Load a causal language model (GGUF or transformers format).
+    """Load a causal language model (GGUF, MLX, or transformers format).
 
-    Automatically detects whether the model is in GGUF or transformers format
-    and loads it with the appropriate backend. GGUF models use llama-cpp-python
-    for optimized inference, while transformers models use the standard HuggingFace
-    transformers library.
+    Automatically detects whether the model is in GGUF, MLX, or transformers format
+    and loads it with the appropriate backend:
+    - GGUF models use llama-cpp-python for optimized inference
+    - MLX models use mlx-lm for Apple Silicon optimization
+    - Transformers models use the standard HuggingFace transformers library
 
     Args:
         model_id: HuggingFace model identifier
@@ -252,9 +255,24 @@ async def load_language(
                 )
                 device = get_device()
 
-                # Detect model format (GGUF vs transformers)
+                # Detect model format (GGUF vs MLX vs transformers)
                 model_format = detect_model_format(model_id)
                 logger.info(f"Detected format: {model_format}")
+
+                # Check platform compatibility for MLX models
+                if model_format == "mlx":
+                    system = platform.system()
+                    machine = platform.machine()
+                    if system != "Darwin" or machine != "arm64":
+                        error_msg = (
+                            f"MLX models are only supported on macOS with Apple Silicon. "
+                            f"Current platform: {system}/{machine}. "
+                            f"Please use a GGUF or transformers version of this model instead. "
+                            f"For example, try searching for '{model_id.split('/')[1].replace('-MLX', '-GGUF')}' or "
+                            f"a non-MLX variant on HuggingFace."
+                        )
+                        logger.error(error_msg)
+                        raise RuntimeError(error_msg)
 
                 # Instantiate appropriate model class based on format
                 model: BaseModel
@@ -265,6 +283,8 @@ async def load_language(
                         n_ctx=n_ctx,
                         preferred_quantization=preferred_quantization,
                     )
+                elif model_format == "mlx":
+                    model = MLXLanguageModel(model_id, device)
                 else:
                     model = LanguageModel(model_id, device)
 

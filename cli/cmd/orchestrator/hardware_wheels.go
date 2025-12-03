@@ -15,6 +15,7 @@ type HardwarePackageSpec struct {
 	UseIndexURL       bool                          // If true, use --index-url; if false, use --extra-index-url
 	WheelURLs         map[HardwareCapability]string // Hardware-specific wheel index URLs
 	FallbackToDefault bool                          // If true and URL is empty, use default PyPI
+	RestrictedTo      []HardwareCapability          // If set, only install on these hardware types (skip others)
 }
 
 // PyTorchSpec defines the hardware-specific installation for PyTorch
@@ -45,6 +46,19 @@ var LlamaCppSpec = HardwarePackageSpec{
 	},
 }
 
+// MLXSpec defines the installation for mlx-lm (Apple Silicon only)
+// MLX is Apple's machine learning framework and only works on macOS with Apple Silicon
+var MLXSpec = HardwarePackageSpec{
+	Name:              "mlx-lm",
+	Version:           ">=0.19.0",
+	UseIndexURL:       false,             // Use default PyPI
+	FallbackToDefault: true,              // Install from default PyPI
+	RestrictedTo:      []HardwareCapability{HardwareMetal}, // Only install on Apple Silicon
+	WheelURLs: map[HardwareCapability]string{
+		HardwareMetal: "", // Empty = use default PyPI
+	},
+}
+
 // GetComponentPackages returns the hardware-dependent packages for a given component
 // It looks up the component in ServiceGraph and returns its HardwarePackages field
 // Returns an empty slice if the component doesn't exist or has no hardware-specific packages
@@ -65,6 +79,21 @@ func InstallHardwarePackages(pythonEnvMgr *PythonEnvManager, workDir string, pac
 	uvPath := pythonEnvMgr.uvManager.GetUVPath()
 
 	for _, pkg := range packages {
+		// Check if this package is restricted to specific hardware
+		if len(pkg.RestrictedTo) > 0 {
+			isAllowed := false
+			for _, allowed := range pkg.RestrictedTo {
+				if hardware == allowed {
+					isAllowed = true
+					break
+				}
+			}
+			if !isAllowed {
+				utils.LogDebug(fmt.Sprintf("Skipping %s: restricted to %v, current hardware is %s", pkg.Name, pkg.RestrictedTo, hardware))
+				continue
+			}
+		}
+
 		// Get the wheel URL for this hardware
 		wheelURL, ok := pkg.WheelURLs[hardware]
 		if !ok {

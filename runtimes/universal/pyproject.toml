@@ -42,6 +42,8 @@ dev = [
 # These are not installed during 'uv sync' to avoid compilation dependencies
 # Note: torch and llama-cpp-python are now in dev group for testing
 gpu = ["torch>=2.0.0", "llama-cpp-python>=0.3.0"]
+# MLX support for Apple Silicon (macOS only)
+mlx = ["mlx-lm>=0.19.0"]
 # xformers is GPU-only and must be installed manually when needed:
 #   uv pip install xformers
 # (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
