@@ -131,6 +131,32 @@ class VectorStore(Component):
         pass
 
     @abstractmethod
+    def get_documents_by_metadata(
+        self, metadata_filter: dict[str, Any]
+    ) -> list[Document]:
+        """Get documents matching a metadata filter.
+
+        Args:
+            metadata_filter: Key-value pairs to match against document metadata.
+
+        Returns:
+            List of matching documents.
+        """
+        pass
+
+    @abstractmethod
+    def delete_documents(self, doc_ids: list[str]) -> int:
+        """Delete documents by their IDs.
+
+        Args:
+            doc_ids: List of document IDs to delete.
+
+        Returns:
+            Number of documents deleted.
+        """
+        pass
+
+    @abstractmethod
     def search(self, query: str, top_k: int = 10) -> list[Document]:
         """Search for similar documents."""
         pass

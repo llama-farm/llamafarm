@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from api.errors import DatasetNotFoundError
 from core.celery import app
-from core.celery.rag_client import build_ingest_signature
+from core.celery.rag_client import build_ingest_signature, delete_file_from_rag
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, MetadataFileContent
 from services.project_service import ProjectService
@@ -326,9 +326,12 @@ class DatasetService:
         project: str,
         dataset: str,
         file_hash: str,
-    ):
+    ) -> dict:
         """
-        Remove a file from a dataset
+        Remove a file from a dataset and delete its chunks from the vector store.
+
+        Returns:
+            Dictionary with deletion results including deleted_count from vector store.
         """
 
         project_config = ProjectService.load_config(namespace, project)
@@ -340,12 +343,32 @@ class DatasetService:
         if dataset_obj is None:
             raise DatasetNotFoundError(dataset)
 
+        # Delete from disk first
         DataService.delete_data_file(
             namespace=namespace,
             project_id=project,
             dataset=dataset,
             file_hash=file_hash,
         )
+
+        # Delete chunks from vector store via RAG task
+        project_dir = ProjectService.get_project_dir(namespace, project)
+        result = delete_file_from_rag(
+            project_dir=project_dir,
+            database_name=dataset_obj.database,
+            file_hash=file_hash,
+        )
+
+        logger.info(
+            "Removed file from dataset",
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hash=file_hash[:16] + "...",
+            deleted_chunks=result.get("deleted_count", 0),
+        )
+
+        return result
 
     @classmethod
     def start_dataset_ingestion(
