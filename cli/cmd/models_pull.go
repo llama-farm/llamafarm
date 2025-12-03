@@ -149,7 +149,6 @@ func pullModel(serverURL, modelID string) error {
 	reader := bufio.NewReader(resp.Body)
 	var lastProgress float64
 	var currentFile string
-	downloadComplete := false
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -208,26 +207,23 @@ func pullModel(serverURL, modelID string) error {
 		case "progress":
 			// Use the percent directly from the event
 			progress := event.Percent
-			// Only print progress updates every 1% for actual downloads
 			if event.Total > 1024*1024 { // Only show for files > 1MB
-				if progress-lastProgress >= 1 || progress >= 99.9 {
-					// Build progress line with rate and ETA
-					rateStr := ""
-					etaStr := ""
-					if event.BytesPerSec > 0 {
-						rateStr = fmt.Sprintf(" @ %s", utils.FormatTransferRate(event.BytesPerSec))
-					}
-					// Only show ETA if more than 1 second remaining
-					if event.ETASeconds != nil && *event.ETASeconds > 1 {
-						etaStr = fmt.Sprintf(", ETA: %s", utils.FormatDuration(*event.ETASeconds))
-					}
-					// Use fixed-width output to ensure clean line overwrites
-					line := fmt.Sprintf("  Progress: %.1f%%%s%s", progress, rateStr, etaStr)
-					// Pad to 60 chars to overwrite any previous longer content
-					fmt.Printf("\r%-60s", line)
-					os.Stdout.Sync()
-					lastProgress = progress
+				// Build progress line with rate and ETA
+				rateStr := ""
+				etaStr := ""
+				if event.BytesPerSec > 0 {
+					rateStr = fmt.Sprintf(" @ %s", utils.FormatTransferRate(event.BytesPerSec))
 				}
+				// Only show ETA if more than 1 second remaining
+				if event.ETASeconds != nil && *event.ETASeconds > 1 {
+					etaStr = fmt.Sprintf(", ETA: %s", utils.FormatDuration(*event.ETASeconds))
+				}
+				// Use fixed-width output to ensure clean line overwrites
+				line := fmt.Sprintf("  Progress: %.1f%%%s%s", progress, rateStr, etaStr)
+				// Pad to 60 chars to overwrite any previous longer content
+				fmt.Printf("\r%-60s", line)
+				os.Stdout.Sync()
+				lastProgress = progress
 			}
 
 		case "cached":
@@ -243,7 +239,6 @@ func pullModel(serverURL, modelID string) error {
 
 		case "done":
 			fmt.Printf("✓ Download complete\n")
-			downloadComplete = true
 			return nil
 
 		case "error":
@@ -251,11 +246,9 @@ func pullModel(serverURL, modelID string) error {
 		}
 	}
 
-	// If we exit the loop without receiving a "done" event, the download was incomplete
-	if !downloadComplete {
-		return fmt.Errorf("download incomplete: connection closed before completion")
-	}
-	return nil
+	// If we reach here, the stream ended without a "done" event (e.g., network drop)
+	// The downloadComplete flag is never set to true because we return immediately on "done"
+	return fmt.Errorf("download incomplete: connection closed before completion")
 }
 
 // checkModelStatus checks if a model is in the local cache
