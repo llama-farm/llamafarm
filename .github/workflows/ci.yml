@@ -188,6 +188,8 @@ jobs:
         env:
           # For universal runtime, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
           UV_EXTRA_INDEX_URL: ${{ matrix.component == 'runtimes/universal' && 'https://download.pytorch.org/whl/cpu' || '' }}
+          # Allow uv to search all indexes for best version (PyTorch index has old versions of common packages)
+          UV_INDEX_STRATEGY: ${{ matrix.component == 'runtimes/universal' && 'unsafe-best-match' || '' }}
         run: |
           if [ -f "uv.lock" ]; then
             # Install main + dev dependencies only (skip optional extras that may have platform requirements)

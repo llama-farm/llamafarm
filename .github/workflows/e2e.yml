@@ -51,6 +51,9 @@ jobs:
       LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
       # Use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages in CI
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+      # Allow uv to search all indexes for best version match (needed because PyTorch index
+      # has old versions of common packages like 'requests' that would block resolution)
+      UV_INDEX_STRATEGY: unsafe-best-match
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
       # Always use base repository for artifacts (cli.yml uploads to base repo)
