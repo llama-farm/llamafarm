@@ -55,6 +55,7 @@ export type DownloadEvent =
   | { event: 'progress'; file?: string; downloaded: number; total: number }
   | { event: 'done'; local_dir: string }
   | { event: 'error'; message: string }
+  | { event: 'warning'; message: string }
 
 /**
  * Response from the delete model endpoint
@@ -64,4 +65,29 @@ export interface DeleteModelResponse {
   revisions_deleted: number
   size_freed: number
   path: string
+}
+
+/**
+ * Response from the validate download endpoint
+ */
+export interface ValidateDownloadResponse {
+  can_download: boolean
+  warning: boolean
+  message: string
+  available_bytes: number
+  required_bytes: number
+  cache_info: {
+    total_bytes: number
+    used_bytes: number
+    free_bytes: number
+    path: string
+    percent_free: number
+  }
+  system_info: {
+    total_bytes: number
+    used_bytes: number
+    free_bytes: number
+    path: string
+    percent_free: number
+  }
 }

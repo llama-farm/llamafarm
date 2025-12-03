@@ -124,14 +124,14 @@ func TestRenderToolCallDeterministicOrdering(t *testing.T) {
 	if !strings.Contains(firstResult, "apple") {
 		t.Error("renderToolCall() should contain 'apple' argument")
 	}
-	
+
 	// Check that 'apple' appears before 'zebra' in the output
 	appleIdx := strings.Index(firstResult, "apple")
 	zebraIdx := strings.Index(firstResult, "zebra")
 	if appleIdx >= zebraIdx {
 		t.Errorf("renderToolCall() should show arguments in alphabetical order (apple before zebra)")
 	}
-	
+
 	// Check that 'banana' appears before 'middle'
 	bananaIdx := strings.Index(firstResult, "banana")
 	middleIdx := strings.Index(firstResult, "middle")
@@ -139,4 +139,3 @@ func TestRenderToolCallDeterministicOrdering(t *testing.T) {
 		t.Errorf("renderToolCall() should show arguments in alphabetical order (banana before middle)")
 	}
 }
-
