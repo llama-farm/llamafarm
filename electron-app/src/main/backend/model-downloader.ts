@@ -283,6 +283,7 @@ export class ModelDownloader {
       let buffer = ''
       let currentDesc = ''
       let currentTotal = 0
+      let receivedDone = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -321,6 +322,7 @@ export class ModelDownloader {
               break
 
             case 'done':
+              receivedDone = true
               onProgress?.(100, 'Complete')
               clearTimeout(timeoutId)
               return
@@ -331,7 +333,10 @@ export class ModelDownloader {
         }
       }
 
-      // If we reach here without 'done', consider it complete
+      // If we reach here without 'done', the download was incomplete
+      if (!receivedDone) {
+        throw new Error('Download incomplete: stream ended without completion signal')
+      }
       onProgress?.(100, 'Complete')
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
