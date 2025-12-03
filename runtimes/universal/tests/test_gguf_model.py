@@ -128,7 +128,7 @@ class TestGGUFLanguageModel:
         model = GGUFLanguageModel("test/model", "cpu")
 
         with pytest.raises(AssertionError, match="Model not loaded"):
-            await model.generate("Hello")
+            await model.generate([{"role": "user", "content": "Hello"}])
 
     @pytest.mark.asyncio
     async def test_generate_with_mock(self, tmp_path):
@@ -140,9 +140,11 @@ class TestGGUFLanguageModel:
 
         model = GGUFLanguageModel("test/model", "cpu")
 
-        # Mock llama instance that returns generation result
+        # Mock llama instance with create_chat_completion method
         mock_llama = MagicMock()
-        mock_llama.return_value = {"choices": [{"text": "Hello! How can I help?"}]}
+        mock_llama.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "Hello! How can I help?"}}]
+        }
 
         with (
             patch(
@@ -156,7 +158,9 @@ class TestGGUFLanguageModel:
             patch("models.gguf_language_model.Llama", return_value=mock_llama),
         ):
             await model.load()
-            result = await model.generate("Hi", max_tokens=10)
+            result = await model.generate(
+                [{"role": "user", "content": "Hi"}], max_tokens=10
+            )
             assert result == "Hello! How can I help?"
 
     @pytest.mark.asyncio
@@ -165,7 +169,9 @@ class TestGGUFLanguageModel:
         model = GGUFLanguageModel("test/model", "cpu")
 
         with pytest.raises(AssertionError, match="Model not loaded"):
-            async for _ in model.generate_stream("Hello"):
+            async for _ in model.generate_stream(
+                [{"role": "user", "content": "Hello"}]
+            ):
                 pass
 
     @pytest.mark.asyncio
@@ -183,10 +189,13 @@ class TestGGUFLanguageModel:
         def raise_exception(*args, **kwargs):
             raise RuntimeError("Simulated llama-cpp-python error")
 
-        mock_llama.side_effect = raise_exception
+        # Mock create_chat_completion to return an iterable that raises
+        mock_llama.create_chat_completion.side_effect = raise_exception
 
         with caplog.at_level(logging.ERROR):
-            gen = model.generate_stream("Hi", max_tokens=10)
+            gen = model.generate_stream(
+                [{"role": "user", "content": "Hi"}], max_tokens=10
+            )
             with pytest.raises(RuntimeError, match="Simulated llama-cpp-python error"):
                 # Exhaust the generator to trigger the exception
                 async for _ in gen:
@@ -219,7 +228,9 @@ class TestGGUFIntegration:
         model = GGUFLanguageModel(model_id, "cpu")
         await model.load()
 
-        result = await model.generate("Hello", max_tokens=10)
+        result = await model.generate(
+            [{"role": "user", "content": "Hello"}], max_tokens=10
+        )
         assert isinstance(result, str)
         assert len(result) > 0
 
@@ -232,7 +243,9 @@ class TestGGUFIntegration:
         await model.load()
 
         tokens = []
-        async for token in model.generate_stream("Hello", max_tokens=10):
+        async for token in model.generate_stream(
+            [{"role": "user", "content": "Hello"}], max_tokens=10
+        ):
             tokens.append(token)
 
         assert len(tokens) > 0
