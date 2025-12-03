@@ -33,12 +33,16 @@ export function useUpgradeAvailability() {
 
   useEffect(() => {
     const abort = new AbortController()
+    let isCancelled = false
+
     const run = async () => {
       // Always fetch current version, but only check for latest version if 12 hours have passed
       const shouldCheckLatest = shouldCheck(checkedAt, TWELVE_HOURS_MS)
       setIsLoading(true)
       try {
         const res = await getVersionCheck(abort.signal)
+        if (isCancelled) return
+
         const serverCurrentVersion = res?.current_version
         // Always update current version from server (no caching)
         // Ignore invalid hardcoded version "0.1.0"
@@ -58,13 +62,21 @@ export function useUpgradeAvailability() {
           }
         }
       } catch (error) {
-        console.error('Failed to fetch version info:', error)
+        if (!isCancelled) {
+          console.error('Failed to fetch version info:', error)
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
-      setIsLoading(false)
     }
     run()
-    return () => abort.abort()
-  }, [checkedAt])
+    return () => {
+      isCancelled = true
+      abort.abort()
+    }
+  }, [])
 
   const normalizedCurrent = currentVersion ? normalizeVersion(currentVersion) : null
   const latestVersion = useMemo(

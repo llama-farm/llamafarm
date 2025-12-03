@@ -5,6 +5,7 @@ which is written by the CLI during source code downloads.
 When running from the repository (dev mode), always returns "dev".
 """
 
+import re
 from pathlib import Path
 
 from core.settings import settings
@@ -44,7 +45,16 @@ def _read_source_version() -> str:
         return "dev"
 
     # Otherwise, read from .source_version file (CLI-managed source)
-    version_file = Path(settings.lf_data_dir) / ".source_version"
+    # Resolve to prevent path traversal
+    data_dir = Path(settings.lf_data_dir).resolve()
+    version_file = data_dir / ".source_version"
+
+    # Ensure version file is actually inside data_dir (prevent path traversal)
+    try:
+        version_file.resolve().relative_to(data_dir)
+    except ValueError:
+        # File path escapes data directory
+        return "dev"
 
     # If file doesn't exist, we're in dev mode
     if not version_file.exists():
@@ -58,6 +68,12 @@ def _read_source_version() -> str:
 
     # Empty file or dev/main branch means dev mode
     if not content or content.lower() in ("main", "dev"):
+        return "dev"
+
+    # Validate version format: alphanumeric, dots, hyphens only (e.g., "0.0.18", "v0.0.18")
+    # Allow "v" prefix and semantic versioning patterns
+    if not re.match(r"^v?[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$", content):
+        # Invalid version format, default to dev
         return "dev"
 
     # Strip "v" prefix if present (e.g., "v0.0.18" -> "0.0.18")
