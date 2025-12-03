@@ -34,7 +34,7 @@ rag:
 |----------|----------|-------------|
 | `type` | Yes | Extractor type (e.g., `EntityExtractor`) |
 | `config` | No | Extractor-specific configuration |
-| `priority` | No | Execution order (higher runs first) |
+| `priority` | No | Execution order (lower numbers run first) |
 | `file_include_patterns` | No | Glob patterns for files to apply to |
 | `condition` | No | Condition expression for when to run |
 
