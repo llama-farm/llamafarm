@@ -3,12 +3,17 @@ permissions:
   contents: read
   actions: read # Required to download artifacts from other workflows
   pull-requests: write # Can post PR comments
+  statuses: write # Required to create commit status checks for fork PRs
 
 on:
   # Trigger after CLI build completes (works for both main branch and PRs)
   workflow_run:
     workflows: ["Build CLI"]
     types: [completed]
+  # Keep pull_request trigger for backward compatibility during transition
+  # TODO: This can be removed once the workflow_run approach is verified working
+  pull_request:
+    branches: [main]
   # Also allow manual trigger
   workflow_dispatch:
 
@@ -20,12 +25,14 @@ jobs:
     name: E2E Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # Only run if CLI build succeeded and it's a PR or main/develop branch
+    # Run for pull_request events directly, or for workflow_run events if CLI build succeeded
     if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.event == 'pull_request' ||
-       github.event.workflow_run.head_branch == 'main' ||
-       github.event.workflow_run.head_branch == 'develop')
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'pull_request' ||
+        github.event.workflow_run.head_branch == 'main' ||
+        github.event.workflow_run.head_branch == 'develop'))
     strategy:
       fail-fast: false
       matrix:
@@ -53,6 +60,28 @@ jobs:
 
     steps:
       # ============================================================
+      # Report Status Check (for workflow_run triggered by fork PRs)
+      # Note: Direct pull_request events get status checks automatically
+      # ============================================================
+      - name: Set pending status check
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.workflow_run.head_sha;
+            console.log(`Setting pending status for commit ${sha}`);
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: sha,
+              state: 'pending',
+              context: 'E2E Tests / ${{ matrix.os }}',
+              description: 'E2E tests are running...',
+              target_url: `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
+            console.log('✓ Pending status set');
+
+      # ============================================================
       # Setup Phase
       # ============================================================
       - name: Checkout code
@@ -65,14 +94,61 @@ jobs:
       # ============================================================
       # Download Pre-built CLI Binary
       # ============================================================
-      - name: Download CLI binary artifact (from workflow_run)
-        if: github.event.workflow_run.id
+      - name: Wait for CLI build artifacts (PRs only)
+        if: github.event_name == 'pull_request'
+        id: wait-artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Waiting for CLI build to produce artifacts..."
+          COMMIT="${{ github.event.pull_request.head.sha }}"
+          ARTIFACT_NAME="${{ matrix.artifact }}"
+          MAX_WAIT=600  # 10 minutes
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            echo "Checking for artifact (${ELAPSED}s elapsed)..."
+
+            # Get artifact info including run ID
+            ARTIFACT_INFO=$(gh api repos/${{ github.repository }}/actions/artifacts \
+              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | select(.workflow_run.head_sha == \"${COMMIT}\") | {id: .id, run_id: .workflow_run.id}" \
+              2>/dev/null | head -n 1)
+
+            if [ -n "$ARTIFACT_INFO" ]; then
+              ARTIFACT_ID=$(echo "$ARTIFACT_INFO" | jq -r '.id')
+              RUN_ID=$(echo "$ARTIFACT_INFO" | jq -r '.run_id')
+              echo "✓ Artifact found! (ID: ${ARTIFACT_ID}, Run: ${RUN_ID})"
+              echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
+          done
+
+          echo "❌ Timeout waiting for artifact after ${MAX_WAIT}s"
+          exit 1
+
+      - name: Download CLI binary artifact (with run_id)
+        if: github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
-          run_id: ${{ github.event.workflow_run.id }}
+          run_id: ${{ github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id }}
           name: ${{ matrix.artifact }}
           path: cli/
+          if_no_artifact_found: fail
+
+      - name: Download CLI binary artifact (search by commit)
+        if: ${{ !(github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id) }}
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: cli.yml
+          commit: ${{ github.sha }}
+          name: ${{ matrix.artifact }}
+          path: cli/
+          search_artifacts: true
           if_no_artifact_found: fail
 
       - name: Download PR info artifact
@@ -88,8 +164,18 @@ jobs:
       - name: Set PR info
         id: pr-info
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER_DIRECT: ${{ github.event.pull_request.number }}
+          HEAD_SHA_DIRECT: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ -f ./pr-info/pr_number.txt ]; then
+          # Handle direct pull_request events
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "pr_number=${PR_NUMBER_DIRECT}" >> $GITHUB_OUTPUT
+            echo "head_sha=${HEAD_SHA_DIRECT}" >> $GITHUB_OUTPUT
+            echo "✓ PR metadata from pull_request event: PR #${PR_NUMBER_DIRECT}"
+          # Handle workflow_run events (from pr-info artifact)
+          elif [ -f ./pr-info/pr_number.txt ]; then
             # Read and trim whitespace from PR number
             PR_NUMBER=$(cat ./pr-info/pr_number.txt | tr -d '[:space:]')
             if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
@@ -102,7 +188,7 @@ jobs:
               echo "head_ref=$(cat ./pr-info/head_ref.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
               echo "head_repo=$(cat ./pr-info/head_repo.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
               echo "base_repo=$(cat ./pr-info/base_repo.txt | tr -d '[:space:]')" >> $GITHUB_OUTPUT
-              echo "✓ PR metadata loaded: PR #${PR_NUMBER}"
+              echo "✓ PR metadata loaded from artifact: PR #${PR_NUMBER}"
             fi
           else
             echo "pr_number=" >> $GITHUB_OUTPUT
@@ -512,6 +598,33 @@ jobs:
           rm -rf "$TEST_DIR"
           echo "✓ Cleanup complete"
 
+      # ============================================================
+      # Report Final Status Check (for fork PRs visibility)
+      # ============================================================
+      - name: Report final status check
+        if: always() && github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.workflow_run.head_sha;
+            const jobStatus = '${{ job.status }}';
+            const state = jobStatus === 'success' ? 'success' : 'failure';
+            const description = state === 'success' 
+              ? 'All E2E tests passed!' 
+              : `E2E tests ${jobStatus}`;
+            
+            console.log(`Setting ${state} status for commit ${sha}`);
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: sha,
+              state: state,
+              context: 'E2E Tests / ${{ matrix.os }}',
+              description: description,
+              target_url: `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
+            console.log(`✓ Final status (${state}) reported`);
+
       - name: Display service logs on failure
         if: failure()
         shell: bash
@@ -699,6 +812,7 @@ jobs:
       contents: read
       pull-requests: write
       actions: read
+      statuses: write # Required to report failure status for fork PRs
     steps:
       - name: Download PR info artifact
         uses: dawidd6/action-download-artifact@v6
@@ -752,3 +866,26 @@ jobs:
               body: commentBody
             });
             console.log(`✅ Posted CLI build failure comment on PR #${prNumber}`);
+
+      - name: Report CLI build failure status
+        if: github.event.workflow_run.event == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.workflow_run.head_sha;
+            console.log(`Setting failure status for commit ${sha} (CLI build failed)`);
+            
+            // Report failure for both matrix entries that would have run
+            const osTargets = ['ubuntu-latest', 'macos-latest'];
+            for (const os of osTargets) {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: sha,
+                state: 'failure',
+                context: `E2E Tests / ${os}`,
+                description: 'CLI build failed - E2E tests skipped',
+                target_url: context.payload.workflow_run.html_url
+              });
+            }
+            console.log('✓ Failure status reported for all E2E test contexts');
