@@ -47,7 +47,8 @@ jobs:
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
       # Always use base repository for artifacts (cli.yml uploads to base repo)
-      # This workflow only runs on trusted contexts (main branch or manual dispatch)
+      # This workflow runs on PRs (including forks), main/develop branches, and manual dispatch
+      # Fork PRs are safe because workflow_run executes in the base repo context, not the fork
       ARTIFACT_REPO: ${{ github.repository }}
 
     steps:
