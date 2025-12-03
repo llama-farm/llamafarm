@@ -19,7 +19,11 @@ const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
 export function useUpgradeAvailability() {
   const [currentVersion, setCurrentVersion] = useState<string | null>(() => {
     const stored = getStoredCurrentVersion()
-    return stored === '0.0.0' ? null : stored
+    // Ignore invalid/old hardcoded versions - always fetch fresh from server
+    if (stored === '0.0.0' || stored === '0.1.0') {
+      return null
+    }
+    return stored
   })
   const [{ info, checkedAt }, setCache] = useState(() =>
     getStoredLatestRelease()
@@ -30,22 +34,28 @@ export function useUpgradeAvailability() {
   useEffect(() => {
     const abort = new AbortController()
     const run = async () => {
-      if (!shouldCheck(checkedAt, TWELVE_HOURS_MS)) return
+      // Always fetch current version, but only check for latest version if 12 hours have passed
+      const shouldCheckLatest = shouldCheck(checkedAt, TWELVE_HOURS_MS)
       setIsLoading(true)
       try {
         const res = await getVersionCheck(abort.signal)
-        const latestVersion = res?.latest_version || ''
-        const htmlUrl = res?.release_url || getGithubReleasesUrl()
-        const publishedAt = res?.published_at
         const serverCurrentVersion = res?.current_version
-        if (serverCurrentVersion) {
+        // Always update current version from server (no caching)
+        // Ignore invalid hardcoded version "0.1.0"
+        if (serverCurrentVersion && serverCurrentVersion !== '0.1.0') {
           setCurrentVersion(serverCurrentVersion)
           storeCurrentVersion(serverCurrentVersion)
         }
-        if (latestVersion) {
-          const mapped = { latestVersion, htmlUrl, publishedAt }
-          storeLatestRelease(mapped)
-          setCache({ info: mapped, checkedAt: Date.now() })
+        // Only update latest version cache if enough time has passed
+        if (shouldCheckLatest) {
+          const latestVersion = res?.latest_version || ''
+          const htmlUrl = res?.release_url || getGithubReleasesUrl()
+          const publishedAt = res?.published_at
+          if (latestVersion) {
+            const mapped = { latestVersion, htmlUrl, publishedAt }
+            storeLatestRelease(mapped)
+            setCache({ info: mapped, checkedAt: Date.now() })
+          }
         }
       } catch (error) {
         console.error('Failed to fetch version info:', error)
@@ -88,7 +98,8 @@ export function useUpgradeAvailability() {
       const htmlUrl = res?.release_url || getGithubReleasesUrl()
       const publishedAt = res?.published_at
       const serverCurrentVersion = res?.current_version
-      if (serverCurrentVersion) {
+      // Ignore invalid hardcoded version "0.1.0"
+      if (serverCurrentVersion && serverCurrentVersion !== '0.1.0') {
         setCurrentVersion(serverCurrentVersion)
         storeCurrentVersion(serverCurrentVersion)
       }
