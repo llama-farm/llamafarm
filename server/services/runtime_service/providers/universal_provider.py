@@ -14,13 +14,13 @@ from huggingface_hub import (
 )
 from huggingface_hub import (
     get_hf_file_metadata,
+    get_token,
     hf_hub_url,
     list_repo_tree,
     scan_cache_dir,
 )
 from huggingface_hub.errors import RepositoryNotFoundError
 from huggingface_hub.file_download import repo_folder_name
-from huggingface_hub.utils import HfFolder
 from llamafarm_common import (
     list_gguf_files,
     parse_model_with_quantization,
@@ -43,7 +43,7 @@ DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def get_hf_token() -> str | None:
-    """Get HuggingFace token from settings or HfFolder.
+    """Get HuggingFace token from settings or huggingface_hub.
 
     Checks settings.huggingface_token first (set via HF_TOKEN env var),
     then falls back to the token stored by `huggingface-cli login`.
@@ -55,8 +55,8 @@ def get_hf_token() -> str | None:
     if settings.huggingface_token:
         return settings.huggingface_token
 
-    # Fall back to HfFolder (from `huggingface-cli login`)
-    return HfFolder.get_token()
+    # Fall back to get_token() (from `huggingface-cli login`)
+    return get_token()
 
 
 @dataclass
