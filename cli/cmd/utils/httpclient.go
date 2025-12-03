@@ -87,8 +87,9 @@ func (v *VerboseHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	// Don't consume the body for streaming responses (SSE, chunked streams)
 	// as they need to be read incrementally by the caller
 	contentType := resp.Header.Get("Content-Type")
-	isStreaming := strings.Contains(contentType, "text/event-stream") ||
-		strings.Contains(contentType, "application/x-ndjson") ||
+	isStreaming := strings.Contains(strings.ToLower(contentType), "text/event-stream") ||
+		strings.Contains(strings.ToLower(contentType), "application/x-ndjson") ||
+		strings.Contains(strings.ToLower(contentType), "application/stream") ||
 		strings.Contains(contentType, "application/stream")
 
 	if !isStreaming {
