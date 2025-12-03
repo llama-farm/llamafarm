@@ -202,9 +202,7 @@ async def list_documents(
             break
 
     if not database_exists:
-        raise HTTPException(
-            status_code=404, detail=f"Database '{database_name}' not found"
-        )
+        raise DatabaseNotFoundError(database_name)
 
     try:
         # Call Celery task to list documents
