@@ -9,8 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from rag.core.base import VectorStore
-
+from core.base import VectorStore
 from core.blob_processor import BlobProcessor
 from core.logging import RAGStructLogger
 from core.strategies.handler import SchemaHandler
