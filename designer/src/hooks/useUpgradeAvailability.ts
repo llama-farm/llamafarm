@@ -73,8 +73,10 @@ export function useUpgradeAvailability() {
   )
   const upgradeAvailable = useMemo(() => {
     if (!latestVersion || !normalizedCurrent) return false
+    // Never show upgrade banner in dev mode
+    if (currentVersion === 'dev') return false
     return compareSemver(latestVersion, normalizedCurrent) > 0
-  }, [latestVersion, normalizedCurrent])
+  }, [latestVersion, normalizedCurrent, currentVersion])
 
   const isDismissedFor = (ctx: DismissContext) => {
     if (!latestVersion) return true
