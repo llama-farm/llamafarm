@@ -91,7 +91,11 @@ config:
 
 ---
 
-## QdrantStore
+## QdrantStore (Coming Soon)
+
+:::note Coming Soon
+QdrantStore is planned but not yet implemented. Use **ChromaStore** for now.
+:::
 
 Qdrant is a high-performance vector database with rich filtering and clustering.
 
@@ -108,7 +112,7 @@ Qdrant is a high-performance vector database with rich filtering and clustering.
     distance: Cosine
 ```
 
-### Options
+### Planned Options
 
 | Option | Type | Default | Required | Description |
 |--------|------|---------|----------|-------------|
@@ -129,7 +133,7 @@ Qdrant is a high-performance vector database with rich filtering and clustering.
 | `Euclid` | Euclidean distance | Geometric comparisons |
 | `Dot` | Dot product | Pre-normalized vectors |
 
-### Docker Setup
+### Docker Setup (for when available)
 
 ```bash
 docker run -p 6333:6333 -p 6334:6334 \
@@ -139,7 +143,11 @@ docker run -p 6333:6333 -p 6334:6334 \
 
 ---
 
-## FAISSStore
+## FAISSStore (Coming Soon)
+
+:::note Coming Soon
+FAISSStore is planned but not yet implemented. Use **ChromaStore** for now.
+:::
 
 FAISS (Facebook AI Similarity Search) for high-performance similarity search.
 
@@ -154,7 +162,7 @@ FAISS (Facebook AI Similarity Search) for high-performance similarity search.
     metric: Cosine
 ```
 
-### Options
+### Planned Options
 
 | Option | Type | Default | Required | Description |
 |--------|------|---------|----------|-------------|
@@ -176,7 +184,11 @@ FAISS (Facebook AI Similarity Search) for high-performance similarity search.
 
 ---
 
-## PineconeStore
+## PineconeStore (Coming Soon)
+
+:::note Coming Soon
+PineconeStore is planned but not yet implemented. Use **ChromaStore** for now.
+:::
 
 Pinecone is a fully managed cloud vector database.
 
@@ -192,7 +204,7 @@ Pinecone is a fully managed cloud vector database.
     environment: us-east-1-aws
 ```
 
-### Options
+### Planned Options
 
 | Option | Type | Default | Required | Description |
 |--------|------|---------|----------|-------------|
@@ -269,21 +281,25 @@ databases:
     config:
       collection_name: documents
 
-  # Archive for older content
+  # Archive for older content (embedded mode)
   - name: archive_db
-    type: QdrantStore
+    type: ChromaStore
     config:
       collection_name: archive
-      vector_size: 768
-      on_disk: true
+      persist_directory: ./data/archive
 
-  # High-performance production
+  # Server-mode for production
   - name: production_db
-    type: FAISSStore
+    type: ChromaStore
     config:
-      dimension: 768
-      index_type: HNSW
+      collection_name: production
+      host: localhost
+      port: 8000
 ```
+
+:::tip Future Options
+When QdrantStore and FAISSStore are available, you'll be able to use them for larger scale deployments and more advanced features.
+:::
 
 Query specific databases:
 
@@ -294,12 +310,12 @@ lf rag query --database archive_db "historical data"
 
 ## Database Selection Guide
 
-| Database | Deployment | Scale | Features | Latency |
-|----------|------------|-------|----------|---------|
-| ChromaStore | Embedded/Server | Small-Medium | Simple, portable | Low |
-| QdrantStore | Self-hosted | Medium-Large | Rich filtering, clustering | Low |
-| FAISSStore | Self-hosted | Very Large | GPU support, research | Very Low |
-| PineconeStore | Cloud | Any | Managed, global | Medium |
+| Database | Deployment | Scale | Features | Status |
+|----------|------------|-------|----------|--------|
+| ChromaStore | Embedded/Server | Small-Medium | Simple, portable | **Available** |
+| QdrantStore | Self-hosted | Medium-Large | Rich filtering, clustering | Coming Soon |
+| FAISSStore | Self-hosted | Very Large | GPU support, research | Coming Soon |
+| PineconeStore | Cloud | Any | Managed, global | Coming Soon |
 
 ## Next Steps
 

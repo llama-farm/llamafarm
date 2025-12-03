@@ -20,7 +20,7 @@ rag:
         - type: PDFParser_LlamaIndex
           file_include_patterns:
             - "*.pdf"
-          priority: 100
+          priority: 0  # Lower = try first
           config:
             chunk_size: 1000
             chunk_overlap: 100
@@ -115,7 +115,7 @@ parsers:
   - type: PDFParser_LlamaIndex
     file_include_patterns:
       - "*.pdf"
-    priority: 100
+    priority: 0  # Lower = try first (preferred parser)
     config:
       chunk_size: 1200
       chunk_overlap: 150
@@ -623,12 +623,12 @@ rag:
     - name: universal_processor
       description: "Handles multiple document formats"
       parsers:
-        # PDF files with LlamaIndex (high priority)
+        # PDF files with LlamaIndex (try first - lower priority value)
         - type: PDFParser_LlamaIndex
           file_include_patterns:
             - "*.pdf"
             - "*.PDF"
-          priority: 100
+          priority: 0
           config:
             chunk_size: 1200
             chunk_overlap: 150
@@ -636,7 +636,7 @@ rag:
             extract_metadata: true
             extract_tables: true
 
-        # PDF fallback with PyPDF2 (lower priority)
+        # PDF fallback with PyPDF2 (try second - higher priority value)
         - type: PDFParser_PyPDF2
           file_include_patterns:
             - "*.pdf"
@@ -652,7 +652,7 @@ rag:
           file_include_patterns:
             - "*.md"
             - "*.markdown"
-          priority: 100
+          priority: 0
           config:
             chunk_size: 800
             chunk_overlap: 80
@@ -663,7 +663,7 @@ rag:
         - type: CSVParser_Pandas
           file_include_patterns:
             - "*.csv"
-          priority: 100
+          priority: 0
           config:
             chunk_size: 500
             chunk_strategy: rows
@@ -674,7 +674,7 @@ rag:
           file_include_patterns:
             - "*.xlsx"
             - "*.xls"
-          priority: 100
+          priority: 0
           config:
             chunk_size: 500
             chunk_strategy: rows
@@ -684,7 +684,7 @@ rag:
         - type: DocxParser_LlamaIndex
           file_include_patterns:
             - "*.docx"
-          priority: 100
+          priority: 0
           config:
             chunk_size: 1000
             chunk_overlap: 100
@@ -698,7 +698,7 @@ rag:
             - "*.py"
             - "*.js"
             - "*.html"
-          priority: 80
+          priority: 0
           config:
             chunk_size: 800
             chunk_overlap: 80
@@ -709,7 +709,7 @@ rag:
         - type: MsgParser_ExtractMsg
           file_include_patterns:
             - "*.msg"
-          priority: 100
+          priority: 0
           config:
             chunk_strategy: email_sections
             extract_attachments: true

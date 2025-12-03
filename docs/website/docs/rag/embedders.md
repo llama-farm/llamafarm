@@ -88,7 +88,11 @@ ollama pull all-minilm                # 384 dim, fast
 
 ---
 
-## HuggingFaceEmbedder
+## HuggingFaceEmbedder (Coming Soon)
+
+:::note Coming Soon
+HuggingFaceEmbedder is planned but not yet implemented. Use **UniversalEmbedder** or **OllamaEmbedder** instead.
+:::
 
 Direct HuggingFace model loading with GPU/MPS support.
 
@@ -103,7 +107,7 @@ Direct HuggingFace model loading with GPU/MPS support.
     normalize_embeddings: true
 ```
 
-### Options
+### Planned Options
 
 | Option | Type | Default | Required | Description |
 |--------|------|---------|----------|-------------|
@@ -114,7 +118,7 @@ Direct HuggingFace model loading with GPU/MPS support.
 | `show_progress_bar` | boolean | `false` | No | Show progress bar |
 | `cache_folder` | string | `null` | No | Model cache directory |
 
-### Recommended Models
+### Recommended Models (for when available)
 
 | Model | Dimensions | Speed | Quality |
 |-------|------------|-------|---------|
@@ -125,7 +129,11 @@ Direct HuggingFace model loading with GPU/MPS support.
 
 ---
 
-## SentenceTransformerEmbedder
+## SentenceTransformerEmbedder (Coming Soon)
+
+:::note Coming Soon
+SentenceTransformerEmbedder is planned but not yet implemented. Use **UniversalEmbedder** or **OllamaEmbedder** instead.
+:::
 
 Sentence Transformers library integration.
 
@@ -139,7 +147,7 @@ Sentence Transformers library integration.
     device: cpu
 ```
 
-### Options
+### Planned Options
 
 | Option | Type | Default | Required | Description |
 |--------|------|---------|----------|-------------|
@@ -148,7 +156,11 @@ Sentence Transformers library integration.
 
 ---
 
-## OpenAIEmbedder
+## OpenAIEmbedder (Coming Soon)
+
+:::note Coming Soon
+OpenAIEmbedder is planned but not yet implemented. Use **UniversalEmbedder** or **OllamaEmbedder** instead.
+:::
 
 OpenAI embedding API integration.
 

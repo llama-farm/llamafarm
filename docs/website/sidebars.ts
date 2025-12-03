@@ -68,7 +68,12 @@ const sidebars: SidebarsConfig = {
       label: 'RAG',
       link: { type: 'doc', id: 'rag/index' },
       items: [
-        { type: 'doc', id: 'rag/advanced-retrieval', label: 'Advanced Retrieval Strategies' },
+        { type: 'doc', id: 'rag/databases', label: 'Databases (Vector Stores)' },
+        { type: 'doc', id: 'rag/embedders', label: 'Embedders' },
+        { type: 'doc', id: 'rag/parsers', label: 'Parsers' },
+        { type: 'doc', id: 'rag/extractors', label: 'Extractors' },
+        { type: 'doc', id: 'rag/retrieval-strategies', label: 'Retrieval Strategies' },
+        { type: 'doc', id: 'rag/advanced-retrieval', label: 'Advanced Retrieval' },
       ],
     },
     {
@@ -81,6 +86,12 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Prompts',
       link: { type: 'doc', id: 'prompts/index' },
+      items: [],
+    },
+    {
+      type: 'category',
+      label: 'MCP (Tools)',
+      link: { type: 'doc', id: 'mcp/index' },
       items: [],
     },
     {

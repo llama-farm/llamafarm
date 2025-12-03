@@ -198,4 +198,4 @@ The server uses:
 
 ## License
 
-MIT - Same as LlamaFarm
+Apache-2.0 - Same as LlamaFarm
