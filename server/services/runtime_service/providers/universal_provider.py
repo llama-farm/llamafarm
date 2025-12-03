@@ -20,6 +20,7 @@ from huggingface_hub import (
 )
 from huggingface_hub.errors import RepositoryNotFoundError
 from huggingface_hub.file_download import repo_folder_name
+from huggingface_hub.utils import HfFolder
 from llamafarm_common import (
     list_gguf_files,
     parse_model_with_quantization,
@@ -39,6 +40,23 @@ logger = FastAPIStructLogger(__name__)
 
 # Chunk size for streaming downloads (1MB)
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def get_hf_token() -> str | None:
+    """Get HuggingFace token from settings or HfFolder.
+
+    Checks settings.huggingface_token first (set via HF_TOKEN env var),
+    then falls back to the token stored by `huggingface-cli login`.
+
+    Returns:
+        The token string if found, None otherwise.
+    """
+    # Check settings first (from HF_TOKEN env var)
+    if settings.huggingface_token:
+        return settings.huggingface_token
+
+    # Fall back to HfFolder (from `huggingface-cli login`)
+    return HfFolder.get_token()
 
 
 @dataclass
@@ -76,18 +94,21 @@ def get_repo_cache_path(model_id: str) -> Path:
     return cache_dir / folder_name
 
 
-def get_file_download_info(model_id: str, filename: str) -> FileDownloadInfo:
+def get_file_download_info(
+    model_id: str, filename: str, token: str | None = None
+) -> FileDownloadInfo:
     """Get download info for a specific file in a repo.
 
     Args:
         model_id: HuggingFace repo ID
         filename: File path within the repo
+        token: Optional HuggingFace token for private/gated models
 
     Returns:
         FileDownloadInfo with URL, size, etag, and commit hash
     """
     url = hf_hub_url(repo_id=model_id, filename=filename, revision="main")
-    metadata = get_hf_file_metadata(url)
+    metadata = get_hf_file_metadata(url, token=token)
 
     return FileDownloadInfo(
         filename=filename,
@@ -103,6 +124,7 @@ async def stream_download_file(
     model_id: str,
     progress_queue: asyncio.Queue[dict],
     keepalive_interval: float = 10.0,
+    token: str | None = None,
 ) -> Path:
     """Download a file with streaming progress reporting.
 
@@ -113,6 +135,7 @@ async def stream_download_file(
         model_id: HuggingFace model ID
         progress_queue: Queue to send progress events to
         keepalive_interval: Seconds between keepalive messages if no progress
+        token: Optional HuggingFace token for private/gated models
 
     Returns:
         Path to the downloaded file
@@ -158,8 +181,13 @@ async def stream_download_file(
         # Use a temp file during download
         temp_path = blob_path.with_suffix(".tmp")
 
+        # Build headers with auth token if provided (for private/gated models)
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
         async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:  # noqa: SIM117
-            async with client.stream("GET", file_info.url) as response:
+            async with client.stream("GET", file_info.url, headers=headers) as response:
                 response.raise_for_status()
                 total = file_info.size or int(response.headers.get("content-length", 0))
 
@@ -238,7 +266,9 @@ async def stream_download_file(
     return snapshot_file
 
 
-def get_model_download_info(model_name: str) -> ModelDownloadInfo:
+def get_model_download_info(
+    model_name: str, token: str | None = None
+) -> ModelDownloadInfo:
     """Get metadata about a model before downloading.
 
     Fetches file information from HuggingFace to determine:
@@ -247,6 +277,7 @@ def get_model_download_info(model_name: str) -> ModelDownloadInfo:
 
     Args:
         model_name: Model identifier, optionally with quantization suffix
+        token: Optional HuggingFace token for private/gated models
 
     Returns:
         ModelDownloadInfo with model details and download size
@@ -255,7 +286,7 @@ def get_model_download_info(model_name: str) -> ModelDownloadInfo:
 
     # Get all files with their sizes from the repo
     try:
-        repo_files = list(list_repo_tree(model_id, recursive=True))
+        repo_files = list(list_repo_tree(model_id, recursive=True, token=token))
         file_sizes = {
             item.path: item.size
             for item in repo_files
@@ -267,7 +298,7 @@ def get_model_download_info(model_name: str) -> ModelDownloadInfo:
 
     # Check if this is a GGUF repository
     try:
-        gguf_files = list_gguf_files(model_id)
+        gguf_files = list_gguf_files(model_id, token=token)
     except Exception:
         gguf_files = []
 
@@ -477,8 +508,13 @@ class UniversalProvider(RuntimeProvider):
             - done: All downloads complete
         """
         try:
+            # Get HuggingFace token for private/gated model access
+            hf_token = get_hf_token()
+
             # First, fetch model metadata and emit init event
-            info = await asyncio.to_thread(get_model_download_info, model_name)
+            info = await asyncio.to_thread(
+                get_model_download_info, model_name, hf_token
+            )
 
             yield {
                 "event": "init",
@@ -506,7 +542,7 @@ class UniversalProvider(RuntimeProvider):
             for i, filename in enumerate(info.files_to_download):
                 # Get download info for this file (URL, size, etag)
                 file_info = await asyncio.to_thread(
-                    get_file_download_info, info.model_id, filename
+                    get_file_download_info, info.model_id, filename, hf_token
                 )
 
                 logger.info(
@@ -521,6 +557,7 @@ class UniversalProvider(RuntimeProvider):
                         model_id=info.model_id,
                         progress_queue=progress_queue,
                         keepalive_interval=keepalive_interval,
+                        token=hf_token,
                     )
                 )
 
