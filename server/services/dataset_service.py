@@ -351,6 +351,9 @@ class DatasetService:
             file_hash=file_hash,
         )
 
+        if result.get("status") == "error":
+            raise Exception(result.get("error"))
+
         logger.info(
             "Deleted chunks from vector store",
             namespace=namespace,
