@@ -10,6 +10,19 @@
  */
 
 /**
+ * Mock retrieval strategy shape
+ */
+export interface MockRetrievalStrategy {
+  id: string
+  type: string
+  config: {
+    top_k: number
+    similarity_threshold: number
+  }
+  database: string
+}
+
+/**
  * Create a list of mock embedding strategies
  */
 export function createMockEmbeddingStrategies(): string[] {
@@ -80,7 +93,7 @@ export function createMockDatabaseConfig(databaseName: string = 'main_db') {
 export function createMockRetrievalStrategy(
   strategyId: string = 'strategy-1',
   type: string = 'semantic_search'
-) {
+): MockRetrievalStrategy {
   return {
     id: strategyId,
     type,
@@ -95,8 +108,8 @@ export function createMockRetrievalStrategy(
 /**
  * Create a list of mock retrieval strategies
  */
-export function createMockRetrievalStrategiesList(count: number = 3) {
-  const strategies = []
+export function createMockRetrievalStrategiesList(count: number = 3): MockRetrievalStrategy[] {
+  const strategies: MockRetrievalStrategy[] = []
   const types = ['semantic_search', 'hybrid_search', 'keyword_search']
 
   for (let i = 0; i < count; i++) {
