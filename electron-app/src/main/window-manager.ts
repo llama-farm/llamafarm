@@ -173,6 +173,8 @@ export class WindowManager {
           <div class="error" id="error" style="display: none;"></div>
 
           <script>
+            const VALID_STATUSES = ['present', 'downloading', 'checking', 'error'];
+
             function getStatusIcon(status) {
               switch (status) {
                 case 'present': return '✓';
@@ -183,6 +185,15 @@ export class WindowManager {
               }
             }
 
+            function getStatusText(status) {
+              switch (status) {
+                case 'present': return 'Ready';
+                case 'downloading': return 'Downloading...';
+                case 'error': return 'Error';
+                default: return '';
+              }
+            }
+
             function renderModels(models) {
               const container = document.getElementById('models-container');
               if (!models || models.length === 0) {
@@ -190,17 +201,48 @@ export class WindowManager {
                 return;
               }
               container.style.display = 'block';
-              container.innerHTML = models.map(model => {
-                const progressHtml = model.status === 'downloading' && model.progress !== undefined
-                  ? '<div class="model-progress"><div class="model-progress-bar" style="width: ' + model.progress + '%"></div></div>'
-                  : '';
-                return '<div class="model-item">' +
-                  '<div class="model-icon ' + model.status + '">' + getStatusIcon(model.status) + '</div>' +
-                  '<div class="model-name">' + model.display_name + '</div>' +
-                  '<div class="model-status">' + (model.status === 'present' ? 'Ready' : model.status === 'downloading' ? 'Downloading...' : model.status === 'error' ? 'Error' : '') + '</div>' +
-                  progressHtml +
-                '</div>';
-              }).join('');
+              // Clear existing content safely
+              container.innerHTML = '';
+
+              models.forEach(model => {
+                // Sanitize status to only allow known values (prevents CSS injection)
+                const safeStatus = VALID_STATUSES.includes(model.status) ? model.status : 'checking';
+
+                // Build DOM elements safely to prevent XSS
+                const item = document.createElement('div');
+                item.className = 'model-item';
+
+                const icon = document.createElement('div');
+                icon.className = 'model-icon ' + safeStatus;
+                icon.textContent = getStatusIcon(safeStatus);
+
+                const name = document.createElement('div');
+                name.className = 'model-name';
+                name.textContent = model.display_name; // Safe: textContent escapes HTML
+
+                const statusEl = document.createElement('div');
+                statusEl.className = 'model-status';
+                statusEl.textContent = getStatusText(safeStatus);
+
+                item.appendChild(icon);
+                item.appendChild(name);
+                item.appendChild(statusEl);
+
+                // Add progress bar if downloading
+                if (safeStatus === 'downloading' && typeof model.progress === 'number') {
+                  const progressContainer = document.createElement('div');
+                  progressContainer.className = 'model-progress';
+                  const progressBar = document.createElement('div');
+                  progressBar.className = 'model-progress-bar';
+                  // Sanitize progress value to prevent CSS injection
+                  const safeProgress = Math.max(0, Math.min(100, Number(model.progress) || 0));
+                  progressBar.style.width = safeProgress + '%';
+                  progressContainer.appendChild(progressBar);
+                  item.appendChild(progressContainer);
+                }
+
+                container.appendChild(item);
+              });
             }
 
             window.llamafarm.splash.onStatus((status) => {
