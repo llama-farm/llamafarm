@@ -320,7 +320,7 @@ class DatasetService:
         return True, metadata_file_content
 
     @classmethod
-    def remove_file_from_dataset(
+    async def remove_file_from_dataset(
         cls,
         namespace: str,
         project: str,
@@ -345,7 +345,7 @@ class DatasetService:
 
         # Delete chunks from vector store via RAG task
         project_dir = ProjectService.get_project_dir(namespace, project)
-        result = delete_file_from_rag(
+        result = await delete_file_from_rag(
             project_dir=project_dir,
             database_name=dataset_obj.database,
             file_hash=file_hash,

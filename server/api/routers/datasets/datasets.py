@@ -257,7 +257,7 @@ async def delete_data(
         dataset=dataset,
         file_hash=file_hash,
     )
-    result = DatasetService.remove_file_from_dataset(
+    result = await DatasetService.remove_file_from_dataset(
         namespace=namespace,
         project=project,
         dataset=dataset,

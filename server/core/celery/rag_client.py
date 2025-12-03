@@ -63,20 +63,24 @@ def build_delete_signature(
     )
 
 
-def delete_file_from_rag(
+async def delete_file_from_rag(
     project_dir: str,
     database_name: str,
     file_hash: str,
     timeout: int = 60,
+    poll_interval: float = 0.5,
 ) -> dict[str, Any]:
     """
     Delete all chunks for a file from the RAG database.
+
+    Uses asyncio.sleep() for non-blocking polling, suitable for async contexts.
 
     Args:
         project_dir: Path to the project directory
         database_name: Name of the RAG database
         file_hash: SHA-256 hash of the file content
         timeout: Maximum time to wait for task completion
+        poll_interval: Time between status checks
 
     Returns:
         Dictionary with deletion results including deleted_count
@@ -86,9 +90,57 @@ def delete_file_from_rag(
         database_name=database_name,
         file_hash=file_hash,
     )
-    return _run_sync_task_with_polling(task, timeout=timeout, poll_interval=0.5) or {
+    result = task.apply_async()
+
+    waited = 0.0
+    while waited < timeout:
+        try:
+            status = result.status
+            if status not in ("PENDING", "STARTED"):
+                break
+        except Exception:
+            await asyncio.sleep(poll_interval)
+            waited += poll_interval
+            continue
+
+        await asyncio.sleep(poll_interval)
+        waited += poll_interval
+
+    try:
+        final_status = result.status
+    except Exception as exc:
+        return {
+            "status": "error",
+            "error": f"Failed to get task status: {exc}",
+            "file_hash": file_hash,
+            "deleted_count": 0,
+        }
+
+    if final_status == "SUCCESS":
+        try:
+            return result.result
+        except Exception as exc:
+            return {
+                "status": "error",
+                "error": f"Failed to get task result: {exc}",
+                "file_hash": file_hash,
+                "deleted_count": 0,
+            }
+
+    if final_status == "FAILURE":
+        error_msg = "Task failed"
+        if hasattr(result, "traceback") and result.traceback:
+            error_msg = f"Task failed: {result.traceback}"
+        return {
+            "status": "error",
+            "error": error_msg,
+            "file_hash": file_hash,
+            "deleted_count": 0,
+        }
+
+    return {
         "status": "error",
-        "error": "Task timed out or failed",
+        "error": f"Task timed out or failed with status: {final_status}",
         "file_hash": file_hash,
         "deleted_count": 0,
     }
