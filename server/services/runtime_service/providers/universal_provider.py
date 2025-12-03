@@ -294,6 +294,7 @@ def get_model_download_info(
         }
     except Exception as e:
         logger.warning(f"Could not fetch file sizes for {model_id}: {e}")
+        repo_files = []
         file_sizes = {}
 
     # Check if this is a GGUF repository
