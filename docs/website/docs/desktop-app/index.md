@@ -81,11 +81,6 @@ GGUF models use quantization (Q4_K_M, Q5_K_M, Q8_0) to reduce memory usage. Q4_K
 - **Memory**: Unified memory is shared between CPU and GPU — 16GB+ recommended for 8B models
 - **Installation**: Unzip and drag to Applications folder
 
-```bash
-# If blocked by Gatekeeper, run:
-xattr -cr /Applications/LlamaFarm.app
-```
-
 ### Windows
 
 - **Tested on**: Windows 10 (21H2+), Windows 11
@@ -135,9 +130,8 @@ The desktop app includes:
 
 ### App won't start
 
-1. **Mac**: Check Gatekeeper settings, run `xattr -cr` command above
-2. **Windows**: Allow through Windows Defender/Firewall
-3. **Linux**: Ensure FUSE is installed, check AppImage is executable
+1. **Windows**: Allow through Windows Defender/Firewall
+2. **Linux**: Ensure FUSE is installed, check AppImage is executable
 
 ### Out of memory
 
