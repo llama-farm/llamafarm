@@ -343,14 +343,6 @@ class DatasetService:
         if dataset_obj is None:
             raise DatasetNotFoundError(dataset)
 
-        # Delete from disk first
-        DataService.delete_data_file(
-            namespace=namespace,
-            project_id=project,
-            dataset=dataset,
-            file_hash=file_hash,
-        )
-
         # Delete chunks from vector store via RAG task
         project_dir = ProjectService.get_project_dir(namespace, project)
         result = delete_file_from_rag(
@@ -360,12 +352,28 @@ class DatasetService:
         )
 
         logger.info(
-            "Removed file from dataset",
+            "Deleted chunks from vector store",
             namespace=namespace,
             project=project,
             dataset=dataset,
             file_hash=file_hash[:16] + "...",
             deleted_chunks=result.get("deleted_count", 0),
+        )
+
+        # Then delete from disk
+        metadata_file_content = DataService.delete_data_file(
+            namespace=namespace,
+            project_id=project,
+            dataset=dataset,
+            file_hash=file_hash,
+        )
+
+        logger.info(
+            "Removed file from dataset",
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            metadata=metadata_file_content.model_dump_json(),
         )
 
         return result
