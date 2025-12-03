@@ -1,6 +1,7 @@
 import {
   ListDatasetsResponse,
   Dataset,
+  TaskStatusResponse,
 } from '../../types/datasets'
 
 /**
@@ -91,21 +92,28 @@ export function createMockProcessingDataset(name: string): Dataset {
 }
 
 /**
- * Create a mock task status response
+ * Create a mock task status response matching the actual API contract
  */
 export function createMockTaskStatus(
   taskId: string,
-  status: 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILURE' = 'SUCCESS'
-) {
+  state: TaskStatusResponse['state'] = 'SUCCESS',
+  overrides: Partial<Omit<TaskStatusResponse, 'task_id' | 'state'>> = {}
+): TaskStatusResponse {
+  const defaults: Omit<TaskStatusResponse, 'task_id' | 'state'> = {
+    meta: state === 'PENDING' ? { message: 'Task is pending' } : null,
+    result:
+      state === 'SUCCESS'
+        ? { processed_files: 10, failed_files: 0, skipped_files: 0 }
+        : null,
+    error: state === 'FAILURE' ? 'Processing failed' : null,
+    traceback: state === 'FAILURE' ? 'Error traceback' : null,
+  }
+
   return {
     task_id: taskId,
-    status,
-    result:
-      status === 'SUCCESS'
-        ? { processed: 10, failed: 0 }
-        : status === 'FAILURE'
-        ? { error: 'Processing failed' }
-        : null,
+    state,
+    ...defaults,
+    ...overrides,
   }
 }
 

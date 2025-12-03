@@ -319,8 +319,12 @@ const datasetWithFiles = createMockDatasetWithFiles('my-dataset', 5) // 5 files
 // Processing dataset
 const processingDataset = createMockProcessingDataset('processing-dataset')
 
-// Task status
+// Task status (matches TaskStatusResponse interface)
 const taskStatus = createMockTaskStatus('task-123', 'SUCCESS')
+const failedTask = createMockTaskStatus('task-456', 'FAILURE', { 
+  error: 'Custom error message',
+  traceback: 'Custom traceback' 
+})
 ```
 
 ### Embedding Strategy Factory

@@ -134,8 +134,8 @@ export interface FileDeleteResponse {
 export interface TaskStatusResponse {
   /** Task identifier */
   task_id: string
-  /** Current task state */
-  state: 'PENDING' | 'SUCCESS' | 'FAILURE' | 'RETRY' | 'REVOKED'
+  /** Current task state (matches Celery task states) */
+  state: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY' | 'REVOKED'
   /** Task metadata (progress info, etc.) */
   meta: any | null
   /** Task result when successful */
