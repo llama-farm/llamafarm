@@ -7,6 +7,28 @@ sidebar_label: Start Here
 
 LlamaFarm helps you ship retrieval-augmented and agentic AI apps from your laptop to production. It is fully open-source and intentionally extendable—swap model providers, vector stores, parsers, and CLI workflows without rewriting your project.
 
+:::info Found a bug or have a feature request?
+[Submit an issue on GitHub →](https://github.com/llama-farm/llamafarm/issues)
+:::
+
+## 🖥️ Desktop App
+
+Get started instantly with our desktop application — no command line required.
+
+<div style={{display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', marginTop: '16px'}}>
+  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19-arm64-mac.zip" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Mac (M1+)
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm.Setup.0.0.19.exe" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Windows
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Linux
+  </a>
+</div>
+
+The desktop app includes everything you need: visual project management, dataset uploads, chat interface, and built-in model management. [**See hardware requirements →**](./desktop-app/index.md)
+
 ## 📺 Video Demo
 
 **Quick Overview (90 seconds):** https://youtu.be/W7MHGyN0MdQ

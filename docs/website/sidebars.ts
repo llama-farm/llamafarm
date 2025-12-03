@@ -26,6 +26,12 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Desktop App',
+      link: { type: 'doc', id: 'desktop-app/index' },
+      items: [],
+    },
+    {
+      type: 'category',
       label: 'Designer Web UI',
       link: { type: 'doc', id: 'designer/index' },
       items: [
