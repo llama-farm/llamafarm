@@ -1,18 +1,30 @@
 """Universal Runtime provider implementation with streaming support."""
 
 import asyncio
+import os
 import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from pathlib import Path
 
+import httpx
 import requests  # type: ignore
-from huggingface_hub import scan_cache_dir, snapshot_download
+from huggingface_hub import (
+    constants as hf_constants,
+)
+from huggingface_hub import (
+    get_hf_file_metadata,
+    hf_hub_url,
+    list_repo_tree,
+    scan_cache_dir,
+)
 from huggingface_hub.errors import RepositoryNotFoundError
+from huggingface_hub.file_download import repo_folder_name
 from llamafarm_common import (
     list_gguf_files,
     parse_model_with_quantization,
     select_gguf_file_with_logging,
 )
-from tqdm.asyncio import tqdm  # type: ignore
 
 from agents.base.clients.client import LFAgentClient
 from agents.base.clients.openai import LFAgentClientOpenAI
@@ -24,6 +36,252 @@ from .base import CachedModel, RuntimeProvider
 from .health import HealthCheckResult
 
 logger = FastAPIStructLogger(__name__)
+
+# Chunk size for streaming downloads (1MB)
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+@dataclass
+class ModelDownloadInfo:
+    """Information about a model to be downloaded."""
+
+    model_id: str
+    quantization: str | None
+    selected_file: str | None
+    total_size: int
+    is_gguf: bool
+    files_to_download: list[str]  # List of files to download
+
+
+@dataclass
+class FileDownloadInfo:
+    """Information about a specific file to download."""
+
+    filename: str
+    url: str
+    size: int
+    etag: str | None
+    commit_hash: str | None
+
+
+def get_hf_cache_path() -> Path:
+    """Get the HuggingFace cache directory path."""
+    return Path(hf_constants.HF_HUB_CACHE)
+
+
+def get_repo_cache_path(model_id: str) -> Path:
+    """Get the cache path for a specific repo."""
+    cache_dir = get_hf_cache_path()
+    folder_name = repo_folder_name(repo_id=model_id, repo_type="model")
+    return cache_dir / folder_name
+
+
+def get_file_download_info(model_id: str, filename: str) -> FileDownloadInfo:
+    """Get download info for a specific file in a repo.
+
+    Args:
+        model_id: HuggingFace repo ID
+        filename: File path within the repo
+
+    Returns:
+        FileDownloadInfo with URL, size, etag, and commit hash
+    """
+    url = hf_hub_url(repo_id=model_id, filename=filename, revision="main")
+    metadata = get_hf_file_metadata(url)
+
+    return FileDownloadInfo(
+        filename=filename,
+        url=url,
+        size=metadata.size or 0,
+        etag=metadata.etag,
+        commit_hash=metadata.commit_hash,
+    )
+
+
+async def stream_download_file(
+    file_info: FileDownloadInfo,
+    model_id: str,
+    progress_queue: asyncio.Queue[dict],
+    keepalive_interval: float = 10.0,
+) -> Path:
+    """Download a file with streaming progress reporting.
+
+    Downloads to the HuggingFace cache in a compatible format.
+
+    Args:
+        file_info: Information about the file to download
+        model_id: HuggingFace model ID
+        progress_queue: Queue to send progress events to
+        keepalive_interval: Seconds between keepalive messages if no progress
+
+    Returns:
+        Path to the downloaded file
+    """
+    repo_cache = get_repo_cache_path(model_id)
+    blobs_dir = repo_cache / "blobs"
+    snapshots_dir = repo_cache / "snapshots"
+    refs_dir = repo_cache / "refs"
+
+    # Create directories
+    blobs_dir.mkdir(parents=True, exist_ok=True)
+    refs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Determine blob filename from etag (HF uses etag without quotes as blob name)
+    etag = file_info.etag
+    if etag:
+        # Remove quotes and any prefix
+        blob_name = etag.strip('"').replace('"', "")
+        # Handle etags with hashes like "abc123-5"
+        if "-" in blob_name and not blob_name.startswith("oid:"):
+            blob_name = blob_name.split("-")[0]
+    else:
+        # Fallback to commit hash if no etag
+        blob_name = file_info.commit_hash or "unknown"
+
+    blob_path = blobs_dir / blob_name
+
+    # Check if already downloaded
+    if blob_path.exists() and blob_path.stat().st_size == file_info.size:
+        logger.info(f"File already cached: {file_info.filename}")
+        await progress_queue.put(
+            {
+                "event": "cached",
+                "file": file_info.filename,
+                "size": file_info.size,
+            }
+        )
+    else:
+        # Download with streaming
+        downloaded = 0
+
+        # Use a temp file during download
+        temp_path = blob_path.with_suffix(".tmp")
+
+        async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:  # noqa: SIM117
+            async with client.stream("GET", file_info.url) as response:
+                response.raise_for_status()
+                total = file_info.size or int(response.headers.get("content-length", 0))
+
+                await progress_queue.put(
+                    {
+                        "event": "start",
+                        "file": file_info.filename,
+                        "total": total,
+                        "downloaded": 0,
+                    }
+                )
+
+                with open(temp_path, "wb") as f:
+                    async for chunk in response.aiter_bytes(DOWNLOAD_CHUNK_SIZE):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        # Emit progress update
+                        await progress_queue.put(
+                            {
+                                "event": "progress",
+                                "file": file_info.filename,
+                                "downloaded": downloaded,
+                                "total": total,
+                                "percent": (downloaded / total * 100) if total else 0,
+                            }
+                        )
+
+        # Move temp file to final location
+        temp_path.rename(blob_path)
+
+        await progress_queue.put(
+            {
+                "event": "end",
+                "file": file_info.filename,
+                "downloaded": downloaded,
+                "total": file_info.size,
+            }
+        )
+
+    # Set up snapshot directory structure
+    commit_hash = file_info.commit_hash or "main"
+    snapshot_dir = snapshots_dir / commit_hash
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Handle nested paths in filename
+    snapshot_file = snapshot_dir / file_info.filename
+    snapshot_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Create symlink from snapshot to blob
+    if snapshot_file.exists() or snapshot_file.is_symlink():
+        snapshot_file.unlink()
+
+    # Use relative symlink
+    rel_blob = os.path.relpath(blob_path, snapshot_file.parent)
+    snapshot_file.symlink_to(rel_blob)
+
+    # Update refs/main to point to commit hash
+    refs_main = refs_dir / "main"
+    refs_main.write_text(commit_hash)
+
+    return snapshot_file
+
+
+def get_model_download_info(model_name: str) -> ModelDownloadInfo:
+    """Get metadata about a model before downloading.
+
+    Fetches file information from HuggingFace to determine:
+    - For GGUF models: the selected quantization file and its size
+    - For other models: the total size of all files
+
+    Args:
+        model_name: Model identifier, optionally with quantization suffix
+
+    Returns:
+        ModelDownloadInfo with model details and download size
+    """
+    model_id, quantization = parse_model_with_quantization(model_name)
+
+    # Get all files with their sizes from the repo
+    try:
+        repo_files = list(list_repo_tree(model_id, recursive=True))
+        file_sizes = {
+            item.path: item.size
+            for item in repo_files
+            if hasattr(item, "size") and item.size is not None
+        }
+    except Exception as e:
+        logger.warning(f"Could not fetch file sizes for {model_id}: {e}")
+        file_sizes = {}
+
+    # Check if this is a GGUF repository
+    try:
+        gguf_files = list_gguf_files(model_id)
+    except Exception:
+        gguf_files = []
+
+    if gguf_files:
+        # GGUF model - select the specific file to download
+        selected_file = select_gguf_file_with_logging(
+            gguf_files, preferred_quantization=quantization
+        )
+        file_size = file_sizes.get(selected_file, 0)
+        return ModelDownloadInfo(
+            model_id=model_id,
+            quantization=quantization,
+            selected_file=selected_file,
+            total_size=file_size,
+            is_gguf=True,
+            files_to_download=[selected_file],
+        )
+    else:
+        # Non-GGUF model - get all files to download
+        all_files = [item.path for item in repo_files if hasattr(item, "size")]
+        total_size = sum(file_sizes.values())
+        return ModelDownloadInfo(
+            model_id=model_id,
+            quantization=quantization,
+            selected_file=None,
+            total_size=total_size,
+            is_gguf=False,
+            files_to_download=all_files,
+        )
 
 
 class UniversalProvider(RuntimeProvider):
@@ -192,110 +450,124 @@ class UniversalProvider(RuntimeProvider):
 
         Supports model names with quantization suffix (e.g., "model:Q4_K_M").
         For GGUF models, only downloads the specified quantization.
+
+        Uses httpx streaming for real-time progress updates.
+
+        Yields events:
+            - init: Model metadata (model_id, quantization, selected_file, total_size)
+            - start: Download of a file is starting
+            - progress: Download progress update (with downloaded, total, percent)
+            - cached: File was already in cache
+            - end: Download of a file completed
+            - done: All downloads complete
         """
         try:
-            # Parse model name to extract quantization if present
-            model_id, quantization = parse_model_with_quantization(model_name)
+            # First, fetch model metadata and emit init event
+            info = await asyncio.to_thread(get_model_download_info, model_name)
 
-            queue: asyncio.Queue[dict] = asyncio.Queue()
-            loop = asyncio.get_event_loop()
+            yield {
+                "event": "init",
+                "model_id": info.model_id,
+                "quantization": info.quantization,
+                "selected_file": info.selected_file,
+                "total_size": info.total_size,
+                "is_gguf": info.is_gguf,
+                "file_count": len(info.files_to_download),
+            }
 
-            def run_download():
-                # Patch file_download module to capture actual download progress
-                import huggingface_hub.file_download
+            if not info.files_to_download:
+                yield {
+                    "event": "done",
+                    "local_dir": str(get_repo_cache_path(info.model_id)),
+                }
+                return
 
-                original = huggingface_hub.file_download.tqdm
-                custom_class = make_reporting_tqdm(queue, loop)
-                huggingface_hub.file_download.tqdm = custom_class
+            # Create progress queue for streaming updates
+            progress_queue: asyncio.Queue[dict] = asyncio.Queue()
+            keepalive_interval = 10  # seconds
+            last_status: dict | None = None
 
-                try:
-                    # Check if this is a GGUF model repository using shared utility
-                    try:
-                        gguf_files = list_gguf_files(model_id)
-
-                        if gguf_files:
-                            # This is a GGUF repo - use intelligent selection
-                            # to download only one quantization variant
-                            selected_file = select_gguf_file_with_logging(
-                                gguf_files, preferred_quantization=quantization
-                            )
-
-                            # Download only the selected GGUF file
-                            local_dir = snapshot_download(
-                                repo_id=model_id,
-                                revision="main",
-                                allow_patterns=[selected_file],
-                                tqdm_class=custom_class,
-                            )
-                        else:
-                            # Not a GGUF repo - download normally
-                            logger.info(
-                                f"Not a GGUF model, downloading all files for {model_id}"
-                            )
-                            local_dir = snapshot_download(
-                                repo_id=model_id,
-                                revision="main",
-                                tqdm_class=custom_class,
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            f"Could not check files in {model_id}: {e}. "
-                            "Falling back to downloading all files"
-                        )
-                        local_dir = snapshot_download(
-                            repo_id=model_id, revision="main", tqdm_class=custom_class
-                        )
-                finally:
-                    huggingface_hub.file_download.tqdm = original
-
-                loop.call_soon_threadsafe(
-                    queue.put_nowait, {"event": "done", "local_dir": local_dir}
+            # Download each file with progress tracking
+            for i, filename in enumerate(info.files_to_download):
+                # Get download info for this file (URL, size, etag)
+                file_info = await asyncio.to_thread(
+                    get_file_download_info, info.model_id, filename
                 )
 
-            worker = asyncio.to_thread(run_download)
+                logger.info(
+                    f"Downloading file {i + 1}/{len(info.files_to_download)}: "
+                    f"{filename} ({file_info.size} bytes)"
+                )
 
-            # consume events until "done"
-            done = False
+                # Start the download task
+                download_task = asyncio.create_task(
+                    stream_download_file(
+                        file_info=file_info,
+                        model_id=info.model_id,
+                        progress_queue=progress_queue,
+                        keepalive_interval=keepalive_interval,
+                    )
+                )
 
-            # start the worker
-            task = asyncio.create_task(worker)
-            try:
-                while not done:
-                    # Use timeout to prevent infinite blocking if worker fails
+                # Consume progress events until download is complete
+                file_done = False
+                while not file_done:
                     try:
-                        evt = await asyncio.wait_for(queue.get(), timeout=300)
+                        evt = await asyncio.wait_for(
+                            progress_queue.get(), timeout=keepalive_interval
+                        )
+                        last_status = evt
                         yield evt
-                        done = evt.get("event") == "done"
+                        # Check if this file is done
+                        if evt.get("event") in ("end", "cached"):
+                            file_done = True
                     except TimeoutError:
-                        # Check if worker task has failed
-                        if task.done():
-                            # Task finished but no "done" event - likely an error
+                        # Check if download task has failed
+                        if download_task.done():
                             try:
-                                await (
-                                    task
-                                )  # This will raise the exception if there was one
+                                await download_task
                             except Exception as task_error:
                                 yield {
                                     "event": "error",
                                     "message": f"Download failed: {str(task_error)}",
+                                    "file": filename,
                                 }
                                 raise
-                        # If task still running, continue waiting
-                        continue
+                            # Task done without end event - shouldn't happen
+                            file_done = True
+                        else:
+                            # Emit keepalive
+                            if last_status:
+                                yield {**last_status, "keepalive": True}
+                            else:
+                                yield {
+                                    "event": "progress",
+                                    "file": filename,
+                                    "downloaded": 0,
+                                    "total": file_info.size,
+                                    "percent": 0,
+                                    "keepalive": True,
+                                }
 
-                # ensure thread finished (propagate any exception)
-                await task
-            finally:
-                # Clean up task if we exit early
-                if not task.done():
-                    task.cancel()
+                # Ensure download task completed
+                await download_task
+
+            # All files downloaded
+            repo_cache = get_repo_cache_path(info.model_id)
+            yield {
+                "event": "done",
+                "local_dir": str(repo_cache),
+            }
+
         except RepositoryNotFoundError as e:
+            model_id, _ = parse_model_with_quantization(model_name)
             logger.error(f"Model {model_id} not found")
             raise NotFoundError(
                 f"Model '{model_id}' not found. Check if the model exists on "
                 f"HuggingFace and that you specified the correct repo path."
             ) from e
         except Exception as e:
+            model_id, _ = parse_model_with_quantization(model_name)
             logger.exception(f"Error downloading model {model_id}: {e}")
             raise e
 
@@ -359,52 +631,3 @@ class UniversalProvider(RuntimeProvider):
             "size_freed": size_on_disk,
             "path": repo_path,
         }
-
-
-def make_reporting_tqdm(queue: asyncio.Queue[dict], loop: asyncio.AbstractEventLoop):
-    """Create a tqdm class that reports progress to an asyncio queue.
-
-    Args:
-        queue: Asyncio queue to send progress events to
-        loop: Event loop reference (must be passed from async context)
-    """
-
-    class ReportingTQDM(tqdm):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            loop.call_soon_threadsafe(
-                queue.put_nowait,
-                {
-                    "event": "start",
-                    "desc": self.desc,
-                    "total": int(self.total) if self.total is not None else None,
-                    "n": int(self.n),
-                },
-            )
-
-        def update(self, n=1):
-            r = super().update(n)
-            loop.call_soon_threadsafe(
-                queue.put_nowait,
-                {
-                    "event": "progress",
-                    "desc": self.desc,
-                    "total": int(self.total) if self.total is not None else None,
-                    "n": int(self.n),
-                },
-            )
-            return r
-
-        def close(self):
-            loop.call_soon_threadsafe(
-                queue.put_nowait,
-                {
-                    "event": "end",
-                    "desc": self.desc,
-                    "total": int(self.total) if self.total is not None else None,
-                    "n": int(self.n),
-                },
-            )
-            super().close()
-
-    return ReportingTQDM

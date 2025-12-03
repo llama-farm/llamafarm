@@ -17,13 +17,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// SSE event structure from the server
+// SSE event structures from the server
 type downloadEvent struct {
-	Event   string `json:"event"`
-	Desc    string `json:"desc"`
-	Total   *int64 `json:"total"`
-	N       int64  `json:"n"`
-	Message string `json:"message"`
+	Event string `json:"event"`
+	// Common fields
+	File    string `json:"file,omitempty"`
+	Message string `json:"message,omitempty"`
+	// Progress fields
+	Downloaded int64   `json:"downloaded,omitempty"`
+	Total      int64   `json:"total,omitempty"`
+	Percent    float64 `json:"percent,omitempty"`
+	// Init fields
+	ModelID      string `json:"model_id,omitempty"`
+	Quantization string `json:"quantization,omitempty"`
+	SelectedFile string `json:"selected_file,omitempty"`
+	TotalSize    int64  `json:"total_size,omitempty"`
+	IsGGUF       bool   `json:"is_gguf,omitempty"`
+	FileCount    int    `json:"file_count,omitempty"`
+	// Done fields
+	LocalDir string `json:"local_dir,omitempty"`
+	// Cached fields
+	Size int64 `json:"size,omitempty"`
+	// Keepalive flag
+	Keepalive bool `json:"keepalive,omitempty"`
 }
 
 var modelsPullCmd = &cobra.Command{
@@ -117,7 +133,7 @@ func pullModel(serverURL, modelID string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 
-	resp, err := utils.GetHTTPClient().Do(req)
+	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
@@ -130,7 +146,7 @@ func pullModel(serverURL, modelID string) error {
 	// Parse SSE stream using buffered reader for better streaming
 	reader := bufio.NewReader(resp.Body)
 	var lastProgress float64
-	var currentDesc string
+	var currentFile string
 	downloadComplete := false
 
 	for {
@@ -141,6 +157,8 @@ func pullModel(serverURL, modelID string) error {
 			}
 			return fmt.Errorf("error reading response: %w", err)
 		}
+
+		utils.LogDebug(fmt.Sprintf("SSE line: %s", line))
 
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "data: ") {
@@ -153,39 +171,66 @@ func pullModel(serverURL, modelID string) error {
 			continue
 		}
 
+		// Skip keepalive events for display purposes
+		if event.Keepalive {
+			continue
+		}
+
 		switch event.Event {
-		case "start":
-			currentDesc = event.Desc
-			if event.Total != nil && *event.Total > 1024*1024 { // Only show size if > 1MB
-				totalMB := float64(*event.Total) / 1024 / 1024
-				fmt.Printf("  %s (%.1f MB)...\n", currentDesc, totalMB)
-			} else if currentDesc != "" {
-				fmt.Printf("  %s...\n", currentDesc)
+		case "init":
+			// Display initial model info
+			if event.TotalSize > 0 {
+				sizeMB := float64(event.TotalSize) / 1024 / 1024
+				if event.IsGGUF && event.SelectedFile != "" {
+					fmt.Printf("  Model: %s\n", event.ModelID)
+					fmt.Printf("  File: %s (%.1f MB)\n", event.SelectedFile, sizeMB)
+				} else {
+					fmt.Printf("  Model: %s (%.1f MB, %d files)\n", event.ModelID, sizeMB, event.FileCount)
+				}
+			} else {
+				fmt.Printf("  Model: %s (%d files)\n", event.ModelID, event.FileCount)
 			}
 			os.Stdout.Sync()
-		case "progress":
-			// Calculate progress percentage
-			var progress float64
-			if event.Total != nil && *event.Total > 0 {
-				progress = float64(event.N) / float64(*event.Total) * 100
+
+		case "start":
+			currentFile = event.File
+			lastProgress = 0
+			if event.Total > 1024*1024 { // Only show size if > 1MB
+				totalMB := float64(event.Total) / 1024 / 1024
+				fmt.Printf("  Downloading %s (%.1f MB)...\n", currentFile, totalMB)
+			} else if currentFile != "" {
+				fmt.Printf("  Downloading %s...\n", currentFile)
 			}
+			os.Stdout.Sync()
+
+		case "progress":
+			// Use the percent directly from the event
+			progress := event.Percent
 			// Only print progress updates every 5% for actual downloads
-			if event.Total != nil && *event.Total > 1024*1024 { // Only show for files > 1MB
+			if event.Total > 1024*1024 { // Only show for files > 1MB
 				if progress-lastProgress >= 5 || progress >= 100 {
 					fmt.Printf("\r  Progress: %.0f%%", progress)
 					os.Stdout.Sync()
 					lastProgress = progress
 				}
 			}
+
+		case "cached":
+			fmt.Printf("  ✓ %s (cached)\n", event.File)
+			os.Stdout.Sync()
+
 		case "end":
 			// Only show completion if we showed progress
 			if lastProgress > 0 {
 				fmt.Printf("\r  Progress: 100%%\n")
 			}
+			lastProgress = 0
+
 		case "done":
 			fmt.Printf("✓ Download complete\n")
 			downloadComplete = true
 			return nil
+
 		case "error":
 			return fmt.Errorf("download failed: %s", event.Message)
 		}
