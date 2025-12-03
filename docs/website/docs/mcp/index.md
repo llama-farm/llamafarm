@@ -210,8 +210,8 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 {
   "mcpServers": {
     "llamafarm": {
-      "command": "curl",
-      "args": ["-N", "http://localhost:8000/mcp"]
+      "transport": "http",
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
