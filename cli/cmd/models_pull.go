@@ -24,9 +24,11 @@ type downloadEvent struct {
 	File    string `json:"file,omitempty"`
 	Message string `json:"message,omitempty"`
 	// Progress fields
-	Downloaded int64   `json:"downloaded,omitempty"`
-	Total      int64   `json:"total,omitempty"`
-	Percent    float64 `json:"percent,omitempty"`
+	Downloaded  int64    `json:"downloaded,omitempty"`
+	Total       int64    `json:"total,omitempty"`
+	Percent     float64  `json:"percent,omitempty"`
+	BytesPerSec int64    `json:"bytes_per_sec,omitempty"`
+	ETASeconds  *float64 `json:"eta_seconds,omitempty"`
 	// Init fields
 	ModelID      string `json:"model_id,omitempty"`
 	Quantization string `json:"quantization,omitempty"`
@@ -180,12 +182,12 @@ func pullModel(serverURL, modelID string) error {
 		case "init":
 			// Display initial model info
 			if event.TotalSize > 0 {
-				sizeMB := float64(event.TotalSize) / 1024 / 1024
+				sizeStr := utils.FormatBytes(event.TotalSize)
 				if event.IsGGUF && event.SelectedFile != "" {
 					fmt.Printf("  Model: %s\n", event.ModelID)
-					fmt.Printf("  File: %s (%.1f MB)\n", event.SelectedFile, sizeMB)
+					fmt.Printf("  File: %s (%s)\n", event.SelectedFile, sizeStr)
 				} else {
-					fmt.Printf("  Model: %s (%.1f MB, %d files)\n", event.ModelID, sizeMB, event.FileCount)
+					fmt.Printf("  Model: %s (%s, %d files)\n", event.ModelID, sizeStr, event.FileCount)
 				}
 			} else {
 				fmt.Printf("  Model: %s (%d files)\n", event.ModelID, event.FileCount)
@@ -196,8 +198,8 @@ func pullModel(serverURL, modelID string) error {
 			currentFile = event.File
 			lastProgress = 0
 			if event.Total > 1024*1024 { // Only show size if > 1MB
-				totalMB := float64(event.Total) / 1024 / 1024
-				fmt.Printf("  Downloading %s (%.1f MB)...\n", currentFile, totalMB)
+				sizeStr := utils.FormatBytes(event.Total)
+				fmt.Printf("  Downloading %s (%s)...\n", currentFile, sizeStr)
 			} else if currentFile != "" {
 				fmt.Printf("  Downloading %s...\n", currentFile)
 			}
@@ -206,10 +208,23 @@ func pullModel(serverURL, modelID string) error {
 		case "progress":
 			// Use the percent directly from the event
 			progress := event.Percent
-			// Only print progress updates every 5% for actual downloads
+			// Only print progress updates every 1% for actual downloads
 			if event.Total > 1024*1024 { // Only show for files > 1MB
-				if progress-lastProgress >= 5 || progress >= 100 {
-					fmt.Printf("\r  Progress: %.0f%%", progress)
+				if progress-lastProgress >= 1 || progress >= 99.9 {
+					// Build progress line with rate and ETA
+					rateStr := ""
+					etaStr := ""
+					if event.BytesPerSec > 0 {
+						rateStr = fmt.Sprintf(" @ %s", utils.FormatTransferRate(event.BytesPerSec))
+					}
+					// Only show ETA if more than 1 second remaining
+					if event.ETASeconds != nil && *event.ETASeconds > 1 {
+						etaStr = fmt.Sprintf(", ETA: %s", utils.FormatDuration(*event.ETASeconds))
+					}
+					// Use fixed-width output to ensure clean line overwrites
+					line := fmt.Sprintf("  Progress: %.1f%%%s%s", progress, rateStr, etaStr)
+					// Pad to 60 chars to overwrite any previous longer content
+					fmt.Printf("\r%-60s", line)
 					os.Stdout.Sync()
 					lastProgress = progress
 				}

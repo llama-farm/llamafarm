@@ -153,6 +153,7 @@ async def stream_download_file(
     else:
         # Download with streaming
         downloaded = 0
+        start_time = time.time()
 
         # Use a temp file during download
         temp_path = blob_path.with_suffix(".tmp")
@@ -176,7 +177,17 @@ async def stream_download_file(
                         f.write(chunk)
                         downloaded += len(chunk)
 
-                        # Emit progress update
+                        # Calculate transfer rate and ETA
+                        elapsed = time.time() - start_time
+                        bytes_per_sec = downloaded / elapsed if elapsed > 0 else 0
+                        remaining_bytes = total - downloaded
+                        eta_seconds = (
+                            remaining_bytes / bytes_per_sec
+                            if bytes_per_sec > 0
+                            else None
+                        )
+
+                        # Emit progress update with rate and ETA
                         await progress_queue.put(
                             {
                                 "event": "progress",
@@ -184,6 +195,10 @@ async def stream_download_file(
                                 "downloaded": downloaded,
                                 "total": total,
                                 "percent": (downloaded / total * 100) if total else 0,
+                                "bytes_per_sec": int(bytes_per_sec),
+                                "eta_seconds": (
+                                    round(eta_seconds, 1) if eta_seconds else None
+                                ),
                             }
                         )
 
