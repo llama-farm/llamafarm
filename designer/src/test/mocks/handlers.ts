@@ -113,9 +113,11 @@ export const handlers = [
   http.post(
     `${API_BASE}/projects/:namespace/:project/datasets/:dataset/actions`,
     async () => {
+      const taskId = `task-${Date.now()}`
       return HttpResponse.json({
         message: 'Accepted',
-        task_uri: `/tasks/task-${Date.now()}`,
+        task_uri: `/tasks/${taskId}`,
+        task_id: taskId,
       })
     }
   ),
@@ -125,7 +127,9 @@ export const handlers = [
     async () => {
       return HttpResponse.json({
         filename: 'test-file.pdf',
-        message: 'File uploaded successfully',
+        hash: `hash-${Date.now()}`,
+        processed: false,
+        skipped: false,
       })
     }
   ),
@@ -141,15 +145,18 @@ export const handlers = [
     }
   ),
 
-  // Task status endpoint
+  // Task status endpoint (matches TaskStatusResponse interface)
   http.get(
     `${API_BASE}/projects/:namespace/:project/tasks/:taskId`,
     ({ params }) => {
       const { taskId } = params
       return HttpResponse.json({
         task_id: taskId,
-        status: 'SUCCESS',
-        result: { processed: 10, failed: 0 },
+        state: 'SUCCESS',
+        meta: null,
+        result: { processed_files: 10, failed_files: 0, skipped_files: 0 },
+        error: null,
+        traceback: null,
       })
     }
   ),
