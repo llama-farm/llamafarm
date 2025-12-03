@@ -19,11 +19,11 @@ import (
 
 // SSE event structure from the server
 type downloadEvent struct {
-	Event   string  `json:"event"`
-	Desc    string  `json:"desc"`
-	Total   *int64  `json:"total"`
-	N       int64   `json:"n"`
-	Message string  `json:"message"`
+	Event   string `json:"event"`
+	Desc    string `json:"desc"`
+	Total   *int64 `json:"total"`
+	N       int64  `json:"n"`
+	Message string `json:"message"`
 }
 
 var modelsPullCmd = &cobra.Command{
@@ -131,6 +131,7 @@ func pullModel(serverURL, modelID string) error {
 	reader := bufio.NewReader(resp.Body)
 	var lastProgress float64
 	var currentDesc string
+	downloadComplete := false
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -183,12 +184,17 @@ func pullModel(serverURL, modelID string) error {
 			}
 		case "done":
 			fmt.Printf("✓ Download complete\n")
+			downloadComplete = true
 			return nil
 		case "error":
 			return fmt.Errorf("download failed: %s", event.Message)
 		}
 	}
 
+	// If we exit the loop without receiving a "done" event, the download was incomplete
+	if !downloadComplete {
+		return fmt.Errorf("download incomplete: connection closed before completion")
+	}
 	return nil
 }
 
