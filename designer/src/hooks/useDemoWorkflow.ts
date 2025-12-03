@@ -278,30 +278,17 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         const processCallId = addApiCall({
           method: 'POST',
-          endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/process`,
+          endpoint: `/v1/projects/${namespace}/${newProjectName}/datasets/${demo.datasetName}/actions`,
           status: 'pending',
-          description: 'Processing dataset (embedding & indexing)',
+          description: 'Processing dataset (embedding & indexing via actions)',
         })
 
         const processStart = Date.now()
-        console.log(
-          `🚀 Starting dataset processing for project: ${newProjectName}, dataset: ${demo.datasetName}`
-        )
-
-        // Verify project exists before processing
-        try {
-          await projectService.getProject(namespace, newProjectName)
-        } catch (err) {
-          console.error('Project verification failed:', err)
-          throw new Error(
-            `Project ${newProjectName} was created but cannot be found. Please try again.`
-          )
-        }
-
-        const processResult = await datasetService.processDataset(
+        const processResult = await datasetService.executeDatasetAction(
           namespace,
           newProjectName,
-          demo.datasetName
+          demo.datasetName,
+          { action_type: 'process' }
         )
 
         // Poll for completion
@@ -354,6 +341,20 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
                     taskStatus.error.length > 200
                       ? taskStatus.error.substring(0, 200) + '...'
                       : taskStatus.error
+                }
+              }
+
+              // If we have result details with file-specific errors, include those
+              if (
+                taskStatus.result?.details &&
+                Array.isArray(taskStatus.result.details)
+              ) {
+                const fileErrors = taskStatus.result.details
+                  .filter((d: any) => d.error)
+                  .map((d: any) => `${d.filename}: ${d.error}`)
+                  .join('; ')
+                if (fileErrors) {
+                  errorMsg += `. File errors: ${fileErrors.substring(0, 300)}`
                 }
               }
 

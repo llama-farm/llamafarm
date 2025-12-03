@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
@@ -12,7 +12,7 @@ import { ChatStreamChunk } from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
-import { useProject } from '../../hooks/useProjects'
+import { useProject, useUpdateProject } from '../../hooks/useProjects'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -189,6 +189,69 @@ export default function TestChat({
       }
     }
   }, [selectedModel, unifiedModels])
+
+  // Database selection management
+  const updateProjectMutation = useUpdateProject()
+
+  // Get current default database from config - using ref to avoid re-render issues
+  const getCurrentDatabase = useCallback(() => {
+    try {
+      const ragConfig = (projectDetail as any)?.project?.config?.rag
+      return ragConfig?.default_database || ''
+    } catch {
+      return ''
+    }
+  }, [projectDetail])
+
+  // Get available databases from project config
+  const availableDatabases = useMemo(() => {
+    try {
+      const ragConfig = (projectDetail as any)?.project?.config?.rag
+      if (!ragConfig?.databases || !Array.isArray(ragConfig.databases)) {
+        return []
+      }
+
+      return ragConfig.databases
+        .filter((db: any) => db?.name) // Only include databases with names
+        .map((db: any) => String(db.name))
+    } catch {
+      return []
+    }
+  }, [projectDetail])
+
+  // Handler to update default database in config
+  const handleDatabaseChange = useCallback(
+    async (newDatabase: string) => {
+      if (!chatParams?.namespace || !chatParams?.projectId || !newDatabase) {
+        return
+      }
+
+      try {
+        const currentConfig = (projectDetail as any)?.project?.config
+        if (!currentConfig) return
+
+        const updatedConfig = {
+          ...currentConfig,
+          rag: {
+            ...currentConfig.rag,
+            default_database: newDatabase,
+          },
+        }
+
+        await updateProjectMutation.mutateAsync({
+          namespace: chatParams.namespace,
+          projectId: chatParams.projectId,
+          request: { config: updatedConfig },
+        })
+      } catch (error) {
+        console.error('Failed to update default database:', error)
+      }
+    },
+    [chatParams, projectDetail, updateProjectMutation]
+  )
+
+  // Get the current database value for rendering
+  const currentDatabase = getCurrentDatabase()
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -512,6 +575,7 @@ export default function TestChat({
               (defaultModel as any)?.name ||
               fallbackDefaultName ||
               undefined,
+            database: getCurrentDatabase() || undefined,
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
@@ -591,6 +655,14 @@ export default function TestChat({
     updateMessage,
     updateInput,
     fallbackSendMessage,
+    genSettings,
+    selectedModel,
+    defaultModel,
+    fallbackDefaultName,
+    getCurrentDatabase,
+    ragEnabled,
+    ragTopK,
+    ragScoreThreshold,
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -741,6 +813,7 @@ export default function TestChat({
               (defaultModel as any)?.name ||
               fallbackDefaultName ||
               undefined,
+            database: getCurrentDatabase() || undefined,
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
@@ -807,12 +880,24 @@ export default function TestChat({
     chatParams,
     projectChatStreamingMessage,
     projectSessionId,
+    genSettings,
+    selectedModel,
+    defaultModel,
+    fallbackDefaultName,
+    getCurrentDatabase,
+    ragEnabled,
+    ragTopK,
+    ragScoreThreshold,
+    projectSession,
+    setStreamingMessage,
+    projectChatStreamingSession.sessionId,
+    projectChatStreamingSession.setSessionId,
   ])
 
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
-      <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
         <div className="text-xs md:text-sm text-muted-foreground">
           {USE_PROJECT_CHAT && chatParams ? (
             <span>
@@ -827,31 +912,59 @@ export default function TestChat({
             'Session'
           )}
         </div>
-        {/* Model selector (if available) */}
+        {/* Model and Database selectors (if available) */}
         {USE_PROJECT_CHAT && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Model</span>
-            <select
-              value={
-                selectedModel ||
-                (defaultModel as any)?.name ||
-                fallbackDefaultName ||
-                ''
-              }
-              onChange={e => setSelectedModel(e.target.value)}
-              className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground"
-            >
-              {modelsLoading && <option value="">Loading…</option>}
-              {!modelsLoading && unifiedModels.length === 0 && (
-                <option value="">No models</option>
-              )}
-              {!modelsLoading &&
-                unifiedModels.map(m => (
-                  <option key={m.name} value={m.name}>
-                    {m.name} ({m.model}) {m.default ? '(default)' : ''}
-                  </option>
-                ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-4 md:gap-8">
+            {/* Model selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Model
+              </span>
+              <select
+                value={
+                  selectedModel ||
+                  (defaultModel as any)?.name ||
+                  fallbackDefaultName ||
+                  ''
+                }
+                onChange={e => setSelectedModel(e.target.value)}
+                className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+              >
+                {modelsLoading && <option value="">Loading…</option>}
+                {!modelsLoading && unifiedModels.length === 0 && (
+                  <option value="">No models</option>
+                )}
+                {!modelsLoading &&
+                  unifiedModels.map(m => (
+                    <option key={m.name} value={m.name}>
+                      {m.name} ({m.model}) {m.default ? '(default)' : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Database selector */}
+            {availableDatabases.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  Database
+                </span>
+                <select
+                  value={currentDatabase || ''}
+                  onChange={e => {
+                    const value = e.target.value
+                    if (value) handleDatabaseChange(value)
+                  }}
+                  className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+                >
+                  {availableDatabases.map((dbName: string) => (
+                    <option key={dbName} value={dbName}>
+                      {dbName} {currentDatabase === dbName ? '(default)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
         <button

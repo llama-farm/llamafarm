@@ -2,7 +2,7 @@
 
 import importlib.util
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -55,7 +55,7 @@ class ToolAwareParserFactory:
         return parser_types
 
     @classmethod
-    def list_parsers(cls, parser_type: Optional[str] = None) -> list[str]:
+    def list_parsers(cls, parser_type: str | None = None) -> list[str]:
         """List available parsers.
 
         Args:
@@ -75,7 +75,7 @@ class ToolAwareParserFactory:
         return parser_names
 
     @classmethod
-    def get_parser_info(cls, parser_name: str) -> Optional[dict[str, Any]]:
+    def get_parser_info(cls, parser_name: str) -> dict[str, Any] | None:
         """Get information about a specific parser.
 
         Args:
@@ -95,7 +95,7 @@ class ToolAwareParserFactory:
         return None
 
     @classmethod
-    def load_parser_class(cls, parser_name: str) -> Optional[type]:
+    def load_parser_class(cls, parser_name: str) -> type | None:
         """Load a parser class dynamically.
 
         Args:
@@ -201,10 +201,10 @@ class ToolAwareParserFactory:
     @classmethod
     def create_parser(
         cls,
-        parser_name: Optional[str] = None,
-        file_type: Optional[str] = None,
-        tool: Optional[str] = None,
-        config: Optional[dict[str, Any]] = None,
+        parser_name: str | None = None,
+        file_type: str | None = None,
+        tool: str | None = None,
+        config: dict[str, Any] | None = None,
     ) -> Any:
         """Create a parser instance.
 
@@ -268,8 +268,8 @@ class ToolAwareParserFactory:
     def get_parser_for_file(
         cls,
         file_path: str | Path,
-        preferred_tool: Optional[str] = None,
-        config: Optional[dict[str, Any]] = None,
+        preferred_tool: str | None = None,
+        config: dict[str, Any] | None = None,
     ) -> Any:
         """Get the appropriate parser for a file.
 
@@ -348,7 +348,7 @@ class ToolAwareParserFactory:
         return status
 
     @classmethod
-    def _dynamic_parser_discovery(cls, parser_type: str) -> Optional[type]:
+    def _dynamic_parser_discovery(cls, parser_type: str) -> type | None:
         """
         Dynamically discover and load parser class by type name using blob_processor logic.
 
@@ -440,7 +440,7 @@ class ToolAwareParserFactory:
     @classmethod
     def _try_import_parser_from_module(
         cls, module_path: str, parser_type: str
-    ) -> Optional[type]:
+    ) -> type | None:
         """Try to import parser class from a specific module path."""
         import importlib
 

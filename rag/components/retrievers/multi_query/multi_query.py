@@ -1,11 +1,12 @@
 """Multi-query strategy - enhanced recall through query variations."""
 
-from pathlib import Path
-import numpy as np
-from typing import List, Dict, Any, Optional
 from collections import defaultdict
-from components.retrievers.base import RetrievalStrategy, RetrievalResult
-from core.base import Document
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from components.retrievers.base import RetrievalResult, RetrievalStrategy
 
 
 class MultiQueryStrategy(RetrievalStrategy):
@@ -28,7 +29,7 @@ class MultiQueryStrategy(RetrievalStrategy):
     def __init__(
         self,
         name: str = "MultiQueryStrategy",
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -44,10 +45,10 @@ class MultiQueryStrategy(RetrievalStrategy):
 
     def retrieve(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         vector_store,
         top_k: int = 5,
-        query_variations: Optional[List[List[float]]] = None,
+        query_variations: list[list[float]] | None = None,
         **kwargs,
     ) -> RetrievalResult:
         """Search using multiple query variations to improve recall.
@@ -76,7 +77,7 @@ class MultiQueryStrategy(RetrievalStrategy):
         doc_objects = {}
         total_searches = 0
 
-        for i, query_var in enumerate(query_variations):
+        for _i, query_var in enumerate(query_variations):
             documents = vector_store.search(
                 query_embedding=query_var,
                 top_k=top_k
@@ -128,7 +129,7 @@ class MultiQueryStrategy(RetrievalStrategy):
             },
         )
 
-    def _aggregate_scores(self, scores: List[float]) -> float:
+    def _aggregate_scores(self, scores: list[float]) -> float:
         """Aggregate multiple scores using the configured method.
 
         Args:
@@ -147,7 +148,7 @@ class MultiQueryStrategy(RetrievalStrategy):
         elif self.aggregation_method == "weighted":
             # Weight later queries less (assuming first query is most important)
             weights = [1.0 / (i + 1) for i in range(len(scores))]
-            weighted_sum = sum(s * w for s, w in zip(scores, weights))
+            weighted_sum = sum(s * w for s, w in zip(scores, weights, strict=False))
             weight_sum = sum(weights)
             return weighted_sum / weight_sum if weight_sum > 0 else 0.0
         else:
@@ -164,11 +165,9 @@ class MultiQueryStrategy(RetrievalStrategy):
             return False
         if self.aggregation_method not in ["max", "mean", "weighted"]:
             return False
-        if self.search_multiplier < 1:
-            return False
-        return True
+        return not self.search_multiplier < 1
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         """Get configuration schema for this strategy."""
         return {
             "type": "object",
@@ -201,7 +200,7 @@ class MultiQueryStrategy(RetrievalStrategy):
             "additionalProperties": False,
         }
 
-    def get_performance_info(self) -> Dict[str, Any]:
+    def get_performance_info(self) -> dict[str, Any]:
         """Get performance characteristics of this strategy."""
         return {
             "speed": "medium",

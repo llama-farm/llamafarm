@@ -6,18 +6,20 @@ Demonstrates validation against actual RAG schemas
 
 import os
 import sys
-import yaml
 import tempfile
 from pathlib import Path
+
+import yaml
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.smart_schema_validator import SmartSchemaValidator
 
+
 def create_test_configs():
     """Create test configuration files"""
-    
+
     # Valid configuration
     valid_config = """
 strategies:
@@ -65,7 +67,7 @@ strategies:
             model: en_core_web_sm
             entity_types: [PERSON, ORG, GPE]
 """
-    
+
     # Invalid configuration with various errors
     invalid_config = """
 strategies:
@@ -97,7 +99,7 @@ strategies:
             algorythm: rake  # Typo
             max_keywords: 1000  # Out of range
 """
-    
+
     # Configuration with warnings
     warning_config = """
 strategies:
@@ -128,78 +130,76 @@ strategies:
         config:
           top_k: 5
 """
-    
-    return {
-        "valid": valid_config,
-        "invalid": invalid_config,
-        "warning": warning_config
-    }
+
+    return {"valid": valid_config, "invalid": invalid_config, "warning": warning_config}
+
 
 def main():
     """Run validation tests"""
-    
+
     print("=" * 60)
     print("Smart Schema Validator Test Suite")
     print("=" * 60)
     print()
-    
+
     # Create validator
     validator = SmartSchemaValidator(verbose=False)
-    
+
     # Get test configurations
     configs = create_test_configs()
-    
+
     # Create temporary files and validate
     for config_name, config_content in configs.items():
         print(f"\n{'=' * 60}")
         print(f"Testing: {config_name.upper()} configuration")
         print("=" * 60)
-        
+
         # Create temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(config_content)
             temp_file = f.name
-        
+
         try:
             # Generate and print report
             report = validator.generate_report(temp_file)
             print(report)
-            
+
             # Get validation result
             is_valid, issues = validator.validate_file(temp_file)
-            
+
             # Summary
-            error_count = len([i for i in issues if i.level == 'ERROR'])
-            warning_count = len([i for i in issues if i.level == 'WARNING'])
-            
+            error_count = len([i for i in issues if i.level == "ERROR"])
+            warning_count = len([i for i in issues if i.level == "WARNING"])
+
             print("\n" + "=" * 60)
             print(f"Configuration: {config_name}")
             print(f"Valid: {'✅ YES' if is_valid else '❌ NO'}")
             print(f"Errors: {error_count}, Warnings: {warning_count}")
             print("=" * 60)
-            
+
         finally:
             # Clean up temporary file
             os.unlink(temp_file)
-    
+
     # Test improvement suggestions
     print("\n" + "=" * 60)
     print("Testing Improvement Suggestions")
     print("=" * 60)
-    
+
     test_config = yaml.safe_load(configs["valid"])
     suggestions = validator.suggest_improvements(test_config)
-    
+
     if suggestions:
         print("\nSuggestions for valid configuration:")
         for suggestion in suggestions:
             print(suggestion)
     else:
         print("\nNo improvement suggestions for the valid configuration.")
-    
+
     print("\n" + "=" * 60)
     print("Validation Test Suite Complete!")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     main()

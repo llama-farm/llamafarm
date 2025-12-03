@@ -1,16 +1,17 @@
 """Tests for Statistics Extractor component."""
 
-import pytest
-from pathlib import Path
 import sys
+from pathlib import Path
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
 from components.extractors.statistics_extractor.statistics_extractor import (
     ContentStatisticsExtractor,
 )
+from core.base import Document
 
 
 class TestContentStatisticsExtractor:
@@ -52,7 +53,7 @@ class TestContentStatisticsExtractor:
         # Default config
         extractor = ContentStatisticsExtractor("default")
         assert extractor is not None
-        assert extractor.include_readability == True
+        assert extractor.include_readability is True
 
         # Custom config
         custom_config = {
@@ -63,9 +64,9 @@ class TestContentStatisticsExtractor:
             "language": "en",
         }
         extractor = ContentStatisticsExtractor("custom", custom_config)
-        assert extractor.include_readability == False
-        assert extractor.include_vocabulary == True
-        assert extractor.include_structure == False
+        assert extractor.include_readability is False
+        assert extractor.include_vocabulary is True
+        assert extractor.include_structure is False
         assert extractor.language == "en"
 
     def test_basic_statistics_extraction(self, default_extractor, sample_documents):
@@ -116,7 +117,9 @@ class TestContentStatisticsExtractor:
                     assert 0 <= readability["flesch_reading_ease"] <= 100
 
                 if "flesch_kincaid_grade" in readability:
-                    assert isinstance(readability["flesch_kincaid_grade"], (int, float))
+                    assert isinstance(
+                        readability["flesch_kincaid_grade"], (int | float)
+                    )
 
     def test_vocabulary_analysis(self, default_extractor, sample_documents):
         """Test vocabulary diversity analysis."""

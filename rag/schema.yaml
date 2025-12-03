@@ -1649,6 +1649,22 @@ definitions:
             description: Retrieval strategy type identifier
           config:
             $ref: "#/definitions/retrievalStrategies/hybridUniversalConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: CrossEncoderRerankedStrategy
+            description: Cross-encoder reranking strategy using Ollama models (GGUF)
+          config:
+            $ref: "#/definitions/retrievalStrategies/crossEncoderRerankedConfig"
+      - required: [type, config]
+        properties:
+          type:
+            type: string
+            const: MultiTurnRAGStrategy
+            description: Multi-turn RAG with query decomposition for complex queries
+          config:
+            $ref: "#/definitions/retrievalStrategies/multiTurnRAGConfig"
   retrievalStrategies:
     basicSimilarityConfig:
       type: object
@@ -1838,6 +1854,132 @@ definitions:
           minimum: 1
           maximum: 1000
           description: Final number of results
+    crossEncoderRerankedConfig:
+      type: object
+      additionalProperties: false
+      description: Cross-encoder reranking configuration using Universal Runtime with HuggingFace models
+      required:
+        - model_name
+      properties:
+        model_name:
+          type: string
+          description: "Name of the model from runtime.models to use for reranking (e.g., 'reranker')"
+          example: "reranker"
+        initial_k:
+          type: integer
+          default: 30
+          minimum: 10
+          maximum: 100
+          description: "Number of initial candidates to retrieve before reranking"
+        final_k:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+          description: "Number of results to return after reranking"
+        base_strategy:
+          type: string
+          enum: [BasicSimilarityStrategy, MetadataFilteredStrategy]
+          default: BasicSimilarityStrategy
+          description: "Base retrieval strategy to use for initial retrieval"
+        base_strategy_config:
+          type: object
+          default: {}
+          description: "Configuration for the base strategy"
+          additionalProperties: true
+        relevance_threshold:
+          type: number
+          default: 0.0
+          minimum: 0.0
+          maximum: 1.0
+          description: "Minimum relevance score (0-1) to include a result"
+        timeout:
+          type: integer
+          default: 60
+          minimum: 10
+          maximum: 300
+          description: "Request timeout in seconds for reranking API calls"
+
+    multiTurnRAGConfig:
+      type: object
+      additionalProperties: false
+      description: Multi-turn RAG with query decomposition for complex queries
+      required:
+        - model_name
+      properties:
+        model_name:
+          type: string
+          description: "Name of the model from runtime.models to use for query decomposition (e.g., 'default')"
+          example: "default"
+        api_key:
+          type: string
+          description: "Optional API key for authentication. Defaults to OPENAI_API_KEY env var or 'not-needed' for local endpoints like Ollama"
+          default: null
+        max_sub_queries:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 5
+          description: "Maximum number of sub-queries to generate from decomposition"
+        complexity_threshold:
+          type: integer
+          default: 50
+          minimum: 20
+          maximum: 200
+          description: "Minimum query length (characters) to trigger decomposition"
+        min_query_length:
+          type: integer
+          default: 20
+          minimum: 10
+          maximum: 100
+          description: "Minimum length for each sub-query"
+        base_strategy:
+          type: string
+          enum: [BasicSimilarityStrategy, MetadataFilteredStrategy]
+          default: BasicSimilarityStrategy
+          description: "Base retrieval strategy to use for each sub-query"
+        base_strategy_config:
+          type: object
+          default: {}
+          description: "Configuration for the base strategy"
+          additionalProperties: true
+        sub_query_top_k:
+          type: integer
+          default: 10
+          minimum: 5
+          maximum: 50
+          description: "Number of results to retrieve per sub-query"
+        final_top_k:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+          description: "Number of results to return after merging and deduplication"
+        enable_reranking:
+          type: boolean
+          default: false
+          description: "Enable reranking for each sub-query (slower but more accurate)"
+        reranker_strategy:
+          type: string
+          default: CrossEncoderRerankedStrategy
+          description: "Reranking strategy to use if reranking is enabled"
+        reranker_config:
+          type: object
+          default: {}
+          description: "Configuration for the reranking strategy"
+          additionalProperties: true
+        dedup_similarity_threshold:
+          type: number
+          default: 0.95
+          minimum: 0.5
+          maximum: 1.0
+          description: "Similarity threshold for deduplication (0-1, higher = stricter)"
+        max_workers:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 10
+          description: "Maximum parallel workers for sub-query retrieval"
 
   # NEW SCHEMA DEFINITIONS
   databaseDefinition:
@@ -1919,6 +2061,8 @@ definitions:
                   MultiQueryStrategy,
                   RerankedStrategy,
                   HybridUniversalStrategy,
+                  CrossEncoderRerankedStrategy,
+                  MultiTurnRAGStrategy,
                 ]
               description: Retrieval type
             config:

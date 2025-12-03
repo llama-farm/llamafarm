@@ -5,16 +5,16 @@ These tests verify that the `await asyncio.sleep(0)` calls in server.py
 properly flush the stream, preventing buffered/chunked responses.
 """
 
-import pytest
-import asyncio
+import contextlib
 import json
-from httpx import AsyncClient, ASGITransport
-import time
-
 
 # Import the server app
 import sys
+import time
 from pathlib import Path
+
+import pytest
+from httpx import ASGITransport, AsyncClient
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -103,7 +103,7 @@ async def test_streaming_token_by_token_delivery():
                 f"Expected incremental streaming, but delays suggest buffering: {inter_chunk_delays}"
             )
 
-        print(f"\n✅ Streaming test passed:")
+        print("\n✅ Streaming test passed:")
         print(f"   - Received {len(chunks_received)} chunks")
         print(f"   - Time span: {chunk_times[-1]:.3f}s")
         print(f"   - Average chunk interval: {chunk_times[-1] / len(chunk_times):.3f}s")
@@ -143,17 +143,15 @@ async def test_streaming_without_asyncio_sleep_simulation():
                     if message.startswith(b"data: "):
                         data_str = message[6:].decode()
                         if data_str != "[DONE]":
-                            try:
+                            with contextlib.suppress(json.JSONDecodeError):
                                 chunks.append(json.loads(data_str))
-                            except json.JSONDecodeError:
-                                pass
 
         # With asyncio.sleep(0), we should see many small chunks
         # Without it, we'd see fewer, larger chunks
         assert len(chunks) > 0, "Should receive at least one chunk"
 
         # Log chunk distribution for diagnostics
-        print(f"\n📊 Chunk size distribution:")
+        print("\n📊 Chunk size distribution:")
         print(f"   - Total chunks: {len(chunk_sizes)}")
         print(f"   - Mean size: {sum(chunk_sizes) / len(chunk_sizes):.1f} bytes")
         print(f"   - Max size: {max(chunk_sizes)} bytes")
@@ -212,14 +210,14 @@ async def test_streaming_completion_markers():
 
         # Check last chunk has finish_reason
         last_chunk = chunks[-1]
-        finish_reason = last_chunk["choices"][0].get("finish_reason")
+        _ = last_chunk["choices"][0].get("finish_reason")
         # Last chunk should have finish_reason or last few chunks
         has_finish_reason = any(
             c["choices"][0].get("finish_reason") is not None for c in chunks[-3:]
         )
         assert has_finish_reason, "Should have finish_reason in final chunks"
 
-        print(f"\n✅ Completion markers verified:")
+        print("\n✅ Completion markers verified:")
         print(f"   - Total chunks: {len(chunks)}")
         print(f"   - Got [DONE]: {got_done}")
         print(f"   - First delta: {first_chunk['choices'][0].get('delta', {})}")
@@ -270,7 +268,7 @@ async def test_streaming_headers():
                 "Missing or incorrect Content-Type header"
             )
 
-            print(f"\n✅ Anti-buffering headers verified:")
+            print("\n✅ Anti-buffering headers verified:")
             print(f"   - Cache-Control: {headers.get('cache-control')}")
             print(f"   - Connection: {headers.get('connection')}")
             print(f"   - X-Accel-Buffering: {headers.get('x-accel-buffering')}")
@@ -338,7 +336,7 @@ async def test_streaming_immediate_start():
             "All chunks arrived at once - not streaming!"
         )
 
-        print(f"\n✅ Streaming latency verified:")
+        print("\n✅ Streaming latency verified:")
         print(f"   - Time to first chunk: {time_to_first_chunk:.3f}s")
         print(f"   - Total streaming time: {total_time:.3f}s")
         print(f"   - Chunks received: {chunk_count}")
@@ -380,10 +378,10 @@ async def test_asyncio_sleep_presence():
         f"Expected at least 2 'await asyncio.sleep(0)' in generate_sse(), found {sse_sleep_count}"
     )
 
-    print(f"\n✅ Code verification passed:")
+    print("\n✅ Code verification passed:")
     print(f"   - Total asyncio.sleep(0) calls: {sleep_count}")
     print(f"   - In generate_sse() function: {sse_sleep_count}")
-    print(f"   - Stream flushing is properly implemented!")
+    print("   - Stream flushing is properly implemented!")
 
 
 if __name__ == "__main__":

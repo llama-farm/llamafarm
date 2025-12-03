@@ -214,7 +214,7 @@ jobs:
           else
             echo "Ruff not available, skipping linting"
           fi
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Set up Ollama
         uses: pydantic/ollama-action@v3

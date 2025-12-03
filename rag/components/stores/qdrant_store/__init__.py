@@ -5,7 +5,7 @@ Component for qdrant store.
 
 from .qdrant_store import QdrantStore
 
-__all__ = ['QdrantStore']
+__all__ = ["QdrantStore"]
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "store"

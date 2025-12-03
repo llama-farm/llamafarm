@@ -10,7 +10,7 @@ Get the CLI installed, ingest a dataset, and run your first RAG-powered chat in 
 ## 1. Prerequisites
 
 - [Docker](https://www.docker.com/get-started/)
-- [Ollama](https://ollama.com/download) *(local runtime today; additional providers coming soon)*
+- [Ollama](https://ollama.com/download) _(local runtime today; additional providers coming soon)_
 
 > Docker is used to run the API and RAG worker automatically when you invoke `lf start`.
 
@@ -54,21 +54,18 @@ lf start
 - Spins up the FastAPI server and RAG worker via Docker.
 - Starts a config watcher and opens the interactive dev chat TUI.
 - Shows health diagnostics for Ollama, Celery, and the rag-service.
-- Launches the Designer web UI at `http://localhost:7724` for visual project management.
+- Launches the Designer web UI at `http://localhost:8000` for visual project management.
 
 Hit `Ctrl+C` to exit the chat UI when you're done.
 
 :::tip Use the Designer Web UI
-Prefer a visual interface? Open `http://localhost:7724` in your browser to access the Designer, where you can manage projects, upload datasets, configure models, and test prompts—all without touching the command line.
-
-**Note:** The Designer port differs based on how you start LlamaFarm:
-- **CLI (`lf start`)**: Port 7724
-- **Docker Compose**: Port 3123
+Prefer a visual interface? Open `http://localhost:8000` in your browser to access the Designer, where you can manage projects, upload datasets, configure models, and test prompts—all without touching the command line.
 
 See the [Designer documentation](../designer/index.md) for details.
 :::
 
 ### Running Services Manually (no Docker auto-start)
+
 If you want to control each service yourself (useful when hacking on code), launch them with Nx from the repository root:
 
 ```bash

@@ -468,6 +468,66 @@ async def create_embeddings(request: EmbeddingRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+# ============================================================================
+# Reranking Endpoint (Cross-Encoder)
+# ============================================================================
+
+
+class RerankRequest(PydanticBaseModel):
+    """Reranking request for cross-encoder models."""
+
+    model: str
+    query: str
+    documents: list[str]
+    top_k: int | None = None
+    return_documents: bool = True
+
+
+@app.post("/v1/rerank")
+async def rerank_documents(request: RerankRequest):
+    """
+    Cross-encoder reranking endpoint.
+
+    Reranks documents based on relevance to the query using proper
+    cross-encoder architecture (query and document jointly encoded).
+
+    This is significantly more accurate than bi-encoder similarity
+    and 10-100x faster than LLM-based reranking.
+    """
+    try:
+        model = await load_encoder(request.model, task="reranking")
+
+        # Rerank documents
+        results = await model.rerank(
+            query=request.query, documents=request.documents, top_k=request.top_k
+        )
+
+        # Format response
+        data = []
+        for result in results:
+            item = {
+                "index": result["index"],
+                "relevance_score": result["relevance_score"],
+            }
+            if request.return_documents:
+                item["document"] = result["document"]
+            data.append(item)
+
+        return {
+            "object": "list",
+            "data": data,
+            "model": request.model,
+            "usage": {
+                "prompt_tokens": 0,  # TODO: Implement token counting
+                "total_tokens": 0,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error in rerank_documents: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 if __name__ == "__main__":
     import uvicorn
     from llamafarm_common.pidfile import write_pid

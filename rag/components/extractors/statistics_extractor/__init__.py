@@ -6,7 +6,7 @@ vocabulary analysis, and structural information.
 
 from .statistics_extractor import ContentStatisticsExtractor
 
-__all__ = ['ContentStatisticsExtractor']
+__all__ = ["ContentStatisticsExtractor"]
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "extractor"

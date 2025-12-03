@@ -10,7 +10,7 @@ import {
 } from '../ui/dialog'
 import { Badge } from '../ui/badge'
 import { type SuggestedDataset } from '../../data/sampleProjects'
-import { useExampleDatasets } from '../../hooks/useExamples'
+import { AVAILABLE_DEMOS } from '../../config/demos'
 
 type Kind = NonNullable<SuggestedDataset['kind']>
 
@@ -35,30 +35,10 @@ type Props = {
   }) => void
 }
 
-const mapKindToStrategy = (kind?: Kind): string => {
-  switch (kind) {
-    case 'pdf':
-      return 'PDF Simple'
-    case 'markdown':
-      return 'Markdown'
-    case 'csv':
-      return 'Tabular (CSV)'
-    case 'images':
-      return 'Image OCR'
-    case 'json':
-      return 'JSON (records)'
-    case 'timeseries':
-      return 'Timeseries (basic)'
-    default:
-      return 'default'
-  }
-}
-
 function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
   const [search, setSearch] = useState('')
   const [kind] = useState<'all' | Kind>('all')
   const [selected, setSelected] = useState<string>('')
-  const [includeStrategy, setIncludeStrategy] = useState(true)
 
   // Reset transient state whenever the modal opens
   useEffect(() => {
@@ -68,24 +48,42 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
     }
   }, [open])
 
-  const { data, isLoading, isError, refetch } = useExampleDatasets()
-
+  // Transform AVAILABLE_DEMOS into dataset entries (no API needed!)
   const allDatasets: FlattenedDataset[] = useMemo(() => {
-    const rows = (data?.datasets || []) as any[]
-    return rows.map(row => {
-      const kind = (row.kind || undefined) as Kind | undefined
+    return AVAILABLE_DEMOS.map(demo => {
+      // Infer kind from file types
+      let kind: Kind | undefined = undefined
+      if (demo.files.length > 0) {
+        const firstType = demo.files[0].type.toLowerCase()
+        if (firstType.includes('pdf')) {
+          kind = 'pdf'
+        } else if (firstType.includes('markdown') || demo.files[0].filename.endsWith('.md')) {
+          kind = 'markdown'
+        } else if (firstType.includes('csv')) {
+          kind = 'csv'
+        } else if (firstType.includes('json')) {
+          kind = 'json'
+        } else if (firstType.includes('image')) {
+          kind = 'images'
+        }
+      }
+
+      // Calculate approximate size (for display only)
+      const fileCount = demo.files.length
+      const size = fileCount === 1 ? '~1 file' : `~${fileCount} files`
+
       return {
-        uid: `${row.example_id}:${row.name}`,
-        id: row.name,
-        name: row.name,
+        uid: `${demo.id}:${demo.datasetName}`,
+        id: demo.datasetName,
+        name: demo.datasetName,
         kind,
-        size: row.size_human,
-        projectId: row.example_id,
-        projectTitle: row.example_title || row.example_id,
-        defaultStrategy: row.strategy || mapKindToStrategy(kind),
+        size,
+        projectId: demo.id,
+        projectTitle: demo.displayName,
+        defaultStrategy: 'markdown_encyclopedia_processor', // Will be loaded from demo config
       }
     })
-  }, [data])
+  }, [])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -114,6 +112,9 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
       >
         <DialogHeader>
           <DialogTitle>Import sample dataset</DialogTitle>
+          <p className="text-sm text-muted-foreground pt-1">
+            Choose a dataset from a demo project to import
+          </p>
         </DialogHeader>
         {/* Middle scrollable region */}
         <div className="grid grid-rows-[auto_1fr] gap-3 min-h-0">
@@ -128,26 +129,9 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
           <div className="hidden" aria-hidden="true" />
           {/* Scroll region: always reserve scrollbar space to avoid layout jump */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 overflow-y-scroll items-stretch">
-            {isLoading ? (
-              <div className="col-span-full text-sm text-muted-foreground p-2">
-                Loading sample datasets…
-              </div>
-            ) : isError ? (
-              <div className="col-span-full text-sm text-muted-foreground p-2">
-                Could not load sample datasets. Ensure the server is running.
-                <div className="mt-2">
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-md border border-input hover:bg-accent/30"
-                    onClick={() => refetch()}
-                  >
-                    Retry
-                  </button>
-                </div>
-              </div>
-            ) : filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <div className="col-span-full text-sm text-muted-foreground p-2 self-start">
-                No datasets match your search.
+                No demo datasets match your search.
               </div>
             ) : (
               filtered.map(ds => {
@@ -187,12 +171,12 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
         </div>
         <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm opacity-60 cursor-not-allowed">
               <input
                 type="checkbox"
                 className="accent-current"
-                checked={includeStrategy}
-                onChange={e => setIncludeStrategy(e.target.checked)}
+                checked={true}
+                disabled={true}
               />
               Include processing strategy
             </label>
@@ -214,9 +198,8 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
               disabled={!selectedObj}
               onClick={() => {
                 if (!selectedObj) return
-                const rag = includeStrategy
-                  ? selectedObj.defaultStrategy
-                  : 'default'
+                // Always include strategy for demo datasets
+                const rag = selectedObj.defaultStrategy
                 onImport({
                   name: selectedObj.name,
                   rag_strategy: rag,

@@ -54,7 +54,10 @@ class TestConfigLoader:
         # Verify database configuration
         db = rag["databases"][0]
         assert db["type"] == "ChromaStore"
-        assert isinstance(db["embedding_strategies"], list) and len(db["embedding_strategies"]) >= 1
+        assert (
+            isinstance(db["embedding_strategies"], list)
+            and len(db["embedding_strategies"]) >= 1
+        )
         assert db["embedding_strategies"][0]["type"] == "OllamaEmbedder"
 
         # Verify data processing strategy
@@ -263,7 +266,6 @@ def test_integration_usage():
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
     # Test package-style import
-    from config import load_config
     from config.datamodel import LlamaFarmConfig
 
     test_dir = Path(__file__).parent
@@ -282,7 +284,11 @@ def test_integration_usage():
     embedder_model = db["embedding_strategies"][0]["config"]["model"]
     collection_name = db["config"]["collection_name"]
 
-    assert parser_type in ["CSVParser_LlamaIndex", "CSVParser_Pandas", "CSVParser_Python"]
+    assert parser_type in [
+        "CSVParser_LlamaIndex",
+        "CSVParser_Pandas",
+        "CSVParser_Python",
+    ]
     assert embedder_model == "mxbai-embed-large"
     assert collection_name == "customer_support_knowledge_base"
 

@@ -3,27 +3,22 @@ Metadata management components for RAG system.
 """
 
 from .metadata_config import (
-    MetadataLevel,
     CoreMetadataConfig,
-    MetadataSchema,
     DocumentMetadata,
-    MetadataPresets
+    MetadataLevel,
+    MetadataPresets,
+    MetadataSchema,
 )
-
-from .metadata_enricher import (
-    MetadataEnricher,
-    MetadataFilter
-)
+from .metadata_enricher import MetadataEnricher, MetadataFilter
 
 __all__ = [
     # Config classes
     "MetadataLevel",
-    "CoreMetadataConfig", 
+    "CoreMetadataConfig",
     "MetadataSchema",
     "DocumentMetadata",
     "MetadataPresets",
-    
     # Enricher classes
     "MetadataEnricher",
-    "MetadataFilter"
+    "MetadataFilter",
 ]

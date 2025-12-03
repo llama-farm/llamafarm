@@ -27,8 +27,8 @@ from config.datamodel import (
     Version,
 )
 
-from agents.chat_orchestrator import ChatOrchestratorAgent
 from agents.base.history import LFChatCompletionUserMessageParam
+from agents.chat_orchestrator import ChatOrchestratorAgent
 from services.project_chat_service import ProjectChatService, RAGParameters
 from services.project_service import ProjectService
 
@@ -278,6 +278,7 @@ class TestProjectChatService:
             mock_agent = AsyncMock(spec=ChatOrchestratorAgent)
             mock_agent.history = MagicMock()
             mock_agent.remove_context_provider = MagicMock()
+            mock_agent.model_name = "test-model"  # Required for event logging
 
             # Mock run_async_stream as an async generator
             async def mock_stream(*args, **kwargs):
@@ -326,6 +327,7 @@ class TestProjectChatService:
             mock_agent.history = MagicMock()
             mock_agent.register_context_provider = MagicMock()
             mock_agent.remove_context_provider = MagicMock()
+            mock_agent.model_name = "test-model"  # Required for event logging
 
             # Mock run_async_stream as an async generator
             async def mock_stream(*args, **kwargs):

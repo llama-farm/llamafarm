@@ -3,10 +3,10 @@
 Update all component schema.yaml and defaults.yaml files to match JSON Schema format
 """
 
-import os
-import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import yaml
 
 # Base path for components
 COMPONENTS_PATH = Path(__file__).parent.parent / "components"
@@ -14,7 +14,7 @@ COMPONENTS_PATH = Path(__file__).parent.parent / "components"
 
 def create_json_schema_header(
     component_type: str, component_name: str, title: str, description: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create standard JSON Schema header"""
     return {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -100,7 +100,7 @@ def update_keyword_extractor():
         f.write("# Keyword Extractor Default Configurations\n\n")
         yaml.dump(defaults, f, default_flow_style=False, sort_keys=False)
 
-    print(f"✓ Updated Keyword Extractor")
+    print("✓ Updated Keyword Extractor")
 
 
 def update_entity_extractor():
@@ -212,7 +212,7 @@ def update_entity_extractor():
         f.write("# Entity Extractor Default Configurations\n\n")
         yaml.dump(defaults, f, default_flow_style=False, sort_keys=False)
 
-    print(f"✓ Updated Entity Extractor")
+    print("✓ Updated Entity Extractor")
 
 
 # ============================================================================
@@ -296,7 +296,7 @@ def update_ollama_embedder():
         f.write("# Ollama Embedder Default Configurations\n\n")
         yaml.dump(defaults, f, default_flow_style=False, sort_keys=False)
 
-    print(f"✓ Updated Ollama Embedder")
+    print("✓ Updated Ollama Embedder")
 
 
 def update_openai_embedder():
@@ -382,7 +382,7 @@ def update_openai_embedder():
         f.write("# OpenAI Embedder Default Configurations\n\n")
         yaml.dump(defaults, f, default_flow_style=False, sort_keys=False)
 
-    print(f"✓ Updated OpenAI Embedder")
+    print("✓ Updated OpenAI Embedder")
 
 
 # ============================================================================
@@ -469,7 +469,7 @@ def update_chroma_store():
         f.write("# Chroma Store Default Configurations\n\n")
         yaml.dump(defaults, f, default_flow_style=False, sort_keys=False)
 
-    print(f"✓ Updated Chroma Store")
+    print("✓ Updated Chroma Store")
 
 
 def update_faiss_store():
@@ -561,7 +561,7 @@ def update_faiss_store():
         f.write("# FAISS Store Default Configurations\n\n")
         yaml.dump(defaults, f, default_flow_style=False, sort_keys=False)
 
-    print(f"✓ Updated FAISS Store")
+    print("✓ Updated FAISS Store")
 
 
 # ============================================================================
@@ -633,7 +633,7 @@ def update_basic_similarity_retriever():
         f.write("# Basic Similarity Retriever Default Configurations\n\n")
         yaml.dump(defaults, f, default_flow_style=False, sort_keys=False)
 
-    print(f"✓ Updated Basic Similarity Retriever")
+    print("✓ Updated Basic Similarity Retriever")
 
 
 def update_remaining_extractors():
@@ -736,7 +736,7 @@ def update_remaining_embedders():
         defaults = {
             "general_purpose": {
                 "name": "General Purpose",
-                "description": f"Standard configuration",
+                "description": "Standard configuration",
                 "config": {
                     "model_name": "sentence-transformers/all-MiniLM-L6-v2",
                     "device": "cpu",

@@ -164,7 +164,6 @@ rag:
 
 datasets:
   - name: "very_large_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "large_db"
 
@@ -244,7 +243,6 @@ runtime:
 
 datasets:
   - name: "unicode_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "unicode_db"
 """
@@ -305,7 +303,6 @@ runtime:
 
 datasets:
   - name: "deep_path_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "deep_path_db"
 
@@ -318,7 +315,7 @@ prompts:
 
         temp_path = temp_config_file(deep_path_config, ".yaml")
 
-        config = load_config_dict(config_path=temp_path)
+        load_config_dict(config_path=temp_path)
         # Path is validated by schema; skip explicit assertion
 
     def test_config_with_special_characters(self, temp_config_file):
@@ -374,7 +371,6 @@ runtime:
 
 datasets:
   - name: "special_chars_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "special_chars_db"
 """

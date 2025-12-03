@@ -50,10 +50,9 @@ def handle_missing_libmagic():
             response = input(
                 "\nWould you like to install libmagic automatically? [y/N]: "
             )
-            if response.lower() == "y":
-                if install_libmagic_macos():
-                    logger.info("Installation complete. Please restart your script.")
-                    raise SystemExit(0)  # More explicit than sys.exit()
+            if response.lower() == "y" and install_libmagic_macos():
+                logger.info("Installation complete. Please restart your script.")
+                raise SystemExit(0)  # More explicit than sys.exit()
 
     elif system == "Linux":
         logger.warning("=" * 60)
@@ -81,7 +80,7 @@ def check_brew_available():
     try:
         result = subprocess.run(["which", "brew"], capture_output=True, text=True)
         return result.returncode == 0
-    except:
+    except Exception:
         return False
 
 

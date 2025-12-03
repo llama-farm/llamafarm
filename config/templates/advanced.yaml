@@ -13,6 +13,7 @@ runtime:
     model: llama3.1:8b
     default: true
     prompt_format: unstructured
+    prompts: [default]
     # instructor_mode: json
     # api_key: optional, not needed for ollama
     # model_api_parameters: optional additional parameters

@@ -1,9 +1,9 @@
 """PDF parser using LlamaIndex."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-from components.parsers.base.base_parser import BaseParser, ParserConfig
+from typing import Any
 
+from components.parsers.base.base_parser import BaseParser, ParserConfig
 from core.logging import RAGStructLogger
 
 logger = RAGStructLogger("rag.components.parsers.pdf.llamaindex_parser")
@@ -15,7 +15,7 @@ class PDFParser_LlamaIndex(BaseParser):
     def __init__(
         self,
         name: str = "PDFParser_LlamaIndex",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         super().__init__(config)  # Call BaseParser init
         self.name = name
@@ -75,7 +75,7 @@ class PDFParser_LlamaIndex(BaseParser):
         """Check if this parser can handle the given file."""
         return file_path.lower().endswith(".pdf")
 
-    def parse_blob(self, data: bytes, metadata: Dict[str, Any] = None) -> List:
+    def parse_blob(self, data: bytes, metadata: dict[str, Any] = None) -> list:
         """Parse PDF from raw bytes."""
         import os
         import tempfile
@@ -142,7 +142,7 @@ class PDFParser_LlamaIndex(BaseParser):
 
     def parse(self, source: str, **kwargs):
         """Parse PDF using LlamaIndex with fallback strategies."""
-        from core.base import Document, ProcessingResult
+        from core.base import ProcessingResult
 
         path = Path(source)
         if not path.exists():
@@ -184,8 +184,8 @@ class PDFParser_LlamaIndex(BaseParser):
         from core.base import Document, ProcessingResult
 
         try:
-            from llama_index.readers.file import PDFReader
             from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
+            from llama_index.readers.file import PDFReader
         except ImportError:
             return None
 
@@ -272,8 +272,8 @@ class PDFParser_LlamaIndex(BaseParser):
         from core.base import Document, ProcessingResult
 
         try:
-            from llama_index.readers.file import PyMuPDFReader
             from llama_index.core.node_parser import SentenceSplitter, TokenTextSplitter
+            from llama_index.readers.file import PyMuPDFReader
         except ImportError:
             return None
 

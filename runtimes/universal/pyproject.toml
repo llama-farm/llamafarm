@@ -20,7 +20,7 @@ dependencies = [
   "psutil>=5.9.0",
   "pyyaml>=6.0",
   "gguf>=0.17.1",
-  "hf-transfer>=0.1.9",
+  # hf-transfer is now provided by llamafarm-common
 ]
 
 [dependency-groups]

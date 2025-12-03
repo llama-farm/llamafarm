@@ -1,235 +1,121 @@
-"""Tests for model format detection and GGUF file selection."""
+"""Tests for runtime-specific model format detection utilities."""
+
+from unittest.mock import Mock, patch
 
 import pytest
-from unittest.mock import Mock, patch
-from llamafarm_common import (
-    parse_quantization_from_filename,
-    parse_model_with_quantization,
-    select_gguf_file,
-)
-from utils.model_format import list_gguf_files
 
 
-class TestParseQuantizationFromFilename:
-    """Test parsing quantization types from GGUF filenames."""
-
-    def test_parse_q4_k_m(self):
-        """Test parsing Q4_K_M quantization."""
-        filename = "qwen3-1.7b.Q4_K_M.gguf"
-        result = parse_quantization_from_filename(filename)
-        assert result == "Q4_K_M"
-
-    def test_parse_q8_0(self):
-        """Test parsing Q8_0 quantization."""
-        filename = "model.Q8_0.gguf"
-        result = parse_quantization_from_filename(filename)
-        assert result == "Q8_0"
-
-    def test_parse_f16(self):
-        """Test parsing F16 quantization."""
-        filename = "llama-3.2-3b.F16.gguf"
-        result = parse_quantization_from_filename(filename)
-        assert result == "F16"
-
-    def test_parse_q5_k_s(self):
-        """Test parsing Q5_K_S quantization."""
-        filename = "model.Q5_K_S.gguf"
-        result = parse_quantization_from_filename(filename)
-        assert result == "Q5_K_S"
-
-    def test_parse_case_insensitive(self):
-        """Test that parsing is case-insensitive."""
-        filename = "model.q4_k_m.gguf"
-        result = parse_quantization_from_filename(filename)
-        assert result == "Q4_K_M"
-
-    def test_parse_no_quantization(self):
-        """Test filename with no recognizable quantization."""
-        filename = "model.gguf"
-        result = parse_quantization_from_filename(filename)
-        assert result is None
-
-    def test_parse_complex_filename(self):
-        """Test parsing from complex filename with multiple dots."""
-        filename = "unsloth_qwen3-1.7b-instruct.Q4_K_M.gguf"
-        result = parse_quantization_from_filename(filename)
-        assert result == "Q4_K_M"
-
-
-class TestParseModelWithQuantization:
-    """Test parsing model names with quantization suffix."""
-
-    def test_parse_with_q4_k_m(self):
-        """Test parsing model name with Q4_K_M quantization."""
-        model_name = "unsloth/Qwen3-4B-GGUF:Q4_K_M"
-        model_id, quantization = parse_model_with_quantization(model_name)
-        assert model_id == "unsloth/Qwen3-4B-GGUF"
-        assert quantization == "Q4_K_M"
-
-    def test_parse_with_lowercase_quantization(self):
-        """Test parsing with lowercase quantization (should be normalized)."""
-        model_name = "unsloth/Qwen3-4B-GGUF:q8_0"
-        model_id, quantization = parse_model_with_quantization(model_name)
-        assert model_id == "unsloth/Qwen3-4B-GGUF"
-        assert quantization == "Q8_0"
-
-    def test_parse_without_quantization(self):
-        """Test parsing model name without quantization suffix."""
-        model_name = "unsloth/Qwen3-4B-GGUF"
-        model_id, quantization = parse_model_with_quantization(model_name)
-        assert model_id == "unsloth/Qwen3-4B-GGUF"
-        assert quantization is None
-
-    def test_parse_with_multiple_colons(self):
-        """Test that only the last colon is used for quantization."""
-        model_name = "org:user/model:Q4_K_M"
-        model_id, quantization = parse_model_with_quantization(model_name)
-        assert model_id == "org:user/model"
-        assert quantization == "Q4_K_M"
-
-    def test_parse_with_empty_quantization(self):
-        """Test parsing with empty string after colon."""
-        model_name = "unsloth/Qwen3-4B-GGUF:"
-        model_id, quantization = parse_model_with_quantization(model_name)
-        assert model_id == "unsloth/Qwen3-4B-GGUF"
-        assert quantization is None
-
-
-class TestSelectGGUFFile:
-    """Test GGUF file selection logic."""
-
-    def test_select_single_file(self):
-        """Test that single file is returned regardless of quantization."""
-        files = ["model.Q8_0.gguf"]
-        result = select_gguf_file(files)
-        assert result == "model.Q8_0.gguf"
-
-    def test_select_default_q4_k_m(self):
-        """Test that Q4_K_M is selected by default."""
-        files = [
-            "model.Q2_K.gguf",
-            "model.Q4_K_M.gguf",
-            "model.Q8_0.gguf",
-            "model.F16.gguf",
-        ]
-        result = select_gguf_file(files)
-        assert result == "model.Q4_K_M.gguf"
-
-    def test_select_preferred_quantization(self):
-        """Test selecting specific preferred quantization."""
-        files = [
-            "model.Q4_K_M.gguf",
-            "model.Q8_0.gguf",
-            "model.F16.gguf",
-        ]
-        result = select_gguf_file(files, preferred_quantization="Q8_0")
-        assert result == "model.Q8_0.gguf"
-
-    def test_select_preferred_case_insensitive(self):
-        """Test that preferred quantization matching is case-insensitive."""
-        files = [
-            "model.Q4_K_M.gguf",
-            "model.Q8_0.gguf",
-        ]
-        result = select_gguf_file(files, preferred_quantization="q8_0")
-        assert result == "model.Q8_0.gguf"
-
-    def test_select_fallback_when_preferred_not_found(self):
-        """Test fallback to default when preferred not found."""
-        files = [
-            "model.Q4_K_M.gguf",
-            "model.Q8_0.gguf",
-        ]
-        result = select_gguf_file(files, preferred_quantization="F16")
-        # Should fall back to Q4_K_M (default preference)
-        assert result == "model.Q4_K_M.gguf"
-
-    def test_select_priority_order(self):
-        """Test that selection follows priority order."""
-        # Test Q5_K_M selected when Q4_K_M not available
-        files = ["model.Q8_0.gguf", "model.Q5_K_M.gguf", "model.F16.gguf"]
-        result = select_gguf_file(files)
-        assert result == "model.Q5_K_M.gguf"
-
-        # Test Q8_0 selected when neither Q4 nor Q5 available
-        files = ["model.Q8_0.gguf", "model.F16.gguf", "model.Q2_K.gguf"]
-        result = select_gguf_file(files)
-        assert result == "model.Q8_0.gguf"
-
-    def test_select_first_when_no_quantization_found(self):
-        """Test that first file is selected when no quantization recognized."""
-        files = ["model_a.gguf", "model_b.gguf"]
-        result = select_gguf_file(files)
-        assert result == "model_a.gguf"
-
-    def test_select_empty_list_returns_none(self):
-        """Test that empty file list returns None."""
-        result = select_gguf_file([])
-        assert result is None
-
-
-class TestListGGUFFiles:
-    """Test listing GGUF files from HuggingFace repositories."""
+class TestDetectModelFormat:
+    """Test model format detection (runtime-specific)."""
 
     @patch("utils.model_format.HfApi")
-    def test_list_gguf_files_filters_correctly(self, mock_hf_api_class):
-        """Test that only .gguf files are returned."""
+    def test_detect_model_format_gguf(self, mock_hf_api_class):
+        """Test detecting GGUF format."""
+        from utils.model_format import clear_format_cache, detect_model_format
+
+        # Clear cache for fresh test
+        clear_format_cache()
+
         # Setup mock
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
             "README.md",
-            "config.json",
             "model.Q4_K_M.gguf",
             "model.Q8_0.gguf",
-            "tokenizer.json",
-            "model.F16.gguf",
         ]
         mock_hf_api_class.return_value = mock_api
 
         # Test
-        result = list_gguf_files("test/model")
+        result = detect_model_format("test/model")
 
         # Verify
-        assert len(result) == 3
-        assert "model.Q4_K_M.gguf" in result
-        assert "model.Q8_0.gguf" in result
-        assert "model.F16.gguf" in result
-        assert "README.md" not in result
-        assert "config.json" not in result
+        assert result == "gguf"
 
     @patch("utils.model_format.HfApi")
-    def test_list_gguf_files_with_token(self, mock_hf_api_class):
-        """Test that token is passed to HuggingFace API."""
-        # Setup mock
-        mock_api = Mock()
-        mock_api.list_repo_files.return_value = ["model.gguf"]
-        mock_hf_api_class.return_value = mock_api
+    def test_detect_model_format_transformers(self, mock_hf_api_class):
+        """Test detecting transformers format."""
+        from utils.model_format import clear_format_cache, detect_model_format
 
-        # Test
-        list_gguf_files("test/model", token="test_token")
+        # Clear cache for fresh test
+        clear_format_cache()
 
-        # Verify token was passed
-        mock_api.list_repo_files.assert_called_once_with(
-            repo_id="test/model", token="test_token"
-        )
-
-    @patch("utils.model_format.HfApi")
-    def test_list_gguf_files_no_gguf_files(self, mock_hf_api_class):
-        """Test handling when no GGUF files exist."""
         # Setup mock
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
-            "README.md",
             "config.json",
             "model.safetensors",
+            "tokenizer.json",
         ]
         mock_hf_api_class.return_value = mock_api
 
         # Test
-        result = list_gguf_files("test/model")
+        result = detect_model_format("test/model")
 
         # Verify
-        assert len(result) == 0
+        assert result == "transformers"
+
+    @patch("utils.model_format.HfApi")
+    def test_detect_model_format_strips_quantization_suffix(self, mock_hf_api_class):
+        """
+        Test that detect_model_format() strips quantization suffix before calling HF API.
+
+        This ensures 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M' is passed to HF API as
+        'unsloth/Qwen3-1.7B-GGUF' (without the ':Q4_K_M' suffix).
+        """
+        from utils.model_format import clear_format_cache, detect_model_format
+
+        # Clear cache to ensure fresh API call
+        clear_format_cache()
+
+        # Setup mock
+        mock_api = Mock()
+        mock_api.list_repo_files.return_value = ["model.Q4_K_M.gguf", "model.Q8_0.gguf"]
+        mock_hf_api_class.return_value = mock_api
+
+        # Test with quantization suffix
+        result = detect_model_format("unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
+
+        # Verify HF API was called with CLEAN model ID (no suffix)
+        mock_api.list_repo_files.assert_called_once_with(
+            repo_id="unsloth/Qwen3-1.7B-GGUF",  # Should NOT have :Q4_K_M
+            token=None,
+        )
+
+        # Verify correct format was detected
+        assert result == "gguf"
+
+    @patch("utils.model_format.HfApi")
+    def test_caching_with_quantization_suffix(self, mock_hf_api_class):
+        """
+        Test that format detection cache works correctly with quantization suffixes.
+
+        Both 'model:Q4_K_M' and 'model:Q8_0' should use the same cached result
+        since they're the same base model.
+        """
+        from utils.model_format import clear_format_cache, detect_model_format
+
+        # Clear cache for fresh test
+        clear_format_cache()
+
+        # Setup mock
+        mock_api = Mock()
+        mock_api.list_repo_files.return_value = ["model.Q4_K_M.gguf"]
+        mock_hf_api_class.return_value = mock_api
+
+        # First call with Q4_K_M suffix
+        result1 = detect_model_format("test/model:Q4_K_M")
+        assert result1 == "gguf"
+        assert mock_api.list_repo_files.call_count == 1
+
+        # Second call with Q8_0 suffix - should use cache (same base model)
+        result2 = detect_model_format("test/model:Q8_0")
+        assert result2 == "gguf"
+        assert mock_api.list_repo_files.call_count == 1  # Still 1, cache was used
+
+        # Third call without suffix - should also use cache
+        result3 = detect_model_format("test/model")
+        assert result3 == "gguf"
+        assert mock_api.list_repo_files.call_count == 1  # Still 1, cache was used
 
 
 if __name__ == "__main__":

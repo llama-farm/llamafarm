@@ -267,7 +267,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
         adjusted_scores = []
         seen_content_hashes = set()
 
-        for doc, score in zip(documents, scores):
+        for doc, score in zip(documents, scores, strict=False):
             # Create a simple content hash for similarity detection
             content_hash = hash(doc.content[:200])  # Use first 200 chars
 
@@ -282,7 +282,7 @@ class HybridUniversalStrategy(HybridRetrievalStrategy):
             adjusted_scores.append(adjusted_score)
 
         # Re-sort by adjusted scores
-        combined = list(zip(adjusted_docs, adjusted_scores))
+        combined = list(zip(adjusted_docs, adjusted_scores, strict=False))
         combined.sort(key=lambda x: x[1], reverse=True)
 
         return [doc for doc, _ in combined], [score for _, score in combined]

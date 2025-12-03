@@ -3,7 +3,7 @@ Encoder model wrapper for embeddings and classification.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -27,7 +27,7 @@ class EncoderModel(BaseModel):
         model_id: str,
         device: str,
         task: str = "embedding",
-        token: Optional[str] = None,
+        token: str | None = None,
     ):
         """
         Initialize encoder model.
@@ -35,7 +35,7 @@ class EncoderModel(BaseModel):
         Args:
             model_id: HuggingFace model ID
             device: Target device (cuda/mps/cpu)
-            task: Model task - "embedding" or "classification"
+            task: Model task - "embedding", "classification", or "reranking"
             token: HuggingFace authentication token for gated models
         """
         super().__init__(model_id, device, token=token)
@@ -56,6 +56,14 @@ class EncoderModel(BaseModel):
 
         # Load model based on task
         if self.task == "classification":
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.model_id,
+                dtype=dtype,
+                trust_remote_code=True,
+                token=self.token,
+            )
+        elif self.task == "reranking":
+            # Rerankers are typically sequence classification models with 1 output class
             self.model = AutoModelForSequenceClassification.from_pretrained(
                 self.model_id,
                 dtype=dtype,
@@ -87,8 +95,8 @@ class EncoderModel(BaseModel):
         )
 
     async def embed(
-        self, texts: List[str], normalize: bool = True
-    ) -> List[List[float]]:
+        self, texts: list[str], normalize: bool = True
+    ) -> list[list[float]]:
         """
         Generate embeddings for input texts.
 
@@ -128,7 +136,7 @@ class EncoderModel(BaseModel):
 
         return embeddings.cpu().tolist()
 
-    async def classify(self, texts: List[str]) -> List[Dict[str, Any]]:
+    async def classify(self, texts: list[str]) -> list[dict[str, Any]]:
         """
         Classify input texts.
 
@@ -177,6 +185,70 @@ class EncoderModel(BaseModel):
             results.append(result)
 
         return results
+
+    async def rerank(
+        self, query: str, documents: list[str], top_k: int | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        Rerank documents using cross-encoder scoring.
+
+        This performs proper cross-encoder reranking where query and document
+        are jointly encoded together (not independently like bi-encoders).
+
+        Args:
+            query: The search query
+            documents: List of documents to rerank
+            top_k: Optional number of top results to return
+
+        Returns:
+            List of dicts with 'index', 'document', and 'relevance_score'
+        """
+        if self.task != "reranking":
+            raise ValueError(f"Model task is '{self.task}', not 'reranking'")
+
+        assert self.model is not None, "Model not loaded"
+        assert self.tokenizer is not None, "Tokenizer not loaded"
+
+        scores = []
+
+        # Score each query-document pair
+        for doc_idx, doc in enumerate(documents):
+            # Tokenize query and document together (key for cross-encoding!)
+            encoded = self.tokenizer(
+                query,
+                doc,
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors="pt",
+            )
+            encoded = {k: v.to(self.device) for k, v in encoded.items()}
+
+            # Get relevance score
+            with torch.no_grad():
+                outputs = self.model(**encoded)
+                # For cross-encoder rerankers, logits represent relevance
+                # Most models output [batch_size, num_labels] where num_labels=1
+                logits = outputs.logits
+
+                # Extract score (handle both single and multi-class outputs)
+                if logits.shape[-1] == 1:
+                    # Single output (common for rerankers)
+                    score = logits[0][0].item()
+                else:
+                    # Multi-class output, take the positive class (usually index 1 or last)
+                    score = logits[0][-1].item()
+
+            scores.append({"index": doc_idx, "document": doc, "relevance_score": score})
+
+        # Sort by relevance score (descending)
+        scores.sort(key=lambda x: x["relevance_score"], reverse=True)
+
+        # Apply top_k if specified
+        if top_k is not None:
+            scores = scores[:top_k]
+
+        return scores
 
     async def generate(self, *args, **kwargs):
         """Not applicable for encoder models."""

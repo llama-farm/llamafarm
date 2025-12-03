@@ -36,8 +36,6 @@ if settings.celery_broker_url and settings.celery_result_backend:
                 "rag.*": {"queue": "rag"},
                 "core.celery.tasks.*": {"queue": "server"},
             },
-            # Import server task modules
-            "imports": ("core.celery.tasks.task_process_dataset",),
         }
     )
 else:
@@ -45,7 +43,11 @@ else:
     # Convert Windows backslashes to forward slashes for file:// URL
     result_backend_path = f"{settings.lf_data_dir}/broker/results".replace("\\", "/")
     # Ensure proper file:// URL format (file:/// for absolute paths on Windows)
-    if sys.platform == "win32" and len(result_backend_path) > 1 and result_backend_path[1] == ":":
+    if (
+        sys.platform == "win32"
+        and len(result_backend_path) > 1
+        and result_backend_path[1] == ":"
+    ):
         # Windows absolute path (e.g., C:/Users/...) needs file:///C:/...
         result_backend_url = f"file:///{result_backend_path}"
     else:
@@ -67,8 +69,6 @@ else:
                 "rag.*": {"queue": "rag"},
                 "core.celery.tasks.*": {"queue": "server"},
             },
-            # Import server task modules
-            "imports": ("core.celery.tasks.task_process_dataset",),
         }
     )
 

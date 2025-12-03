@@ -1,9 +1,10 @@
 """CSV parser using Pandas library."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.parsers.csv.pandas_parser")
 
 
@@ -11,7 +12,7 @@ class CSVParser_Pandas:
     """CSV parser using Pandas for data extraction."""
 
     def __init__(
-        self, name: str = "CSVParser_Pandas", config: Optional[Dict[str, Any]] = None
+        self, name: str = "CSVParser_Pandas", config: dict[str, Any] | None = None
     ):
         self.name = name
         self.config = config or {}

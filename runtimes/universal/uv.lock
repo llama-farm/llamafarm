@@ -513,6 +513,21 @@ sdist = { url = "https://files.pythonhosted.org/packages/e4/b4/c8cd17629ced0b964
 name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../../common" }
+dependencies = [
+    { name = "hf-transfer" },
+    { name = "huggingface-hub" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "hf-transfer", specifier = ">=0.1.9" },
+    { name = "huggingface-hub", specifier = ">=0.24.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0.0" }]
 
 [[package]]
 name = "markupsafe"
@@ -1455,7 +1470,6 @@ dependencies = [
     { name = "einops" },
     { name = "fastapi" },
     { name = "gguf" },
-    { name = "hf-transfer" },
     { name = "llamafarm-common" },
     { name = "openai" },
     { name = "pillow" },
@@ -1494,7 +1508,6 @@ requires-dist = [
     { name = "einops", specifier = ">=0.8.1" },
     { name = "fastapi", specifier = ">=0.104.0" },
     { name = "gguf", specifier = ">=0.17.1" },
-    { name = "hf-transfer", specifier = ">=0.1.9" },
     { name = "llama-cpp-python", marker = "extra == 'gpu'", specifier = ">=0.3.0" },
     { name = "llamafarm-common", editable = "../../common" },
     { name = "openai", specifier = ">=1.0.0" },
