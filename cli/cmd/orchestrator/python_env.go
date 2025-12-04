@@ -164,10 +164,14 @@ func (m *PythonEnvManager) getEnv() []string {
 
 	for _, e := range env {
 		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 0 {
+			continue
+		}
 		varName := parts[0]
 
-		// Only include non-Python environment variables
-		if _, isPythonEnv := pythonEnvVars[varName]; !isPythonEnv {
+		// Case-insensitive comparison to prevent bypass attacks (e.g., Virtual_Env, virtual_env)
+		// This is critical on Windows where env vars are case-insensitive
+		if _, isPythonEnv := pythonEnvVars[strings.ToUpper(varName)]; !isPythonEnv {
 			filteredEnv = append(filteredEnv, e)
 		}
 	}
