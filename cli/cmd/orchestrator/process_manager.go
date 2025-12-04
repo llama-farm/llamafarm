@@ -254,21 +254,33 @@ func (pm *ProcessManager) StopProcess(name string) error {
 		}
 	}
 
-	// Wait for process to exit (with timeout)
-	done := make(chan error, 1)
-	go func() {
-		done <- proc.Cmd.Wait()
-	}()
+	// Poll for process exit instead of calling Wait()
+	// This avoids two critical bugs:
+	// 1. Double Wait() - monitorProcess() already called Wait() for native processes
+	// 2. Invalid Wait() - orphaned processes have synthetic Cmd that was never Start()ed
+	deadline := time.Now().Add(5 * time.Second)
+	pollInterval := 100 * time.Millisecond
 
-	select {
-	case <-done:
-		utils.OutputProgress("%s process stopped\n", name)
-	case <-time.After(5 * time.Second):
-		// Force kill if graceful shutdown times out
-		proc.Cmd.Process.Kill()
-		utils.OutputWarning("%s process killed after timeout\n", name)
+	for time.Now().Before(deadline) {
+		// Check if process is still running using signal 0 (works for both native and orphaned)
+		if !pm.isProcessStillRunning(proc) {
+			utils.OutputProgress("%s process stopped\n", name)
+			proc.mu.Lock()
+			proc.Status = "stopped"
+			proc.mu.Unlock()
+			return nil
+		}
+		time.Sleep(pollInterval)
 	}
 
+	// Force kill if graceful shutdown times out
+	utils.LogDebug(fmt.Sprintf("Graceful shutdown timeout for %s, forcing kill", name))
+	proc.Cmd.Process.Kill()
+
+	// Give it a moment to die after kill
+	time.Sleep(500 * time.Millisecond)
+
+	utils.OutputWarning("%s process killed after timeout\n", name)
 	proc.mu.Lock()
 	proc.Status = "stopped"
 	proc.mu.Unlock()
@@ -305,6 +317,24 @@ func (pm *ProcessManager) isProcessRunning(proc *ProcessInfo) bool {
 	}
 
 	err := proc.Cmd.Process.Signal(os.Signal(nil))
+	return err == nil
+}
+
+// isProcessStillRunning checks if a process is still running (inverse of isProcessRunning for readability)
+// This is used during shutdown to poll for process exit
+func (pm *ProcessManager) isProcessStillRunning(proc *ProcessInfo) bool {
+	if proc.Cmd == nil || proc.Cmd.Process == nil {
+		return false
+	}
+
+	// On Unix, sending signal 0 checks if a process exists.
+	// On Windows, this is not supported, so we check if the process has exited.
+	if runtime.GOOS == "windows" {
+		return proc.Cmd.ProcessState == nil || !proc.Cmd.ProcessState.Exited()
+	}
+
+	// Use signal 0 to check if process exists (works for both native and orphaned processes)
+	err := proc.Cmd.Process.Signal(syscall.Signal(0))
 	return err == nil
 }
 
