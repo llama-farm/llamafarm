@@ -263,7 +263,7 @@ func (pm *ProcessManager) StopProcess(name string) error {
 
 	for time.Now().Before(deadline) {
 		// Check if process is still running using signal 0 (works for both native and orphaned)
-		if !pm.isProcessStillRunning(proc) {
+		if !pm.isProcessRunning(proc) {
 			utils.OutputProgress("%s process stopped\n", name)
 			proc.mu.Lock()
 			proc.Status = "stopped"
@@ -306,23 +306,6 @@ func (pm *ProcessManager) StopAllProcesses() {
 
 // isProcessRunning checks if a process is still running
 func (pm *ProcessManager) isProcessRunning(proc *ProcessInfo) bool {
-	if proc.Cmd == nil || proc.Cmd.Process == nil {
-		return false
-	}
-
-	// On Unix, sending signal 0 checks if a process exists.
-	// On Windows, this is not supported, so we check if the process has exited.
-	if runtime.GOOS == "windows" {
-		return proc.Cmd.ProcessState == nil || !proc.Cmd.ProcessState.Exited()
-	}
-
-	err := proc.Cmd.Process.Signal(os.Signal(nil))
-	return err == nil
-}
-
-// isProcessStillRunning checks if a process is still running (inverse of isProcessRunning for readability)
-// This is used during shutdown to poll for process exit
-func (pm *ProcessManager) isProcessStillRunning(proc *ProcessInfo) bool {
 	if proc.Cmd == nil || proc.Cmd.Process == nil {
 		return false
 	}
