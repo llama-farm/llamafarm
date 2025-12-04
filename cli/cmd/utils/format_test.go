@@ -117,9 +117,9 @@ func TestFormatDuration(t *testing.T) {
 
 func TestFormatTransferRate(t *testing.T) {
 	tests := []struct {
-		name         string
-		bytesPerSec  int64
-		expected     string
+		name        string
+		bytesPerSec int64
+		expected    string
 	}{
 		{
 			name:        "kilobytes per second",
