@@ -163,17 +163,11 @@ func (m *PythonEnvManager) getEnv() []string {
 	}
 
 	for _, e := range env {
-		// Check if this is a Python environment variable
-		isPythonEnv := false
-		for varName := range pythonEnvVars {
-			if strings.HasPrefix(e, varName+"=") {
-				isPythonEnv = true
-				break
-			}
-		}
+		parts := strings.SplitN(e, "=", 2)
+		varName := parts[0]
 
 		// Only include non-Python environment variables
-		if !isPythonEnv {
+		if _, isPythonEnv := pythonEnvVars[varName]; !isPythonEnv {
 			filteredEnv = append(filteredEnv, e)
 		}
 	}
