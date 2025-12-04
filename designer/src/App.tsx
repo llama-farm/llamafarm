@@ -39,7 +39,10 @@ import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
 import EditRetrievalStrategy from './components/Rag/EditRetrievalStrategy'
 // Projects standalone page removed; Home now hosts projects section
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
-import { useUpgradeAvailability } from './hooks/useUpgradeAvailability'
+import {
+  useUpgradeAvailability,
+  UpgradeAvailabilityProvider,
+} from './hooks/useUpgradeAvailability'
 import { MobileViewProvider } from './contexts/MobileViewContext'
 import NotFound from './components/NotFound'
 import { DemoModalProvider, useDemoModal } from './contexts/DemoModalContext'
@@ -135,22 +138,16 @@ function DemoModalRoot() {
   )
 }
 
-function App() {
+function AppContent() {
   const location = useLocation()
   const isHome = location.pathname === '/'
   const { currentVersion } = useUpgradeAvailability()
   return (
-    <main className="h-screen w-full">
-      <ToastProvider>
-        <ProjectModalProvider>
-          <DemoModalProvider>
-            <ModeResetProvider>
-              <MobileViewProvider>
-                <UnsavedChangesProvider>
-                  <Header currentVersion={currentVersion} />
-                  {isHome ? <HomeUpgradeBanner /> : null}
-                  <div className="h-full w-full">
-                    <Routes>
+    <>
+      <Header currentVersion={currentVersion} />
+      {isHome ? <HomeUpgradeBanner /> : null}
+      <div className="h-full w-full">
+        <Routes>
                       <Route path="/" element={<Home />} />
                       {/* Redirect '/projects' to Home; Home will scroll to projects */}
                       <Route path="/projects" element={<Home />} />
@@ -257,14 +254,30 @@ function App() {
                       {/* Catch-all for unknown top-level routes */}
                       <Route path="*" element={<NotFound />} />
                     </Routes>
-                  </div>
-                  <ProjectModalRoot />
-                  <DemoModalRoot />
-                </UnsavedChangesProvider>
-              </MobileViewProvider>
-            </ModeResetProvider>
-          </DemoModalProvider>
-        </ProjectModalProvider>
+      </div>
+      <ProjectModalRoot />
+      <DemoModalRoot />
+    </>
+  )
+}
+
+function App() {
+  return (
+    <main className="h-screen w-full">
+      <ToastProvider>
+        <UpgradeAvailabilityProvider>
+          <ProjectModalProvider>
+            <DemoModalProvider>
+              <ModeResetProvider>
+                <MobileViewProvider>
+                  <UnsavedChangesProvider>
+                    <AppContent />
+                  </UnsavedChangesProvider>
+                </MobileViewProvider>
+              </ModeResetProvider>
+            </DemoModalProvider>
+          </ProjectModalProvider>
+        </UpgradeAvailabilityProvider>
       </ToastProvider>
     </main>
   )

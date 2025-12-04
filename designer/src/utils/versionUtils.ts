@@ -7,12 +7,15 @@ export type ReleaseInfo = {
 const STORAGE_KEYS = {
   latest: 'lf_latest_release',
   checkedAt: 'lf_latest_release_checked_at',
-  currentVersion: 'lf_current_version',
 }
 
+export enum Version {
+
+  UNKNOWN = 'unknown',
+}
 
 export function normalizeVersion(version: string | null | undefined): string {
-  if (!version) return '0.0.0'
+  if (!version) return Version.UNKNOWN;
   return version.startsWith('v') ? version.slice(1) : version
 }
 
@@ -39,7 +42,9 @@ export function storeLatestRelease(
   try {
     localStorage.setItem(STORAGE_KEYS.latest, JSON.stringify(info))
     localStorage.setItem(STORAGE_KEYS.checkedAt, String(nowMs))
-  } catch {}
+  } catch {
+    // no-op
+  }
 }
 
 export function getStoredLatestRelease(): {
@@ -56,21 +61,6 @@ export function getStoredLatestRelease(): {
     return { info: null, checkedAt: null }
   }
 }
-
-export function storeCurrentVersion(version: string): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.currentVersion, version)
-  } catch {}
-}
-
-export function getStoredCurrentVersion(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEYS.currentVersion) || '0.0.0'
-  } catch {
-    return '0.0.0'
-  }
-}
-
 
 export function shouldCheck(
   lastCheckedAtMs: number | null,
@@ -104,7 +94,9 @@ export function setDismissed(
     const key = dismissKey(version, ctx)
     if (dismissed) localStorage.setItem(key, '1')
     else localStorage.removeItem(key)
-  } catch {}
+  } catch {
+    // no-op
+  }
 }
 
 export function getGithubReleasesUrl(): string {
