@@ -5,6 +5,7 @@ import {
   DownloadModelRequest,
   DownloadEvent,
   DeleteModelResponse,
+  ValidateDownloadResponse,
 } from '../types/model'
 
 /**
@@ -44,11 +45,11 @@ export async function* downloadModel(
 ): AsyncIterableIterator<DownloadEvent> {
   // Get base URL from apiClient config
   const baseURL = apiClient.defaults.baseURL || '/api/v1'
-  
+
   // Set up AbortController for timeout
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
-  
+
   let response: Response
   try {
     response = await fetch(`${baseURL}/models/download`, {
@@ -63,7 +64,9 @@ export async function* downloadModel(
     if (error.name === 'AbortError') {
       throw new Error('Request timed out while downloading model')
     }
-    throw new Error(`Network error while downloading model: ${error.message || error}`)
+    throw new Error(
+      `Network error while downloading model: ${error.message || error}`
+    )
   } finally {
     clearTimeout(timeout)
   }
@@ -103,6 +106,21 @@ export async function* downloadModel(
       }
     }
   }
+}
+
+/**
+ * Validate if there's sufficient disk space for a model download
+ * @param modelName - The model identifier to validate (e.g., "meta-llama/Llama-2-7b-hf")
+ * @returns Promise<ValidateDownloadResponse> - Validation result with can_download, warning, and space info
+ */
+export async function validateModelDownload(
+  modelName: string
+): Promise<ValidateDownloadResponse> {
+  const response = await apiClient.post<ValidateDownloadResponse>(
+    '/models/validate-download',
+    { model_name: modelName }
+  )
+  return response.data
 }
 
 /**

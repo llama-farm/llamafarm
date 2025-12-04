@@ -146,17 +146,109 @@ class TestChromaStore:
         # Add documents first
         test_store.add_documents(sample_documents)
 
-        # Delete specific document
-        success = test_store.delete_documents(["doc1"])
+        # Delete specific document - returns count of deleted docs
+        deleted_count = test_store.delete_documents(["doc1"])
 
-        if success:  # Some stores might not support deletion
-            # Verify document was deleted
-            doc = test_store.get_document("doc1")
-            assert doc is None
+        assert deleted_count == 1
 
-            # Other documents should still exist
-            remaining_doc = test_store.get_document("doc2")
-            assert remaining_doc is not None
+        # Verify document was deleted
+        doc = test_store.get_document("doc1")
+        assert doc is None
+
+        # Other documents should still exist
+        remaining_doc = test_store.get_document("doc2")
+        assert remaining_doc is not None
+
+    def test_get_documents_by_metadata(self, test_store):
+        """Test retrieving documents by metadata filter."""
+        # Create documents with specific metadata
+        docs = [
+            Document(
+                content="Document with file_hash A",
+                id="hash_doc1",
+                source="test1.txt",
+                metadata={"file_hash": "abc123", "category": "test"},
+                embeddings=[0.1, 0.2, 0.3, 0.4, 0.5] * 100,
+            ),
+            Document(
+                content="Document with file_hash A (chunk 2)",
+                id="hash_doc2",
+                source="test1.txt",
+                metadata={"file_hash": "abc123", "category": "test"},
+                embeddings=[0.2, 0.3, 0.4, 0.5, 0.6] * 100,
+            ),
+            Document(
+                content="Document with different file_hash",
+                id="hash_doc3",
+                source="test2.txt",
+                metadata={"file_hash": "xyz789", "category": "other"},
+                embeddings=[0.3, 0.4, 0.5, 0.6, 0.7] * 100,
+            ),
+        ]
+        test_store.add_documents(docs)
+
+        # Get documents by file_hash
+        results = test_store.get_documents_by_metadata({"file_hash": "abc123"})
+
+        assert len(results) == 2
+        assert all(doc.metadata.get("file_hash") == "abc123" for doc in results)
+        assert {doc.id for doc in results} == {"hash_doc1", "hash_doc2"}
+
+        # Get documents by different filter
+        results = test_store.get_documents_by_metadata({"category": "other"})
+        assert len(results) == 1
+        assert results[0].id == "hash_doc3"
+
+        # No results for non-existent filter
+        results = test_store.get_documents_by_metadata({"file_hash": "nonexistent"})
+        assert len(results) == 0
+
+    def test_delete_documents_by_file_hash_workflow(self, test_store):
+        """Test the full workflow of finding and deleting documents by file_hash."""
+        # Create documents with file_hash metadata
+        docs = [
+            Document(
+                content="Chunk 1 of file ABC",
+                id="file_abc_chunk1",
+                source="abc.pdf",
+                metadata={"file_hash": "filehash_abc"},
+                embeddings=[0.1] * 500,
+            ),
+            Document(
+                content="Chunk 2 of file ABC",
+                id="file_abc_chunk2",
+                source="abc.pdf",
+                metadata={"file_hash": "filehash_abc"},
+                embeddings=[0.2] * 500,
+            ),
+            Document(
+                content="Chunk of file XYZ",
+                id="file_xyz_chunk1",
+                source="xyz.pdf",
+                metadata={"file_hash": "filehash_xyz"},
+                embeddings=[0.3] * 500,
+            ),
+        ]
+        test_store.add_documents(docs)
+
+        # Step 1: Find documents by file_hash
+        docs_to_delete = test_store.get_documents_by_metadata(
+            {"file_hash": "filehash_abc"}
+        )
+        assert len(docs_to_delete) == 2
+
+        # Step 2: Delete by IDs
+        doc_ids = [doc.id for doc in docs_to_delete]
+        deleted_count = test_store.delete_documents(doc_ids)
+        assert deleted_count == 2
+
+        # Verify ABC documents are gone
+        remaining = test_store.get_documents_by_metadata({"file_hash": "filehash_abc"})
+        assert len(remaining) == 0
+
+        # XYZ document should still exist
+        xyz_docs = test_store.get_documents_by_metadata({"file_hash": "filehash_xyz"})
+        assert len(xyz_docs) == 1
 
     def test_collection_management(self, test_store):
         """Test collection creation and deletion."""

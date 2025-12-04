@@ -241,11 +241,6 @@ const Test = () => {
     return v == null ? false : v === 'true'
   })
   const showPrompts = false
-  const [showThinking, setShowThinking] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    const v = localStorage.getItem('lf_test_showThinking')
-    return v == null ? false : v === 'true'
-  })
   const [allowRanking, setAllowRanking] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     const v = localStorage.getItem('lf_test_allowRanking')
@@ -265,10 +260,20 @@ const Test = () => {
     seed?: number | ''
     streaming: boolean
     jsonMode: boolean
+    enableThinking: boolean
+    thinkingBudget: number
   }>(() => {
     try {
       const raw = localStorage.getItem('lf_gen_defaults')
-      if (raw) return JSON.parse(raw)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        // Add defaults for new fields if not present
+        return {
+          enableThinking: false,
+          thinkingBudget: 1024,
+          ...parsed,
+        }
+      }
     } catch {}
     return {
       temperature: 0.7,
@@ -279,6 +284,8 @@ const Test = () => {
       seed: '',
       streaming: true,
       jsonMode: false,
+      enableThinking: false,
+      thinkingBudget: 1024,
     }
   })
 
@@ -311,10 +318,6 @@ const Test = () => {
     if (typeof window === 'undefined') return
     localStorage.setItem('lf_test_showGenSettings', String(showGenSettings))
   }, [showGenSettings])
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    localStorage.setItem('lf_test_showThinking', String(showThinking))
-  }, [showThinking])
   useEffect(() => {
     if (typeof window === 'undefined') return
     localStorage.setItem('lf_test_allowRanking', String(allowRanking))
@@ -397,13 +400,13 @@ const Test = () => {
               </label>
               <label className="inline-flex items-center gap-2 flex-shrink-0">
                 <Checkbox
-                  id="show-thinking"
-                  checked={showThinking}
+                  id="enable-thinking"
+                  checked={gen.enableThinking}
                   onCheckedChange={(v: boolean | 'indeterminate') =>
-                    setShowThinking(Boolean(v))
+                    setGen({ ...gen, enableThinking: Boolean(v) })
                   }
                 />
-                <span className="whitespace-nowrap">Show thinking steps</span>
+                <span className="whitespace-nowrap">Enable Thinking</span>
               </label>
               {/* Show generation settings toggle moved into the drawer */}
               <div className="flex items-center gap-2 sm:ml-auto flex-shrink-0">
@@ -697,6 +700,30 @@ const Test = () => {
                     </div>
                     <div className="grid grid-cols-3 gap-2 items-center">
                       <span className="text-sm text-muted-foreground">
+                        Thinking budget
+                      </span>
+                      <Input
+                        type="number"
+                        step="128"
+                        min="0"
+                        value={gen.thinkingBudget}
+                        onChange={e =>
+                          setGen({
+                            ...gen,
+                            thinkingBudget: Number(e.target.value),
+                          })
+                        }
+                        className="col-span-2"
+                        disabled={!gen.enableThinking}
+                        title={
+                          gen.enableThinking
+                            ? 'Max tokens for thinking process'
+                            : 'Enable thinking to set budget'
+                        }
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 items-center">
+                      <span className="text-sm text-muted-foreground">
                         Presence penalty
                       </span>
                       <Input
@@ -768,7 +795,7 @@ const Test = () => {
                   allowRanking,
                   useTestData,
                   showPrompts,
-                  showThinking,
+                  showThinking: gen.enableThinking, // Show thinking in UI when enabled
                   showGenSettings,
                   genSettings: gen,
                   ragEnabled: ragEnabledUI,

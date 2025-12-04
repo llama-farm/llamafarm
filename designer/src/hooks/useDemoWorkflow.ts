@@ -299,7 +299,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           )
           let completed = false
           let attempts = 0
-          const maxAttempts = 60 // 2 minutes max
+          // Increased timeout to 10 minutes to account for first-time model downloads
+          // Model downloads can take 2-5 minutes, plus processing time
+          const maxAttempts = 300 // 10 minutes max (300 * 2s = 600s)
 
           while (!completed && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 2000))
@@ -362,6 +364,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
             }
 
             // Update progress during processing (90-98%)
+            // Progress increases slowly to account for model downloads on first use
             const processingProgress =
               90 + Math.min((attempts / maxAttempts) * 8, 8)
             setProgress(processingProgress)

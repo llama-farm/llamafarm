@@ -290,7 +290,7 @@ func fetchRAGStats(cfg *config.ServerConfig, database string) (*RAGStats, error)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var stats RAGStats
@@ -324,7 +324,7 @@ func fetchRAGHealth(cfg *config.ServerConfig, database string) (*RAGHealth, erro
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var health RAGHealth
@@ -370,7 +370,7 @@ func fetchRAGDocuments(cfg *config.ServerConfig, database string, limit int, fil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var docs []RAGDocument
@@ -404,7 +404,7 @@ func compactRAGDatabase(cfg *config.ServerConfig, database string) (*CompactionR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var result CompactionResult
@@ -446,7 +446,7 @@ func reindexRAGDatabase(cfg *config.ServerConfig, database string, strategy stri
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var result ReindexResult

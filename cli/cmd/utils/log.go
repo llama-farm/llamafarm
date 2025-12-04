@@ -51,8 +51,6 @@ var (
 		// Session IDs
 		{regexp.MustCompile(`(?i)(session[_-]?id[=:\s]+['"]?)[a-zA-Z0-9\-_]{16,}`), "${1}[REDACTED]"},
 		{regexp.MustCompile(`(?i)(sid[=:\s]+['"]?)[a-zA-Z0-9\-_]{16,}`), "${1}[REDACTED]"},
-		// Credit card numbers (basic pattern)
-		{regexp.MustCompile(`\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b`), "[REDACTED-CC]"},
 		// Cookies (basic pattern)
 		{regexp.MustCompile(`(?i)(cookie[=:\s]+['"]?)[^;\n]+`), "${1}[REDACTED]"},
 	}

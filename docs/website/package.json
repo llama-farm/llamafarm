@@ -18,7 +18,11 @@
     "test:backend": "jest __tests__/backend.test.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:all": "./setup-and-test.sh"
+    "test:all": "./setup-and-test.sh",
+    "mcp:build": "cd mcp && npm install && npm run build",
+    "mcp:start": "node mcp/dist/index.js",
+    "mcp:dev": "cd mcp && npm run dev",
+    "mcp:inspect": "cd mcp && npm run inspect"
   },
   "dependencies": {
     "@docusaurus/core": "3.9.2",

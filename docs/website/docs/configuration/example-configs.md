@@ -8,6 +8,74 @@ sidebar_position: 1
 
 Use these snippets as starting points for real projects. Every example validates against the current schema.
 
+## Quick Start (Minimal Config)
+
+The simplest working configuration:
+
+```yaml
+version: v1
+name: quickstart
+namespace: default
+
+runtime:
+  default_model: default
+  models:
+    - name: default
+      provider: ollama
+      model: gemma3:1b
+      default: true
+```
+
+## Simple RAG Setup
+
+Basic RAG with PDF processing:
+
+```yaml
+version: v1
+name: simple-rag
+namespace: default
+
+runtime:
+  default_model: default
+  models:
+    - name: default
+      provider: ollama
+      model: llama3.1:8b
+      default: true
+
+rag:
+  databases:
+    - name: docs_db
+      type: ChromaStore
+      embedding_strategies:
+        - name: default
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text
+      retrieval_strategies:
+        - name: search
+          type: BasicSimilarityStrategy
+          config:
+            top_k: 5
+          default: true
+      default_embedding_strategy: default
+      default_retrieval_strategy: search
+
+  data_processing_strategies:
+    - name: basic
+      description: "Basic PDF and text processing"
+      parsers:
+        - type: PDFParser_PyPDF2
+          file_include_patterns: ["*.pdf"]
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+        - type: TextParser_Python
+          file_include_patterns: ["*.txt", "*.md"]
+          config:
+            chunk_size: 800
+```
+
 ## Local RAG with Ollama (Multi-Model)
 
 ```yaml
@@ -256,6 +324,334 @@ prompts:
 - Default model: `lf chat "Normal question"`
 - Small model: `lf chat --model ollama-small "Simple task"`
 
+## Universal Runtime with Reranking
+
+Universal Runtime enables cross-encoder reranking for high-precision search:
+
+```yaml
+version: v1
+name: reranking-demo
+namespace: default
+
+runtime:
+  default_model: default
+  models:
+    - name: default
+      provider: ollama
+      model: llama3.1:8b
+      default: true
+
+    # Cross-encoder reranker via Universal Runtime
+    - name: reranker
+      description: "Fast cross-encoder for document reranking"
+      provider: universal
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2
+      base_url: http://127.0.0.1:11540
+
+rag:
+  databases:
+    - name: main_db
+      type: ChromaStore
+      config:
+        collection_name: documents
+        distance_function: cosine
+
+      embedding_strategies:
+        - name: default
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text
+            dimension: 768
+
+      retrieval_strategies:
+        - name: fast
+          type: BasicSimilarityStrategy
+          config:
+            top_k: 10
+          default: false
+
+        - name: accurate
+          type: CrossEncoderRerankedStrategy
+          config:
+            model_name: reranker
+            initial_k: 30
+            final_k: 5
+            relevance_threshold: 0.3
+          default: true
+
+      default_embedding_strategy: default
+      default_retrieval_strategy: accurate
+```
+
+## Complex Multi-Format RAG
+
+Full-featured RAG with multiple file types, extractors, and retrieval strategies:
+
+```yaml
+version: v1
+name: enterprise-rag
+namespace: production
+
+runtime:
+  default_model: primary
+  models:
+    - name: primary
+      description: "Primary production model"
+      provider: ollama
+      model: llama3.1:8b
+      default: true
+
+    - name: fast
+      description: "Fast model for quick queries"
+      provider: ollama
+      model: gemma3:1b
+
+    - name: query_decomposer
+      description: "Model for query decomposition"
+      provider: openai
+      model: gemma3:1b
+      base_url: http://localhost:11434/v1
+
+    - name: reranker
+      description: "Cross-encoder reranker"
+      provider: universal
+      model: BAAI/bge-reranker-v2-m3
+      base_url: http://127.0.0.1:11540
+
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are an expert document analyst. Always cite sources by filename.
+          If information is not in the provided context, say so clearly.
+
+rag:
+  default_database: main_db
+
+  databases:
+    - name: main_db
+      type: ChromaStore
+      config:
+        collection_name: enterprise_docs
+        distance_function: cosine
+        persist_directory: ./data/main_db
+
+      embedding_strategies:
+        - name: default
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v2-moe
+            dimension: 768
+            batch_size: 16
+          priority: 0
+
+      retrieval_strategies:
+        # Fast basic search
+        - name: fast
+          type: BasicSimilarityStrategy
+          config:
+            top_k: 10
+            distance_metric: cosine
+
+        # Filtered by metadata
+        - name: filtered
+          type: MetadataFilteredStrategy
+          config:
+            top_k: 10
+            filter_mode: pre
+
+        # High-accuracy reranking
+        - name: accurate
+          type: CrossEncoderRerankedStrategy
+          config:
+            model_name: reranker
+            initial_k: 30
+            final_k: 10
+          default: true
+
+        # Complex query handling
+        - name: complex
+          type: MultiTurnRAGStrategy
+          config:
+            model_name: query_decomposer
+            max_sub_queries: 3
+            complexity_threshold: 50
+            enable_reranking: true
+            reranker_config:
+              model_name: reranker
+              initial_k: 20
+              final_k: 10
+
+      default_embedding_strategy: default
+      default_retrieval_strategy: accurate
+
+  data_processing_strategies:
+    - name: universal_processor
+      description: "Process PDFs, Word docs, spreadsheets, and text"
+      parsers:
+        # PDFs with LlamaIndex (semantic chunking)
+        - type: PDFParser_LlamaIndex
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 100
+          config:
+            chunk_size: 1200
+            chunk_overlap: 150
+            chunk_strategy: semantic
+            extract_metadata: true
+            extract_tables: true
+
+        # PDF fallback
+        - type: PDFParser_PyPDF2
+          file_include_patterns: ["*.pdf"]
+          priority: 50
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+
+        # Word documents
+        - type: DocxParser_LlamaIndex
+          file_include_patterns: ["*.docx"]
+          priority: 100
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_tables: true
+
+        # Excel files
+        - type: ExcelParser_LlamaIndex
+          file_include_patterns: ["*.xlsx", "*.xls"]
+          priority: 100
+          config:
+            chunk_size: 500
+            chunk_strategy: rows
+
+        # CSV files
+        - type: CSVParser_Pandas
+          file_include_patterns: ["*.csv"]
+          priority: 100
+          config:
+            chunk_size: 500
+            extract_metadata: true
+
+        # Markdown
+        - type: MarkdownParser_LlamaIndex
+          file_include_patterns: ["*.md", "*.markdown"]
+          priority: 100
+          config:
+            chunk_size: 800
+            chunk_strategy: headings
+            extract_code_blocks: true
+
+        # Plain text and code
+        - type: TextParser_LlamaIndex
+          file_include_patterns: ["*.txt", "*.py", "*.js", "*.html"]
+          priority: 80
+          config:
+            chunk_size: 800
+            chunk_strategy: semantic
+            preserve_code_structure: true
+
+      extractors:
+        # Entity extraction
+        - type: EntityExtractor
+          priority: 100
+          config:
+            entity_types: [PERSON, ORG, DATE, PRODUCT, EMAIL, PHONE]
+            use_fallback: true
+
+        # Keyword extraction
+        - type: KeywordExtractor
+          priority: 90
+          config:
+            algorithm: yake
+            max_keywords: 15
+
+        # Content statistics
+        - type: ContentStatisticsExtractor
+          priority: 80
+          config:
+            include_readability: true
+            include_structure: true
+
+        # Pattern matching
+        - type: PatternExtractor
+          priority: 70
+          file_include_patterns: ["*.pdf"]
+          config:
+            predefined_patterns: [email, phone, date, version]
+
+datasets:
+  - name: documents
+    database: main_db
+    data_processing_strategy: universal_processor
+```
+
+## Qdrant Production Setup
+
+Production-ready configuration with Qdrant vector database:
+
+```yaml
+version: v1
+name: qdrant-production
+namespace: production
+
+runtime:
+  default_model: default
+  models:
+    - name: default
+      provider: openai
+      model: gpt-4o-mini
+      api_key: ${OPENAI_API_KEY}
+      default: true
+
+rag:
+  databases:
+    - name: production_db
+      type: QdrantStore
+      config:
+        host: qdrant.internal.company.com
+        port: 6333
+        api_key: ${QDRANT_API_KEY}
+        collection_name: documents
+        vector_size: 1536
+        distance: Cosine
+
+      embedding_strategies:
+        - name: openai
+          type: OpenAIEmbedder
+          config:
+            model: text-embedding-3-small
+            api_key: ${OPENAI_API_KEY}
+            batch_size: 100
+
+      retrieval_strategies:
+        - name: production
+          type: HybridUniversalStrategy
+          config:
+            combination_method: weighted_average
+            final_k: 10
+            strategies:
+              - type: BasicSimilarityStrategy
+                weight: 0.7
+                config:
+                  top_k: 20
+              - type: MetadataFilteredStrategy
+                weight: 0.3
+                config:
+                  top_k: 20
+          default: true
+
+      default_embedding_strategy: openai
+      default_retrieval_strategy: production
+```
+
 ---
 
-Mix and match these patterns to suit your project. Remember to regenerate schema types if you add new providers or store options.
+Mix and match these patterns to suit your project. For detailed component configuration, see the [RAG documentation](../rag/index.md):
+
+- [Parsers Reference](../rag/parsers.md) - All parser types and options
+- [Embedders Reference](../rag/embedders.md) - Embedding configurations
+- [Extractors Reference](../rag/extractors.md) - Metadata extraction
+- [Databases Reference](../rag/databases.md) - Vector store options
+- [Retrieval Strategies](../rag/retrieval-strategies.md) - Search configurations

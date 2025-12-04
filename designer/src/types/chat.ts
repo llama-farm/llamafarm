@@ -54,6 +54,9 @@ export interface ChatRequest {
   rag_retrieval_strategy?: string | null
   rag_top_k?: number | null
   rag_score_threshold?: number | null
+  // Thinking/reasoning model parameters (universal runtime)
+  think?: boolean | null
+  thinking_budget?: number | null
 }
 
 /**

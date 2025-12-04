@@ -1,106 +1,15 @@
-"""Document management system with hash-based tracking, versioning, and lifecycle management."""
+"""Document management system with hash-based tracking and lifecycle management."""
 
 import hashlib
 import json
-from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from core.base import Document
 from core.logging import RAGStructLogger
-from utils.hash_utils import extract_document_hash_from_chunk_id
 
 logger = RAGStructLogger("rag.core.document_manager")
-
-
-class DeletionStrategy(Enum):
-    """Deletion strategy types."""
-
-    HARD_DELETE = "hard_delete"
-    SOFT_DELETE = "soft_delete"
-    ARCHIVE_DELETE = "archive_delete"
-    CASCADE_DELETE = "cascade_delete"
-
-
-class UpdateStrategy(Enum):
-    """Document update strategy types."""
-
-    REPLACE_ALL = "replace_all"
-    INCREMENTAL = "incremental"
-    VERSIONING = "versioning"
-    COPY_ON_WRITE = "copy_on_write"
-
-
-@dataclass
-class DocumentMetadata:
-    """Comprehensive document metadata for management."""
-
-    # Identity
-    doc_id: str
-    chunk_id: str
-    chunk_index: int = 0
-    total_chunks: int = 1
-
-    # Source Information
-    filename: str = ""
-    filepath: str = ""
-    source_system: str = ""
-    file_size: int = 0
-
-    # Hashes
-    file_hash: str = ""
-    chunk_hash: str = ""
-    metadata_hash: str = ""
-
-    # Timestamps
-    created_at: str = ""
-    updated_at: str = ""
-    indexed_at: str = ""
-    expires_at: str = ""
-
-    # Versioning
-    version: int = 1
-    is_active: bool = True
-    previous_version: str = ""
-    change_summary: str = ""
-
-    # Content
-    page_number: int = 0
-    section: str = ""
-
-    # Relationships
-    parent_doc: str = ""
-    related_docs: list[str] = None
-    supersedes: str = ""
-
-    # Permissions & Classification
-    access_level: str = "public"
-    department: str = ""
-    tags: list[str] = None
-    retention_category: str = "standard"
-
-    # Analysis
-    summary: str = ""
-    keywords: list[str] = None
-    language: str = "en"
-    reading_time_minutes: float = 0.0
-
-    def __post_init__(self):
-        """Initialize default values."""
-        if self.related_docs is None:
-            self.related_docs = []
-        if self.tags is None:
-            self.tags = []
-        if self.keywords is None:
-            self.keywords = []
-        if not self.created_at:
-            self.created_at = datetime.utcnow().isoformat() + "Z"
-        if not self.updated_at:
-            self.updated_at = self.created_at
-        if not self.indexed_at:
-            self.indexed_at = self.created_at
 
 
 class DocumentHashManager:
@@ -479,242 +388,68 @@ class DocumentLifecycleManager:
 
 
 class DocumentDeletionManager:
-    """Manages document deletion with various strategies."""
+    """Manages document deletion by file_hash."""
 
-    def __init__(self, vector_store, config: dict[str, Any]):
+    def __init__(self, vector_store, config: dict[str, Any] | None = None):
         self.vector_store = vector_store
-        self.config = config
-        self.enable_soft_delete = config.get("enable_soft_delete", True)
-        self.archive_location = config.get("retention_policy", {}).get(
-            "archive_location"
-        )
+        self.config = config or {}
 
-    def delete_by_time(
-        self,
-        older_than_days: int,
-        strategy: DeletionStrategy = DeletionStrategy.SOFT_DELETE,
-    ) -> dict[str, Any]:
-        """Delete documents older than specified days."""
-        cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
-        cutoff_iso = cutoff_date.isoformat() + "Z"
+    def delete_by_file_hash(self, file_hash: str) -> dict[str, Any]:
+        """Delete all chunks belonging to a file by its content hash.
 
-        # Find documents to delete
-        filter_criteria = {"created_at": {"$lt": cutoff_iso}}
+        This is the primary deletion interface. The file_hash is the SHA-256
+        hash of the original file content, which is stored in chunk metadata.
 
-        if self.enable_soft_delete and strategy == DeletionStrategy.SOFT_DELETE:
-            filter_criteria["is_active"] = True
+        Args:
+            file_hash: SHA-256 hash of the original file content.
 
-        return self._execute_deletion(filter_criteria, strategy)
-
-    def delete_by_document(
-        self,
-        doc_ids: list[str],
-        strategy: DeletionStrategy = DeletionStrategy.SOFT_DELETE,
-    ) -> dict[str, Any]:
-        """Delete specific documents by ID."""
-        filter_criteria = {"doc_id": {"$in": doc_ids}}
-
-        if self.enable_soft_delete and strategy == DeletionStrategy.SOFT_DELETE:
-            filter_criteria["is_active"] = True
-
-        return self._execute_deletion(filter_criteria, strategy)
-
-    def delete_by_filename(
-        self,
-        filenames: list[str],
-        strategy: DeletionStrategy = DeletionStrategy.SOFT_DELETE,
-    ) -> dict[str, Any]:
-        """Delete documents by filename."""
-        filter_criteria = {"filename": {"$in": filenames}}
-
-        if self.enable_soft_delete and strategy == DeletionStrategy.SOFT_DELETE:
-            filter_criteria["is_active"] = True
-
-        return self._execute_deletion(filter_criteria, strategy)
-
-    def delete_by_hash(
-        self,
-        content_hashes: list[str],
-        strategy: DeletionStrategy = DeletionStrategy.SOFT_DELETE,
-    ) -> dict[str, Any]:
-        """Delete documents by content hash."""
-        filter_criteria = {"chunk_hash": {"$in": content_hashes}}
-
-        if self.enable_soft_delete and strategy == DeletionStrategy.SOFT_DELETE:
-            filter_criteria["is_active"] = True
-
-        return self._execute_deletion(filter_criteria, strategy)
-
-    def delete_by_document_hash(
-        self,
-        document_hashes: list[str],
-        strategy: DeletionStrategy = DeletionStrategy.HARD_DELETE,
-    ) -> dict[str, Any]:
-        """Delete all chunks belonging to specific documents by their hashes."""
+        Returns:
+            Dictionary with deletion results.
+        """
         results = {
-            "strategy": strategy.value,
-            "document_hashes": document_hashes,
+            "file_hash": file_hash,
             "deleted_count": 0,
-            "errors": [],
+            "error": None,
         }
 
         try:
-            total_deleted = 0
-            for doc_hash in document_hashes:
-                # Use vector store's hash-based deletion if available
-                if hasattr(self.vector_store, "delete_by_document_hash"):
-                    success = self.vector_store.delete_by_document_hash(doc_hash)
-                    if success:
-                        # We don't get exact count, so estimate
-                        total_deleted += 1  # At least one document group deleted
-                else:
-                    # Fallback: try to delete by metadata filter
-                    filter_criteria = {"document_hash": doc_hash}
-                    delete_result = self._execute_deletion(filter_criteria, strategy)
-                    total_deleted += delete_result.get("deleted_count", 0)
+            # Step 1: Find all documents with this file_hash
+            documents = self.vector_store.get_documents_by_metadata(
+                {"file_hash": file_hash}
+            )
 
-            results["deleted_count"] = total_deleted
+            if not documents:
+                logger.info(f"No chunks found with file_hash {file_hash[:16]}...")
+                return results
+
+            # Step 2: Delete by document IDs
+            doc_ids = [doc.id for doc in documents]
+            deleted_count = self.vector_store.delete_documents(doc_ids)
+
+            results["deleted_count"] = deleted_count
+            logger.info(
+                f"Deleted {deleted_count} chunks for file_hash {file_hash[:16]}..."
+            )
 
         except Exception as e:
-            error_msg = f"Failed to delete documents by hash: {e}"
-            results["errors"].append(error_msg)
+            error_msg = f"Failed to delete by file_hash: {e}"
+            results["error"] = error_msg
             logger.error(error_msg)
 
         return results
-
-    def delete_by_source_path(
-        self,
-        source_paths: list[str],
-        strategy: DeletionStrategy = DeletionStrategy.HARD_DELETE,
-    ) -> dict[str, Any]:
-        """Delete all documents from specific source files."""
-        results = {
-            "strategy": strategy.value,
-            "source_paths": source_paths,
-            "deleted_count": 0,
-            "errors": [],
-        }
-
-        try:
-            total_deleted = 0
-            for source_path in source_paths:
-                # Use vector store's source-based deletion if available
-                if hasattr(self.vector_store, "delete_by_source"):
-                    success = self.vector_store.delete_by_source(source_path)
-                    if success:
-                        total_deleted += 1  # At least one source group deleted
-                else:
-                    # Fallback: try multiple metadata fields
-                    for field in ["source", "file_path", "filepath"]:
-                        filter_criteria = {field: source_path}
-                        delete_result = self._execute_deletion(
-                            filter_criteria, strategy
-                        )
-                        total_deleted += delete_result.get("deleted_count", 0)
-
-            results["deleted_count"] = total_deleted
-
-        except Exception as e:
-            error_msg = f"Failed to delete documents by source: {e}"
-            results["errors"].append(error_msg)
-            logger.error(error_msg)
-
-        return results
-
-    def delete_expired_documents(
-        self, strategy: DeletionStrategy = DeletionStrategy.SOFT_DELETE
-    ) -> dict[str, Any]:
-        """Delete documents that have passed their expiration date."""
-        current_time = datetime.utcnow().isoformat() + "Z"
-
-        filter_criteria = {"expires_at": {"$lt": current_time}}
-
-        if self.enable_soft_delete and strategy == DeletionStrategy.SOFT_DELETE:
-            filter_criteria["is_active"] = True
-
-        return self._execute_deletion(filter_criteria, strategy)
-
-    def cleanup_old_versions(self, keep_versions: int = 5) -> dict[str, Any]:
-        """Clean up old versions, keeping only the specified number of latest versions."""
-        # This would require querying for documents grouped by doc_id
-        # and keeping only the latest N versions
-        # Implementation depends on vector store capabilities
-
-        results = {
-            "action": "cleanup_versions",
-            "deleted_count": 0,
-            "archived_count": 0,
-            "errors": [],
-        }
-
-        logger.info(f"Version cleanup requested (keep {keep_versions} versions)")
-        # TODO: Implement version cleanup logic
-
-        return results
-
-    def _execute_deletion(
-        self, filter_criteria: dict[str, Any], strategy: DeletionStrategy
-    ) -> dict[str, Any]:
-        """Execute deletion based on strategy."""
-        results = {
-            "strategy": strategy.value,
-            "filter_criteria": filter_criteria,
-            "deleted_count": 0,
-            "archived_count": 0,
-            "errors": [],
-        }
-
-        try:
-            if strategy == DeletionStrategy.SOFT_DELETE:
-                # Mark as inactive instead of deleting
-                update_metadata = {
-                    "is_active": False,
-                    "deleted_at": datetime.utcnow().isoformat() + "Z",
-                }
-                results["deleted_count"] = self.vector_store.update_metadata(
-                    filter_criteria, update_metadata
-                )
-
-            elif strategy == DeletionStrategy.HARD_DELETE:
-                # Permanently delete
-                results["deleted_count"] = self.vector_store.delete_documents(
-                    filter_criteria
-                )
-
-            elif strategy == DeletionStrategy.ARCHIVE_DELETE:
-                # Archive then delete
-                if self.archive_location:
-                    results["archived_count"] = self._archive_documents(filter_criteria)
-                results["deleted_count"] = self.vector_store.delete_documents(
-                    filter_criteria
-                )
-
-            else:
-                results["errors"].append(f"Unsupported deletion strategy: {strategy}")
-
-        except Exception as e:
-            results["errors"].append(f"Deletion failed: {str(e)}")
-            logger.error(f"Deletion failed: {e}")
-
-        return results
-
-    def _archive_documents(self, filter_criteria: dict[str, Any]) -> int:
-        """Archive documents before deletion."""
-        # This would involve exporting documents to archive location
-        # Implementation depends on requirements
-        logger.info(f"Archiving documents with criteria: {filter_criteria}")
-        return 0  # Placeholder
 
 
 class DocumentManager:
     """Main document management interface."""
 
-    def __init__(self, vector_store, config: dict[str, Any]):
+    def __init__(self, vector_store, config: dict[str, Any] | None = None):
         self.vector_store = vector_store
-        self.config = config
-        self.lifecycle_manager = DocumentLifecycleManager(config)
-        self.deletion_manager = DocumentDeletionManager(vector_store, config)
-        self.hash_manager = DocumentHashManager(config.get("hash_algorithm", "sha256"))
+        self.config = config or {}
+        self.lifecycle_manager = DocumentLifecycleManager(self.config)
+        self.deletion_manager = DocumentDeletionManager(vector_store, self.config)
+        self.hash_manager = DocumentHashManager(
+            self.config.get("hash_algorithm", "sha256")
+        )
 
     def process_documents(
         self,
@@ -733,105 +468,30 @@ class DocumentManager:
 
         return enhanced_documents
 
-    def delete_documents(
-        self,
-        doc_ids: list[str] = None,
-        filenames: list[str] = None,
-        content_hashes: list[str] = None,
-        document_hashes: list[str] = None,
-        source_paths: list[str] = None,
-        older_than: int = None,
-        expired: bool = False,
-        strategy: DeletionStrategy = DeletionStrategy.SOFT_DELETE,
-    ) -> dict[str, Any]:
-        """Delete documents based on various criteria with enhanced hash-based support."""
+    def delete_by_file_hash(self, file_hash: str) -> dict[str, Any]:
+        """Delete all chunks belonging to a file by its content hash.
 
-        if doc_ids:
-            # Check if any doc_ids are actually chunk IDs that we can extract document hashes from
-            document_hashes_from_ids = []
-            regular_doc_ids = []
+        This is the primary deletion interface. The file_hash is the SHA-256
+        hash of the original file content.
 
-            for doc_id in doc_ids:
-                doc_hash = extract_document_hash_from_chunk_id(doc_id)
-                if doc_hash:
-                    document_hashes_from_ids.append(doc_hash)
-                else:
-                    regular_doc_ids.append(doc_id)
+        Args:
+            file_hash: SHA-256 hash of the original file content.
 
-            # Delete by document hash first (more efficient)
-            results = {"deleted_count": 0, "errors": []}
-            if document_hashes_from_ids:
-                hash_result = self.deletion_manager.delete_by_document_hash(
-                    document_hashes_from_ids, strategy
-                )
-                results["deleted_count"] += hash_result.get("deleted_count", 0)
-                results["errors"].extend(hash_result.get("errors", []))
-
-            # Delete remaining regular IDs
-            if regular_doc_ids:
-                regular_result = self.deletion_manager.delete_by_document(
-                    regular_doc_ids, strategy
-                )
-                results["deleted_count"] += regular_result.get("deleted_count", 0)
-                results["errors"].extend(regular_result.get("errors", []))
-
-            return results
-
-        elif document_hashes:
-            return self.deletion_manager.delete_by_document_hash(
-                document_hashes, strategy
-            )
-        elif source_paths:
-            return self.deletion_manager.delete_by_source_path(source_paths, strategy)
-        elif filenames:
-            return self.deletion_manager.delete_by_filename(filenames, strategy)
-        elif content_hashes:
-            return self.deletion_manager.delete_by_hash(content_hashes, strategy)
-        elif older_than is not None:
-            return self.deletion_manager.delete_by_time(older_than, strategy)
-        elif expired:
-            return self.deletion_manager.delete_expired_documents(strategy)
-        else:
-            return {"error": "No deletion criteria specified", "deleted_count": 0}
-
-    def find_duplicates(self, documents: list[Document]) -> dict[str, list[str]]:
-        """Find duplicate documents based on content hash."""
-        hash_to_docs = {}
-
-        for doc in documents:
-            content_hash = doc.metadata.get("chunk_hash", "")
-            if content_hash:
-                if content_hash not in hash_to_docs:
-                    hash_to_docs[content_hash] = []
-                hash_to_docs[content_hash].append(doc.id)
-
-        # Return only hashes with multiple documents
-        return {h: docs for h, docs in hash_to_docs.items() if len(docs) > 1}
+        Returns:
+            Dictionary with deletion results including deleted_count.
+        """
+        return self.deletion_manager.delete_by_file_hash(file_hash)
 
     def get_document_stats(self) -> dict[str, Any]:
-        """Get comprehensive document statistics."""
+        """Get document statistics from the vector store."""
         try:
-            # Use enhanced vector store method if available
             if hasattr(self.vector_store, "get_collection_stats"):
                 return self.vector_store.get_collection_stats()
             else:
-                # Fallback to basic collection info
                 info = self.vector_store.get_collection_info()
                 return {
                     "total_documents": info.get("count", 0),
-                    "active_documents": info.get("count", 0),
-                    "deleted_documents": 0,
-                    "expired_documents": 0,
-                    "total_versions": 0,
-                    "storage_size_mb": 0,
                 }
         except Exception as e:
             logger.error(f"Failed to get document stats: {e}")
-            return {
-                "total_documents": 0,
-                "active_documents": 0,
-                "deleted_documents": 0,
-                "expired_documents": 0,
-                "total_versions": 0,
-                "storage_size_mb": 0,
-            }
+            return {"total_documents": 0}

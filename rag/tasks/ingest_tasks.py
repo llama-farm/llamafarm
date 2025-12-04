@@ -113,8 +113,8 @@ def ingest_file_with_rag_task(
         # Create metadata
         file_path = Path(source_path)
 
-        # Check if this is a hash-based file in lf_data/raw
-        if "lf_data/raw" in str(source_path):
+        # Check if this is a hash-based file in lf_data/datasets/*/raw/
+        if "lf_data/datasets/" in str(source_path) and "/raw/" in str(source_path):
             # Extract file hash from the path
             file_hash = file_path.name
             # Try to load metadata file

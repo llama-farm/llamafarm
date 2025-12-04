@@ -413,6 +413,21 @@ class ChatRequest(BaseModel):
     rag_score_threshold: float | None = None
     n_ctx: int | None = None  # Context window size for GGUF models (universal runtime)
 
+    # Custom RAG query override
+    rag_queries: list[str] | None = Field(
+        default=None,
+        description="Custom queries for RAG retrieval. Overrides using the user message. Can be a single query or multiple queries - results are merged and deduplicated.",
+    )
+
+    # Thinking/reasoning model parameters (Ollama-compatible, universal runtime)
+    # Controls whether thinking models show their reasoning process
+    think: bool | None = (
+        None  # None = runtime default (off), True = enable, False = disable
+    )
+    # Maximum tokens for thinking process (default: 1024 when thinking enabled)
+    # max_tokens is used for the final answer, thinking_budget is additional
+    thinking_budget: int | None = None
+
 
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
@@ -528,6 +543,9 @@ async def chat(
                 rag_top_k=request.rag_top_k,
                 rag_score_threshold=request.rag_score_threshold,
                 n_ctx=request.n_ctx,
+                rag_queries=request.rag_queries,
+                think=request.think,
+                thinking_budget=request.thinking_budget,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -546,6 +564,9 @@ async def chat(
             rag_top_k=request.rag_top_k,
             n_ctx=request.n_ctx,
             rag_score_threshold=request.rag_score_threshold,
+            rag_queries=request.rag_queries,
+            think=request.think,
+            thinking_budget=request.thinking_budget,
         )
     except Exception as e:
         raise HTTPException(

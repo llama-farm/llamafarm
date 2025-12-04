@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import uuid
 from collections.abc import AsyncGenerator
@@ -49,12 +50,14 @@ class RAGParameters:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        rag_queries: list[str] | None = None,
     ):
         self.rag_enabled = rag_enabled
         self.database = database
         self.retrieval_strategy = retrieval_strategy
         self.rag_top_k = rag_top_k
         self.rag_score_threshold = rag_score_threshold
+        self.rag_queries = rag_queries
 
 
 class ProjectChatService:
@@ -123,6 +126,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        rag_queries: list[str] | None = None,
     ) -> None:
         """
         Perform RAG search with event logging.
@@ -138,10 +142,19 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
+            rag_queries=rag_queries,
         )
 
         if not rag_params.rag_enabled:
             return
+
+        # Determine the query for logging
+        log_query = message
+        if rag_params.rag_queries:
+            if len(rag_params.rag_queries) == 1:
+                log_query = rag_params.rag_queries[0]
+            else:
+                log_query = f"[{len(rag_params.rag_queries)} custom queries]"
 
         # Log RAG query start if enabled
         self._log_event(
@@ -149,9 +162,12 @@ class ProjectChatService:
             "rag_query_start",
             {
                 "database": rag_params.database,
-                "query": message,
+                "query": log_query,
                 "top_k": rag_params.rag_top_k,
                 "retrieval_strategy": rag_params.retrieval_strategy,
+                "rag_queries_count": len(rag_params.rag_queries)
+                if rag_params.rag_queries
+                else 0,
             },
         )
 
@@ -166,6 +182,7 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
+            rag_queries=rag_queries,
         )
 
         # Extract results from context provider to log completion metrics
@@ -229,6 +246,9 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
         n_ctx: int | None = None,
+        rag_queries: list[str] | None = None,
+        think: bool | None = None,
+        thinking_budget: int | None = None,
     ) -> LFChatCompletion:
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
@@ -267,6 +287,7 @@ class ProjectChatService:
                     retrieval_strategy=retrieval_strategy,
                     rag_top_k=rag_top_k,
                     rag_score_threshold=rag_score_threshold,
+                    rag_queries=rag_queries,
                 )
             except Exception as e:
                 self._fail_event(event_logger, str(e))
@@ -277,6 +298,11 @@ class ProjectChatService:
             extra_body = {}
             if n_ctx is not None:
                 extra_body["n_ctx"] = n_ctx
+            # Thinking/reasoning model parameters (universal runtime)
+            if think is not None:
+                extra_body["think"] = think
+            if thinking_budget is not None:
+                extra_body["thinking_budget"] = thinking_budget
 
             response = await chat_agent.run_async(
                 messages=messages,
@@ -337,6 +363,9 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
         n_ctx: int | None = None,
+        rag_queries: list[str] | None = None,
+        think: bool | None = None,
+        thinking_budget: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         # Create event logger (gracefully handles test mocks)
@@ -378,6 +407,7 @@ class ProjectChatService:
                     retrieval_strategy=retrieval_strategy,
                     rag_top_k=rag_top_k,
                     rag_score_threshold=rag_score_threshold,
+                    rag_queries=rag_queries,
                 )
 
             logger.debug("Running async stream")
@@ -395,6 +425,11 @@ class ProjectChatService:
             extra_body = {}
             if n_ctx is not None:
                 extra_body["n_ctx"] = n_ctx
+            # Thinking/reasoning model parameters (universal runtime)
+            if think is not None:
+                extra_body["think"] = think
+            if thinking_budget is not None:
+                extra_body["thinking_budget"] = thinking_budget
 
             async for chunk in chat_agent.run_async_stream(
                 messages=messages,
@@ -435,6 +470,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        rag_queries: list[str] | None = None,
     ) -> RAGParameters:
         """
         Resolve RAG parameters with intelligent cascading defaults.
@@ -536,6 +572,7 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
+            rag_queries=rag_queries,
         )
 
     def _extract_config_value(
@@ -595,46 +632,28 @@ class ProjectChatService:
             },
         }
 
-    def _perform_rag_search(
+    def _execute_single_rag_query(
         self,
         project_dir: str,
-        project_config: LlamaFarmConfig,
-        message: str,
+        query: str,
+        database: str,
         top_k: int = 5,
-        database: str | None = None,
         retrieval_strategy: str | None = None,
         score_threshold: float | None = None,
     ) -> list[Any]:
-        """Perform RAG search using the project's RAG configuration.
+        """Execute a single RAG query and return normalized results.
 
-        This implementation searches the database directly, not through datasets.
+        This is the low-level search method that calls the RAG service directly.
+        For most use cases, use _perform_rag_search which handles custom queries
+        and concurrent execution.
         """
-
-        # First, make sure rag is enabled
-        if not project_config.rag:
-            logger.warning("RAG is not enabled in project config. Skipping.")
-            return []
-
-        logger.info(f"Performing RAG search for message: {message}")
-
-        # Find the database configuration
-        if not database:
-            # Check for explicit default_database first, then fall back to first database
-            if project_config.rag.default_database:
-                database = str(project_config.rag.default_database)
-                logger.info(f"Using configured default database: {database}")
-            elif project_config.rag.databases:
-                database = str(project_config.rag.databases[0].name)
-                logger.info(f"Using first database as default: {database}")
-            else:
-                logger.error("No databases found in project config")
-                return []
+        logger.info(f"Executing RAG query: {query[:50]}...")
 
         # Use shared helper to run RAG search on database
         results = search_with_rag(
             project_dir,
             database,
-            message,
+            query,
             top_k=top_k,
             retrieval_strategy=retrieval_strategy,
             score_threshold=score_threshold,
@@ -654,7 +673,7 @@ class ProjectChatService:
             )()
             for item in results
         ]
-        logger.info(f"RAG search returned {len(normalized)} results")
+        logger.info(f"RAG query returned {len(normalized)} results")
         return normalized
 
     def _clear_rag_context_provider(self, chat_agent: LFAgent) -> None:
@@ -674,6 +693,7 @@ class ProjectChatService:
         retrieval_strategy: str | None = None,
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
+        rag_queries: list[str] | None = None,
     ) -> None:
         self._clear_rag_context_provider(chat_agent)
         context_provider = RAGContextProvider(title="Project Chat Context")
@@ -687,17 +707,15 @@ class ProjectChatService:
             retrieval_strategy=retrieval_strategy,
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
+            rag_queries=rag_queries,
         )
 
         rag_results = []
         if rag_params.rag_enabled:
-            rag_results = self._perform_rag_search(
-                project_dir,
-                project_config,
-                message,
-                top_k=rag_params.rag_top_k or 5,
-                database=rag_params.database,
-                retrieval_strategy=rag_params.retrieval_strategy,
+            rag_results = await self._perform_rag_search(
+                project_dir=project_dir,
+                message=message,
+                rag_params=rag_params,
             )
 
         for idx, result in enumerate(rag_results):
@@ -712,6 +730,89 @@ class ProjectChatService:
                 },
             )
             context_provider.chunks.append(chunk_item)
+
+    async def _perform_rag_search(
+        self,
+        project_dir: str,
+        message: str,
+        rag_params: RAGParameters,
+    ) -> list[Any]:
+        """
+        Perform RAG search using the project's RAG configuration.
+
+        Handles two cases:
+        1. rag_queries (list): Execute queries concurrently and merge/deduplicate results
+        2. Default: Use the user message as the query
+
+        Args:
+            project_dir: Path to the project directory
+            message: The user message (used as default query if no custom queries)
+            rag_params: Resolved RAG parameters including database, strategy, and queries
+        """
+        if not rag_params.rag_enabled or not rag_params.database:
+            return []
+
+        top_k = rag_params.rag_top_k or 5
+
+        # Determine queries to execute
+        queries = [message]  # Default to user message
+        if rag_params.rag_queries:
+            valid_queries = [q for q in rag_params.rag_queries if q and q.strip()]
+            if valid_queries:
+                queries = valid_queries
+
+        # Single query - execute directly without concurrent overhead
+        if len(queries) == 1:
+            logger.info(f"Performing RAG search with query: {queries[0][:50]}...")
+            return self._execute_single_rag_query(
+                project_dir=project_dir,
+                query=queries[0],
+                database=rag_params.database,
+                top_k=top_k,
+                retrieval_strategy=rag_params.retrieval_strategy,
+                score_threshold=rag_params.rag_score_threshold,
+            )
+
+        # Multiple queries - execute concurrently
+        logger.info(f"Performing RAG search with {len(queries)} queries concurrently")
+
+        # Create concurrent search tasks using asyncio.to_thread for sync function
+        search_tasks = [
+            asyncio.to_thread(
+                self._execute_single_rag_query,
+                project_dir=project_dir,
+                query=query,
+                database=rag_params.database,
+                top_k=top_k,
+                retrieval_strategy=rag_params.retrieval_strategy,
+                score_threshold=rag_params.rag_score_threshold,
+            )
+            for query in queries
+        ]
+
+        # Execute all searches concurrently
+        list_of_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+        # Flatten, deduplicate, and sort the aggregated results
+        all_results = []
+        seen_content_hashes: set[str] = set()
+
+        for results in list_of_results:
+            # Skip failed searches
+            if isinstance(results, Exception):
+                logger.warning(f"RAG search failed for one query: {results}")
+                continue
+
+            for result in results:
+                # Create a hash from the first 200 chars of content for deduplication
+                content_hash = hash(result.content[:200] if result.content else "")
+                if content_hash not in seen_content_hashes:
+                    seen_content_hashes.add(content_hash)
+                    all_results.append(result)
+
+        # Sort by score (descending) and limit to top_k
+        all_results.sort(key=lambda x: getattr(x, "score", 0.0), reverse=True)
+        return all_results[:top_k]
 
 
 project_chat_service = ProjectChatService()

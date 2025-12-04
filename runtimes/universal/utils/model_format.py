@@ -1,17 +1,22 @@
 """Model format detection utilities for Universal Runtime.
 
 Detects whether a HuggingFace model repository contains GGUF or transformers format files.
+
+Note: Core GGUF utilities (list_gguf_files, select_gguf_file, get_gguf_file_path, etc.)
+are provided by llamafarm_common and re-exported here for backward compatibility.
 """
 
 import logging
-import os
 
-from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub import HfApi
 from llamafarm_common import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
+    get_gguf_file_path,
+    list_gguf_files,
     parse_model_with_quantization,
     parse_quantization_from_filename,
     select_gguf_file,
+    select_gguf_file_with_logging,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,9 +30,11 @@ __all__ = [
     "parse_model_with_quantization",
     "parse_quantization_from_filename",
     "select_gguf_file",
+    "select_gguf_file_with_logging",
     "detect_model_format",
     "list_gguf_files",
     "get_gguf_file_path",
+    "clear_format_cache",
 ]
 
 
@@ -90,198 +97,6 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
     except Exception as e:
         logger.error(f"Error detecting model format for {base_model_id}: {e}")
         raise
-
-
-def list_gguf_files(model_id: str, token: str | None = None) -> list[str]:
-    """
-    List all GGUF files available in a HuggingFace model repository.
-
-    This function uses the HuggingFace Hub API to list all files in the repository
-    and returns only the .gguf files without downloading them.
-
-    Args:
-        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF" or "unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
-        token: Optional HuggingFace authentication token for gated models
-
-    Returns:
-        List of .gguf filenames available in the repository
-
-    Examples:
-        >>> files = list_gguf_files("unsloth/Qwen3-1.7B-GGUF")
-        >>> files
-        ['qwen3-1.7b.Q4_K_M.gguf', 'qwen3-1.7b.Q8_0.gguf', 'qwen3-1.7b.F16.gguf']
-        >>> files = list_gguf_files("unsloth/Qwen3-1.7B-GGUF:Q8_0")
-        >>> files
-        ['qwen3-1.7b.Q4_K_M.gguf', 'qwen3-1.7b.Q8_0.gguf', 'qwen3-1.7b.F16.gguf']
-    """
-    # Parse model ID to remove quantization suffix if present
-    base_model_id, _ = parse_model_with_quantization(model_id)
-
-    try:
-        api = HfApi()
-        all_files = api.list_repo_files(repo_id=base_model_id, token=token)
-        gguf_files = [f for f in all_files if f.endswith(".gguf")]
-        logger.debug(
-            f"Found {len(gguf_files)} GGUF files in {base_model_id}: {gguf_files}"
-        )
-        return gguf_files
-    except Exception as e:
-        logger.error(f"Error listing files in {base_model_id}: {e}")
-        raise
-
-
-# Note: parse_quantization_from_filename and select_gguf_file are imported from llamafarm_common
-# and re-exported above for backward compatibility. We wrap select_gguf_file to add logging.
-
-
-def select_gguf_file_with_logging(
-    gguf_files: list[str], preferred_quantization: str | None = None
-) -> str:
-    """
-    Select the best GGUF file from a list based on quantization preference, with logging.
-
-    This is a wrapper around llamafarm_common.select_gguf_file that adds logging.
-
-    Args:
-        gguf_files: List of .gguf filenames from the repository
-        preferred_quantization: Optional preferred quantization type (e.g., "Q4_K_M", "Q8_0")
-
-    Returns:
-        Selected GGUF filename
-
-    Raises:
-        ValueError: If no GGUF files provided
-    """
-    if not gguf_files:
-        raise ValueError("No GGUF files provided")
-
-    # If only one file, return it
-    if len(gguf_files) == 1:
-        logger.info(f"Only one GGUF file available: {gguf_files[0]}")
-        return gguf_files[0]
-
-    # Check if preferred quantization exists and log appropriately
-    found = False
-    if preferred_quantization:
-        file_quantizations = [
-            (filename, parse_quantization_from_filename(filename))
-            for filename in gguf_files
-        ]
-
-        preferred_upper = preferred_quantization.upper()
-        found = any(
-            quant and quant.upper() == preferred_upper
-            for _, quant in file_quantizations
-        )
-
-        if found:
-            logger.info(
-                f"Selected GGUF file with preferred quantization '{preferred_quantization}'"
-            )
-        else:
-            available = [q for _, q in file_quantizations if q]
-            logger.warning(
-                f"Preferred quantization '{preferred_quantization}' not found. "
-                f"Available quantizations: {available}. Falling back to default selection."
-            )
-
-    # Use common selection logic
-    result = select_gguf_file(gguf_files, preferred_quantization)
-
-    if not preferred_quantization or not found:
-        # Log which default was selected
-        quant = parse_quantization_from_filename(result)
-        if quant:
-            logger.info(
-                f"Selected GGUF file with default quantization '{quant}': {result}"
-            )
-        else:
-            logger.warning(
-                f"No preferred quantization found. Using first file: {result}"
-            )
-
-    return result
-
-
-def get_gguf_file_path(
-    model_id: str,
-    token: str | None = None,
-    preferred_quantization: str | None = None,
-) -> str:
-    """
-    Get the full path to a GGUF file in the HuggingFace cache.
-
-    This function intelligently selects a GGUF file based on quantization preference,
-    downloads only that specific file, and returns its path.
-
-    Args:
-        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF" or "unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
-        token: Optional HuggingFace authentication token for gated models
-        preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0")
-                                If not specified, will use quantization from model_id if present, otherwise defaults to Q4_K_M
-
-    Returns:
-        Full absolute path to the selected .gguf file
-
-    Raises:
-        FileNotFoundError: If no GGUF file found in the model repository
-
-    Examples:
-        >>> path = get_gguf_file_path("unsloth/Qwen3-0.6B-GGUF")
-        >>> path.endswith('.gguf')
-        True
-        >>> path = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF:Q8_0")
-        >>> "Q8_0" in path
-        True
-        >>> path = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF", preferred_quantization="Q8_0")
-        >>> "Q8_0" in path
-        True
-    """
-    # Parse model ID to extract base model and quantization suffix if present
-    base_model_id, model_quantization = parse_model_with_quantization(model_id)
-
-    # Use quantization from model_id if no explicit preference provided
-    if preferred_quantization is None and model_quantization is not None:
-        preferred_quantization = model_quantization
-        logger.info(f"Using quantization from model ID: {preferred_quantization}")
-
-    logger.info(f"Locating GGUF file for model: {base_model_id}")
-
-    # Step 1: List all GGUF files in the repository (without downloading)
-    # list_gguf_files will handle parsing the model_id internally
-    available_gguf_files = list_gguf_files(base_model_id, token)
-
-    if not available_gguf_files:
-        raise FileNotFoundError(
-            f"No GGUF files found in model repository: {base_model_id}"
-        )
-
-    # Step 2: Select the best GGUF file based on preference
-    selected_filename = select_gguf_file_with_logging(
-        available_gguf_files, preferred_quantization
-    )
-
-    logger.info(
-        f"Selected GGUF file: {selected_filename} "
-        f"(from {len(available_gguf_files)} available files)"
-    )
-
-    # Step 3: Download only the selected file using allow_patterns
-    local_path = snapshot_download(
-        repo_id=base_model_id,
-        token=token,
-        allow_patterns=[selected_filename],  # Only download this specific file
-    )
-
-    # Step 4: Construct full path to the downloaded file
-    gguf_path = os.path.join(local_path, selected_filename)
-
-    # Verify the file exists
-    if not os.path.exists(gguf_path):
-        raise FileNotFoundError(f"GGUF file not found after download: {gguf_path}")
-
-    logger.info(f"GGUF file ready: {gguf_path}")
-    return gguf_path
 
 
 def clear_format_cache():
