@@ -167,3 +167,123 @@ def test_delete_model_handles_errors(mocker):
         "An error occurred while deleting the model" in data["detail"]
         or "contact support" in data["detail"]
     )
+
+
+def test_download_model_insufficient_space(mocker):
+    """Test download blocked when disk space is critically low."""
+    from server.services.disk_space_service import (
+        DiskSpaceInfo,
+        ValidationResult,
+    )
+
+    # Mock validation to return can_download=False
+    mock_validation = mocker.patch(
+        "server.services.disk_space_service.DiskSpaceService.validate_space_for_download"
+    )
+    mock_validation.return_value = ValidationResult(
+        can_download=False,
+        warning=False,
+        available_bytes=50000000,  # 50MB
+        required_bytes=1000000000,  # 1GB
+        message="Insufficient disk space. Required: 1.00 GB, Available: 0.05 GB.",
+        cache_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
+        system_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
+    )
+
+    client = _client()
+    resp = client.post(
+        "/v1/models/download",
+        json={"model_name": "test/model", "provider": "universal"},
+    )
+
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "Insufficient disk space" in data["detail"]
+
+
+def test_download_model_sufficient_space(mocker):
+    """Test download proceeds when space is available."""
+    from server.services.disk_space_service import (
+        DiskSpaceInfo,
+        ValidationResult,
+    )
+
+    # Mock validation to return can_download=True, no warning
+    mock_validation = mocker.patch(
+        "server.services.disk_space_service.DiskSpaceService.validate_space_for_download"
+    )
+    mock_validation.return_value = ValidationResult(
+        can_download=True,
+        warning=False,
+        available_bytes=50000000000,  # 50GB
+        required_bytes=1000000000,  # 1GB
+        message="Sufficient space available (50.00 GB free)",
+        cache_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
+        system_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
+    )
+
+    # Mock the actual download to return a simple event
+    mock_download = mocker.patch(
+        "server.services.model_service.ModelService.download_model"
+    )
+
+    async def mock_download_gen():
+        yield {"event": "progress", "downloaded": 100, "total": 1000}
+        yield {"event": "done", "model_name": "test/model"}
+
+    mock_download.return_value = mock_download_gen()
+
+    client = _client()
+    resp = client.post(
+        "/v1/models/download",
+        json={"model_name": "test/model", "provider": "universal"},
+    )
+
+    # Should return 200 with streaming response
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "text/event-stream; charset=utf-8"
+
+
+def test_download_model_low_space_warning(mocker):
+    """Test download emits warning event when space is low."""
+    from server.services.disk_space_service import (
+        DiskSpaceInfo,
+        ValidationResult,
+    )
+
+    # Mock validation to return can_download=True with warning
+    mock_validation = mocker.patch(
+        "server.services.disk_space_service.DiskSpaceService.validate_space_for_download"
+    )
+    mock_validation.return_value = ValidationResult(
+        can_download=True,
+        warning=True,
+        available_bytes=5000000000,  # 5GB (< 10% threshold)
+        required_bytes=1000000000,  # 1GB
+        message="Downloading this model (1.00 GB) will leave you with 4.00 GB free (4.0% free), which is below the 10% threshold. This could affect LlamaFarm's capabilities. Do you want to continue anyway?",
+        cache_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
+        system_info=DiskSpaceInfo(0, 0, 0, "", 0.0),
+    )
+
+    # Mock the actual download
+    mock_download = mocker.patch(
+        "server.services.model_service.ModelService.download_model"
+    )
+
+    async def mock_download_gen():
+        yield {"event": "progress", "downloaded": 100, "total": 1000}
+        yield {"event": "done", "model_name": "test/model"}
+
+    mock_download.return_value = mock_download_gen()
+
+    client = _client()
+    resp = client.post(
+        "/v1/models/download",
+        json={"model_name": "test/model", "provider": "universal"},
+    )
+
+    assert resp.status_code == 200
+    # Read the stream to check for warning event
+    content = resp.text
+    assert "warning" in content.lower()
+    assert "below the 10% threshold" in content

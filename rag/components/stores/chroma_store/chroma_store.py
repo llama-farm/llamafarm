@@ -82,7 +82,6 @@ class ChromaStore(VectorStore):
                 lambda: chromadb.PersistentClient(path=self.persist_directory),
             )
 
-        self.collection = None
         self._setup_collection()
 
         # Initialize deduplication tracker
@@ -196,7 +195,7 @@ class ChromaStore(VectorStore):
                 return True
 
             # Prepare data for ChromaDB
-            ids = []
+            ids: list[str] = []
             embeddings = []
             metadatas = []
             documents_content = []
@@ -479,73 +478,57 @@ class ChromaStore(VectorStore):
             logger.error(f"Failed to get document {doc_id}: {e}")
             return None
 
-    def delete_documents(self, doc_ids: list[str]) -> bool:
-        """Delete documents by IDs."""
-        try:
-            self.collection.delete(ids=doc_ids)
-            logger.info(f"Deleted {len(doc_ids)} documents from ChromaDB")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete documents: {e}")
-            return False
+    def get_documents_by_metadata(
+        self, metadata_filter: dict[str, Any]
+    ) -> list[Document]:
+        """Get documents matching a metadata filter.
 
-    def delete_by_document_hash(self, document_hash: str) -> bool:
-        """Delete all chunks belonging to a specific document by its hash."""
+        Args:
+            metadata_filter: Key-value pairs to match against document metadata.
+
+        Returns:
+            List of matching documents.
+        """
         try:
-            # Find all documents with this document hash
             results = self.collection.get(
-                where={"document_hash": document_hash}, include=["metadatas"]
+                where=metadata_filter, include=["documents", "metadatas"]
             )
 
+            documents = []
             if results and results["ids"]:
-                doc_ids = results["ids"]
-                self.collection.delete(ids=doc_ids)
-                logger.info(
-                    f"Deleted {len(doc_ids)} documents with hash {document_hash[:12]}..."
-                )
-                return True
-            else:
-                logger.info(f"No documents found with hash {document_hash[:12]}...")
-                return True
-
-        except Exception as e:
-            logger.error(f"Failed to delete documents by hash: {e}")
-            return False
-
-    def delete_by_source(self, source_path: str) -> bool:
-        """Delete all documents from a specific source file."""
-        try:
-            # Try both exact match and path-based matching
-            where_conditions = [{"source": source_path}, {"file_path": source_path}]
-
-            total_deleted = 0
-            for where_condition in where_conditions:
-                try:
-                    results = self.collection.get(
-                        where=where_condition, include=["metadatas"]
+                for i, doc_id in enumerate(results["ids"]):
+                    content = results["documents"][i] if results["documents"] else ""
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+                    metadata = self._parse_metadata(metadata)
+                    documents.append(
+                        Document(id=doc_id, content=content, metadata=metadata)
                     )
 
-                    if results and results["ids"]:
-                        doc_ids = results["ids"]
-                        self.collection.delete(ids=doc_ids)
-                        total_deleted += len(doc_ids)
-
-                except Exception:
-                    # Continue to next condition if this one fails
-                    continue
-
-            if total_deleted > 0:
-                logger.info(
-                    f"Deleted {total_deleted} documents from source {source_path}"
-                )
-                return True
-            else:
-                logger.info(f"No documents found from source {source_path}")
-                return True
+            return documents
 
         except Exception as e:
-            logger.error(f"Failed to delete documents by source: {e}")
-            return False
+            logger.error(f"Failed to get documents by metadata: {e}")
+            return []
+
+    def delete_documents(self, doc_ids: list[str]) -> int:
+        """Delete documents by their IDs.
+
+        Args:
+            doc_ids: List of document IDs to delete.
+
+        Returns:
+            Number of documents deleted.
+        """
+        try:
+            if not doc_ids:
+                return 0
+
+            self.collection.delete(ids=doc_ids)
+            logger.info(f"Deleted {len(doc_ids)} documents from ChromaDB")
+            return len(doc_ids)
+        except Exception as e:
+            logger.error(f"Failed to delete documents: {e}")
+            raise
 
     def _document_exists(self, doc_id: str) -> bool:
         """Check if a document with the given ID already exists."""

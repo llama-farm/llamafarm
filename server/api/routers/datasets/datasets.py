@@ -231,7 +231,20 @@ async def upload_data(
     )
 
 
-@router.delete("/{dataset}/data/{file_hash}")
+class DeleteDataResponse(BaseModel):
+    file_hash: str
+    deleted_chunks: int = Field(
+        description="Number of chunks deleted from vector store"
+    )
+
+
+@router.delete(
+    "/{dataset}/data/{file_hash}",
+    operation_id="dataset_data_delete",
+    summary="Delete a file from the dataset",
+    description="Delete a file from the dataset and remove its chunks from the vector store.",
+    responses={200: {"model": DeleteDataResponse}},
+)
 async def delete_data(
     namespace: str,
     project: str,
@@ -244,11 +257,14 @@ async def delete_data(
         dataset=dataset,
         file_hash=file_hash,
     )
-    DatasetService.remove_file_from_dataset(
+    result = await DatasetService.remove_file_from_dataset(
         namespace=namespace,
         project=project,
         dataset=dataset,
         file_hash=file_hash,
     )
 
-    return {"file_hash": file_hash}
+    return DeleteDataResponse(
+        file_hash=file_hash,
+        deleted_chunks=result.get("deleted_count", 0),
+    )

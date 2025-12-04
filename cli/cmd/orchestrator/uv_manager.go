@@ -163,11 +163,11 @@ func (m *UVManager) downloadUV() error {
 		}
 	}
 
-	// Move to final location
-	if err := os.Rename(extractedUV, m.uvPath); err != nil {
-		// On Windows, rename can fail if file exists, so try remove first
+	// Move to final location (handles cross-filesystem moves)
+	if err := utils.MoveFile(extractedUV, m.uvPath); err != nil {
+		// On Windows, move can fail if file exists, so try remove first
 		os.Remove(m.uvPath)
-		if err := os.Rename(extractedUV, m.uvPath); err != nil {
+		if err := utils.MoveFile(extractedUV, m.uvPath); err != nil {
 			return fmt.Errorf("failed to install UV binary: %w", err)
 		}
 	}

@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from core.base import VectorStore
 from core.blob_processor import BlobProcessor
 from core.logging import RAGStructLogger
 from core.strategies.handler import SchemaHandler
@@ -171,7 +172,7 @@ class IngestHandler:
             # Import the module
             module = importlib.import_module(module_path)
             # Get the class (should match the type name)
-            store_class = getattr(module, vector_store_type)
+            store_class: type[VectorStore] = getattr(module, vector_store_type)
             # Initialize with config from the config file
             # Use the already resolved config_dict from above
 

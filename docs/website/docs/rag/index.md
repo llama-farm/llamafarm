@@ -1,11 +1,24 @@
 ---
 title: RAG Guide
-sidebar_position: 6
+sidebar_position: 1
 ---
 
 # RAG Guide
 
 LlamaFarm treats retrieval-augmented generation as a first-class, configurable pipeline. This guide explains how strategies, databases, and datasets fit together—and how to operate and extend them.
+
+## Component Reference
+
+For detailed configuration options, see these reference guides:
+
+| Component | Description | Link |
+|-----------|-------------|------|
+| **Parsers** | Transform documents into chunks | [Parsers Reference](./parsers.md) |
+| **Embedders** | Convert text to vectors | [Embedders Reference](./embedders.md) |
+| **Extractors** | Enrich chunks with metadata | [Extractors Reference](./extractors.md) |
+| **Databases** | Vector storage backends | [Databases Reference](./databases.md) |
+| **Retrieval Strategies** | Search and ranking methods | [Retrieval Strategies](./retrieval-strategies.md) |
+| **Advanced Retrieval** | Cross-encoder, multi-turn RAG | [Advanced Retrieval](./advanced-retrieval.md) |
 
 ## RAG at a Glance
 
@@ -123,6 +136,12 @@ See [Advanced Retrieval Strategies](./advanced-retrieval.md) for detailed config
 
 ## Next Steps
 
-- [CLI Reference](../cli/index.md) – command usage.
-- [Extending RAG](../extending/index.md#extend-rag-components) – add stores/parsers.
-- [Examples](../examples/index.md) – see FDA and Raleigh workflows.
+- [Parsers Reference](./parsers.md) – configure document parsing
+- [Embedders Reference](./embedders.md) – configure embedding models
+- [Extractors Reference](./extractors.md) – add metadata extraction
+- [Databases Reference](./databases.md) – configure vector stores
+- [Retrieval Strategies](./retrieval-strategies.md) – configure search strategies
+- [Advanced Retrieval](./advanced-retrieval.md) – cross-encoder and multi-turn RAG
+- [CLI Reference](../cli/index.md) – command usage
+- [Extending RAG](../extending/index.md#extend-rag-components) – add custom components
+- [Examples](../examples/index.md) – see FDA and Raleigh workflows

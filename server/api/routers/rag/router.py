@@ -1,15 +1,20 @@
 """RAG router for query endpoints."""
 
 from pathlib import Path
+from typing import Any
 
+from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from api.errors import DatabaseNotFoundError
 from core.logging import FastAPIStructLogger
+from services.database_service import DatabaseService
 from services.project_service import ProjectService
 
 from .rag_health import RAGHealthResponse, handle_rag_health
 from .rag_query import QueryResponse, RAGQueryRequest, handle_rag_query
+from .rag_stats import RAGStatsResponse, handle_rag_stats
 
 logger = FastAPIStructLogger()
 
@@ -99,6 +104,30 @@ async def get_rag_health(
 
     # Use the handler function from rag_health.py
     return await handle_rag_health(project_obj.config, str(project_dir), database)
+
+
+@router.get("/stats", response_model=RAGStatsResponse)
+async def get_rag_stats(
+    namespace: str,
+    project: str,
+    database: str | None = Query(
+        None, description="Specific database to get stats for"
+    ),
+):
+    """Get statistics for a RAG database including vector counts and storage usage."""
+    logger.bind(namespace=namespace, project=project, database=database)
+
+    # Get project configuration
+    project_obj = ProjectService.get_project(namespace, project)
+    project_dir = ProjectService.get_project_dir(namespace, project)
+
+    if not project_obj.config.rag:
+        raise HTTPException(
+            status_code=400, detail="RAG not configured for this project"
+        )
+
+    # Use the handler function from rag_stats.py
+    return await handle_rag_stats(project_obj.config, str(project_dir), database)
 
 
 def _build_embedding_strategies(db, db_name: str) -> list[EmbeddingStrategyInfo]:
@@ -308,4 +337,358 @@ async def get_rag_databases(namespace: str, project: str):
         default_database=str(rag_config.default_database)
         if rag_config.default_database
         else None,
+    )
+
+
+# ============================================================================
+# Database CRUD Endpoints
+# ============================================================================
+
+
+class CreateDatabaseRequest(BaseModel):
+    """Request model for creating a new database."""
+
+    name: str = Field(
+        ..., description="Unique database identifier", pattern=r"^[a-z][a-z0-9_]*$"
+    )
+    type: str = Field(..., description="Database type (ChromaStore, QdrantStore)")
+    config: dict[str, Any] | None = Field(
+        None, description="Database-specific configuration"
+    )
+    embedding_strategies: list[dict[str, Any]] | None = Field(
+        None, description="Embedding strategies for this database"
+    )
+    retrieval_strategies: list[dict[str, Any]] | None = Field(
+        None, description="Retrieval strategies for this database"
+    )
+    default_embedding_strategy: str | None = Field(
+        None, description="Name of default embedding strategy"
+    )
+    default_retrieval_strategy: str | None = Field(
+        None, description="Name of default retrieval strategy"
+    )
+
+
+class UpdateDatabaseRequest(BaseModel):
+    """Request model for updating a database (partial update)."""
+
+    config: dict[str, Any] | None = Field(
+        None, description="Database-specific configuration"
+    )
+    embedding_strategies: list[dict[str, Any]] | None = Field(
+        None, description="Embedding strategies for this database"
+    )
+    retrieval_strategies: list[dict[str, Any]] | None = Field(
+        None, description="Retrieval strategies for this database"
+    )
+    default_embedding_strategy: str | None = Field(
+        None, description="Name of default embedding strategy"
+    )
+    default_retrieval_strategy: str | None = Field(
+        None, description="Name of default retrieval strategy"
+    )
+
+
+class DatabaseResponse(BaseModel):
+    """Response model for a single database."""
+
+    database: DatabaseInfo
+
+
+class DatabaseDetailResponse(BaseModel):
+    """Detailed response for a single database including raw config."""
+
+    name: str
+    type: str
+    config: dict[str, Any] | None
+    embedding_strategies: list[dict[str, Any]] | None
+    retrieval_strategies: list[dict[str, Any]] | None
+    default_embedding_strategy: str | None
+    default_retrieval_strategy: str | None
+    dependent_datasets: list[str]
+
+
+def _database_to_info(db: Database, is_default: bool = False) -> DatabaseInfo:
+    """Convert a Database model to DatabaseInfo response."""
+    db_name = str(db.name)
+    embedding_strategies = _build_embedding_strategies(db, db_name)
+    retrieval_strategies = _build_retrieval_strategies(db, db_name)
+    db_type = db.type.value if hasattr(db.type, "value") else str(db.type)
+
+    return DatabaseInfo(
+        name=db_name,
+        type=db_type,
+        is_default=is_default,
+        embedding_strategies=embedding_strategies,
+        retrieval_strategies=retrieval_strategies,
+    )
+
+
+def _database_to_detail(
+    db: Database, dependent_datasets: list[str]
+) -> DatabaseDetailResponse:
+    """Convert a Database model to detailed response."""
+    return DatabaseDetailResponse(
+        name=db.name,
+        type=db.type.value if hasattr(db.type, "value") else str(db.type),
+        config=db.config,
+        embedding_strategies=[s.model_dump() for s in (db.embedding_strategies or [])],
+        retrieval_strategies=[s.model_dump() for s in (db.retrieval_strategies or [])],
+        default_embedding_strategy=db.default_embedding_strategy,
+        default_retrieval_strategy=db.default_retrieval_strategy,
+        dependent_datasets=dependent_datasets,
+    )
+
+
+@router.post(
+    "/databases",
+    response_model=DatabaseResponse,
+    status_code=201,
+    operation_id="database_create",
+    summary="Create a new RAG database",
+)
+async def create_database(
+    namespace: str,
+    project: str,
+    request: CreateDatabaseRequest,
+):
+    """
+    Create a new RAG database in the project configuration.
+
+    The database will be added to the project's llamafarm.yaml config file.
+    You must provide at least the name and type. Embedding and retrieval
+    strategies can be added during creation or later via PATCH.
+    """
+    logger.bind(namespace=namespace, project=project, database=request.name)
+
+    # Convert request to Database model
+    try:
+        # Build embedding strategies if provided
+        embedding_strategies = None
+        if request.embedding_strategies:
+            embedding_strategies = [
+                EmbeddingStrategy(**s) for s in request.embedding_strategies
+            ]
+
+        # Build retrieval strategies if provided
+        retrieval_strategies = None
+        if request.retrieval_strategies:
+            retrieval_strategies = [
+                RetrievalStrategy(**s) for s in request.retrieval_strategies
+            ]
+
+        database = Database(
+            name=request.name,
+            type=request.type,
+            config=request.config,
+            embedding_strategies=embedding_strategies,
+            retrieval_strategies=retrieval_strategies,
+            default_embedding_strategy=request.default_embedding_strategy,
+            default_retrieval_strategy=request.default_retrieval_strategy,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid database configuration: {e}"
+        ) from e
+
+    try:
+        created_db = DatabaseService.create_database(namespace, project, database)
+    except ValueError as e:
+        error_msg = str(e)
+        # Return 409 Conflict for duplicate database names
+        if "already exists" in error_msg:
+            raise HTTPException(status_code=409, detail=error_msg) from e
+        raise HTTPException(status_code=400, detail=error_msg) from e
+
+    return DatabaseResponse(database=_database_to_info(created_db))
+
+
+@router.get(
+    "/databases/{database_name}",
+    response_model=DatabaseDetailResponse,
+    operation_id="database_get",
+    summary="Get a single RAG database by name",
+)
+async def get_database(
+    namespace: str,
+    project: str,
+    database_name: str,
+):
+    """
+    Get detailed information about a specific RAG database.
+
+    Returns the full configuration including all strategies and
+    lists any datasets that depend on this database.
+    """
+    logger.bind(namespace=namespace, project=project, database=database_name)
+
+    try:
+        db = DatabaseService.get_database(namespace, project, database_name)
+    except DatabaseNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"Database '{database_name}' not found"
+        ) from None
+
+    dependent_datasets = DatabaseService.get_dependent_datasets(
+        namespace, project, database_name
+    )
+
+    return _database_to_detail(db, dependent_datasets)
+
+
+@router.patch(
+    "/databases/{database_name}",
+    response_model=DatabaseDetailResponse,
+    operation_id="database_update",
+    summary="Update a RAG database",
+)
+async def update_database(
+    namespace: str,
+    project: str,
+    database_name: str,
+    request: UpdateDatabaseRequest,
+):
+    """
+    Update a RAG database's mutable fields.
+
+    Only these fields can be updated:
+    - config: Database-specific configuration
+    - embedding_strategies: List of embedding strategies
+    - retrieval_strategies: List of retrieval strategies
+    - default_embedding_strategy: Name of default embedding strategy
+    - default_retrieval_strategy: Name of default retrieval strategy
+
+    The database name and type cannot be changed.
+    """
+    logger.bind(namespace=namespace, project=project, database=database_name)
+
+    # Build typed strategies if provided
+    embedding_strategies = None
+    if request.embedding_strategies is not None:
+        try:
+            embedding_strategies = [
+                EmbeddingStrategy(**s) for s in request.embedding_strategies
+            ]
+        except Exception as e:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid embedding strategy: {e}"
+            ) from e
+
+    retrieval_strategies = None
+    if request.retrieval_strategies is not None:
+        try:
+            retrieval_strategies = [
+                RetrievalStrategy(**s) for s in request.retrieval_strategies
+            ]
+        except Exception as e:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid retrieval strategy: {e}"
+            ) from e
+
+    try:
+        updated_db = DatabaseService.update_database(
+            namespace=namespace,
+            project=project,
+            name=database_name,
+            config=request.config,
+            embedding_strategies=embedding_strategies,
+            retrieval_strategies=retrieval_strategies,
+            default_embedding_strategy=request.default_embedding_strategy,
+            default_retrieval_strategy=request.default_retrieval_strategy,
+        )
+    except DatabaseNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"Database '{database_name}' not found"
+        ) from None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    dependent_datasets = DatabaseService.get_dependent_datasets(
+        namespace, project, database_name
+    )
+
+    return _database_to_detail(updated_db, dependent_datasets)
+
+
+class DeleteDatabaseResponse(BaseModel):
+    """Response model for database deletion."""
+
+    message: str
+    database: DatabaseDetailResponse
+    collection_deleted: bool
+
+
+@router.delete(
+    "/databases/{database_name}",
+    response_model=DeleteDatabaseResponse,
+    operation_id="database_delete",
+    summary="Delete a RAG database",
+    responses={
+        200: {"model": DeleteDatabaseResponse},
+        404: {"description": "Database not found"},
+        409: {"description": "Database has dependent datasets"},
+    },
+)
+async def delete_database(
+    namespace: str,
+    project: str,
+    database_name: str,
+    delete_collection: bool = Query(
+        True,
+        description="Whether to delete the underlying vector store collection. "
+        "Set to false to only remove from config.",
+    ),
+):
+    """
+    Delete a RAG database from the project.
+
+    This will:
+    1. Check for dependent datasets - fails if any exist
+    2. Delete the vector store collection (ChromaDB/Qdrant) if delete_collection=true
+    3. Remove the database from the project config
+
+    **Important**: You must first delete or reassign any datasets that use this database.
+    The endpoint will return a 409 Conflict error listing the dependent datasets if any exist.
+    """
+    logger.bind(namespace=namespace, project=project, database=database_name)
+
+    # Get the database details before deletion for the response
+    try:
+        db = DatabaseService.get_database(namespace, project, database_name)
+    except DatabaseNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"Database '{database_name}' not found"
+        ) from None
+
+    dependent_datasets = DatabaseService.get_dependent_datasets(
+        namespace, project, database_name
+    )
+
+    # Build the response detail before deletion
+    db_detail = _database_to_detail(db, dependent_datasets)
+
+    # Attempt deletion
+    try:
+        DatabaseService.delete_database(
+            namespace=namespace,
+            project=project,
+            name=database_name,
+            delete_collection=delete_collection,
+        )
+    except DatabaseNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"Database '{database_name}' not found"
+        ) from None
+    except ValueError as e:
+        error_msg = str(e)
+        # Check if this is a dependent datasets error (409 Conflict)
+        if "dataset(s) depend on it" in error_msg:
+            raise HTTPException(status_code=409, detail=error_msg) from e
+        # Other validation errors (400 Bad Request)
+        raise HTTPException(status_code=400, detail=error_msg) from e
+
+    return DeleteDatabaseResponse(
+        message=f"Database '{database_name}' deleted successfully",
+        database=db_detail,
+        collection_deleted=delete_collection,
     )

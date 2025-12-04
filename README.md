@@ -8,6 +8,18 @@
 [![Docs](https://img.shields.io/badge/docs-latest-4C51BF.svg)](docs/website/docs/intro.md)
 [![Discord](https://img.shields.io/discord/1392890421771899026.svg)](https://discord.gg/RrAUXTCVNF)
 
+### 🖥️ Desktop App Downloads
+
+Get started instantly — no command line required:
+
+| Platform | Download |
+|----------|----------|
+| **Mac (M1+)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19-arm64-mac.zip) |
+| **Windows** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm.Setup.0.0.19.exe) |
+| **Linux** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19.AppImage) |
+
+---
+
 LlamaFarm is an open-source framework for building retrieval-augmented and agentic AI applications. It ships with opinionated defaults (Ollama for local models, Chroma for vector storage) while staying 100% extendable—swap in vLLM, remote OpenAI-compatible hosts, new parsers, or custom stores without rewriting your app.
 
 - **Local-first developer experience** with a single CLI (`lf`) that manages projects, datasets, and chat sessions.
