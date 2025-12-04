@@ -1,9 +1,8 @@
 """Service for cleaning up processed chunks after cancellation."""
 
-import importlib
-from pathlib import Path
 from typing import Any
 
+from core.celery.rag_client import delete_file_from_rag
 from core.logging import FastAPIStructLogger
 from services.project_service import ProjectService
 
@@ -13,7 +12,7 @@ logger = FastAPIStructLogger(__name__)
 class DatasetCleanupService:
     """Service for cleaning up processed chunks after cancellation."""
 
-    def cleanup_processed_files(
+    async def cleanup_processed_files(
         self,
         namespace: str,
         project: str,
@@ -22,6 +21,8 @@ class DatasetCleanupService:
     ) -> dict[str, Any]:
         """
         Remove chunks for successfully processed files.
+
+        Uses Celery task via rag_client to delete chunks
 
         Args:
             namespace: Project namespace
@@ -65,7 +66,7 @@ class DatasetCleanupService:
             project_obj = ProjectService.get_project(namespace, project)
             project_dir = ProjectService.get_project_dir(namespace, project)
 
-            # Find dataset config
+            # Find dataset config to get database name
             dataset_config = next(
                 (ds for ds in (project_obj.config.datasets or []) if ds.name == dataset),
                 None,
@@ -78,36 +79,22 @@ class DatasetCleanupService:
             if not database_name:
                 raise ValueError(f"Dataset '{dataset}' has no database configured")
 
-            # Get database configuration
-            database_config = self._get_database_config(project_obj.config, database_name)
-
-            # Initialize vector store
-            vector_store = self._initialize_vector_store(project_dir, database_config)
-
-            # Initialize document manager
-            from rag.core.document_manager import DeletionStrategy, DocumentManager
-
-            doc_manager = DocumentManager(
-                vector_store=vector_store,
-                config={"enable_soft_delete": False},  # Hard delete for cleanup
-            )
-
-            # Delete chunks for each successful file
+            # Delete chunks for each successful file via Celery task
             for file_hash in successful_files:
                 try:
                     logger.info(f"Deleting chunks for file: {file_hash[:12]}...")
 
-                    # Delete by document hash (file_hash is used as document_hash)
-                    result = doc_manager.delete_documents(
-                        document_hashes=[file_hash],
-                        strategy=DeletionStrategy.HARD_DELETE,
+                    # Use delete_file_from_rag from rag_client
+                    result = await delete_file_from_rag(
+                        project_dir=project_dir,
+                        database_name=database_name,
+                        file_hash=file_hash,
                     )
 
-                    deleted_count = result.get("deleted_count", 0)
-                    # Check if there were errors
-                    if (deleted_count > 0 or result.get("errors")) and result.get("errors"):
-                        raise Exception(f"Deletion errors: {result['errors']}")
+                    if result.get("status") == "error":
+                        raise Exception(result.get("error", "Unknown error"))
 
+                    deleted_count = result.get("deleted_count", 0)
                     logger.info(
                         f"Successfully deleted chunks for file {file_hash[:12]}...",
                         deleted_count=deleted_count,
@@ -231,53 +218,3 @@ class DatasetCleanupService:
             logger.error(f"Error getting successful files: {e}", exc_info=True)
 
         return successful_files
-
-    def _get_database_config(self, project_config, database_name: str):
-        """Get database configuration from project config."""
-        if not project_config.rag or not project_config.rag.databases:
-            raise ValueError("No databases configured in project")
-
-        database_config = next(
-            (db for db in project_config.rag.databases if db.name == database_name),
-            None,
-        )
-
-        if not database_config:
-            raise ValueError(f"Database '{database_name}' not found in project config")
-
-        return database_config
-
-    def _initialize_vector_store(self, project_dir: str, database_config):
-        """Initialize vector store from database configuration."""
-
-        # Get vector store configuration
-        vector_store_config = database_config.config
-        vector_store_type = database_config.type.value if hasattr(database_config.type, "value") else str(database_config.type)
-
-        if not vector_store_type:
-            raise ValueError("No vector store type specified in database configuration")
-
-        logger.info(
-            f"Initializing vector store: {vector_store_type}",
-            project_dir=project_dir,
-        )
-
-        # Dynamically import the store based on type
-        store_name_lower = vector_store_type.replace("Store", "_store").lower()
-        module_path = f"rag.components.stores.{store_name_lower}"
-
-        try:
-            # Import the module
-            module = importlib.import_module(module_path)
-            # Get the class (should match the type name)
-            store_class = getattr(module, vector_store_type)
-            # Initialize with config
-            return store_class(config=vector_store_config, project_dir=Path(project_dir))
-        except (ImportError, AttributeError) as e:
-            logger.error(
-                f"Failed to load vector store {vector_store_type} from {module_path}: {e}"
-            )
-            raise ValueError(
-                f"Cannot initialize vector store {vector_store_type}: {e}"
-            ) from e
-

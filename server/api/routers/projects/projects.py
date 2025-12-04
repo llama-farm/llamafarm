@@ -1433,7 +1433,7 @@ async def cancel_task(
             
             if dataset_name:
                 cleanup_service = DatasetCleanupService()
-                cleanup_result = cleanup_service.cleanup_processed_files(
+                cleanup_result = await cleanup_service.cleanup_processed_files(
                     namespace, project_id, dataset_name, task_id
                 )
                 
