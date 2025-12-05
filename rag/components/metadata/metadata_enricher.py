@@ -7,7 +7,7 @@ import json
 import mimetypes
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from core.base import Document
 from core.logging import RAGStructLogger
@@ -20,7 +20,7 @@ logger = RAGStructLogger("rag.components.metadata.metadata_enricher")
 class MetadataEnricher:
     """Enrich documents with comprehensive metadata."""
 
-    def __init__(self, schema: Optional[MetadataSchema] = None):
+    def __init__(self, schema: MetadataSchema | None = None):
         """
         Initialize metadata enricher.
 
@@ -212,9 +212,12 @@ class MetadataEnricher:
         missing_fields = []
 
         for field in self.schema.required_fields:
-            if field == "id" and not doc.id:
-                missing_fields.append(field)
-            elif field != "id" and field not in doc.metadata:
+            if (
+                field == "id"
+                and not doc.id
+                or field != "id"
+                and field not in doc.metadata
+            ):
                 missing_fields.append(field)
 
         if missing_fields:
@@ -224,7 +227,7 @@ class MetadataEnricher:
 
     def _ensure_chroma_compatibility(
         self, metadata: dict[str, Any]
-    ) -> dict[str, Union[str, int, float, bool, None]]:
+    ) -> dict[str, str | int | float | bool | None]:
         """
         Ensure metadata is compatible with ChromaDB.
 

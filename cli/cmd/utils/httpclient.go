@@ -84,8 +84,20 @@ func (v *VerboseHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	LogDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
 	LogHeaders("response", resp.Header)
 
-	// Log and restore response body
-	resp.Body = LogBodyContent(resp.Body, "response body")
+	// Don't consume the body for streaming responses (SSE, chunked streams)
+	// as they need to be read incrementally by the caller
+	contentType := resp.Header.Get("Content-Type")
+	isStreaming := strings.Contains(strings.ToLower(contentType), "text/event-stream") ||
+		strings.Contains(strings.ToLower(contentType), "application/x-ndjson") ||
+		strings.Contains(strings.ToLower(contentType), "application/stream") ||
+		strings.Contains(contentType, "application/stream")
+
+	if !isStreaming {
+		// Log and restore response body for non-streaming responses
+		resp.Body = LogBodyContent(resp.Body, "response body")
+	} else {
+		LogDebug("  -> response body: <streaming - not logged>")
+	}
 
 	return resp, nil
 }

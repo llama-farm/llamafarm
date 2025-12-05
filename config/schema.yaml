@@ -68,7 +68,6 @@ properties:
       type: object
       required:
         - name
-        - files
         - data_processing_strategy
         - database
       properties:
@@ -81,13 +80,6 @@ properties:
         database:
           type: string
           description: RAG database to use for the dataset
-        files:
-          type: array
-          description: List of file hashes
-          items:
-            type: string
-            description: sha256 of the file content (e.g., "2b3e321d021e5c625a4a003f0624801fa46faab59b530caddcd65a5c106b8a17")
-          default: []
     default: []
 
   runtime:
@@ -131,7 +123,26 @@ properties:
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
             model_api_parameters:
               type: object
-              description: Additional parameters passed to the API provider
+              description: |
+                Additional parameters passed directly to the API provider as request parameters.
+                Common examples: temperature, top_p, max_tokens, frequency_penalty, etc.
+              additionalProperties: true
+            extra_body:
+              type: object
+              description: |
+                Provider-specific parameters passed in the request body's extra_body field.
+                These parameters are sent directly to the underlying provider API.
+
+                Note: For GGUF quantization, specify it in the model name using the format
+                "model_id:quantization" (e.g., "unsloth/Qwen3-4B-GGUF:Q4_K_M").
+              properties:
+                n_ctx:
+                  type: integer
+                  description: |
+                    Context window size for GGUF models (Universal runtime only).
+                    If not specified, automatically computed based on available memory,
+                    model training context, and pattern-based defaults.
+                    See Universal runtime documentation for auto-detection behavior.
               additionalProperties: true
             prompts:
               type: array
@@ -154,6 +165,12 @@ properties:
                 any model to use tools. This is universal, but may not be as effective as native tool calling.
                 Use `prompt_based` for models that do not support native tool calling.
               default: native_api
+            tools:
+              type: array
+              description: List of tools to use for this model
+              items:
+                $ref: "#/definitions/Tool"
+              default: []
 
   mcp:
     type: object
@@ -200,3 +217,27 @@ properties:
                 type: string
               example:
                 Authorization: Bearer ${env:MCP_SERVER_TOKEN}
+
+definitions:
+  Tool:
+    type: object
+    required:
+      - type
+      - name
+      - description
+      - parameters
+    properties:
+      type:
+        type: string
+        enum: [function]
+        description: Type of tool
+      name:
+        type: string
+        description: Name of the tool
+      description:
+        type: string
+        description: Description of the tool
+      parameters:
+        type: object
+        description: Parameters of the tool
+        additionalProperties: true

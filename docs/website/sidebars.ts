@@ -26,6 +26,12 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Desktop App',
+      link: { type: 'doc', id: 'desktop-app/index' },
+      items: [],
+    },
+    {
+      type: 'category',
       label: 'Designer Web UI',
       link: { type: 'doc', id: 'designer/index' },
       items: [
@@ -41,9 +47,11 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'cli/lf-init', label: 'lf init' },
         { type: 'doc', id: 'cli/lf-start', label: 'lf start' },
         { type: 'doc', id: 'cli/lf-chat', label: 'lf chat' },
+        { type: 'doc', id: 'cli/lf-models', label: 'lf models' },
         { type: 'doc', id: 'cli/lf-datasets', label: 'lf datasets' },
         { type: 'doc', id: 'cli/lf-rag', label: 'lf rag' },
         { type: 'doc', id: 'cli/lf-projects', label: 'lf projects' },
+        { type: 'doc', id: 'cli/lf-services', label: 'lf services' },
         { type: 'doc', id: 'cli/lf-version', label: 'lf version' },
       ],
     },
@@ -65,7 +73,14 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'RAG',
       link: { type: 'doc', id: 'rag/index' },
-      items: [],
+      items: [
+        { type: 'doc', id: 'rag/databases', label: 'Databases (Vector Stores)' },
+        { type: 'doc', id: 'rag/embedders', label: 'Embedders' },
+        { type: 'doc', id: 'rag/parsers', label: 'Parsers' },
+        { type: 'doc', id: 'rag/extractors', label: 'Extractors' },
+        { type: 'doc', id: 'rag/retrieval-strategies', label: 'Retrieval Strategies' },
+        { type: 'doc', id: 'rag/advanced-retrieval', label: 'Advanced Retrieval' },
+      ],
     },
     {
       type: 'category',
@@ -77,6 +92,12 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Prompts',
       link: { type: 'doc', id: 'prompts/index' },
+      items: [],
+    },
+    {
+      type: 'category',
+      label: 'MCP (Tools)',
+      link: { type: 'doc', id: 'mcp/index' },
       items: [],
     },
     {

@@ -8,21 +8,20 @@ including unit tests for all public methods and edge cases.
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
 import pytest
-from fastapi import UploadFile
-
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
-    PromptSet,
+    Model,
     PromptMessage,
+    PromptSet,
     Provider,
     Runtime,
     Version,
-    Model,
 )
+from fastapi import UploadFile
+
 from services.data_service import (
     DataService,
-    FileExistsInAnotherDatasetError,
     MetadataFileContent,
 )
 
@@ -37,6 +36,7 @@ class TestDataService:
         """Set up test fixtures before each test method."""
         self.test_namespace = "test_namespace"
         self.test_project = "test_project"
+        self.test_dataset = "test_dataset"
         self.test_data_dir = "/test/data/dir"
 
         # Mock file data
@@ -140,15 +140,17 @@ class TestDataService:
 
     @patch("services.data_service.os.makedirs")
     @patch("services.data_service.ProjectService.get_project_dir")
-    def test_get_data_dir_creates_directories(
+    def test_ensure_data_dir_creates_directories(
         self, mock_get_project_dir, mock_makedirs
     ):
-        """Test that get_data_dir creates all necessary directories."""
+        """Test that ensure_data_dir creates all necessary directories."""
         mock_get_project_dir.return_value = "/project/dir"
 
-        result = DataService.get_data_dir(self.test_namespace, self.test_project)
+        result = DataService.ensure_data_dir(
+            self.test_namespace, self.test_project, self.test_dataset
+        )
 
-        expected_data_dir = "/project/dir/lf_data"
+        expected_data_dir = f"/project/dir/lf_data/datasets/{self.test_dataset}"
         assert result == expected_data_dir
         mock_get_project_dir.assert_called_once_with(
             self.test_namespace, self.test_project
@@ -156,11 +158,11 @@ class TestDataService:
 
         # Verify all directories are created
         expected_calls = [
-            (("/project/dir/lf_data",), {"exist_ok": True}),
-            (("/project/dir/lf_data/meta",), {"exist_ok": True}),
-            (("/project/dir/lf_data/raw",), {"exist_ok": True}),
-            (("/project/dir/lf_data/stores",), {"exist_ok": True}),
-            (("/project/dir/lf_data/index/by_name",), {"exist_ok": True}),
+            ((expected_data_dir,), {"exist_ok": True}),
+            ((f"{expected_data_dir}/meta",), {"exist_ok": True}),
+            ((f"{expected_data_dir}/raw",), {"exist_ok": True}),
+            ((f"{expected_data_dir}/stores",), {"exist_ok": True}),
+            ((f"{expected_data_dir}/index/by_name",), {"exist_ok": True}),
         ]
         assert mock_makedirs.call_count == len(expected_calls)
         for call in expected_calls:
@@ -192,7 +194,7 @@ class TestDataService:
         result = DataService.append_collision_timestamp("test")
         assert result == "test_1640995200.0"
 
-    @patch.object(DataService, "get_data_dir")
+    @patch.object(DataService, "ensure_data_dir")
     @patch.object(DataService, "hash_data")
     @patch.object(DataService, "append_collision_timestamp")
     @patch("builtins.open", new_callable=mock_open)
@@ -206,11 +208,11 @@ class TestDataService:
         mock_file_open,
         mock_append_timestamp,
         mock_hash_data,
-        mock_get_data_dir,
+        mock_ensure_data_dir,
     ):
         """Test successfully adding a data file."""
         # Setup mocks
-        mock_get_data_dir.return_value = self.test_data_dir
+        mock_ensure_data_dir.return_value = self.test_data_dir
         mock_hash_data.return_value = self.test_file_hash
         mock_append_timestamp.return_value = "test_1640995200.0.pdf"
 
@@ -222,7 +224,10 @@ class TestDataService:
 
         # Execute
         result = await DataService.add_data_file(
-            self.test_namespace, self.test_project, mock_upload_file
+            self.test_namespace,
+            self.test_project,
+            self.test_dataset,
+            mock_upload_file,
         )
 
         # Verify result
@@ -237,173 +242,78 @@ class TestDataService:
         mock_upload_file.read.assert_called_once()
         mock_hash_data.assert_called_once_with(self.test_file_content)
         mock_append_timestamp.assert_called_once_with("test.pdf")
+        mock_ensure_data_dir.assert_called_once_with(
+            self.test_namespace, self.test_project, self.test_dataset
+        )
 
         # Verify file writes
         assert mock_file_open.call_count == 2  # metadata and raw file
         mock_symlink.assert_called_once()
         mock_logger.info.assert_called_once()
 
-    @patch.object(DataService, "get_data_dir")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"test file content")
-    def test_read_data_file_success(self, mock_file_open, mock_get_data_dir):
-        """Test successfully reading a data file."""
-        mock_get_data_dir.return_value = self.test_data_dir
-
-        result = DataService.read_data_file(
-            self.test_namespace, self.test_project, self.test_file_hash
-        )
-
-        assert result == b"test file content"
-        mock_get_data_dir.assert_called_once_with(
-            self.test_namespace, self.test_project
-        )
-        mock_file_open.assert_called_once_with(
-            f"{self.test_data_dir}/raw/{self.test_file_hash}", "rb"
-        )
-
-    @patch.object(DataService, "get_data_dir")
-    @patch("builtins.open", new_callable=mock_open)
-    def test_read_data_file_not_found(self, mock_file_open, mock_get_data_dir):
-        """Test reading a non-existent data file."""
-        mock_get_data_dir.return_value = self.test_data_dir
-        mock_file_open.side_effect = FileNotFoundError("File not found")
-
-        with pytest.raises(FileNotFoundError):
-            DataService.read_data_file(
-                self.test_namespace, self.test_project, "nonexistent_hash"
-            )
-
-    @patch.object(DataService, "get_data_dir")
+    @patch.object(DataService, "ensure_data_dir")
     @patch("builtins.open", new_callable=mock_open)
     def test_get_data_file_metadata_by_hash_success(
-        self, mock_file_open, mock_get_data_dir
+        self, mock_file_open, mock_ensure_data_dir
     ):
         """Test successfully getting metadata by hash."""
-        mock_get_data_dir.return_value = self.test_data_dir
+        mock_ensure_data_dir.return_value = self.test_data_dir
         mock_file_open.return_value.read.return_value = (
             self.mock_metadata.model_dump_json()
         )
 
         result = DataService.get_data_file_metadata_by_hash(
-            self.test_namespace, self.test_project, self.test_file_hash
+            self.test_namespace,
+            self.test_project,
+            self.test_dataset,
+            self.test_file_hash,
         )
 
         assert isinstance(result, MetadataFileContent)
         assert result.original_file_name == self.mock_metadata.original_file_name
         assert result.hash == self.mock_metadata.hash
 
-        mock_get_data_dir.assert_called_once_with(
-            self.test_namespace, self.test_project
+        mock_ensure_data_dir.assert_called_once_with(
+            self.test_namespace, self.test_project, self.test_dataset
         )
         mock_file_open.assert_called_once_with(
             f"{self.test_data_dir}/meta/{self.test_file_hash}.json"
         )
 
-    @patch.object(DataService, "get_data_dir")
+    @patch.object(DataService, "ensure_data_dir")
     @patch("builtins.open", new_callable=mock_open)
     def test_get_data_file_metadata_by_hash_not_found(
-        self, mock_file_open, mock_get_data_dir
+        self, mock_file_open, mock_ensure_data_dir
     ):
         """Test getting metadata for non-existent file."""
-        mock_get_data_dir.return_value = self.test_data_dir
+        mock_ensure_data_dir.return_value = self.test_data_dir
         mock_file_open.side_effect = FileNotFoundError("Metadata not found")
 
-        with pytest.raises(FileNotFoundError):
-            DataService.get_data_file_metadata_by_hash(
-                self.test_namespace, self.test_project, "nonexistent_hash"
-            )
+        result = DataService.get_data_file_metadata_by_hash(
+            self.test_namespace,
+            self.test_project,
+            self.test_dataset,
+            "nonexistent_hash",
+        )
+        assert result is None
 
+    @patch.object(DataService, "get_data_file_metadata_by_hash")
     @patch("services.data_service.os.remove")
     @patch("services.data_service.logger")
-    @patch.object(DataService, "get_data_dir")
-    @patch("services.data_service.ProjectService.get_project")
+    @patch.object(DataService, "ensure_data_dir")
     def test_delete_data_file_success(
-        self, mock_get_project, mock_get_data_dir, mock_logger, mock_remove
+        self, mock_ensure_data_dir, mock_logger, mock_remove, mock_get_metadata
     ):
         """Test successfully deleting a data file."""
-        mock_get_data_dir.return_value = self.test_data_dir
-
-        # Mock project with datasets where no other dataset exists
-        mock_project = Mock()
-        mock_project.config = LlamaFarmConfig(
-            version=Version.v1,
-            name="test_project",
-            namespace=self.test_namespace,
-            prompts=[
-                PromptSet(
-                    name="default",
-                    messages=[
-                        PromptMessage(
-                            role="system", content="You are a helpful assistant."
-                        )
-                    ],
-                )
-            ],
-            rag={
-                "databases": [
-                    {
-                        "name": "default_db",
-                        "type": "ChromaStore",
-                        "config": {},
-                        "embedding_strategies": [
-                            {
-                                "name": "default_embedding",
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            }
-                        ],
-                        "retrieval_strategies": [
-                            {
-                                "name": "default_retrieval",
-                                "type": "BasicSimilarityStrategy",
-                                "config": {},
-                                "default": True,
-                            }
-                        ],
-                    }
-                ],
-                "data_processing_strategies": [
-                    {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "parsers": [
-                            {
-                                "type": "CSVParser_LlamaIndex",
-                                "config": {},
-                                "file_extensions": [".pdf"],
-                            }
-                        ],
-                    }
-                ],
-            },
-            datasets=[
-                Dataset(
-                    name="target_dataset",
-                    data_processing_strategy="default",
-                    database="default_db",
-                    files=[self.test_file_hash],
-                )
-            ],
-            runtime=Runtime(
-                models=[
-                    Model(
-                        name="default",
-                        provider=Provider.openai,
-                        model="llama3.1:8b",
-                        api_key="ollama",
-                        base_url="http://localhost:11434/v1",
-                        model_api_parameters={
-                            "temperature": 0.5,
-                        },
-                    )
-                ]
-            ),
-        )
-        mock_get_project.return_value = mock_project
+        mock_ensure_data_dir.return_value = self.test_data_dir
+        mock_get_metadata.return_value = self.mock_metadata
 
         # Execute
         DataService.delete_data_file(
-            self.test_namespace, self.test_project, "target_dataset", self.mock_metadata
+            self.test_namespace,
+            self.test_project,
+            "target_dataset",
+            self.test_file_hash,
         )
 
         # Verify file removals
@@ -417,220 +327,23 @@ class TestDataService:
             mock_remove.assert_any_call(expected_path)
 
         mock_logger.info.assert_called_once()
-
-    @patch.object(DataService, "get_data_dir")
-    @patch("services.data_service.ProjectService.get_project")
-    def test_delete_data_file_in_use_by_another_dataset(
-        self, mock_get_project, mock_get_data_dir
-    ):
-        """Test deleting a file that's in use by another dataset."""
-        mock_get_data_dir.return_value = self.test_data_dir
-
-        # Mock project with datasets where another dataset exists
-        # Note: Current logic just checks if ANY other dataset exists, not if file is in use
-        mock_project = Mock()
-        mock_project.config = LlamaFarmConfig(
-            version=Version.v1,
-            name="test_project",
-            namespace=self.test_namespace,
-            prompts=[
-                PromptSet(
-                    name="default",
-                    messages=[
-                        PromptMessage(
-                            role="system", content="You are a helpful assistant."
-                        )
-                    ],
-                )
-            ],
-            rag={
-                "databases": [
-                    {
-                        "name": "default_db",
-                        "type": "ChromaStore",
-                        "config": {},
-                        "embedding_strategies": [
-                            {
-                                "name": "default_embedding",
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            }
-                        ],
-                        "retrieval_strategies": [
-                            {
-                                "name": "default_retrieval",
-                                "type": "BasicSimilarityStrategy",
-                                "config": {},
-                                "default": True,
-                            }
-                        ],
-                    }
-                ],
-                "data_processing_strategies": [
-                    {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "parsers": [
-                            {
-                                "type": "CSVParser_LlamaIndex",
-                                "config": {},
-                                "file_extensions": [".pdf"],
-                            }
-                        ],
-                    }
-                ],
-            },
-            datasets=[
-                Dataset(
-                    name="target_dataset",
-                    data_processing_strategy="default",
-                    database="default_db",
-                    files=[self.test_file_hash],
-                ),
-                Dataset(
-                    name="other_dataset",
-                    data_processing_strategy="default",
-                    database="default_db",
-                    files=["other_hash", self.test_file_hash],
-                ),
-            ],
-            runtime=Runtime(
-                models=[
-                    Model(
-                        name="default",
-                        provider=Provider.openai,
-                        model="llama3.1:8b",
-                        api_key="ollama",
-                        base_url="http://localhost:11434/v1",
-                        model_api_parameters={
-                            "temperature": 0.5,
-                        },
-                    )
-                ]
-            ),
+        mock_ensure_data_dir.assert_called_once_with(
+            self.test_namespace, self.test_project, "target_dataset"
         )
-        mock_get_project.return_value = mock_project
-
-        # Execute and verify exception
-        with pytest.raises(FileExistsInAnotherDatasetError) as exc_info:
-            DataService.delete_data_file(
-                self.test_namespace,
-                self.test_project,
-                "target_dataset",
-                self.mock_metadata,
-            )
-
-        assert "is in use by dataset 'other_dataset'" in str(exc_info.value)
-
-    @patch.object(DataService, "get_data_dir")
-    @patch("services.data_service.ProjectService.get_project")
-    def test_delete_data_file_no_other_datasets(
-        self, mock_get_project, mock_get_data_dir
-    ):
-        """Test deleting a file when no other datasets exist."""
-        mock_get_data_dir.return_value = self.test_data_dir
-
-        # Mock project with only the target dataset
-        mock_project = Mock()
-        mock_project.config = LlamaFarmConfig(
-            version=Version.v1,
-            name="test_project",
-            namespace=self.test_namespace,
-            prompts=[
-                PromptSet(
-                    name="default",
-                    messages=[
-                        PromptMessage(
-                            role="system", content="You are a helpful assistant."
-                        )
-                    ],
-                )
-            ],
-            rag={
-                "databases": [
-                    {
-                        "name": "default_db",
-                        "type": "ChromaStore",
-                        "config": {},
-                        "embedding_strategies": [
-                            {
-                                "name": "default_embedding",
-                                "type": "OllamaEmbedder",
-                                "config": {"model": "nomic-embed-text"},
-                            }
-                        ],
-                        "retrieval_strategies": [
-                            {
-                                "name": "default_retrieval",
-                                "type": "BasicSimilarityStrategy",
-                                "config": {},
-                                "default": True,
-                            }
-                        ],
-                    }
-                ],
-                "data_processing_strategies": [
-                    {
-                        "name": "default",
-                        "description": "Default strategy configuration",
-                        "parsers": [
-                            {
-                                "type": "CSVParser_LlamaIndex",
-                                "config": {},
-                                "file_extensions": [".pdf"],
-                            }
-                        ],
-                    }
-                ],
-            },
-            datasets=[
-                Dataset(
-                    name="target_dataset",
-                    data_processing_strategy="default",
-                    database="default_db",
-                    files=[self.test_file_hash],
-                )
-            ],
-            runtime=Runtime(
-                models=[
-                    Model(
-                        name="default",
-                        provider=Provider.openai,
-                        model="llama3.1:8b",
-                        api_key="ollama",
-                        base_url="http://localhost:11434/v1",
-                        model_api_parameters={
-                            "temperature": 0.5,
-                        },
-                    )
-                ]
-            ),
+        mock_get_metadata.assert_called_once_with(
+            self.test_namespace,
+            self.test_project,
+            "target_dataset",
+            self.test_file_hash,
         )
-        mock_get_project.return_value = mock_project
-
-        with (
-            patch("services.data_service.os.remove") as mock_remove,
-            patch("services.data_service.logger") as mock_logger,
-        ):
-            # Should not raise an exception
-            DataService.delete_data_file(
-                self.test_namespace,
-                self.test_project,
-                "target_dataset",
-                self.mock_metadata,
-            )
-
-            # Verify files were removed
-            assert mock_remove.call_count == 3
-            mock_logger.info.assert_called_once()
 
 
 # Integration tests
 class TestDataServiceIntegration:
     """Integration tests for DataService workflows."""
 
-    @patch.object(DataService, "get_data_dir")
-    def test_file_hash_consistency(self, mock_get_data_dir):
+    @patch.object(DataService, "ensure_data_dir")
+    def test_file_hash_consistency(self, mock_ensure_data_dir):
         """Test that the same data always produces the same hash."""
         test_data1 = b"consistent test data"
         test_data2 = b"consistent test data"

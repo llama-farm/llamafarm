@@ -19,7 +19,8 @@ interface ProjectModalProps {
     name: string,
     details?: { brief?: { what?: string } }
   ) => void
-  onDelete?: () => void
+  onOpenDelete?: () => void
+  onCopy?: () => void
   isLoading?: boolean
   projectError?: string | null
   onNameChange?: (name: string) => void
@@ -32,20 +33,19 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   initialBrief = {},
   onClose,
   onSave,
-  onDelete,
+  onOpenDelete,
+  onCopy,
   isLoading = false,
   projectError = null,
   onNameChange,
 }) => {
   const [name, setName] = useState(initialName)
   const [what, setWhat] = useState(initialBrief.what || '')
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       setName(initialName)
       setWhat(initialBrief.what || '')
-      setConfirmingDelete(false)
     }
   }, [
     isOpen,
@@ -71,25 +71,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
   const cta = mode === 'create' ? 'Create' : 'Save'
   const isValid = name.trim().length > 0 && !isLoading
 
-  const handleDelete = () => {
-    if (!onDelete) return
-    setConfirmingDelete(true)
-  }
-
-  const handleConfirmDelete = () => {
-    if (!onDelete) return
-    onDelete()
-  }
-
-  const handleCancel = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    onClose()
-  }
-
   const handleOpenChange = (open: boolean) => {
     if (!open) {
-      setConfirmingDelete(false)
       onClose()
     }
   }
@@ -153,49 +136,35 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row items-center justify-between sm:justify-between gap-2">
+        <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {mode === 'edit' ? (
-            confirmingDelete ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Delete this project?</span>
-                <button
-                  className="px-3 py-2 rounded-md text-sm text-primary hover:underline disabled:opacity-50"
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={isLoading}
-                  type="button"
-                >
-                  Keep
-                </button>
-                <button
-                  className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
-                  onClick={handleConfirmDelete}
-                  disabled={isLoading}
-                  type="button"
-                >
-                  {isLoading ? 'Deleting...' : 'Confirm delete'}
-                </button>
-              </div>
-            ) : (
-              <button
-                className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
-                onClick={handleDelete}
-                disabled={isLoading}
-                type="button"
-              >
-                Delete
-              </button>
-            )
+            <button
+              className="px-3 py-2 rounded-md bg-destructive text-destructive-foreground hover:opacity-90 text-sm disabled:opacity-50"
+              onClick={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (onOpenDelete) onOpenDelete()
+              }}
+              disabled={isLoading}
+              type="button"
+            >
+              Delete
+            </button>
           ) : (
             <div />
           )}
           <div className="flex items-center gap-2 ml-auto">
             <button
-              className="px-3 py-2 rounded-md text-sm text-primary hover:underline disabled:opacity-50"
-              onClick={handleCancel}
-              disabled={isLoading}
+              className="px-3 py-2 rounded-md border border-input text-foreground hover:bg-accent/20 text-sm disabled:opacity-50"
+              onClick={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (onCopy) onCopy()
+              }}
+              disabled={isLoading || mode !== 'edit'}
               type="button"
             >
-              Cancel
+              Copy to new project
             </button>
             <button
               className={`px-3 py-2 rounded-md text-sm ${

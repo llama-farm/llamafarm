@@ -45,7 +45,6 @@ rag:
 
 datasets:
   - name: "sample_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "support_db"
 

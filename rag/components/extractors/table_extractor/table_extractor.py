@@ -3,7 +3,7 @@ Table Extractor for finding and extracting structured tabular data from document
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from components.extractors.base import BaseExtractor
 from core.base import Document
@@ -13,7 +13,7 @@ class TableExtractor(BaseExtractor):
     """Extract structured table data from text content."""
 
     def __init__(
-        self, name: str = "TableExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "TableExtractor", config: dict[str, Any] | None = None
     ):
         """
         Initialize table extractor.
@@ -31,7 +31,7 @@ class TableExtractor(BaseExtractor):
         self.table_formats = self.config.get("table_formats", ["pipe", "grid", "csv"])
         self.max_cell_length = self.config.get("max_cell_length", 200)
 
-    def extract(self, documents: List[Document]) -> List[Document]:
+    def extract(self, documents: list[Document]) -> list[Document]:
         """
         Extract table data from documents.
 
@@ -64,13 +64,13 @@ class TableExtractor(BaseExtractor):
 
         return documents
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get required dependencies for this extractor."""
         return []  # No external dependencies
 
     def _extract_from_text(
-        self, text: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, text: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Extract table data from text.
 
@@ -126,7 +126,7 @@ class TableExtractor(BaseExtractor):
             self.logger.error(f"Error in table extraction: {e}")
             return {"tables": [], "table_count": 0, "error": str(e)}
 
-    def _extract_pipe_tables(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_pipe_tables(self, text: str) -> list[dict[str, Any]]:
         """Extract pipe-delimited tables (Markdown-style)."""
         tables = []
         lines = text.split("\n")
@@ -169,7 +169,7 @@ class TableExtractor(BaseExtractor):
 
         return tables
 
-    def _extract_grid_tables(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_grid_tables(self, text: str) -> list[dict[str, Any]]:
         """Extract grid-style tables with borders."""
         tables = []
 
@@ -219,7 +219,7 @@ class TableExtractor(BaseExtractor):
 
         return tables
 
-    def _extract_csv_like_tables(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_csv_like_tables(self, text: str) -> list[dict[str, Any]]:
         """Extract CSV-like tables with consistent delimiters."""
         tables = []
         lines = text.split("\n")
@@ -274,7 +274,7 @@ class TableExtractor(BaseExtractor):
 
         return tables
 
-    def _extract_html_table_markers(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_html_table_markers(self, text: str) -> list[dict[str, Any]]:
         """Extract tables marked with [TABLE] tags or similar."""
         tables = []
 
@@ -305,7 +305,7 @@ class TableExtractor(BaseExtractor):
 
         return tables
 
-    def _parse_pipe_table(self, lines: List[str]) -> Optional[Dict[str, Any]]:
+    def _parse_pipe_table(self, lines: list[str]) -> dict[str, Any] | None:
         """Parse pipe-delimited table lines."""
         if not lines:
             return None
@@ -313,7 +313,7 @@ class TableExtractor(BaseExtractor):
         rows = []
         headers = None
 
-        for i, line in enumerate(lines):
+        for _i, line in enumerate(lines):
             # Skip separator lines
             if self._is_separator_line(line):
                 continue
@@ -343,7 +343,7 @@ class TableExtractor(BaseExtractor):
 
         return None
 
-    def _parse_grid_table(self, lines: List[str]) -> Optional[Dict[str, Any]]:
+    def _parse_grid_table(self, lines: list[str]) -> dict[str, Any] | None:
         """Parse grid-style table."""
         if not lines:
             return None
@@ -358,8 +358,8 @@ class TableExtractor(BaseExtractor):
         return self._parse_pipe_table(content_lines)
 
     def _parse_csv_table(
-        self, lines: List[str], delimiter: str
-    ) -> Optional[Dict[str, Any]]:
+        self, lines: list[str], delimiter: str
+    ) -> dict[str, Any] | None:
         """Parse CSV-style table."""
         if not lines:
             return None
@@ -367,7 +367,7 @@ class TableExtractor(BaseExtractor):
         rows = []
         headers = None
 
-        for i, line in enumerate(lines):
+        for _i, line in enumerate(lines):
             cells = [cell.strip() for cell in line.split(delimiter)]
 
             if len(cells) >= self.min_columns:
@@ -391,22 +391,22 @@ class TableExtractor(BaseExtractor):
         stripped = line.strip()
         return bool(re.match(r"^[|+:\s-]+$", stripped))
 
-    def _looks_like_data_row(self, cells: List[str]) -> bool:
+    def _looks_like_data_row(self, cells: list[str]) -> bool:
         """Check if row looks like data rather than headers."""
         # Look for numbers, dates, or other data patterns
         data_indicators = 0
         for cell in cells:
-            if re.search(r"\d+", cell):  # Contains numbers
-                data_indicators += 1
-            elif re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", cell):  # Date pattern
-                data_indicators += 1
-            elif cell.lower() in ["yes", "no", "true", "false", "n/a", "null"]:
+            if (
+                re.search(r"\d+", cell)
+                or re.search(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", cell)
+                or cell.lower() in ["yes", "no", "true", "false", "n/a", "null"]
+            ):  # Contains numbers
                 data_indicators += 1
 
         # If any cells look like data, treat as data row
         return data_indicators > 0
 
-    def _validate_table(self, table: Dict[str, Any]) -> bool:
+    def _validate_table(self, table: dict[str, Any]) -> bool:
         """Validate that table meets minimum requirements."""
         data = table.get("data", [])
 
@@ -431,7 +431,7 @@ class TableExtractor(BaseExtractor):
 
         return True
 
-    def _generate_table_stats(self, tables: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _generate_table_stats(self, tables: list[dict[str, Any]]) -> dict[str, Any]:
         """Generate statistics about extracted tables."""
         if not tables:
             return {}
@@ -478,7 +478,7 @@ class TableExtractor(BaseExtractor):
         return stats
 
     @staticmethod
-    def get_supported_formats() -> List[str]:
+    def get_supported_formats() -> list[str]:
         """Get list of supported table formats."""
         return ["pipe", "grid", "csv", "html_marker"]
 

@@ -7,6 +7,28 @@ sidebar_label: Start Here
 
 LlamaFarm helps you ship retrieval-augmented and agentic AI apps from your laptop to production. It is fully open-source and intentionally extendable—swap model providers, vector stores, parsers, and CLI workflows without rewriting your project.
 
+:::info Found a bug or have a feature request?
+[Submit an issue on GitHub →](https://github.com/llama-farm/llamafarm/issues)
+:::
+
+## 🖥️ Desktop App
+
+Get started instantly with our desktop application — no command line required.
+
+<div style={{display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', marginTop: '16px'}}>
+  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19-arm64-mac.zip" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Mac (M1+)
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm.Setup.0.0.19.exe" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Windows
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Linux
+  </a>
+</div>
+
+The desktop app includes everything you need: visual project management, dataset uploads, chat interface, and built-in model management. [**See hardware requirements →**](./desktop-app/index.md)
+
 ## 📺 Video Demo
 
 **Quick Overview (90 seconds):** https://youtu.be/W7MHGyN0MdQ
@@ -21,80 +43,40 @@ Get a fast introduction to LlamaFarm's core features and see it in action.
 - **Extend everything** from model handlers to data processors by updating schemas and wiring your own implementations.
 - **Give models superpowers** with MCP (Model Context Protocol) – Connect your AI to local tools, APIs, and databases through a standardized protocol.
 
-## The Power of MCP (Model Context Protocol)
+## MCP (Model Context Protocol)
 
-LlamaFarm supports **MCP servers** – a standardized way to give AI models access to external tools and capabilities. Instead of limiting your AI to text generation, you can connect it to filesystems, databases, APIs, calendars, and custom business logic.
-
-### What Makes MCP Powerful
-
-**Per-Model Tool Access Control**: Different models can have different capabilities. Give your production model access to read-only tools while your development model can modify data.
-
-**Multiple Transport Types**: Connect to tools running as:
-- **Local processes** (STDIO) – Python scripts, Node.js servers
-- **HTTP APIs** – Remote services with standard REST endpoints
-- **SSE streams** – Server-Sent Events for real-time data
-
-**Persistent Sessions**: LlamaFarm maintains long-lived connections to MCP servers, avoiding reconnection overhead and improving performance.
-
-### Configuration Example
+LlamaFarm supports **MCP** – a standardized protocol for giving AI models access to external tools. Connect your AI to filesystems, databases, APIs, and custom business logic.
 
 ```yaml
-# Define available MCP servers
 mcp:
   servers:
     - name: filesystem
       transport: stdio
       command: npx
-      args:
-        - "-y"
-        - "@modelcontextprotocol/server-filesystem"
-        - "/Users/myuser/documents"
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/dir']
 
-    - name: database
-      transport: http
-      base_url: http://localhost:8080/mcp
-      headers:
-        Authorization: Bearer ${env:DB_TOKEN}
-
-# Configure which models can use which servers
 runtime:
   models:
-    - name: research-assistant
+    - name: assistant
       provider: openai
       model: gpt-4
-      # This model can access filesystem only
-      mcp_servers:
-        - filesystem
-
-    - name: data-analyst
-      provider: openai
-      model: gpt-4
-      # This model can access database only
-      mcp_servers:
-        - database
-
-    - name: general-chat
-      provider: ollama
-      model: llama3.1:8b
-      # Empty list = no MCP access (safer)
-      mcp_servers: []
+      mcp_servers: [filesystem]
 ```
 
-### Real-World Use Cases
+**Key features:**
+- **Per-model access control** – Different models get different tools
+- **Multiple transports** – STDIO (local), HTTP (remote), SSE (streaming)
+- **Persistent sessions** – Efficient connection management
 
-- **Code Analysis**: Give models access to your local file system to read and analyze code
-- **Data Queries**: Connect to databases and let AI write and execute SQL queries
-- **Calendar Management**: Integrate with calendar APIs for scheduling and meeting coordination
-- **API Integration**: Connect to external services (weather, CRM, ticketing systems)
-- **Custom Business Logic**: Expose internal tools through your own MCP servers
+[**Learn more about MCP →**](./mcp/index.md)
 
 ## Choose Your Own Adventure
 
-| Get Started | Go Deeper | Build Your Own |
-| ----------- | --------- | -------------- |
-| [Quickstart](./quickstart/index.md) – install, init, chat, ingest your first dataset. | [Core Concepts](./concepts/index.md) – architecture, sessions, and components. | [Extending LlamaFarm](./extending/index.md) – add runtimes, stores, parsers, and CLI commands. |
-| [Designer Web UI](./designer/index.md) – visual interface for project management. | [Configuration Guide](./configuration/index.md) – schema-driven project settings. | [RAG Guide](./rag/index.md) – strategies, processing pipelines, and monitoring. |
-| [CLI Reference](./cli/index.md) – command matrix and examples. | [Models & Runtime](./models/index.md) – configure AI models and providers. | [Prompts](./prompts/index.md) – prompt engineering and management. |
+| Get Started                                                                           | Go Deeper                                                                         | Build Your Own                                                                                 |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [Quickstart](./quickstart/index.md) – install, init, chat, ingest your first dataset. | [Core Concepts](./concepts/index.md) – architecture, sessions, and components.    | [Extending LlamaFarm](./extending/index.md) – add runtimes, stores, parsers, and CLI commands. |
+| [Designer Web UI](./designer/index.md) – visual interface for project management.     | [Configuration Guide](./configuration/index.md) – schema-driven project settings. | [RAG Guide](./rag/index.md) – strategies, processing pipelines, and monitoring.                |
+| [CLI Reference](./cli/index.md) – command matrix and examples.                        | [Models & Runtime](./models/index.md) – configure AI models and providers.        | [Prompts](./prompts/index.md) – prompt engineering and management.                             |
 
 ## Philosophy
 
@@ -105,7 +87,7 @@ runtime:
 - **Open for extension** – documentation includes patterns for registering new providers, stores, and utilities.
 
 :::tip Prefer Visual Tools?
-The **Designer Web UI** provides a browser-based interface for managing projects, uploading datasets, and testing your AI—all without touching the command line. It's automatically available at `http://localhost:7724` when you run `lf start` (or `http://localhost:3123` if using Docker Compose directly). [Learn more →](./designer/index.md)
+The **Designer Web UI** provides a browser-based interface for managing projects, uploading datasets, and testing your AI—all without touching the command line. It's automatically available at `http://localhost:8000` when you run `lf start`. [Learn more →](./designer/index.md)
 :::
 
 ## 🎥 In-Depth Tutorial

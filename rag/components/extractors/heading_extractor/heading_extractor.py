@@ -3,7 +3,7 @@ Heading Extractor for identifying document structure and hierarchy.
 """
 
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.base import Document
@@ -15,7 +15,7 @@ class HeadingExtractor(BaseExtractor):
     """Extract document headings and structure information."""
 
     def __init__(
-        self, name: str = "HeadingExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "HeadingExtractor", config: dict[str, Any] | None = None
     ):
         """
         Initialize heading extractor.
@@ -42,7 +42,7 @@ class HeadingExtractor(BaseExtractor):
         self.generate_toc = self.config.get("generate_toc", True)
         self.detect_sections = self.config.get("detect_sections", True)
 
-    def extract(self, documents: List["Document"]) -> List["Document"]:
+    def extract(self, documents: list["Document"]) -> list["Document"]:
         """
         Extract heading structure from documents.
 
@@ -52,7 +52,6 @@ class HeadingExtractor(BaseExtractor):
         Returns:
             List of enhanced documents with heading metadata
         """
-        from core.base import Document
 
         for doc in documents:
             try:
@@ -73,13 +72,13 @@ class HeadingExtractor(BaseExtractor):
 
         return documents
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get required dependencies for this extractor."""
         return []  # No external dependencies
 
     def _extract_from_text(
-        self, text: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, text: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Extract heading structure from text.
 
@@ -146,10 +145,10 @@ class HeadingExtractor(BaseExtractor):
             }
 
         except Exception as e:
-            logger.error(f"Error in heading extraction: {e}")
+            self.logger.error(f"Error in heading extraction: {e}")
             return {"headings": [], "heading_count": 0, "error": str(e)}
 
-    def _extract_markdown_headings(self, lines: List[str]) -> List[Dict[str, Any]]:
+    def _extract_markdown_headings(self, lines: list[str]) -> list[dict[str, Any]]:
         """Extract markdown-style headings (# ## ### etc.)."""
         headings = []
 
@@ -175,7 +174,7 @@ class HeadingExtractor(BaseExtractor):
 
         return headings
 
-    def _extract_underlined_headings(self, lines: List[str]) -> List[Dict[str, Any]]:
+    def _extract_underlined_headings(self, lines: list[str]) -> list[dict[str, Any]]:
         """Extract underlined headings (text followed by === or ---)."""
         headings = []
 
@@ -210,7 +209,7 @@ class HeadingExtractor(BaseExtractor):
 
         return headings
 
-    def _extract_numbered_headings(self, lines: List[str]) -> List[Dict[str, Any]]:
+    def _extract_numbered_headings(self, lines: list[str]) -> list[dict[str, Any]]:
         """Extract numbered headings (1. 1.1. 1.1.1. etc.)."""
         headings = []
 
@@ -241,7 +240,7 @@ class HeadingExtractor(BaseExtractor):
 
         return headings
 
-    def _extract_caps_headings(self, lines: List[str]) -> List[Dict[str, Any]]:
+    def _extract_caps_headings(self, lines: list[str]) -> list[dict[str, Any]]:
         """Extract all-caps headings."""
         headings = []
 
@@ -285,10 +284,7 @@ class HeadingExtractor(BaseExtractor):
 
         # Should not be mostly numbers or special characters
         alphanumeric_count = sum(c.isalnum() for c in text)
-        if alphanumeric_count < len(text) * 0.5:
-            return False
-
-        return True
+        return not alphanumeric_count < len(text) * 0.5
 
     def _looks_like_data(self, text: str) -> bool:
         """Check if text looks like data rather than a heading."""
@@ -302,7 +298,7 @@ class HeadingExtractor(BaseExtractor):
 
         return any(re.match(pattern, text) for pattern in data_patterns)
 
-    def _estimate_caps_heading_level(self, lines: List[str], line_index: int) -> int:
+    def _estimate_caps_heading_level(self, lines: list[str], line_index: int) -> int:
         """Estimate heading level for all-caps headings based on context."""
         # Look at surrounding context to estimate level
         # This is a heuristic approach
@@ -324,8 +320,8 @@ class HeadingExtractor(BaseExtractor):
             return 3
 
     def _deduplicate_headings(
-        self, headings: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, headings: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Remove duplicate headings that might be detected by multiple methods."""
         unique_headings = []
         seen_positions = set()
@@ -361,7 +357,7 @@ class HeadingExtractor(BaseExtractor):
 
         return unique_headings
 
-    def _analyze_hierarchy(self, headings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _analyze_hierarchy(self, headings: list[dict[str, Any]]) -> dict[str, Any]:
         """Analyze the hierarchical structure of headings."""
         if not headings:
             return {}
@@ -384,7 +380,7 @@ class HeadingExtractor(BaseExtractor):
             "has_consistent_numbering": self._has_consistent_numbering(headings),
         }
 
-    def _has_consistent_numbering(self, headings: List[Dict[str, Any]]) -> bool:
+    def _has_consistent_numbering(self, headings: list[dict[str, Any]]) -> bool:
         """Check if document has consistent numbering scheme."""
         numbered_headings = [h for h in headings if h["type"] == "numbered"]
 
@@ -396,8 +392,8 @@ class HeadingExtractor(BaseExtractor):
         return len(numbered_headings) >= len(headings) * 0.5
 
     def _generate_table_of_contents(
-        self, headings: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, headings: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Generate a table of contents from headings."""
         toc = []
 
@@ -414,8 +410,8 @@ class HeadingExtractor(BaseExtractor):
         return toc
 
     def _detect_document_sections(
-        self, headings: List[Dict[str, Any]], lines: List[str]
-    ) -> List[Dict[str, Any]]:
+        self, headings: list[dict[str, Any]], lines: list[str]
+    ) -> list[dict[str, Any]]:
         """Detect document sections based on headings."""
         if not headings:
             return []
@@ -454,7 +450,7 @@ class HeadingExtractor(BaseExtractor):
 
         return sections
 
-    def _generate_heading_stats(self, headings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _generate_heading_stats(self, headings: list[dict[str, Any]]) -> dict[str, Any]:
         """Generate statistics about headings."""
         if not headings:
             return {}
@@ -483,7 +479,7 @@ class HeadingExtractor(BaseExtractor):
         }
 
     @staticmethod
-    def get_supported_types() -> List[str]:
+    def get_supported_types() -> list[str]:
         """Get list of supported heading types."""
         return ["markdown", "underlined", "numbered", "caps"]
 

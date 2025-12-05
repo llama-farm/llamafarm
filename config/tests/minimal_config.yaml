@@ -43,7 +43,6 @@ models:
 
 datasets:
   - name: "minimal_dataset"
-    files: ["test_file.csv"]
     data_processing_strategy: "default"
     database: "minimal_db"
 

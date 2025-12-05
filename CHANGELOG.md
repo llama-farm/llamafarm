@@ -1,5 +1,99 @@
 # Changelog
 
+## [0.0.19](https://github.com/llama-farm/llamafarm/compare/v0.0.18...v0.0.19) (2025-12-03)
+
+
+### Features
+
+* Add automatic model download management ([#545](https://github.com/llama-farm/llamafarm/issues/545)) ([e362e12](https://github.com/llama-farm/llamafarm/commit/e362e123d4cf73e8e1737c3c1afe5d5c066637b0))
+* Add custom RAG query support to chat/completions endpoint ([#536](https://github.com/llama-farm/llamafarm/issues/536)) ([dd402a0](https://github.com/llama-farm/llamafarm/commit/dd402a0eea697069b6dd281b774628a96a78645b))
+* Add thinking/reasoning model support to Universal Runtime ([#542](https://github.com/llama-farm/llamafarm/issues/542)) ([e80725e](https://github.com/llama-farm/llamafarm/commit/e80725e67bbad93b7d5c799de24e92f90c39796b))
+* **api:** Add Database CRUD API endpoints ([#524](https://github.com/llama-farm/llamafarm/issues/524)) ([e2f0e99](https://github.com/llama-farm/llamafarm/commit/e2f0e99c328e54aa8f703adbba82421872196f62))
+* **designer:** better ux for day 2 users ([#509](https://github.com/llama-farm/llamafarm/issues/509)) ([7cbbafe](https://github.com/llama-farm/llamafarm/commit/7cbbafea1a0d6ef80c9e79bad318184f49ea169b))
+* **designer:** check disk space for model download ([#527](https://github.com/llama-farm/llamafarm/issues/527)) ([555c094](https://github.com/llama-farm/llamafarm/commit/555c0947dd052583a31a5f89a2366f86d1a45c40))
+* **designer:** list gguf models for download ([#503](https://github.com/llama-farm/llamafarm/issues/503)) ([0afa661](https://github.com/llama-farm/llamafarm/commit/0afa66148af8a5857f21321b21e79702c3c4e182))
+
+
+### Bug Fixes
+
+* **api:** Support datasets endpoint without trailing slash ([#519](https://github.com/llama-farm/llamafarm/issues/519)) ([e3acfe0](https://github.com/llama-farm/llamafarm/commit/e3acfe04ba49f8454082e9b93200fcb9cd26d411)), closes [#518](https://github.com/llama-farm/llamafarm/issues/518)
+* **cli:** handle cross-fs data moves ([#537](https://github.com/llama-farm/llamafarm/issues/537)) ([c4ad4fa](https://github.com/llama-farm/llamafarm/commit/c4ad4fa4cae5317814251dc9caa58cf01a9d7d1b))
+* Datasets CLI file count and RAG PDF parsing ([#530](https://github.com/llama-farm/llamafarm/issues/530)) ([ac6f4e4](https://github.com/llama-farm/llamafarm/commit/ac6f4e4eec9a9c364c7c2a5d8fc15052b2d91cdd))
+* **demo:** change timeout for inital  demo experience ([#539](https://github.com/llama-farm/llamafarm/issues/539)) ([a2dcaa0](https://github.com/llama-farm/llamafarm/commit/a2dcaa04e047b57c46f57c71911636dc653b337f))
+* **designer:** address build error ([0d194ef](https://github.com/llama-farm/llamafarm/commit/0d194ef69002145467f17cbd60298cc32268b425))
+* **designer:** fix demo data import and update toast component ([#506](https://github.com/llama-farm/llamafarm/issues/506)) ([11a375a](https://github.com/llama-farm/llamafarm/commit/11a375aa16dceccc3d551015dcba46d104c3b802))
+* **rag:** Apply reranking even when query decomposition fails ([#517](https://github.com/llama-farm/llamafarm/issues/517)) ([5030cca](https://github.com/llama-farm/llamafarm/commit/5030cca89e56c7bda8d9b6aad651943872e913c6))
+
+
+### Miscellaneous Chores
+
+* release 0.0.19 ([ece3f40](https://github.com/llama-farm/llamafarm/commit/ece3f40f94c94b2b62fb9647bdee53081acadbb9))
+
+## [0.0.18](https://github.com/llama-farm/llamafarm/compare/v0.0.17...v0.0.18) (2025-11-25)
+
+
+### Features
+
+* **app:** sign windows and mac apps ([#502](https://github.com/llama-farm/llamafarm/issues/502)) ([f020648](https://github.com/llama-farm/llamafarm/commit/f0206487c86bee4524b2eea6e587fd63b7a43cba))
+* **rag:** Add advanced retrieval strategies with cross-encoder reranking and multi-turn RAG ([#476](https://github.com/llama-farm/llamafarm/issues/476)) ([9a18fe7](https://github.com/llama-farm/llamafarm/commit/9a18fe7a600dd40c0193445606ace201630e9c9e))
+
+
+### Bug Fixes
+
+* **cli:** ensure logs are on for services ([#505](https://github.com/llama-farm/llamafarm/issues/505)) ([81ab388](https://github.com/llama-farm/llamafarm/commit/81ab3882f3acab157d131b65df7b88d35bfcd2f2))
+
+
+### Miscellaneous Chores
+
+* release 0.0.18 ([37b7024](https://github.com/llama-farm/llamafarm/commit/37b70246e1866f59a3320e3748e0a5b6aecdb921))
+
+## [0.0.17](https://github.com/llama-farm/llamafarm/compare/v0.0.16...v0.0.17) (2025-11-24)
+
+
+### Bug Fixes
+
+* **designer:** fix empty prompts array for new projects, fix current version in designer ([#495](https://github.com/llama-farm/llamafarm/issues/495)) ([488313c](https://github.com/llama-farm/llamafarm/commit/488313cd239c2075f2adcce47b297e0b89005494))
+* **docs:** add troubleshooting and update styles ([#498](https://github.com/llama-farm/llamafarm/issues/498)) ([270af60](https://github.com/llama-farm/llamafarm/commit/270af6050c3007744aa1e8ea778afe6ce3f66177))
+* hf progress bars can crash runtime ([#499](https://github.com/llama-farm/llamafarm/issues/499)) ([50d66a8](https://github.com/llama-farm/llamafarm/commit/50d66a847062b5071e47b66231e1b9e9297f2e88))
+
+## [0.0.16](https://github.com/llama-farm/llamafarm/compare/v0.0.15...v0.0.16) (2025-11-23)
+
+
+### Bug Fixes
+
+* cli packaging ([8058b1f](https://github.com/llama-farm/llamafarm/commit/8058b1f3f8c809e5896a47e3d73a579d8a14fbfd))
+
+## [0.0.15](https://github.com/llama-farm/llamafarm/compare/v0.0.14...v0.0.15) (2025-11-22)
+
+
+### Features
+
+* Add universal event logging for observability ([#383](https://github.com/llama-farm/llamafarm/issues/383)) ([e0c4c8e](https://github.com/llama-farm/llamafarm/commit/e0c4c8e89582a8ab117f28f5cd9af3fbffd6080c))
+* create project from existing project ([#459](https://github.com/llama-farm/llamafarm/issues/459)) ([3fee20d](https://github.com/llama-farm/llamafarm/commit/3fee20d3801953bd69c687c10c28bb82e925b8d2))
+* **designer:** Add interactive demo project creation system ([#473](https://github.com/llama-farm/llamafarm/issues/473)) ([4328380](https://github.com/llama-farm/llamafarm/commit/4328380e589f5a7db95f94769f1eb41afe65711d))
+* **designer:** demo app, copy config, test fixes ([#477](https://github.com/llama-farm/llamafarm/issues/477)) ([c840da7](https://github.com/llama-farm/llamafarm/commit/c840da7a29c817baf29ed86bc886b000cf1a466b))
+* **designer:** import demo data, demo to universal runtime, fix empty prompts array bug ([#491](https://github.com/llama-farm/llamafarm/issues/491)) ([dc5a33f](https://github.com/llama-farm/llamafarm/commit/dc5a33fc368fc8dbd2d29704be35a441d61f5cf1))
+* **electron:** Desktop app with auto-updates and polished UI ([#458](https://github.com/llama-farm/llamafarm/issues/458)) ([02ddf58](https://github.com/llama-farm/llamafarm/commit/02ddf5875fce359f3df7d6d5be6ca822aafb0b01))
+* implement enhanced tool calling ([#460](https://github.com/llama-farm/llamafarm/issues/460)) ([72d9b82](https://github.com/llama-farm/llamafarm/commit/72d9b82abee8611d00ee4290556b751736d22992))
+* **runtime:** support gguf models ([#445](https://github.com/llama-farm/llamafarm/issues/445)) ([6479372](https://github.com/llama-farm/llamafarm/commit/64793727a30651d2de771410dd8f56a1f8604222))
+
+
+### Bug Fixes
+
+* Add GH_TOKEN to desktop app workflows ([#480](https://github.com/llama-farm/llamafarm/issues/480)) ([6402da0](https://github.com/llama-farm/llamafarm/commit/6402da075ec2a7a90743ef6956215a8d188d39f8))
+* **cli:** prevent uv from building source on run ([#482](https://github.com/llama-farm/llamafarm/issues/482)) ([082a269](https://github.com/llama-farm/llamafarm/commit/082a269673c3342f2bfa535c877d5fcbfb6aeb8b))
+* **cli:** sync newer config on startup instead of always preferring CWD ([#484](https://github.com/llama-farm/llamafarm/issues/484)) ([458cd7b](https://github.com/llama-farm/llamafarm/commit/458cd7bfa48655ec92963bb36444ad52e142a22a))
+* **cli:** upgrades may fail on unix-like environments ([#453](https://github.com/llama-farm/llamafarm/issues/453)) ([3efed4c](https://github.com/llama-farm/llamafarm/commit/3efed4c31c1f684be9aa3e2078aee41907e06ede))
+* **designer:** database tab switching ([#455](https://github.com/llama-farm/llamafarm/issues/455)) ([e8be498](https://github.com/llama-farm/llamafarm/commit/e8be498a96b1adec475460d0ca1eff980ec33a67))
+* **designer:** dataset name validation, status column, other polishes ([#472](https://github.com/llama-farm/llamafarm/issues/472)) ([bcc8669](https://github.com/llama-farm/llamafarm/commit/bcc86699c237cc2c95fd1b4a49a1ffc71175e907))
+* **designer:** Improve RAG integration and chat context management ([#471](https://github.com/llama-farm/llamafarm/issues/471)) ([7bb1011](https://github.com/llama-farm/llamafarm/commit/7bb1011d13ab16148eb5c3a383f03de8ad19fc9e))
+* **mcp:** handle missing mcp config section gracefully ([#485](https://github.com/llama-farm/llamafarm/issues/485)) ([517d663](https://github.com/llama-farm/llamafarm/commit/517d663b303d315a1ace964669fb7d5d94eed5a4))
+
+
+### Miscellaneous Chores
+
+* release 0.0.15 ([2395ddc](https://github.com/llama-farm/llamafarm/commit/2395ddcc68a71ff500dd6a20dbabe69ba2cdac63))
+
 ## [0.0.14](https://github.com/llama-farm/llamafarm/compare/v0.0.13...v0.0.14) (2025-11-13)
 
 

@@ -57,9 +57,9 @@ class LFAgentHistory:
                 role="assistant",
                 content=data.get("content"),
                 audio=data.get("audio"),
-                name=data.get("name"),
+                name=data.get("name") or "",
                 refusal=data.get("refusal"),
-                tool_calls=data.get("tool_calls"),
+                tool_calls=data.get("tool_calls") or [],
                 # reasoning=data.get("reasoning"),
             )
         elif role == "tool":

@@ -32,7 +32,7 @@ dependencies = [
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
-  "jsonref>=1.1.0", # Can be removed since it's now in config
+  "jsonref>=1.1.0",             # Can be removed since it's now in config
   "celery>=5.5.3",
   # Configuration parsing
   "pyyaml>=6.0.0", # Can be removed since it's now in config
@@ -44,14 +44,17 @@ dependencies = [
   "fastapi-mcp>=0.4.0",
   "ollama>=0.6.0",
   "huggingface-hub>=1.0.1",
+  "psutil>=5.9.0",
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
+dev = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 test = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 
 [dependency-groups]
+dev = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 test = ["pytest>=8.4.1", "pytest-asyncio>=1.1.0", "pytest-mock>=3.14.1"]
 
 [tool.pytest.ini_options]

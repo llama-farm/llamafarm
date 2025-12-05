@@ -47,6 +47,7 @@ class LFAgentClientOllama(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
+        **_,
     ) -> LFChatCompletion:
         """Chat with tool calling support."""
         client = AsyncClient(
@@ -131,6 +132,7 @@ class LFAgentClientOllama(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
+        **_,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat, converting Ollama chunks to OpenAI format."""
 

@@ -91,7 +91,7 @@ class Embedder(Component):
         texts = [doc.content for doc in documents]
         embeddings = self.embed(texts)
 
-        for doc, embedding in zip(documents, embeddings):
+        for doc, embedding in zip(documents, embeddings, strict=False):
             doc.embeddings = embedding
 
         # Calculate chunk metrics
@@ -128,6 +128,32 @@ class VectorStore(Component):
     @abstractmethod
     def add_documents(self, documents: list[Document]) -> bool:
         """Add documents to the vector store."""
+        pass
+
+    @abstractmethod
+    def get_documents_by_metadata(
+        self, metadata_filter: dict[str, Any]
+    ) -> list[Document]:
+        """Get documents matching a metadata filter.
+
+        Args:
+            metadata_filter: Key-value pairs to match against document metadata.
+
+        Returns:
+            List of matching documents.
+        """
+        pass
+
+    @abstractmethod
+    def delete_documents(self, doc_ids: list[str]) -> int:
+        """Delete documents by their IDs.
+
+        Args:
+            doc_ids: List of document IDs to delete.
+
+        Returns:
+            Number of documents deleted.
+        """
         pass
 
     @abstractmethod

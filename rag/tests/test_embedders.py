@@ -1,6 +1,7 @@
 """Essential embedder tests - focus on real functionality."""
 
 import pytest
+
 from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
 from components.embedders.sentence_transformer_embedder.sentence_transformer_embedder import (
     SentenceTransformerEmbedder,
@@ -21,9 +22,6 @@ class TestEmbedders:
     def test_sentence_transformer_embedder(self):
         """Test SentenceTransformer embedder basic functionality."""
         # SentenceTransformerEmbedder is abstract, test that it exists
-        from components.embedders.sentence_transformer_embedder.sentence_transformer_embedder import (
-            SentenceTransformerEmbedder,
-        )
 
         # Test that the class exists and has required methods
         assert hasattr(SentenceTransformerEmbedder, "embed")

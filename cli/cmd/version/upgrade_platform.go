@@ -163,8 +163,8 @@ func (u *UnixUpgradeStrategy) createBackup(binaryPath string) (string, error) {
 }
 
 func (u *UnixUpgradeStrategy) atomicReplace(current, new string) error {
-	// Move new binary to final location
-	err := os.Rename(new, current)
+	// Move new binary to final location (handles cross-filesystem moves)
+	err := utils.MoveFile(new, current)
 	if err != nil {
 		return fmt.Errorf("failed to move new binary to final location: %w", err)
 	}
@@ -281,11 +281,11 @@ func (w *WindowsUpgradeStrategy) atomicReplace(current, new string) error {
 		return fmt.Errorf("failed to move current binary: %w", err)
 	}
 
-	// Move new binary to final location
-	err = os.Rename(new, current)
+	// Move new binary to final location (handles cross-filesystem moves)
+	err = utils.MoveFile(new, current)
 	if err != nil {
 		// Restore original if new binary move failed
-		os.Rename(tempBackup, current)
+		utils.MoveFile(tempBackup, current)
 		return fmt.Errorf("failed to move new binary to final location: %w", err)
 	}
 

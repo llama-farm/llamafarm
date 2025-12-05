@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
@@ -12,7 +12,7 @@ import { ChatStreamChunk } from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
-import { useProject } from '../../hooks/useProjects'
+import { useProject, useUpdateProject } from '../../hooks/useProjects'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -30,6 +30,8 @@ export interface TestChatProps {
     seed?: number | ''
     streaming: boolean
     jsonMode: boolean
+    enableThinking: boolean
+    thinkingBudget: number
   }
   ragEnabled?: boolean
   ragTopK?: number
@@ -49,7 +51,7 @@ const textareaClasses =
 
 function EmptyState() {
   return (
-    <div className="flex items-center justify-center h-full">
+    <div className="flex items-center justify-center h-full w-full">
       <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-teal-500/20 border border-teal-500/30">
           <FontIcon type="test" className="w-5 h-5 text-teal-400" />
@@ -137,23 +139,121 @@ export default function TestChat({
   const fallbackDefaultName: string | undefined = cfgDefaultName
   const [selectedModel, setSelectedModel] = useState<string | undefined>(() => {
     if (typeof window === 'undefined') return undefined
-    return localStorage.getItem('lf_testchat_selected_model') || undefined
+
+    // Load from localStorage but validate it exists in current config
+    const savedModel = localStorage.getItem('lf_testchat_selected_model')
+    if (savedModel) {
+      // Check if this model exists in the unified models list
+      // Note: unifiedModels might not be populated yet during initial render
+      // so we'll validate again in the useEffect below
+      return savedModel
+    }
+    return undefined
   })
+
+  // Validate selected model and set default if needed
   useEffect(() => {
-    if (!selectedModel) {
+    // Build list of valid model names from current config
+    const validModelNames = unifiedModels.map(m => m.name)
+
+    if (!selectedModel || !validModelNames.includes(selectedModel)) {
+      // Selected model is invalid or doesn't exist - fall back to default
       const apiDefaultName = (defaultModel as any)?.name
-      if (apiDefaultName) {
+      if (apiDefaultName && validModelNames.includes(apiDefaultName)) {
         setSelectedModel(apiDefaultName)
-      } else if (fallbackDefaultName) {
+      } else if (
+        fallbackDefaultName &&
+        validModelNames.includes(fallbackDefaultName)
+      ) {
         setSelectedModel(fallbackDefaultName)
+      } else if (validModelNames.length > 0) {
+        // Use first available model as last resort
+        setSelectedModel(validModelNames[0])
+      } else {
+        // No valid models available, clear selection
+        setSelectedModel(undefined)
       }
     }
-  }, [(defaultModel as any)?.name, fallbackDefaultName, selectedModel])
+  }, [
+    (defaultModel as any)?.name,
+    fallbackDefaultName,
+    selectedModel,
+    unifiedModels,
+  ])
+
+  // Persist valid model selection to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined' && selectedModel) {
-      localStorage.setItem('lf_testchat_selected_model', selectedModel)
+      // Only save if it's a valid model
+      const validModelNames = unifiedModels.map(m => m.name)
+      if (validModelNames.includes(selectedModel)) {
+        localStorage.setItem('lf_testchat_selected_model', selectedModel)
+      }
     }
-  }, [selectedModel])
+  }, [selectedModel, unifiedModels])
+
+  // Database selection management
+  const updateProjectMutation = useUpdateProject()
+
+  // Get current default database from config - using ref to avoid re-render issues
+  const getCurrentDatabase = useCallback(() => {
+    try {
+      const ragConfig = (projectDetail as any)?.project?.config?.rag
+      return ragConfig?.default_database || ''
+    } catch {
+      return ''
+    }
+  }, [projectDetail])
+
+  // Get available databases from project config
+  const availableDatabases = useMemo(() => {
+    try {
+      const ragConfig = (projectDetail as any)?.project?.config?.rag
+      if (!ragConfig?.databases || !Array.isArray(ragConfig.databases)) {
+        return []
+      }
+
+      return ragConfig.databases
+        .filter((db: any) => db?.name) // Only include databases with names
+        .map((db: any) => String(db.name))
+    } catch {
+      return []
+    }
+  }, [projectDetail])
+
+  // Handler to update default database in config
+  const handleDatabaseChange = useCallback(
+    async (newDatabase: string) => {
+      if (!chatParams?.namespace || !chatParams?.projectId || !newDatabase) {
+        return
+      }
+
+      try {
+        const currentConfig = (projectDetail as any)?.project?.config
+        if (!currentConfig) return
+
+        const updatedConfig = {
+          ...currentConfig,
+          rag: {
+            ...currentConfig.rag,
+            default_database: newDatabase,
+          },
+        }
+
+        await updateProjectMutation.mutateAsync({
+          namespace: chatParams.namespace,
+          projectId: chatParams.projectId,
+          request: { config: updatedConfig },
+        })
+      } catch (error) {
+        console.error('Failed to update default database:', error)
+      }
+    },
+    [chatParams, projectDetail, updateProjectMutation]
+  )
+
+  // Get the current database value for rendering
+  const currentDatabase = getCurrentDatabase()
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -229,7 +329,9 @@ export default function TestChat({
       return typeof error === 'string' ? error : error.message
     }
     if (projectChatError) {
-      return typeof projectChatError === 'string' ? projectChatError : projectChatError.message
+      return typeof projectChatError === 'string'
+        ? projectChatError
+        : projectChatError.message
     }
     return null
   })()
@@ -470,11 +572,18 @@ export default function TestChat({
               typeof genSettings?.frequencyPenalty === 'number'
                 ? genSettings?.frequencyPenalty
                 : undefined,
+            // Thinking/reasoning model parameters
+            think: genSettings?.enableThinking === true ? true : undefined,
+            thinking_budget:
+              genSettings?.enableThinking && genSettings?.thinkingBudget
+                ? genSettings.thinkingBudget
+                : undefined,
             model:
               selectedModel ||
               (defaultModel as any)?.name ||
               fallbackDefaultName ||
               undefined,
+            database: getCurrentDatabase() || undefined,
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
@@ -554,6 +663,14 @@ export default function TestChat({
     updateMessage,
     updateInput,
     fallbackSendMessage,
+    genSettings,
+    selectedModel,
+    defaultModel,
+    fallbackDefaultName,
+    getCurrentDatabase,
+    ragEnabled,
+    ragTopK,
+    ragScoreThreshold,
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -699,11 +816,18 @@ export default function TestChat({
               typeof genSettings?.frequencyPenalty === 'number'
                 ? genSettings?.frequencyPenalty
                 : undefined,
+            // Thinking/reasoning model parameters
+            think: genSettings?.enableThinking === true ? true : undefined,
+            thinking_budget:
+              genSettings?.enableThinking && genSettings?.thinkingBudget
+                ? genSettings.thinkingBudget
+                : undefined,
             model:
               selectedModel ||
               (defaultModel as any)?.name ||
               fallbackDefaultName ||
               undefined,
+            database: getCurrentDatabase() || undefined,
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
@@ -770,12 +894,24 @@ export default function TestChat({
     chatParams,
     projectChatStreamingMessage,
     projectSessionId,
+    genSettings,
+    selectedModel,
+    defaultModel,
+    fallbackDefaultName,
+    getCurrentDatabase,
+    ragEnabled,
+    ragTopK,
+    ragScoreThreshold,
+    projectSession,
+    setStreamingMessage,
+    projectChatStreamingSession.sessionId,
+    projectChatStreamingSession.setSessionId,
   ])
 
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
-      <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
         <div className="text-xs md:text-sm text-muted-foreground">
           {USE_PROJECT_CHAT && chatParams ? (
             <span>
@@ -790,31 +926,59 @@ export default function TestChat({
             'Session'
           )}
         </div>
-        {/* Model selector (if available) */}
+        {/* Model and Database selectors (if available) */}
         {USE_PROJECT_CHAT && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Model</span>
-            <select
-              value={
-                selectedModel ||
-                (defaultModel as any)?.name ||
-                fallbackDefaultName ||
-                ''
-              }
-              onChange={e => setSelectedModel(e.target.value)}
-              className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground"
-            >
-              {modelsLoading && <option value="">Loading…</option>}
-              {!modelsLoading && unifiedModels.length === 0 && (
-                <option value="">No models</option>
-              )}
-              {!modelsLoading &&
-                unifiedModels.map(m => (
-                  <option key={m.name} value={m.name}>
-                    {m.name} ({m.model}) {m.default ? '(default)' : ''}
-                  </option>
-                ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-4 md:gap-8">
+            {/* Model selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Model
+              </span>
+              <select
+                value={
+                  selectedModel ||
+                  (defaultModel as any)?.name ||
+                  fallbackDefaultName ||
+                  ''
+                }
+                onChange={e => setSelectedModel(e.target.value)}
+                className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+              >
+                {modelsLoading && <option value="">Loading…</option>}
+                {!modelsLoading && unifiedModels.length === 0 && (
+                  <option value="">No models</option>
+                )}
+                {!modelsLoading &&
+                  unifiedModels.map(m => (
+                    <option key={m.name} value={m.name}>
+                      {m.name} ({m.model}) {m.default ? '(default)' : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Database selector */}
+            {availableDatabases.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  Database
+                </span>
+                <select
+                  value={currentDatabase || ''}
+                  onChange={e => {
+                    const value = e.target.value
+                    if (value) handleDatabaseChange(value)
+                  }}
+                  className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+                >
+                  {availableDatabases.map((dbName: string) => (
+                    <option key={dbName} value={dbName}>
+                      {dbName} {currentDatabase === dbName ? '(default)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
         <button
@@ -848,12 +1012,19 @@ export default function TestChat({
       )}
 
       {/* Messages */}
-      <div ref={listRef} className="flex-1 overflow-y-auto p-3 md:p-4">
-        <div className="flex flex-col gap-4 min-h-full pb-80">
-          {!hasMessages ? (
-            <EmptyState />
-          ) : (
-            messages.map((m: ChatboxMessage) => (
+      <div
+        ref={listRef}
+        className={
+          !hasMessages
+            ? 'flex-1 overflow-hidden p-3 md:p-4'
+            : 'flex-1 overflow-y-auto p-3 md:p-4'
+        }
+      >
+        {!hasMessages ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-4 min-h-full pb-80">
+            {messages.map((m: ChatboxMessage) => (
               <TestChatMessage
                 key={m.id}
                 message={m}
@@ -864,10 +1035,10 @@ export default function TestChat({
                 lastUserInput={lastUserInputRef.current}
                 showGenSettings={showGenSettings}
               />
-            ))
-          )}
-          <div ref={endRef} />
-        </div>
+            ))}
+            <div ref={endRef} />
+          </div>
+        )}
       </div>
 
       {/* Input */}
@@ -960,11 +1131,20 @@ export function TestChatMessage({
   // Remove raw <tool_call> XML tags from display (handled as separate messages)
   if (isAssistant && typeof contentWithoutThinking === 'string') {
     // Remove complete tool_call blocks
-    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<tool_call>[\s\S]*?<\/tool_call>/g,
+      ''
+    )
     // Remove unclosed tool_call tags (streaming in progress)
-    contentWithoutThinking = contentWithoutThinking.replace(/<tool_call>[\s\S]*$/g, '')
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<tool_call>[\s\S]*$/g,
+      ''
+    )
     // Remove orphaned closing tags
-    contentWithoutThinking = contentWithoutThinking.replace(/<\/tool_call>/g, '')
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<\/tool_call>/g,
+      ''
+    )
     contentWithoutThinking = contentWithoutThinking.trim()
   }
 
@@ -1008,9 +1188,7 @@ export function TestChatMessage({
         }
       >
         {message.isLoading && isAssistant ? (
-          showThinking ? (
-            <TypingDots label="Thinking" />
-          ) : null
+          <TypingDots label="Thinking" />
         ) : message.metadata?.isTest && isUser ? (
           <div className="whitespace-pre-wrap">
             <div className="mb-2">
@@ -1040,11 +1218,11 @@ export function TestChatMessage({
                   </span>
                 </button>
                 {openThinking && (
-                  <div className="px-3 py-2 text-sm whitespace-pre-wrap border-t border-border">
+                  <div className="px-3 py-2 text-sm border-t border-border text-muted-foreground/70">
                     {thinkingFromTags ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1.5 prose-pre:my-2">
+                      <div className="prose prose-sm max-w-none leading-normal prose-p:my-4 prose-li:my-0.5 prose-ul:my-3 prose-ol:my-3 prose-headings:my-4 prose-pre:my-3 [&_*]:text-muted-foreground/70">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {thinkingFromTags}
+                          {thinkingFromTags.replace(/\n{3,}/g, '\n\n')}
                         </ReactMarkdown>
                       </div>
                     ) : Array.isArray((message as any)?.metadata?.thinking) &&
@@ -1059,7 +1237,7 @@ export function TestChatMessage({
                         )}
                       </ul>
                     ) : (
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground/50">
                         No thinking steps
                       </div>
                     )}
@@ -1069,9 +1247,9 @@ export function TestChatMessage({
             )}
 
             {/* Final answer content (without <think> … </think>) */}
-            <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap leading-relaxed prose-p:my-1 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1.5 prose-pre:my-2">
+            <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-4 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-headings:my-4 prose-pre:my-3 [&>*]:mb-4">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {contentWithoutThinking}
+                {contentWithoutThinking.replace(/\n{3,}/g, '\n\n')}
               </ReactMarkdown>
             </div>
           </>

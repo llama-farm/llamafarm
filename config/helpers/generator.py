@@ -57,7 +57,9 @@ def generate_base_config(
     try:
         validated = LlamaFarmConfig(**raw_cfg)
     except Exception as e:
-        raise ValueError(f"Config template content is not a valid LlamaFarmConfig: {e}") from e
+        raise ValueError(
+            f"Config template content is not a valid LlamaFarmConfig: {e}"
+        ) from e
 
     # Return JSON-serializable dict
     cfg = validated.model_dump(mode="json", exclude_none=True)

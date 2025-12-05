@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LlamaFarm - Starting...</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      color: white;
+      overflow: hidden;
+    }
+
+    .splash-container {
+      text-align: center;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      width: 400px;
+    }
+
+    .logo {
+      font-size: 48px;
+      margin-bottom: 20px;
+      animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 30px;
+    }
+
+    .status {
+      margin: 20px 0;
+      min-height: 24px;
+      font-size: 14px;
+      opacity: 0.95;
+    }
+
+    .progress-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 20px 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: white;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-top: 10px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error {
+      color: #ff6b6b;
+      background: rgba(255, 107, 107, 0.1);
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-size: 13px;
+      text-align: left;
+      word-wrap: break-word;
+    }
+
+    .error-title {
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-container">
+    <div class="logo">🦙</div>
+    <h1>LlamaFarm</h1>
+    <div class="subtitle">Local AI Platform</div>
+
+    <div class="status" id="status">Starting up...</div>
+
+    <div class="progress-container">
+      <div class="progress-bar" id="progress"></div>
+    </div>
+
+    <div class="spinner" id="spinner"></div>
+
+    <div class="error" id="error" style="display: none;">
+      <div class="error-title">Error</div>
+      <div id="error-message"></div>
+    </div>
+  </div>
+
+  <script>
+    // Listen for status updates
+    if (window.llamafarm) {
+      window.llamafarm.splash.onStatus((status) => {
+        const statusEl = document.getElementById('status');
+        const progressEl = document.getElementById('progress');
+        const spinnerEl = document.getElementById('spinner');
+        const errorEl = document.getElementById('error');
+        const errorMessageEl = document.getElementById('error-message');
+
+        if (statusEl) {
+          statusEl.textContent = status.message || 'Starting...';
+        }
+
+        if (progressEl && status.progress !== undefined) {
+          progressEl.style.width = `${status.progress}%`;
+        }
+
+        if (status.error) {
+          if (spinnerEl) spinnerEl.style.display = 'none';
+          if (errorEl) {
+            errorEl.style.display = 'block';
+            if (errorMessageEl) {
+              errorMessageEl.textContent = status.error;
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

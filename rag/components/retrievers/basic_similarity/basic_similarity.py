@@ -1,11 +1,11 @@
 """Basic similarity retrieval strategy using cosine similarity."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from components.retrievers.base import RetrievalResult, RetrievalStrategy
-
 from core.logging import RAGStructLogger
+
 logger = RAGStructLogger("rag.components.retrievers.basic_similarity.basic_similarity")
 
 
@@ -20,7 +20,7 @@ class BasicSimilarityStrategy(RetrievalStrategy):
     def __init__(
         self,
         name: str = "BasicSimilarityStrategy",
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -33,7 +33,7 @@ class BasicSimilarityStrategy(RetrievalStrategy):
         self.distance_metric = config.get("distance_metric", "cosine")
 
     def retrieve(
-        self, query_embedding: List[float], vector_store, top_k: int = 5, **kwargs
+        self, query_embedding: list[float], vector_store, top_k: int = 5, **kwargs
     ) -> RetrievalResult:
         """
         Retrieve documents using basic similarity search.
@@ -131,7 +131,7 @@ class BasicSimilarityStrategy(RetrievalStrategy):
         # Universal support - works with all vector stores
         return True
 
-    def get_strategy_info(self) -> Dict[str, Any]:
+    def get_strategy_info(self) -> dict[str, Any]:
         """Get information about this strategy."""
         return {
             "name": self.name,
@@ -162,7 +162,7 @@ class BasicSimilarityStrategy(RetrievalStrategy):
             },
         }
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         """Get JSON schema for configuration validation."""
         return {
             "type": "object",
@@ -191,7 +191,7 @@ class BasicSimilarityStrategy(RetrievalStrategy):
             "additionalProperties": False,
         }
 
-    def get_performance_info(self) -> Dict[str, Any]:
+    def get_performance_info(self) -> dict[str, Any]:
         """Get performance characteristics of this strategy."""
         return {
             "speed": "fast",

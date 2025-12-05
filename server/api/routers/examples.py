@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import json
+import contextlib
 import os
 from glob import glob
 from typing import Any
 
+from config.datamodel import LlamaFarmConfig
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core.logging import FastAPIStructLogger
-from config.datamodel import LlamaFarmConfig
-from services.project_service import ProjectService
-from services.dataset_service import DatasetService
 from services.data_service import DataService, MetadataFileContent
-from core.celery.tasks.task_process_dataset import process_dataset_task
+from services.dataset_service import DatasetService
+from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
 
@@ -37,6 +36,7 @@ class ExampleSummary(BaseModel):
 
 class ExampleDataset(BaseModel):
     """Dataset defined by an example manifest, with computed file sizes."""
+
     example_id: str
     example_title: str | None = None
     name: str
@@ -86,26 +86,24 @@ def _scan_manifests() -> list[dict[str, Any]]:
             data_bytes = 0
             for ds in ds_list or []:
                 for pattern in ds.get("ingest", []) or []:
-                    abs_glob = _ensure_path_under_examples(os.path.join(_repo_root(), pattern))
+                    abs_glob = _ensure_path_under_examples(
+                        os.path.join(_repo_root(), pattern)
+                    )
                     for path in glob(abs_glob):
-                        try:
+                        with contextlib.suppress(OSError):
                             data_bytes += os.path.getsize(path)
-                        except OSError:
-                            pass
 
             # Project size approximation: manifest + referenced cfg
             proj_bytes = 0
-            try:
+            with contextlib.suppress(OSError):
                 proj_bytes += os.path.getsize(manifest_path)
-            except OSError:
-                pass
             cfg_path = m.get("config", {}).get("yaml_path")
             if cfg_path:
-                cfg_abs = _ensure_path_under_examples(os.path.join(_repo_root(), cfg_path))
-                try:
+                cfg_abs = _ensure_path_under_examples(
+                    os.path.join(_repo_root(), cfg_path)
+                )
+                with contextlib.suppress(OSError):
                     proj_bytes += os.path.getsize(cfg_abs)
-                except OSError:
-                    pass
 
             # Updated at: directory mtime
             try:
@@ -125,16 +123,24 @@ def _scan_manifests() -> list[dict[str, Any]]:
                     "description": m.get("description"),
                     "tags": m.get("tags", []),
                     "primaryModel": m.get("primaryModel"),
-                    "dataset_count": len(ds_list) if isinstance(ds_list, list) else None,
+                    "dataset_count": len(ds_list)
+                    if isinstance(ds_list, list)
+                    else None,
                     "data_size_bytes": data_bytes,
-                    "data_size_human": _humanize_size(data_bytes) if data_bytes else None,
+                    "data_size_human": _humanize_size(data_bytes)
+                    if data_bytes
+                    else None,
                     "project_size_bytes": proj_bytes,
-                    "project_size_human": _humanize_size(proj_bytes) if proj_bytes else None,
+                    "project_size_human": _humanize_size(proj_bytes)
+                    if proj_bytes
+                    else None,
                     "updated_at": updated_at,
                 }
             )
         except Exception as e:
-            logger.warning("Failed to read example manifest", path=manifest_path, error=str(e))
+            logger.warning(
+                "Failed to read example manifest", path=manifest_path, error=str(e)
+            )
 
     # Fallback: directories without manifest but with files/ or llamafarm.yaml
     for candidate in glob(os.path.join(root, "*")):
@@ -178,22 +184,20 @@ def _scan_manifests() -> list[dict[str, Any]]:
             for root_dir, _dirs, files in os.walk(files_dir):
                 for fn in files:
                     fp = os.path.join(root_dir, fn)
-                    try:
+                    with contextlib.suppress(OSError):
                         data_bytes += os.path.getsize(fp)
-                    except OSError:
-                        pass
 
         proj_bytes = 0
         if cfg_guess:
-            try:
+            with contextlib.suppress(OSError):
                 proj_bytes += os.path.getsize(cfg_guess)
-            except OSError:
-                pass
 
         try:
             import datetime as _dt
 
-            updated_at = _dt.datetime.fromtimestamp(os.path.getmtime(candidate)).isoformat()
+            updated_at = _dt.datetime.fromtimestamp(
+                os.path.getmtime(candidate)
+            ).isoformat()
         except OSError:
             updated_at = None
 
@@ -209,7 +213,9 @@ def _scan_manifests() -> list[dict[str, Any]]:
                 "data_size_bytes": data_bytes,
                 "data_size_human": _humanize_size(data_bytes) if data_bytes else None,
                 "project_size_bytes": proj_bytes,
-                "project_size_human": _humanize_size(proj_bytes) if proj_bytes else None,
+                "project_size_human": _humanize_size(proj_bytes)
+                if proj_bytes
+                else None,
                 "updated_at": updated_at,
             }
         )
@@ -269,7 +275,9 @@ def _list_example_datasets_from_manifest(m: dict[str, Any]) -> list[ExampleDatas
                 try:
                     total += os.path.getsize(path)
                 except OSError as e:
-                    logger.warning("Failed to get size for path", path=path, error=str(e))
+                    logger.warning(
+                        "Failed to get size for path", path=path, error=str(e)
+                    )
 
         # Naive kind inference from file extensions in patterns
         kind: str | None = None
@@ -280,7 +288,9 @@ def _list_example_datasets_from_manifest(m: dict[str, Any]) -> list[ExampleDatas
             kind = "csv"
         elif ".md" in pattern_str or "markdown" in pattern_str:
             kind = "markdown"
-        elif any(ext in pattern_str for ext in [".png", ".jpg", ".jpeg", ".tif", ".tiff"]):
+        elif any(
+            ext in pattern_str for ext in [".png", ".jpg", ".jpeg", ".tif", ".tiff"]
+        ):
             kind = "images"
         elif ".json" in pattern_str:
             kind = "json"
@@ -322,7 +332,11 @@ async def list_all_example_datasets() -> dict[str, list[ExampleDataset]]:
                 continue
             datasets.extend(_list_example_datasets_from_manifest(m))
         except Exception as e:
-            logger.warning("Failed to read example manifest for datasets", path=manifest_path, error=str(e))
+            logger.warning(
+                "Failed to read example manifest for datasets",
+                path=manifest_path,
+                error=str(e),
+            )
     return {"datasets": datasets}
 
 
@@ -347,9 +361,11 @@ def _ensure_path_under_examples(path: str) -> str:
     return abs_path
 
 
-def _add_file_from_path(namespace: str, project: str, dataset: str, source_path: str) -> MetadataFileContent:
+def _add_file_from_path(
+    namespace: str, project: str, dataset: str, source_path: str
+) -> MetadataFileContent:
     # Replicate DataService.add_data_file for local path
-    data_dir = DataService.get_data_dir(namespace, project)
+    data_dir = DataService.ensure_data_dir(namespace, project, dataset)
     with open(source_path, "rb") as f:
         file_data = f.read()
     data_hash = DataService.hash_data(file_data)
@@ -378,16 +394,16 @@ def _add_file_from_path(namespace: str, project: str, dataset: str, source_path:
     index_dir = os.path.join(data_dir, "index", "by_name")
     os.makedirs(index_dir, exist_ok=True)
     index_path = os.path.join(index_dir, resolved_file_name)
-    try:
+    with contextlib.suppress(FileExistsError):
         os.symlink(raw_path, index_path)
-    except FileExistsError:
-        pass
 
     DatasetService.add_file_to_dataset(namespace, project, dataset, meta)
     return meta
 
 
-def _merge_rag_components(base_cfg: LlamaFarmConfig, example_cfg: LlamaFarmConfig) -> LlamaFarmConfig:
+def _merge_rag_components(
+    base_cfg: LlamaFarmConfig, example_cfg: LlamaFarmConfig
+) -> LlamaFarmConfig:
     # Extend databases and strategies by name without duplicates
     base = base_cfg.model_dump(mode="json")
     ex = example_cfg.model_dump(mode="json")
@@ -399,27 +415,34 @@ def _merge_rag_components(base_cfg: LlamaFarmConfig, example_cfg: LlamaFarmConfi
     for d in ex_rag.get("databases", []) or []:
         base_dbs.setdefault(d.get("name"), d)
     # Strategies
-    base_strats = {s["name"]: s for s in base_rag.get("data_processing_strategies", []) or []}
+    base_strats = {
+        s["name"]: s for s in base_rag.get("data_processing_strategies", []) or []
+    }
     for s in ex_rag.get("data_processing_strategies", []) or []:
         base_strats.setdefault(s.get("name"), s)
 
     base_rag["databases"] = list(base_dbs.values())
     base_rag["data_processing_strategies"] = list(base_strats.values())
     if ex_rag.get("default_embedding_strategy"):
-        base_rag.setdefault("default_embedding_strategy", ex_rag.get("default_embedding_strategy"))
+        base_rag.setdefault(
+            "default_embedding_strategy", ex_rag.get("default_embedding_strategy")
+        )
     if ex_rag.get("default_retrieval_strategy"):
-        base_rag.setdefault("default_retrieval_strategy", ex_rag.get("default_retrieval_strategy"))
+        base_rag.setdefault(
+            "default_retrieval_strategy", ex_rag.get("default_retrieval_strategy")
+        )
     base["rag"] = base_rag
 
     return LlamaFarmConfig(**base)
 
 
 @router.post("/{example_id}/import-project", response_model=ImportProjectResponse)
-async def import_project(example_id: str, request: ImportProjectRequest) -> ImportProjectResponse:
+async def import_project(
+    example_id: str, request: ImportProjectRequest
+) -> ImportProjectResponse:
     import yaml
 
     m = _load_manifest_by_id(example_id)
-    base_dir = m.get("_base_dir")
     cfg_path = m.get("config", {}).get("yaml_path")
     if not cfg_path:
         raise HTTPException(status_code=400, detail="Manifest missing config.yaml_path")
@@ -445,14 +468,20 @@ async def import_project(example_id: str, request: ImportProjectRequest) -> Impo
         if not (ds_name and strategy and database):
             continue
         try:
-            DatasetService.create_dataset(request.namespace, request.name, ds_name, strategy, database)
+            DatasetService.create_dataset(
+                request.namespace, request.name, ds_name, strategy, database
+            )
         except ValueError as e:
             # Allow already-existing datasets; surface other errors
             msg = str(e)
             if "already exists" in msg:
                 logger.info("Dataset already exists; continuing", dataset=ds_name)
             else:
-                logger.warning("Failed to create dataset during import_project", dataset=ds_name, error=msg)
+                logger.warning(
+                    "Failed to create dataset during import_project",
+                    dataset=ds_name,
+                    error=msg,
+                )
                 raise HTTPException(status_code=400, detail=msg) from e
         datasets.append(ds_name)
 
@@ -463,10 +492,17 @@ async def import_project(example_id: str, request: ImportProjectRequest) -> Impo
                 _add_file_from_path(request.namespace, request.name, ds_name, path)
 
         if request.process:
-            res = process_dataset_task.apply_async(args=[request.namespace, request.name, ds_name])
-            task_ids.append(res.id)
+            launch = DatasetService.start_dataset_ingestion(
+                request.namespace, request.name, ds_name
+            )
+            task_ids.append(launch.task_id)
 
-    return ImportProjectResponse(project=request.name, namespace=request.namespace, datasets=datasets, task_ids=task_ids)
+    return ImportProjectResponse(
+        project=request.name,
+        namespace=request.namespace,
+        datasets=datasets,
+        task_ids=task_ids,
+    )
 
 
 class ImportDataRequest(BaseModel):
@@ -484,7 +520,9 @@ class ImportDataResponse(BaseModel):
 
 
 @router.post("/{example_id}/import-data", response_model=ImportDataResponse)
-async def import_data(example_id: str, request: ImportDataRequest) -> ImportDataResponse:
+async def import_data(
+    example_id: str, request: ImportDataRequest
+) -> ImportDataResponse:
     import yaml
 
     m = _load_manifest_by_id(example_id)
@@ -512,13 +550,19 @@ async def import_data(example_id: str, request: ImportDataRequest) -> ImportData
             continue
         # Create if missing
         try:
-            DatasetService.create_dataset(request.namespace, request.project, ds_name, strategy, database)
+            DatasetService.create_dataset(
+                request.namespace, request.project, ds_name, strategy, database
+            )
         except ValueError as e:
             msg = str(e)
             if "already exists" in msg:
                 logger.info("Dataset already exists; continuing", dataset=ds_name)
             else:
-                logger.warning("Failed to create dataset during import_data", dataset=ds_name, error=msg)
+                logger.warning(
+                    "Failed to create dataset during import_data",
+                    dataset=ds_name,
+                    error=msg,
+                )
                 raise HTTPException(status_code=400, detail=msg) from e
         datasets.append(ds_name)
 
@@ -528,10 +572,17 @@ async def import_data(example_id: str, request: ImportDataRequest) -> ImportData
                 _add_file_from_path(request.namespace, request.project, ds_name, path)
 
         if request.process:
-            res = process_dataset_task.apply_async(args=[request.namespace, request.project, ds_name])
-            task_ids.append(res.id)
+            launch = DatasetService.start_dataset_ingestion(
+                request.namespace, request.project, ds_name
+            )
+            task_ids.append(launch.task_id)
 
-    return ImportDataResponse(project=request.project, namespace=request.namespace, datasets=datasets, task_ids=task_ids)
+    return ImportDataResponse(
+        project=request.project,
+        namespace=request.namespace,
+        datasets=datasets,
+        task_ids=task_ids,
+    )
 
 
 class ImportDatasetRequest(BaseModel):
@@ -552,7 +603,9 @@ class ImportDatasetResponse(BaseModel):
 
 
 @router.post("/{example_id}/import-dataset", response_model=ImportDatasetResponse)
-async def import_dataset(example_id: str, request: ImportDatasetRequest) -> ImportDatasetResponse:
+async def import_dataset(
+    example_id: str, request: ImportDatasetRequest
+) -> ImportDatasetResponse:
     import yaml
 
     m = _load_manifest_by_id(example_id)
@@ -572,27 +625,43 @@ async def import_dataset(example_id: str, request: ImportDatasetRequest) -> Impo
 
     # Find dataset in manifest
     manifest_ds = next(
-        (ds for ds in (m.get("datasets", []) or []) if ds.get("name") == request.dataset),
+        (
+            ds
+            for ds in (m.get("datasets", []) or [])
+            if ds.get("name") == request.dataset
+        ),
         None,
     )
     if not manifest_ds:
-        raise HTTPException(status_code=404, detail=f"Dataset '{request.dataset}' not found in example '{example_id}'")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset '{request.dataset}' not found in example '{example_id}'",
+        )
 
     ds_name = request.target_dataset or manifest_ds.get("name")
     strategy = manifest_ds.get("strategy")
     database = manifest_ds.get("database")
     if not (ds_name and strategy and database):
-        raise HTTPException(status_code=400, detail="Dataset entry incomplete in manifest (name/strategy/database)")
+        raise HTTPException(
+            status_code=400,
+            detail="Dataset entry incomplete in manifest (name/strategy/database)",
+        )
 
     # Create if missing
     try:
-        DatasetService.create_dataset(request.namespace, request.project, ds_name, strategy, database)
+        DatasetService.create_dataset(
+            request.namespace, request.project, ds_name, strategy, database
+        )
     except ValueError as e:
         msg = str(e)
         if "already exists" in msg:
             logger.info("Dataset already exists; continuing", dataset=ds_name)
         else:
-            logger.warning("Failed to create dataset during import_dataset", dataset=ds_name, error=msg)
+            logger.warning(
+                "Failed to create dataset during import_dataset",
+                dataset=ds_name,
+                error=msg,
+            )
             raise HTTPException(status_code=400, detail=msg) from e
 
     # Add files
@@ -605,8 +674,10 @@ async def import_dataset(example_id: str, request: ImportDatasetRequest) -> Impo
 
     task_id: str | None = None
     if request.process:
-        res = process_dataset_task.apply_async(args=[request.namespace, request.project, ds_name])
-        task_id = res.id
+        launch = DatasetService.start_dataset_ingestion(
+            request.namespace, request.project, ds_name
+        )
+        task_id = launch.task_id
 
     return ImportDatasetResponse(
         project=request.project,
@@ -615,5 +686,3 @@ async def import_dataset(example_id: str, request: ImportDatasetRequest) -> Impo
         file_count=file_count,
         task_id=task_id,
     )
-
-

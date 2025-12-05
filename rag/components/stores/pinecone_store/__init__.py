@@ -5,7 +5,7 @@ Component for pinecone store.
 
 from .pinecone_store import PineconeStore
 
-__all__ = ['PineconeStore']
+__all__ = ["PineconeStore"]
 
 # Component metadata (read from schema.json at runtime)
 COMPONENT_TYPE = "store"

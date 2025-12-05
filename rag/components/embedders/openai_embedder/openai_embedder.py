@@ -14,8 +14,9 @@ Status: Implementation in progress
 """
 
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from core.base import Embedder, Document
+from typing import Any
+
+from core.base import Document, Embedder
 
 
 class OpenAIEmbedder(Embedder):
@@ -30,7 +31,7 @@ class OpenAIEmbedder(Embedder):
     def __init__(
         self,
         name: str = "OpenAIEmbedder",
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -50,7 +51,7 @@ class OpenAIEmbedder(Embedder):
             "For now, please use OllamaEmbedder."
         )
 
-    def embed_documents(self, documents: List[Document]) -> List[Document]:
+    def embed_documents(self, documents: list[Document]) -> list[Document]:
         """Generate embeddings for a batch of documents using OpenAI API.
 
         This will use OpenAI's text-embedding API to generate high-quality
@@ -67,7 +68,7 @@ class OpenAIEmbedder(Embedder):
         """
         raise NotImplementedError("OpenAIEmbedder coming soon!")
 
-    def embed_query(self, query: str) -> List[float]:
+    def embed_query(self, query: str) -> list[float]:
         """Generate embedding for a single query string.
 
         Args:

@@ -1,13 +1,12 @@
 """Essential retriever tests."""
 
-import pytest
-from core.base import Document
 from components.retrievers.basic_similarity.basic_similarity import (
     BasicSimilarityStrategy,
 )
 from components.retrievers.metadata_filtered.metadata_filtered import (
     MetadataFilteredStrategy,
 )
+from core.base import Document
 
 
 class TestRetrievers:
@@ -37,7 +36,7 @@ class TestRetrievers:
 
     def test_metadata_filtered_retriever(self):
         """Test retrieval with metadata filtering."""
-        retriever = MetadataFilteredStrategy(
+        _retriever = MetadataFilteredStrategy(
             config={"filter_key": "type", "filter_value": "technical"}
         )
 

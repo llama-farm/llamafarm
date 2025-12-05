@@ -1,0 +1,112 @@
+version: v1
+name: demo-app
+namespace: default
+
+# =============================================================================
+# RUNTIME CONFIGURATION - Universal Runtime with fast, lightweight model
+# =============================================================================
+runtime:
+  models:
+    - name: default
+      description: "Qwen3 1.7B (GGUF Q4_K_M quantized) - Fast, efficient model optimized for Apple Silicon and local inference"
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
+      base_url: http://127.0.0.1:11540/v1
+      default: true
+      prompt_format: unstructured
+      prompts: ["default"]
+
+# =============================================================================
+# PROMPTS CONFIGURATION - Llama & Alpaca Encyclopedia Expert
+# =============================================================================
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are an expert on llamas and alpacas (South American camelids) with deep knowledge of:
+          - Breeding, husbandry, and care
+          - Fiber production and processing
+          - Nutrition and health management
+          - Behavior and training
+          - Veterinary care and emergency response
+
+          Your expertise comes from a comprehensive encyclopedia covering evolution, anatomy,
+          life stages, nutrition, diseases, parasites, breeding, behavior, training, fiber science,
+          medical emergencies, facilities, senior care, and future research.
+
+          When answering questions:
+          - Provide detailed, accurate information based on the knowledge base
+          - Cite specific chapters or sections when relevant (e.g., "According to Chapter 4 on Nutrition...")
+          - Use technical terminology when appropriate, but explain it clearly
+          - Give practical, actionable advice for camelid owners and breeders
+          - If information isn't in the knowledge base, state that clearly
+          - Be thorough but organized - use bullet points and headings for complex topics
+
+          Always prioritize animal welfare and evidence-based practices based on the documents provided.
+
+# =============================================================================
+# DATASETS CONFIGURATION - Llama encyclopedia demo dataset
+# =============================================================================
+datasets:
+  - name: llama_encyclopedia
+    database: llama_knowledge_db
+    data_processing_strategy: default
+
+# =============================================================================
+# RAG CONFIGURATION - Optimized for structured markdown documents
+# =============================================================================
+rag:
+  default_database: llama_knowledge_db
+
+  # =============================================================================
+  # DATABASE CONFIGURATION - ChromaDB optimized for encyclopedic content
+  # =============================================================================
+  databases:
+    - name: "llama_knowledge_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/chroma/llama_knowledge_db"
+        distance_function: "cosine"
+        collection_name: "llama_encyclopedia"
+
+      # Embedding configuration - high quality embeddings
+      default_embedding_strategy: "semantic_embeddings"
+      embedding_strategies:
+        - name: "semantic_embeddings"
+          type: "UniversalEmbedder"
+          priority: 0
+          config:
+            model: sentence-transformers/all-MiniLM-L6-v2
+            base_url: http://127.0.0.1:11540/v1
+            batch_size: 32
+            timeout: 120
+            normalize: true
+
+      # Retrieval configuration - semantic search with high recall
+      default_retrieval_strategy: "comprehensive_search"
+      retrieval_strategies:
+        - name: "comprehensive_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 12
+          default: true
+
+        - name: "precise_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 5
+
+  # Minimal processing strategy - simplest possible config
+  data_processing_strategies:
+    - name: "default"
+      description: "Default text processing"
+      parsers:
+        - type: "TextParser_Python"
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+      extractors: []

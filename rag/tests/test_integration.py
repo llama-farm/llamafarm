@@ -1,13 +1,13 @@
 """Essential integration tests for the RAG pipeline."""
 
-import pytest
 import tempfile
 from pathlib import Path
 
-from core.base import Document, Pipeline
+import pytest
+
 from components.parsers.text.python_parser import TextParser_Python
-from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
 from components.stores.chroma_store.chroma_store import ChromaStore
+from core.base import Document
 from core.strategies.handler import SchemaHandler
 
 
@@ -48,7 +48,7 @@ class TestIntegration:
             assert len(embeddings) == len(texts)
 
             # Store documents
-            for doc, emb in zip(parsed.documents, embeddings):
+            for doc, emb in zip(parsed.documents, embeddings, strict=False):
                 doc.embeddings = emb
 
             success = store.add_documents(parsed.documents)

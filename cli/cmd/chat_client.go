@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -17,10 +16,25 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// ToolCallFunction represents the function details of a tool call
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ToolCallItem represents a single tool call in a message
+type ToolCallItem struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function ToolCallFunction `json:"function"`
+}
+
 // Message represents a single chat message
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string         `json:"role"`
+	Content    string         `json:"content"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCallItem `json:"tool_calls,omitempty"`
 }
 
 // ChatRequest represents the request payload for the chat API
@@ -96,23 +110,8 @@ type ChatSessionContext struct {
 	RAGScoreThreshold    float64
 }
 
-func newDefaultContextFromGlobals() *ChatSessionContext {
-	return &ChatSessionContext{
-		ServerURL:        serverURL,
-		Namespace:        namespace,
-		ProjectID:        projectID,
-		SessionID:        sessionID,
-		SessionMode:      SessionModeProject,
-		SessionNamespace: namespace,
-		SessionProject:   projectID,
-		Temperature:      temperature,
-		MaxTokens:        maxTokens,
-		Streaming:        streaming,
-		HTTPClient:       utils.GetHTTPClient(),
-		RAGEnabled:       true, // RAG is enabled by default
-	}
-}
-
+// sessionFilePath returns the path to the session context file
+// This is kept for the legacy readSessionContext/writeSessionContext functions
 func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 	if ctx == nil {
 		return "", fmt.Errorf("session context is nil")
@@ -132,7 +131,7 @@ func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 		proj = ctx.ProjectID
 	}
 	if strings.TrimSpace(ns) == "" || strings.TrimSpace(proj) == "" {
-		return "", fmt.Errorf("dev session requires namespace and project")
+		return "", fmt.Errorf("session requires namespace and project")
 	}
 
 	switch ctx.SessionMode {
@@ -145,59 +144,6 @@ func (ctx *ChatSessionContext) sessionFilePath() (string, error) {
 		base := filepath.Join(lfDataDir, "projects", ns, proj, "cli", "context")
 		return filepath.Join(base, "context.yaml"), nil
 	}
-}
-
-func buildChatCurl(messages []Message, ctx *ChatSessionContext) (string, error) {
-	if ctx == nil {
-		ctx = newDefaultContextFromGlobals()
-	}
-
-	url, err := buildChatAPIURL(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to build chat API URL: %w", err)
-	}
-
-	streamTrue := true
-	var filteredMessages []Message
-	for _, msg := range messages {
-		if msg.Role != "client" && msg.Role != "error" {
-			filteredMessages = append(filteredMessages, msg)
-		}
-	}
-
-	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
-
-	// Include model if specified
-	if ctx.Model != "" {
-		request.Model = &ctx.Model
-	}
-
-	if ctx.RAGEnabled {
-		request.RAGEnabled = &ctx.RAGEnabled
-		if ctx.RAGDatabase != "" {
-			request.RAGDatabase = &ctx.RAGDatabase
-		}
-		if ctx.RAGRetrievalStrategy != "" {
-			request.RAGRetrievalStrategy = &ctx.RAGRetrievalStrategy
-		}
-		if ctx.RAGTopK > 0 {
-			request.RAGTopK = &ctx.RAGTopK
-		}
-		if ctx.RAGScoreThreshold > 0 {
-			request.RAGScoreThreshold = &ctx.RAGScoreThreshold
-		}
-	}
-
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	headers := http.Header{}
-	headers.Set("Content-Type", "application/json")
-	headers.Set("Accept", "text/event-stream")
-
-	return buildChatCurlCommand(url, jsonData, headers), nil
 }
 
 // shellEscapeSingleQuotes safely wraps a string for POSIX shells using single
@@ -235,235 +181,6 @@ func buildChatCurlCommand(url string, body []byte, headers http.Header) string {
 	return b.String()
 }
 
-// buildChatAPIURL chooses the appropriate endpoint based on whether
-// namespace and project are set. If both are provided, it uses the
-// project-scoped chat completions endpoint; otherwise it falls back
-// to the inference chat endpoint.
-func buildChatAPIURL(ctx *ChatSessionContext) (string, error) {
-	base := strings.TrimSuffix(ctx.ServerURL, "/")
-	if ctx.Namespace == "" || ctx.ProjectID == "" {
-		return "", fmt.Errorf("namespace and project id are required to build chat API URL")
-	}
-	return fmt.Sprintf("%s/v1/projects/%s/%s/chat/completions", base, ctx.Namespace, ctx.ProjectID), nil
-}
-
-// sendChatRequest connects to the server with stream=true and returns the full assistant message.
-func sendChatRequest(messages []Message, ctx *ChatSessionContext) (string, error) {
-	chunks, errs, cancel := startChatStream(messages, ctx)
-	defer cancel()
-	var builder strings.Builder
-	for {
-		select {
-		case s, ok := <-chunks:
-			if !ok {
-				return builder.String(), nil
-			}
-			builder.WriteString(s)
-		case err := <-errs:
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-}
-
-// startChatStream opens a streaming chat request and returns a channel of
-// content chunks and an error channel. The caller should read until the
-// chunks channel is closed. The returned cancel function aborts the stream.
-func startChatStream(messages []Message, ctx *ChatSessionContext) (<-chan string, <-chan error, func()) {
-	outCh := make(chan string, 16)
-	errCh := make(chan error, 1)
-	var cancelFn context.CancelFunc = func() {}
-
-	go func() {
-		defer close(outCh)
-		if ctx == nil {
-			ctx = newDefaultContextFromGlobals()
-		}
-
-		if ctx.SessionMode == SessionModeStateless {
-			ctx.SessionID = ""
-			sessionID = ""
-		} else {
-			if existingContext, err := readSessionContext(ctx); err != nil {
-				utils.LogDebug(fmt.Sprintf("Failed to read session context: %v", err))
-			} else if existingContext != nil && existingContext.SessionID != "" {
-				ctx.SessionID = existingContext.SessionID
-				sessionID = existingContext.SessionID
-				utils.LogDebug(fmt.Sprintf("Using existing session ID: %s", existingContext.SessionID))
-			}
-		}
-
-		url, err := buildChatAPIURL(ctx)
-		if err != nil {
-			errCh <- fmt.Errorf("failed to build chat API URL: %w", err)
-			return
-		}
-		streamTrue := true
-		// Filter out client messages - they're only for display
-		var filteredMessages []Message
-		for _, msg := range messages {
-			if msg.Role != "client" && msg.Role != "error" {
-				filteredMessages = append(filteredMessages, msg)
-			}
-		}
-		request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
-
-		// Include model if specified
-		if ctx.Model != "" {
-			request.Model = &ctx.Model
-		}
-
-		// Always include rag_enabled to let the server know the explicit intent
-		request.RAGEnabled = &ctx.RAGEnabled
-		// Include additional RAG params only when enabled
-		if ctx.RAGEnabled {
-			if ctx.RAGDatabase != "" {
-				request.RAGDatabase = &ctx.RAGDatabase
-			}
-			if ctx.RAGRetrievalStrategy != "" {
-				request.RAGRetrievalStrategy = &ctx.RAGRetrievalStrategy
-			}
-			if ctx.RAGTopK > 0 {
-				request.RAGTopK = &ctx.RAGTopK
-			}
-			if ctx.RAGScoreThreshold > 0 {
-				request.RAGScoreThreshold = &ctx.RAGScoreThreshold
-			}
-		}
-
-		jsonData, err := json.Marshal(request)
-		utils.LogDebug(fmt.Sprintf("JSON DATA: %s", string(jsonData)))
-		if err != nil {
-			errCh <- fmt.Errorf("failed to marshal request: %w", err)
-			return
-		}
-
-		reqCtx, cancel := context.WithCancel(context.Background())
-		cancelFn = cancel
-
-		req, err := http.NewRequestWithContext(reqCtx, "POST", url, bytes.NewBuffer(jsonData))
-		if err != nil {
-			errCh <- fmt.Errorf("failed to create request: %w", err)
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "text/event-stream")
-		req.Header.Set("Cache-Control", "no-cache")
-		req.Header.Set("Connection", "keep-alive")
-		if ctx.SessionID != "" {
-			req.Header.Set("X-Session-ID", ctx.SessionID)
-		} else if ctx.SessionMode == SessionModeStateless {
-			req.Header.Set("X-No-Session", "true")
-		}
-		utils.LogDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
-		utils.LogHeaders("request", req.Header)
-
-		// Log and restore request body
-		req.Body = utils.LogBodyContent(req.Body, "request body")
-
-		hc := &http.Client{Timeout: 0, Transport: &http.Transport{DisableCompression: true, IdleConnTimeout: 0}}
-		resp, err := hc.Do(req)
-		if err != nil {
-			errCh <- fmt.Errorf("failed to send request: %w", err)
-			return
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			body, readErr := io.ReadAll(resp.Body)
-			if readErr != nil {
-				errCh <- fmt.Errorf("server returned error %d and body read failed: %v", resp.StatusCode, readErr)
-				return
-			}
-			errCh <- fmt.Errorf("server returned error %d: %s", resp.StatusCode, utils.PrettyServerError(resp, body))
-			return
-		}
-
-		utils.LogDebug(fmt.Sprintf("  -> %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
-		utils.LogHeaders("response", resp.Header)
-		if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
-			if ctx.SessionMode == SessionModeStateless {
-				ctx.SessionID = ""
-				sessionID = ""
-			} else {
-				ctx.SessionID = sessionIDHeader
-				sessionID = sessionIDHeader
-				if err := writeSessionContext(ctx, sessionIDHeader); err != nil {
-					utils.LogDebug(fmt.Sprintf("Failed to write session context: %v", err))
-				}
-			}
-		}
-
-		reader := bufio.NewReader(resp.Body)
-		for {
-			line, err := reader.ReadString('\n')
-			utils.LogDebug(fmt.Sprintf("STREAM LINE: %v", line))
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				errCh <- fmt.Errorf("stream read error: %w", err)
-				return
-			}
-			line = strings.TrimRight(line, "\r\n")
-			if line == "" {
-				continue
-			}
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if payload == "[DONE]" {
-				break
-			}
-			var chunk struct {
-				Choices []struct {
-					Delta struct {
-						Role      string `json:"role,omitempty"`
-						Content   string `json:"content,omitempty"`
-						ToolCalls []struct {
-							ID       string `json:"id"`
-							Type     string `json:"type"`
-							Function struct {
-								Name      string `json:"name"`
-								Arguments string `json:"arguments"`
-							} `json:"function"`
-						} `json:"tool_calls,omitempty"`
-					} `json:"delta"`
-				} `json:"choices"`
-			}
-			if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
-				continue
-			}
-			if len(chunk.Choices) == 0 {
-				continue
-			}
-			delta := chunk.Choices[0].Delta
-
-			// Check for tool calls first
-			if len(delta.ToolCalls) > 0 {
-				// Format tool call notification with special marker for TUI styling
-				for _, tc := range delta.ToolCalls {
-					if tc.Function.Name != "" {
-						// Use special marker [TOOL_CALL] so TUI can style it
-						toolMsg := fmt.Sprintf("[TOOL_CALL]%s|%s|%s", tc.Function.Name, tc.ID, tc.Function.Arguments)
-						utils.LogDebug(fmt.Sprintf("Tool call detected: %s", tc.Function.Name))
-						outCh <- toolMsg
-					}
-				}
-			}
-
-			// Send content if present
-			if delta.Content != "" {
-				utils.LogDebug(fmt.Sprintf("Sending chunk: %s", delta.Content))
-				outCh <- delta.Content
-			}
-		}
-	}()
-
-	return outCh, errCh, func() { cancelFn() }
-}
-
 // SessionContext represents the structure of the session context file
 type SessionContext struct {
 	SessionID string `yaml:"session_id"`
@@ -472,29 +189,18 @@ type SessionContext struct {
 
 // readSessionContext reads the session context from the YAML file if it exists
 func readSessionContext(ctx *ChatSessionContext) (*SessionContext, error) {
-	var contextFile string
 	if ctx == nil {
-		// Fallback inference when context not provided: try project-scoped location first
-		if inferred := newDefaultContextFromGlobals(); inferred != nil {
-			if path, err := inferred.sessionFilePath(); err == nil && strings.TrimSpace(path) != "" {
-				contextFile = path
-			}
-		}
-		// Legacy fallback: CWD/.llamafarm/context.yaml
-		if strings.TrimSpace(contextFile) == "" {
-			cwd := utils.GetEffectiveCWD()
-			contextFile = filepath.Join(cwd, ".llamafarm", "context.yaml")
-		}
-	} else {
-		path, err := ctx.sessionFilePath()
-		if err != nil {
-			return nil, err
-		}
-		if path == "" {
-			return nil, nil
-		}
-		contextFile = path
+		return nil, fmt.Errorf("context is required")
 	}
+
+	path, err := ctx.sessionFilePath()
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nil, nil
+	}
+	contextFile := path
 
 	if _, err := os.Stat(contextFile); os.IsNotExist(err) {
 		return nil, nil
@@ -564,9 +270,10 @@ type SessionHistory struct {
 }
 
 type SessionHistoryMessage struct {
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	ToolCalls []struct {
+	Role       string `json:"role"`
+	Content    string `json:"content"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	ToolCalls  []struct {
 		ID       string `json:"id"`
 		Type     string `json:"type"`
 		Function struct {

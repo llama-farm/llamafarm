@@ -1,14 +1,15 @@
 """Tests for Entity Extractor component."""
 
-import pytest
-from pathlib import Path
 import sys
+from pathlib import Path
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.base import Document
 from components.extractors.entity_extractor.entity_extractor import EntityExtractor
+from core.base import Document
 
 
 class TestEntityExtractor:
@@ -62,7 +63,7 @@ class TestEntityExtractor:
         }
         extractor = EntityExtractor("custom_extractor", custom_config)
         assert extractor.entity_types == set(["PERSON", "ORG"])
-        assert extractor.use_fallback == False
+        assert extractor.use_fallback is False
         assert extractor.min_entity_length == 3
 
     def test_entity_extraction_basic(self, default_extractor, sample_documents):
@@ -163,7 +164,7 @@ class TestEntityExtractor:
         assert isinstance(entities, dict)
         if entities:  # If any entities were found
             # At least check that we can find PERSON entities when configured
-            assert "PERSON" in entities or any("PERSON" in et for et in entities.keys())
+            assert "PERSON" in entities or any("PERSON" in et for et in entities)
 
     def test_metadata_preservation(self, default_extractor):
         """Test that existing metadata is preserved."""
@@ -195,7 +196,7 @@ class TestEntityExtractor:
             assert isinstance(entities_data, dict)
 
             # Each entity type should contain a list of entity dicts
-            for entity_type, entity_list in entities_data.items():
+            for _entity_type, entity_list in entities_data.items():
                 assert isinstance(entity_list, list)
                 for entity in entity_list:
                     assert isinstance(entity, dict)

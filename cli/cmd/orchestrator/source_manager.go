@@ -468,8 +468,8 @@ func (m *SourceManager) DownloadSource(version string) error {
 		return fmt.Errorf("failed to remove old source directory: %w", err)
 	}
 
-	// Move extracted source to final location
-	if err := os.Rename(extractedSrcDir, m.srcDir); err != nil {
+	// Move extracted source to final location (handles cross-filesystem moves)
+	if err := utils.MoveDir(extractedSrcDir, m.srcDir); err != nil {
 		return fmt.Errorf("failed to move source to final location: %w", err)
 	}
 
@@ -508,10 +508,16 @@ func (m *SourceManager) SyncDependencies() error {
 	if err := m.syncDirectory(configDir, "config", false); err != nil {
 		return fmt.Errorf("failed to sync config dependencies: %w", err)
 	}
+	if err := m.installHardwareWheels(configDir, "config"); err != nil {
+		return err
+	}
 
 	utils.LogDebug("Syncing common dependencies...")
 	if err := m.syncDirectory(commonDir, "common", false); err != nil {
 		return fmt.Errorf("failed to sync common dependencies: %w", err)
+	}
+	if err := m.installHardwareWheels(commonDir, "common"); err != nil {
+		return err
 	}
 
 	// Now sync server, rag, and universal-runtime in parallel
@@ -525,6 +531,9 @@ func (m *SourceManager) SyncDependencies() error {
 		defer wg.Done()
 		utils.LogDebug("Syncing server dependencies...")
 		serverErr = m.syncDirectory(serverDir, "server", false)
+		if serverErr == nil {
+			serverErr = m.installHardwareWheels(serverDir, "server")
+		}
 	}()
 
 	// Sync rag dependencies
@@ -532,13 +541,20 @@ func (m *SourceManager) SyncDependencies() error {
 		defer wg.Done()
 		utils.LogDebug("Syncing RAG dependencies...")
 		ragErr = m.syncDirectory(ragDir, "rag", false)
+		if ragErr == nil {
+			ragErr = m.installHardwareWheels(ragDir, "rag")
+		}
 	}()
 
-	// Sync universal-runtime dependencies (needs PyTorch index)
+	// Sync universal-runtime dependencies (do NOT use PyTorch index for uv sync)
+	// Hardware-specific wheels will be installed separately after sync
 	go func() {
 		defer wg.Done()
-		utils.LogDebug("Syncing universal-runtime dependencies...")
-		universalRuntimeErr = m.syncDirectory(universalRuntimeDir, "universal-runtime", true)
+		utils.LogDebug("Syncing universal-runtime base dependencies...")
+		universalRuntimeErr = m.syncDirectory(universalRuntimeDir, "universal-runtime", false)
+		if universalRuntimeErr == nil {
+			universalRuntimeErr = m.installHardwareWheels(universalRuntimeDir, "universal-runtime")
+		}
 	}()
 
 	wg.Wait()
@@ -558,6 +574,40 @@ func (m *SourceManager) SyncDependencies() error {
 	return nil
 }
 
+// installHardwareWheels installs hardware-specific binary wheels for a component
+// This must be called after syncDirectory to ensure base dependencies are installed first
+// If the component has no hardware-specific packages, this is a no-op
+func (m *SourceManager) installHardwareWheels(dir string, componentName string) error {
+	// Get the hardware-dependent packages for this component
+	packages := GetComponentPackages(componentName)
+
+	// No-op if no hardware-specific packages are defined
+	if len(packages) == 0 {
+		utils.LogDebug(fmt.Sprintf("No hardware-specific packages for %s, skipping wheel installation", componentName))
+		return nil
+	}
+
+	utils.LogDebug(fmt.Sprintf("Installing hardware-specific binary wheels for %s...", componentName))
+
+	// Install the packages with hardware-specific wheels
+	if err := InstallHardwarePackages(m.pythonEnvMgr, dir, packages); err != nil {
+		return fmt.Errorf("failed to install hardware-specific wheels for %s: %w", componentName, err)
+	}
+
+	utils.LogDebug(fmt.Sprintf("Hardware-specific wheels for %s installed successfully", componentName))
+
+	// Create marker file to indicate hardware wheels have been installed
+	// This allows areDependenciesSynced to skip re-syncing when not needed
+	if componentName == "universal-runtime" {
+		markerFile := filepath.Join(dir, ".hardware-wheels-installed")
+		if err := os.WriteFile(markerFile, []byte("installed"), 0644); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: could not create hardware wheels marker: %v", err))
+		}
+	}
+
+	return nil
+}
+
 // syncDirectory runs `uv sync` in a specific directory
 // keepPyTorchIndex controls whether UV_EXTRA_INDEX_URL should be preserved
 func (m *SourceManager) syncDirectory(dir string, name string, keepPyTorchIndex bool) error {
@@ -571,7 +621,11 @@ func (m *SourceManager) syncDirectory(dir string, name string, keepPyTorchIndex 
 
 	// Run UV sync command in the specific project directory
 	// This ensures .venv is created in the correct location
-	cmd := exec.Command(uvPath, "sync", "--managed-python")
+	// Use --no-install-workspace to prevent UV from installing workspace members, which can
+	// cause hardware-specific packages like llama-cpp-python to be built from source during
+	// config/common sync instead of being installed via the CLI's hardware detection
+	// Use --no-group dev to skip dev dependencies (only install main dependencies)
+	cmd := exec.Command(uvPath, "sync", "--managed-python", "--no-install-workspace", "--frozen", "--no-group", "dev")
 	cmd.Dir = dir // Critical: run from project directory so .venv is created there
 
 	// Get base environment
@@ -632,7 +686,14 @@ func (m *SourceManager) areDependenciesSynced() bool {
 	_, ragErr := os.Stat(ragVenv)
 	_, universalRuntimeErr := os.Stat(universalRuntimeVenv)
 
-	return configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil && universalRuntimeErr == nil
+	venvsSynced := configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil && universalRuntimeErr == nil
+
+	// Also check for hardware wheels marker file (for universal-runtime)
+	// This ensures hardware-specific packages like torch and llama-cpp-python are installed
+	hardwareWheelsMarker := filepath.Join(m.srcDir, "runtimes", "universal", ".hardware-wheels-installed")
+	_, hardwareWheelsErr := os.Stat(hardwareWheelsMarker)
+
+	return venvsSynced && hardwareWheelsErr == nil
 }
 
 // readVersionFile reads the current version from the version file
@@ -868,7 +929,8 @@ func (m *SourceManager) GenerateDatamodel() error {
 	uvPath := m.pythonEnvMgr.uvManager.GetUVPath()
 
 	// Run the generation script
-	cmd := exec.Command(uvPath, "run", "--managed-python", "python", "generate_types.py")
+	// Use --no-sync to avoid attempting to sync dependencies during run
+	cmd := exec.Command(uvPath, "run", "--no-sync", "--managed-python", "python", "generate_types.py")
 	cmd.Dir = configDir
 	cmd.Env = m.pythonEnvMgr.GetEnvForProcess()
 

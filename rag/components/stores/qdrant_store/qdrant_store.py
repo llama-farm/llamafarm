@@ -15,8 +15,9 @@ Status: Implementation in progress
 """
 
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from core.base import VectorStore, Document
+from typing import Any
+
+from core.base import Document, VectorStore
 
 
 class QdrantStore(VectorStore):
@@ -31,7 +32,7 @@ class QdrantStore(VectorStore):
     def __init__(
         self,
         name: str = "QdrantStore",
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] = None,
         project_dir: Path | None = None,
     ):
         super().__init__(name, config, project_dir)
@@ -53,7 +54,7 @@ class QdrantStore(VectorStore):
             "For now, please use ChromaStore."
         )
 
-    def add(self, documents: List[Document]) -> None:
+    def add_documents(self, documents: list[Document]) -> bool:
         """Add documents to Qdrant collection.
 
         This will insert documents with their embeddings and metadata
@@ -69,10 +70,10 @@ class QdrantStore(VectorStore):
 
     def search(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         top_k: int = 5,
-        metadata_filter: Optional[Dict[str, Any]] = None,
-    ) -> List[Document]:
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> list[Document]:
         """Search for similar documents in Qdrant.
 
         Args:
@@ -88,18 +89,45 @@ class QdrantStore(VectorStore):
         """
         raise NotImplementedError("QdrantStore coming soon!")
 
-    def delete(self, document_ids: List[str]) -> None:
-        """Delete documents from Qdrant collection.
+    def get_documents_by_metadata(
+        self, metadata_filter: dict[str, Any]
+    ) -> list[Document]:
+        """Get documents matching a metadata filter.
 
         Args:
-            document_ids: IDs of documents to delete
+            metadata_filter: Key-value pairs to match against document metadata.
+
+        Returns:
+            List of matching documents.
 
         Raises:
             NotImplementedError: This store is not yet implemented
         """
         raise NotImplementedError("QdrantStore coming soon!")
 
-    def get_collection_info(self) -> Dict[str, Any]:
+    def delete_documents(self, doc_ids: list[str]) -> int:
+        """Delete documents by their IDs.
+
+        Args:
+            doc_ids: List of document IDs to delete.
+
+        Returns:
+            Number of documents deleted.
+
+        Raises:
+            NotImplementedError: This store is not yet implemented
+        """
+        raise NotImplementedError("QdrantStore coming soon!")
+
+    def delete_collection(self) -> bool:
+        """Delete the collection.
+
+        Raises:
+            NotImplementedError: This store is not yet implemented
+        """
+        raise NotImplementedError("QdrantStore coming soon!")
+
+    def get_collection_info(self) -> dict[str, Any]:
         """Get information about the Qdrant collection.
 
         Returns:

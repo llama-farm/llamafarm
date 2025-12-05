@@ -14,11 +14,12 @@ Examples:
     python download_model.py stabilityai/stable-diffusion-xl-base-1.0 --image
 """
 
-import sys
 import argparse
+import sys
+
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from diffusers import DiffusionPipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def download_text_model(model_id: str, device: str = "auto"):
@@ -36,16 +37,16 @@ def download_text_model(model_id: str, device: str = "auto"):
         import platform
 
         if platform.system() == "Darwin":  # macOS
-            print(f"⚠️  Warning: This model appears to use bitsandbytes quantization")
-            print(f"   bitsandbytes is not supported on macOS/Apple Silicon")
-            print(f"\nRecommended alternatives for macOS:")
-            print(f"  1. Use standard (non-quantized) models:")
-            print(f"     - Qwen/Qwen2.5-0.5B-Instruct")
-            print(f"     - Qwen/Qwen2.5-1.5B-Instruct")
-            print(f"  2. Use FP8 quantized models (compatible):")
-            print(f"     - qwen-community/Qwen3-0.6B-FP8")
-            print(f"  3. Use GGUF models with Lemonade runtime (recommended)")
-            print(f"\nContinuing anyway, but download may fail...\n")
+            print("⚠️  Warning: This model appears to use bitsandbytes quantization")
+            print("   bitsandbytes is not supported on macOS/Apple Silicon")
+            print("\nRecommended alternatives for macOS:")
+            print("  1. Use standard (non-quantized) models:")
+            print("     - Qwen/Qwen2.5-0.5B-Instruct")
+            print("     - Qwen/Qwen2.5-1.5B-Instruct")
+            print("  2. Use FP8 quantized models (compatible):")
+            print("     - qwen-community/Qwen3-0.6B-FP8")
+            print("  3. Use GGUF models with Lemonade runtime (recommended)")
+            print("\nContinuing anyway, but download may fail...\n")
 
     # Determine device
     if device == "auto":
@@ -62,7 +63,7 @@ def download_text_model(model_id: str, device: str = "auto"):
     # Download tokenizer
     print("\n1. Downloading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-    print(f"   ✓ Tokenizer downloaded")
+    print("   ✓ Tokenizer downloaded")
     print(f"   Vocab size: {tokenizer.vocab_size:,}")
 
     # Download model
@@ -80,20 +81,20 @@ def download_text_model(model_id: str, device: str = "auto"):
     if device == "cpu":
         model = model.to(device)
 
-    print(f"   ✓ Model downloaded")
+    print("   ✓ Model downloaded")
 
     # Model stats
     total_params = sum(p.numel() for p in model.parameters())
     print(f"\n{'=' * 60}")
-    print(f"✅ Model Ready!")
+    print("✅ Model Ready!")
     print(f"{'=' * 60}")
     print(f"Model ID: {model_id}")
     print(f"Parameters: {total_params / 1e9:.2f}B")
     print(f"Device: {device}")
-    print(f"Cache: ~/.cache/huggingface/hub/")
-    print(f"\nTest with:")
-    print(f"  curl -X POST http://localhost:11540/v1/chat/completions \\")
-    print(f'    -H "Content-Type: application/json" \\')
+    print("Cache: ~/.cache/huggingface/hub/")
+    print("\nTest with:")
+    print("  curl -X POST http://localhost:11540/v1/chat/completions \\")
+    print('    -H "Content-Type: application/json" \\')
     print(
         f'    -d \'{{"model": "{model_id}", "messages": [{{"role": "user", "content": "Hello!"}}]}}\''
     )
@@ -132,7 +133,7 @@ def download_diffusion_model(model_id: str, device: str = "auto"):
         )
     except (OSError, ValueError) as e:
         if "safetensors" in str(e).lower():
-            print(f"   Note: Model doesn't have safetensors, using standard weights")
+            print("   Note: Model doesn't have safetensors, using standard weights")
             pipe = DiffusionPipeline.from_pretrained(
                 model_id,
                 dtype=dtype,
@@ -144,19 +145,19 @@ def download_diffusion_model(model_id: str, device: str = "auto"):
 
     pipe = pipe.to(device)
 
-    print(f"   ✓ Pipeline downloaded")
+    print("   ✓ Pipeline downloaded")
 
     # Pipeline info
     print(f"\n{'=' * 60}")
-    print(f"✅ Model Ready!")
+    print("✅ Model Ready!")
     print(f"{'=' * 60}")
     print(f"Model ID: {model_id}")
     print(f"Pipeline: {pipe.__class__.__name__}")
     print(f"Device: {device}")
-    print(f"Cache: ~/.cache/huggingface/hub/")
-    print(f"\nTest with:")
-    print(f"  curl -X POST http://localhost:11540/v1/images/generations \\")
-    print(f'    -H "Content-Type: application/json" \\')
+    print("Cache: ~/.cache/huggingface/hub/")
+    print("\nTest with:")
+    print("  curl -X POST http://localhost:11540/v1/images/generations \\")
+    print('    -H "Content-Type: application/json" \\')
     print(
         f'    -d \'{{"prompt": "mountain sunset", "model": "{model_id}", "size": "512x512"}}\''
     )
@@ -219,10 +220,10 @@ Examples:
     except Exception as e:
         error_msg = str(e)
         print(f"\n❌ Error downloading model: {error_msg}", file=sys.stderr)
-        print(f"\nTroubleshooting:")
+        print("\nTroubleshooting:")
         print(f"  1. Check model ID is correct: https://huggingface.co/{args.model_id}")
-        print(f"  2. For gated models, set HF_TOKEN: export HF_TOKEN=hf_xxxxx")
-        print(f"  3. Ensure sufficient disk space (~2-10GB per model)")
+        print("  2. For gated models, set HF_TOKEN: export HF_TOKEN=hf_xxxxx")
+        print("  3. Ensure sufficient disk space (~2-10GB per model)")
 
         # Specific error handling for bitsandbytes
         if "bitsandbytes" in error_msg.lower():
@@ -230,22 +231,22 @@ Examples:
 
             if platform.system() == "Darwin":
                 print(
-                    f"\n⚠️  bitsandbytes quantization is NOT supported on macOS/Apple Silicon"
+                    "\n⚠️  bitsandbytes quantization is NOT supported on macOS/Apple Silicon"
                 )
-                print(f"\nRecommended models for macOS:")
-                print(f"  Standard models:")
+                print("\nRecommended models for macOS:")
+                print("  Standard models:")
                 print(
-                    f"    uv run python download_model.py Qwen/Qwen2.5-0.5B-Instruct --text"
-                )
-                print(
-                    f"    uv run python download_model.py Qwen/Qwen2.5-1.5B-Instruct --text"
-                )
-                print(f"  FP8 quantized (compatible):")
-                print(
-                    f"    uv run python download_model.py qwen-community/Qwen3-0.6B-FP8 --text"
+                    "    uv run python download_model.py Qwen/Qwen2.5-0.5B-Instruct --text"
                 )
                 print(
-                    f"  Or use GGUF models with Lemonade runtime (best for Apple Silicon)"
+                    "    uv run python download_model.py Qwen/Qwen2.5-1.5B-Instruct --text"
+                )
+                print("  FP8 quantized (compatible):")
+                print(
+                    "    uv run python download_model.py qwen-community/Qwen3-0.6B-FP8 --text"
+                )
+                print(
+                    "  Or use GGUF models with Lemonade runtime (best for Apple Silicon)"
                 )
 
         sys.exit(1)

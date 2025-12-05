@@ -5,6 +5,8 @@ import Loader from '../../common/Loader'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
+import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
+import { getDatabaseColor } from '../../utils/databaseColors'
 import {
   Tooltip,
   TooltipContent,
@@ -45,7 +47,11 @@ import {
   useDeleteDatasetFile,
   useDeleteDataset,
 } from '../../hooks/useDatasets'
-import { DatasetFile } from '../../types/datasets'
+import {
+  DatasetFile,
+  ProcessDatasetResponse,
+  FileProcessingDetail,
+} from '../../types/datasets'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
@@ -107,9 +113,16 @@ function DatasetView() {
     }
   }, []) // Empty deps - only run on mount
 
+  // Extract databases from project config for color assignment
+  const databases = useMemo(() => {
+    const ragDatabases = (projectResp as any)?.project?.config?.rag?.databases
+    return Array.isArray(ragDatabases) ? ragDatabases : []
+  }, [projectResp])
+
   // Task tracking state and hooks
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null)
-  const [processingResult, setProcessingResult] = useState<any>(null)
+  const [processingResult, setProcessingResult] =
+    useState<ProcessDatasetResponse | null>(null)
   const [processingFailure, setProcessingFailure] = useState<{
     error: string
     timestamp: Date
@@ -117,37 +130,52 @@ function DatasetView() {
   } | null>(null)
   const [isResultsOpen, setIsResultsOpen] = useState(false)
 
-  // Helper function to recalculate counts from details array
-  const recalculateCountsFromDetails = (result: any) => {
-    if (!result || !result.details || !Array.isArray(result.details)) {
-      return result
+  // Transform async task result from [bool, {...}] format to normalized structure
+  const normalizeTaskResult = (rawResult: any): ProcessDatasetResponse => {
+    if (!rawResult || !rawResult.details || !Array.isArray(rawResult.details)) {
+      return rawResult
     }
 
-    let processedCount = 0
-    let skippedCount = 0
-    let failedCount = 0
+    const normalizedDetails: FileProcessingDetail[] = rawResult.details.map(
+      (detail: any) => {
+        const [success, info] = detail
 
-    for (const detail of result.details) {
-      const detailsObj = detail.details || {}
-      const resultObj = detailsObj.result || {}
-      const isSkipped =
-        resultObj.status === 'skipped' || detailsObj.status === 'skipped'
-      const isFailed = !detail.success
+        // Determine status - prioritize info.status, then check result.status, then infer from success
+        const status =
+          info.status ||
+          info.result?.status ||
+          (success ? 'processed' : 'failed')
 
-      if (isSkipped) {
-        skippedCount++
-      } else if (isFailed) {
-        failedCount++
-      } else if (detail.success) {
-        processedCount++
+        // Use filename from result if main filename looks like a hash (64 char SHA)
+        const filename =
+          info.result?.filename && info.filename?.length === 64
+            ? info.result.filename
+            : info.filename || ''
+
+        return {
+          hash: info.file_hash,
+          filename: filename,
+          success: success,
+          status: status,
+          parser: info.parser,
+          extractors: info.extractors,
+          chunks: info.chunks,
+          chunk_size: info.chunk_size,
+          embedder: info.embedder,
+          error: info.error,
+          reason: info.reason,
+          stored_count: info.stored_count ?? info.result?.stored_count,
+          skipped_count: info.skipped_count ?? info.result?.skipped_count,
+        }
       }
-    }
+    )
 
     return {
-      ...result,
-      processed_files: processedCount,
-      skipped_files: skippedCount,
-      failed_files: failedCount,
+      ...rawResult,
+      processed_files: rawResult.processed_files,
+      skipped_files: rawResult.skipped_files,
+      failed_files: rawResult.failed_files,
+      details: normalizedDetails,
     }
   }
 
@@ -173,22 +201,16 @@ function DatasetView() {
         datasetId
       )
       if (savedResult) {
-        // Recalculate counts from details to ensure accuracy
-        const recalculatedResult = recalculateCountsFromDetails(savedResult)
-        setProcessingResult(recalculatedResult)
+        // Normalize if it's raw async task format
+        const normalizedResult =
+          savedResult.details &&
+          Array.isArray(savedResult.details) &&
+          savedResult.details[0] &&
+          Array.isArray(savedResult.details[0])
+            ? normalizeTaskResult(savedResult)
+            : savedResult
 
-        // Don't restore failure state if there are partial successes
-        // (This ensures old stored failures don't show up incorrectly)
-        const hasPartialResults =
-          recalculatedResult &&
-          (recalculatedResult.processed_files > 0 ||
-            recalculatedResult.skipped_files > 0)
-
-        if (!hasPartialResults && recalculatedResult.failed_files > 0) {
-          // Only restore failure state for complete failures
-          // Note: we don't have the original error message, so don't set processingFailure
-          // The results grid will show the failure counts
-        }
+        setProcessingResult(normalizedResult)
       }
     }
   }, [
@@ -251,29 +273,25 @@ function DatasetView() {
             failed_files: failedCount,
             skipped_files: skippedCount,
             details: files.map((f: any) => ({
-              file_hash: f.file_hash || f.filename,
+              hash: f.file_hash || f.filename,
+              filename: f.filename,
               success: f.state === 'processed' || f.state === 'success',
+              status: f.state,
+              chunks: f.chunks,
               error: f.error,
-              details: {
-                status: f.state,
-                filename: f.filename,
-                chunks: f.chunks,
-                reason: f.error,
-              },
+              reason: f.error,
             })),
           }
         }
 
         // Save result for display and persist to localStorage (even on failure - preserve partial results)
         if (resultsToSave) {
-          // Recalculate counts from details to ensure accuracy
-          const recalculatedResult = recalculateCountsFromDetails(resultsToSave)
-          setProcessingResult(recalculatedResult)
+          setProcessingResult(resultsToSave)
           saveDatasetResult(
             activeProject.namespace,
             activeProject.project,
             datasetId,
-            recalculatedResult
+            resultsToSave
           )
           // Expand results section when new results arrive (even on failure if there are partial results)
           setIsResultsOpen(true)
@@ -351,16 +369,16 @@ function DatasetView() {
         typeof fileObj === 'string' ? fileObj : fileObj?.id || fileObj || ''
       const size =
         typeof fileObj === 'object' &&
-          fileObj !== null &&
-          'size' in fileObj &&
-          fileObj.size !== undefined
+        fileObj !== null &&
+        'size' in fileObj &&
+        fileObj.size !== undefined
           ? fileObj.size
           : 'unknown'
       const lastModified =
         typeof fileObj === 'object' &&
-          fileObj !== null &&
-          'lastModified' in fileObj &&
-          fileObj.lastModified !== undefined
+        fileObj !== null &&
+        'lastModified' in fileObj &&
+        fileObj.lastModified !== undefined
           ? fileObj.lastModified
           : 'unknown'
       return {
@@ -377,6 +395,7 @@ function DatasetView() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [editNameError, setEditNameError] = useState<string | null>(null)
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
   const [pendingDeleteFileHash, setPendingDeleteFileHash] = useState<
     string | null
@@ -587,10 +606,10 @@ function DatasetView() {
               prev.map((s, i) =>
                 i === idx
                   ? {
-                    ...s,
-                    status: 'error',
-                    error: error?.message || 'Upload failed',
-                  }
+                      ...s,
+                      status: 'error',
+                      error: error?.message || 'Upload failed',
+                    }
                   : s
               )
             )
@@ -697,7 +716,6 @@ function DatasetView() {
         processedPercent: 0,
         version: '',
         description: '',
-        files: [],
       })
     }
   }, [datasetId, currentApiDataset])
@@ -711,9 +729,58 @@ function DatasetView() {
       setCurrentTaskId(null)
       setProcessingFailure(null) // Clear any previous failures
 
-      // Store the processing result
+      // Store the processing result - merge with previous results to maintain history
       if (taskStatus.result) {
-        setProcessingResult(taskStatus.result)
+        // Normalize the result from async task format
+        const normalizedResult = normalizeTaskResult(taskStatus.result)
+
+        setProcessingResult(prevResult => {
+          if (!prevResult) {
+            // No previous result, just use the new one
+            return normalizedResult
+          }
+
+          // Merge the new results with the old ones
+          const oldDetails = prevResult.details || []
+          const newDetails = normalizedResult.details || []
+
+          // Create a map of file hashes to their latest processing details
+          const detailsMap = new Map()
+
+          // Add old details first
+          oldDetails.forEach((detail: FileProcessingDetail) => {
+            detailsMap.set(detail.hash, detail)
+          })
+
+          // Override/add with new details
+          newDetails.forEach((detail: FileProcessingDetail) => {
+            detailsMap.set(detail.hash, detail)
+          })
+
+          // Combine into array
+          const mergedDetails = Array.from(detailsMap.values())
+
+          // Recalculate counters from the merged details to keep totals accurate
+          const processedCount = mergedDetails.filter(
+            (d: FileProcessingDetail) =>
+              d.status === 'processed' || (d.success && d.status !== 'skipped')
+          ).length
+          const failedCount = mergedDetails.filter(
+            (d: FileProcessingDetail) =>
+              d.status === 'failed' || (!d.success && d.status !== 'skipped')
+          ).length
+          const skippedCount = mergedDetails.filter(
+            (d: FileProcessingDetail) => d.status === 'skipped'
+          ).length
+
+          return {
+            ...normalizedResult,
+            processed_files: processedCount,
+            failed_files: failedCount,
+            skipped_files: skippedCount,
+            details: mergedDetails,
+          }
+        })
       }
 
       toast({
@@ -751,35 +818,80 @@ function DatasetView() {
           failed_files: failedCount,
           skipped_files: skippedCount,
           details: files.map((f: any) => ({
-            file_hash: f.file_hash || f.filename,
+            hash: f.file_hash || f.filename,
+            filename: f.filename,
             success: f.state === 'processed' || f.state === 'success',
+            status: f.state,
+            chunks: f.chunks,
             error: f.error,
-            details: {
-              status: f.state,
-              filename: f.filename,
-              chunks: f.chunks,
-              reason: f.error,
-            },
+            reason: f.error,
           })),
         }
         console.log('Constructed partial results from meta:', partialResults)
       }
 
       // Keep partial results to show what succeeded and what failed
-      let recalculatedPartialResults = null
       if (partialResults) {
-        // Recalculate counts from details to ensure accuracy
-        recalculatedPartialResults =
-          recalculateCountsFromDetails(partialResults)
-        setProcessingResult(recalculatedPartialResults)
+        // Normalize if it's raw async task format (has [bool, {...}] details)
+        const normalizedPartialResults =
+          partialResults.details &&
+          Array.isArray(partialResults.details) &&
+          partialResults.details[0] &&
+          Array.isArray(partialResults.details[0])
+            ? normalizeTaskResult(partialResults)
+            : partialResults
+
+        // Merge with previous results to maintain history
+        setProcessingResult(prevResult => {
+          if (!prevResult) {
+            return normalizedPartialResults
+          }
+
+          // Merge the new results with the old ones
+          const oldDetails = prevResult.details || []
+          const newDetails = normalizedPartialResults.details || []
+
+          // Create a map of file hashes to their latest processing details
+          const detailsMap = new Map()
+
+          // Add old details first
+          oldDetails.forEach((detail: FileProcessingDetail) => {
+            detailsMap.set(detail.hash, detail)
+          })
+
+          // Override/add with new details
+          newDetails.forEach((detail: FileProcessingDetail) => {
+            detailsMap.set(detail.hash, detail)
+          })
+
+          // Combine into array
+          const mergedDetails = Array.from(detailsMap.values())
+
+          return {
+            message:
+              normalizedPartialResults?.message ||
+              prevResult.message ||
+              'Processing complete',
+            processed_files: normalizedPartialResults.processed_files,
+            failed_files: normalizedPartialResults.failed_files,
+            skipped_files: normalizedPartialResults.skipped_files,
+            strategy:
+              normalizedPartialResults?.strategy || prevResult.strategy || null,
+            database:
+              normalizedPartialResults?.database || prevResult.database || null,
+            task_id:
+              normalizedPartialResults?.task_id || prevResult.task_id || null,
+            details: mergedDetails,
+          }
+        })
       }
 
       const errorMessage = taskStatus.error || 'Unknown error occurred'
       const hasPartialResults =
-        recalculatedPartialResults &&
-        (recalculatedPartialResults.processed_files > 0 ||
-          recalculatedPartialResults.skipped_files > 0 ||
-          recalculatedPartialResults.failed_files > 0)
+        partialResults &&
+        (partialResults.processed_files > 0 ||
+          partialResults.skipped_files > 0 ||
+          partialResults.failed_files > 0)
 
       // Only set failure state if there are NO partial results (complete failure)
       // If there are partial results, just show them in the results grid
@@ -798,9 +910,10 @@ function DatasetView() {
       setIsResultsOpen(true)
 
       toast({
-        message: hasPartialResults
-          ? `⚠️ Processing completed with ${recalculatedPartialResults.failed_files} error(s). ${recalculatedPartialResults.processed_files} file(s) processed successfully.`
-          : `❌ Processing failed: ${errorMessage}`,
+        message:
+          hasPartialResults && partialResults
+            ? `⚠️ Processing completed with ${partialResults.failed_files} error(s). ${partialResults.processed_files} file(s) processed successfully.`
+            : `❌ Processing failed: ${errorMessage}`,
         variant: hasPartialResults ? 'default' : 'destructive',
       })
     }
@@ -815,11 +928,27 @@ function DatasetView() {
   const openEdit = () => {
     setEditName(dataset?.name ?? '')
     setEditDescription(dataset?.description ?? '')
+    setEditNameError(null)
     setIsEditOpen(true)
   }
 
   const handleSaveEdit = () => {
     if (!dataset || !datasetId) return
+
+    // Validate dataset name
+    const existingDatasetNames =
+      datasetsResponse?.datasets?.map((d: any) => d.name) || []
+    const validation = validateDatasetNameWithDuplicateCheck(
+      editName,
+      existingDatasetNames,
+      dataset.name // Allow keeping the same name
+    )
+
+    if (!validation.isValid) {
+      setEditNameError(validation.error || 'Invalid dataset name')
+      return
+    }
+
     // Note: Dataset name/description updates are local-only until backend supports PATCH endpoint
     const updatedDataset = {
       ...dataset,
@@ -827,6 +956,7 @@ function DatasetView() {
       description: editDescription,
     }
     setDataset(updatedDataset)
+    setEditNameError(null)
     setIsEditOpen(false)
   }
 
@@ -866,6 +996,28 @@ function DatasetView() {
 
   const handleCancelDelete = () => {
     setShowDeleteConfirmation(false)
+  }
+
+  // Helper function to get processing status for a file
+  const getFileProcessingStatus = (fileHash: string | undefined): boolean => {
+    if (!fileHash || !processingResult?.details) {
+      return false // Not processed if no hash or no processing data
+    }
+
+    const fileDetail = processingResult.details.find(
+      (detail: FileProcessingDetail) =>
+        detail.hash === fileHash || (detail as any).file_hash === fileHash
+    )
+
+    if (!fileDetail) {
+      return false // Not processed if not in results
+    }
+
+    // Check if file was successfully processed or skipped
+    const isSkipped = fileDetail.status === 'skipped'
+    const isProcessed = fileDetail.success === true
+
+    return isProcessed || isSkipped
   }
 
   const handleDeleteFile = (fileHash: string) => {
@@ -1022,7 +1174,7 @@ function DatasetView() {
                     </div>
                     <p className="text-xs text-muted-foreground max-w-[640px] mb-3">
                       {dataset?.description &&
-                        dataset.description.trim().length > 0
+                      dataset.description.trim().length > 0
                         ? dataset.description
                         : 'Add a short description so teammates know what this dataset is for.'}
                     </p>
@@ -1038,8 +1190,15 @@ function DatasetView() {
                           <Badge
                             variant="default"
                             size="sm"
-                            className="rounded-xl bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-900 cursor-pointer hover:opacity-80 transition-opacity"
-                            onClick={() => navigate('/chat/databases')}
+                            className={`rounded-xl ${getDatabaseColor((currentApiDataset as any).database, databases)} cursor-pointer hover:opacity-80 transition-opacity`}
+                            onClick={() => {
+                              // Navigate with database query parameter for reliable tab selection
+                              const databaseName = (currentApiDataset as any)
+                                .database
+                              navigate(
+                                `/chat/databases?database=${encodeURIComponent(databaseName)}`
+                              )
+                            }}
                           >
                             {(currentApiDataset as any).database}
                           </Badge>
@@ -1054,7 +1213,7 @@ function DatasetView() {
                         <Badge
                           variant="default"
                           size="sm"
-                          className="rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
+                          className="rounded-xl bg-muted text-foreground dark:bg-muted dark:text-foreground cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() =>
                             navigate(`/chat/data/strategies/${currentStrategy}`)
                           }
@@ -1089,38 +1248,12 @@ function DatasetView() {
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <FontIcon
                             type="chevron-down"
-                            className={`w-4 h-4 flex-shrink-0 transition-transform ${isResultsOpen ? '' : '-rotate-90'
-                              }`}
+                            className={`w-4 h-4 flex-shrink-0 transition-transform ${
+                              isResultsOpen ? '' : '-rotate-90'
+                            }`}
                           />
                           Last Processing Results
                         </div>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            setProcessingResult(null)
-                            setProcessingFailure(null)
-                            setCurrentTaskId(null) // Stop polling the task
-                            if (
-                              activeProject?.namespace &&
-                              activeProject?.project &&
-                              datasetId
-                            ) {
-                              clearDatasetResult(
-                                activeProject.namespace,
-                                activeProject.project,
-                                datasetId
-                              )
-                              clearDatasetTaskId(
-                                activeProject.namespace,
-                                activeProject.project,
-                                datasetId
-                              )
-                            }
-                          }}
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          Clear
-                        </button>
                       </div>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -1187,264 +1320,217 @@ function DatasetView() {
                                 </div>
                                 <div className="rounded-md border border-border max-h-96 overflow-auto">
                                   {processingResult.details.map(
-                                    (fileResult: any, idx: number) => {
-                                      const details = fileResult.details || {}
-                                      const result = details.result || {}
+                                    (
+                                      fileResult: FileProcessingDetail,
+                                      idx: number
+                                    ) => {
                                       const isSkipped =
-                                        result.status === 'skipped' ||
-                                        details.status === 'skipped'
+                                        fileResult.status === 'skipped'
                                       const isFailed = !fileResult.success
                                       const isSuccess =
                                         fileResult.success && !isSkipped
 
-                                      // Get filename from result (actual name) or fall back to hash
+                                      // Get filename or fall back to hash
                                       const displayFilename =
-                                        result.filename ||
-                                        details.filename ||
-                                        fileResult.file_hash
-                                      const isHashFilename =
-                                        displayFilename ===
-                                        fileResult.file_hash ||
-                                        !result.filename
+                                        fileResult.filename || fileResult.hash
+                                      // Show hash when we have both a real filename AND a different has
 
-                                      // Get file extension for icon
-                                      // Calculate total chunks if available
-                                      const totalChunks =
-                                        result.document_count ||
-                                        details.chunks ||
-                                        0
+                                      // Get chunks information
+                                      const totalChunks = fileResult.chunks || 0
                                       const storedChunks =
-                                        result.stored_count || 0
+                                        fileResult.stored_count ?? 0
                                       const skippedChunks =
-                                        result.skipped_count || 0
+                                        fileResult.skipped_count ?? 0
 
                                       return (
                                         <div
                                           key={idx}
-                                          className="px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                                          className="px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors flex gap-3"
                                         >
-                                          {/* File header with status */}
-                                          <div className="flex items-start justify-between gap-3 mb-1.5">
-                                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                                              {/* Status icon */}
-                                              {isSuccess && (
-                                                <FontIcon
-                                                  type="checkmark-filled"
-                                                  className="w-4 h-4 text-green-600 flex-shrink-0"
-                                                />
-                                              )}
-                                              {isSkipped && (
-                                                <div className="w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center flex-shrink-0">
-                                                  <span className="text-foreground text-[10px] font-bold">
-                                                    !
-                                                  </span>
-                                                </div>
-                                              )}
-                                              {isFailed && (
-                                                <FontIcon
-                                                  type="close"
-                                                  className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0"
-                                                />
-                                              )}
+                                          {/* Status icon column - spans full height */}
+                                          <div className="flex-shrink-0 w-4 flex items-start pt-0.5">
+                                            {isSuccess && (
+                                              <FontIcon
+                                                type="checkmark-filled"
+                                                className="w-4 h-4 text-green-600"
+                                              />
+                                            )}
+                                            {isSkipped && (
+                                              <div className="w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center">
+                                                <span className="text-foreground text-[10px] font-bold">
+                                                  !
+                                                </span>
+                                              </div>
+                                            )}
+                                            {isFailed && (
+                                              <FontIcon
+                                                type="close"
+                                                className="w-4 h-4 text-red-600 dark:text-red-400"
+                                              />
+                                            )}
+                                          </div>
 
+                                          {/* Content column */}
+                                          <div className="flex-1 min-w-0 space-y-1.5">
+                                            {/* File header with status */}
+                                            <div className="flex items-start justify-between gap-3">
                                               {/* Filename */}
-                                              <div className="flex flex-col flex-1 min-w-0">
+                                              <div className="flex flex-col flex-1 min-w-0 gap-1">
                                                 <span className="text-sm font-medium truncate">
                                                   {displayFilename}
                                                 </span>
-                                                {isHashFilename &&
-                                                  fileResult.file_hash && (
-                                                    <TooltipProvider>
-                                                      <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                          <span className="text-xs text-muted-foreground font-mono cursor-pointer">
-                                                            Hash:{' '}
-                                                            {fileResult.file_hash.substring(
-                                                              0,
-                                                              12
-                                                            )}
-                                                            ...
-                                                          </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                          <p className="font-mono text-xs">
-                                                            {
-                                                              fileResult.file_hash
-                                                            }
-                                                          </p>
-                                                        </TooltipContent>
-                                                      </Tooltip>
-                                                    </TooltipProvider>
-                                                  )}
+                                                <TooltipProvider>
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <span className="text-xs text-muted-foreground text-blue-600 text-mono">
+                                                        {fileResult.hash}
+                                                      </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      <p className="font-mono text-xs">
+                                                        {fileResult.hash}
+                                                      </p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                </TooltipProvider>
                                               </div>
+
+                                              {/* Status badge */}
+                                              <Badge
+                                                variant={
+                                                  isSuccess
+                                                    ? 'default'
+                                                    : isSkipped
+                                                      ? 'secondary'
+                                                      : 'outline'
+                                                }
+                                                size="sm"
+                                                className="rounded-xl flex-shrink-0 font-medium"
+                                              >
+                                                {isSuccess && 'SUCCESS'}
+                                                {isSkipped &&
+                                                  `SKIPPED${fileResult.reason ? ` (${fileResult.reason})` : ''}`}
+                                                {isFailed && 'FAILED'}
+                                              </Badge>
                                             </div>
 
-                                            {/* Status badge */}
-                                            <Badge
-                                              variant={
-                                                isSuccess
-                                                  ? 'default'
-                                                  : isSkipped
-                                                    ? 'secondary'
-                                                    : 'outline'
-                                              }
-                                              size="sm"
-                                              className="rounded-xl flex-shrink-0 font-medium"
-                                            >
-                                              {isSuccess && 'SUCCESS'}
-                                              {isSkipped &&
-                                                `SKIPPED${result.reason ? ` (${result.reason})` : ''}`}
-                                              {isFailed && 'FAILED'}
-                                            </Badge>
-                                          </div>
-
-                                          {/* Processing stats - condensed */}
-                                          <div className="space-y-1.5 text-xs">
-                                            {/* Chunks info with reason inline */}
-                                            {totalChunks > 0 && (
-                                              <div className="flex items-center justify-between gap-3">
-                                                <div className="flex items-center gap-3 flex-wrap">
-                                                  <div className="flex items-center gap-1.5">
-                                                    <span className="font-semibold text-foreground">
-                                                      {totalChunks}
-                                                    </span>
-                                                    <span className="text-muted-foreground">
-                                                      chunk
-                                                      {totalChunks !== 1
-                                                        ? 's'
-                                                        : ''}{' '}
-                                                      created
-                                                    </span>
+                                            {/* Processing stats - condensed */}
+                                            <div className="space-y-1.5 text-xs">
+                                              {/* Chunks info with reason inline */}
+                                              {totalChunks > 0 && (
+                                                <div className="flex items-center justify-between gap-3">
+                                                  <div className="flex items-center gap-3 flex-wrap">
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="font-semibold text-foreground">
+                                                        {totalChunks}
+                                                      </span>
+                                                      <span className="text-muted-foreground">
+                                                        chunk
+                                                        {totalChunks !== 1
+                                                          ? 's'
+                                                          : ''}{' '}
+                                                        created
+                                                      </span>
+                                                    </div>
+                                                    {storedChunks > 0 && (
+                                                      <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
+                                                        <span className="font-semibold">
+                                                          {storedChunks}
+                                                        </span>
+                                                        <span>stored</span>
+                                                      </div>
+                                                    )}
+                                                    {skippedChunks > 0 && (
+                                                      <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
+                                                        <span className="font-semibold">
+                                                          {skippedChunks}
+                                                        </span>
+                                                        <span>skipped</span>
+                                                      </div>
+                                                    )}
                                                   </div>
-                                                  {storedChunks > 0 && (
-                                                    <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
-                                                      <span className="font-semibold">
-                                                        {storedChunks}
-                                                      </span>
-                                                      <span>stored</span>
-                                                    </div>
-                                                  )}
-                                                  {skippedChunks > 0 && (
-                                                    <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
-                                                      <span className="font-semibold">
-                                                        {skippedChunks}
-                                                      </span>
-                                                      <span>skipped</span>
-                                                    </div>
-                                                  )}
+                                                  {/* Reason inline - only show for failed files (not skipped, since badge already shows reason) */}
+                                                  {fileResult.reason &&
+                                                    isFailed && (
+                                                      <div className="flex items-center gap-1">
+                                                        <span className="font-medium text-red-600 dark:text-red-400">
+                                                          Reason:
+                                                        </span>
+                                                        <span className="text-red-600 dark:text-red-400">
+                                                          {fileResult.reason}
+                                                        </span>
+                                                      </div>
+                                                    )}
                                                 </div>
-                                                {/* Reason inline - only show for failed files (not skipped, since badge already shows reason) */}
-                                                {(result.reason ||
-                                                  details.reason) &&
-                                                  isFailed && (
-                                                    <div className="flex items-center gap-1">
-                                                      <span className="font-medium text-red-600 dark:text-red-400">
-                                                        Reason:
-                                                      </span>
-                                                      <span className="text-red-600 dark:text-red-400">
-                                                        {result.reason ||
-                                                          details.reason}
-                                                      </span>
-                                                    </div>
-                                                  )}
-                                              </div>
-                                            )}
+                                              )}
 
-                                            {/* Processing details - horizontal single row */}
-                                            <div className="flex items-center gap-3 flex-wrap text-muted-foreground ml-5">
-                                              {/* Parser info */}
-                                              {(details.parser ||
-                                                result.parsers_used?.length >
-                                                0) && (
+                                              {/* Processing details - horizontal single row */}
+                                              <div className="flex items-center gap-3 flex-wrap text-muted-foreground">
+                                                {/* Parser info */}
+                                                {fileResult.parser && (
                                                   <div>
                                                     <span className="font-medium text-foreground">
                                                       Parser:
                                                     </span>{' '}
                                                     <span className="font-mono text-xs">
-                                                      {result.parsers_used?.join(
-                                                        ', '
-                                                      ) || details.parser}
+                                                      {fileResult.parser}
                                                     </span>
                                                   </div>
                                                 )}
 
-                                              {/* Embedder */}
-                                              {(details.embedder ||
-                                                result.embedder) && (
+                                                {/* Embedder */}
+                                                {fileResult.embedder && (
                                                   <div>
                                                     <span className="font-medium text-foreground">
                                                       Embedder:
                                                     </span>{' '}
                                                     <span className="font-mono text-xs">
-                                                      {result.embedder ||
-                                                        details.embedder}
+                                                      {fileResult.embedder}
                                                     </span>
                                                   </div>
                                                 )}
 
-                                              {/* Extractors - inline */}
-                                              {(details.extractors?.length >
-                                                0 ||
-                                                result.extractors_applied
-                                                  ?.length > 0) && (
-                                                  <div className="flex items-center gap-1.5">
-                                                    <span className="font-medium text-foreground">
-                                                      Extractors:
-                                                    </span>
-                                                    <div className="inline-flex flex-wrap gap-1">
-                                                      {(
-                                                        result.extractors_applied ||
-                                                        details.extractors ||
-                                                        []
-                                                      ).map(
-                                                        (
-                                                          ext: string,
-                                                          i: number
-                                                        ) => (
-                                                          <Badge
-                                                            key={i}
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="rounded font-mono text-[10px] px-1.5 py-0"
-                                                          >
-                                                            {ext}
-                                                          </Badge>
-                                                        )
-                                                      )}
+                                                {/* Extractors - inline */}
+                                                {fileResult.extractors &&
+                                                  fileResult.extractors.length >
+                                                    0 && (
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="font-medium text-foreground">
+                                                        Extractors:
+                                                      </span>
+                                                      <div className="inline-flex flex-wrap gap-1">
+                                                        {fileResult.extractors.map(
+                                                          (
+                                                            ext: string,
+                                                            i: number
+                                                          ) => (
+                                                            <Badge
+                                                              key={i}
+                                                              variant="outline"
+                                                              size="sm"
+                                                              className="rounded font-mono text-[10px] px-1.5 py-0"
+                                                            >
+                                                              {ext}
+                                                            </Badge>
+                                                          )
+                                                        )}
+                                                      </div>
                                                     </div>
-                                                  </div>
-                                                )}
-                                            </div>
+                                                  )}
+                                              </div>
 
-                                            {/* Document IDs if stored */}
-                                            {result.document_ids &&
-                                              result.document_ids.length >
-                                              0 && (
-                                                <div className="text-muted-foreground ml-5">
-                                                  <span className="font-medium text-foreground">
-                                                    Document IDs:
-                                                  </span>{' '}
-                                                  <span className="font-mono text-xs">
-                                                    {result.document_ids.length}{' '}
-                                                    stored in vector database
-                                                  </span>
-                                                </div>
-                                              )}
-
-                                            {/* Error message for failures - keep on separate line for visibility */}
-                                            {isFailed &&
-                                              (fileResult.error ||
-                                                details.error) && (
-                                                <div className="mt-1.5 ml-5 px-2 py-1.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                                              {/* Error message for failures - keep on separate line for visibility */}
+                                              {isFailed && fileResult.error && (
+                                                <div className="mt-1.5 px-2 py-1.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
                                                   <span className="font-medium text-red-800 dark:text-red-400">
                                                     Error:
                                                   </span>{' '}
                                                   <span className="text-red-700 dark:text-red-400">
-                                                    {fileResult.error ||
-                                                      details.error}
+                                                    {fileResult.error}
                                                   </span>
                                                 </div>
                                               )}
+                                            </div>
                                           </div>
                                         </div>
                                       )
@@ -1554,9 +1640,37 @@ function DatasetView() {
                           <Input
                             autoFocus
                             value={editName}
-                            onChange={e => setEditName(e.target.value)}
+                            onChange={e => {
+                              const newName = e.target.value
+                              setEditName(newName)
+
+                              // Validate on change for real-time feedback
+                              const existingDatasetNames =
+                                datasetsResponse?.datasets?.map(
+                                  (d: any) => d.name
+                                ) || []
+                              const validation =
+                                validateDatasetNameWithDuplicateCheck(
+                                  newName,
+                                  existingDatasetNames,
+                                  dataset?.name || null // Allow keeping the same name
+                                )
+                              setEditNameError(
+                                validation.isValid
+                                  ? null
+                                  : validation.error || 'Invalid dataset name'
+                              )
+                            }}
                             placeholder="Dataset name"
+                            className={
+                              editNameError ? 'border-destructive' : ''
+                            }
                           />
+                          {editNameError && (
+                            <p className="text-xs text-destructive mt-1">
+                              {editNameError}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-col gap-1">
                           <label className="text-xs text-muted-foreground">
@@ -1583,7 +1697,7 @@ function DatasetView() {
                           </DialogClose>
                           <Button
                             onClick={handleSaveEdit}
-                            disabled={!editName.trim()}
+                            disabled={!editName.trim() || !!editNameError}
                           >
                             Save
                           </Button>
@@ -1661,7 +1775,7 @@ function DatasetView() {
                               {taskStatus.meta?.progress
                                 ? `Processing ${taskStatus.meta.progress}%`
                                 : taskStatus.meta?.current &&
-                                  taskStatus.meta?.total
+                                    taskStatus.meta?.total
                                   ? `Processing ${Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)}%`
                                   : 'Processing...'}
                             </>
@@ -1818,35 +1932,48 @@ function DatasetView() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          className="gap-1.5"
-                          disabled={
-                            processMutation.isPending || !!currentTaskId
-                          }
-                        >
-                          {processMutation.isPending
-                            ? 'Starting...'
-                            : currentTaskId && taskStatus
-                              ? 'Processing...'
-                              : 'Process data'}
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="opacity-60"
-                          >
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                          </svg>
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="sm"
+                                className="gap-1.5"
+                                disabled={
+                                  processMutation.isPending ||
+                                  !!currentTaskId ||
+                                  files.length === 0
+                                }
+                              >
+                                {processMutation.isPending
+                                  ? 'Starting...'
+                                  : currentTaskId && taskStatus
+                                    ? 'Processing...'
+                                    : 'Process data'}
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="opacity-60"
+                                >
+                                  <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          {files.length === 0 && (
+                            <TooltipContent>
+                              Upload files before processing
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                       <DropdownMenuContent align="end" className="w-[200px]">
                         <DropdownMenuItem
                           onClick={async () => {
@@ -1858,13 +1985,9 @@ function DatasetView() {
                               return
 
                             try {
-                              // Clear previous results from state and localStorage
-                              setProcessingResult(null)
-                              clearDatasetResult(
-                                activeProject.namespace,
-                                activeProject.project,
-                                datasetId
-                              )
+                              // Don't clear previous results - keep them so already processed files still show as processed
+                              // Only clear failures since we're starting a new job
+                              setProcessingFailure(null)
 
                               const result = await processMutation.mutateAsync({
                                 namespace: activeProject.namespace,
@@ -2078,11 +2201,11 @@ function DatasetView() {
                   accept={
                     fileTypeFilter
                       ? fileTypeFilter
-                        .split(',')
-                        .map(s => s.trim())
-                        .filter(Boolean)
-                        .map(ext => (ext.startsWith('.') ? ext : `.${ext}`))
-                        .join(',')
+                          .split(',')
+                          .map(s => s.trim())
+                          .filter(Boolean)
+                          .map(ext => (ext.startsWith('.') ? ext : `.${ext}`))
+                          .join(',')
                       : undefined
                   }
                   onChange={async e => {
@@ -2184,8 +2307,25 @@ function DatasetView() {
                 </div>
                 <div className="rounded-md border border-input bg-background p-0 text-xs">
                   {files.length === 0 ? (
-                    <div className="p-3 text-muted-foreground">
-                      No files assigned yet.
+                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                      <FontIcon
+                        type="upload"
+                        className="w-10 h-10 text-blue-200 dark:text-white mb-4"
+                      />
+                      <div className="text-base font-medium text-foreground mb-2">
+                        Drag and drop files here
+                      </div>
+                      <div className="text-sm text-muted-foreground mb-4 max-w-[400px]">
+                        Upload PDFs, CSVs, or other documents to add them to
+                        this dataset
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Upload files
+                      </Button>
                     </div>
                   ) : (
                     <div>
@@ -2232,7 +2372,7 @@ function DatasetView() {
                                 className="flex items-center justify-between px-3 py-3 border-b last:border-b-0 border-border/60"
                               >
                                 <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
-                                  <span>{f.fullHash ? f.name : f.name}</span>
+                                  <span>{f.name}</span>
                                   {f.fullHash && (
                                     <button
                                       onClick={async () => {
@@ -2257,45 +2397,58 @@ function DatasetView() {
                                           }))
                                         }, 1500)
                                       }}
-                                      className={`text-xs text-left ${copyStatus?.[f.id] === 'Copied!'
-                                        ? 'text-green-600'
-                                        : copyStatus?.[f.id] ===
-                                          'Failed to copy'
-                                          ? 'text-red-600'
-                                          : 'text-blue-600 hover:text-blue-800'
-                                        }`}
+                                      className={`text-xs text-left ${
+                                        copyStatus?.[f.id] === 'Copied!'
+                                          ? 'text-green-600'
+                                          : copyStatus?.[f.id] ===
+                                              'Failed to copy'
+                                            ? 'text-red-600'
+                                            : 'text-blue-600 hover:text-blue-800'
+                                      }`}
                                       title="Click to copy full hash"
                                     >
-                                      {copyStatus?.[f.id] || 'Copy full hash'}
+                                      {copyStatus?.[f.id] || f.fullHash}
                                     </button>
                                   )}
                                 </div>
                                 <div className="w-1/2 flex items-center justify-between gap-4">
-                                  <div className="text-xs text-muted-foreground">
-                                    {f.size === 'unknown' || f.fullHash
-                                      ? 'N/A'
-                                      : `${Math.ceil(f.size / 1024)} KB`}
+                                  <div className="text-xs flex items-center gap-1.5">
+                                    {getFileProcessingStatus(f.fullHash) ? (
+                                      <>
+                                        <FontIcon
+                                          type="checkmark-outline"
+                                          className="w-3.5 h-3.5 text-green-600 dark:text-green-400"
+                                        />
+                                        <span className="text-green-600 dark:text-green-400 font-medium">
+                                          Processed
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        Not Processed
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-6">
                                     {fileUploadStatuses.find(s => s.id === f.id)
                                       ?.status === 'uploading' && (
-                                        <div className="flex items-center gap-1 text-muted-foreground">
-                                          <FontIcon
-                                            type="fade"
-                                            className="w-4 h-4"
-                                          />
-                                          <span className="text-xs">
-                                            Processing
-                                          </span>
-                                        </div>
-                                      )}
+                                      <div className="flex items-center gap-1 text-muted-foreground">
+                                        <FontIcon
+                                          type="fade"
+                                          className="w-4 h-4"
+                                        />
+                                        <span className="text-xs">
+                                          Processing
+                                        </span>
+                                      </div>
+                                    )}
                                     {fileUploadStatuses.find(s => s.id === f.id)
                                       ?.status === 'success' && (
-                                        <FontIcon
-                                          type="checkmark-outline"
-                                          className="w-4 h-4 text-teal-600 dark:text-teal-400"
-                                        />
-                                      )}
+                                      <FontIcon
+                                        type="checkmark-outline"
+                                        className="w-4 h-4 text-teal-600 dark:text-teal-400"
+                                      />
+                                    )}
                                     <button
                                       className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
                                       onClick={() =>
@@ -2311,7 +2464,7 @@ function DatasetView() {
                                       title="Delete file"
                                     >
                                       {f.fullHash &&
-                                        isFileDeleting(f.fullHash) ? (
+                                      isFileDeleting(f.fullHash) ? (
                                         <span className="text-xs">...</span>
                                       ) : (
                                         <FontIcon

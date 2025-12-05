@@ -3,7 +3,7 @@ Link Extractor for finding URLs, email addresses, and references in text.
 """
 
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.base import Document
@@ -16,7 +16,7 @@ class LinkExtractor(BaseExtractor):
     """Extract URLs, email addresses, and various reference types from text."""
 
     def __init__(
-        self, name: str = "LinkExtractor", config: Optional[Dict[str, Any]] = None
+        self, name: str = "LinkExtractor", config: dict[str, Any] | None = None
     ):
         """
         Initialize link extractor.
@@ -71,7 +71,7 @@ class LinkExtractor(BaseExtractor):
             re.compile(r"\\[\w.-]+\\[\w.$-]+(?:\\[\w.$-]+)*"),  # UNC paths
         ]
 
-    def extract(self, documents: List["Document"]) -> List["Document"]:
+    def extract(self, documents: list["Document"]) -> list["Document"]:
         """
         Extract links and references from documents.
 
@@ -81,7 +81,6 @@ class LinkExtractor(BaseExtractor):
         Returns:
             List of enhanced documents with link metadata
         """
-        from core.base import Document
 
         for doc in documents:
             try:
@@ -106,13 +105,13 @@ class LinkExtractor(BaseExtractor):
 
         return documents
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         """Get required dependencies for this extractor."""
         return []  # No external dependencies
 
     def _extract_from_text(
-        self, text: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, text: str, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Extract links and references from text.
 
@@ -182,10 +181,10 @@ class LinkExtractor(BaseExtractor):
             return results
 
         except Exception as e:
-            logger.error(f"Error in link extraction: {e}")
+            self.logger.error(f"Error in link extraction: {e}")
             return {"error": str(e), "extractor": "LinkExtractor"}
 
-    def _extract_urls(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_urls(self, text: str) -> list[dict[str, Any]]:
         """Extract and analyze URLs from text."""
         urls = []
 
@@ -218,7 +217,7 @@ class LinkExtractor(BaseExtractor):
 
         return urls
 
-    def _extract_emails(self, text: str) -> List[str]:
+    def _extract_emails(self, text: str) -> list[str]:
         """Extract email addresses from text."""
         emails = []
 
@@ -229,7 +228,7 @@ class LinkExtractor(BaseExtractor):
 
         return emails
 
-    def _extract_phone_numbers(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_phone_numbers(self, text: str) -> list[dict[str, Any]]:
         """Extract phone numbers from text."""
         phones = []
         found_numbers = set()  # To avoid duplicates
@@ -252,7 +251,7 @@ class LinkExtractor(BaseExtractor):
 
         return phones
 
-    def _extract_mentions(self, text: str) -> List[str]:
+    def _extract_mentions(self, text: str) -> list[str]:
         """Extract @mentions from text."""
         mentions = []
 
@@ -265,7 +264,7 @@ class LinkExtractor(BaseExtractor):
 
         return mentions
 
-    def _extract_hashtags(self, text: str) -> List[str]:
+    def _extract_hashtags(self, text: str) -> list[str]:
         """Extract #hashtags from text."""
         hashtags = []
 
@@ -278,7 +277,7 @@ class LinkExtractor(BaseExtractor):
 
         return hashtags
 
-    def _extract_file_paths(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_file_paths(self, text: str) -> list[dict[str, Any]]:
         """Extract file paths from text."""
         file_paths = []
         found_paths = set()
@@ -292,21 +291,20 @@ class LinkExtractor(BaseExtractor):
                     ("." in path and len(path.split(".")[-1]) <= 5)
                     or path.endswith("/")
                     or path.endswith("\\")
-                ):
-                    if path not in found_paths:
-                        found_paths.add(path)
-                        file_paths.append(
-                            {
-                                "path": path,
-                                "type": self._classify_file_path(path),
-                                "position": match.span(),
-                                "context": self._get_context(text, match.span()),
-                            }
-                        )
+                ) and path not in found_paths:
+                    found_paths.add(path)
+                    file_paths.append(
+                        {
+                            "path": path,
+                            "type": self._classify_file_path(path),
+                            "position": match.span(),
+                            "context": self._get_context(text, match.span()),
+                        }
+                    )
 
         return file_paths
 
-    def _categorize_domains(self, urls: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+    def _categorize_domains(self, urls: list[dict[str, Any]]) -> dict[str, list[str]]:
         """Categorize URLs by domain type."""
         categories = {
             "social_media": [],
@@ -421,7 +419,7 @@ class LinkExtractor(BaseExtractor):
         )
 
     @staticmethod
-    def get_supported_types() -> List[str]:
+    def get_supported_types() -> list[str]:
         """Get list of supported link types."""
         return ["urls", "emails", "phone_numbers", "mentions", "hashtags", "file_paths"]
 

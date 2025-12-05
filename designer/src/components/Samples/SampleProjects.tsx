@@ -176,7 +176,7 @@ function SampleProjects() {
           <span className="text-foreground">Sample projects</span>
         </nav>
         <div className="flex items-center gap-2 md:self-auto">
-          <Button onClick={projectModal.openCreateModal}>
+          <Button onClick={() => projectModal.openCreateModal()}>
             New blank project
           </Button>
           <Button variant="outline" onClick={() => (navigate(-1), undefined)}>

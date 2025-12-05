@@ -9,34 +9,35 @@ Tests the chat orchestrator including:
 - History persistence
 """
 
-import json
 import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from agents.chat_orchestrator import (
-    ChatOrchestratorAgent,
-    ChatOrchestratorAgentFactory,
-)
-from agents.base.history import (
-    LFChatCompletionAssistantMessageParam,
-    LFChatCompletionUserMessageParam,
-)
-from agents.base.types import StreamEvent, ToolCallRequest
 from config.datamodel import (
     LlamaFarmConfig,
     Mcp,
-    PromptMessage,
     Model,
+    PromptMessage,
     PromptSet,
     Provider,
     Runtime,
     Server,
     Transport,
     Version,
+)
+from openai.types.chat.chat_completion_chunk import (
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
+)
+
+from agents.base.history import (
+    LFChatCompletionAssistantMessageParam,
+    LFChatCompletionUserMessageParam,
+)
+from agents.chat_orchestrator import (
+    ChatOrchestratorAgent,
+    ChatOrchestratorAgentFactory,
 )
 
 
@@ -47,10 +48,12 @@ def make_completion(content: str, *, tool_calls: list | None = None):
 
 
 def make_tool_call(*, name: str, arguments: str):
-    return SimpleNamespace(
+    # For streaming, create a proper ChoiceDeltaToolCall
+    return ChoiceDeltaToolCall(
+        index=0,
         type="function",
         id="call_1",
-        function=SimpleNamespace(name=name, arguments=arguments),
+        function=ChoiceDeltaToolCallFunction(name=name, arguments=arguments),
     )
 
 
@@ -60,12 +63,23 @@ def make_chunk(
     tool_calls: list | None = None,
     finish_reason: str | None = None,
 ):
+    import time
+
     delta = SimpleNamespace(
         content=content,
         tool_calls=tool_calls or [],
     )
     choice = SimpleNamespace(delta=delta, finish_reason=finish_reason)
-    return SimpleNamespace(choices=[choice])
+    return SimpleNamespace(
+        id="chunk-123",
+        created=int(time.time()),
+        model="test-model",
+        object="chat.completion.chunk",
+        system_fingerprint=None,
+        service_tier=None,
+        usage=None,
+        choices=[choice],
+    )
 
 
 @pytest.fixture
@@ -251,7 +265,7 @@ class TestChatOrchestratorAgent:
             )
 
             user_input = LFChatCompletionUserMessageParam(role="user", content="Hi")
-            response = await agent.run_async(user_input=user_input)
+            response = await agent.run_async(messages=[user_input])
 
             assert response.choices[0].message.content == "Hello there!"
             # Note: Since we're mocking the parent's run_async, history management
@@ -300,7 +314,7 @@ class TestChatOrchestratorAgent:
             user_input = LFChatCompletionUserMessageParam(
                 role="user", content="Use the tool"
             )
-            response = await agent.run_async(user_input=user_input)
+            response = await agent.run_async(messages=[user_input])
 
             assert (
                 response.choices[0].message.content
@@ -346,7 +360,7 @@ class TestChatOrchestratorAgent:
             agent._mcp_tools = [mock_tool_class]
 
             user_input = LFChatCompletionUserMessageParam(role="user", content="Test")
-            response = await agent.run_async(user_input=user_input)
+            response = await agent.run_async(messages=[user_input])
 
             # Should return max iterations message
             assert "maximum number of tool calls" in response.choices[0].message.content
@@ -356,10 +370,9 @@ class TestChatOrchestratorAgent:
     async def test_run_async_tool_not_found(self, mock_run_async, base_config):
         """Test handling of non-existent tool."""
         tool_call = make_tool_call(name="nonexistent_tool", arguments="{}")
-        mock_run_async.side_effect = [
-            make_completion("Tool call", tool_calls=[tool_call]),
-            make_completion("I apologize"),
-        ]
+        mock_run_async.return_value = make_completion(
+            "Tool call", tool_calls=[tool_call]
+        )
 
         with tempfile.TemporaryDirectory() as project_dir:
             agent = ChatOrchestratorAgent(
@@ -370,10 +383,11 @@ class TestChatOrchestratorAgent:
             agent._mcp_tools = []
 
             user_input = LFChatCompletionUserMessageParam(role="user", content="Test")
-            response = await agent.run_async(user_input=user_input)
+            response = await agent.run_async(messages=[user_input])
 
-            # Should handle error gracefully
-            assert "apologize" in response.choices[0].message.content.lower()
+            # Should handle non-existent tool gracefully by returning the response with tool call
+            # New behavior: agent detects missing tool and skips execution, returning original response
+            assert "tool call" in response.choices[0].message.content.lower()
 
     @pytest.mark.asyncio
     @patch("agents.base.agent.LFAgent.run_async")
@@ -411,7 +425,7 @@ class TestChatOrchestratorAgent:
             agent._mcp_tools = [mock_tool_class]
 
             user_input = LFChatCompletionUserMessageParam(role="user", content="Test")
-            response = await agent.run_async(user_input=user_input)
+            response = await agent.run_async(messages=[user_input])
 
             # Should handle error gracefully
             message = response.choices[0].message.content.lower()
@@ -438,7 +452,7 @@ class TestChatOrchestratorAgent:
             ):
                 user_input = LFChatCompletionUserMessageParam(role="user", content="Hi")
                 chunks = []
-                async for chunk in agent.run_async_stream(user_input=user_input):
+                async for chunk in agent.run_async_stream(messages=[user_input]):
                     chunks.append(chunk)
 
                 assert len(chunks) == 2
@@ -500,7 +514,7 @@ class TestChatOrchestratorAgent:
                     role="user", content="Test"
                 )
                 chunks = []
-                async for chunk in agent.run_async_stream(user_input=user_input):
+                async for chunk in agent.run_async_stream(messages=[user_input]):
                     chunks.append(chunk)
 
                 # Should include content and tool call indicator
@@ -844,19 +858,21 @@ class TestChatOrchestratorAgentFactory:
     @pytest.mark.asyncio
     async def test_create_agent_with_mcp(self, config_with_mcp):
         """Test creating agent with MCP configuration."""
-        with tempfile.TemporaryDirectory() as project_dir:
-            with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
-                mock_factory_instance = AsyncMock()
-                mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
-                mock_factory.return_value = mock_factory_instance
+        with (
+            tempfile.TemporaryDirectory() as project_dir,
+            patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory,
+        ):
+            mock_factory_instance = AsyncMock()
+            mock_factory_instance.create_all_tools = AsyncMock(return_value=[])
+            mock_factory.return_value = mock_factory_instance
 
-                agent = await ChatOrchestratorAgentFactory.create_agent(
-                    project_config=config_with_mcp,
-                    project_dir=project_dir,
-                )
+            agent = await ChatOrchestratorAgentFactory.create_agent(
+                project_config=config_with_mcp,
+                project_dir=project_dir,
+            )
 
-                assert isinstance(agent, ChatOrchestratorAgent)
-                assert agent._mcp_enabled
+            assert isinstance(agent, ChatOrchestratorAgent)
+            assert agent._mcp_enabled
 
     @pytest.mark.asyncio
     async def test_create_agent_with_model_name(self, base_config):

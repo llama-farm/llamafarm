@@ -16,10 +16,10 @@ import pytest
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.context_provider import LFAgentContextProvider
 from agents.base.history import (
+    LFAgentHistory,
     LFChatCompletionAssistantMessageParam,
     LFChatCompletionSystemMessageParam,
     LFChatCompletionUserMessageParam,
-    LFAgentHistory,
 )
 from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
 from agents.base.types import (
@@ -234,8 +234,9 @@ class TestLFAgent:
     @pytest.fixture
     def mock_client(self):
         """Create mock client that inherits from LFAgentClient."""
-        from agents.base.clients.client import LFAgentClient
         from config.datamodel import Model, Provider
+
+        from agents.base.clients.client import LFAgentClient
 
         # Create a concrete mock that inherits from LFAgentClient
         class MockLFAgentClient(LFAgentClient):
@@ -244,6 +245,7 @@ class TestLFAgent:
                 *,
                 messages,
                 tools=None,
+                extra_body=None,
             ):
                 return "Response"
 
@@ -252,6 +254,7 @@ class TestLFAgent:
                 *,
                 messages,
                 tools=None,
+                extra_body=None,
             ):
                 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
@@ -306,7 +309,7 @@ class TestLFAgent:
         agent = LFAgent(config=agent_config)
         user_msg = LFChatCompletionUserMessageParam(role="user", content="Hello")
 
-        response = await agent.run_async(user_input=user_msg)
+        response = await agent.run_async(messages=[user_msg])
 
         assert response == "Response"
         assert len(agent.history.history) == 1
@@ -334,7 +337,7 @@ class TestLFAgent:
         user_msg = LFChatCompletionUserMessageParam(role="user", content="Hello")
 
         chunks = []
-        async for chunk in agent.run_async_stream(user_input=user_msg):
+        async for chunk in agent.run_async_stream(messages=[user_msg]):
             chunks.append(chunk)
 
         assert len(chunks) > 0
@@ -354,7 +357,7 @@ class TestLFAgent:
         ]
 
         chunks = []
-        async for chunk in agent.run_async_stream(user_input=user_msg, tools=tools):
+        async for chunk in agent.run_async_stream(messages=[user_msg], tools=tools):
             chunks.append(chunk)
 
         assert len(chunks) > 0

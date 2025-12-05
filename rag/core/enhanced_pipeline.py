@@ -1,8 +1,8 @@
 """Enhanced pipeline with progress tracking."""
 
 import time
-from typing import List
-from core.base import Pipeline, Document, ProcessingResult
+
+from core.base import Document, Pipeline, ProcessingResult
 from utils.progress import LlamaProgressTracker, create_enhanced_progress_bar
 
 
@@ -14,7 +14,7 @@ class EnhancedPipeline(Pipeline):
         self.tracker = LlamaProgressTracker()
 
     def run_with_progress(
-        self, source: str = None, documents: List[Document] = None
+        self, source: str = None, documents: list[Document] = None
     ) -> ProcessingResult:
         """Run the pipeline with enhanced progress tracking."""
 
@@ -44,12 +44,18 @@ class EnhancedPipeline(Pipeline):
                 all_errors = []
 
             # Check for chunks in parsed documents
-            chunked_docs = [doc for doc in current_docs if 'chunk_num' in doc.metadata or 'chunk_index' in doc.metadata]
+            chunked_docs = [
+                doc
+                for doc in current_docs
+                if "chunk_num" in doc.metadata or "chunk_index" in doc.metadata
+            ]
             if chunked_docs:
-                self.tracker.print_success(f"Parsed {len(current_docs)} documents (including {len(chunked_docs)} chunks)!")
+                self.tracker.print_success(
+                    f"Parsed {len(current_docs)} documents (including {len(chunked_docs)} chunks)!"
+                )
             else:
                 self.tracker.print_success(f"Parsed {len(current_docs)} documents!")
-            
+
             if all_errors:
                 self.tracker.print_warning(f"Found {len(all_errors)} parsing errors")
 
@@ -123,7 +129,7 @@ class EnhancedPipeline(Pipeline):
 
         return ProcessingResult(documents=current_docs, errors=all_errors)
 
-    def _process_embeddings_with_progress(self, embedder, documents: List[Document]):
+    def _process_embeddings_with_progress(self, embedder, documents: list[Document]):
         """Process embeddings with detailed progress tracking."""
         batch_size = getattr(embedder, "batch_size", 32)
         total_batches = (len(documents) + batch_size - 1) // batch_size
@@ -146,7 +152,7 @@ class EnhancedPipeline(Pipeline):
                 embeddings = embedder.embed(texts)
 
                 # Update documents with embeddings
-                for doc, embedding in zip(batch, embeddings):
+                for doc, embedding in zip(batch, embeddings, strict=False):
                     doc.embeddings = embedding
                     processed_count += 1
                     pbar.update(1)
@@ -165,7 +171,7 @@ class EnhancedPipeline(Pipeline):
             pbar.close()
             raise e
 
-    def _process_storage_with_progress(self, store, documents: List[Document]):
+    def _process_storage_with_progress(self, store, documents: list[Document]):
         """Process vector storage with progress tracking."""
         print(f"💾 Storing {len(documents)} documents in vector database...")
 
