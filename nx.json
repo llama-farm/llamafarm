@@ -2,9 +2,9 @@
   "installation": {
     "version": "21.6.8",
     "plugins": {
-      "@nx/eslint": "21.6.8",
-      "@nx/vite": "21.6.8",
-      "@nx/jest": "21.6.8",
+      "@nx/eslint": "22.0.2",
+      "@nx/vite": "22.0.2",
+      "@nx/jest": "22.0.2",
       "@nx/docker": "21.6.8"
     }
   },

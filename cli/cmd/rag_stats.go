@@ -118,6 +118,11 @@ Examples:
   # Limit results
   lf rag list --limit 10`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if statsDatabase == "" {
+			fmt.Fprintf(os.Stderr, "Error: --database flag is required\n")
+			os.Exit(1)
+		}
+
 		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -336,13 +341,10 @@ func fetchRAGHealth(cfg *config.ServerConfig, database string) (*RAGHealth, erro
 }
 
 func fetchRAGDocuments(cfg *config.ServerConfig, database string, limit int, filters []string) ([]RAGDocument, error) {
-	url := buildServerURL(cfg.URL, fmt.Sprintf("/v1/projects/%s/%s/rag/documents", cfg.Namespace, cfg.Project))
+	url := buildServerURL(cfg.URL, fmt.Sprintf("/v1/projects/%s/%s/rag/databases/%s/documents", cfg.Namespace, cfg.Project, database))
 
 	// Add query parameters
 	params := []string{}
-	if database != "" {
-		params = append(params, "database="+database)
-	}
 	if limit > 0 {
 		params = append(params, fmt.Sprintf("limit=%d", limit))
 	}

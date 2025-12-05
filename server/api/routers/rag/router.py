@@ -151,7 +151,7 @@ class RAGDocumentResponse(BaseModel):
 
 
 @router.get(
-    "/documents",
+    "/databases/{database_name}/documents",
     response_model=list[RAGDocumentResponse],
     operation_id="rag_list_documents",
     summary="List documents in a RAG database",
@@ -159,7 +159,7 @@ class RAGDocumentResponse(BaseModel):
 async def list_documents(
     namespace: str,
     project: str,
-    database: str | None = Query(None, description="Database to list documents from"),
+    database_name: str,
     limit: int = Query(50, ge=1, le=1000, description="Maximum documents to return"),
     offset: int = Query(0, ge=0, description="Number of documents to skip"),
 ):
@@ -171,7 +171,7 @@ async def list_documents(
 
     Returns a list of documents sorted alphabetically by filename.
     """
-    logger.bind(namespace=namespace, project=project, database=database)
+    logger.bind(namespace=namespace, project=project, database=database_name)
 
     # Get project configuration
     project_obj = ProjectService.get_project(namespace, project)
@@ -180,18 +180,6 @@ async def list_documents(
     if not project_obj.config.rag:
         raise HTTPException(
             status_code=400, detail="RAG not configured for this project"
-        )
-
-    # Determine which database to use
-    database_name = database
-    if not database_name and project_obj.config.rag.databases:
-        # Use first database as default
-        database_name = project_obj.config.rag.databases[0].name
-        logger.info(f"Using default database: {database_name}")
-
-    if not database_name:
-        raise HTTPException(
-            status_code=400, detail="No database specified and no default available"
         )
 
     # Validate database exists
