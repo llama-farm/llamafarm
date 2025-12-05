@@ -42,7 +42,7 @@ export class CLIInstaller {
       }
 
       // Fallback: check if it's in system PATH
-const { stdout } = await execAsync(process.platform === 'win32' ? 'where lf' : 'which lf')
+      const { stdout } = await execAsync(process.platform === 'win32' ? 'where lf' : 'which lf')
       if (stdout.trim()) {
         this.cliPath = stdout.trim()
         return true
@@ -241,7 +241,7 @@ const { stdout } = await execAsync(process.platform === 'win32' ? 'where lf' : '
           resolve()
         })
       }).on('error', (err) => {
-        fs.unlink(dest, () => {}) // Clean up
+        fs.unlink(dest, () => { }) // Clean up
         reject(err)
       })
     })
@@ -291,17 +291,36 @@ const { stdout } = await execAsync(process.platform === 'win32' ? 'where lf' : '
         await fsPromises.chmod(this.cliPath, 0o755)
       }
 
+      // Wait for file system to finish (prevents "Text file busy" on Linux)
+      await new Promise(resolve => setTimeout(resolve, 500))
+
       onProgress?.({ step: 'verifying', message: 'Verifying installation...' })
 
-      // Verify installation
-      const isInstalled = await this.isInstalled()
-      if (!isInstalled) {
-        throw new Error('Installation verification failed')
-      }
+      // Verify installation with retry for "Text file busy" errors
+      let verifyAttempts = 0
+      const maxVerifyAttempts = 3
+      while (verifyAttempts < maxVerifyAttempts) {
+        try {
+          const isInstalled = await this.isInstalled()
+          if (!isInstalled) {
+            throw new Error('Installation verification failed')
+          }
 
-      // Get version to confirm it works
-      const { stdout } = await execAsync(`"${this.cliPath}" version`)
-      console.log('CLI version:', stdout.trim())
+          // Get version to confirm it works
+          const { stdout } = await execAsync(`"${this.cliPath}" version`)
+          console.log('CLI version:', stdout.trim())
+          break // Success
+        } catch (err) {
+          verifyAttempts++
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          if (errorMsg.includes('Text file busy') && verifyAttempts < maxVerifyAttempts) {
+            console.log(`File busy, waiting before retry (${verifyAttempts}/${maxVerifyAttempts})...`)
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          } else {
+            throw err
+          }
+        }
+      }
 
       onProgress?.({ step: 'complete', message: 'CLI installed successfully!' })
     } catch (error) {

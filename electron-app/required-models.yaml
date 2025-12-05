@@ -7,7 +7,7 @@
 #   - ../server/seeds/project_seed/llamafarm.yaml
 #
 # To update: npm run sync-models
-# Generated: 2025-12-04T19:19:22.372Z
+# Generated: 2025-12-05T21:46:48.698Z
 
 version: "1"
 models:

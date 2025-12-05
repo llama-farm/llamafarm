@@ -9,6 +9,7 @@ import { CLIInstaller, InstallProgress } from './backend/cli-installer'
 import { ModelDownloader, ModelDownloadProgress } from './backend/model-downloader'
 import { WindowManager } from './window-manager'
 import { MenuManager } from './menu-manager'
+import { logger } from './logger'
 import * as path from 'path'
 import * as fs from 'fs'
 import { promises as fsPromises } from 'fs'
@@ -29,7 +30,6 @@ class LlamaFarmApp {
   private windowManager: WindowManager
   private menuManager: MenuManager
   private isQuitting = false
-  private isFirstStartup = false
 
   constructor() {
     // Set app name early
@@ -143,6 +143,9 @@ class LlamaFarmApp {
    * App ready handler - main initialization
    */
   private async onReady(): Promise<void> {
+    // Initialize logger first - this also creates the logs directory
+    await logger.initialize()
+
     console.log('LlamaFarm starting...')
 
     // Create application menu
@@ -154,9 +157,6 @@ class LlamaFarmApp {
     try {
       // Step 0: Ensure .llamafarm directory exists for logging
       await this.ensureLlamaFarmDirectory()
-
-      // Step 1: Detect if this is first startup
-      await this.detectFirstStartup()
 
       // Step 2: Ensure CLI is installed and upgraded
       await this.ensureCLI()
@@ -218,29 +218,6 @@ class LlamaFarmApp {
   }
 
   /**
-   * Detect if this is the first startup by checking if source directory exists
-   */
-  private async detectFirstStartup(): Promise<void> {
-    try {
-      const homeDir = os.homedir()
-      const llamafarmDir = path.join(homeDir, '.llamafarm')
-      const srcDir = path.join(llamafarmDir, 'src')
-
-      // Check if source directory exists (indicates previous setup)
-      const srcExists = await fsPromises.access(srcDir).then(() => true).catch(() => false)
-      this.isFirstStartup = !srcExists
-
-      if (this.isFirstStartup) {
-        console.log('First startup detected - will use extended timeouts')
-      }
-    } catch (error) {
-      console.warn('Failed to detect startup state:', error)
-      // Assume first startup to be safe
-      this.isFirstStartup = true
-    }
-  }
-
-  /**
    * Ensure CLI is installed and upgraded
    */
   private async ensureCLI(): Promise<void> {
@@ -293,9 +270,7 @@ class LlamaFarmApp {
     }
 
     // Start services to ensure RAG server and dependencies are downloaded
-    const startupMessage = this.isFirstStartup
-      ? 'Preparing services (first startup may take longer)...'
-      : 'Preparing services...'
+    const startupMessage = 'Preparing services...'
     this.windowManager.updateSplash({
       message: startupMessage,
       progress: 70
@@ -311,96 +286,112 @@ class LlamaFarmApp {
   }
 
   /**
-   * Check and start services if needed
+   * Check and start services if needed.
+   * The status check triggers environment setup (source download, dependency sync).
+   * We use generous timeouts since first-time setup can take 10+ minutes.
    */
   private async startServices(): Promise<void> {
-    // First check if services are already running
-    console.log('Checking services status...')
+    // Check services status - this also triggers environment setup if needed
+    // (the CLI's ServiceManager calls EnsureNativeEnvironment on init)
+    console.log('Checking services status (this triggers environment setup if needed)...')
+    this.windowManager.updateSplash({
+      message: 'Preparing environment...',
+      progress: 55
+    })
 
-    let statusOutput: string
+    let statusOutput = ''
+    let servicesRunning = false
+
     try {
+      // Use generous timeout - first-time setup downloads source and syncs dependencies
       const result = await execAsync(
         `"${this.cliInstaller.getCLIPath()}" services status`,
-        { timeout: 30000 }
+        { timeout: 600000 } // 10 minutes - first-time setup can take a while
       )
       statusOutput = result.stdout
       console.log('Services status:', statusOutput)
+
+      // Check if server and RAG are already running
+      const serverRunning = statusOutput.includes('Service: server') &&
+        statusOutput.includes('State: ✓ running')
+      const ragRunning = statusOutput.includes('Service: rag') &&
+        statusOutput.includes('State: ✓ running')
+
+      servicesRunning = serverRunning && ragRunning
     } catch (error) {
-      // Status check failure is not critical - services might not be running
-      console.warn('Could not check services status:', error)
-      statusOutput = ''
+      // Status check may fail if environment setup fails - we'll try to start anyway
+      console.warn('Services status check failed:', error)
     }
 
-    // Check if server and RAG are running
-    const serverRunning = statusOutput.includes('Service: server') &&
-                         statusOutput.includes('State: ✓ running')
-    const ragRunning = statusOutput.includes('Service: rag') &&
-                      statusOutput.includes('State: ✓ running')
-
-    if (serverRunning && ragRunning) {
+    if (servicesRunning) {
       console.log('Services already running, skipping start')
       return
     }
 
-    // Services not running, start them
-    const startMessage = this.isFirstStartup
-      ? 'Starting LlamaFarm services (this may take a few minutes on first startup)...'
-      : 'Starting LlamaFarm services...'
+    // Services not running, start them with retry logic
     console.log('Starting services...')
     this.windowManager.updateSplash({
-      message: startMessage,
+      message: 'Starting LlamaFarm services...',
       progress: 60
     })
 
-    // Use longer timeout on first startup to account for dependency installation
-    const timeout = this.isFirstStartup ? 300000 : 180000 // 5 minutes vs 3 minutes
+    const timeout = 600000 // 10 minutes - generous timeout for first-time setup
+    const maxRetries = 2
 
-    try {
-      const { stdout, stderr } = await execAsync(
-        `"${this.cliInstaller.getCLIPath()}" services start`,
-        { timeout }
-      )
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 1) {
+          console.log(`Retry attempt ${attempt}/${maxRetries}...`)
+          this.windowManager.updateSplash({
+            message: `Starting services (attempt ${attempt}/${maxRetries})...`,
+            progress: 60
+          })
+          await new Promise(resolve => setTimeout(resolve, 3000))
+        }
 
-      console.log('Services output:', stdout)
-      if (stderr) {
-        console.error('Services stderr:', stderr)
-        // Check if stderr contains actual errors (not just warnings)
-        if (stderr.toLowerCase().includes('error') && !stderr.toLowerCase().includes('warning')) {
-          throw new Error(`Service start reported errors: ${stderr}`)
+        const { stdout, stderr } = await execAsync(
+          `"${this.cliInstaller.getCLIPath()}" services start`,
+          { timeout }
+        )
+
+        console.log('Services output:', stdout)
+        if (stderr) {
+          console.log('Services stderr:', stderr)
+        }
+
+        // Verify services started
+        await new Promise(resolve => setTimeout(resolve, 2000))
+
+        const verifyResult = await execAsync(
+          `"${this.cliInstaller.getCLIPath()}" services status`,
+          { timeout: 60000 }
+        )
+
+        const serverStarted = verifyResult.stdout.includes('Service: server') &&
+          verifyResult.stdout.includes('State: ✓ running')
+        const ragStarted = verifyResult.stdout.includes('Service: rag') &&
+          verifyResult.stdout.includes('State: ✓ running')
+
+        if (!serverStarted || !ragStarted) {
+          console.warn('Services may not have started properly. Status:', verifyResult.stdout)
+        }
+
+        // Success - exit retry loop
+        return
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        console.error(`Service start attempt ${attempt} failed:`, errorMsg)
+
+        if (attempt >= maxRetries) {
+          if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
+            throw new Error(
+              `Services failed to start within ${timeout / 1000} seconds. ` +
+              `Please check logs in ~/.llamafarm/logs/ and try again.`
+            )
+          }
+          throw new Error(`Failed to start services: ${errorMsg}`)
         }
       }
-
-      // Verify services actually started by checking status again
-      // Give it a moment for services to register
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      const verifyResult = await execAsync(
-        `"${this.cliInstaller.getCLIPath()}" services status`,
-        { timeout: 30000 }
-      )
-
-      const serverStarted = verifyResult.stdout.includes('Service: server') &&
-                           verifyResult.stdout.includes('State: ✓ running')
-      const ragStarted = verifyResult.stdout.includes('Service: rag') &&
-                        verifyResult.stdout.includes('State: ✓ running')
-
-      if (!serverStarted || !ragStarted) {
-        console.warn('Services may not have started properly. Status:', verifyResult.stdout)
-        // Don't throw here - waitForServer() will verify health
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      
-      // Check if it's a timeout error
-      if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
-        throw new Error(
-          `Services failed to start within ${timeout / 1000} seconds. ` +
-          `This may take longer on first startup. Please check logs in ~/.llamafarm/logs/ and try again.`
-        )
-      }
-
-      // Re-throw with more context
-      throw new Error(`Failed to start services: ${errorMsg}`)
     }
   }
 
@@ -408,19 +399,14 @@ class LlamaFarmApp {
    * Wait for server to be ready with exponential backoff
    */
   private async waitForServer(): Promise<void> {
-    const waitMessage = this.isFirstStartup
-      ? 'Waiting for server (first startup may take longer)...'
-      : 'Waiting for server...'
     this.windowManager.updateSplash({
-      message: waitMessage,
+      message: 'Waiting for server...',
       progress: 80
     })
 
-    // Increase timeout to match server's DefaultTimeout (90 seconds)
-    // Use longer timeout on first startup
-    const maxAttempts = this.isFirstStartup ? 120 : 90 // 120 seconds vs 90 seconds
+    const maxAttempts = 120 // Up to ~2 minutes with backoff
     let attempts = 0
-    let delay = 500 // Start with 500ms, will increase with exponential backoff
+    let delay = 500 // Start with 500ms
     const maxDelay = 2000 // Cap at 2 seconds
 
     while (attempts < maxAttempts) {
@@ -430,7 +416,6 @@ class LlamaFarmApp {
           timeout: 3000
         })
 
-        console.log(`Health check response: ${response.status}`)
         if (response.status === 200) {
           console.log('Server is ready!')
           this.windowManager.updateSplash({
@@ -443,19 +428,17 @@ class LlamaFarmApp {
         // Server not ready yet, continue waiting
         const errorMsg = error instanceof Error ? error.message : String(error)
         if (attempts % 10 === 0 || attempts < 5) {
-          // Log every 10th attempt or first 5 attempts
-          console.log(`Server check attempt ${attempts + 1}/${maxAttempts} - Error: ${errorMsg}`)
+          console.log(`Server check attempt ${attempts + 1}/${maxAttempts} - ${errorMsg}`)
         }
       }
 
-      // Exponential backoff: increase delay gradually, capped at maxDelay
       await new Promise(resolve => setTimeout(resolve, delay))
-      delay = Math.min(delay * 1.1, maxDelay) // Increase by 10% each time, cap at maxDelay
+      delay = Math.min(delay * 1.1, maxDelay)
       attempts++
     }
 
     throw new Error(
-      `Server failed to start - timeout waiting for http://127.0.0.1:8000/health after ${maxAttempts} attempts. ` +
+      `Server failed to respond after ${maxAttempts} attempts. ` +
       `Please check logs in ~/.llamafarm/logs/server.log and run "lf services status" for details.`
     )
   }
@@ -602,6 +585,10 @@ class LlamaFarmApp {
       this.windowManager.cleanup()
 
       console.log('Shutdown complete')
+
+      // Close logger
+      await logger.close()
+
       app.exit(0)
     } catch (error) {
       console.error('Shutdown error:', error)

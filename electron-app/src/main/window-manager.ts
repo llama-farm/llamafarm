@@ -19,7 +19,8 @@ export class WindowManager {
       frame: false,
       transparent: true,
       resizable: false,
-      alwaysOnTop: true,
+      alwaysOnTop: false,
+      movable: true,
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: false,
