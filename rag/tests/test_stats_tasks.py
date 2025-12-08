@@ -388,8 +388,11 @@ class TestListDocumentsTaskAggregation:
         ]
 
         # Mock the config and search API to test the actual task logic
+        mock_db = Mock()
+        mock_db.name = "test_db"  # Set .name attribute explicitly (Mock(name=...) is for repr)
+
         mock_config = Mock()
-        mock_config.rag.databases = [Mock(name="test_db")]
+        mock_config.rag.databases = [mock_db]
 
         mock_search_api = Mock()
         mock_search_api.vector_store.list_documents.return_value = (chunks, len(chunks))
