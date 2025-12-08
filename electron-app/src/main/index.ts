@@ -416,17 +416,24 @@ class LlamaFarmApp {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     console.error('Startup error:', errorMessage)
 
-    this.windowManager.showSplashError(
-      'Failed to start LlamaFarm',
-      errorMessage
-    )
+    this.windowManager.showSplashError('Failed to start LlamaFarm', errorMessage)
 
-    // Show error dialog
+    // Remove always-on-top and close splash to ensure error dialog is visible
     setTimeout(() => {
-      dialog.showErrorBox(
-        'LlamaFarm Startup Failed',
-        `Failed to start LlamaFarm:\n\n${errorMessage}\n\nPlease check the logs and try again.`
-      )
+      const splash = this.windowManager.getSplashWindow()
+      if (splash && !splash.isDestroyed()) {
+        splash.setAlwaysOnTop(false)
+      }
+      this.windowManager.closeSplash()
+
+      // Use modal dialog with better UX
+      dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'LlamaFarm Startup Failed',
+        message: 'Failed to start LlamaFarm',
+        detail: `${errorMessage}\n\nPlease check the logs and try again.`,
+        buttons: ['OK']
+      })
       app.quit()
     }, 3000)
   }
