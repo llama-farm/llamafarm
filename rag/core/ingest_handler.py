@@ -1,6 +1,11 @@
 """
 Ingest handler for LlamaFarm CLI integration.
 Manages the flow from CLI file uploads to blob processing and vector storage.
+
+Includes safety features to prevent runaway data growth:
+- Embedding validation (rejects zero vectors)
+- Circuit breaker pattern (stops after consecutive failures)
+- Health checks before batch processing
 """
 
 import importlib
@@ -13,6 +18,13 @@ from core.base import VectorStore
 from core.blob_processor import BlobProcessor
 from core.logging import RAGStructLogger
 from core.strategies.handler import SchemaHandler
+from utils.embedding_safety import (
+    CircuitBreakerOpenError,
+    EmbedderUnavailableError,
+    InvalidEmbeddingError,
+    is_valid_embedding,
+    is_zero_vector,
+)
 
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
@@ -284,8 +296,28 @@ class IngestHandler:
                 },
             )
 
+            # Health check: Verify embedder is available before processing batch
+            if hasattr(self.embedder, "validate_config"):
+                if not self.embedder.validate_config():
+                    error_msg = (
+                        f"Embedder {self.embedder.__class__.__name__} is not available. "
+                        "Please ensure the embedding service is running."
+                    )
+                    logger.error(error_msg)
+                    event_logger.fail_event(error_msg)
+                    return {
+                        "status": "error",
+                        "message": error_msg,
+                        "filename": filename,
+                        "document_count": 0,
+                        "reason": "embedder_unavailable",
+                    }
+
             # Generate embeddings for each document
             embedded_documents = []
+            failed_embeddings = 0
+            expected_dimension = self.embedder.get_embedding_dimension()
+
             for i, doc in enumerate(documents):
                 # Generate a unique ID based on file hash and chunk index
                 # This ensures the same file won't be re-embedded
@@ -296,18 +328,83 @@ class IngestHandler:
                 doc.metadata["chunk_index"] = i
                 doc.metadata["total_chunks"] = len(documents)
 
-                # Generate embedding
-                embedding = self.embedder.embed([doc.content])  # embed expects a list
+                try:
+                    # Generate embedding
+                    embedding = self.embedder.embed([doc.content])  # embed expects a list
 
-                # Set embedding on the document object itself
-                if embedding and len(embedding) > 0:
-                    doc.embeddings = embedding[0]  # Get first embedding from list
-                    if i == 0:  # Print embedding info only once
-                        logger.info(
-                            f"\n🧠 Embedding with {self.embedder.__class__.__name__}:"
+                    # Validate embedding before accepting it
+                    if embedding and len(embedding) > 0:
+                        emb = embedding[0]
+                        is_valid, error_msg = is_valid_embedding(
+                            emb, expected_dimension=expected_dimension, allow_zero=False
                         )
-                        logger.info(f"   └─ Dimensions: {len(doc.embeddings)}")
-                embedded_documents.append(doc)
+
+                        if is_valid:
+                            doc.embeddings = emb
+                            if i == 0:  # Print embedding info only once
+                                logger.info(
+                                    f"\n🧠 Embedding with {self.embedder.__class__.__name__}:"
+                                )
+                                logger.info(f"   └─ Dimensions: {len(doc.embeddings)}")
+                            embedded_documents.append(doc)
+                        else:
+                            # Invalid embedding (zero vector or wrong dimension)
+                            failed_embeddings += 1
+                            logger.warning(
+                                f"Invalid embedding for chunk {i}: {error_msg}"
+                            )
+                            # Don't append document - skip it
+                    else:
+                        failed_embeddings += 1
+                        logger.warning(f"No embedding returned for chunk {i}")
+
+                except (EmbedderUnavailableError, CircuitBreakerOpenError) as e:
+                    # Embedder service failure - stop processing immediately
+                    error_msg = (
+                        f"Embedder failed after processing {i}/{len(documents)} chunks: {e}"
+                    )
+                    logger.error(error_msg)
+                    event_logger.fail_event(error_msg)
+
+                    # Return partial results with error status
+                    return {
+                        "status": "error",
+                        "message": str(e),
+                        "filename": filename,
+                        "document_count": len(documents),
+                        "embedded_count": len(embedded_documents),
+                        "failed_count": failed_embeddings + (len(documents) - i),
+                        "reason": "embedder_failure",
+                        "circuit_state": (
+                            self.embedder.get_circuit_state()
+                            if hasattr(self.embedder, "get_circuit_state")
+                            else None
+                        ),
+                    }
+
+            # Check if we have any valid embeddings
+            if not embedded_documents:
+                error_msg = (
+                    f"All {len(documents)} embeddings failed validation. "
+                    "This may indicate the embedder is returning invalid data."
+                )
+                logger.error(error_msg)
+                event_logger.fail_event(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg,
+                    "filename": filename,
+                    "document_count": len(documents),
+                    "embedded_count": 0,
+                    "failed_count": failed_embeddings,
+                    "reason": "all_embeddings_invalid",
+                }
+
+            # Log if some embeddings failed
+            if failed_embeddings > 0:
+                logger.warning(
+                    f"⚠️ {failed_embeddings}/{len(documents)} embeddings failed validation and were skipped"
+                )
 
             # Log embeddings generated
             embedding_dim = (

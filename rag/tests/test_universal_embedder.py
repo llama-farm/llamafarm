@@ -1,8 +1,10 @@
 """Tests for Universal Runtime embedder."""
 
+import pytest
 from unittest.mock import Mock, patch
 
 from components.embedders.universal_embedder.universal_embedder import UniversalEmbedder
+from utils.embedding_safety import EmbedderUnavailableError
 
 
 class TestUniversalEmbedder:
@@ -145,16 +147,30 @@ class TestUniversalEmbedder:
 
     @patch("requests.post")
     def test_embed_error_handling(self, mock_post):
-        """Test error handling during embedding."""
+        """Test error handling during embedding with fail_fast enabled (default)."""
         mock_response = Mock()
         mock_response.status_code = 500
         mock_response.text = "Internal server error"
         mock_post.return_value = mock_response
 
         embedder = UniversalEmbedder()
+
+        # With fail_fast=True (default), should raise EmbedderUnavailableError
+        with pytest.raises(EmbedderUnavailableError):
+            embedder.embed_text("test text")
+
+    @patch("requests.post")
+    def test_embed_error_handling_legacy_mode(self, mock_post):
+        """Test error handling during embedding with fail_fast=False (legacy mode)."""
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal server error"
+        mock_post.return_value = mock_response
+
+        embedder = UniversalEmbedder(config={"fail_fast": False})
         result = embedder.embed_text("test text")
 
-        # Should return zero vector on error
+        # With fail_fast=False, should return zero vector on error
         assert result == [0.0] * embedder.get_embedding_dimension()
 
     @patch("requests.post")
@@ -208,14 +224,30 @@ class TestUniversalEmbedder:
 
     @patch("requests.post")
     def test_empty_text_handling(self, mock_post):
-        """Test handling of empty or whitespace-only text."""
+        """Test handling of empty or whitespace-only text with fail_fast enabled (default)."""
         embedder = UniversalEmbedder()
 
-        # Empty string
+        # Empty string - should raise with fail_fast=True
+        with pytest.raises(EmbedderUnavailableError):
+            embedder.embed_text("")
+
+        # Whitespace only - should also raise
+        with pytest.raises(EmbedderUnavailableError):
+            embedder.embed_text("   ")
+
+        # Should not call API
+        assert not mock_post.called
+
+    @patch("requests.post")
+    def test_empty_text_handling_legacy_mode(self, mock_post):
+        """Test handling of empty or whitespace-only text with fail_fast=False (legacy mode)."""
+        embedder = UniversalEmbedder(config={"fail_fast": False})
+
+        # Empty string - should return zero vector
         result = embedder.embed_text("")
         assert result == [0.0] * embedder.get_embedding_dimension()
 
-        # Whitespace only
+        # Whitespace only - should return zero vector
         result = embedder.embed_text("   ")
         assert result == [0.0] * embedder.get_embedding_dimension()
 

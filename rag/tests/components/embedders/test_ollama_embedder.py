@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
 from core.base import Document
+from utils.embedding_safety import EmbedderUnavailableError
 
 
 class TestOllamaEmbedder:
@@ -125,20 +126,36 @@ class TestOllamaEmbedder:
         assert all(isinstance(emb, list) for emb in embeddings)
 
     def test_empty_text_handling(self, mock_embedder):
-        """Test handling of empty or invalid text."""
+        """Test handling of empty or invalid text with fail_fast enabled (default)."""
         embedder, mock_api = mock_embedder
 
-        # Test empty string
-        embedding = embedder.embed_text("")
-        assert embedding is not None  # Should handle gracefully
+        # With fail_fast=True (default), empty text should raise an error
+        with pytest.raises(EmbedderUnavailableError):
+            embedder.embed_text("")
 
-        # Test None
-        embedding = embedder.embed_text(None)
-        assert embedding is not None or embedding is None  # Either is acceptable
+        # Test whitespace only - also raises
+        with pytest.raises(EmbedderUnavailableError):
+            embedder.embed_text("   \n\t   ")
+
+    def test_empty_text_handling_legacy_mode(self):
+        """Test handling of empty text with fail_fast=False (legacy mode)."""
+        config = {
+            "model": "nomic-embed-text",
+            "api_base": "http://localhost:11434",
+            "fail_fast": False,  # Legacy behavior
+        }
+        embedder = OllamaEmbedder("legacy_test", config)
+
+        # With fail_fast=False, empty text should return zero vector
+        embedding = embedder.embed_text("")
+        assert embedding is not None
+        assert isinstance(embedding, list)
+        assert all(v == 0.0 for v in embedding)
 
         # Test whitespace only
         embedding = embedder.embed_text("   \n\t   ")
         assert embedding is not None
+        assert all(v == 0.0 for v in embedding)
 
     def test_batching_functionality(self, mock_embedder):
         """Test batching of multiple embedding requests."""
@@ -156,16 +173,31 @@ class TestOllamaEmbedder:
         assert mock_api.call_count >= 2
 
     def test_error_handling(self):
-        """Test error handling for API failures."""
+        """Test error handling for API failures with fail_fast enabled (default)."""
         embedder = OllamaEmbedder("error_test")
 
         # Mock failed API call
         with patch.object(embedder, "_call_ollama_api") as mock_api:
             mock_api.side_effect = Exception("API connection failed")
 
-            # Should handle error gracefully
+            # With fail_fast=True (default), should raise EmbedderUnavailableError
+            with pytest.raises(EmbedderUnavailableError):
+                embedder.embed_text("test text")
+
+    def test_error_handling_legacy_mode(self):
+        """Test error handling for API failures with fail_fast=False (legacy mode)."""
+        config = {"fail_fast": False}
+        embedder = OllamaEmbedder("error_test_legacy", config)
+
+        # Mock failed API call
+        with patch.object(embedder, "_call_ollama_api") as mock_api:
+            mock_api.side_effect = Exception("API connection failed")
+
+            # With fail_fast=False, should return zero vector
             embedding = embedder.embed_text("test text")
-            assert embedding is None or isinstance(embedding, list)
+            assert embedding is not None
+            assert isinstance(embedding, list)
+            assert all(v == 0.0 for v in embedding)
 
     def test_configuration_validation(self):
         """Test configuration validation."""

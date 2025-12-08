@@ -79,12 +79,80 @@ class Parser(Component):
 
 
 class Embedder(Component):
-    """Base class for embedding generators."""
+    """Base class for embedding generators with circuit breaker protection."""
+
+    # Default circuit breaker settings (can be overridden in subclasses)
+    DEFAULT_FAILURE_THRESHOLD = 5
+    DEFAULT_RESET_TIMEOUT = 60.0
+
+    def __init__(
+        self,
+        name: str | None = None,
+        config: dict[str, Any] | None = None,
+        project_dir: Path | None = None,
+    ):
+        super().__init__(name, config, project_dir)
+
+        # Initialize circuit breaker for this embedder
+        from utils.embedding_safety import CircuitBreaker
+
+        circuit_config = (config or {}).get("circuit_breaker", {})
+        self._circuit_breaker = CircuitBreaker(
+            failure_threshold=circuit_config.get(
+                "failure_threshold", self.DEFAULT_FAILURE_THRESHOLD
+            ),
+            reset_timeout=circuit_config.get(
+                "reset_timeout", self.DEFAULT_RESET_TIMEOUT
+            ),
+        )
+
+        # Track whether to fail fast on errors (default: True for safety)
+        self._fail_fast = (config or {}).get("fail_fast", True)
 
     @abstractmethod
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts."""
         pass
+
+    @abstractmethod
+    def get_embedding_dimension(self) -> int:
+        """Get the dimension of embeddings produced by this model."""
+        pass
+
+    def check_circuit_breaker(self) -> None:
+        """
+        Check if the circuit breaker allows requests.
+
+        Raises:
+            CircuitBreakerOpenError: If circuit is open
+        """
+        from utils.embedding_safety import CircuitBreakerOpenError
+
+        if not self._circuit_breaker.can_execute():
+            state_info = self._circuit_breaker.get_state_info()
+            raise CircuitBreakerOpenError(
+                f"Circuit breaker is open for {self.name}. "
+                f"Too many consecutive failures ({state_info['failure_count']}/{state_info['failure_threshold']}). "
+                f"Will retry in {state_info.get('time_until_reset', 'N/A')} seconds.",
+                failures=state_info["failure_count"],
+                reset_time=state_info.get("time_until_reset", 0),
+            )
+
+    def record_success(self) -> None:
+        """Record a successful embedding operation."""
+        self._circuit_breaker.record_success()
+
+    def record_failure(self, error: Exception | None = None) -> None:
+        """Record a failed embedding operation."""
+        self._circuit_breaker.record_failure(error)
+
+    def get_circuit_state(self) -> dict[str, Any]:
+        """Get current circuit breaker state."""
+        return self._circuit_breaker.get_state_info()
+
+    def reset_circuit_breaker(self) -> None:
+        """Manually reset the circuit breaker."""
+        self._circuit_breaker.force_reset()
 
     def process(self, documents: list[Document]) -> ProcessingResult:
         """Add embeddings to documents."""

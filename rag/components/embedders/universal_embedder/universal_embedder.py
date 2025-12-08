@@ -1,4 +1,4 @@
-"""Universal Runtime-based embedding generator."""
+"""Universal Runtime-based embedding generator with circuit breaker protection."""
 
 from pathlib import Path
 from typing import Any
@@ -9,6 +9,10 @@ import requests  # type: ignore
 from core.base import Embedder
 from core.logging import RAGStructLogger
 from core.settings import settings
+from utils.embedding_safety import (
+    EmbedderUnavailableError,
+    is_zero_vector,
+)
 
 logger = RAGStructLogger(
     "rag.components.embedders.universal_embedder.universal_embedder"
@@ -16,7 +20,7 @@ logger = RAGStructLogger(
 
 
 class UniversalEmbedder(Embedder):
-    """Embedder using Universal Runtime API for embeddings."""
+    """Embedder using Universal Runtime API for embeddings with circuit breaker protection."""
 
     def __init__(
         self,
@@ -70,6 +74,9 @@ class UniversalEmbedder(Embedder):
         # Normalization (Universal Runtime doesn't normalize by default)
         self.normalize = config.get("normalize", True)
 
+        # Track consecutive failures for logging
+        self._consecutive_failures = 0
+
     def validate_config(self) -> bool:
         """Validate configuration and check Universal Runtime availability."""
         try:
@@ -96,9 +103,17 @@ class UniversalEmbedder(Embedder):
             return False
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for texts using Universal Runtime."""
+        """Generate embeddings for texts using Universal Runtime.
+
+        Raises:
+            CircuitBreakerOpenError: If too many consecutive failures have occurred
+            EmbedderUnavailableError: If Universal Runtime is unavailable and fail_fast is enabled
+        """
         if not texts:
             return []
+
+        # Check circuit breaker before starting
+        self.check_circuit_breaker()
 
         embeddings = []
 
@@ -111,38 +126,102 @@ class UniversalEmbedder(Embedder):
         return embeddings
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts using Universal Runtime."""
+        """Embed a batch of texts using Universal Runtime.
+
+        Raises:
+            EmbedderUnavailableError: If Universal Runtime is unavailable and fail_fast is enabled
+            CircuitBreakerOpenError: If circuit breaker trips during batch processing
+        """
+        # Check circuit breaker before batch
+        self.check_circuit_breaker()
+
         try:
             result = self._call_universal_api(texts)
 
             # Parse OpenAI-compatible response format
             data = result.get("data", [])
             if not data:
-                logger.warning(
-                    f"No embeddings returned for batch of {len(texts)} texts"
-                )
+                self._consecutive_failures += 1
+                error_msg = f"No embeddings returned for batch of {len(texts)} texts"
+                logger.warning(error_msg)
+                self.record_failure(Exception(error_msg))
+
+                if self._fail_fast:
+                    raise EmbedderUnavailableError(
+                        f"Universal Runtime returned no embeddings. "
+                        f"Consecutive failures: {self._consecutive_failures}"
+                    )
                 return [
                     [0.0] * self.get_embedding_dimension() for _ in range(len(texts))
                 ]
 
             # Extract embeddings from data array
             embeddings = []
+            zero_count = 0
             for item in data:
                 embedding = item.get("embedding", [])
-                if embedding:
+                if embedding and not is_zero_vector(embedding):
                     embeddings.append(embedding)
                 else:
-                    logger.warning("Empty embedding in response")
+                    zero_count += 1
+                    logger.warning("Empty or zero embedding in response")
+                    if self._fail_fast:
+                        self._consecutive_failures += 1
+                        self.record_failure(Exception("Empty embedding in response"))
+                        raise EmbedderUnavailableError(
+                            f"Universal Runtime returned empty/invalid embedding. "
+                            f"Consecutive failures: {self._consecutive_failures}"
+                        )
                     embeddings.append([0.0] * self.get_embedding_dimension())
+
+            # If all embeddings are valid, record success
+            if zero_count == 0:
+                self.record_success()
+                self._consecutive_failures = 0
 
             # Ensure we have the right number of embeddings
             while len(embeddings) < len(texts):
+                if self._fail_fast:
+                    self._consecutive_failures += 1
+                    self.record_failure(Exception("Incomplete embedding response"))
+                    raise EmbedderUnavailableError(
+                        f"Universal Runtime returned fewer embeddings than expected. "
+                        f"Expected {len(texts)}, got {len(embeddings)}"
+                    )
                 embeddings.append([0.0] * self.get_embedding_dimension())
 
             return embeddings[: len(texts)]
 
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            self._consecutive_failures += 1
+            logger.error(
+                f"Error generating embeddings (failure {self._consecutive_failures}): {e}"
+            )
+            self.record_failure(e)
+
+            if self._fail_fast:
+                raise EmbedderUnavailableError(
+                    f"Universal Runtime is unavailable at {self.base_url}: {e}. "
+                    f"Consecutive failures: {self._consecutive_failures}"
+                ) from e
+            return [[0.0] * self.get_embedding_dimension() for _ in range(len(texts))]
+
+        except EmbedderUnavailableError:
+            # Re-raise our own exceptions
+            raise
+
         except Exception as e:
-            logger.error(f"Error generating embeddings: {e}")
+            self._consecutive_failures += 1
+            logger.error(
+                f"Error generating embeddings (failure {self._consecutive_failures}): {e}"
+            )
+            self.record_failure(e)
+
+            if self._fail_fast:
+                raise EmbedderUnavailableError(
+                    f"Failed to generate embeddings: {e}. "
+                    f"Consecutive failures: {self._consecutive_failures}"
+                ) from e
             return [[0.0] * self.get_embedding_dimension() for _ in range(len(texts))]
 
     def get_embedding_dimension(self) -> int:
@@ -203,19 +282,71 @@ class UniversalEmbedder(Embedder):
             raise Exception(error_msg)
 
     def embed_text(self, text: str) -> list[float]:
-        """Embed a single text string."""
+        """Embed a single text string.
+
+        Raises:
+            EmbedderUnavailableError: If Universal Runtime is unavailable and fail_fast is enabled
+            CircuitBreakerOpenError: If circuit breaker is open
+        """
         if not text or not text.strip():
+            if self._fail_fast:
+                raise EmbedderUnavailableError("Cannot embed empty text")
             return [0.0] * self.get_embedding_dimension()
+
+        # Check circuit breaker
+        self.check_circuit_breaker()
 
         try:
             result = self._call_universal_api([text])
             data = result.get("data", [])
             if data and len(data) > 0:
-                return data[0].get("embedding", [0.0] * self.get_embedding_dimension())
+                embedding = data[0].get("embedding", [])
+                if embedding and not is_zero_vector(embedding):
+                    self.record_success()
+                    self._consecutive_failures = 0
+                    return embedding
+                else:
+                    self._consecutive_failures += 1
+                    self.record_failure(Exception("Empty embedding returned"))
+
+                    if self._fail_fast:
+                        raise EmbedderUnavailableError(
+                            f"Universal Runtime returned empty/invalid embedding. "
+                            f"Consecutive failures: {self._consecutive_failures}"
+                        )
+                    return [0.0] * self.get_embedding_dimension()
             else:
+                self._consecutive_failures += 1
+                self.record_failure(Exception("No data in response"))
+
+                if self._fail_fast:
+                    raise EmbedderUnavailableError(
+                        f"Universal Runtime returned no data. "
+                        f"Consecutive failures: {self._consecutive_failures}"
+                    )
                 return [0.0] * self.get_embedding_dimension()
-        except Exception as e:
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            self._consecutive_failures += 1
             logger.error(f"Error embedding text: {e}")
+            self.record_failure(e)
+
+            if self._fail_fast:
+                raise EmbedderUnavailableError(
+                    f"Universal Runtime is unavailable at {self.base_url}: {e}"
+                ) from e
+            return [0.0] * self.get_embedding_dimension()
+
+        except EmbedderUnavailableError:
+            raise
+
+        except Exception as e:
+            self._consecutive_failures += 1
+            logger.error(f"Error embedding text: {e}")
+            self.record_failure(e)
+
+            if self._fail_fast:
+                raise EmbedderUnavailableError(f"Failed to embed text: {e}") from e
             return [0.0] * self.get_embedding_dimension()
 
     def _check_model_availability(self) -> bool:
