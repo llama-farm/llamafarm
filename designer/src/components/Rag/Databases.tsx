@@ -409,14 +409,6 @@ function Databases() {
     return null
   }
 
-  const getEmbeddingRuntime = (strategyName: string): 'Local' | 'Cloud' | null => {
-    const strategy = getEmbeddingStrategy(strategyName)
-    if (!strategy) return null
-    // Ollama and UniversalEmbedder are local, others are typically cloud
-    return strategy.type === 'OllamaEmbedder' || strategy.type === 'UniversalEmbedder' 
-      ? 'Local' 
-      : 'Cloud'
-  }
   // Get retrieval strategy details from server data or project config
   const getRetrievalStrategy = (strategyName: string) => {
     // First try to get from API response

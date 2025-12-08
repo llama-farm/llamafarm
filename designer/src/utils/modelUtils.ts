@@ -52,3 +52,56 @@ export function getModelDiskSize(
   })
   return found?.size || null
 }
+
+// Sanitize model name by removing spaces and special characters
+export function sanitizeModelName(name: string): string {
+  return name
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+// Format ETA in seconds to human-readable string
+export function formatETA(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`
+  return `${Math.round(seconds / 3600)}h`
+}
+
+// Validate model name
+export function validateModelName(
+  name: string,
+  existingNames: string[],
+  currentName?: string
+): { isValid: boolean; error?: string } {
+  if (!name || name.trim().length === 0) {
+    return { isValid: false, error: 'Model name is required' }
+  }
+
+  if (name.trim().length > 100) {
+    return { isValid: false, error: 'Model name must be 100 characters or less' }
+  }
+
+  // Check for duplicate names (excluding current name if renaming)
+  const normalizedName = name.trim().toLowerCase()
+  const isDuplicate = existingNames.some(
+    existing =>
+      existing.toLowerCase() === normalizedName &&
+      existing !== currentName
+  )
+
+  if (isDuplicate) {
+    return { isValid: false, error: 'A model with this name already exists' }
+  }
+
+  // Check for invalid characters
+  if (!/^[a-zA-Z0-9_-]+$/.test(name.trim())) {
+    return {
+      isValid: false,
+      error: 'Model name can only contain letters, numbers, hyphens, and underscores',
+    }
+  }
+
+  return { isValid: true }
+}
