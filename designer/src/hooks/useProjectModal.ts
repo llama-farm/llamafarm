@@ -206,17 +206,6 @@ export const useProjectModal = ({
           }
           queryClient.setQueryData(projectKeys.list(namespace), next)
         } catch {}
-        // Persist in local fallback list for offline support
-        try {
-          const raw = localStorage.getItem('lf_custom_projects')
-          const arr: string[] = raw ? JSON.parse(raw) : []
-          if (!arr.includes(sanitizedName)) {
-            localStorage.setItem(
-              'lf_custom_projects',
-              JSON.stringify([...arr, sanitizedName])
-            )
-          }
-        } catch {}
         closeModal()
         onSuccess?.(sanitizedName, 'create')
         toast({ message: `Project "${sanitizedName}" created` })
@@ -316,12 +305,6 @@ export const useProjectModal = ({
           queryClient.invalidateQueries({
             queryKey: projectKeys.list(namespace),
           })
-
-          const raw = localStorage.getItem('lf_custom_projects')
-          const arr: string[] = raw ? JSON.parse(raw) : []
-          const withoutOld = arr.filter(n => n !== oldName)
-          if (!withoutOld.includes(newName)) withoutOld.push(newName)
-          localStorage.setItem('lf_custom_projects', JSON.stringify(withoutOld))
         } catch {}
 
         setActiveProject(newName)
@@ -378,12 +361,6 @@ export const useProjectModal = ({
           })
         }
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
-
-        // Update local fallback list
-        const raw = localStorage.getItem('lf_custom_projects')
-        const arr: string[] = raw ? JSON.parse(raw) : []
-        const filtered = arr.filter(n => n !== nameToDelete)
-        localStorage.setItem('lf_custom_projects', JSON.stringify(filtered))
 
         // If the deleted project was active, clear it
         const active = localStorage.getItem('activeProject')
@@ -539,18 +516,6 @@ export const useProjectModal = ({
           projects: [...(prev?.projects ?? []), nextProject],
         }
         queryClient.setQueryData(projectKeys.list(namespace), next)
-      } catch {}
-
-      // Persist in local fallback list
-      try {
-        const raw = localStorage.getItem('lf_custom_projects')
-        const arr: string[] = raw ? JSON.parse(raw) : []
-        if (!arr.includes(sanitizedName)) {
-          localStorage.setItem(
-            'lf_custom_projects',
-            JSON.stringify([...arr, sanitizedName])
-          )
-        }
       } catch {}
 
       closeModal()

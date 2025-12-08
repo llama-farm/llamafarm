@@ -12,29 +12,7 @@ export interface ProjectItem {
   description?: string
 }
 
-/**
- * Get project list from localStorage (legacy function - returns empty if none found)
- */
-export const getProjectsList = (): string[] => {
-  try {
-    const stored = localStorage.getItem('projectsList')
-    if (stored) return JSON.parse(stored) as string[]
-  } catch (error) {
-    console.error('Failed to read projectsList from localStorage:', error)
-  }
-  return []
-}
-
-/**
- * Save project list to localStorage
- */
-export const saveProjectsList = (projects: string[]): void => {
-  try {
-    localStorage.setItem('projectsList', JSON.stringify(projects))
-  } catch (error) {
-    console.error('Failed to save projectsList to localStorage:', error)
-  }
-}
+// Legacy getProjectsList and saveProjectsList removed - all projects now come from server API
 
 /**
  * Get active project from localStorage
@@ -87,56 +65,6 @@ export const apiProjectsToProjectItems = (projects: Project[]): ProjectItem[] =>
   })
 }
 
-/**
- * Convert project names to ProjectItem objects (legacy compatibility)
- */
-export const namesToProjectItems = (names: string[]): ProjectItem[] => {
-  return names.map((name, idx) => ({
-    id: idx + 1,
-    name,
-    model: 'TinyLama',
-    lastEdited: '8/15/2025',
-  }))
-}
-
-/**
- * Filter projects by search term
- */
-export const filterProjectsBySearch = <T extends { name: string }>(
-  projects: T[],
-  search: string
-): T[] => {
-  if (!search) return projects
-  return projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-}
-
-/**
- * Update project name in list
- */
-export const updateProjectInList = (
-  projects: string[],
-  oldName: string,
-  newName: string
-): string[] => {
-  return projects.map(name => (name === oldName ? newName : name))
-}
-
-/**
- * Remove project from list
- */
-export const removeProjectFromList = (
-  projects: string[],
-  projectName: string
-): string[] => {
-  return projects.filter(name => name !== projectName)
-}
-
-/**
- * Add project to list if it doesn't exist
- */
-export const addProjectToList = (
-  projects: string[],
-  projectName: string
-): string[] => {
-  return projects.includes(projectName) ? projects : [...projects, projectName]
-}
+// Legacy functions removed: namesToProjectItems, filterProjectsBySearch, 
+// updateProjectInList, removeProjectFromList, addProjectToList
+// All project management now goes through server API

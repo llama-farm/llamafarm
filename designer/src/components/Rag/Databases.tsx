@@ -91,9 +91,14 @@ function Databases() {
   )
 
   // Database management -------------------------------------------------
+  // Memoize project config to avoid repeated reads
+  const projectConfig = useMemo(() => {
+    return (projectResp as any)?.project?.config as ProjectConfig | undefined
+  }, [projectResp])
+
   const databases = useMemo((): Database[] => {
-    // Prefer databases from live project config
-    const cfgDbs = (projectResp as any)?.project?.config?.rag?.databases
+    // Get databases from live project config (server source of truth)
+    const cfgDbs = projectConfig?.rag?.databases
     if (Array.isArray(cfgDbs) && cfgDbs.length > 0) {
       return cfgDbs.map((db: any) => ({
         name: db?.name || 'unnamed',
@@ -102,19 +107,8 @@ function Databases() {
       }))
     }
 
-    // Fallbacks (legacy/local dev)
-    try {
-      const stored = localStorage.getItem('lf_databases')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed
-        }
-      }
-    } catch {}
-
     return []
-  }, [projectResp])
+  }, [projectConfig])
 
   // Active database state (namespaced per project)
   const projectKey = useMemo(() => {
@@ -145,8 +139,6 @@ function Databases() {
 
   // Track pending database to switch to after creation
   const [pendingDatabaseSwitch, setPendingDatabaseSwitch] = useState<string | null>(null)
-
-  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
   const getDatabaseLocation = useCallback(() => {
     if (activeDatabase) {
       return {
@@ -180,10 +172,15 @@ function Databases() {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(ACTIVE_DB_KEY)
-      if (stored) {
-        // ensure it's in the current databases list
+      if (stored && databases.length > 0) {
+        // Ensure stored database exists in the current databases list
         const exists = databases.some(d => d.name === stored)
-        setActiveDatabase(exists ? stored : activeDatabase)
+        if (exists) {
+          setActiveDatabase(stored)
+        } else if (databases.length > 0) {
+          // Fall back to first database if stored one doesn't exist
+          setActiveDatabase(databases[0].name)
+        }
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,8 +292,12 @@ function Databases() {
   }, [refetchRagDatabases])
   
   // Refetch when projectResp updates (after database create/update/delete)
+  // Use a ref to track if we've already fetched for this projectResp to avoid duplicate calls
+  const lastProjectRespRef = useRef(projectResp)
   useEffect(() => {
-    if (projectResp) {
+    // Only refetch if projectResp actually changed (not just on mount)
+    if (projectResp && projectResp !== lastProjectRespRef.current) {
+      lastProjectRespRef.current = projectResp
       refetchRagDatabases()
     }
   }, [projectResp, refetchRagDatabases])
@@ -341,9 +342,8 @@ function Databases() {
     let model = strategy?.config?.model || strategy?.config?.modelId || strategy?.config?.model_name
     
     // If not found in API response, try project config as fallback
-    if (!model && strategy) {
-      const projectConfig = (projectResp as any)?.project?.config
-      const configDb = projectConfig?.rag?.databases?.find(
+    if (!model && strategy && projectConfig) {
+      const configDb = projectConfig.rag?.databases?.find(
         (d: any) => d.name === activeDatabase
       )
       const fullStrategy = configDb?.embedding_strategies?.find(
@@ -424,9 +424,8 @@ function Databases() {
     const apiStrategy = db?.retrieval_strategies?.find(s => s.name === strategyName)
     
     // If config is missing, get it from project config
-    if (apiStrategy && !apiStrategy.config) {
-      const projectConfig = (projectResp as any)?.project?.config
-      const configDb = projectConfig?.rag?.databases?.find(
+    if (apiStrategy && !apiStrategy.config && projectConfig) {
+      const configDb = projectConfig.rag?.databases?.find(
         (d: any) => d.name === activeDatabase
       )
       const fullStrategy = configDb?.retrieval_strategies?.find(
@@ -475,38 +474,6 @@ function Databases() {
     return parts.join(' • ')
   }
 
-  // Processing strategy helpers ----------------------------------------------
-  // Deprecated: old usage metric helper replaced by per-strategy dataset badges
-
-  // Create handlers for new cards --------------------------------------------
-  // const createEmbedding = () => {
-  //   const name = prompt('Enter embedding strategy name')?.trim()
-  //   if (!name) return
-  //   const slug = name
-  //     .toLowerCase()
-  //     .replace(/[^a-z0-9]+/g, '-')
-  //     .replace(/^-+|-+$/g, '')
-  //   const id = `emb-${slug || Date.now()}`
-  //   const list = getEmbeddings()
-  //   list.push({ id, name, isDefault: list.length === 0, enabled: true })
-  //   saveEmbeddings(list)
-  //   setMetaTick(t => t + 1)
-  //   navigate(`/chat/databases/${id}/change-embedding`)
-  // }
-  // const createRetrieval = () => {
-  //   const name = prompt('Enter retrieval strategy name')?.trim()
-  //   if (!name) return
-  //   const slug = name
-  //     .toLowerCase()
-  //     .replace(/[^a-z0-9]+/g, '-')
-  //     .replace(/^-+|-+$/g, '')
-  //   const id = `ret-${slug || Date.now()}`
-  //   const list = getRetrievals()
-  //   list.push({ id, name, isDefault: list.length === 0, enabled: true })
-  //   saveRetrievals(list)
-  //   setMetaTick(t => t + 1)
-  //   navigate(`/chat/databases/${id}/retrieval`)
-  // }
 
   const sortedEmbeddings = useMemo(() => {
     const list = serverEmbeddings || []
@@ -548,7 +515,6 @@ function Databases() {
   const handleCreateDatabase = async (database: DatabaseType) => {
     try {
       setDatabaseError(null)
-      const projectConfig = (projectResp as any)?.project?.config
       if (!projectConfig) {
         throw new Error('Project config not loaded')
       }
@@ -578,7 +544,6 @@ function Databases() {
   ) => {
     try {
       setDatabaseError(null)
-      const projectConfig = (projectResp as any)?.project?.config
       if (!projectConfig) {
         throw new Error('Project config not loaded')
       }
@@ -630,7 +595,6 @@ function Databases() {
   ) => {
     try {
       setDatabaseError(null)
-      const projectConfig = (projectResp as any)?.project?.config
       if (!projectConfig) {
         throw new Error('Project config not loaded')
       }
@@ -697,7 +661,6 @@ function Databases() {
 
   const handleSetDefaultEmbedding = async (strategyName: string) => {
     try {
-      const projectConfig = (projectResp as any)?.project?.config
       if (!projectConfig) {
         throw new Error('Project config not loaded')
       }
@@ -775,7 +738,6 @@ function Databases() {
     setDeleteEmbeddingOpen(false)
 
     try {
-      const projectConfig = (projectResp as any)?.project?.config
       if (!projectConfig) {
         throw new Error('Project config not loaded')
       }
@@ -876,7 +838,6 @@ function Databases() {
 
   const handleSetDefaultRetrieval = async (strategyName: string) => {
     try {
-      const projectConfig = (projectResp as any)?.project?.config
       if (!projectConfig) {
         throw new Error('Project config not loaded')
       }
@@ -951,7 +912,6 @@ function Databases() {
     setDeleteRetrievalOpen(false)
 
     try {
-      const projectConfig = (projectResp as any)?.project?.config
       if (!projectConfig) {
         throw new Error('Project config not loaded')
       }
@@ -1567,29 +1527,28 @@ function Databases() {
         isOpen={databaseModalOpen}
         mode={databaseModalMode}
         initialDatabase={editingDatabase as DatabaseType | undefined}
-        existingDatabases={databases.map(db => ({
-          name: db.name,
-          type: (db.type || 'ChromaStore') as 'ChromaStore' | 'QdrantStore',
-          config: db.config,
-          default_embedding_strategy: (
-            projectResp as any
-          )?.project?.config?.rag?.databases?.find(
-            (d: any) => d.name === db.name
-          )?.default_embedding_strategy,
-          default_retrieval_strategy: (
-            projectResp as any
-          )?.project?.config?.rag?.databases?.find(
-            (d: any) => d.name === db.name
-          )?.default_retrieval_strategy,
-          embedding_strategies:
-            (projectResp as any)?.project?.config?.rag?.databases?.find(
+        existingDatabases={useMemo(() => {
+          if (!projectConfig) return databases.map(db => ({
+            name: db.name,
+            type: (db.type || 'ChromaStore') as 'ChromaStore' | 'QdrantStore',
+            config: db.config,
+          }))
+          
+          return databases.map(db => {
+            const configDb = projectConfig.rag?.databases?.find(
               (d: any) => d.name === db.name
-            )?.embedding_strategies || [],
-          retrieval_strategies:
-            (projectResp as any)?.project?.config?.rag?.databases?.find(
-              (d: any) => d.name === db.name
-            )?.retrieval_strategies || [],
-        }))}
+            )
+            return {
+              name: db.name,
+              type: (db.type || 'ChromaStore') as 'ChromaStore' | 'QdrantStore',
+              config: db.config,
+              default_embedding_strategy: configDb?.default_embedding_strategy,
+              default_retrieval_strategy: configDb?.default_retrieval_strategy,
+              embedding_strategies: configDb?.embedding_strategies || [],
+              retrieval_strategies: configDb?.retrieval_strategies || [],
+            }
+          })
+        }, [databases, projectConfig])}
         onClose={() => {
           setDatabaseModalOpen(false)
           setDatabaseError(null)

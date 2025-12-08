@@ -14,13 +14,8 @@ import { getModelDisplayName } from './projectHelpers'
 export const getProjectsList = (apiResponse?: {
   projects?: Project[]
 }): string[] => {
-  const api = (apiResponse?.projects || []).map(p => p.name)
-  let custom: string[] = []
-  try {
-    const raw = localStorage.getItem('lf_custom_projects')
-    if (raw) custom = JSON.parse(raw)
-  } catch {}
-  return [...new Set([...api, ...custom])]
+  // All projects come from server - no localStorage fallback
+  return (apiResponse?.projects || []).map(p => p.name)
 }
 
 
@@ -32,14 +27,10 @@ export const getProjectsList = (apiResponse?: {
 export const getProjectsForUI = (
   apiResponse?: { projects?: Project[] }
 ) => {
+  // All projects come from server - no localStorage fallback
   const api = apiResponse?.projects || []
-  let custom: string[] = []
-  try {
-    const raw = localStorage.getItem('lf_custom_projects')
-    if (raw) custom = JSON.parse(raw)
-  } catch {}
   
-  const itemsFromApi = api.map((project, idx) => ({
+  return api.map((project, idx) => ({
     id: idx + 1,
     name: project.name,
     model: getModelDisplayName(project.config),
@@ -47,18 +38,6 @@ export const getProjectsForUI = (
     description: project.config?.description || '',
     validationError: project.validation_error,
   }))
-  const startIndex = itemsFromApi.length
-  const itemsFromCustom = custom
-    .filter(name => !api.some(p => p.name === name))
-    .map((name, idx) => ({
-      id: startIndex + idx + 1,
-      name,
-      model: 'Unknown',
-      lastEdited: 'N/A',
-      description: '',
-    }))
-  
-  return [...itemsFromApi, ...itemsFromCustom]
 }
 
 /**

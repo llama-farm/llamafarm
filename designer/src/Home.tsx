@@ -239,18 +239,6 @@ function Home() {
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
       } catch {}
 
-      // Persist in local fallback list
-      try {
-        const raw = localStorage.getItem('lf_custom_projects')
-        const arr: string[] = raw ? JSON.parse(raw) : []
-        if (!arr.includes(sanitizedName)) {
-          localStorage.setItem(
-            'lf_custom_projects',
-            JSON.stringify([...arr, sanitizedName])
-          )
-        }
-      } catch {}
-
       // Ensure the loading overlay is visible for at least MIN_LOADING_MS
       const elapsed = performance.now() - startedAt
       if (elapsed < MIN_LOADING_MS) {
