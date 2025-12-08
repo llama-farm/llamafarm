@@ -16,6 +16,7 @@ from typing import Any
 import tomli_w
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
+from ruamel.yaml.scalarstring import LiteralScalarString
 
 try:
     import jsonschema  # type: ignore
@@ -51,7 +52,11 @@ def _commented_map_to_dict(obj: Any) -> Any:
 
 
 def _dict_to_commented_map(obj: Any) -> Any:
-    """Recursively convert plain dict/list to CommentedMap/CommentedSeq."""
+    """
+    Recursively convert plain dict/list to CommentedMap/CommentedSeq.
+
+    Multiline strings are converted to LiteralScalarString to use block style (|).
+    """
     if isinstance(obj, dict):
         cm = CommentedMap()
         for k, v in obj.items():
@@ -62,6 +67,9 @@ def _dict_to_commented_map(obj: Any) -> Any:
         for item in obj:
             cs.append(_dict_to_commented_map(item))
         return cs
+    elif isinstance(obj, str) and "\n" in obj:
+        # Use block scalar style for multiline strings
+        return LiteralScalarString(obj)
     else:
         return obj
 
@@ -420,13 +428,36 @@ def _load_yaml_preserved(file_path: Path) -> CommentedMap:
         return yaml_instance.load(f) or CommentedMap()
 
 
+def _preserve_string_style(existing: Any, new_value: str) -> str | LiteralScalarString:
+    """
+    Preserve the YAML string style when replacing a value.
+
+    If the existing value was a block scalar (LiteralScalarString) and the new value
+    contains newlines, wrap it in LiteralScalarString to preserve the `|` style.
+
+    Args:
+        existing: The existing value being replaced
+        new_value: The new string value
+
+    Returns:
+        The new value, possibly wrapped in LiteralScalarString
+    """
+    if isinstance(existing, LiteralScalarString) and isinstance(new_value, str):
+        # Existing was a block scalar - preserve that style
+        return LiteralScalarString(new_value)
+    elif isinstance(new_value, str) and "\n" in new_value:
+        # New multiline string - use block scalar style
+        return LiteralScalarString(new_value)
+    return new_value
+
+
 def _deep_merge_preserved(
     target: CommentedMap | CommentedSeq,
     source: dict | list,
 ) -> CommentedMap | CommentedSeq:
     """
     Deep merge source dict/list into target CommentedMap/CommentedSeq,
-    preserving comments and formatting in the target.
+    preserving comments, formatting, and string styles in the target.
 
     Args:
         target: ruamel.yaml CommentedMap or CommentedSeq to merge into
@@ -446,12 +477,18 @@ def _deep_merge_preserved(
                     # For lists, we need to handle more carefully
                     # Replace the list but try to preserve structure for matching items
                     _merge_list_preserved(existing, value)
+                elif isinstance(value, str):
+                    # Preserve string style (block scalars, etc.)
+                    target[key] = _preserve_string_style(existing, value)
                 else:
-                    # Replace scalar or type-changed values
+                    # Replace other scalar or type-changed values
                     target[key] = value
             else:
-                # New key, just add it
-                target[key] = value
+                # New key - convert multiline strings to block scalars
+                if isinstance(value, str) and "\n" in value:
+                    target[key] = LiteralScalarString(value)
+                else:
+                    target[key] = value
     elif isinstance(target, CommentedSeq) and isinstance(source, list):
         _merge_list_preserved(target, source)
 
@@ -460,53 +497,18 @@ def _deep_merge_preserved(
 
 def _merge_list_preserved(target: CommentedSeq, source: list) -> None:
     """
-    Merge a source list into a target CommentedSeq.
+    Replace target CommentedSeq contents with source list items.
 
-    For lists of dicts with a 'name' key, tries to match by name to preserve
-    comments on existing items. Otherwise, replaces the list contents.
+    Converts all items through _dict_to_commented_map() to ensure
+    multiline strings use block scalar style.
 
     Args:
-        target: ruamel.yaml CommentedSeq to merge into
+        target: ruamel.yaml CommentedSeq to replace contents of
         source: Plain list with new values
     """
-    # Check if this is a list of named items (common pattern in configs)
-    if (
-        source
-        and isinstance(source[0], dict)
-        and "name" in source[0]
-        and target
-        and isinstance(target[0], CommentedMap)
-        and "name" in target[0]
-    ):
-        # Build a map of existing items by name
-        existing_by_name: dict[str, tuple[int, CommentedMap]] = {}
-        for i, item in enumerate(target):
-            if isinstance(item, CommentedMap) and "name" in item:
-                existing_by_name[item["name"]] = (i, item)
-
-        # Process source items
-        new_items = []
-        for src_item in source:
-            if isinstance(src_item, dict) and "name" in src_item:
-                name = src_item["name"]
-                if name in existing_by_name:
-                    # Update existing item in place
-                    _, existing_item = existing_by_name[name]
-                    _deep_merge_preserved(existing_item, src_item)
-                    new_items.append(existing_item)
-                else:
-                    # New item
-                    new_items.append(src_item)
-            else:
-                new_items.append(src_item)
-
-        # Replace target contents
-        target.clear()
-        target.extend(new_items)
-    else:
-        # Simple list replacement
-        target.clear()
-        target.extend(source)
+    target.clear()
+    for item in source:
+        target.append(_dict_to_commented_map(item))
 
 
 def _save_yaml_preserved(
