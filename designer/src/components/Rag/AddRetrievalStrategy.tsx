@@ -559,10 +559,14 @@ function AddRetrievalStrategy() {
         variant: 'default',
       })
 
-      // Clear unsaved changes before navigating
+      // Clear unsaved changes BEFORE navigation to prevent modal from showing
       setHasUnsavedChanges(false)
+      unsavedChangesContext.setIsDirty(false)
       
-      navigate('/chat/databases')
+      // Use requestAnimationFrame to ensure state update happens before navigation
+      requestAnimationFrame(() => {
+        navigate('/chat/databases')
+      })
     } catch (error: any) {
       console.error('Failed to create retrieval strategy:', error)
       setError(error.message || 'Failed to create strategy')
@@ -1252,24 +1256,26 @@ function AddRetrievalStrategy() {
             setModalErrorMessage(null)
             setError(null)
 
-            // Confirm navigation before calling onSave (which will navigate on success)
-            unsavedChangesContext.confirmNavigation()
+            // Clear unsaved changes BEFORE calling onSave to prevent navigation interception
+            setHasUnsavedChanges(false)
+            unsavedChangesContext.setIsDirty(false)
             
             // Call onSave - it handles setIsSaving and navigation internally
+            // The navigation will now proceed without being intercepted
             await onSave()
             
             // If we get here and there's an error, onSave didn't navigate
             if (error) {
               setModalErrorMessage(error)
-              // Cancel navigation since save failed
-              unsavedChangesContext.cancelNavigation()
-            } else {
-              // Save succeeded - navigation will happen in onSave
-              setHasUnsavedChanges(false)
+              // Restore unsaved changes flag since save failed
+              setHasUnsavedChanges(true)
+              unsavedChangesContext.setIsDirty(true)
             }
           } catch (e: any) {
             setModalErrorMessage(e?.message || 'Failed to save strategy')
-            unsavedChangesContext.cancelNavigation()
+            // Restore unsaved changes flag since save failed
+            setHasUnsavedChanges(true)
+            unsavedChangesContext.setIsDirty(true)
           }
         }}
         onDiscard={() => {

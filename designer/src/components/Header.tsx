@@ -53,8 +53,8 @@ function Header({ currentVersion }: HeaderProps) {
 
   // Project dropdown state
   const [isProjectOpen, setIsProjectOpen] = useState(false)
-  const [activeProject, setActiveProject] = useState<string>(() =>
-    getActiveProject()
+  const [activeProject, setActiveProject] = useState<string>(
+    () => getActiveProject() ?? ''
   )
   const namespace = getCurrentNamespace()
 

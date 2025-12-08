@@ -1109,7 +1109,7 @@ function AddEmbeddingStrategy() {
     providerLabel: string,
     chosenModel: string,
     encryptedApiKey?: string
-  ) => {
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
       setIsSaving(true)
       setError(null)
@@ -1117,8 +1117,9 @@ function AddEmbeddingStrategy() {
       // Validate
       const validationErrors = validateStrategy()
       if (validationErrors.length > 0) {
-        setError(validationErrors.join(', '))
-        return false
+        const errorMsg = validationErrors.join(', ')
+        setError(errorMsg)
+        return { success: false, error: errorMsg }
       }
 
       // Get current project config
@@ -1184,19 +1185,26 @@ function AddEmbeddingStrategy() {
         projectConfig,
       })
 
-      return true
+      return { success: true }
     } catch (error: any) {
       console.error('Failed to save embedding strategy:', error)
-      setError(error.message || 'Failed to save strategy')
-      return false
+      const errorMsg = error.message || 'Failed to save strategy'
+      setError(errorMsg)
+      return { success: false, error: errorMsg }
     } finally {
       setIsSaving(false)
     }
   }
 
   const finalizeAndRedirect = () => {
+    // Ensure unsaved changes are cleared before navigation
+    setHasUnsavedChanges(false)
+    unsavedChangesContext.setIsDirty(false)
     toast({ message: 'Embedding strategy created', variant: 'default' })
-    navigate('/chat/databases')
+    // Use requestAnimationFrame to ensure state update happens before navigation
+    requestAnimationFrame(() => {
+      navigate('/chat/databases')
+    })
   }
 
   return (
@@ -1280,7 +1288,19 @@ function AddEmbeddingStrategy() {
                   >
                     {copyFrom || 'Select a strategy to copy...'}
                   </span>
-                  <FontIcon type="chevron-down" className="w-4 h-4" />
+                  <span
+                    className="flex-shrink-0 flex-grow-0 inline-flex items-center justify-center"
+                    style={{
+                      width: '1rem',
+                      height: '1rem',
+                      minWidth: '1rem',
+                      maxWidth: '1rem',
+                      flexShrink: 0,
+                      flexGrow: 0,
+                    }}
+                  >
+                    <FontIcon type="chevron-down" className="w-4 h-4" />
+                  </span>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-64">
@@ -1501,49 +1521,96 @@ function AddEmbeddingStrategy() {
                 Refresh
               </Button>
             </div>
-            <div className="w-full overflow-hidden rounded-lg border border-border">
-              <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
-                <div className="col-span-3">Model</div>
-                <div className="col-span-2">dim</div>
-                <div className="col-span-2">Quality</div>
-                <div className="col-span-2">Size</div>
-                <div className="col-span-2">Status</div>
-                <div className="col-span-1" />
+            <div className="w-full rounded-lg border border-border">
+              <div className="hidden md:grid grid-cols-12 items-start md:items-center bg-secondary text-secondary-foreground text-xs px-3 py-2 gap-x-2">
+                <div className="col-span-3 min-w-0">Model</div>
+                <div className="col-span-2 min-w-0">dim</div>
+                <div className="col-span-2 min-w-0">Quality</div>
+                <div className="col-span-2 min-w-0">Size</div>
+                <div className="col-span-3 min-w-0">Status</div>
               </div>
               {filteredGroups.map(group => {
                 const isOpen = expandedGroupId === group.id
                 return (
                   <div key={group.id} className="border-t border-border">
+                    {/* Mobile layout */}
                     <div
-                      className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
+                      className="md:hidden flex flex-col px-3 py-3 cursor-pointer hover:bg-accent/40"
                       onClick={() =>
                         setExpandedGroupId(prev =>
                           prev === group.id ? null : group.id
                         )
                       }
                     >
-                      <div className="col-span-3 flex items-center gap-2">
-                        <FontIcon
-                          type="chevron-down"
-                          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                        />
-                        <span className="truncate font-medium">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="flex-shrink-0 flex-grow-0 inline-flex items-center justify-center"
+                          style={{
+                            width: '1rem',
+                            height: '1rem',
+                            minWidth: '1rem',
+                            maxWidth: '1rem',
+                            flexShrink: 0,
+                            flexGrow: 0,
+                          }}
+                        >
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          />
+                        </span>
+                        <span className="font-medium">{group.name}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
+                        <span>dim: {group.dim}</span>
+                        <span>Quality: {group.quality}</span>
+                        <span>Size: {group.download}</span>
+                        <span>{group.ramVram}</span>
+                      </div>
+                    </div>
+                    {/* Desktop layout */}
+                    <div
+                      className="hidden md:grid grid-cols-12 items-start md:items-center px-3 py-4 md:py-3 text-sm cursor-pointer hover:bg-accent/40 gap-x-2"
+                      onClick={() =>
+                        setExpandedGroupId(prev =>
+                          prev === group.id ? null : group.id
+                        )
+                      }
+                    >
+                      <div className="col-span-3 flex items-center gap-2 min-w-0">
+                        <span
+                          className="flex-shrink-0 flex-grow-0 inline-flex items-center justify-center"
+                          style={{
+                            width: '1rem',
+                            height: '1rem',
+                            minWidth: '1rem',
+                            maxWidth: '1rem',
+                            flexShrink: 0,
+                            flexGrow: 0,
+                          }}
+                        >
+                          <FontIcon
+                            type="chevron-down"
+                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          />
+                        </span>
+                        <span className="truncate font-medium min-w-0">
                           {group.name}
                         </span>
                       </div>
-                      <div className="col-span-2 text-xs text-muted-foreground">
+                      <div className="col-span-2 text-xs text-muted-foreground truncate min-w-0">
                         {group.dim}
                       </div>
-                      <div className="col-span-2 text-xs text-muted-foreground">
+                      <div className="col-span-2 text-xs text-muted-foreground truncate min-w-0">
                         {group.quality}
                       </div>
-                      <div className="col-span-2 text-xs text-muted-foreground">
+                      <div className="col-span-2 text-xs text-muted-foreground truncate min-w-0">
                         {group.download}
                       </div>
-                      <div className="col-span-2 text-xs text-muted-foreground">
+                      <div className="col-span-2 text-xs text-muted-foreground truncate min-w-0">
                         {group.ramVram}
                       </div>
-                      <div className="col-span-1" />
+                      <div className="col-span-3 min-w-0" />
                     </div>
                     {group.variants && isOpen && (
                       <div className="px-3 pb-2">
@@ -1559,127 +1626,252 @@ function AddEmbeddingStrategy() {
                             v.isDownloaded || downloadState?.state === 'success'
 
                           return (
-                            <div
-                              key={v.id}
-                              className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                            >
-                              <div className="col-span-3 flex items-center text-muted-foreground">
-                                <span className="inline-block w-4" />
-                                <span className="ml-2 font-mono text-xs truncate">
-                                  {v.label}
-                                </span>
-                              </div>
-                              <div className="col-span-2 text-xs text-muted-foreground">
-                                {v.dim}
-                              </div>
-                              <div className="col-span-2 text-xs text-muted-foreground">
-                                {v.quality}
-                              </div>
-                              <div className="col-span-2 text-xs text-muted-foreground">
-                                {v.download}
-                              </div>
-                              <div className="col-span-2 flex items-center gap-2 flex-wrap">
-                                {isDownloaded && (
-                                  <Badge
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-xl text-muted-foreground border-muted"
-                                  >
-                                    On disk
-                                  </Badge>
-                                )}
-                                {isUsing && (
-                                  <Badge
-                                    variant="default"
-                                    size="sm"
-                                    className="rounded-xl"
-                                  >
-                                    <FontIcon
-                                      type="checkmark-filled"
-                                      className="w-3 h-3 mr-1"
-                                    />
-                                    Using
-                                  </Badge>
-                                )}
-                                {hasError && (
-                                  <Badge
-                                    variant="secondary"
-                                    size="sm"
-                                    className="rounded-xl text-destructive border-destructive"
-                                  >
-                                    Error
-                                  </Badge>
-                                )}
-                                {!isDownloaded && !isUsing && !hasError && (
-                                  <Badge
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-xl"
-                                  >
-                                    Not downloaded
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="col-span-1 flex items-center justify-end pr-2">
-                                <Button
-                                  size="sm"
-                                  className={`h-8 px-3 ${
-                                    !isUsing &&
-                                    selected?.runtime === 'Local' &&
-                                    selected?.modelId
-                                      ? 'opacity-60 hover:opacity-100'
-                                      : ''
-                                  }`}
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    selectLocal(v)
-                                  }}
-                                  disabled={isDownloading || hasError}
-                                  variant={
-                                    !isUsing &&
-                                    selected?.runtime === 'Local' &&
-                                    selected?.modelId
-                                      ? 'outline'
-                                      : 'default'
-                                  }
-                                >
-                                  {isDownloading ? (
-                                    'Downloading...'
-                                  ) : isUsing ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <FontIcon
-                                        type="checkmark-filled"
-                                        className="w-4 h-4"
-                                      />{' '}
-                                      Using
-                                    </span>
-                                  ) : selected?.runtime === 'Local' &&
-                                    selected?.modelId ? (
-                                    'Use instead'
-                                  ) : (
-                                    'Use'
-                                  )}
-                                </Button>
-                              </div>
-                              {hasError && downloadState?.error && (
-                                <div className="col-span-12 mt-2 px-3">
-                                  <div className="text-xs text-destructive">
-                                    {downloadState.error}
+                            <>
+                              {/* Mobile layout */}
+                              <div
+                                key={v.id}
+                                className="md:hidden flex flex-col px-3 py-3 rounded-md hover:bg-accent/40"
+                              >
+                                <div className="mb-2">
+                                  <span className="font-mono text-xs">
+                                    {v.label}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2 text-xs text-muted-foreground">
+                                  <span>dim: {v.dim}</span>
+                                  <span>Quality: {v.quality}</span>
+                                  <span>Size: {v.download}</span>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {isDownloaded && (
+                                      <Badge
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-xl text-muted-foreground border-muted flex-shrink-0"
+                                      >
+                                        On disk
+                                      </Badge>
+                                    )}
+                                    {isUsing && (
+                                      <Badge
+                                        variant="default"
+                                        size="sm"
+                                        className="rounded-xl flex-shrink-0"
+                                      >
+                                        <FontIcon
+                                          type="checkmark-filled"
+                                          className="w-3 h-3 mr-1 flex-shrink-0"
+                                        />
+                                        Using
+                                      </Badge>
+                                    )}
+                                    {hasError && (
+                                      <Badge
+                                        variant="secondary"
+                                        size="sm"
+                                        className="rounded-xl text-destructive border-destructive flex-shrink-0"
+                                      >
+                                        Error
+                                      </Badge>
+                                    )}
+                                    {!isDownloaded && !isUsing && !hasError && (
+                                      <Badge
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-xl flex-shrink-0"
+                                      >
+                                        Not downloaded
+                                      </Badge>
+                                    )}
                                   </div>
                                   <Button
                                     size="sm"
-                                    variant="outline"
-                                    className="mt-1 h-6 text-xs"
+                                    className={`h-8 px-3 flex-shrink-0 w-fit ${
+                                      !isUsing &&
+                                      selected?.runtime === 'Local' &&
+                                      selected?.modelId
+                                        ? 'opacity-60 hover:opacity-100'
+                                        : ''
+                                    }`}
                                     onClick={e => {
                                       e.stopPropagation()
-                                      downloadModel(v)
+                                      selectLocal(v)
                                     }}
+                                    disabled={isDownloading || hasError}
+                                    variant={
+                                      !isUsing &&
+                                      selected?.runtime === 'Local' &&
+                                      selected?.modelId
+                                        ? 'outline'
+                                        : 'default'
+                                    }
                                   >
-                                    Retry
+                                    {isDownloading ? (
+                                      'Downloading...'
+                                    ) : isUsing ? (
+                                      <span className="inline-flex items-center gap-1">
+                                        <FontIcon
+                                          type="checkmark-filled"
+                                          className="w-4 h-4"
+                                        />{' '}
+                                        Using
+                                      </span>
+                                    ) : selected?.runtime === 'Local' &&
+                                      selected?.modelId ? (
+                                      'Use instead'
+                                    ) : (
+                                      'Use'
+                                    )}
                                   </Button>
                                 </div>
+                              </div>
+                              {/* Desktop layout */}
+                              <div
+                                key={`${v.id}-desktop`}
+                                className="hidden md:grid grid-cols-12 items-start md:items-center px-3 py-4 md:py-3 text-sm rounded-md hover:bg-accent/40 gap-x-2 gap-y-2"
+                              >
+                                <div className="col-span-3 flex items-start md:items-center text-muted-foreground min-w-0 pt-1 md:pt-0">
+                                  <span
+                                    className="inline-block w-4 flex-shrink-0"
+                                    style={{
+                                      width: '1rem',
+                                      minWidth: '1rem',
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                  <span className="ml-2 font-mono text-xs truncate min-w-0">
+                                    {v.label}
+                                  </span>
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground truncate min-w-0 pt-1 md:pt-0">
+                                  {v.dim}
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground truncate min-w-0 pt-1 md:pt-0">
+                                  {v.quality}
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground truncate min-w-0 pt-1 md:pt-0">
+                                  {v.download}
+                                </div>
+                                <div className="col-span-3 flex flex-row items-center gap-2 min-w-0 flex-wrap">
+                                  {isDownloaded && (
+                                    <Badge
+                                      variant="outline"
+                                      size="sm"
+                                      className="rounded-xl text-muted-foreground border-muted flex-shrink-0"
+                                    >
+                                      On disk
+                                    </Badge>
+                                  )}
+                                  {isUsing && (
+                                    <Badge
+                                      variant="default"
+                                      size="sm"
+                                      className="rounded-xl flex-shrink-0"
+                                    >
+                                      <FontIcon
+                                        type="checkmark-filled"
+                                        className="w-3 h-3 mr-1 flex-shrink-0"
+                                      />
+                                      Using
+                                    </Badge>
+                                  )}
+                                  {hasError && (
+                                    <Badge
+                                      variant="secondary"
+                                      size="sm"
+                                      className="rounded-xl text-destructive border-destructive flex-shrink-0"
+                                    >
+                                      Error
+                                    </Badge>
+                                  )}
+                                  {!isDownloaded && !isUsing && !hasError && (
+                                    <Badge
+                                      variant="outline"
+                                      size="sm"
+                                      className="rounded-xl flex-shrink-0"
+                                    >
+                                      Not downloaded
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    className={`h-8 px-3 flex-shrink-0 ${
+                                      !isUsing &&
+                                      selected?.runtime === 'Local' &&
+                                      selected?.modelId
+                                        ? 'opacity-60 hover:opacity-100'
+                                        : ''
+                                    }`}
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      selectLocal(v)
+                                    }}
+                                    disabled={isDownloading || hasError}
+                                    variant={
+                                      !isUsing &&
+                                      selected?.runtime === 'Local' &&
+                                      selected?.modelId
+                                        ? 'outline'
+                                        : 'default'
+                                    }
+                                  >
+                                    {isDownloading ? (
+                                      'Downloading...'
+                                    ) : isUsing ? (
+                                      <span className="inline-flex items-center gap-1">
+                                        <FontIcon
+                                          type="checkmark-filled"
+                                          className="w-4 h-4"
+                                        />{' '}
+                                        Using
+                                      </span>
+                                    ) : selected?.runtime === 'Local' &&
+                                      selected?.modelId ? (
+                                      'Use instead'
+                                    ) : (
+                                      'Use'
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                              {hasError && downloadState?.error && (
+                                <>
+                                  <div className="md:hidden mt-2 px-3">
+                                    <div className="text-xs text-destructive">
+                                      {downloadState.error}
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="mt-1 h-6 text-xs"
+                                      onClick={e => {
+                                        e.stopPropagation()
+                                        downloadModel(v)
+                                      }}
+                                    >
+                                      Retry
+                                    </Button>
+                                  </div>
+                                  <div className="hidden md:block col-span-12 mt-2 px-3">
+                                    <div className="text-xs text-destructive">
+                                      {downloadState.error}
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="mt-1 h-6 text-xs"
+                                      onClick={e => {
+                                        e.stopPropagation()
+                                        downloadModel(v)
+                                      }}
+                                    >
+                                      Retry
+                                    </Button>
+                                  </div>
+                                </>
                               )}
-                            </div>
+                            </>
                           )
                         })}
                         <div className="flex justify-end pr-3">
@@ -1709,7 +1901,19 @@ function AddEmbeddingStrategy() {
                 <DropdownMenuTrigger asChild>
                   <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
                     <span>{provider}</span>
-                    <FontIcon type="chevron-down" className="w-4 h-4" />
+                    <span
+                      className="flex-shrink-0 flex-grow-0 inline-flex items-center justify-center"
+                      style={{
+                        width: '1rem',
+                        height: '1rem',
+                        minWidth: '1rem',
+                        maxWidth: '1rem',
+                        flexShrink: 0,
+                        flexGrow: 0,
+                      }}
+                    >
+                      <FontIcon type="chevron-down" className="w-4 h-4" />
+                    </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-64">
@@ -1737,7 +1941,19 @@ function AddEmbeddingStrategy() {
                 <DropdownMenuTrigger asChild>
                   <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between">
                     <span>{model}</span>
-                    <FontIcon type="chevron-down" className="w-4 h-4" />
+                    <span
+                      className="flex-shrink-0 flex-grow-0 inline-flex items-center justify-center"
+                      style={{
+                        width: '1rem',
+                        height: '1rem',
+                        minWidth: '1rem',
+                        maxWidth: '1rem',
+                        flexShrink: 0,
+                        flexGrow: 0,
+                      }}
+                    >
+                      <FontIcon type="chevron-down" className="w-4 h-4" />
+                    </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-64 max-h-64 overflow-auto">
@@ -2026,23 +2242,38 @@ function AddEmbeddingStrategy() {
                     return
                   }
 
-                  const success = await saveStrategyToConfig(
+                  const result = await saveStrategyToConfig(
                     selected.runtime,
                     summaryProvider || 'Provider',
                     selected.modelId,
                     encryptedKey
                   )
 
-                  if (!success) {
+                  if (!result.success) {
+                    // Show error toast and close modal
+                    const errorMessage =
+                      result.error || 'Failed to save embedding strategy'
+                    toast({
+                      message: errorMessage,
+                      variant: 'destructive',
+                    })
+                    setConfirmOpen(false)
                     return
                   }
 
+                  // Clear unsaved changes BEFORE navigation to prevent modal from showing
+                  setHasUnsavedChanges(false)
+                  unsavedChangesContext.setIsDirty(false)
+
                   setConfirmOpen(false)
-                  if (makeDefault) {
-                    setReembedOpen(true)
-                  } else {
-                    finalizeAndRedirect()
-                  }
+                  // Use requestAnimationFrame to ensure state update happens before any navigation
+                  requestAnimationFrame(() => {
+                    if (makeDefault) {
+                      setReembedOpen(true)
+                    } else {
+                      finalizeAndRedirect()
+                    }
+                  })
                 }}
                 disabled={isSaving}
               >
@@ -2304,24 +2535,36 @@ function AddEmbeddingStrategy() {
                 encryptedKey = await encryptAPIKey(apiKey, secret)
               }
 
-              const success = await saveStrategyToConfig(
+              const result = await saveStrategyToConfig(
                 selected.runtime,
                 summaryProvider || 'Provider',
                 selected.modelId,
                 encryptedKey
               )
 
-              if (!success) {
-                setModalErrorMessage(error || 'Failed to save strategy')
+              if (!result.success) {
+                // Show error toast and close modal
+                const errorMessage = result.error || 'Failed to save strategy'
+                toast({
+                  message: errorMessage,
+                  variant: 'destructive',
+                })
+                setModalErrorMessage(null)
                 setIsSaving(false)
+                unsavedChangesContext.cancelNavigation()
                 return
               }
 
-              // Save succeeded - clear error and confirm navigation
+              // Save succeeded - clear unsaved changes BEFORE navigation
               setModalErrorMessage(null)
               setHasUnsavedChanges(false)
+              unsavedChangesContext.setIsDirty(false)
               setIsSaving(false)
-              unsavedChangesContext.confirmNavigation()
+
+              // Navigate after saving (use requestAnimationFrame to ensure state is cleared)
+              requestAnimationFrame(() => {
+                finalizeAndRedirect()
+              })
             } catch (e: any) {
               setModalErrorMessage(e?.message || 'Failed to save strategy')
               setIsSaving(false)
