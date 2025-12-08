@@ -8,29 +8,83 @@ import os
 import re
 import socket
 import sys
+import tomllib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml  # type: ignore
-except ImportError:
-    yaml = None
-
-try:
-    import tomllib
-except ImportError:
-    tomllib = None  # type: ignore
-
-try:
-    import tomli_w  # type: ignore
-except ImportError:
-    tomli_w = None
+import tomli_w
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 try:
     import jsonschema  # type: ignore
 except ImportError:
     jsonschema = None
+
+
+# ============================================================================
+# YAML UTILITIES (ruamel.yaml - single library for all YAML operations)
+# ============================================================================
+
+
+def _get_ruamel_yaml() -> YAML:
+    """Create a configured ruamel.yaml instance for all YAML operations."""
+    yaml_instance = YAML()
+    yaml_instance.preserve_quotes = True
+    # Configure indentation:
+    # - mapping=2: 2 spaces for nested mappings
+    # - sequence=4: 4 spaces for sequence items (includes the "- ")
+    # - offset=2: the "-" is indented 2 spaces from the parent key
+    yaml_instance.indent(mapping=2, sequence=4, offset=2)
+    return yaml_instance
+
+
+def _commented_map_to_dict(obj: Any) -> Any:
+    """Recursively convert CommentedMap/CommentedSeq to plain dict/list."""
+    if isinstance(obj, CommentedMap):
+        return {k: _commented_map_to_dict(v) for k, v in obj.items()}
+    elif isinstance(obj, CommentedSeq):
+        return [_commented_map_to_dict(item) for item in obj]
+    else:
+        return obj
+
+
+def _dict_to_commented_map(obj: Any) -> Any:
+    """Recursively convert plain dict/list to CommentedMap/CommentedSeq."""
+    if isinstance(obj, dict):
+        cm = CommentedMap()
+        for k, v in obj.items():
+            cm[k] = _dict_to_commented_map(v)
+        return cm
+    elif isinstance(obj, list):
+        cs = CommentedSeq()
+        for item in obj:
+            cs.append(_dict_to_commented_map(item))
+        return cs
+    else:
+        return obj
+
+
+def _deep_merge(target: dict, source: dict) -> dict:
+    """
+    Recursively merge source dict into target dict.
+
+    Args:
+        target: Dictionary to merge into (modified in place)
+        source: Dictionary with values to merge
+
+    Returns:
+        The modified target dict
+    """
+    for key, value in source.items():
+        if isinstance(value, dict) and key in target and isinstance(target[key], dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
+    return target
+
+
 # Removed complex referencing imports - using compile_schema.py instead
 
 # Handle both relative and absolute imports
@@ -190,22 +244,19 @@ def _validate_config(config: dict, schema: dict) -> None:
 
 
 def _load_yaml_file(file_path: Path) -> dict:
-    """Load configuration from a YAML file."""
-    if yaml is None:
-        raise ConfigError("PyYAML is required to load YAML files.")
-
+    """Load configuration from a YAML file as a plain dict."""
     try:
-        with open(file_path) as f:
-            return yaml.safe_load(f) or {}
+        yaml_instance = _get_ruamel_yaml()
+        with open(file_path, encoding="utf-8") as f:
+            doc = yaml_instance.load(f)
+            # Convert to plain dict for compatibility with rest of codebase
+            return _commented_map_to_dict(doc) if doc else {}
     except Exception as e:
         raise ConfigError(f"Error loading YAML file {file_path}: {e}") from e
 
 
 def _load_toml_file(file_path: Path) -> dict:
     """Load configuration from a TOML file."""
-    if tomllib is None:
-        raise ConfigError("tomllib module not available")
-
     try:
         with open(file_path, "rb") as f:
             return tomllib.load(f)
@@ -350,50 +401,182 @@ def load_config(
 
 
 # ============================================================================
-# WRITE FUNCTIONS
+# FORMAT-PRESERVING YAML FUNCTIONS (ruamel.yaml)
 # ============================================================================
 
 
-def _save_yaml_file(config: dict, file_path: Path, force_sync: bool = False) -> None:
-    """Save configuration to a YAML file.
+def _load_yaml_preserved(file_path: Path) -> CommentedMap:
+    """
+    Load a YAML file preserving comments and formatting using ruamel.yaml.
 
     Args:
-        config: Configuration dictionary to save
-        file_path: Path to save the YAML file
-        force_sync: If True, forces immediate write to disk (slower but safer)
+        file_path: Path to the YAML file
+
+    Returns:
+        CommentedMap that preserves comments and formatting when saved
     """
-    if yaml is None:
-        raise ConfigError("PyYAML is required to save YAML files.")
+    yaml_instance = _get_ruamel_yaml()
+    with open(file_path, encoding="utf-8") as f:
+        return yaml_instance.load(f) or CommentedMap()
 
-    try:
-        # First dump to string to ensure complete serialization
-        yaml_content = yaml.dump(
-            config,
-            default_flow_style=False,
-            allow_unicode=True,
-            sort_keys=False,
-            indent=2,
-        )
 
-        # Then write the complete string to file atomically
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(yaml_content)
-            f.flush()  # Explicitly flush to ensure all data is written
+def _deep_merge_preserved(
+    target: CommentedMap | CommentedSeq,
+    source: dict | list,
+) -> CommentedMap | CommentedSeq:
+    """
+    Deep merge source dict/list into target CommentedMap/CommentedSeq,
+    preserving comments and formatting in the target.
 
-            # Only force sync for critical files when explicitly requested
-            if force_sync:
-                os.fsync(f.fileno())  # Force write to disk (slower but safer)
-    except Exception as e:
-        raise ConfigError(f"Error saving YAML file {file_path}: {e}") from e
+    Args:
+        target: ruamel.yaml CommentedMap or CommentedSeq to merge into
+        source: Plain dict or list with new values
+
+    Returns:
+        The modified target with merged values
+    """
+    if isinstance(target, CommentedMap) and isinstance(source, dict):
+        for key, value in source.items():
+            if key in target:
+                existing = target[key]
+                if isinstance(existing, CommentedMap) and isinstance(value, dict):
+                    # Recursively merge nested dicts
+                    _deep_merge_preserved(existing, value)
+                elif isinstance(existing, CommentedSeq) and isinstance(value, list):
+                    # For lists, we need to handle more carefully
+                    # Replace the list but try to preserve structure for matching items
+                    _merge_list_preserved(existing, value)
+                else:
+                    # Replace scalar or type-changed values
+                    target[key] = value
+            else:
+                # New key, just add it
+                target[key] = value
+    elif isinstance(target, CommentedSeq) and isinstance(source, list):
+        _merge_list_preserved(target, source)
+
+    return target
+
+
+def _merge_list_preserved(target: CommentedSeq, source: list) -> None:
+    """
+    Merge a source list into a target CommentedSeq.
+
+    For lists of dicts with a 'name' key, tries to match by name to preserve
+    comments on existing items. Otherwise, replaces the list contents.
+
+    Args:
+        target: ruamel.yaml CommentedSeq to merge into
+        source: Plain list with new values
+    """
+    # Check if this is a list of named items (common pattern in configs)
+    if (
+        source
+        and isinstance(source[0], dict)
+        and "name" in source[0]
+        and target
+        and isinstance(target[0], CommentedMap)
+        and "name" in target[0]
+    ):
+        # Build a map of existing items by name
+        existing_by_name: dict[str, tuple[int, CommentedMap]] = {}
+        for i, item in enumerate(target):
+            if isinstance(item, CommentedMap) and "name" in item:
+                existing_by_name[item["name"]] = (i, item)
+
+        # Process source items
+        new_items = []
+        for src_item in source:
+            if isinstance(src_item, dict) and "name" in src_item:
+                name = src_item["name"]
+                if name in existing_by_name:
+                    # Update existing item in place
+                    _, existing_item = existing_by_name[name]
+                    _deep_merge_preserved(existing_item, src_item)
+                    new_items.append(existing_item)
+                else:
+                    # New item
+                    new_items.append(src_item)
+            else:
+                new_items.append(src_item)
+
+        # Replace target contents
+        target.clear()
+        target.extend(new_items)
+    else:
+        # Simple list replacement
+        target.clear()
+        target.extend(source)
+
+
+def _save_yaml_preserved(
+    doc: CommentedMap,
+    file_path: Path,
+    force_sync: bool = False,
+) -> None:
+    """
+    Save a ruamel.yaml document preserving comments and formatting.
+
+    Args:
+        doc: CommentedMap to save
+        file_path: Path to save the YAML file
+        force_sync: If True, forces immediate write to disk
+    """
+    yaml_instance = _get_ruamel_yaml()
+    with open(file_path, "w", encoding="utf-8") as f:
+        yaml_instance.dump(doc, f)
+        f.flush()
+
+        if force_sync:
+            os.fsync(f.fileno())
+
+
+def _save_yaml(
+    config_dict: dict,
+    config_file: Path,
+    template_path: Path | None = None,
+    force_sync: bool = False,
+) -> None:
+    """
+    Save YAML config using ruamel.yaml, preserving comments and formatting when possible.
+
+    This function uses a single code path (ruamel.yaml) for all YAML saves:
+    1. If config_file exists: load original, merge changes, save (preserves existing comments)
+    2. If template_path provided: load template, merge changes, save (preserves template comments)
+    3. Otherwise: convert dict to CommentedMap and save (consistent formatting)
+
+    Args:
+        config_dict: Configuration dictionary to save
+        config_file: Destination path for the YAML file
+        template_path: Optional template file to use for formatting new files
+        force_sync: If True, forces immediate write to disk
+    """
+    # Determine which file to use as the formatting source
+    if config_file.exists():
+        # Updating existing file - preserve its formatting
+        doc = _load_yaml_preserved(config_file)
+        _deep_merge_preserved(doc, config_dict)
+    elif template_path and template_path.exists():
+        # Creating from template - preserve template formatting
+        doc = _load_yaml_preserved(template_path)
+        _deep_merge_preserved(doc, config_dict)
+    else:
+        # No source to preserve from - create fresh CommentedMap
+        doc = _dict_to_commented_map(config_dict)
+
+    # Save with ruamel.yaml (consistent behavior for all cases)
+    _save_yaml_preserved(doc, config_file, force_sync=force_sync)
+
+
+# ============================================================================
+# WRITE FUNCTIONS (TOML and JSON)
+# ============================================================================
 
 
 def _save_toml_file(config: dict, file_path: Path) -> None:
     """Save configuration to a TOML file."""
-    if tomli_w is None:
-        raise ConfigError("tomli-w is required to save TOML files.")
-
     try:
-        with open(file_path, "w", encoding="utf-8") as f:
+        with open(file_path, "wb") as f:
             tomli_w.dump(config, f)
     except Exception as e:
         raise ConfigError(f"Error saving TOML file {file_path}: {e}") from e
@@ -429,12 +612,18 @@ def save_config(
     format: str | None = None,
     create_backup: bool = True,
     force_sync: bool = False,
+    template_path: str | Path | None = None,
 ) -> tuple[Path, LlamaFarmConfig]:
     """
-    Save a configuration to disk.
+    Save a configuration to disk, preserving comments and formatting when possible.
+
+    For YAML files, this function preserves comments and formatting by:
+    - If updating an existing file: loads the original, merges changes, saves preserved
+    - If creating from a template: loads the template, merges changes, saves preserved
+    - Otherwise: uses standard YAML dump
 
     Args:
-        config: Configuration dictionary to save.
+        config: Configuration to save.
         config_path: Path where to save the configuration file or directory.
                     If it's a file path, saves to that file.
                     If it's a directory, looks for existing config or defaults to llamafarm.yaml.
@@ -443,9 +632,11 @@ def save_config(
         create_backup: Whether to create a backup of existing file.
         force_sync: If True, forces immediate write to disk for YAML files (slower but safer).
                    Use for critical configurations.
+        template_path: Optional path to a YAML template file. When provided for new files,
+                      the template's comments and formatting will be preserved.
 
     Returns:
-        Path to the saved configuration file.
+        Tuple of (path to saved file, validated config).
 
     Raises:
         ConfigError: If validation fails or file cannot be saved.
@@ -517,7 +708,12 @@ def save_config(
     # Save file based on format
     try:
         if format.lower() == "yaml":
-            _save_yaml_file(config_dict, config_file, force_sync=force_sync)
+            _save_yaml(
+                config_dict,
+                config_file,
+                template_path=Path(template_path) if template_path else None,
+                force_sync=force_sync,
+            )
         elif format.lower() == "toml":
             _save_toml_file(config_dict, config_file)
         elif format.lower() == "json":
@@ -585,22 +781,13 @@ def update_config(
     # Load existing configuration
     config = load_config(config_file, validate=False)
 
-    # Apply updates (deep merge)
-    def deep_update(base: dict, updates: dict) -> dict:
-        """Recursively update a dictionary."""
-        for key, value in updates.items():
-            if isinstance(value, dict) and key in base and isinstance(base[key], dict):
-                deep_update(base[key], value)
-            else:
-                base[key] = value
-        return base
-
+    # Apply updates using deep merge
     config_dict = config.model_dump(mode="json", exclude_none=True)
-    updated_config_dict = deep_update(config_dict, updates)
+    _deep_merge(config_dict, updates)
 
     # Save updated configuration (preserves original format)
     saved_path, cfg = save_config(
-        LlamaFarmConfig(**updated_config_dict),
+        LlamaFarmConfig(**config_dict),
         config_file,
         create_backup=create_backup,
         force_sync=force_sync,

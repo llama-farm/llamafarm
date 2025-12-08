@@ -146,20 +146,20 @@ func (m *PythonEnvManager) getEnv() []string {
 	// with UV's managed Python environment
 	filteredEnv := make([]string, 0, len(env))
 	pythonEnvVars := map[string]bool{
-		"VIRTUAL_ENV":            true,
-		"PYTHONHOME":             true,
-		"PYTHONPATH":             true,
-		"PYTHONSTARTUP":          true,
-		"PYTHONEXECUTABLE":       true,
-		"PYTHONUSERBASE":         true,
-		"CONDA_DEFAULT_ENV":      true,
-		"CONDA_PREFIX":           true,
-		"CONDA_PYTHON_EXE":       true,
-		"PYENV_VERSION":          true,
-		"PYENV_VIRTUAL_ENV":      true,
-		"PIPENV_ACTIVE":          true,
-		"POETRY_ACTIVE":          true,
-		"PDM_PYTHON":             true,
+		"VIRTUAL_ENV":       true,
+		"PYTHONHOME":        true,
+		"PYTHONPATH":        true,
+		"PYTHONSTARTUP":     true,
+		"PYTHONEXECUTABLE":  true,
+		"PYTHONUSERBASE":    true,
+		"CONDA_DEFAULT_ENV": true,
+		"CONDA_PREFIX":      true,
+		"CONDA_PYTHON_EXE":  true,
+		"PYENV_VERSION":     true,
+		"PYENV_VIRTUAL_ENV": true,
+		"PIPENV_ACTIVE":     true,
+		"POETRY_ACTIVE":     true,
+		"PDM_PYTHON":        true,
 	}
 
 	for _, e := range env {

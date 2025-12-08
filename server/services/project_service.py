@@ -132,13 +132,19 @@ class ProjectService:
         config_template_path = cls._resolve_template_path(config_template)
 
         # Generate config directly with correct name
-        cfg_dict = generate_base_config(
+        # Returns (config_dict, template_path) for format preservation
+        cfg_dict, template_path = generate_base_config(
             namespace=namespace,
             name=project_id,
             config_template_path=str(config_template_path),
         )
 
-        return cls.save_config(namespace, project_id, LlamaFarmConfig(**cfg_dict))
+        return cls.save_config(
+            namespace,
+            project_id,
+            LlamaFarmConfig(**cfg_dict),
+            template_path=template_path,
+        )
 
     @classmethod
     def _resolve_template_path(cls, config_template: str | None) -> Path:
@@ -489,8 +495,26 @@ class ProjectService:
         namespace: str,
         project_id: str,
         config: LlamaFarmConfig,
+        template_path: Path | None = None,
     ) -> LlamaFarmConfig:
-        file_path, cfg = save_config(config, cls.get_project_dir(namespace, project_id))
+        """
+        Save a project configuration to disk.
+
+        Args:
+            namespace: The project namespace
+            project_id: The project ID
+            config: The configuration to save
+            template_path: Optional path to a template file. When provided for new files,
+                          the template's comments and formatting will be preserved.
+
+        Returns:
+            The validated configuration that was saved
+        """
+        file_path, cfg = save_config(
+            config,
+            cls.get_project_dir(namespace, project_id),
+            template_path=template_path,
+        )
         logger.debug("Saved project config", config=config, file_path=file_path)
         return cfg
 
