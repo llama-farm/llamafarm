@@ -439,7 +439,7 @@ class LlamaFarmApp {
 
     throw new Error(
       `Server failed to respond after ${maxAttempts} attempts. ` +
-      `Please check logs in ~/.llamafarm/logs/server.log and run "lf services status" for details.`
+      `Please check logs in ${path.join(os.homedir(), '.llamafarm', 'logs', 'server.log')} and run "lf services status" for details.`
     )
   }
 
