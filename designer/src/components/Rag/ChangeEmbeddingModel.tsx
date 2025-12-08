@@ -34,6 +34,7 @@ import { useProject } from '../../hooks/useProjects'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import { validateEmbeddingNavigationState } from '../../utils/security'
+import { validateStrategyName } from '../../utils/strategyValidation'
 import type { ProjectConfig } from '../../types/config'
 import { useCachedModels } from '../../hooks/useModels'
 import modelService from '../../api/modelService'
@@ -182,6 +183,39 @@ function ChangeEmbeddingModel() {
 
   // Editable strategy name - initialize from state
   const [strategyName, setStrategyName] = useState<string>(originalStrategyName)
+
+  // Name validation
+  const nameValidation = validateStrategyName(strategyName)
+  const nameValidationError =
+    strategyName.trim().length > 0 && !nameValidation.isValid
+      ? nameValidation.error
+      : null
+
+  // Duplicate name validation (check against existing strategies)
+  const duplicateNameError = useMemo(() => {
+    if (!projectConfig || !strategyName.trim()) return null
+    const trimmedName = strategyName.trim()
+
+    // Skip check if name hasn't changed
+    if (trimmedName === originalStrategyName) return null
+
+    const currentDb = projectConfig.rag?.databases?.find(
+      (db: any) => db.name === database
+    )
+    if (!currentDb) return null
+
+    const nameExists = currentDb.embedding_strategies?.some(
+      (s: any) => s.name === trimmedName && s.name !== originalStrategyName
+    )
+
+    if (nameExists) {
+      return `An embedding strategy with name "${trimmedName}" already exists`
+    }
+    return null
+  }, [projectConfig, strategyName, originalStrategyName, database])
+
+  // Combined validation error (format validation or duplicate)
+  const combinedNameError = nameValidationError || duplicateNameError
 
   // Initialize strategy name from state
   useEffect(() => {
@@ -1249,17 +1283,20 @@ function ChangeEmbeddingModel() {
       setHasUnsavedChanges(false)
       unsavedChangesContext.setIsDirty(false)
 
-      // Use requestAnimationFrame to ensure state update happens before any navigation
+      // Use double requestAnimationFrame to ensure state update propagates before navigation
+      // This prevents the unsaved changes modal from showing when clicking "Save strategy"
       requestAnimationFrame(() => {
-        if (
-          makeDefault ||
-          (isDefaultStrategy && strategyName.trim() !== originalStrategyName)
-        ) {
-          setReembedOpen(true)
-        } else {
-          toast({ message: 'Strategy saved', variant: 'default' })
-          navigate('/chat/databases')
-        }
+        requestAnimationFrame(() => {
+          if (
+            makeDefault ||
+            (isDefaultStrategy && strategyName.trim() !== originalStrategyName)
+          ) {
+            setReembedOpen(true)
+          } else {
+            toast({ message: 'Strategy saved', variant: 'default' })
+            navigate('/chat/databases')
+          }
+        })
       })
       return true
     } catch (error: any) {
@@ -1364,7 +1401,28 @@ function ChangeEmbeddingModel() {
                   Make default
                 </label>
               )}
-              <Button onClick={() => setConfirmOpen(true)} disabled={isSaving}>
+              <Button
+                onClick={() => {
+                  // Validate before opening modal
+                  if (nameValidationError) {
+                    toast({
+                      message: nameValidationError,
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+                  if (duplicateNameError) {
+                    toast({
+                      message: duplicateNameError,
+                      variant: 'destructive',
+                    })
+                    return
+                  }
+                  // All validation passed, open confirmation modal
+                  setConfirmOpen(true)
+                }}
+                disabled={isSaving || !!combinedNameError}
+              >
                 {isSaving ? 'Saving...' : 'Save strategy'}
               </Button>
             </div>
@@ -1396,8 +1454,18 @@ function ChangeEmbeddingModel() {
                   value={strategyName}
                   onChange={e => setStrategyName(e.target.value)}
                   placeholder="Enter a name"
-                  className="h-9"
+                  className={`h-9 ${combinedNameError ? 'border-destructive' : ''}`}
                 />
+                {combinedNameError ? (
+                  <p className="text-xs text-destructive">
+                    {combinedNameError}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Only letters, numbers, underscores (_) and hyphens (-)
+                    allowed. No spaces.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2466,7 +2534,23 @@ function ChangeEmbeddingModel() {
                 >
                   Cancel
                 </Button>
-                <Button onClick={saveEdited} disabled={isSaving}>
+                <Button
+                  onClick={async () => {
+                    const result = await saveEdited()
+                    if (!result) {
+                      // Save failed - close modal and show error (error is already set in saveEdited)
+                      setConfirmOpen(false)
+                      if (error) {
+                        toast({
+                          message: error,
+                          variant: 'destructive',
+                        })
+                      }
+                    }
+                    // If result is true, saveEdited already handled navigation/closing
+                  }}
+                  disabled={isSaving}
+                >
                   {isSaving
                     ? 'Saving...'
                     : selected?.runtime === 'Local' &&

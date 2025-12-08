@@ -23,7 +23,7 @@ import {
 } from '../ui/dialog'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { getClientSideSecret } from '../../utils/crypto'
-import { validateStrategyName } from '../../utils/security'
+import { validateStrategyName } from '../../utils/strategyValidation'
 import { useCachedModels } from '../../hooks/useModels'
 import modelService from '../../api/modelService'
 import Loader from '../../common/Loader'
@@ -102,7 +102,14 @@ function AddEmbeddingStrategy() {
   const [error, setError] = useState<string | null>(null)
 
   // Name
-  const [name, setName] = useState('New embedding strategy')
+  const [name, setName] = useState('new-embedding-strategy')
+
+  // Name validation
+  const nameValidation = validateStrategyName(name)
+  const nameValidationError =
+    name.trim().length > 0 && !nameValidation.isValid
+      ? nameValidation.error
+      : null
 
   // Copy from existing strategy
   const [copyFrom, setCopyFrom] = useState<string>('')
@@ -435,7 +442,7 @@ function AddEmbeddingStrategy() {
   useEffect(() => {
     // Check if any form field has been modified from defaults
     const hasChanges =
-      name !== 'New embedding strategy' ||
+      name !== 'new-embedding-strategy' ||
       copyFrom !== '' ||
       selected !== null ||
       baseUrl !== 'http://localhost:11434' ||
@@ -1038,9 +1045,9 @@ function AddEmbeddingStrategy() {
     const errors: string[] = []
 
     // Validate strategy name with security checks
-    const nameError = validateStrategyName(name)
-    if (nameError) {
-      errors.push(nameError)
+    const nameValidationResult = validateStrategyName(name)
+    if (!nameValidationResult.isValid && nameValidationResult.error) {
+      errors.push(nameValidationResult.error)
     }
 
     // Validate model selection
@@ -1273,8 +1280,16 @@ function AddEmbeddingStrategy() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Enter a name"
-              className="h-9"
+              className={`h-9 ${nameValidationError ? 'border-destructive' : ''}`}
             />
+            {nameValidationError ? (
+              <p className="text-xs text-destructive">{nameValidationError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Only letters, numbers, underscores (_) and hyphens (-) allowed.
+                No spaces.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">Copy from</Label>
@@ -1308,7 +1323,7 @@ function AddEmbeddingStrategy() {
                   onClick={() => {
                     setCopyFrom('')
                     // Reset form to defaults
-                    setName('New embedding strategy')
+                    setName('new-embedding-strategy')
                     setBaseUrl('http://localhost:11434')
                     setDimension(768)
                     setBatchSize(16)

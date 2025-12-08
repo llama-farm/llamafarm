@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -16,14 +16,18 @@ import {
   STRATEGY_LABELS,
   type StrategyType,
 } from '../../utils/strategyCatalog'
-import { validateNavigationState, parseMetadataFilters, validateStrategyName } from '../../utils/security'
+import {
+  validateNavigationState,
+  parseMetadataFilters,
+} from '../../utils/security'
+import { validateStrategyName } from '../../utils/strategyValidation'
 
 function EditRetrievalStrategy() {
   const navigate = useNavigate()
   const location = useLocation()
   const { toast } = useToast()
   const activeProject = useActiveProject()
-  
+
   // Get project config and database manager
   const { data: projectResp } = useProject(
     activeProject?.namespace || '',
@@ -49,6 +53,40 @@ function EditRetrievalStrategy() {
   const [makeDefault, setMakeDefault] = useState(isDefaultStrategy)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Name validation
+  const nameValidation = validateStrategyName(name)
+  const nameValidationError =
+    name.trim().length > 0 && !nameValidation.isValid
+      ? nameValidation.error
+      : null
+
+  // Duplicate name validation (check against existing strategies)
+  const projectConfig = (projectResp as any)?.project?.config
+  const duplicateNameError = useMemo(() => {
+    if (!projectConfig || !name.trim()) return null
+    const trimmedName = name.trim()
+
+    // Skip check if name hasn't changed
+    if (trimmedName === originalStrategyName) return null
+
+    const currentDb = projectConfig.rag?.databases?.find(
+      (db: any) => db.name === database
+    )
+    if (!currentDb) return null
+
+    const nameExists = currentDb.retrieval_strategies?.some(
+      (s: any) => s.name === trimmedName && s.name !== originalStrategyName
+    )
+
+    if (nameExists) {
+      return `A retrieval strategy with name "${trimmedName}" already exists`
+    }
+    return null
+  }, [projectConfig, name, originalStrategyName, database])
+
+  // Combined validation error (format validation or duplicate)
+  const combinedNameError = nameValidationError || duplicateNameError
 
   // Shared UI helpers
   const inputClass =
@@ -196,7 +234,7 @@ function EditRetrievalStrategy() {
   ): Record<string, unknown> => {
     return getDefaultConfigForRetrieval(type)
   }
-  
+
   const updateHybridSub = (index: number, partial: Partial<HybridSub>) => {
     setHybStrategies(prev => {
       const next = [...prev]
@@ -204,7 +242,7 @@ function EditRetrievalStrategy() {
       return next
     })
   }
-  
+
   const updateHybridSubConfig = (
     index: number,
     updater: (prev: Record<string, unknown>) => Record<string, unknown>
@@ -237,20 +275,28 @@ function EditRetrievalStrategy() {
   // Validation function
   const validateStrategy = (): string[] => {
     const errors: string[] = []
-    
+
     // Validate strategy name with security checks
-    const nameError = validateStrategyName(name)
-    if (nameError) {
-      errors.push(nameError)
+    const nameValidationResult = validateStrategyName(name)
+    if (!nameValidationResult.isValid && nameValidationResult.error) {
+      errors.push(nameValidationResult.error)
     }
-    
+
+    // Check for duplicate name
+    if (duplicateNameError) {
+      errors.push(duplicateNameError)
+    }
+
     // Type-specific validation
     if (strategyType === 'BasicSimilarityStrategy') {
       const topK = Number(basicTopK)
       if (isNaN(topK) || topK < 1 || topK > 1000) {
         errors.push('Top K must be between 1 and 1000')
       }
-      if (basicScoreThreshold.trim() && (Number(basicScoreThreshold) < 0 || Number(basicScoreThreshold) > 1)) {
+      if (
+        basicScoreThreshold.trim() &&
+        (Number(basicScoreThreshold) < 0 || Number(basicScoreThreshold) > 1)
+      ) {
         errors.push('Score threshold must be between 0 and 1')
       }
     } else if (strategyType === 'MetadataFilteredStrategy') {
@@ -272,10 +318,13 @@ function EditRetrievalStrategy() {
       if (isNaN(finalK) || finalK < 1 || finalK > initialK) {
         errors.push('Final K must be between 1 and Initial K')
       }
-    } else if (strategyType === 'HybridUniversalStrategy' && hybStrategies.length < 2) {
+    } else if (
+      strategyType === 'HybridUniversalStrategy' &&
+      hybStrategies.length < 2
+    ) {
       errors.push('At least 2 sub-strategies are required for hybrid approach')
     }
-    
+
     return errors
   }
 
@@ -303,7 +352,7 @@ function EditRetrievalStrategy() {
       const currentDb = projectConfig.rag?.databases?.find(
         (db: any) => db.name === database
       )
-      
+
       if (!currentDb) {
         throw new Error(`Database ${database} not found in configuration`)
       }
@@ -314,7 +363,9 @@ function EditRetrievalStrategy() {
           (s: any) => s.name === name.trim() && s.name !== originalStrategyName
         )
         if (existingStrategy) {
-          throw new Error(`A retrieval strategy with name "${name.trim()}" already exists`)
+          throw new Error(
+            `A retrieval strategy with name "${name.trim()}" already exists`
+          )
         }
       }
 
@@ -381,17 +432,19 @@ function EditRetrievalStrategy() {
       }
 
       // Update the specific strategy
-      const updatedStrategies = currentDb.retrieval_strategies?.map((strategy: any) => {
-        if (strategy.name === originalStrategyName) {
-          return {
-            name: name.trim(),
-            type: strategyType,
-            config,
-            // No 'default' field - it's determined by default_retrieval_strategy at database level
+      const updatedStrategies = currentDb.retrieval_strategies?.map(
+        (strategy: any) => {
+          if (strategy.name === originalStrategyName) {
+            return {
+              name: name.trim(),
+              type: strategyType,
+              config,
+              // No 'default' field - it's determined by default_retrieval_strategy at database level
+            }
           }
+          return strategy
         }
-        return strategy
-      })
+      )
 
       // Determine default strategy name with robust edge case handling
       let updatedDefaultStrategy = currentDb.default_retrieval_strategy
@@ -399,7 +452,9 @@ function EditRetrievalStrategy() {
       if (makeDefault) {
         // User explicitly wants this strategy to be the default
         // Verify the new name exists in the updated strategies list
-        const exists = updatedStrategies.some((s: any) => s.name === name.trim())
+        const exists = updatedStrategies.some(
+          (s: any) => s.name === name.trim()
+        )
         if (exists) {
           updatedDefaultStrategy = name.trim()
         } else {
@@ -409,7 +464,9 @@ function EditRetrievalStrategy() {
       } else if (isDefaultStrategy && name.trim() !== originalStrategyName) {
         // This WAS the default strategy and we're renaming it (but NOT unchecking makeDefault)
         // Update the default reference to the new name
-        const exists = updatedStrategies.some((s: any) => s.name === name.trim())
+        const exists = updatedStrategies.some(
+          (s: any) => s.name === name.trim()
+        )
         if (exists) {
           updatedDefaultStrategy = name.trim()
         } else {
@@ -419,12 +476,16 @@ function EditRetrievalStrategy() {
       } else if (isDefaultStrategy && !makeDefault) {
         // User is UNCHECKING the default status of the current default
         // Assign default to another strategy (first one that's not this one)
-        const otherStrategy = updatedStrategies.find((s: any) => s.name !== name.trim())
+        const otherStrategy = updatedStrategies.find(
+          (s: any) => s.name !== name.trim()
+        )
         updatedDefaultStrategy = otherStrategy?.name || name.trim()
       }
 
       // Final validation: ensure default strategy actually exists in the list
-      const defaultExists = updatedStrategies.some((s: any) => s.name === updatedDefaultStrategy)
+      const defaultExists = updatedStrategies.some(
+        (s: any) => s.name === updatedDefaultStrategy
+      )
       if (!defaultExists && updatedStrategies.length > 0) {
         updatedDefaultStrategy = updatedStrategies[0].name
       }
@@ -481,8 +542,18 @@ function EditRetrievalStrategy() {
             Cancel
           </Button>
           <Button
-            onClick={onSave}
-            disabled={isSaving || !name.trim()}
+            onClick={() => {
+              // Show toast if there's a validation error before attempting save
+              if (combinedNameError) {
+                toast({
+                  message: combinedNameError,
+                  variant: 'destructive',
+                })
+                return
+              }
+              onSave()
+            }}
+            disabled={isSaving || !name.trim() || !!combinedNameError}
           >
             {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
@@ -505,8 +576,16 @@ function EditRetrievalStrategy() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Enter a name"
-              className="h-9"
+              className={`h-9 ${combinedNameError ? 'border-destructive' : ''}`}
             />
+            {combinedNameError ? (
+              <p className="text-xs text-destructive">{combinedNameError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Only letters, numbers, underscores (_) and hyphens (-) allowed.
+                No spaces.
+              </p>
+            )}
           </div>
           <div className="flex items-end">
             <label className="inline-flex items-center gap-2 text-sm">
@@ -531,10 +610,15 @@ function EditRetrievalStrategy() {
                 {STRATEGY_LABELS[strategyType]}
               </div>
               <div className="text-xs text-muted-foreground mt-2">
-                After being created, retrieval strategy types cannot be changed, but you may always{' '}
+                After being created, retrieval strategy types cannot be changed,
+                but you may always{' '}
                 <button
                   className="text-teal-600 dark:text-teal-400 hover:underline"
-                  onClick={() => navigate(`/chat/databases/add-retrieval?database=${database}`)}
+                  onClick={() =>
+                    navigate(
+                      `/chat/databases/add-retrieval?database=${database}`
+                    )
+                  }
                 >
                   create a new retrieval strategy
                 </button>
@@ -1042,4 +1126,3 @@ function EditRetrievalStrategy() {
 }
 
 export default EditRetrievalStrategy
-

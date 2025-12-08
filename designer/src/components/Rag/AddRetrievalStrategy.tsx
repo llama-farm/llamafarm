@@ -24,7 +24,8 @@ import {
   STRATEGY_DESCRIPTIONS,
   type StrategyType,
 } from '../../utils/strategyCatalog'
-import { parseMetadataFilters, validateStrategyName } from '../../utils/security'
+import { parseMetadataFilters } from '../../utils/security'
+import { validateStrategyName } from '../../utils/strategyValidation'
 import { useUnsavedChanges } from '../../contexts/UnsavedChangesContext'
 import UnsavedChangesModal from '../ConfigEditor/UnsavedChangesModal'
 
@@ -33,7 +34,7 @@ function AddRetrievalStrategy() {
   const [searchParams] = useSearchParams()
   const { toast } = useToast()
   const activeProject = useActiveProject()
-  
+
   // Get project config and database manager
   const { data: projectResp } = useProject(
     activeProject?.namespace || '',
@@ -59,16 +60,25 @@ function AddRetrievalStrategy() {
   }, [projectResp, database])
 
   // New retrieval name and default toggle
-  const [name, setName] = useState('New retrieval strategy')
+  const [name, setName] = useState('new-retrieval-strategy')
   const [makeDefault, setMakeDefault] = useState(false)
   const [copyFrom, setCopyFrom] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Name validation
+  const nameValidation = validateStrategyName(name)
+  const nameValidationError =
+    name.trim().length > 0 && !nameValidation.isValid
+      ? nameValidation.error
+      : null
+
   // Unsaved changes tracking
   const unsavedChangesContext = useUnsavedChanges()
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(null)
+  const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(
+    null
+  )
 
   // Selected type + settings state
   const [selectedType, setSelectedType] = useState<StrategyType | null>(null)
@@ -212,7 +222,9 @@ function AddRetrievalStrategy() {
   useEffect(() => {
     if (projectResp && database) {
       const projectConfig = (projectResp as any)?.project?.config
-      const db = projectConfig?.rag?.databases?.find((d: any) => d.name === database)
+      const db = projectConfig?.rag?.databases?.find(
+        (d: any) => d.name === database
+      )
       const hasStrategies = db?.retrieval_strategies?.length > 0
       setMakeDefault(!hasStrategies)
     }
@@ -243,8 +255,12 @@ function AddRetrievalStrategy() {
     // Populate form fields based on strategy type
     if (strategyType === 'BasicSimilarityStrategy') {
       if (typeof config.top_k === 'number') setBasicTopK(String(config.top_k))
-      if (config.distance_metric) setBasicDistance(String(config.distance_metric))
-      if (config.score_threshold !== null && config.score_threshold !== undefined) {
+      if (config.distance_metric)
+        setBasicDistance(String(config.distance_metric))
+      if (
+        config.score_threshold !== null &&
+        config.score_threshold !== undefined
+      ) {
         setBasicScoreThreshold(String(config.score_threshold))
       }
     } else if (strategyType === 'MetadataFilteredStrategy') {
@@ -318,7 +334,7 @@ function AddRetrievalStrategy() {
   useEffect(() => {
     // Check if any form field has been modified from defaults
     const hasChanges =
-      name !== 'New retrieval strategy' ||
+      name !== 'new-retrieval-strategy' ||
       copyFrom !== '' ||
       selectedType !== null ||
       makeDefault !== false ||
@@ -381,24 +397,27 @@ function AddRetrievalStrategy() {
   // Validation function
   const validateStrategy = (): string[] => {
     const errors: string[] = []
-    
+
     if (!selectedType) {
       errors.push('Please select a strategy type')
     }
-    
+
     // Validate strategy name with security checks
-    const nameError = validateStrategyName(name)
-    if (nameError) {
-      errors.push(nameError)
+    const nameValidationResult = validateStrategyName(name)
+    if (!nameValidationResult.isValid && nameValidationResult.error) {
+      errors.push(nameValidationResult.error)
     }
-    
+
     // Type-specific validation
     if (selectedType === 'BasicSimilarityStrategy') {
       const topK = Number(basicTopK)
       if (isNaN(topK) || topK < 1 || topK > 1000) {
         errors.push('Top K must be between 1 and 1000')
       }
-      if (basicScoreThreshold.trim() && (Number(basicScoreThreshold) < 0 || Number(basicScoreThreshold) > 1)) {
+      if (
+        basicScoreThreshold.trim() &&
+        (Number(basicScoreThreshold) < 0 || Number(basicScoreThreshold) > 1)
+      ) {
         errors.push('Score threshold must be between 0 and 1')
       }
     } else if (selectedType === 'MetadataFilteredStrategy') {
@@ -420,10 +439,13 @@ function AddRetrievalStrategy() {
       if (isNaN(finalK) || finalK < 1 || finalK > initialK) {
         errors.push('Final K must be between 1 and Initial K')
       }
-    } else if (selectedType === 'HybridUniversalStrategy' && hybStrategies.length < 2) {
+    } else if (
+      selectedType === 'HybridUniversalStrategy' &&
+      hybStrategies.length < 2
+    ) {
       errors.push('At least 2 sub-strategies are required for hybrid approach')
     }
-    
+
     return errors
   }
 
@@ -451,7 +473,7 @@ function AddRetrievalStrategy() {
       const currentDb = projectConfig.rag?.databases?.find(
         (db: any) => db.name === database
       )
-      
+
       if (!currentDb) {
         throw new Error(`Database ${database} not found in configuration`)
       }
@@ -461,7 +483,9 @@ function AddRetrievalStrategy() {
         (s: any) => s.name === name.trim()
       )
       if (existingStrategy) {
-        throw new Error(`A retrieval strategy with name "${name.trim()}" already exists`)
+        throw new Error(
+          `A retrieval strategy with name "${name.trim()}" already exists`
+        )
       }
 
       // Build config from current state
@@ -540,9 +564,10 @@ function AddRetrievalStrategy() {
       ]
 
       // Determine default strategy name (no 'default' field on strategy objects)
-      const defaultStrategyName = makeDefault || updatedStrategies.length === 1
-        ? newStrategy.name
-        : currentDb.default_retrieval_strategy
+      const defaultStrategyName =
+        makeDefault || updatedStrategies.length === 1
+          ? newStrategy.name
+          : currentDb.default_retrieval_strategy
 
       // Update database configuration
       await databaseManager.updateDatabase.mutateAsync({
@@ -562,7 +587,7 @@ function AddRetrievalStrategy() {
       // Clear unsaved changes BEFORE navigation to prevent modal from showing
       setHasUnsavedChanges(false)
       unsavedChangesContext.setIsDirty(false)
-      
+
       // Use requestAnimationFrame to ensure state update happens before navigation
       requestAnimationFrame(() => {
         navigate('/chat/databases')
@@ -623,8 +648,16 @@ function AddRetrievalStrategy() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Enter a name"
-              className="h-9"
+              className={`h-9 ${nameValidationError ? 'border-destructive' : ''}`}
             />
+            {nameValidationError ? (
+              <p className="text-xs text-destructive">{nameValidationError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Only letters, numbers, underscores (_) and hyphens (-) allowed.
+                No spaces.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">Copy from</Label>
@@ -646,7 +679,7 @@ function AddRetrievalStrategy() {
                   onClick={() => {
                     setCopyFrom('')
                     // Reset form to defaults
-                    setName('New retrieval strategy')
+                    setName('new-retrieval-strategy')
                     setSelectedType(null)
                     setMakeDefault(false)
                     setBasicTopK('10')
@@ -1259,11 +1292,11 @@ function AddRetrievalStrategy() {
             // Clear unsaved changes BEFORE calling onSave to prevent navigation interception
             setHasUnsavedChanges(false)
             unsavedChangesContext.setIsDirty(false)
-            
+
             // Call onSave - it handles setIsSaving and navigation internally
             // The navigation will now proceed without being intercepted
             await onSave()
-            
+
             // If we get here and there's an error, onSave didn't navigate
             if (error) {
               setModalErrorMessage(error)
