@@ -386,7 +386,7 @@ class LlamaFarmApp {
           if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
             throw new Error(
               `Services failed to start within ${timeout / 1000} seconds. ` +
-              `Please check logs in ~/.llamafarm/logs/ and try again.`
+              `Please check logs in ${path.join(os.homedir(), '.llamafarm', 'logs')} and try again.`
             )
           }
           throw new Error(`Failed to start services: ${errorMsg}`)
