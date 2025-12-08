@@ -62,10 +62,10 @@ var initCmd = &cobra.Command{
 			ns = "default"
 		}
 
-	// Ensure server is available (auto-start locally if needed)
-	factory := GetServiceConfigFactory()
-	orchConfig := factory.ServerOnly(serverURL)
-	orchestrator.EnsureServicesOrExitWithConfig(orchConfig, "server")
+		// Ensure server is available (auto-start locally if needed)
+		factory := GetServiceConfigFactory()
+		orchConfig := factory.ServerOnly(serverURL)
+		orchestrator.EnsureServicesOrExitWithConfig(orchConfig, "server")
 
 		// Build URL
 		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
@@ -113,17 +113,9 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Parse response and write project.config as YAML to absProjectDir/llamafarm.yaml
-		var createResp CreateProjectResponse
-		if err := json.Unmarshal(respBody, &createResp); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
-			os.Exit(1)
-		}
-
-		yamlPath := filepath.Join(absProjectDir, "llamafarm.yaml")
-		if err := config.SaveConfig(&createResp.Project.Config, yamlPath); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write llamafarm.yaml: %v\n", err)
-			os.Exit(1)
+		// Copy the server-created config to the project directory
+		if err := EnsureConfigSynced(ns, projectName); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after project creation: %v", err))
 		}
 
 		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absProjectDir)
