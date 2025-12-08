@@ -360,49 +360,59 @@ class TestListDocumentsTaskAggregation:
     """Tests for document aggregation logic in list_database_documents task."""
 
     def test_aggregates_chunks_by_source(self):
-        """Test that chunks from the same source are aggregated."""
-        # This tests the aggregation logic by simulating what the task does
+        """Test that chunks from the same source are aggregated by the real task."""
+        from unittest.mock import patch
+
         from core.base import Document
 
-        # Simulate chunks from two documents
+        # Create test chunks from two documents
         chunks = [
             Document(
                 id="chunk1",
                 content="",
                 source="doc1.pdf",
-                metadata={"size": 1000, "parser": "PDFParser"},
+                metadata={"size": 1000, "parser_type": "PDFParser"},
             ),
             Document(
                 id="chunk2",
                 content="",
                 source="doc1.pdf",
-                metadata={"size": 1000, "parser": "PDFParser"},
+                metadata={"size": 1000, "parser_type": "PDFParser"},
             ),
             Document(
                 id="chunk3",
                 content="",
                 source="doc2.pdf",
-                metadata={"size": 2000, "parser": "TextParser"},
+                metadata={"size": 2000, "parser_type": "TextParser"},
             ),
         ]
 
-        # Simulate aggregation logic
-        documents_map = {}
-        for chunk in chunks:
-            source = chunk.source or "unknown"
-            if source not in documents_map:
-                documents_map[source] = {
-                    "filename": source.split("/")[-1],
-                    "chunk_count": 0,
-                    "size_bytes": chunk.metadata.get("size", 0),
-                }
-            documents_map[source]["chunk_count"] += 1
+        # Mock the config and search API to test the actual task logic
+        mock_config = Mock()
+        mock_config.rag.databases = [Mock(name="test_db")]
 
-        assert len(documents_map) == 2
-        assert documents_map["doc1.pdf"]["chunk_count"] == 2
-        assert documents_map["doc2.pdf"]["chunk_count"] == 1
-        assert documents_map["doc1.pdf"]["size_bytes"] == 1000
-        assert documents_map["doc2.pdf"]["size_bytes"] == 2000
+        mock_search_api = Mock()
+        mock_search_api.vector_store.list_documents.return_value = (chunks, len(chunks))
+
+        with (
+            patch("tasks.stats_tasks.load_config", return_value=mock_config),
+            patch("tasks.stats_tasks.DatabaseSearchAPI", return_value=mock_search_api),
+        ):
+            from tasks.stats_tasks import rag_list_database_documents_task
+
+            # Call the actual task (use .run() to bypass Celery machinery)
+            result = rag_list_database_documents_task.run(
+                project_dir="/fake/path",
+                database="test_db",
+            )
+
+        # Verify the task correctly aggregated the chunks
+        assert result["total_count"] == 2
+        docs_by_name = {d["filename"]: d for d in result["documents"]}
+        assert docs_by_name["doc1.pdf"]["chunk_count"] == 2
+        assert docs_by_name["doc2.pdf"]["chunk_count"] == 1
+        assert docs_by_name["doc1.pdf"]["size_bytes"] == 1000
+        assert docs_by_name["doc2.pdf"]["size_bytes"] == 2000
 
 
 class TestStatsTaskTaskImport:

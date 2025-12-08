@@ -266,15 +266,26 @@ def rag_list_database_documents_task(
         # Initialize search API to access vector store
         search_api = DatabaseSearchAPI(project_dir=project_dir, database=database)
 
-        # Get all chunks to aggregate by source
-        # We need to fetch all chunks because multiple chunks can belong
-        # to the same document, and we need to aggregate them first
-        # before applying document-level pagination
-        chunks, total_chunks = search_api.vector_store.list_documents(
-            limit=10000,  # Fetch up to 10k chunks to aggregate
-            offset=0,
-            include_content=False,
-        )
+        # Fetch all chunks by paginating through the entire collection.
+        # We need all chunks because multiple chunks can belong to the same
+        # document, and we must aggregate them before applying document-level
+        # pagination.
+        chunks: list[Any] = []
+        chunk_page_size = 10000
+        chunk_offset = 0
+
+        while True:
+            page_chunks, total_chunks = search_api.vector_store.list_documents(
+                limit=chunk_page_size,
+                offset=chunk_offset,
+                include_content=False,
+            )
+            chunks.extend(page_chunks)
+
+            # Stop if we've fetched all chunks or got an empty page
+            if len(page_chunks) < chunk_page_size or len(chunks) >= total_chunks:
+                break
+            chunk_offset += chunk_page_size
 
         # Aggregate chunks by source file
         documents_map: dict[str, dict[str, Any]] = {}
