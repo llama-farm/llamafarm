@@ -115,7 +115,8 @@ var initCmd = &cobra.Command{
 
 		// Copy the server-created config to the project directory
 		if err := EnsureConfigSynced(ns, projectName); err != nil {
-			utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after project creation: %v", err))
+			utils.OutputError(fmt.Sprintf("Failed to sync config after project creation: %v", err))
+			os.Exit(1)
 		}
 
 		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absProjectDir)
