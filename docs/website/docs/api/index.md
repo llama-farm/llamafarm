@@ -143,6 +143,7 @@ Common HTTP status codes:
 ### Tasks
 
 - `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get async task status
+- `DELETE /v1/projects/{namespace}/{project}/tasks/{task_id}` - Cancel running task
 
 ### Event Logs
 
@@ -1462,6 +1463,115 @@ Get the status of an asynchronous task.
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
 ```
+
+### Cancel Task
+
+Cancel a running task and revert any files that were successfully processed.
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}/tasks/{task_id}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `task_id` (path, required): Task ID to cancel
+
+**Description:**
+
+This endpoint is primarily used for cancelling dataset processing operations. When a task is cancelled:
+1. All pending Celery tasks are revoked (prevented from starting)
+2. Running tasks are gracefully stopped (current work finishes)
+3. The task is marked as cancelled in the backend
+4. Any files that were successfully processed have their chunks removed from the vector store
+
+**Response:**
+```json
+{
+  "message": "Task cancelled and 3 file(s) reverted",
+  "task_id": "task-123-abc",
+  "cancelled": true,
+  "pending_tasks_cancelled": 5,
+  "running_tasks_at_cancel": 2,
+  "files_reverted": 3,
+  "files_failed_to_revert": 0,
+  "errors": null,
+  "already_completed": false,
+  "already_cancelled": false
+}
+```
+
+**Response Fields:**
+- `message` - Human-readable status message
+- `task_id` - The ID of the cancelled task
+- `cancelled` - Whether the task was successfully cancelled
+- `pending_tasks_cancelled` - Number of queued tasks that were stopped
+- `running_tasks_at_cancel` - Number of tasks that were running when cancelled
+- `files_reverted` - Number of files whose chunks were successfully removed
+- `files_failed_to_revert` - Number of files that failed to clean up
+- `errors` - Array of cleanup errors (if any)
+- `already_completed` - True if task had already completed before cancellation
+- `already_cancelled` - True if task was already cancelled
+
+**Edge Cases:**
+
+**Task Already Completed:**
+```json
+{
+  "message": "Task already success",
+  "task_id": "task-123-abc",
+  "cancelled": false,
+  "already_completed": true,
+  ...
+}
+```
+
+**Task Already Cancelled:**
+```json
+{
+  "message": "Task already cancelled",
+  "task_id": "task-123-abc",
+  "cancelled": true,
+  "already_cancelled": true,
+  "files_reverted": 3,
+  ...
+}
+```
+
+**Cleanup Failures:**
+```json
+{
+  "message": "Task cancelled with cleanup issues: 3 reverted, 1 failed",
+  "task_id": "task-123-abc",
+  "cancelled": true,
+  "files_reverted": 3,
+  "files_failed_to_revert": 1,
+  "errors": [
+    {
+      "file_hash": "abc123def456",
+      "error": "Vector store connection timeout"
+    }
+  ],
+  ...
+}
+```
+
+**Example:**
+```bash
+# Cancel a running dataset processing task
+curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
+```
+
+**HTTP Status Codes:**
+- `200 OK` - Task cancellation succeeded (or task already completed/cancelled)
+- `404 Not Found` - Task not found or not a cancellable task type
+- `500 Internal Server Error` - Server error during cancellation
+
+**Notes:**
+- Only group tasks (dataset processing) can be cancelled
+- **Security:** Tasks can only be cancelled by the namespace/project they belong to
+- Cancellation is idempotent (safe to call multiple times)
+- Cleanup failures don't prevent cancellation from succeeding
+- Successfully processed files are automatically reverted
+- Manual cleanup is available via `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/cleanup/{file_hash}` if automatic cleanup fails
 
 ---
 

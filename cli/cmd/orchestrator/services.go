@@ -51,6 +51,7 @@ type ServiceOrchestrationConfig struct {
 	ServiceNeeds    map[string]ServiceRequirement
 	DefaultTimeout  time.Duration
 	ServiceTimeouts map[string]time.Duration
+	AutoStart       bool
 }
 
 type OrchestrationResult struct {
@@ -301,6 +302,51 @@ func EnsureServicesOrExit(serverURL string, serviceNames ...string) {
 
 	if err := sm.EnsureServices(serviceNames...); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start services: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// EnsureServicesWithConfig ensures services are running, respecting AutoStart flag
+func (sm *ServiceManager) EnsureServicesWithConfig(config *ServiceOrchestrationConfig, serviceNames ...string) error {
+	// If auto-start is disabled, check health but don't start services
+	if !config.AutoStart {
+		var unhealthyServices []string
+
+		for _, serviceName := range serviceNames {
+			serviceDef, exists := ServiceGraph[serviceName]
+			if !exists {
+				return fmt.Errorf("unknown service: %s", serviceName)
+			}
+
+			if !sm.isServiceHealthy(serviceDef) {
+				unhealthyServices = append(unhealthyServices, serviceName)
+			}
+		}
+
+		if len(unhealthyServices) > 0 {
+			return fmt.Errorf("services not running and auto-start is disabled: %s (use --auto-start to enable automatic startup)", strings.Join(unhealthyServices, ", "))
+		}
+
+		if config.PrintStatus {
+			fmt.Println("✓ All required services are already running")
+		}
+		return nil
+	}
+
+	// Auto-start is enabled, use existing logic
+	return sm.EnsureServices(serviceNames...)
+}
+
+// EnsureServicesOrExitWithConfig wraps EnsureServicesWithConfig with exit behavior
+func EnsureServicesOrExitWithConfig(config *ServiceOrchestrationConfig, serviceNames ...string) {
+	sm, err := NewServiceManager(config.ServerURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize service manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := sm.EnsureServicesWithConfig(config, serviceNames...); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

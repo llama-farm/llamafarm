@@ -132,6 +132,97 @@ Open another terminal to run `lf` commands (installed or built from source). Thi
 | Process dataset            | `lf datasets process research-notes`                                       | Streams heartbeat dots during long processing.                |
 | Semantic query             | `lf rag query --database main_db "What did the 2024 FDA letters require?"` | Use `--filter`, `--include-metadata`, etc.                    |
 
+### Global Flags
+
+All `lf` commands support these global flags:
+
+| Flag | Description | Use Case |
+| ---- | ----------- | -------- |
+| `--auto-start` | Automatically start services when needed (default: true). Use `--auto-start=false` to disable. | CI/CD pipelines, manual service management, debugging |
+| `--server-url <url>` | Connect to a specific server | Remote deployments, custom ports |
+| `--debug` | Enable verbose debug output | Troubleshooting, development |
+| `--cwd <path>` | Override working directory | Scripting, automation |
+
+**Example: Manual Service Management**
+```bash
+# Start services manually
+lf start
+
+# In another terminal, run commands without auto-start
+lf chat --auto-start=false "What is LlamaFarm?"
+lf datasets list --auto-start=false
+```
+
+### Common Scenarios
+
+**CI/CD Pipeline (GitHub Actions)**
+```yaml
+# .github/workflows/test.yml
+- name: Start LlamaFarm services
+  run: |
+    docker-compose up -d llamafarm-server llamafarm-rag-worker
+    
+- name: Wait for services
+  run: |
+    timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+    
+- name: Run tests with --auto-start=false
+  run: |
+    lf datasets create --auto-start=false -s pdf_ingest -b main_db test-data
+    lf datasets upload --auto-start=false test-data ./test-files/*.pdf
+    lf datasets process --auto-start=false test-data
+    lf rag query --auto-start=false "test query"
+```
+
+**Development Workflow (Two Terminal Setup)**
+```bash
+# Terminal 1: Start and monitor services
+lf start
+# This keeps services running and shows logs
+
+# Terminal 2: Run commands without triggering restarts
+lf chat --auto-start=false "Develop with stable services"
+lf datasets list --auto-start=false
+lf rag stats --auto-start=false
+
+# Benefits:
+# - Services stay up between commands
+# - Faster command execution (no health checks/restarts)
+# - Easier to debug service issues
+```
+
+**Troubleshooting Tips**
+
+If you see: `Service 'server' is not running and auto-start is disabled`
+
+1. **Check if services are running:**
+   ```bash
+   docker ps | grep llamafarm
+   curl http://localhost:8000/health
+   ```
+
+2. **Start services manually:**
+   ```bash
+   lf start
+   # Or with Docker Compose:
+   docker-compose up -d
+   ```
+
+3. **Remove the flag to enable auto-start:**
+   ```bash
+   # Instead of:
+   lf chat --auto-start=false "query"
+   
+   # Use:
+   lf chat "query"  # Auto-starts if needed
+   ```
+
+4. **Check service logs:**
+   ```bash
+   docker logs llamafarm-server
+   docker logs llamafarm-rag-worker
+   ```
+
 See the [CLI reference](docs/website/docs/cli/index.md) for full command details and troubleshooting advice.
 
 ### Designer Web UI

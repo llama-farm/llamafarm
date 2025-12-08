@@ -81,7 +81,9 @@ Examples:
 		StartConfigWatcherForCommand()
 
 		// Ensure server and RAG are available
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		// Build the request
 		queryRequest := buildQueryRequest(queryText)

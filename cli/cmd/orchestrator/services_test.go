@@ -293,3 +293,101 @@ func TestStopServicesValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestEnsureServicesWithConfig_AutoStartDisabled tests the auto-start disabled behavior
+func TestEnsureServicesWithConfig_AutoStartDisabled(t *testing.T) {
+	sm := &ServiceManager{
+		serverURL: "http://localhost:8000",
+		services:  ServiceGraph,
+	}
+
+	tests := []struct {
+		name         string
+		autoStart    bool
+		serviceNames []string
+		wantErr      bool
+		errContains  string
+		// Note: We can't easily mock isServiceHealthy without refactoring,
+		// so these tests focus on error message formatting and unknown service handling
+	}{
+		{
+			name:         "unknown service returns error immediately",
+			autoStart:    false,
+			serviceNames: []string{"unknown-service"},
+			wantErr:      true,
+			errContains:  "unknown service",
+		},
+		{
+			name:         "empty service list succeeds",
+			autoStart:    false,
+			serviceNames: []string{},
+			wantErr:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &ServiceOrchestrationConfig{
+				ServerURL:   "http://localhost:8000",
+				PrintStatus: false,
+				AutoStart:   tt.autoStart,
+			}
+
+			err := sm.EnsureServicesWithConfig(config, tt.serviceNames...)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("EnsureServicesWithConfig() expected error but got none")
+					return
+				}
+				if tt.errContains != "" && !contains(err.Error(), tt.errContains) {
+					t.Errorf("EnsureServicesWithConfig() error = %v, should contain %v", err, tt.errContains)
+				}
+				return
+			}
+
+			// For non-error cases, we can't fully test without mocking health checks,
+			// but we verify the function doesn't error on empty lists
+			if err != nil && !contains(err.Error(), "not running") {
+				t.Errorf("EnsureServicesWithConfig() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestEnsureServicesWithConfig_ErrorMessageFormat tests that error messages are properly formatted
+func TestEnsureServicesWithConfig_ErrorMessageFormat(t *testing.T) {
+	// This test verifies the error message format includes all unhealthy services
+	// Since we can't easily mock isServiceHealthy, we test the error message structure
+	// by checking that the error message format is correct when services are unhealthy
+	// We use port 59999 to ensure no server is running
+
+	sm := &ServiceManager{
+		serverURL: "http://localhost:59999",
+		services:  ServiceGraph,
+	}
+
+	config := &ServiceOrchestrationConfig{
+		ServerURL:   "http://localhost:59999",
+		PrintStatus: false,
+		AutoStart:   false,
+	}
+
+	// Test with a known service (will fail health check if server is not running)
+	// This tests the error message format
+	err := sm.EnsureServicesWithConfig(config, "server")
+
+	// The server should not be running during unit tests, so we must get an error
+	if err == nil {
+		t.Fatal("EnsureServicesWithConfig() expected error when server is not running and AutoStart is false, but got nil")
+	}
+
+	// Verify error message contains expected format
+	errMsg := err.Error()
+	if !contains(errMsg, "services not running") || !contains(errMsg, "auto-start is disabled") {
+		t.Errorf("EnsureServicesWithConfig() error message should mention 'services not running' and 'auto-start is disabled', got: %v", errMsg)
+	}
+	if !contains(errMsg, "--auto-start") {
+		t.Errorf("EnsureServicesWithConfig() error message should mention '--auto-start', got: %v", errMsg)
+	}
+}

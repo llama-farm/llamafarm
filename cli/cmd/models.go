@@ -61,7 +61,9 @@ Examples:
 		proj = serverCfg.Project
 
 		// Ensure server is up
-		orchestrator.EnsureServicesOrExit(serverURL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverURL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
 		// Fetch models using shared function
 		models := fetchAvailableModels(serverURL, ns, proj)

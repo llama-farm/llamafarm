@@ -14,6 +14,7 @@ var debug bool
 var serverURL string = "http://localhost:8000"
 var ollamaHost string = "http://localhost:11434"
 var serverStartTimeout time.Duration
+var autoStart bool
 
 var rootCmd = &cobra.Command{
 	Use:   "lf",
@@ -77,4 +78,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "http://localhost:8000", "LlamaFarm server URL")
 	rootCmd.PersistentFlags().DurationVar(&serverStartTimeout, "server-start-timeout", 45*time.Second, "How long to wait for local server to become ready when auto-starting (e.g. 45s, 1m)")
 	rootCmd.PersistentFlags().StringVar(&utils.OverrideCwd, "cwd", "", "Override the current working directory for CLI operations")
+	rootCmd.PersistentFlags().BoolVar(&autoStart, "auto-start", true, "Automatically start services when needed (default: true). Use --auto-start=false to disable.")
 }

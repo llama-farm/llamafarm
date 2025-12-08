@@ -50,7 +50,9 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		// Confirm operation unless force flag is set
 		if !force {
@@ -118,7 +120,9 @@ Examples:
 
 		StartConfigWatcherForCommand()
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		// Build deletion request
 		req := buildDeleteRequest()
@@ -187,7 +191,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		// Get prune preview
 		preview, err := getPrunePreview(serverCfg, manageDatabase)
@@ -253,7 +259,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		fmt.Printf("📦 Exporting database to %s...\n", outputFile)
 
@@ -299,7 +307,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		// Read import file
 		importData, err := readImportFile(inputFile)

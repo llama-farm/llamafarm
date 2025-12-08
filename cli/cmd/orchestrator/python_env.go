@@ -139,7 +139,44 @@ func (m *PythonEnvManager) ValidatePythonInstallation() error {
 // getEnv returns the environment variables for UV commands
 // This ensures UV uses our managed directories
 func (m *PythonEnvManager) getEnv() []string {
+	// Start with the current environment
 	env := os.Environ()
+
+	// Filter out Python-related environment variables that could interfere
+	// with UV's managed Python environment
+	filteredEnv := make([]string, 0, len(env))
+	pythonEnvVars := map[string]bool{
+		"VIRTUAL_ENV":            true,
+		"PYTHONHOME":             true,
+		"PYTHONPATH":             true,
+		"PYTHONSTARTUP":          true,
+		"PYTHONEXECUTABLE":       true,
+		"PYTHONUSERBASE":         true,
+		"CONDA_DEFAULT_ENV":      true,
+		"CONDA_PREFIX":           true,
+		"CONDA_PYTHON_EXE":       true,
+		"PYENV_VERSION":          true,
+		"PYENV_VIRTUAL_ENV":      true,
+		"PIPENV_ACTIVE":          true,
+		"POETRY_ACTIVE":          true,
+		"PDM_PYTHON":             true,
+	}
+
+	for _, e := range env {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 0 {
+			continue
+		}
+		varName := parts[0]
+
+		// Case-insensitive comparison to prevent bypass attacks (e.g., Virtual_Env, virtual_env)
+		// This is critical on Windows where env vars are case-insensitive
+		if _, isPythonEnv := pythonEnvVars[strings.ToUpper(varName)]; !isPythonEnv {
+			filteredEnv = append(filteredEnv, e)
+		}
+	}
+
+	env = filteredEnv
 
 	// Add UV-specific environment variables if needed
 	llamafarmDir := filepath.Join(m.homeDir, ".llamafarm")

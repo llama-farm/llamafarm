@@ -50,7 +50,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		stats, err := fetchRAGStats(serverCfg, statsDatabase)
 		if err != nil {
@@ -86,7 +88,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		health, err := fetchRAGHealth(serverCfg, statsDatabase)
 		if err != nil {
@@ -124,7 +128,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		docs, err := fetchRAGDocuments(serverCfg, statsDatabase, listLimit, metadataFilters)
 		if err != nil {
@@ -157,7 +163,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		fmt.Println("🔧 Starting database compaction...")
 		result, err := compactRAGDatabase(serverCfg, statsDatabase)
@@ -191,7 +199,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		fmt.Println("🔄 Starting reindexing...")
 		result, err := reindexRAGDatabase(serverCfg, statsDatabase, ragDataStrategy)
