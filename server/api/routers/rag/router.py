@@ -1,5 +1,6 @@
 """RAG router for query endpoints."""
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -193,8 +194,10 @@ async def list_documents(
         raise DatabaseNotFoundError(database_name)
 
     try:
-        # Call Celery task to list documents
-        result = list_rag_documents(
+        # Call Celery task to list documents in a thread to avoid blocking
+        # the event loop (list_rag_documents uses blocking time.sleep polling)
+        result = await asyncio.to_thread(
+            list_rag_documents,
             project_dir=str(project_dir),
             database=database_name,
             limit=limit,
