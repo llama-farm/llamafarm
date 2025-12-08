@@ -2380,7 +2380,13 @@ nx start universal-runtime
 | **Files** | `DELETE /v1/files/{id}` | Delete uploaded file |
 | **OCR** | `POST /v1/ocr` | Extract text from images/PDFs |
 | **Documents** | `POST /v1/documents/extract` | Extract structured data from documents |
-| **Classification** | `POST /v1/classify` | Classify text (sentiment, etc.) |
+| **Classification** | `POST /v1/classify` | Classify text using pre-trained models (sentiment, etc.) |
+| **Custom Classifier** | `POST /v1/classifier/fit` | Train custom classifier (SetFit few-shot) |
+| **Custom Classifier** | `POST /v1/classifier/predict` | Classify with trained custom model |
+| **Custom Classifier** | `POST /v1/classifier/save` | Save trained classifier |
+| **Custom Classifier** | `POST /v1/classifier/load` | Load saved classifier |
+| **Custom Classifier** | `GET /v1/classifier/models` | List saved classifiers |
+| **Custom Classifier** | `DELETE /v1/classifier/models/{name}` | Delete saved classifier |
 | **NER** | `POST /v1/ner` | Named entity recognition |
 | **Reranking** | `POST /v1/rerank` | Rerank documents by relevance |
 | **Anomaly** | `POST /v1/anomaly/fit` | Train anomaly detector |
@@ -2405,6 +2411,25 @@ curl -X POST http://localhost:11540/v1/ocr \
 curl -X POST http://localhost:11540/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{"model": "sentence-transformers/all-MiniLM-L6-v2", "input": "Hello world"}'
+```
+
+**Custom Classification (SetFit):**
+```bash
+# Train a custom classifier with few examples
+curl -X POST http://localhost:11540/v1/classifier/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier",
+    "training_data": [
+      {"text": "Book a flight", "label": "booking"},
+      {"text": "Cancel my order", "label": "cancellation"}
+    ]
+  }'
+
+# Classify new texts
+curl -X POST http://localhost:11540/v1/classifier/predict \
+  -H "Content-Type: application/json" \
+  -d '{"model": "intent-classifier", "texts": ["I need to reserve a room"]}'
 ```
 
 **Anomaly Detection:**

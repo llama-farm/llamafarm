@@ -135,6 +135,78 @@ Deep learning approach for complex patterns.
 
 ---
 
+## Understanding Contamination
+
+The `contamination` parameter is one of the most important settings for anomaly detection. It tells the algorithm what percentage of your **training data** might already contain anomalies.
+
+### What Contamination Does
+
+- **Sets the decision boundary**: The algorithm uses contamination to determine where to draw the line between normal and anomalous
+- **Affects threshold calculation**: During training, the model computes an anomaly threshold such that approximately `contamination × 100%` of training samples would be flagged
+- **Impacts sensitivity**: Lower contamination = stricter definition of "normal" = more sensitive to deviations
+
+### How to Choose Contamination
+
+| Scenario | Contamination | When to Use |
+|----------|---------------|-------------|
+| **Very clean data** | 0.01 - 0.05 | Curated datasets, lab conditions, known-good samples |
+| **Typical production** | 0.05 - 0.15 | API logs, sensor readings, user activity |
+| **Noisy data** | 0.15 - 0.30 | Raw logs with errors, unfiltered data streams |
+| **Unknown** | 0.10 (default) | Start here and tune based on results |
+
+### Impact on Detection
+
+```
+Training data: [normal, normal, normal, anomaly, normal, ...]
+                                         ↑
+                           If contamination=0.1, model expects
+                           ~10% of training data to be anomalies
+```
+
+**Contamination too low** (e.g., 0.01 when true rate is 0.10):
+- Model assumes almost all training data is normal
+- Decision boundary is too tight around training distribution
+- Result: **High false negatives** (misses real anomalies that look like the "contaminated" training samples)
+
+**Contamination too high** (e.g., 0.30 when true rate is 0.05):
+- Model assumes many normal samples are actually anomalies
+- Decision boundary is too loose
+- Result: **High false positives** (flags normal variations as anomalies)
+
+### Per-Algorithm Behavior
+
+| Algorithm | How Contamination is Used |
+|-----------|--------------------------|
+| **Isolation Forest** | Sets the `contamination` parameter directly, which determines the threshold on the anomaly score distribution |
+| **One-Class SVM** | Maps to the `nu` parameter (upper bound on training error fraction) |
+| **Local Outlier Factor** | Sets the contamination parameter for decision threshold |
+| **Autoencoder** | Sets the reconstruction error threshold at the contamination percentile |
+
+### Best Practices
+
+1. **Start with 0.1** (10%) if you don't know the true anomaly rate
+2. **Use domain knowledge**: If you know ~5% of API requests are errors, set `contamination: 0.05`
+3. **Prefer clean training data**: If possible, curate a dataset of known-normal samples and use `contamination: 0.01-0.05`
+4. **Tune empirically**: Run detection on labeled test data and adjust based on precision/recall
+5. **Consider the cost of errors**: High-stakes (security) → lower contamination; low-stakes (monitoring) → higher contamination
+
+### Example: Tuning Contamination
+
+```bash
+# Start conservative (assume clean training data)
+curl -X POST http://localhost:11540/v1/anomaly/fit \
+  -d '{"model": "test", "data": [...], "contamination": 0.05}'
+
+# Test on data with known anomalies
+curl -X POST http://localhost:11540/v1/anomaly/score \
+  -d '{"model": "test", "data": [known_normal, known_anomaly, ...]}'
+
+# If too many false positives → increase contamination
+# If missing anomalies → decrease contamination (or clean training data)
+```
+
+---
+
 ## Mixed Data Types
 
 Real-world data often includes both numeric and categorical features. Use the `schema` parameter to automatically encode mixed data.

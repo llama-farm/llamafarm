@@ -13,7 +13,8 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 |-----------|----------|----------|
 | [OCR](#ocr-text-extraction) | `POST /v1/ocr` | Extract text from images/PDFs |
 | [Document Extraction](#document-extraction) | `POST /v1/documents/extract` | Extract structured data from forms |
-| [Text Classification](#text-classification) | `POST /v1/classify` | Sentiment, spam detection, routing |
+| [Text Classification](#text-classification-pre-trained) | `POST /v1/classify` | Sentiment, spam detection (pre-trained models) |
+| [Custom Classification](#custom-text-classification-setfit) | `POST /v1/classifier/*` | Train your own classifier with few examples |
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
 | [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
@@ -164,9 +165,14 @@ curl -X POST http://localhost:11540/v1/documents/extract \
 
 ---
 
-## Text Classification
+## Text Classification (Pre-trained)
 
-Classify text using any HuggingFace sequence classification model.
+Use **pre-trained HuggingFace models** for common classification tasks like sentiment analysis. No training required - just pick a model and classify.
+
+:::tip When to Use This vs Custom Classification
+- **Use `/v1/classify`** when a pre-trained model exists for your task (sentiment, spam, toxicity)
+- **Use `/v1/classifier/*`** when you need custom categories specific to your domain (intent routing, ticket categorization)
+:::
 
 ### Popular Models
 
@@ -204,6 +210,177 @@ curl -X POST http://localhost:11540/v1/classify \
   "model": "distilbert-base-uncased-finetuned-sst-2-english"
 }
 ```
+
+---
+
+## Custom Text Classification (SetFit)
+
+Train **your own text classifier** with as few as 8-16 examples per class using [SetFit](https://huggingface.co/docs/setfit) (Sentence Transformer Fine-tuning). Perfect for domain-specific classification tasks.
+
+:::info How SetFit Works
+SetFit uses contrastive learning to fine-tune a sentence-transformer model on your examples, then trains a small classification head. This approach achieves strong performance with minimal labeled data and no GPU required.
+:::
+
+### When to Use Custom Classification
+
+| Scenario | Use `/v1/classify` | Use `/v1/classifier/*` |
+|----------|-------------------|----------------------|
+| Sentiment analysis | ✅ Pre-trained models available | ❌ Overkill |
+| Intent routing (booking, support, billing) | ❌ No pre-trained model | ✅ Train on your intents |
+| Ticket categorization | ❌ Domain-specific | ✅ Train on your categories |
+| Content moderation | ✅ Toxicity models exist | ✅ If you need custom rules |
+| Document classification | ❌ Domain-specific | ✅ Train on your doc types |
+
+### Workflow Overview
+
+```
+1. Fit model     →  2. Predict  →  3. Save (optional)
+   /classifier/fit    /classifier/predict    /classifier/save
+```
+
+### Step 1: Train Your Classifier
+
+Provide labeled examples (minimum 2, recommended 8-16 per class):
+
+```bash
+curl -X POST http://localhost:11540/v1/classifier/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier",
+    "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "training_data": [
+      {"text": "I need to book a flight to NYC", "label": "booking"},
+      {"text": "Reserve a hotel room for next week", "label": "booking"},
+      {"text": "Can I get a table for two tonight?", "label": "booking"},
+      {"text": "Cancel my reservation please", "label": "cancellation"},
+      {"text": "I want to cancel my booking", "label": "cancellation"},
+      {"text": "Please remove my appointment", "label": "cancellation"},
+      {"text": "What is the weather like?", "label": "other"},
+      {"text": "Tell me a joke", "label": "other"}
+    ],
+    "num_iterations": 20
+  }'
+```
+
+**Response:**
+```json
+{
+  "object": "fit_result",
+  "model": "intent-classifier",
+  "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "samples_fitted": 8,
+  "num_classes": 3,
+  "labels": ["booking", "cancellation", "other"],
+  "training_time_ms": 1234.56,
+  "status": "fitted"
+}
+```
+
+### Step 2: Classify New Texts
+
+```bash
+curl -X POST http://localhost:11540/v1/classifier/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier",
+    "texts": [
+      "I want to book a car for tomorrow",
+      "Please cancel everything",
+      "How are you doing?"
+    ]
+  }'
+```
+
+**Response:**
+```json
+{
+  "object": "list",
+  "data": [
+    {"text": "I want to book a car for tomorrow", "label": "booking", "score": 0.94, "all_scores": {"booking": 0.94, "cancellation": 0.03, "other": 0.03}},
+    {"text": "Please cancel everything", "label": "cancellation", "score": 0.91, "all_scores": {"booking": 0.04, "cancellation": 0.91, "other": 0.05}},
+    {"text": "How are you doing?", "label": "other", "score": 0.87, "all_scores": {"booking": 0.06, "cancellation": 0.07, "other": 0.87}}
+  ],
+  "model": "intent-classifier"
+}
+```
+
+### Step 3: Save for Production
+
+Save your trained model to persist across server restarts:
+
+```bash
+curl -X POST http://localhost:11540/v1/classifier/save \
+  -H "Content-Type: application/json" \
+  -d '{"model": "intent-classifier"}'
+```
+
+**Response:**
+```json
+{
+  "object": "save_result",
+  "model": "intent-classifier",
+  "path": "~/.llamafarm/models/classifier/intent-classifier",
+  "status": "saved"
+}
+```
+
+### Loading Saved Models
+
+After a server restart, load your saved model:
+
+```bash
+curl -X POST http://localhost:11540/v1/classifier/load \
+  -H "Content-Type: application/json" \
+  -d '{"model": "intent-classifier"}'
+```
+
+### List & Delete Models
+
+```bash
+# List all saved classifiers
+curl http://localhost:11540/v1/classifier/models
+
+# Delete a model
+curl -X DELETE http://localhost:11540/v1/classifier/models/intent-classifier
+```
+
+### API Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/classifier/fit` | POST | Train a classifier on labeled examples |
+| `/v1/classifier/predict` | POST | Classify texts using a trained model |
+| `/v1/classifier/save` | POST | Save model to disk |
+| `/v1/classifier/load` | POST | Load model from disk |
+| `/v1/classifier/models` | GET | List saved models |
+| `/v1/classifier/models/{name}` | DELETE | Delete a saved model |
+
+### Training Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | required | Unique name for your classifier |
+| `base_model` | string | `all-MiniLM-L6-v2` | Sentence transformer to fine-tune |
+| `training_data` | array | required | List of `{text, label}` objects |
+| `num_iterations` | int | 20 | Contrastive learning iterations |
+| `batch_size` | int | 16 | Training batch size |
+
+### Recommended Base Models
+
+| Model | Size | Speed | Quality |
+|-------|------|-------|---------|
+| `sentence-transformers/all-MiniLM-L6-v2` | 80MB | Fast | Good |
+| `sentence-transformers/all-mpnet-base-v2` | 420MB | Medium | Better |
+| `BAAI/bge-small-en-v1.5` | 130MB | Fast | Good |
+| `BAAI/bge-base-en-v1.5` | 440MB | Medium | Better |
+
+### Best Practices
+
+1. **Provide diverse examples**: Include variations in phrasing, not just similar sentences
+2. **Balance classes**: Aim for similar numbers of examples per class
+3. **Start small**: 8-16 examples per class is often sufficient
+4. **Test before saving**: Verify accuracy on held-out examples before saving
+5. **Iterate**: Add more examples for classes with lower accuracy
 
 ---
 

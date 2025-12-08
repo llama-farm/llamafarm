@@ -788,6 +788,7 @@ async def classify_texts(request: ClassifyRequest):
         return {
             "object": "list",
             "data": data,
+            "total_count": len(data),
             "model": request.model,
             "usage": {
                 "texts_processed": len(request.texts),
@@ -1462,6 +1463,7 @@ async def score_anomalies(request: AnomalyScoreRequest):
         return {
             "object": "list",
             "data": data,
+            "total_count": len(results),
             "model": request.model,
             "backend": request.backend,
             "summary": {
@@ -1540,6 +1542,14 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
                 else [],
             }
 
+        # Auto-save model to prevent data loss on restart
+        saved_paths = await _auto_save_anomaly_model(
+            model=model,
+            model_name=request.model,
+            backend=request.backend,
+            cache_key=cache_key,
+        )
+
         return {
             "object": "fit_result",
             "model": request.model,
@@ -1549,6 +1559,8 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             "model_params": result.model_params,
             "encoder": encoder_info,
             "status": "fitted",
+            "auto_saved": saved_paths["model_path"] is not None,
+            "saved_path": saved_paths["model_path"],
         }
 
     except Exception as e:
@@ -1615,6 +1627,7 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         return {
             "object": "list",
             "data": data,
+            "total_count": len(results),
             "model": request.model,
             "backend": request.backend,
             "summary": {
@@ -1694,6 +1707,53 @@ def _get_model_path(model_name: str, backend: str) -> Path:
     safe_backend = _sanitize_model_name(backend)
     filename = f"{safe_name}_{safe_backend}"
     return ANOMALY_MODELS_DIR / filename
+
+
+async def _auto_save_anomaly_model(
+    model: BaseModel,
+    model_name: str,
+    backend: str,
+    cache_key: str,
+) -> dict[str, str | None]:
+    """Auto-save anomaly model after fit to prevent data loss.
+
+    Models are saved immediately after training to ensure they persist
+    across server restarts without requiring an explicit /save call.
+
+    Returns:
+        Dict with saved file paths (model_path, encoder_path)
+    """
+    try:
+        # Create models directory if needed
+        ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Generate path from model name
+        save_path = _get_model_path(model_name, backend)
+        await model.save(str(save_path))
+
+        # Determine actual saved file
+        if backend == "autoencoder":
+            actual_path = save_path.with_suffix(".pt")
+        else:
+            actual_path = save_path.with_suffix(".joblib")
+            if not actual_path.exists():
+                actual_path = save_path.with_suffix(".pkl")
+
+        # Save encoder if one exists for this model
+        encoder_path = None
+        if cache_key in _encoders:
+            encoder = _encoders[cache_key]
+            encoder_save_path = save_path.parent / f"{save_path.name}_encoder.json"
+            encoder.save(encoder_save_path)
+            encoder_path = str(encoder_save_path)
+            logger.info(f"Auto-saved feature encoder to {encoder_save_path}")
+
+        logger.info(f"Auto-saved anomaly model to {actual_path}")
+        return {"model_path": str(actual_path), "encoder_path": encoder_path}
+
+    except Exception as e:
+        logger.warning(f"Auto-save failed (model still in memory): {e}")
+        return {"model_path": None, "encoder_path": None}
 
 
 @app.post("/v1/anomaly/save")
@@ -1997,6 +2057,34 @@ def _get_classifier_path(model_name: str) -> Path:
     return CLASSIFIER_MODELS_DIR / safe_name
 
 
+async def _auto_save_classifier_model(
+    model: "ClassifierModel",
+    model_name: str,
+) -> dict[str, str | None]:
+    """Auto-save classifier model after fit to prevent data loss.
+
+    Models are saved immediately after training to ensure they persist
+    across server restarts without requiring an explicit /save call.
+
+    Returns:
+        Dict with saved file path
+    """
+    try:
+        # Create models directory if needed
+        CLASSIFIER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Generate path from model name
+        save_path = _get_classifier_path(model_name)
+        await model.save(str(save_path))
+
+        logger.info(f"Auto-saved classifier model to {save_path}")
+        return {"model_path": str(save_path)}
+
+    except Exception as e:
+        logger.warning(f"Auto-save failed (model still in memory): {e}")
+        return {"model_path": None}
+
+
 async def load_classifier(
     model_id: str,
     base_model: str = "sentence-transformers/all-MiniLM-L6-v2",
@@ -2108,6 +2196,12 @@ async def fit_classifier(request: ClassifierFitRequest):
             batch_size=request.batch_size,
         )
 
+        # Auto-save model to prevent data loss on restart
+        saved_paths = await _auto_save_classifier_model(
+            model=model,
+            model_name=request.model,
+        )
+
         return {
             "object": "fit_result",
             "model": request.model,
@@ -2117,6 +2211,8 @@ async def fit_classifier(request: ClassifierFitRequest):
             "labels": result.labels,
             "training_time_ms": result.training_time_ms,
             "status": "fitted",
+            "auto_saved": saved_paths["model_path"] is not None,
+            "saved_path": saved_paths["model_path"],
         }
 
     except HTTPException:
@@ -2173,6 +2269,7 @@ async def predict_classifier(request: ClassifierPredictRequest):
                 }
                 for r in results
             ],
+            "total_count": len(results),
             "model": request.model,
         }
 
