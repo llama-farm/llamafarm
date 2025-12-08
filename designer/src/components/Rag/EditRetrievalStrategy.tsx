@@ -76,9 +76,8 @@ function EditRetrievalStrategy() {
     if (!currentDb) return null
 
     const nameLower = trimmedName.toLowerCase()
-    const originalLower = originalStrategyName?.toLowerCase()
     const nameExists = currentDb.retrieval_strategies?.some(
-      (s: any) => s.name?.toLowerCase() === nameLower && s.name?.toLowerCase() !== originalLower
+      (s: any) => s.name?.toLowerCase() === nameLower && s.name !== originalStrategyName
     )
 
     if (nameExists) {

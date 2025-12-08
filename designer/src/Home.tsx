@@ -625,7 +625,7 @@ function Home() {
         )}
 
         {/* Search and Sort - only show if there are projects */}
-        {filteredAndSortedProjectNames.length > 0 && (
+        {projectsList.length > 0 && (
           <div className="mb-4 flex flex-col sm:flex-row gap-3">
             <div className="flex-1 flex items-center bg-card rounded-lg px-3 py-2 border border-input">
               <FontIcon type="search" className="w-4 h-4 text-foreground" />

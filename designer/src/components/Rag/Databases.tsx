@@ -337,22 +337,7 @@ function Databases() {
 
   const getEmbeddingSummary = (strategyName: string): string => {
     const strategy = getEmbeddingStrategy(strategyName)
-    
-    // Get model from API response config
-    let model = strategy?.config?.model || strategy?.config?.modelId || strategy?.config?.model_name
-    
-    // If not found in API response, try project config as fallback
-    if (!model && strategy && projectConfig) {
-      const configDb = projectConfig.rag?.databases?.find(
-        (d: any) => d.name === activeDatabase
-      )
-      const fullStrategy = configDb?.embedding_strategies?.find(
-        (s: any) => s.name === strategyName
-      )
-      if (fullStrategy?.config) {
-        model = fullStrategy.config.model || fullStrategy.config.modelId || fullStrategy.config.model_name
-      }
-    }
+    const model = strategy?.config?.model || strategy?.config?.modelId || strategy?.config?.model_name
     
     if (!model) return 'Not configured'
     const sanitized = sanitizeConfigValue(model)

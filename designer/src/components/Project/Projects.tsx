@@ -109,7 +109,9 @@ const Projects = () => {
   }
 
   // Show empty state when no projects exist (and not loading, not error)
-  const showEmptyState = !isLoading && filteredProjects.length === 0 && !error
+  // Check projects.length, not filteredProjects.length, to distinguish between
+  // "no projects" vs "no search results"
+  const showEmptyState = !isLoading && projects.length === 0 && !error
 
   return (
     <div className="w-full h-full transition-colors bg-background pt-16">

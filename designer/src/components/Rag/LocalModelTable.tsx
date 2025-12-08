@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
@@ -27,7 +27,6 @@ export type LocalGroup = {
 }
 
 interface LocalModelTableProps {
-  localGroups: LocalGroup[]
   filteredGroups: LocalGroup[]
   query: string
   onQueryChange: (query: string) => void
@@ -54,7 +53,6 @@ interface LocalModelTableProps {
 }
 
 export function LocalModelTable({
-  localGroups,
   filteredGroups,
   query,
   onQueryChange,
@@ -203,10 +201,9 @@ export function LocalModelTable({
                       v.isDownloaded || downloadState?.state === 'success'
 
                     return (
-                      <>
+                      <Fragment key={v.id}>
                         {/* Mobile layout */}
                         <div
-                          key={v.id}
                           className="md:hidden flex flex-col px-3 py-3 rounded-md hover:bg-accent/40"
                         >
                           <div className="mb-2">
@@ -300,7 +297,6 @@ export function LocalModelTable({
                         </div>
                         {/* Desktop layout */}
                         <div
-                          key={`${v.id}-desktop`}
                           className="hidden md:grid grid-cols-12 items-start md:items-center px-3 py-4 md:py-3 text-sm rounded-md hover:bg-accent/40 gap-x-2 gap-y-2"
                         >
                           <div className="col-span-3 flex items-start md:items-center text-muted-foreground min-w-0 pt-1 md:pt-0">
@@ -440,7 +436,7 @@ export function LocalModelTable({
                             </div>
                           </>
                         )}
-                      </>
+                      </Fragment>
                     )
                   })}
                   <div className="flex justify-end pr-3">

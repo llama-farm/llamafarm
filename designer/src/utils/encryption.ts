@@ -27,8 +27,14 @@ export async function encryptAPIKey(apiKey: string, secret: string): Promise<str
     key,
     enc.encode(apiKey)
   )
-  const base64 = (ab: ArrayBuffer) =>
-    window.btoa(String.fromCharCode(...new Uint8Array(ab)))
+  const base64 = (ab: ArrayBuffer) => {
+    const bytes = new Uint8Array(ab)
+    let binary = ''
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i])
+    }
+    return window.btoa(binary)
+  }
   return JSON.stringify({
     salt: base64(salt.buffer),
     iv: base64(iv.buffer),

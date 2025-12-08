@@ -470,31 +470,6 @@ function AddEmbeddingStrategy() {
       // UniversalEmbedder - local HuggingFace model
       setSourceTab('local')
       setProvider('Ollama (remote)')
-
-      if (config.model) {
-        const modelId = config.model
-        // Use a timeout to ensure localGroups is populated
-        setTimeout(() => {
-          // Find variant by modelIdentifier or mapping
-          const variant = localGroups
-            .flatMap(g => g.variants)
-            .find(
-              v =>
-                v.modelIdentifier === modelId ||
-                modelIdToHuggingFace[v.id] === modelId ||
-                v.id === modelId
-            )
-
-          if (variant) {
-            setSelected({
-              runtime: 'Local',
-              provider: 'Ollama',
-              modelId: variant.id,
-            })
-            setShowModelTable(false)
-          }
-        }, 100)
-      }
     } else if (strategyType === 'OllamaEmbedder') {
       setSourceTab('local')
       setProvider('Ollama (remote)')
@@ -513,7 +488,79 @@ function AddEmbeddingStrategy() {
           modelId: modelName,
         })
       }
-    } else if (strategyType === 'OpenAIEmbedder') {
+    }
+  }, [copyFrom, projectResp, database])
+
+  // Handle UniversalEmbedder model selection after localGroups is populated
+  useEffect(() => {
+    if (!copyFrom || !projectResp) return
+
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig) return
+
+    const db = projectConfig.rag?.databases?.find(
+      (d: any) => d.name === database
+    )
+    const strategy = db?.embedding_strategies?.find(
+      (s: any) => s.name === copyFrom
+    )
+
+    if (!strategy?.config) return
+
+    const config = strategy.config
+    const strategyType = strategy.type || 'OllamaEmbedder'
+
+    if (strategyType === 'UniversalEmbedder' && config.model) {
+      const modelId = config.model
+      // Find variant by modelIdentifier or mapping
+      const variant = localGroups
+        .flatMap(g => g.variants)
+        .find(
+          v =>
+            v.modelIdentifier === modelId ||
+            modelIdToHuggingFace[v.id] === modelId ||
+            v.id === modelId
+        )
+
+      if (variant) {
+        setSelected({
+          runtime: 'Local',
+          provider: 'Ollama',
+          modelId: variant.id,
+        })
+        setShowModelTable(false)
+      }
+    }
+  }, [copyFrom, projectResp, database, localGroups, modelIdToHuggingFace])
+
+  // Handle other cloud strategy types
+  useEffect(() => {
+    if (!copyFrom || !projectResp) return
+
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig) return
+
+    const db = projectConfig.rag?.databases?.find(
+      (d: any) => d.name === database
+    )
+    const strategy = db?.embedding_strategies?.find(
+      (s: any) => s.name === copyFrom
+    )
+
+    if (!strategy?.config) return
+
+    const config = strategy.config
+    const strategyType = strategy.type || 'OllamaEmbedder'
+
+    // Skip UniversalEmbedder and OllamaEmbedder as they're handled above
+    if (
+      strategyType === 'UniversalEmbedder' ||
+      strategyType === 'OllamaEmbedder'
+    ) {
+      return
+    }
+
+    if (strategyType === 'OpenAIEmbedder') {
       setSourceTab('cloud')
       setProvider('OpenAI')
       if (config.model) {
@@ -1149,15 +1196,20 @@ function AddEmbeddingStrategy() {
     }
   }
 
+  const [shouldRedirect, setShouldRedirect] = useState(false)
+
+  useEffect(() => {
+    if (shouldRedirect) {
+      navigate('/chat/databases')
+    }
+  }, [shouldRedirect, navigate])
+
   const finalizeAndRedirect = () => {
     // Ensure unsaved changes are cleared before navigation
     setHasUnsavedChanges(false)
     unsavedChangesContext.setIsDirty(false)
     toast({ message: 'Embedding strategy created', variant: 'default' })
-    // Use requestAnimationFrame to ensure state update happens before navigation
-    requestAnimationFrame(() => {
-      navigate('/chat/databases')
-    })
+    setShouldRedirect(true)
   }
 
   return (
@@ -1456,7 +1508,6 @@ function AddEmbeddingStrategy() {
 
         {sourceTab === 'local' && showModelTable && (
           <LocalModelTable
-            localGroups={localGroups}
             filteredGroups={filteredGroups}
             query={query}
             onQueryChange={setQuery}

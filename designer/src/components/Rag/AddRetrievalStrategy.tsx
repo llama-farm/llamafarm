@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -218,15 +218,20 @@ function AddRetrievalStrategy() {
     setHybStrategies([])
   }, [selectedType])
 
+  // Track initial makeDefault value to prevent false unsaved changes
+  const initialMakeDefault = useRef<boolean | null>(null)
+
   // Ensure default checked when first retrieval
   useEffect(() => {
-    if (projectResp && database) {
+    if (projectResp && database && initialMakeDefault.current === null) {
       const projectConfig = (projectResp as any)?.project?.config
       const db = projectConfig?.rag?.databases?.find(
         (d: any) => d.name === database
       )
       const hasStrategies = db?.retrieval_strategies?.length > 0
-      setMakeDefault(!hasStrategies)
+      const defaultValue = !hasStrategies
+      initialMakeDefault.current = defaultValue
+      setMakeDefault(defaultValue)
     }
   }, [projectResp, database])
 
@@ -332,12 +337,15 @@ function AddRetrievalStrategy() {
 
   // Track changes to form fields (after all state is declared)
   useEffect(() => {
+    // Don't track changes until initial values are set
+    if (initialMakeDefault.current === null && !projectResp) return
+
     // Check if any form field has been modified from defaults
     const hasChanges =
       name !== 'new-retrieval-strategy' ||
       copyFrom !== '' ||
       selectedType !== null ||
-      makeDefault !== false ||
+      makeDefault !== (initialMakeDefault.current ?? false) ||
       basicTopK !== '10' ||
       basicDistance !== 'cosine' ||
       basicScoreThreshold !== '' ||
@@ -387,6 +395,7 @@ function AddRetrievalStrategy() {
     hybStrategies,
     hybCombination,
     hybFinalK,
+    projectResp, // Add projectResp to re-evaluate when data is ready
   ])
 
   // Sync isDirty with context
@@ -450,7 +459,7 @@ function AddRetrievalStrategy() {
   }
 
   // Save handler - updated to use project config
-  const onSave = async () => {
+  const onSave = async (): Promise<{ success: boolean; error?: string }> => {
     try {
       setIsSaving(true)
       setError(null)
@@ -458,9 +467,10 @@ function AddRetrievalStrategy() {
       // Validate
       const validationErrors = validateStrategy()
       if (validationErrors.length > 0) {
-        setError(validationErrors.join(', '))
+        const errorMsg = validationErrors.join(', ')
+        setError(errorMsg)
         setIsSaving(false)
-        return
+        return { success: false, error: errorMsg }
       }
 
       // Get current project config
@@ -593,11 +603,13 @@ function AddRetrievalStrategy() {
       requestAnimationFrame(() => {
         navigate('/chat/databases')
       })
+      return { success: true }
     } catch (error: any) {
       console.error('Failed to create retrieval strategy:', error)
-      setError(error.message || 'Failed to create strategy')
-    } finally {
+      const errorMsg = error.message || 'Failed to create strategy'
+      setError(errorMsg)
       setIsSaving(false)
+      return { success: false, error: errorMsg }
     }
   }
 
@@ -1296,11 +1308,11 @@ function AddRetrievalStrategy() {
 
             // Call onSave - it handles setIsSaving and navigation internally
             // The navigation will now proceed without being intercepted
-            await onSave()
+            const result = await onSave()
 
-            // If we get here and there's an error, onSave didn't navigate
-            if (error) {
-              setModalErrorMessage(error)
+            // If save failed, show error and restore unsaved changes flag
+            if (!result.success) {
+              setModalErrorMessage(result.error || 'Failed to save strategy')
               // Restore unsaved changes flag since save failed
               setHasUnsavedChanges(true)
               unsavedChangesContext.setIsDirty(true)

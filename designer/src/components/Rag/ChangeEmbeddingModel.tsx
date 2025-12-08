@@ -1662,7 +1662,6 @@ function ChangeEmbeddingModel() {
 
             {sourceTab === 'local' && showModelTable && (
               <LocalModelTable
-                localGroups={localGroups}
                 filteredGroups={filteredGroups}
                 query={query}
                 onQueryChange={setQuery}
