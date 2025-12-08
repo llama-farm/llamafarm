@@ -478,9 +478,10 @@ function AddRetrievalStrategy() {
         throw new Error(`Database ${database} not found in configuration`)
       }
 
-      // Check if name already exists
+      // Check if name already exists (case-insensitive)
+      const trimmedName = name.trim().toLowerCase()
       const existingStrategy = currentDb.retrieval_strategies?.find(
-        (s: any) => s.name === name.trim()
+        (s: any) => s.name?.toLowerCase() === trimmedName
       )
       if (existingStrategy) {
         throw new Error(

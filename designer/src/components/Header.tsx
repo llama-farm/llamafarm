@@ -34,14 +34,17 @@ function Header({ currentVersion }: HeaderProps) {
 
   // Determine active tab - check for RAG-related routes first
   const pathname = location.pathname
+  const RAG_ROUTE_PATTERNS = [
+    '/add-embedding-strategy',
+    '/add-retrieval-strategy',
+    '/add-retrieval',
+    '/edit-retrieval-strategy',
+    '/change-embedding-model',
+    '/change-embedding',
+  ]
   const isRAGRoute =
     pathname.startsWith('/chat/databases') ||
-    pathname.includes('/add-embedding-strategy') ||
-    pathname.includes('/add-retrieval-strategy') ||
-    pathname.includes('/add-retrieval') ||
-    pathname.includes('/edit-retrieval-strategy') ||
-    pathname.includes('/change-embedding-model') ||
-    pathname.includes('/change-embedding') ||
+    RAG_ROUTE_PATTERNS.some(pattern => pathname.includes(pattern)) ||
     (pathname.includes('/retrieval') && pathname.startsWith('/chat/'))
 
   const isSelected = isRAGRoute ? 'databases' : pathname.split('/')[2]

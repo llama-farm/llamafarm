@@ -316,57 +316,6 @@ export const parseMetadataFilters = (
   return result
 }
 
-/**
- * List of reserved strategy names that should not be allowed
- * These names could cause conflicts or confusion in the system
- */
-export const RESERVED_STRATEGY_NAMES = [
-  'default',
-  'null',
-  'undefined',
-  'none',
-  'system',
-  'admin',
-  'root',
-  'all',
-  'any',
-]
-
-/**
- * Validates a strategy name against reserved names and character restrictions
- * 
- * @param name - The strategy name to validate
- * @returns An error message if invalid, or null if valid
- * 
- * @example
- * validateStrategyName('my-strategy') // Returns null (valid)
- * validateStrategyName('default') // Returns error message
- * validateStrategyName('test<script>') // Returns error message
- */
-export const validateStrategyName = (name: string): string | null => {
-  const trimmedName = name.trim()
-  
-  if (!trimmedName) {
-    return 'Strategy name is required'
-  }
-  
-  // Check for reserved names (case-insensitive)
-  if (RESERVED_STRATEGY_NAMES.includes(trimmedName.toLowerCase())) {
-    return `"${trimmedName}" is a reserved name. Please choose a different name.`
-  }
-  
-  // Check for valid characters (alphanumeric, spaces, hyphens, underscores only)
-  if (!/^[a-zA-Z0-9\s_-]+$/.test(trimmedName)) {
-    return 'Strategy name can only contain letters, numbers, spaces, hyphens, and underscores'
-  }
-  
-  // Check length
-  if (trimmedName.length > 100) {
-    return 'Strategy name must be 100 characters or less'
-  }
-  
-  return null
-}
 
 /**
  * Safely extracts and sanitizes a hostname from a URL configuration value

@@ -61,22 +61,24 @@ function EditRetrievalStrategy() {
       ? nameValidation.error
       : null
 
-  // Duplicate name validation (check against existing strategies)
+  // Duplicate name validation (check against existing strategies, case-insensitive)
   const projectConfig = (projectResp as any)?.project?.config
   const duplicateNameError = useMemo(() => {
     if (!projectConfig || !name.trim()) return null
     const trimmedName = name.trim()
 
-    // Skip check if name hasn't changed
-    if (trimmedName === originalStrategyName) return null
+    // Skip check if name hasn't changed (case-insensitive)
+    if (trimmedName.toLowerCase() === originalStrategyName?.toLowerCase()) return null
 
     const currentDb = projectConfig.rag?.databases?.find(
       (db: any) => db.name === database
     )
     if (!currentDb) return null
 
+    const nameLower = trimmedName.toLowerCase()
+    const originalLower = originalStrategyName?.toLowerCase()
     const nameExists = currentDb.retrieval_strategies?.some(
-      (s: any) => s.name === trimmedName && s.name !== originalStrategyName
+      (s: any) => s.name?.toLowerCase() === nameLower && s.name?.toLowerCase() !== originalLower
     )
 
     if (nameExists) {
@@ -357,14 +359,17 @@ function EditRetrievalStrategy() {
         throw new Error(`Database ${database} not found in configuration`)
       }
 
-      // Check if renamed to an existing name
-      if (name.trim() !== originalStrategyName) {
+      // Check if renamed to an existing name (case-insensitive)
+      const trimmedName = name.trim()
+      if (trimmedName.toLowerCase() !== originalStrategyName?.toLowerCase()) {
+        const nameLower = trimmedName.toLowerCase()
+        const originalLower = originalStrategyName?.toLowerCase()
         const existingStrategy = currentDb.retrieval_strategies?.find(
-          (s: any) => s.name === name.trim() && s.name !== originalStrategyName
+          (s: any) => s.name?.toLowerCase() === nameLower && s.name?.toLowerCase() !== originalLower
         )
         if (existingStrategy) {
           throw new Error(
-            `A retrieval strategy with name "${name.trim()}" already exists`
+            `A retrieval strategy with name "${trimmedName}" already exists`
           )
         }
       }
