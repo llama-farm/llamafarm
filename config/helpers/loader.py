@@ -524,13 +524,16 @@ def _save_yaml_preserved(
         file_path: Path to save the YAML file
         force_sync: If True, forces immediate write to disk
     """
-    yaml_instance = _get_ruamel_yaml()
-    with open(file_path, "w", encoding="utf-8") as f:
-        yaml_instance.dump(doc, f)
-        f.flush()
+    try:
+        yaml_instance = _get_ruamel_yaml()
+        with open(file_path, "w", encoding="utf-8") as f:
+            yaml_instance.dump(doc, f)
+            f.flush()
 
-        if force_sync:
-            os.fsync(f.fileno())
+            if force_sync:
+                os.fsync(f.fileno())
+    except Exception as e:
+        raise ConfigError(f"Error saving YAML file {file_path}: {e}") from e
 
 
 def _save_yaml(
