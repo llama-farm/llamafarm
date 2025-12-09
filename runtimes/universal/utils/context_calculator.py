@@ -128,6 +128,7 @@ def compute_max_context(
     model_size_bytes: int,
     available_memory_bytes: int,
     memory_factor: float = 0.8,
+    max_context_cap: int = 131072,
 ) -> int:
     """Compute maximum safe context size based on available memory.
 
@@ -141,6 +142,9 @@ def compute_max_context(
         model_size_bytes: Size of model file in bytes
         available_memory_bytes: Available memory on target device
         memory_factor: Fraction of available memory to use (default 0.8)
+        max_context_cap: Hard upper limit for context size (default 131072/128K).
+            Most models don't support more than 128K context even with
+            sufficient memory.
 
     Returns:
         Maximum safe context size (number of tokens)
@@ -169,8 +173,16 @@ def compute_max_context(
 
     max_context = int(usable_memory / (bytes_per_token * context_overhead))
 
+    # Apply hard cap - most models don't support extremely large contexts
+    # even if memory would allow it
+    if max_context > max_context_cap:
+        logger.debug(
+            f"Computed context {max_context} exceeds cap {max_context_cap}, capping"
+        )
+        max_context = max_context_cap
+
     # Round down to nearest power of 2 for better memory alignment
-    # Common sizes: 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536
+    # Common sizes: 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072
     power_of_2 = 1
     while power_of_2 * 2 <= max_context:
         power_of_2 *= 2

@@ -11,3 +11,24 @@ model_defaults:
   - pattern: "unsloth/Qwen2.5-Coder-1.5B-Instruct-GGUF"
     n_ctx: 32768
     notes: "Qwen 2.5 supports 32k context"
+
+  - pattern: "unsloth/gpt-oss-*"
+    n_ctx: 8192
+    notes: "GPT-OSS models default to 8k context"
+
+  # Wildcard patterns (lower priority)
+  - pattern: "*Qwen2.5*"
+    n_ctx: 32768
+    notes: "Qwen 2.5 family supports 32k context"
+
+  - pattern: "*Llama-3*"
+    n_ctx: 8192
+    notes: "Llama 3 family default"
+
+  - pattern: "*Mistral*"
+    n_ctx: 32768
+    notes: "Mistral models support 32k context"
+
+  - pattern: "*"
+    n_ctx: 4096
+    notes: "Fallback default for unknown models"
