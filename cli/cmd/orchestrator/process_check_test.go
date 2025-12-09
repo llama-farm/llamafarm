@@ -39,9 +39,8 @@ func TestIsProcessAlive_DeadProcess(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// The process should now be dead
-	// Note: There's a small chance of PID reuse, but it's very unlikely in a test
 	if isProcessAlive(pid) {
-		t.Logf("PID %d may have been reused by another process (rare but possible)", pid)
+		t.Errorf("dead process (PID %d) should not be reported as alive (possible PID reuse, but unlikely)", pid)
 	}
 }
 
@@ -88,6 +87,6 @@ func TestIsProcessAlive_LongRunningProcess(t *testing.T) {
 
 	// Process should now be dead
 	if isProcessAlive(pid) {
-		t.Logf("PID %d may have been reused (rare but possible)", pid)
+		t.Errorf("killed process (PID %d) should not be reported as alive (possible PID reuse, but unlikely)", pid)
 	}
 }
