@@ -1,0 +1,48 @@
+name: Generate Prose Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to generate changelog for (e.g., 0.0.19). Leave empty for latest.'
+        required: false
+        type: string
+      model:
+        description: 'LlamaFarm model to use for generation'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NX_NO_CLOUD: true
+
+jobs:
+  generate-prose-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Generate prose changelog
+        id: generate
+        uses: ./.github/actions/prose-changelog
+        with:
+          version: ${{ inputs.version }}
+          model: ${{ inputs.model }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Add to job summary
+        run: |
+          echo "## Prose Changelog for v${{ steps.generate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.generate.outputs.prose_changelog }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload prose changelog artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prose-changelog-${{ steps.generate.outputs.version }}
+          path: prose-changelog-*.md
+          retention-days: 30

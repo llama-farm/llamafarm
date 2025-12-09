@@ -1,0 +1,46 @@
+name: 'Generate Prose Changelog'
+description: 'Transform conventional commits changelog into detailed prose release notes using LlamaFarm'
+
+inputs:
+  version:
+    description: 'Version to generate changelog for (e.g., 0.0.19). Leave empty for latest.'
+    required: false
+    default: ''
+  model:
+    description: 'LlamaFarm model to use for generation'
+    required: false
+    default: ''
+  changelog_file:
+    description: 'Path to the CHANGELOG.md file'
+    required: false
+    default: 'CHANGELOG.md'
+  openai_api_key:
+    description: 'OpenAI API key for LLM generation'
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: 'The version that was processed'
+    value: ${{ steps.generate.outputs.version }}
+  prose_changelog:
+    description: 'The generated prose changelog content'
+    value: ${{ steps.generate.outputs.prose_changelog }}
+  output_file:
+    description: 'Path to the generated changelog file'
+    value: ${{ steps.generate.outputs.output_file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate prose changelog
+      id: generate
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_CHANGELOG_FILE: ${{ inputs.changelog_file }}
+        OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+      run: |
+        chmod +x ${{ github.action_path }}/generate.sh
+        ${{ github.action_path }}/generate.sh
