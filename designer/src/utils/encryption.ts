@@ -1,11 +1,14 @@
 /**
  * Encrypts an API key using AES-GCM encryption with PBKDF2 key derivation.
- * 
+ *
  * @param apiKey - The API key to encrypt
  * @param secret - The secret key used for encryption
  * @returns A JSON string containing the encrypted data, salt, and IV
  */
-export async function encryptAPIKey(apiKey: string, secret: string): Promise<string> {
+export async function encryptAPIKey(
+  apiKey: string,
+  secret: string
+): Promise<string> {
   const enc = new TextEncoder()
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
@@ -41,4 +44,3 @@ export async function encryptAPIKey(apiKey: string, secret: string): Promise<str
     data: base64(ciphertext),
   })
 }
-
