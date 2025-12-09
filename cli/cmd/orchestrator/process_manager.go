@@ -174,7 +174,6 @@ func (pm *ProcessManager) StartProcess(name string, workDir string, env []string
 	// Check if process is still running using cross-platform check
 	if !isProcessAlive(cmd.Process.Pid) {
 		// Clean up state if process failed to start
-		logF.Close()
 		delete(pm.processes, name)
 		pm.mu.Unlock()
 		return fmt.Errorf("%s process failed to start or crashed immediately. (run `lf services logs -s %s` to view logs)", name, name)
