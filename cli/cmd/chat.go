@@ -179,12 +179,15 @@ Examples:
 		}
 
 		// Ensure required services are running
+		factory := GetServiceConfigFactory()
 		if runNoRAG {
 			// Only need server for non-RAG requests
-			orchestrator.EnsureServicesOrExit(serverURL, "server", "universal-runtime")
+			config := factory.ChatNoRAG(serverURL)
+			orchestrator.EnsureServicesOrExitWithConfig(config, "server", "universal-runtime")
 		} else {
 			// RAG enabled - explicitly ensure all three services
-			orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+			config := factory.RAGCommand(serverURL)
+			orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 		}
 
 		// Send message and get response

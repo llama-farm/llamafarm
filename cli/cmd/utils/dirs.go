@@ -37,7 +37,7 @@ func MoveFile(src, dst string) error {
 	}
 
 	// Fall back to copy + delete
-	if err := copyFile(src, dst); err != nil {
+	if err := CopyFile(src, dst); err != nil {
 		return err
 	}
 
@@ -78,8 +78,8 @@ func isCrossDeviceError(err error) bool {
 	return false
 }
 
-// copyFile copies a single file from src to dst, preserving permissions.
-func copyFile(src, dst string) error {
+// CopyFile copies a single file from src to dst, preserving permissions.
+func CopyFile(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return fmt.Errorf("failed to stat source file: %w", err)
@@ -137,7 +137,7 @@ func copyDir(src, dst string) error {
 				return err
 			}
 		} else {
-			if err := copyFile(srcPath, dstPath); err != nil {
+			if err := CopyFile(srcPath, dstPath); err != nil {
 				return err
 			}
 		}

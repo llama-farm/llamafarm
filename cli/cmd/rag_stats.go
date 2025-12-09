@@ -50,7 +50,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		stats, err := fetchRAGStats(serverCfg, statsDatabase)
 		if err != nil {
@@ -86,7 +88,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		health, err := fetchRAGHealth(serverCfg, statsDatabase)
 		if err != nil {
@@ -124,7 +128,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		docs, err := fetchRAGDocuments(serverCfg, statsDatabase, listLimit, metadataFilters)
 		if err != nil {
@@ -157,7 +163,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		fmt.Println("🔧 Starting database compaction...")
 		result, err := compactRAGDatabase(serverCfg, statsDatabase)
@@ -191,7 +199,9 @@ Examples:
 			os.Exit(1)
 		}
 
-		orchestrator.EnsureServicesOrExit(serverURL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		fmt.Println("🔄 Starting reindexing...")
 		result, err := reindexRAGDatabase(serverCfg, statsDatabase, ragDataStrategy)
@@ -290,7 +300,7 @@ func fetchRAGStats(cfg *config.ServerConfig, database string) (*RAGStats, error)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var stats RAGStats
@@ -324,7 +334,7 @@ func fetchRAGHealth(cfg *config.ServerConfig, database string) (*RAGHealth, erro
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var health RAGHealth
@@ -370,7 +380,7 @@ func fetchRAGDocuments(cfg *config.ServerConfig, database string, limit int, fil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var docs []RAGDocument
@@ -404,7 +414,7 @@ func compactRAGDatabase(cfg *config.ServerConfig, database string) (*CompactionR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var result CompactionResult
@@ -446,7 +456,7 @@ func reindexRAGDatabase(cfg *config.ServerConfig, database string, strategy stri
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%s", utils.PrettyServerError(resp, body))
 	}
 
 	var result ReindexResult

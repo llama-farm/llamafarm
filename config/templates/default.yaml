@@ -10,7 +10,7 @@ runtime:
     - name: default
       description: "Default Universal model"
       provider: universal
-      model: unsloth/gemma-3-1b-it-gguf:Q4_K_M
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
       default: true
       prompt_format: unstructured
       prompts: [default]
@@ -147,8 +147,8 @@ rag:
           type: "UniversalEmbedder"
           priority: 0
           config:
-            model: nomic-ai/nomic-embed-text-v1.5
-            dimension: 768
+            model: sentence-transformers/all-MiniLM-L6-v2
+            dimension: 384
             batch_size: 16
             timeout: 60
             auto_pull: true # Available retrieval strategies

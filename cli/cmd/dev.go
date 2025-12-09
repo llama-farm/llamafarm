@@ -62,7 +62,9 @@ func start(mode SessionMode) {
 	}
 	serverURL = serverInfo.URL
 
-	orchestrator.EnsureServicesOrExit(serverURL, "server", "universal-runtime")
+	factory := GetServiceConfigFactory()
+	config := factory.ServerOnly(serverURL)
+	orchestrator.EnsureServicesOrExitWithConfig(config, "server", "universal-runtime")
 
 	runChatSessionTUI(mode, projectInfo)
 }

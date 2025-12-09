@@ -54,7 +54,7 @@ class QdrantStore(VectorStore):
             "For now, please use ChromaStore."
         )
 
-    def add(self, documents: list[Document]) -> None:
+    def add_documents(self, documents: list[Document]) -> bool:
         """Add documents to Qdrant collection.
 
         This will insert documents with their embeddings and metadata
@@ -89,11 +89,38 @@ class QdrantStore(VectorStore):
         """
         raise NotImplementedError("QdrantStore coming soon!")
 
-    def delete(self, document_ids: list[str]) -> None:
-        """Delete documents from Qdrant collection.
+    def get_documents_by_metadata(
+        self, metadata_filter: dict[str, Any]
+    ) -> list[Document]:
+        """Get documents matching a metadata filter.
 
         Args:
-            document_ids: IDs of documents to delete
+            metadata_filter: Key-value pairs to match against document metadata.
+
+        Returns:
+            List of matching documents.
+
+        Raises:
+            NotImplementedError: This store is not yet implemented
+        """
+        raise NotImplementedError("QdrantStore coming soon!")
+
+    def delete_documents(self, doc_ids: list[str]) -> int:
+        """Delete documents by their IDs.
+
+        Args:
+            doc_ids: List of document IDs to delete.
+
+        Returns:
+            Number of documents deleted.
+
+        Raises:
+            NotImplementedError: This store is not yet implemented
+        """
+        raise NotImplementedError("QdrantStore coming soon!")
+
+    def delete_collection(self) -> bool:
+        """Delete the collection.
 
         Raises:
             NotImplementedError: This store is not yet implemented

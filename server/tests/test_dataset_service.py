@@ -671,40 +671,47 @@ class TestDatasetService:
         mock_file.seek.assert_awaited()
         mock_file.seek.assert_awaited_with(0)
 
+    @pytest.mark.asyncio
     @patch("services.dataset_service.DataService.delete_data_file")
-    @patch.object(ProjectService, "save_config")
+    @patch("services.dataset_service.delete_file_from_rag")
+    @patch.object(ProjectService, "get_project_dir")
     @patch.object(ProjectService, "load_config")
-    def test_remove_file_from_dataset_success(
-        self, mock_load_config, mock_save_config, mock_delete_data_file
+    async def test_remove_file_from_dataset_success(
+        self,
+        mock_load_config,
+        mock_get_project_dir,
+        mock_delete_rag,
+        mock_delete_data_file,
     ):
         """Test successfully removing a file from a dataset."""
         mock_load_config.return_value = self.mock_project_config.model_copy()
+        mock_get_project_dir.return_value = "/mock/project/dir"
+        mock_delete_rag.return_value = {"status": "success", "deleted_count": 5}
 
-        DatasetService.remove_file_from_dataset(
+        await DatasetService.remove_file_from_dataset(
             "test_namespace", "test_project", "dataset1", "file1.pdf"
         )
 
+        mock_delete_rag.assert_awaited_once_with(
+            project_dir="/mock/project/dir",
+            database_name="custom_db",
+            file_hash="file1.pdf",
+        )
         mock_delete_data_file.assert_called_once_with(
             namespace="test_namespace",
             project_id="test_project",
             dataset="dataset1",
             file_hash="file1.pdf",
         )
-        # Note: remove_file_from_dataset doesn't save config anymore as DataService handles deletion
-        # Wait, checking source code...
-        # It calls DataService.delete_data_file.
-        # Does it verify file removal from config?
-        # No, DataService.delete_data_file deletes physical files.
-        # DatasetService needs to remove it from dataset.files list too?
-        # Let me check the source code again.
 
+    @pytest.mark.asyncio
     @patch.object(ProjectService, "load_config")
-    def test_remove_file_from_dataset_dataset_not_found(self, mock_load_config):
+    async def test_remove_file_from_dataset_dataset_not_found(self, mock_load_config):
         """Test removing a file from a non-existent dataset."""
         mock_load_config.return_value = self.mock_project_config
 
         with pytest.raises(DatasetNotFoundError):
-            DatasetService.remove_file_from_dataset(
+            await DatasetService.remove_file_from_dataset(
                 "test_namespace", "test_project", "nonexistent_dataset", "hash"
             )
 

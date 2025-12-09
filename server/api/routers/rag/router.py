@@ -14,6 +14,7 @@ from services.project_service import ProjectService
 
 from .rag_health import RAGHealthResponse, handle_rag_health
 from .rag_query import QueryResponse, RAGQueryRequest, handle_rag_query
+from .rag_stats import RAGStatsResponse, handle_rag_stats
 
 logger = FastAPIStructLogger()
 
@@ -103,6 +104,30 @@ async def get_rag_health(
 
     # Use the handler function from rag_health.py
     return await handle_rag_health(project_obj.config, str(project_dir), database)
+
+
+@router.get("/stats", response_model=RAGStatsResponse)
+async def get_rag_stats(
+    namespace: str,
+    project: str,
+    database: str | None = Query(
+        None, description="Specific database to get stats for"
+    ),
+):
+    """Get statistics for a RAG database including vector counts and storage usage."""
+    logger.bind(namespace=namespace, project=project, database=database)
+
+    # Get project configuration
+    project_obj = ProjectService.get_project(namespace, project)
+    project_dir = ProjectService.get_project_dir(namespace, project)
+
+    if not project_obj.config.rag:
+        raise HTTPException(
+            status_code=400, detail="RAG not configured for this project"
+        )
+
+    # Use the handler function from rag_stats.py
+    return await handle_rag_stats(project_obj.config, str(project_dir), database)
 
 
 def _build_embedding_strategies(db, db_name: str) -> list[EmbeddingStrategyInfo]:

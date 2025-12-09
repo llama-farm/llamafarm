@@ -1,0 +1,31 @@
+{
+  "name": "@llamafarm/docs-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for LlamaFarm documentation - allows AI models to search and read docs",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "llamafarm-docs-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "inspect": "npx @anthropic-ai/mcp-inspector tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "llamafarm",
+    "documentation",
+    "ai"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.6.0"
+  }
+}

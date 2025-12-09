@@ -19,13 +19,13 @@ async def test_language_load(device, test_model_ids):
 
 
 @pytest.mark.asyncio
-async def test_language_generate(device, test_model_ids, sample_text):
-    """Test text generation."""
+async def test_language_generate(device, test_model_ids, sample_messages):
+    """Test text generation with messages."""
     model = LanguageModel(test_model_ids["language"], device)
     await model.load()
 
     result = await model.generate(
-        prompt=sample_text,
+        messages=sample_messages,
         max_tokens=10,
         temperature=0.7,
     )
@@ -61,26 +61,32 @@ async def test_language_model_info(device, test_model_ids):
 
 
 @pytest.mark.asyncio
-async def test_language_temperature_variations(device, test_model_ids, sample_text):
+async def test_language_temperature_variations(device, test_model_ids, sample_messages):
     """Test generation with different temperatures."""
     model = LanguageModel(test_model_ids["language"], device)
     await model.load()
 
     # Test with temperature=0 (deterministic)
-    result1 = await model.generate(prompt=sample_text, max_tokens=5, temperature=0.0)
-    result2 = await model.generate(prompt=sample_text, max_tokens=5, temperature=0.0)
+    result1 = await model.generate(
+        messages=sample_messages, max_tokens=5, temperature=0.0
+    )
+    result2 = await model.generate(
+        messages=sample_messages, max_tokens=5, temperature=0.0
+    )
 
     # Should be identical (or very similar due to floating point)
     assert isinstance(result1, str)
     assert isinstance(result2, str)
 
     # Test with temperature=1.0 (more random)
-    result3 = await model.generate(prompt=sample_text, max_tokens=5, temperature=1.0)
+    result3 = await model.generate(
+        messages=sample_messages, max_tokens=5, temperature=1.0
+    )
     assert isinstance(result3, str)
 
 
 @pytest.mark.asyncio
-async def test_language_streaming(device, test_model_ids, sample_text):
+async def test_language_streaming(device, test_model_ids, sample_messages):
     """Test streaming text generation."""
     model = LanguageModel(test_model_ids["language"], device)
     await model.load()
@@ -91,7 +97,7 @@ async def test_language_streaming(device, test_model_ids, sample_text):
     # Collect streamed tokens
     tokens = []
     async for token in model.generate_stream(
-        prompt=sample_text,
+        messages=sample_messages,
         max_tokens=20,
         temperature=0.7,
     ):
@@ -115,7 +121,7 @@ async def test_language_streaming_with_stop(device, test_model_ids):
     # Generate with a stop sequence
     tokens = []
     async for token in model.generate_stream(
-        prompt="Count: 1, 2, 3,",
+        messages=[{"role": "user", "content": "Count: 1, 2, 3,"}],
         max_tokens=50,
         temperature=0.5,
         stop=["\n"],
@@ -130,7 +136,7 @@ async def test_language_streaming_with_stop(device, test_model_ids):
 
 @pytest.mark.asyncio
 async def test_language_streaming_vs_nonstreaming_equivalence(
-    device, test_model_ids, sample_text
+    device, test_model_ids, sample_messages
 ):
     """Test that streaming and non-streaming produce equivalent results with deterministic settings."""
     model = LanguageModel(test_model_ids["language"], device)
@@ -138,7 +144,7 @@ async def test_language_streaming_vs_nonstreaming_equivalence(
 
     # Generate with non-streaming (deterministic)
     non_streaming_result = await model.generate(
-        prompt=sample_text,
+        messages=sample_messages,
         max_tokens=15,
         temperature=0.0,  # Deterministic
         top_p=1.0,
@@ -147,7 +153,7 @@ async def test_language_streaming_vs_nonstreaming_equivalence(
     # Generate with streaming (deterministic)
     streaming_tokens = []
     async for token in model.generate_stream(
-        prompt=sample_text,
+        messages=sample_messages,
         max_tokens=15,
         temperature=0.0,  # Deterministic
         top_p=1.0,

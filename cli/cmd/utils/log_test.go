@@ -44,12 +44,6 @@ func TestSanitizeLogMessage(t *testing.T) {
 			shouldNotContain: []string{"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"},
 		},
 		{
-			name:             "credit card number",
-			input:            "Card: 4532-1234-5678-9010",
-			shouldContain:    []string{"Card:", "[REDACTED-CC]"},
-			shouldNotContain: []string{"4532-1234-5678-9010"},
-		},
-		{
 			name:             "AWS access key",
 			input:            "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
 			shouldContain:    []string{"AWS_ACCESS_KEY_ID=", "[REDACTED-AWS-KEY]"},

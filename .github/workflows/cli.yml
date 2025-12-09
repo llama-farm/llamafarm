@@ -4,11 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
 
 env:
   NX_VERSION: 21
   NX_NO_CLOUD: true
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   build-cli:
@@ -106,7 +111,31 @@ jobs:
         with:
           name: ${{ matrix.output }}
           path: dist/${{ matrix.output }}
-          retention-days: 30
+          retention-days: 1
+
+      # Upload PR metadata for e2e.yml to reference (only once, on first matrix entry)
+      - name: Create PR info directory
+        if: github.event_name == 'pull_request' && matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        shell: bash
+        run: |
+          mkdir -p ./pr-info
+          echo '${{ github.event.pull_request.number }}' > ./pr-info/pr_number.txt
+          echo '${{ github.event.pull_request.head.sha }}' > ./pr-info/head_sha.txt
+          echo '${{ github.event.pull_request.base.sha }}' > ./pr-info/base_sha.txt
+          echo '${{ github.event.pull_request.head.ref }}' > ./pr-info/head_ref.txt
+          echo '${{ github.event.pull_request.head.repo.full_name }}' > ./pr-info/head_repo.txt
+          echo '${{ github.repository }}' > ./pr-info/base_repo.txt
+          echo "PR metadata created:"
+          cat ./pr-info/*.txt
+
+      - name: Upload PR info artifact
+        if: github.event_name == 'pull_request' && matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-info
+          path: ./pr-info
+          retention-days: 1
+          overwrite: true
 
   # Create checksums for all binaries
   create-checksums:
@@ -123,7 +152,7 @@ jobs:
       - name: Create checksums
         run: |
           cd dist/
-          sha256sum * > checksums.txt
+          find . -maxdepth 1 -type f ! -name checksums.txt -exec sha256sum {} \; > checksums.txt
           cat checksums.txt
 
       - name: Upload checksums

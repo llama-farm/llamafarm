@@ -6,6 +6,7 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, nativeTheme } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { CLIInstaller, InstallProgress } from './backend/cli-installer'
+import { ModelDownloader, ModelDownloadProgress } from './backend/model-downloader'
 import { WindowManager } from './window-manager'
 import { MenuManager } from './menu-manager'
 import * as path from 'path'
@@ -22,6 +23,7 @@ autoUpdater.autoInstallOnAppQuit = true
 
 class LlamaFarmApp {
   private cliInstaller: CLIInstaller
+  private modelDownloader: ModelDownloader
   private windowManager: WindowManager
   private menuManager: MenuManager
   private isQuitting = false
@@ -47,6 +49,7 @@ class LlamaFarmApp {
     }
 
     this.cliInstaller = new CLIInstaller()
+    this.modelDownloader = new ModelDownloader()
     this.windowManager = new WindowManager()
     this.menuManager = new MenuManager()
 
@@ -156,10 +159,13 @@ class LlamaFarmApp {
       // Step 3: Wait for server to be ready
       await this.waitForServer()
 
-      // Step 4: Create main window with Designer UI
+      // Step 4: Check and download required models
+      await this.ensureModels()
+
+      // Step 5: Create main window with Designer UI
       this.windowManager.updateSplash({
         message: 'Opening Designer...',
-        progress: 95
+        progress: 98
       })
 
       // Give a moment for the message to show
@@ -167,7 +173,7 @@ class LlamaFarmApp {
 
       this.windowManager.createMainWindow()
 
-      // Step 5: Check for app updates (in background)
+      // Step 6: Check for app updates (in background)
       if (app.isPackaged) {
         setTimeout(() => {
           autoUpdater.checkForUpdatesAndNotify().catch(err => {
@@ -337,6 +343,70 @@ class LlamaFarmApp {
     }
 
     throw new Error('Server failed to start - timeout waiting for http://127.0.0.1:8000/health')
+  }
+
+  /**
+   * Ensure required models are downloaded
+   */
+  private async ensureModels(): Promise<void> {
+    console.log('Checking required models...')
+
+    this.windowManager.updateSplash({
+      message: 'Checking required models...',
+      progress: 85
+    })
+
+    try {
+      const result = await this.modelDownloader.ensureModels((progress) => {
+        // Map model statuses to splash format
+        const models = progress.models.map(m => ({
+          id: m.id,
+          display_name: m.display_name,
+          status: m.status,
+          progress: m.progress
+        }))
+
+        this.windowManager.updateSplash({
+          message: progress.message,
+          progress: 85 + (progress.overall_progress * 0.1), // 85-95% range
+          models
+        })
+      })
+
+      if (result.success) {
+        console.log('All required models are ready')
+        this.windowManager.updateSplash({
+          message: 'All models ready!',
+          progress: 95,
+          models: result.models.map(m => ({
+            id: m.id,
+            display_name: m.display_name,
+            status: m.status,
+            progress: m.progress
+          }))
+        })
+      } else {
+        // Some models failed but continue anyway
+        const failedModels = result.models.filter(m => m.status === 'error')
+        console.warn('Some models failed to download:', failedModels.map(m => m.id))
+        this.windowManager.updateSplash({
+          message: 'Some models unavailable (continuing...)',
+          progress: 95,
+          models: result.models.map(m => ({
+            id: m.id,
+            display_name: m.display_name,
+            status: m.status,
+            progress: m.progress
+          }))
+        })
+      }
+
+      // Small delay to show the model status
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    } catch (error) {
+      console.warn('Model check failed (continuing anyway):', error)
+      // Model download failure is not critical - continue anyway
+    }
   }
 
   /**

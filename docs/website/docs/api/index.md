@@ -7,6 +7,7 @@ LlamaFarm provides a comprehensive REST API for managing projects, datasets, cha
 The API is served at: `http://localhost:8000`
 
 All versioned endpoints use the `/v1` prefix:
+
 ```
 http://localhost:8000/v1
 ```
@@ -26,23 +27,26 @@ The easiest way to find your namespace and project name is to check your `llamaf
 
 ```yaml
 version: v1
-name: my-project        # This is your project name
-namespace: my-org       # This is your namespace
+name: my-project # This is your project name
+namespace: my-org # This is your namespace
 ```
 
 ### From the File System
 
 Projects are stored in:
+
 ```
 ~/.llamafarm/projects/{namespace}/{project_name}/
 ```
 
 For example, if you see:
+
 ```
 ~/.llamafarm/projects/acme-corp/chatbot/
 ```
 
 Then:
+
 - Namespace: `acme-corp`
 - Project name: `chatbot`
 
@@ -58,6 +62,7 @@ curl http://localhost:8000/v1/projects/my-org
 ### Custom Data Directory
 
 If you've set a custom data directory using the `LF_DATA_DIR` environment variable, check:
+
 ```
 $LF_DATA_DIR/projects/{namespace}/{project_name}/
 ```
@@ -90,6 +95,7 @@ Error responses follow a consistent format with appropriate HTTP status codes (4
 ```
 
 Common HTTP status codes:
+
 - `200 OK` - Request succeeded
 - `201 Created` - Resource created successfully
 - `400 Bad Request` - Invalid request parameters
@@ -100,6 +106,7 @@ Common HTTP status codes:
 ## API Endpoints Overview
 
 ### Projects
+
 - `GET /v1/projects/{namespace}` - List projects
 - `POST /v1/projects/{namespace}` - Create project
 - `GET /v1/projects/{namespace}/{project}` - Get project details
@@ -107,6 +114,7 @@ Common HTTP status codes:
 - `DELETE /v1/projects/{namespace}/{project}` - Delete project
 
 ### Chat
+
 - `POST /v1/projects/{namespace}/{project}/chat/completions` - Send chat message (OpenAI-compatible)
 - `GET /v1/projects/{namespace}/{project}/chat/sessions/{session_id}/history` - Get chat history
 - `DELETE /v1/projects/{namespace}/{project}/chat/sessions/{session_id}` - Delete chat session
@@ -114,6 +122,7 @@ Common HTTP status codes:
 - `GET /v1/projects/{namespace}/{project}/models` - List available models
 
 ### Datasets
+
 - `GET /v1/projects/{namespace}/{project}/datasets` - List datasets
 - `POST /v1/projects/{namespace}/{project}/datasets` - Create dataset
 - `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}` - Delete dataset
@@ -122,6 +131,7 @@ Common HTTP status codes:
 - `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}/data/{file_hash}` - Remove file from dataset
 
 ### RAG (Retrieval-Augmented Generation)
+
 - `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG system
 - `GET /v1/projects/{namespace}/{project}/rag/health` - Check RAG health
 - `GET /v1/projects/{namespace}/{project}/rag/databases` - List databases
@@ -131,13 +141,17 @@ Common HTTP status codes:
 - `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database}` - Delete database
 
 ### Tasks
+
 - `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get async task status
+- `DELETE /v1/projects/{namespace}/{project}/tasks/{task_id}` - Cancel running task
 
 ### Event Logs
+
 - `GET /v1/projects/{namespace}/{project}/event_logs` - List event logs
 - `GET /v1/projects/{namespace}/{project}/event_logs/{event_id}` - Get event details
 
 ### Examples
+
 - `GET /v1/examples` - List available examples
 - `GET /v1/examples/{example_id}/datasets` - List example datasets
 - `POST /v1/examples/{example_id}/import-project` - Import example as new project
@@ -145,15 +159,18 @@ Common HTTP status codes:
 - `POST /v1/examples/{example_id}/import-dataset` - Import specific dataset from example
 
 ### Models Cache
+
 - `GET /v1/models` - List cached models
 - `POST /v1/models/download` - Download/cache a model
 - `DELETE /v1/models/{model_name}` - Delete cached model
 
 ### Health
+
 - `GET /health` - Overall health check
 - `GET /health/liveness` - Liveness probe
 
 ### System
+
 - `GET /` - Basic hello endpoint
 - `GET /info` - System information
 - `GET /v1/system/version-check` - Check for CLI updates
@@ -169,9 +186,11 @@ List all projects in a namespace.
 **Endpoint:** `GET /v1/projects/{namespace}`
 
 **Parameters:**
+
 - `namespace` (path, required): The namespace to list projects from
 
 **Response:**
+
 ```json
 {
   "total": 2,
@@ -192,6 +211,7 @@ List all projects in a namespace.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org
 ```
@@ -203,17 +223,20 @@ Create a new project in a namespace.
 **Endpoint:** `POST /v1/projects/{namespace}`
 
 **Parameters:**
+
 - `namespace` (path, required): The namespace to create the project in
 
 **Request Body:**
+
 ```json
 {
   "name": "my-new-project",
-  "config_template": "server"  // Optional: server, rag, or custom template name
+  "config_template": "server" // Optional: server, rag, or custom template name
 }
 ```
 
 **Response:**
+
 ```json
 {
   "project": {
@@ -225,6 +248,7 @@ Create a new project in a namespace.
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org \
   -H "Content-Type: application/json" \
@@ -238,10 +262,12 @@ Get details of a specific project.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Response:**
+
 ```json
 {
   "project": {
@@ -262,6 +288,7 @@ Get details of a specific project.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot
 ```
@@ -273,10 +300,12 @@ Update a project's configuration.
 **Endpoint:** `PUT /v1/projects/{namespace}/{project}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Request Body:**
+
 ```json
 {
   "config": {
@@ -293,6 +322,7 @@ Update a project's configuration.
 ```
 
 **Response:**
+
 ```json
 {
   "project": {
@@ -304,6 +334,7 @@ Update a project's configuration.
 ```
 
 **Example:**
+
 ```bash
 curl -X PUT http://localhost:8000/v1/projects/my-org/chatbot \
   -H "Content-Type: application/json" \
@@ -317,10 +348,12 @@ Delete a project (currently returns project info; actual deletion not implemente
 **Endpoint:** `DELETE /v1/projects/{namespace}/{project}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Response:**
+
 ```json
 {
   "project": {
@@ -342,10 +375,12 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 **Endpoint:** `POST /v1/projects/{namespace}/{project}/chat/completions`
 
 **Headers:**
+
 - `X-Session-ID` (optional): Session ID for stateful conversations. If not provided, a new session is created.
 - `X-No-Session` (optional): Set to any value for stateless mode (no conversation history)
 
 **Request Body:**
+
 ```json
 {
   "messages": [
@@ -369,19 +404,24 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 ```
 
 **Request Fields:**
+
 - `messages` (required): Array of chat messages with `role` and `content`
 - `model` (optional): Select which model to use (OpenAI-compatible, added in PR #263 multi-model support)
 - `stream` (optional): Enable streaming responses (Server-Sent Events)
 - `temperature` (optional): Sampling temperature (0.0-2.0)
-- `max_tokens` (optional): Maximum tokens to generate
+- `max_tokens` (optional): Maximum tokens to generate for the **answer** (thinking tokens are separate)
 - `top_p` (optional): Nucleus sampling parameter
 - `top_k` (optional): Top-k sampling parameter
 - `rag_enabled` (optional): Enable/disable RAG (uses config default if not specified)
 - `database` (optional): Database to use for RAG queries
 - `rag_top_k` (optional): Number of RAG results to retrieve
 - `rag_score_threshold` (optional): Minimum similarity score for RAG results
+- `rag_queries` (optional): Array of custom queries for RAG retrieval, overriding the user message. Can be a single query `["my query"]` or multiple queries `["query1", "query2"]` - results from multiple queries are executed concurrently, merged, and deduplicated
+- `think` (optional): Enable thinking/reasoning mode for supported models like Qwen3 (default: `false`)
+- `thinking_budget` (optional): Maximum tokens for thinking process when `think: true` (default: `1024`)
 
 **Response (Non-Streaming):**
+
 ```json
 {
   "id": "chatcmpl-123",
@@ -407,6 +447,7 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 ```
 
 **Response Headers:**
+
 - `X-Session-ID`: The session ID (only in stateful mode)
 
 **Streaming Response:**
@@ -422,6 +463,7 @@ data: [DONE]
 ```
 
 **Example (Non-Streaming):**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
@@ -433,6 +475,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 ```
 
 **Example (Streaming):**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
@@ -445,6 +488,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 ```
 
 **Example (Stateless):**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
@@ -457,6 +501,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 ```
 
 **Example (With RAG):**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
@@ -470,6 +515,96 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   }'
 ```
 
+**Example (With Thinking/Reasoning):**
+
+For models that support chain-of-thought reasoning (like Qwen3), enable thinking mode to see the model's reasoning process:
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "What is 15% of 85?"}
+    ],
+    "think": true,
+    "thinking_budget": 512,
+    "max_tokens": 200
+  }'
+```
+
+**Response with Thinking:**
+
+```json
+{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "model": "Qwen3-1.7B",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "15% of 85 is **12.75**."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "thinking": {
+    "content": "To find 15% of 85, I need to multiply 85 by 0.15. Let me calculate: 85 × 0.15 = 12.75.",
+    "tokens": null
+  }
+}
+```
+
+**Token Allocation with Thinking:**
+
+- `max_tokens`: Controls the **answer** length (default: 512)
+- `thinking_budget`: Controls the **thinking** length (default: 1024 when enabled)
+- Total generation = `thinking_budget` + `max_tokens`
+
+This ensures your answer isn't cut short by the thinking process.
+
+**Example (Custom RAG Query):**
+
+Override the default RAG query (which uses the user message) with a custom search query. This is useful when the user's question is conversational but you want specific technical retrieval:
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Can you summarize the key findings?"}
+    ],
+    "rag_enabled": true,
+    "database": "research_db",
+    "rag_queries": ["clinical trial results primary endpoints efficacy safety"]
+  }'
+```
+
+**Example (Multiple Custom RAG Queries):**
+
+Execute multiple search queries concurrently and merge the results. This is useful for comparative analysis or comprehensive retrieval:
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Compare the two approaches"}
+    ],
+    "rag_enabled": true,
+    "database": "research_db",
+    "rag_queries": [
+      "machine learning neural network methodology",
+      "traditional statistical analysis regression"
+    ],
+    "rag_top_k": 10
+  }'
+```
+
+Results from multiple queries are automatically executed concurrently, merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
+
 ### Get Chat History
 
 Retrieve conversation history for a session.
@@ -477,11 +612,13 @@ Retrieve conversation history for a session.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/chat/sessions/{session_id}/history`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `session_id` (path, required): Session ID
 
 **Response:**
+
 ```json
 {
   "messages": [
@@ -498,6 +635,7 @@ Retrieve conversation history for a session.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123/history
 ```
@@ -509,11 +647,13 @@ Delete a specific chat session and its history.
 **Endpoint:** `DELETE /v1/projects/{namespace}/{project}/chat/sessions/{session_id}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `session_id` (path, required): Session ID
 
 **Response:**
+
 ```json
 {
   "message": "Session abc-123 deleted"
@@ -521,6 +661,7 @@ Delete a specific chat session and its history.
 ```
 
 **Example:**
+
 ```bash
 curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123
 ```
@@ -532,10 +673,12 @@ Delete all chat sessions for a project.
 **Endpoint:** `DELETE /v1/projects/{namespace}/{project}/chat/sessions`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Response:**
+
 ```json
 {
   "message": "Deleted 5 session(s)",
@@ -544,6 +687,7 @@ Delete all chat sessions for a project.
 ```
 
 **Example:**
+
 ```bash
 curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions
 ```
@@ -555,10 +699,12 @@ List all configured models for a project.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/models`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Response:**
+
 ```json
 {
   "total": 2,
@@ -584,6 +730,7 @@ List all configured models for a project.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/models
 ```
@@ -599,11 +746,13 @@ List all datasets in a project.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/datasets`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `include_extra_details` (query, optional): Include detailed file information (default: true)
 
 **Response:**
+
 ```json
 {
   "total": 2,
@@ -631,6 +780,7 @@ List all datasets in a project.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/datasets
 ```
@@ -642,10 +792,12 @@ Get available data processing strategies and databases for a project.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/datasets/strategies`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Response:**
+
 ```json
 {
   "data_processing_strategies": ["universal_processor", "custom_strategy"],
@@ -654,6 +806,7 @@ Get available data processing strategies and databases for a project.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/datasets/strategies
 ```
@@ -665,10 +818,12 @@ Create a new dataset.
 **Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Request Body:**
+
 ```json
 {
   "name": "research_papers",
@@ -678,6 +833,7 @@ Create a new dataset.
 ```
 
 **Response:**
+
 ```json
 {
   "dataset": {
@@ -690,6 +846,7 @@ Create a new dataset.
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets \
   -H "Content-Type: application/json" \
@@ -707,11 +864,13 @@ Delete a dataset.
 **Endpoint:** `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `dataset` (path, required): Dataset name
 
 **Response:**
+
 ```json
 {
   "dataset": {
@@ -724,6 +883,7 @@ Delete a dataset.
 ```
 
 **Example:**
+
 ```bash
 curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers
 ```
@@ -735,15 +895,18 @@ Upload a file to a dataset (stores the file but does not process it).
 **Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `dataset` (path, required): Dataset name
 
 **Request:**
+
 - Content-Type: `multipart/form-data`
 - Body: File upload with field name `file`
 
 **Response:**
+
 ```json
 {
   "filename": "paper1.pdf",
@@ -753,6 +916,7 @@ Upload a file to a dataset (stores the file but does not process it).
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data \
   -F "file=@paper1.pdf"
@@ -765,12 +929,14 @@ Processing is now driven exclusively through the dataset actions endpoint, which
 **Endpoint:** `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/actions`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `dataset` (path, required): Dataset name
 - `action_type` (body, required): `"process"` (alias `"ingest"`)
 
 **Request Body:**
+
 ```json
 {
   "action_type": "process"
@@ -778,6 +944,7 @@ Processing is now driven exclusively through the dataset actions endpoint, which
 ```
 
 **Response:**
+
 ```json
 {
   "message": "Accepted",
@@ -789,6 +956,7 @@ Processing is now driven exclusively through the dataset actions endpoint, which
 Use `task_uri`/`task_id` with `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` to monitor progress. When the Celery task finishes, the `result` payload matches the historical `ProcessDatasetResponse` structure (processed/skipped/failed counts plus per-file details).
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/actions \
   -H "Content-Type: application/json" \
@@ -802,6 +970,7 @@ Remove a file from a dataset.
 **Endpoint:** `DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}/data/{file_hash}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `dataset` (path, required): Dataset name
@@ -809,6 +978,7 @@ Remove a file from a dataset.
 - `remove_from_disk` (query, optional): Also delete the file from disk (default: false)
 
 **Response:**
+
 ```json
 {
   "file_hash": "abc123"
@@ -816,11 +986,13 @@ Remove a file from a dataset.
 ```
 
 **Example:**
+
 ```bash
 curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123
 ```
 
 **Example (Remove from disk):**
+
 ```bash
 curl -X DELETE "http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123?remove_from_disk=true"
 ```
@@ -836,10 +1008,12 @@ Perform a semantic search query against a RAG database.
 **Endpoint:** `POST /v1/projects/{namespace}/{project}/rag/query`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Request Body:**
+
 ```json
 {
   "query": "What are the clinical trial requirements?",
@@ -854,6 +1028,7 @@ Perform a semantic search query against a RAG database.
 ```
 
 **Request Fields:**
+
 - `query` (required): The search query text
 - `database` (optional): Database name (uses default if not specified)
 - `top_k` (optional): Number of results to return (default: 5)
@@ -867,6 +1042,7 @@ Perform a semantic search query against a RAG database.
 - `max_tokens` (optional): Maximum tokens in results
 
 **Response:**
+
 ```json
 {
   "query": "What are the clinical trial requirements?",
@@ -891,6 +1067,7 @@ Perform a semantic search query against a RAG database.
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/query \
   -H "Content-Type: application/json" \
@@ -908,10 +1085,12 @@ List all configured RAG databases and their associated strategies for a project.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/databases`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Response:**
+
 ```json
 {
   "databases": [
@@ -941,6 +1120,7 @@ List all configured RAG databases and their associated strategies for a project.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases
 ```
@@ -952,11 +1132,13 @@ Get detailed information about a specific RAG database including its configurati
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/databases/{database_name}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `database_name` (path, required): Name of the database
 
 **Response:**
+
 ```json
 {
   "name": "main_db",
@@ -980,7 +1162,7 @@ Get detailed information about a specific RAG database including its configurati
     {
       "name": "basic_search",
       "type": "BasicSimilarityStrategy",
-      "config": {"top_k": 10},
+      "config": { "top_k": 10 },
       "default": true
     }
   ],
@@ -991,6 +1173,7 @@ Get detailed information about a specific RAG database including its configurati
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db
 ```
@@ -1002,10 +1185,12 @@ Create a new RAG database in the project configuration.
 **Endpoint:** `POST /v1/projects/{namespace}/{project}/rag/databases`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 
 **Request Body:**
+
 ```json
 {
   "name": "new_database",
@@ -1028,7 +1213,7 @@ Create a new RAG database in the project configuration.
     {
       "name": "basic_search",
       "type": "BasicSimilarityStrategy",
-      "config": {"top_k": 10},
+      "config": { "top_k": 10 },
       "default": true
     }
   ]
@@ -1036,6 +1221,7 @@ Create a new RAG database in the project configuration.
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "database": {
@@ -1049,6 +1235,7 @@ Create a new RAG database in the project configuration.
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/databases \
   -H "Content-Type: application/json" \
@@ -1071,11 +1258,13 @@ Update a RAG database's mutable fields. Note: `name` and `type` are immutable.
 **Endpoint:** `PATCH /v1/projects/{namespace}/{project}/rag/databases/{database_name}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `database_name` (path, required): Name of the database
 
 **Request Body (all fields optional):**
+
 ```json
 {
   "config": {
@@ -1089,6 +1278,7 @@ Update a RAG database's mutable fields. Note: `name` and `type` are immutable.
 ```
 
 **Response:**
+
 ```json
 {
   "name": "main_db",
@@ -1103,6 +1293,7 @@ Update a RAG database's mutable fields. Note: `name` and `type` are immutable.
 ```
 
 **Example - Add a reranking strategy:**
+
 ```bash
 curl -X PATCH http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db \
   -H "Content-Type: application/json" \
@@ -1122,12 +1313,14 @@ Delete a RAG database from the project. Fails if any datasets depend on this dat
 **Endpoint:** `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database_name}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `database_name` (path, required): Name of the database
 - `delete_collection` (query, optional): Whether to delete the underlying vector store collection. Set to `false` to only remove from config. Default: `true`
 
 **Response (200 OK):**
+
 ```json
 {
   "message": "Database 'old_db' deleted successfully",
@@ -1141,6 +1334,7 @@ Delete a RAG database from the project. Fails if any datasets depend on this dat
 ```
 
 **Error Response (409 Conflict - has dependent datasets):**
+
 ```json
 {
   "detail": "Cannot delete database 'main_db': 2 dataset(s) depend on it. Delete or reassign these datasets first: ['dataset1', 'dataset2']"
@@ -1148,6 +1342,7 @@ Delete a RAG database from the project. Fails if any datasets depend on this dat
 ```
 
 **Example:**
+
 ```bash
 # Delete database and its collection
 curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/old_db
@@ -1163,11 +1358,13 @@ Get health status of the RAG system and databases.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/health`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `database` (query, optional): Specific database to check (uses default if not specified)
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -1192,6 +1389,7 @@ Get health status of the RAG system and databases.
 ```
 
 **Response Fields:**
+
 - `status`: Overall health status (`healthy`, `degraded`, `unhealthy`)
 - `database`: Database that was checked
 - `components`: Individual component health checks
@@ -1199,17 +1397,20 @@ Get health status of the RAG system and databases.
 - `issues`: Array of issues if any problems detected
 
 **Component Health:**
+
 - `name`: Component identifier
 - `status`: Component status (`healthy`, `degraded`, `unhealthy`)
 - `latency`: Response time in milliseconds
 - `message`: Optional status message
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/rag/health
 ```
 
 **Example (Specific database):**
+
 ```bash
 curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/health?database=main_db"
 ```
@@ -1225,11 +1426,13 @@ Get the status of an asynchronous task.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/tasks/{task_id}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `task_id` (path, required): Task ID returned from async operations
 
 **Response:**
+
 ```json
 {
   "task_id": "task-123-abc",
@@ -1248,6 +1451,7 @@ Get the status of an asynchronous task.
 ```
 
 **Task States:**
+
 - `PENDING` - Task is queued
 - `STARTED` - Task is running
 - `SUCCESS` - Task completed successfully
@@ -1255,9 +1459,119 @@ Get the status of an asynchronous task.
 - `RETRY` - Task is being retried
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
 ```
+
+### Cancel Task
+
+Cancel a running task and revert any files that were successfully processed.
+
+**Endpoint:** `DELETE /v1/projects/{namespace}/{project}/tasks/{task_id}`
+
+**Parameters:**
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `task_id` (path, required): Task ID to cancel
+
+**Description:**
+
+This endpoint is primarily used for cancelling dataset processing operations. When a task is cancelled:
+1. All pending Celery tasks are revoked (prevented from starting)
+2. Running tasks are gracefully stopped (current work finishes)
+3. The task is marked as cancelled in the backend
+4. Any files that were successfully processed have their chunks removed from the vector store
+
+**Response:**
+```json
+{
+  "message": "Task cancelled and 3 file(s) reverted",
+  "task_id": "task-123-abc",
+  "cancelled": true,
+  "pending_tasks_cancelled": 5,
+  "running_tasks_at_cancel": 2,
+  "files_reverted": 3,
+  "files_failed_to_revert": 0,
+  "errors": null,
+  "already_completed": false,
+  "already_cancelled": false
+}
+```
+
+**Response Fields:**
+- `message` - Human-readable status message
+- `task_id` - The ID of the cancelled task
+- `cancelled` - Whether the task was successfully cancelled
+- `pending_tasks_cancelled` - Number of queued tasks that were stopped
+- `running_tasks_at_cancel` - Number of tasks that were running when cancelled
+- `files_reverted` - Number of files whose chunks were successfully removed
+- `files_failed_to_revert` - Number of files that failed to clean up
+- `errors` - Array of cleanup errors (if any)
+- `already_completed` - True if task had already completed before cancellation
+- `already_cancelled` - True if task was already cancelled
+
+**Edge Cases:**
+
+**Task Already Completed:**
+```json
+{
+  "message": "Task already success",
+  "task_id": "task-123-abc",
+  "cancelled": false,
+  "already_completed": true,
+  ...
+}
+```
+
+**Task Already Cancelled:**
+```json
+{
+  "message": "Task already cancelled",
+  "task_id": "task-123-abc",
+  "cancelled": true,
+  "already_cancelled": true,
+  "files_reverted": 3,
+  ...
+}
+```
+
+**Cleanup Failures:**
+```json
+{
+  "message": "Task cancelled with cleanup issues: 3 reverted, 1 failed",
+  "task_id": "task-123-abc",
+  "cancelled": true,
+  "files_reverted": 3,
+  "files_failed_to_revert": 1,
+  "errors": [
+    {
+      "file_hash": "abc123def456",
+      "error": "Vector store connection timeout"
+    }
+  ],
+  ...
+}
+```
+
+**Example:**
+```bash
+# Cancel a running dataset processing task
+curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
+```
+
+**HTTP Status Codes:**
+- `200 OK` - Task cancellation succeeded (or task already completed/cancelled)
+- `404 Not Found` - Task not found or not a cancellable task type
+- `500 Internal Server Error` - Server error during cancellation
+
+**Notes:**
+- Only group tasks (dataset processing) can be cancelled
+- **Security:** Tasks can only be cancelled by the namespace/project they belong to
+- Cancellation is idempotent (safe to call multiple times)
+- Cleanup failures don't prevent cancellation from succeeding
+- Successfully processed files are automatically reverted
+- Manual cleanup is available via `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/cleanup/{file_hash}` if automatic cleanup fails
 
 ---
 
@@ -1270,6 +1584,7 @@ List all available example projects.
 **Endpoint:** `GET /v1/examples`
 
 **Response:**
+
 ```json
 {
   "examples": [
@@ -1292,6 +1607,7 @@ List all available example projects.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/examples
 ```
@@ -1303,9 +1619,11 @@ Import an example as a new project.
 **Endpoint:** `POST /v1/examples/{example_id}/import-project`
 
 **Parameters:**
+
 - `example_id` (path, required): Example ID to import
 
 **Request Body:**
+
 ```json
 {
   "namespace": "my-org",
@@ -1315,6 +1633,7 @@ Import an example as a new project.
 ```
 
 **Response:**
+
 ```json
 {
   "project": "my-fda-project",
@@ -1325,6 +1644,7 @@ Import an example as a new project.
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/examples/fda_rag/import-project \
   -H "Content-Type: application/json" \
@@ -1342,9 +1662,11 @@ Import example data into an existing project.
 **Endpoint:** `POST /v1/examples/{example_id}/import-data`
 
 **Parameters:**
+
 - `example_id` (path, required): Example ID to import data from
 
 **Request Body:**
+
 ```json
 {
   "namespace": "my-org",
@@ -1355,6 +1677,7 @@ Import example data into an existing project.
 ```
 
 **Response:**
+
 ```json
 {
   "project": "my-project",
@@ -1365,6 +1688,7 @@ Import example data into an existing project.
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/examples/fda_rag/import-data \
   -H "Content-Type: application/json" \
@@ -1387,6 +1711,7 @@ Check overall system health.
 **Endpoint:** `GET /health`
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -1399,6 +1724,7 @@ Check overall system health.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/health
 ```
@@ -1410,6 +1736,7 @@ Simple liveness check for container orchestration.
 **Endpoint:** `GET /health/liveness`
 
 **Response:**
+
 ```json
 {
   "status": "alive"
@@ -1417,6 +1744,7 @@ Simple liveness check for container orchestration.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/health/liveness
 ```
@@ -1432,6 +1760,7 @@ Basic hello endpoint.
 **Endpoint:** `GET /`
 
 **Response:**
+
 ```json
 {
   "message": "Hello, World!"
@@ -1445,6 +1774,7 @@ Get system version and configuration info.
 **Endpoint:** `GET /info`
 
 **Response:**
+
 ```json
 {
   "version": "0.1.0",
@@ -1453,6 +1783,7 @@ Get system version and configuration info.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/info
 ```
@@ -1464,6 +1795,7 @@ Check if a newer version of the CLI is available.
 **Endpoint:** `GET /v1/system/version-check`
 
 **Response:**
+
 ```json
 {
   "current_version": "0.0.17",
@@ -1481,6 +1813,7 @@ Check if a newer version of the CLI is available.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/system/version-check
 ```
@@ -1498,6 +1831,7 @@ List event logs for a project with optional filtering.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/event_logs`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `type` (query, optional): Filter by event type (e.g., "inference", "rag_processing")
@@ -1507,6 +1841,7 @@ List event logs for a project with optional filtering.
 - `offset` (query, optional): Number of events to skip for pagination
 
 **Response:**
+
 ```json
 {
   "total": 42,
@@ -1528,6 +1863,7 @@ List event logs for a project with optional filtering.
 ```
 
 **Example:**
+
 ```bash
 # List recent events
 curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs
@@ -1546,11 +1882,13 @@ Get full details of a specific event including all sub-events.
 **Endpoint:** `GET /v1/projects/{namespace}/{project}/event_logs/{event_id}`
 
 **Parameters:**
+
 - `namespace` (path, required): Project namespace
 - `project` (path, required): Project name
 - `event_id` (path, required): Event ID
 
 **Response:**
+
 ```json
 {
   "event_id": "evt_20240115_103000_inference_abc123",
@@ -1572,6 +1910,7 @@ Get full details of a specific event including all sub-events.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs/evt_20240115_103000_inference_abc123
 ```
@@ -1589,9 +1928,11 @@ List all models cached on disk.
 **Endpoint:** `GET /v1/models`
 
 **Parameters:**
+
 - `provider` (query, optional): Model provider (default: "universal")
 
 **Response:**
+
 ```json
 {
   "data": [
@@ -1607,6 +1948,7 @@ List all models cached on disk.
 ```
 
 **Example:**
+
 ```bash
 curl http://localhost:8000/v1/models
 ```
@@ -1618,6 +1960,7 @@ Download and cache a model. Returns a streaming response with progress events.
 **Endpoint:** `POST /v1/models/download`
 
 **Request Body:**
+
 ```json
 {
   "provider": "universal",
@@ -1626,6 +1969,7 @@ Download and cache a model. Returns a streaming response with progress events.
 ```
 
 **Response:** Server-Sent Events stream with progress updates:
+
 ```
 data: {"event": "progress", "downloaded": 45000000, "total": 90000000, "percent": 50}
 
@@ -1633,6 +1977,7 @@ data: {"event": "complete", "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"
 ```
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:8000/v1/models/download \
   -H "Content-Type: application/json" \
@@ -1646,10 +1991,12 @@ Delete a cached model from disk.
 **Endpoint:** `DELETE /v1/models/{model_name}`
 
 **Parameters:**
+
 - `model_name` (path, required): The model identifier to delete
 - `provider` (query, optional): Model provider (default: "universal")
 
 **Response:**
+
 ```json
 {
   "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
@@ -1660,6 +2007,7 @@ Delete a cached model from disk.
 ```
 
 **Example:**
+
 ```bash
 curl -X DELETE "http://localhost:8000/v1/models/cross-encoder/ms-marco-MiniLM-L-6-v2"
 ```
@@ -1716,6 +2064,7 @@ curl http://localhost:8000/v1/projects/my-org/chatbot/models
 ### Concurrent Requests
 
 The API handles concurrent requests efficiently:
+
 - Chat sessions are thread-safe with internal locking
 - Dataset processing can run asynchronously with Celery
 - Multiple chat sessions can be active simultaneously
@@ -1729,6 +2078,7 @@ The API handles concurrent requests efficiently:
 ### Async Processing
 
 For long-running operations (dataset processing):
+
 1. POST to the dataset `actions` endpoint (`{"action_type":"process"}`) to queue a Celery task
 2. Poll the task endpoint to check status
 3. Retrieve final results when `state` is `SUCCESS`
@@ -1742,6 +2092,7 @@ LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI
 ### MCP-Compatible Operations
 
 **Project Management:**
+
 - `GET /v1/projects/{namespace}` - List projects (operation ID: `projects_list`)
 - `POST /v1/projects/{namespace}` - Create project (operation ID: `project_create`)
 - `GET /v1/projects/{namespace}/{project}` - Get project (operation ID: `project_get`)
@@ -1749,9 +2100,11 @@ LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI
 - `DELETE /v1/projects/{namespace}/{project}` - Delete project (operation ID: `project_delete`)
 
 **Model Management:**
+
 - `GET /v1/projects/{namespace}/{project}/models` - List models (operation ID: `models_list`)
 
 **Dataset Operations:**
+
 - `GET /v1/projects/{namespace}/{project}/datasets` - List datasets (operation ID: `dataset_list`)
 - `GET /v1/projects/{namespace}/{project}/datasets/strategies` - List strategies (operation ID: `dataset_strategies_list`)
 - `POST /v1/projects/{namespace}/{project}/datasets` - Create dataset (operation ID: `dataset_create`)
@@ -1760,6 +2113,7 @@ LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI
 - `POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data` - Upload data (operation ID: `dataset_data_upload`)
 
 **RAG Operations:**
+
 - `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG (operation ID: `rag_query`)
 - `POST /v1/projects/{namespace}/{project}/rag/databases` - Create database (operation ID: `database_create`)
 - `GET /v1/projects/{namespace}/{project}/rag/databases/{database}` - Get database (operation ID: `database_get`)
@@ -1767,6 +2121,7 @@ LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI
 - `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database}` - Delete database (operation ID: `database_delete`)
 
 **Task Management:**
+
 - `GET /v1/projects/{namespace}/{project}/tasks/{task_id}` - Get task status (operation ID: `task_get`)
 
 ### Using LlamaFarm with MCP Servers
@@ -1957,7 +2312,7 @@ class LlamaFarmClient {
 // Usage
 const client = new LlamaFarmClient();
 const result = await client.chat("my-org", "chatbot", [
-  { role: "user", content: "Hello!" }
+  { role: "user", content: "Hello!" },
 ]);
 console.log(result.choices[0].message.content);
 ```
@@ -1969,18 +2324,23 @@ console.log(result.choices[0].message.content);
 ### Common Issues
 
 **Problem:** `404 Not Found` when accessing project
+
 - **Solution**: Verify namespace and project name are correct. List projects to confirm.
 
 **Problem:** Chat returns empty or error
+
 - **Solution**: Check that the model is configured correctly and Ollama is running.
 
 **Problem:** RAG query returns no results
+
 - **Solution**: Ensure dataset is processed and database exists. Check RAG health endpoint.
 
 **Problem:** Dataset processing stuck
+
 - **Solution**: Check Celery worker status. Use async processing and poll task endpoint.
 
 **Problem:** Session not persisting
+
 - **Solution**: Ensure you're passing `X-Session-ID` header and not using `X-No-Session`.
 
 ### Debugging Tips

@@ -595,6 +595,16 @@ func (m *SourceManager) installHardwareWheels(dir string, componentName string) 
 	}
 
 	utils.LogDebug(fmt.Sprintf("Hardware-specific wheels for %s installed successfully", componentName))
+
+	// Create marker file to indicate hardware wheels have been installed
+	// This allows areDependenciesSynced to skip re-syncing when not needed
+	if componentName == "universal-runtime" {
+		markerFile := filepath.Join(dir, ".hardware-wheels-installed")
+		if err := os.WriteFile(markerFile, []byte("installed"), 0644); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: could not create hardware wheels marker: %v", err))
+		}
+	}
+
 	return nil
 }
 
@@ -676,7 +686,14 @@ func (m *SourceManager) areDependenciesSynced() bool {
 	_, ragErr := os.Stat(ragVenv)
 	_, universalRuntimeErr := os.Stat(universalRuntimeVenv)
 
-	return configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil && universalRuntimeErr == nil
+	venvsSynced := configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil && universalRuntimeErr == nil
+
+	// Also check for hardware wheels marker file (for universal-runtime)
+	// This ensures hardware-specific packages like torch and llama-cpp-python are installed
+	hardwareWheelsMarker := filepath.Join(m.srcDir, "runtimes", "universal", ".hardware-wheels-installed")
+	_, hardwareWheelsErr := os.Stat(hardwareWheelsMarker)
+
+	return venvsSynced && hardwareWheelsErr == nil
 }
 
 // readVersionFile reads the current version from the version file

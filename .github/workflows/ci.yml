@@ -189,13 +189,19 @@ jobs:
           # For universal runtime, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
           UV_EXTRA_INDEX_URL: ${{ matrix.component == 'runtimes/universal' && 'https://download.pytorch.org/whl/cpu' || '' }}
         run: |
+          # For universal runtime, allow uv to search all indexes (PyTorch index has old versions of common packages)
+          INDEX_STRATEGY_FLAG=""
+          if [ "${{ matrix.component }}" = "runtimes/universal" ]; then
+            INDEX_STRATEGY_FLAG="--index-strategy unsafe-best-match"
+          fi
+          
           if [ -f "uv.lock" ]; then
             # Install main + dev dependencies only (skip optional extras that may have platform requirements)
             # Use --frozen to avoid re-resolving dependencies from extras that aren't being installed
-            uv sync --group dev --frozen
+            uv sync --group dev --frozen $INDEX_STRATEGY_FLAG
           else
             echo "No uv.lock found, attempting to install from pyproject.toml"
-            uv pip install -e .
+            uv pip install -e . $INDEX_STRATEGY_FLAG
           fi
 
       - name: Install test dependencies

@@ -53,11 +53,24 @@ Available commands:
 }
 
 // ==== API types (mirroring server) ====
+type fileMetadata struct {
+	OriginalFileName string  `json:"original_file_name"`
+	ResolvedFileName string  `json:"resolved_file_name"`
+	Timestamp        float64 `json:"timestamp"`
+	Size             int64   `json:"size"`
+	MimeType         string  `json:"mime_type"`
+	Hash             string  `json:"hash"`
+}
+
+type datasetDetails struct {
+	FilesMetadata []fileMetadata `json:"files_metadata"`
+}
+
 type apiDataset struct {
-	Name                   string   `json:"name"`
-	DataProcessingStrategy string   `json:"data_processing_strategy"`
-	Database               string   `json:"database"`
-	Files                  []string `json:"files"`
+	Name                   string         `json:"name"`
+	DataProcessingStrategy string         `json:"data_processing_strategy"`
+	Database               string         `json:"database"`
+	Details                datasetDetails `json:"details"`
 }
 
 type listDatasetsResponse struct {
@@ -94,9 +107,11 @@ var datasetsListCmd = &cobra.Command{
 		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
 
 		// Ensure required services are running
-		orchestrator.EnsureServicesOrExit(serverURL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
-		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=false", serverCfg.Namespace, serverCfg.Project))
+		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/?include_extra_details=true", serverCfg.Namespace, serverCfg.Project))
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
@@ -134,7 +149,7 @@ var datasetsListCmd = &cobra.Command{
 		fmt.Fprintln(w, "NAME\tDATA PROCESSING STRATEGY\tDATABASE\tFILE COUNT")
 		fmt.Fprintln(w, "----\t------------------------\t--------\t----------")
 		for _, ds := range out.Datasets {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", ds.Name, emptyDefault(ds.DataProcessingStrategy, "auto"), emptyDefault(ds.Database, "auto"), len(ds.Files))
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", ds.Name, emptyDefault(ds.DataProcessingStrategy, "auto"), emptyDefault(ds.Database, "auto"), len(ds.Details.FilesMetadata))
 		}
 		w.Flush()
 	},
@@ -175,7 +190,9 @@ Examples:
 		}
 
 		// 2) Validate strategies and databases exist in project config
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 		if err := validateStrategiesAndDatabases(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, dataProcessingStrategy, database); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -287,7 +304,9 @@ var datasetsDeleteCommand = &cobra.Command{
 
 		datasetName := args[0]
 		// Ensure server is up
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s", serverCfg.Namespace, serverCfg.Project, datasetName))
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
@@ -367,7 +386,9 @@ Examples:
 		fmt.Printf("Found %d files to upload\n", len(files))
 
 		// Ensure server is up
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server")
+		factory := GetServiceConfigFactory()
+		config := factory.ServerOnly(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
 		// Upload in batches with progress display
 		const batchSize = 10
@@ -456,7 +477,9 @@ var datasetsProcessCmd = &cobra.Command{
 		datasetName := args[0]
 
 		// Ensure server and RAG are up (process command needs RAG for ingestion)
-		orchestrator.EnsureServicesOrExit(serverCfg.URL, "server", "rag", "universal-runtime")
+		factory := GetServiceConfigFactory()
+		config := factory.RAGCommand(serverCfg.URL)
+		orchestrator.EnsureServicesOrExitWithConfig(config, "server", "rag", "universal-runtime")
 
 		// Call the dataset actions endpoint
 		url := buildServerURL(serverCfg.URL, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/actions",

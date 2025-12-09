@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   compareSemver,
   getStoredLatestRelease,
@@ -9,41 +17,63 @@ import {
   setDismissed,
   type DismissContext,
   getGithubReleasesUrl,
-  storeCurrentVersion,
-  getStoredCurrentVersion,
 } from '@/utils/versionUtils'
 import { getVersionCheck } from '@/api/systemService'
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
 
-export function useUpgradeAvailability() {
-  const [currentVersion, setCurrentVersion] = useState<string | null>(() => {
-    const stored = getStoredCurrentVersion()
-    return stored === '0.0.0' ? null : stored
-  })
+type UpgradeAvailabilityValue = {
+  isLoading: boolean
+  currentVersion: string
+  latestVersion: string
+  upgradeAvailable: boolean
+  releasesUrl: string
+  isDismissedFor: (ctx: DismissContext) => boolean
+  dismiss: (ctx: DismissContext) => void
+  refreshLatest: (signal?: AbortSignal) => Promise<void>
+  _dismissCounter: number
+}
+
+const UpgradeAvailabilityContext =
+  createContext<UpgradeAvailabilityValue | null>(null)
+
+export function UpgradeAvailabilityProvider({
+  children,
+}: {
+  children: ReactNode
+}) {
+  const [currentVersion, setCurrentVersion] = useState<string>('unknown')
   const [{ info, checkedAt }, setCache] = useState(() =>
     getStoredLatestRelease()
   )
+  const initialCheckedAt = useRef(checkedAt)
   const [isLoading, setIsLoading] = useState(false)
   const [dismissCounter, setDismissCounter] = useState(0)
 
+  // Fetch version info on mount - always get current version, cache latest release
   useEffect(() => {
     const abort = new AbortController()
     const run = async () => {
-      if (!shouldCheck(checkedAt, TWELVE_HOURS_MS)) return
-      setIsLoading(true)
+      const shouldUpdateCache = shouldCheck(
+        initialCheckedAt.current,
+        TWELVE_HOURS_MS
+      )
+      if (shouldUpdateCache) {
+        setIsLoading(true)
+      }
       try {
         const res = await getVersionCheck(abort.signal)
-        const latestVersion = res?.latest_version || ''
-        const htmlUrl = res?.release_url || getGithubReleasesUrl()
-        const publishedAt = res?.published_at
-        const serverCurrentVersion = res?.current_version
-        if (serverCurrentVersion) {
-          setCurrentVersion(serverCurrentVersion)
-          storeCurrentVersion(serverCurrentVersion)
+        // Always update current version from server
+        if (res?.current_version) {
+          setCurrentVersion(res.current_version)
         }
-        if (latestVersion) {
-          const mapped = { latestVersion, htmlUrl, publishedAt }
+        // Only update cache if stale
+        if (shouldUpdateCache && res?.latest_version) {
+          const mapped = {
+            latestVersion: res.latest_version,
+            htmlUrl: res.release_url || getGithubReleasesUrl(),
+            publishedAt: res.published_at,
+          }
           storeLatestRelease(mapped)
           setCache({ info: mapped, checkedAt: Date.now() })
         }
@@ -54,9 +84,12 @@ export function useUpgradeAvailability() {
     }
     run()
     return () => abort.abort()
-  }, [checkedAt])
+  }, [])
 
-  const normalizedCurrent = currentVersion ? normalizeVersion(currentVersion) : null
+  const normalizedCurrent =
+    currentVersion && currentVersion !== 'unknown'
+      ? normalizeVersion(currentVersion)
+      : null
   const latestVersion = useMemo(
     () => normalizeVersion(info?.latestVersion),
     [info?.latestVersion]
@@ -90,7 +123,6 @@ export function useUpgradeAvailability() {
       const serverCurrentVersion = res?.current_version
       if (serverCurrentVersion) {
         setCurrentVersion(serverCurrentVersion)
-        storeCurrentVersion(serverCurrentVersion)
       }
       if (latestVersion) {
         const mapped = { latestVersion, htmlUrl, publishedAt }
@@ -104,16 +136,31 @@ export function useUpgradeAvailability() {
     }
   }
 
-  return {
+  const value: UpgradeAvailabilityValue = {
     isLoading,
-    currentVersion: normalizedCurrent,
+    currentVersion: normalizedCurrent ?? currentVersion,
     latestVersion,
     upgradeAvailable,
     releasesUrl,
     isDismissedFor,
     dismiss,
     refreshLatest,
-    // expose to allow optional subscriptions; not used outside
     _dismissCounter: dismissCounter,
   }
+
+  return (
+    <UpgradeAvailabilityContext.Provider value={value}>
+      {children}
+    </UpgradeAvailabilityContext.Provider>
+  )
+}
+
+export function useUpgradeAvailability(): UpgradeAvailabilityValue {
+  const ctx = useContext(UpgradeAvailabilityContext)
+  if (!ctx) {
+    throw new Error(
+      'useUpgradeAvailability must be used within UpgradeAvailabilityProvider'
+    )
+  }
+  return ctx
 }
