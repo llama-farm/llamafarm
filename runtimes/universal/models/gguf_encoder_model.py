@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 GGUF encoder model wrapper using llama-cpp-python for embeddings.
 
@@ -7,13 +9,18 @@ GGUF quantized embedding models, enabling faster inference and lower memory usag
 
 import asyncio
 import logging
+import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
-
-from llama_cpp import Llama
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from utils.model_format import get_gguf_file_path
 
 from .base import BaseModel
+
+if TYPE_CHECKING:  # pragma: no cover - for type checkers only
+    from llama_cpp import Llama
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +100,16 @@ class GGUFEncoderModel(BaseModel):
         else:
             n_gpu_layers = 0  # CPU only
             logger.info("Configuring for CPU-only inference")
+
+        try:
+            if sys.platform == "win32":
+                self._setup_windows_dll_path()
+
+            from llama_cpp import Llama
+        except (ImportError, RuntimeError, FileNotFoundError, OSError) as e:
+            error_msg = self._create_gguf_error_message(e)
+            logger.error(f"Failed to load GGUF model: {error_msg}")
+            raise RuntimeError(error_msg) from e
 
         # Load model using llama-cpp-python in embedding mode
         # Run in thread pool since Llama() initialization is blocking
@@ -210,3 +227,33 @@ class GGUFEncoderModel(BaseModel):
         """Cleanup thread pool executor on deletion."""
         if hasattr(self, "_executor"):
             self._executor.shutdown(wait=False)
+
+    def _setup_windows_dll_path(self) -> None:
+        """Add llama_cpp lib directory to Windows DLL search path."""
+        try:
+            import llama_cpp
+
+            lib_path = Path(llama_cpp.__file__).parent / "lib"
+            if lib_path.exists() and hasattr(os, "add_dll_directory"):
+                os.add_dll_directory(str(lib_path))
+                logger.debug(f"Added DLL directory for llama_cpp: {lib_path}")
+        except Exception as e:  # pragma: no cover - best-effort logging only
+            logger.warning(f"Could not set up Windows DLL path for llama_cpp: {e}")
+
+    def _create_gguf_error_message(self, error: Exception) -> str:
+        """Create actionable error message for GGUF loading failures."""
+        base_msg = f"Cannot load GGUF model support: {error}"
+
+        if sys.platform != "win32":
+            return base_msg
+
+        suggestions = [
+            base_msg,
+            "\nWindows troubleshooting:",
+            "1. Install Visual C++ Redistributable: https://aka.ms/vs/17/release/vc_redist.x64.exe",
+            "2. If using GPU: ensure CUDA 12.1+ runtime DLLs (e.g., cublas64_12.dll) are installed",
+            "3. Force CPU-only wheel: set LLAMAFARM_FORCE_CPU_WHEEL=true before install",
+            '4. Verify 64-bit Python: python -c "import sys; print(sys.maxsize > 2**32)"',
+        ]
+
+        return "\n".join(suggestions)
