@@ -3,6 +3,8 @@
 package orchestrator
 
 import (
+	"errors"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -17,7 +19,13 @@ func isProcessAlive(pid int) bool {
 
 	handle, err := windows.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
-		// Process doesn't exist or we can't access it
+		// ERROR_ACCESS_DENIED means the process exists but is protected
+		// (e.g., antimalware services, system-critical processes).
+		// We still consider it alive for consistency with Unix EPERM handling.
+		if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+			return true
+		}
+		// Other errors (ERROR_INVALID_PARAMETER for non-existent PID) mean process doesn't exist
 		return false
 	}
 
