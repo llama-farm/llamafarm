@@ -8,5 +8,10 @@ export interface InferenceModel {
   badges: string[]
   isDefault?: boolean
   status?: ModelStatus
+  // Cloud model configuration
+  provider?: string
+  apiKey?: string
+  baseUrl?: string
+  maxTokens?: number | null
 }
 

@@ -95,21 +95,25 @@ def parse_quantization_from_filename(filename: str) -> str | None:
 
     # Try multiple patterns to catch all variations
     # Pattern order matters - more specific first
+    # Note: I? prefix supports imatrix-based quantization types (IQ2_K, IQ3_K, IQ4_XS, etc.)
     patterns = [
         # Patterns with separators (most common)
-        r"[\._-](Q[2-8]_K_[SML])",  # Q3_K_S, Q3_K_M, Q3_K_L, Q4_K_S, Q4_K_M, Q5_K_S, Q5_K_M
-        r"[\._-](Q[2-8]_[01])",  # Q4_0, Q4_1, Q5_0, Q5_1, Q8_0
-        r"[\._-](Q[2-8]_K)(?![_\.])",  # Q2_K, Q3_K, Q4_K, Q5_K, Q6_K (not followed by _ or .)
+        r"[\._-](I?Q[2-8]_K_[SML])",  # Q3_K_S, Q3_K_M, Q3_K_L, Q4_K_S, Q4_K_M, Q5_K_S, Q5_K_M, IQ2_K, IQ3_K, etc.
+        r"[\._-](I?Q[2-8]_[01])",  # Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, IQ4_0, etc.
+        r"[\._-](I?Q[2-8]_K)(?![_\.])",  # Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, IQ2_K, IQ3_K, etc. (not followed by _ or .)
+        r"[\._-](I?Q[2-8]_XS)",  # IQ4_XS, IQ3_XS, etc. (imatrix extra small variants)
         r"[\._-](F16|F32|FP16|FP32)",  # F16, F32, FP16, FP32
         # Patterns without separators (less common but possible)
-        r"(Q[2-8]_K_[SML])",  # Without separator prefix
-        r"(Q[2-8]_[01])",  # Without separator prefix
-        r"(Q[2-8]_K)(?![_\.])",  # Without separator prefix
+        r"(I?Q[2-8]_K_[SML])",  # Without separator prefix
+        r"(I?Q[2-8]_[01])",  # Without separator prefix
+        r"(I?Q[2-8]_K)(?![_\.])",  # Without separator prefix
+        r"(I?Q[2-8]_XS)",  # Without separator prefix
         r"(F16|F32|FP16|FP32)",  # Without separator prefix
         # Handle cases where quantization might be in the middle of filename
-        r"(Q[2-8]_K_[SML])",  # Anywhere in filename
-        r"(Q[2-8]_[01])",  # Anywhere in filename
-        r"(Q[2-8]_K)(?![_\.A-Za-z0-9])",  # Q2_K, Q3_K, etc. not followed by alphanumeric
+        r"(I?Q[2-8]_K_[SML])",  # Anywhere in filename
+        r"(I?Q[2-8]_[01])",  # Anywhere in filename
+        r"(I?Q[2-8]_K)(?![_\.A-Za-z0-9])",  # Q2_K, Q3_K, etc. not followed by alphanumeric
+        r"(I?Q[2-8]_XS)",  # Anywhere in filename
         r"(F16|F32|FP16|FP32)",  # Anywhere in filename
     ]
 
@@ -123,8 +127,9 @@ def parse_quantization_from_filename(filename: str) -> str | None:
             elif quant == "FP32":
                 quant = "F32"
             # Validate it's a known quantization type
+            # Supports both regular (Q) and imatrix-based (IQ) quantization types
             if re.match(
-                r"^(Q[2-8](?:_K(?:_[SML])?|_[01]|_K)|F(?:16|32))$", quant, re.IGNORECASE
+                r"^(I?Q[2-8](?:_K(?:_[SML])?|_[01]|_K|_XS)|F(?:16|32))$", quant, re.IGNORECASE
             ):
                 return quant
 

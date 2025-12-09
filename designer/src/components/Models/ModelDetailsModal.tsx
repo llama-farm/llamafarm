@@ -41,11 +41,6 @@ export function ModelDetailsModal({
   const [selectedQuantization, setSelectedQuantization] =
     useState<string | null>(null)
 
-  // Early return if required props are missing
-  if (!baseModelId || !onSelect) {
-    return null
-  }
-
   useEffect(() => {
     if (open && baseModelId && baseModelId.trim()) {
       setIsLoading(true)
@@ -90,6 +85,11 @@ export function ModelDetailsModal({
       setSelectedQuantization(null)
     }
   }, [open, baseModelId, defaultQuantization])
+
+  // Early return if required props are missing (after all hooks)
+  if (!baseModelId || !onSelect) {
+    return null
+  }
 
   const handleSelect = () => {
     if (!selectedQuantization) return

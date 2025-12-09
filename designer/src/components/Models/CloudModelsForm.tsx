@@ -76,6 +76,10 @@ export function CloudModelsForm({
       meta: `Added on ${new Date().toLocaleDateString()}`,
       badges: ['Cloud'],
       status: 'ready',
+      provider,
+      apiKey: apiKey.trim() || undefined,
+      baseUrl: baseUrl.trim() || undefined,
+      maxTokens: maxTokens || undefined,
     })
     setTimeout(() => {
       setSubmitState('success')
