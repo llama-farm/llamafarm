@@ -650,8 +650,8 @@ function Home() {
           </div>
         )}
 
-        {/* Empty state when no projects */}
-        {filteredAndSortedProjectNames.length === 0 ? (
+        {/* Empty state when no projects exist (unfiltered) */}
+        {projectsList.length === 0 ? (
           <div className="w-full">
             <div className="text-center px-6 py-8 rounded-xl border border-border bg-card/40">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
@@ -673,6 +673,30 @@ function Home() {
                 }}
               >
                 Create your first project
+              </button>
+            </div>
+          </div>
+        ) : filteredAndSortedProjectNames.length === 0 ? (
+          /* No search results but projects exist */
+          <div className="w-full">
+            <div className="text-center px-6 py-8 rounded-xl border border-border bg-card/40">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted border border-border">
+                <FontIcon
+                  type="search"
+                  className="w-6 h-6 text-muted-foreground"
+                />
+              </div>
+              <div className="text-lg font-medium text-foreground mb-2">
+                No projects found
+              </div>
+              <div className="text-sm text-muted-foreground mb-6">
+                No projects match your search. Try adjusting your search terms.
+              </div>
+              <button
+                className="px-4 py-2 rounded-lg border border-input text-foreground hover:bg-accent/20 transition-colors"
+                onClick={() => setSearch('')}
+              >
+                Clear search
               </button>
             </div>
           </div>

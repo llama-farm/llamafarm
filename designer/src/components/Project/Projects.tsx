@@ -19,50 +19,19 @@ const Projects = () => {
   const namespace = getCurrentNamespace()
 
   // API hooks
-  const { data: projectsResponse, isLoading, error, refetch } = useProjects(namespace)
-
-  // Debug: Log API response and network status
-  useEffect(() => {
-    console.log('🔍 Projects Component State:', {
-      namespace,
-      isLoading,
-      hasError: !!error,
-      hasData: !!projectsResponse,
-      projectCount: projectsResponse?.total || 0,
-    })
-    
-    if (projectsResponse) {
-      console.log('✅ Projects API Response:', {
-        namespace,
-        total: projectsResponse.total,
-        projects: projectsResponse.projects?.map(p => p.name) || [],
-        apiUrl: `GET /v1/projects/${namespace}`,
-      })
-      
-      if (projectsResponse.total === 0) {
-        console.warn('⚠️ API returned 0 projects. Check if projects exist in namespace:', namespace)
-      }
-    }
-    
-    if (error) {
-      console.error('❌ Projects API Error:', {
-        message: error.message,
-        namespace,
-        error: error,
-        apiUrl: `GET /v1/projects/${namespace}`,
-        suggestion: 'Check Network tab to see if request failed or returned empty',
-      })
-    }
-  }, [projectsResponse, error, namespace, isLoading])
+  const {
+    data: projectsResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useProjects(namespace)
 
   const handleRefresh = async () => {
-    console.log('🔄 Refreshing projects...', { namespace })
     queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
     try {
-      const result = await refetch()
-      console.log('🔄 Refresh result:', result)
+      await refetch()
     } catch (err) {
-      console.error('🔄 Refresh failed:', err)
+      // Error handling is done by React Query
     }
   }
 
@@ -112,6 +81,8 @@ const Projects = () => {
   // Check projects.length, not filteredProjects.length, to distinguish between
   // "no projects" vs "no search results"
   const showEmptyState = !isLoading && projects.length === 0 && !error
+  const hasNoSearchResults =
+    !isLoading && projects.length > 0 && filteredProjects.length === 0 && !error
 
   return (
     <div className="w-full h-full transition-colors bg-background pt-16">
@@ -135,7 +106,8 @@ const Projects = () => {
           <div>
             <h2 className="text-2xl text-foreground">Projects</h2>
             <p className="text-xs text-muted-foreground mt-1">
-              Namespace: <code className="px-1 py-0.5 bg-muted rounded">{namespace}</code>
+              Namespace:{' '}
+              <code className="px-1 py-0.5 bg-muted rounded">{namespace}</code>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -145,7 +117,10 @@ const Projects = () => {
               disabled={isLoading}
               title="Refresh projects list"
             >
-              <FontIcon type="recently-viewed" className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <FontIcon
+                type="recently-viewed"
+                className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+              />
               Refresh
             </button>
             <button className="px-3 py-2 rounded-lg border border-input text-primary hover:bg-accent/20">
@@ -182,8 +157,9 @@ const Projects = () => {
                 No projects yet
               </div>
               <div className="text-sm text-muted-foreground mb-6">
-                Create your first project to start building AI-powered applications.
-                Each project can have its own models, prompts, and data.
+                Create your first project to start building AI-powered
+                applications. Each project can have its own models, prompts, and
+                data.
               </div>
               <button
                 className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
@@ -193,42 +169,65 @@ const Projects = () => {
               </button>
             </div>
           </div>
+        ) : hasNoSearchResults ? (
+          <div className="flex items-center justify-center min-h-[40vh]">
+            <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40 max-w-md">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted border border-border">
+                <FontIcon
+                  type="search"
+                  className="w-6 h-6 text-muted-foreground"
+                />
+              </div>
+              <div className="text-lg font-medium text-foreground mb-2">
+                No projects found
+              </div>
+              <div className="text-sm text-muted-foreground mb-6">
+                No projects match your search. Try adjusting your search terms.
+              </div>
+              <button
+                className="px-4 py-2 rounded-lg border border-input text-foreground hover:bg-accent/20 transition-colors"
+                onClick={() => setSearch('')}
+              >
+                Clear search
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-8">
             {!isLoading &&
               filteredProjects.map(p => (
-              <div
-                key={p.id}
-                className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer"
-                onClick={() => openProject(p.name)}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="text-base text-foreground">{p.name}</div>
-                  <FontIcon
-                    type="arrow-right"
-                    className="w-5 h-5 text-primary"
-                  />
-                </div>
-                <div className="mt-3">
-                  <span className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5">
-                    {p.model}
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground mt-2">
-                  Last edited on {p.lastEdited}
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <button
-                    className="flex items-center gap-1 text-primary hover:opacity-80"
-                    onClick={e => {
-                      e.stopPropagation()
-                      projectModal.openEditModal(p.name)
-                    }}
-                  >
-                    <FontIcon type="edit" className="w-5 h-5 text-primary" />
-                    <span className="text-sm">Edit</span>
-                  </button>
-                </div>
+                <div
+                  key={p.id}
+                  className="group w-full rounded-lg p-4 bg-card border border-border cursor-pointer"
+                  onClick={() => openProject(p.name)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="text-base text-foreground">{p.name}</div>
+                    <FontIcon
+                      type="arrow-right"
+                      className="w-5 h-5 text-primary"
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <span className="text-xs text-primary-foreground bg-primary rounded-xl px-3 py-0.5">
+                      {p.model}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    Last edited on {p.lastEdited}
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      className="flex items-center gap-1 text-primary hover:opacity-80"
+                      onClick={e => {
+                        e.stopPropagation()
+                        projectModal.openEditModal(p.name)
+                      }}
+                    >
+                      <FontIcon type="edit" className="w-5 h-5 text-primary" />
+                      <span className="text-sm">Edit</span>
+                    </button>
+                  </div>
                 </div>
               ))}
           </div>
