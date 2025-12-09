@@ -335,15 +335,28 @@ func TestWaitForPIDFile_CreatedDuringWait(t *testing.T) {
 	pm := newTestProcessManager(t)
 	serviceName := "delayed-service"
 
+	// Use a channel to signal when the goroutine completes
+	done := make(chan struct{})
+
 	// Start a goroutine that writes the PID file after a delay
 	go func() {
+		defer close(done)
 		time.Sleep(300 * time.Millisecond)
-		writePIDFile(t, pm.pidsDir, serviceName, os.Getpid())
+		// Write PID file directly instead of using writePIDFile helper
+		// to avoid calling t.Fatalf from a goroutine (violates Go testing conventions)
+		pidFile := filepath.Join(pm.pidsDir, fmt.Sprintf("%s.pid", serviceName))
+		if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644); err != nil {
+			// Log error but don't call t.Fatalf from goroutine
+			t.Logf("failed to write PID file in goroutine: %v", err)
+		}
 	}()
 
 	start := time.Now()
 	err := pm.waitForPIDFile(serviceName, 2*time.Second)
 	elapsed := time.Since(start)
+
+	// Wait for goroutine to complete before test exits
+	<-done
 
 	if err != nil {
 		t.Errorf("expected no error, got: %v", err)

@@ -3,6 +3,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"os"
 	"syscall"
 )
@@ -18,7 +19,11 @@ func isProcessAlive(pid int) bool {
 
 	// Signal 0 doesn't actually send a signal, but does error checking:
 	// - Returns nil if process exists and we can signal it
-	// - Returns an error if process doesn't exist or we lack permission
+	// - Returns ESRCH if process doesn't exist
+	// - Returns EPERM if process exists but we lack permission (different user)
 	err = process.Signal(syscall.Signal(0))
-	return err == nil
+
+	// EPERM means the process exists but is owned by another user.
+	// We still consider it alive to prevent duplicate service starts.
+	return err == nil || errors.Is(err, syscall.EPERM)
 }

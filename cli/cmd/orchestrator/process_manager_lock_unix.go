@@ -38,6 +38,13 @@ func (pm *ProcessManager) acquireServiceLock(serviceName string) (*os.File, erro
 			return lockFile, nil
 		}
 
+		// Only retry if the lock is held by another process (EWOULDBLOCK/EAGAIN).
+		// Other errors (EBADF, etc.) should fail immediately.
+		if err != syscall.EWOULDBLOCK {
+			lockFile.Close()
+			return nil, fmt.Errorf("failed to acquire lock on %s: %w", serviceName, err)
+		}
+
 		// Check if we've exceeded the deadline
 		if time.Now().After(deadline) {
 			lockFile.Close()
