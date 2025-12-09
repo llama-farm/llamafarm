@@ -27,6 +27,7 @@ class LlamaFarmApp {
   private windowManager: WindowManager
   private menuManager: MenuManager
   private isQuitting = false
+  private startupErrorPending = false
 
   constructor() {
     // Set app name early
@@ -416,17 +417,17 @@ class LlamaFarmApp {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     console.error('Startup error:', errorMessage)
 
+    this.startupErrorPending = true
     this.windowManager.showSplashError('Failed to start LlamaFarm', errorMessage)
 
-    // Remove always-on-top and close splash to ensure error dialog is visible
+    // Remove always-on-top before showing dialog to ensure visibility
     setTimeout(() => {
       const splash = this.windowManager.getSplashWindow()
       if (splash && !splash.isDestroyed()) {
         splash.setAlwaysOnTop(false)
       }
-      this.windowManager.closeSplash()
 
-      // Use modal dialog with better UX
+      // Use modal dialog with better UX (keep splash open until after dialog)
       dialog.showMessageBoxSync({
         type: 'error',
         title: 'LlamaFarm Startup Failed',
@@ -434,6 +435,9 @@ class LlamaFarmApp {
         detail: `${errorMessage}\n\nPlease check the logs and try again.`,
         buttons: ['OK']
       })
+
+      this.windowManager.closeSplash()
+      this.isQuitting = true
       app.quit()
     }, 3000)
   }
@@ -443,6 +447,10 @@ class LlamaFarmApp {
    */
   private onWindowsClosed(): void {
     // On macOS, keep app running when windows are closed
+    if (this.startupErrorPending) {
+      return
+    }
+
     if (process.platform !== 'darwin') {
       app.quit()
     }
