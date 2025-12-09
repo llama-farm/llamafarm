@@ -88,13 +88,16 @@ class CircuitBreaker:
                     extra={"reset_timeout": self.reset_timeout},
                 )
                 self.state = CircuitState.HALF_OPEN
-                self.half_open_calls = 0
+                self.half_open_calls = 1  # Count this call as the first half-open call
                 return True
             return False
 
         if self.state == CircuitState.HALF_OPEN:
             # Allow limited calls in half-open state
-            return self.half_open_calls < self.half_open_max_calls
+            if self.half_open_calls < self.half_open_max_calls:
+                self.half_open_calls += 1
+                return True
+            return False
 
         return False
 

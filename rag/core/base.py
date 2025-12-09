@@ -79,7 +79,18 @@ class Parser(Component):
 
 
 class Embedder(Component):
-    """Base class for embedding generators with circuit breaker protection."""
+    """Base class for embedding generators with circuit breaker protection.
+
+    Subclasses should implement:
+    - `_call_embedding_api(texts)`: Make the actual API call to generate embeddings
+    - `get_embedding_dimension()`: Return the embedding dimension for this model
+
+    The base class handles:
+    - Circuit breaker pattern (stops after consecutive failures)
+    - Fail-fast behavior (raises exceptions vs returning zero vectors)
+    - Embedding validation (rejects zero/invalid embeddings)
+    - Success/failure tracking
+    """
 
     # Default circuit breaker settings (can be overridden in subclasses)
     DEFAULT_FAILURE_THRESHOLD = 5
@@ -109,6 +120,9 @@ class Embedder(Component):
         # Track whether to fail fast on errors (default: True for safety)
         self._fail_fast = (config or {}).get("fail_fast", True)
 
+        # Track consecutive failures for logging
+        self._consecutive_failures = 0
+
     @abstractmethod
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts."""
@@ -118,6 +132,106 @@ class Embedder(Component):
     def get_embedding_dimension(self) -> int:
         """Get the dimension of embeddings produced by this model."""
         pass
+
+    @abstractmethod
+    def _call_embedding_api(self, text: str) -> list[float]:
+        """Make the actual API call to generate an embedding for a single text.
+
+        Subclasses must implement this method to perform the API call.
+        This method should NOT handle errors - let them propagate up.
+
+        Args:
+            text: The text to embed
+
+        Returns:
+            The embedding vector
+
+        Raises:
+            Any exception from the underlying API
+        """
+        pass
+
+    def _get_connection_exceptions(self) -> tuple:
+        """Return tuple of exception types that indicate connection failures.
+
+        Subclasses can override to add provider-specific connection exceptions.
+        """
+        return (ConnectionError, TimeoutError)
+
+    def embed_text(self, text: str) -> list[float]:
+        """Embed a single text string with error handling.
+
+        This method handles circuit breaker, fail-fast, and error recovery.
+        Subclasses should implement `_call_embedding_api` instead.
+
+        Args:
+            text: The text to embed
+
+        Returns:
+            The embedding vector, or zero vector if fail_fast=False and error occurs
+
+        Raises:
+            EmbedderUnavailableError: If embedding fails and fail_fast=True
+            CircuitBreakerOpenError: If circuit breaker is open
+        """
+        from utils.embedding_safety import EmbedderUnavailableError, is_zero_vector
+
+        # Handle empty text
+        if not text or not text.strip():
+            if self._fail_fast:
+                raise EmbedderUnavailableError("Cannot embed empty text")
+            return [0.0] * self.get_embedding_dimension()
+
+        # Check circuit breaker
+        self.check_circuit_breaker()
+
+        try:
+            embedding = self._call_embedding_api(text)
+
+            # Validate embedding
+            if embedding and not is_zero_vector(embedding):
+                self.record_success()
+                self._consecutive_failures = 0
+                return embedding
+            else:
+                # Invalid/empty embedding returned
+                self._consecutive_failures += 1
+                self.record_failure(Exception("Empty or invalid embedding returned"))
+
+                if self._fail_fast:
+                    raise EmbedderUnavailableError(
+                        f"{self.name} returned empty/invalid embedding. "
+                        f"Consecutive failures: {self._consecutive_failures}"
+                    )
+                return [0.0] * self.get_embedding_dimension()
+
+        except EmbedderUnavailableError:
+            # Re-raise our own exceptions
+            raise
+
+        except self._get_connection_exceptions() as e:
+            self._consecutive_failures += 1
+            self.logger.error(f"Connection error embedding text: {e}")
+            self.record_failure(e)
+
+            if self._fail_fast:
+                raise EmbedderUnavailableError(
+                    f"{self.name} is unavailable: {e}. "
+                    f"Consecutive failures: {self._consecutive_failures}"
+                ) from e
+            return [0.0] * self.get_embedding_dimension()
+
+        except Exception as e:
+            self._consecutive_failures += 1
+            self.logger.error(f"Error embedding text: {e}")
+            self.record_failure(e)
+
+            if self._fail_fast:
+                raise EmbedderUnavailableError(
+                    f"Failed to embed text: {e}. "
+                    f"Consecutive failures: {self._consecutive_failures}"
+                ) from e
+            return [0.0] * self.get_embedding_dimension()
 
     def check_circuit_breaker(self) -> None:
         """

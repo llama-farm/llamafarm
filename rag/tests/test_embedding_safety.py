@@ -243,6 +243,30 @@ class TestCircuitBreaker:
         cb.record_failure(Exception("Error 3"))
         assert cb.state == CircuitState.OPEN
 
+    def test_half_open_limits_calls(self):
+        """Half-open state should limit number of calls."""
+        cb = CircuitBreaker(failure_threshold=2, reset_timeout=0.1, half_open_max_calls=2)
+
+        # Open the circuit
+        cb.record_failure(Exception("Error 1"))
+        cb.record_failure(Exception("Error 2"))
+
+        # Wait for timeout
+        time.sleep(0.15)
+
+        # First call should be allowed (transitions to half-open)
+        assert cb.can_execute() is True
+        assert cb.state == CircuitState.HALF_OPEN
+        assert cb.half_open_calls == 1
+
+        # Second call should be allowed (within limit)
+        assert cb.can_execute() is True
+        assert cb.half_open_calls == 2
+
+        # Third call should be blocked (limit reached)
+        assert cb.can_execute() is False
+        assert cb.half_open_calls == 2  # Counter shouldn't increase
+
     def test_force_reset(self):
         """Force reset should close circuit."""
         cb = CircuitBreaker(failure_threshold=2)
@@ -324,8 +348,8 @@ class TestEmbedderIntegration:
             }
         )
 
-        # Mock the API call to fail
-        with patch.object(embedder, "_call_ollama_api") as mock_api:
+        # Mock the API call to fail (now uses _call_embedding_api)
+        with patch.object(embedder, "_call_embedding_api") as mock_api:
             mock_api.side_effect = Exception("Connection refused")
 
             # Should return zero vector instead of raising

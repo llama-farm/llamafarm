@@ -55,12 +55,10 @@ class TestOllamaEmbedder:
 
         embedder = OllamaEmbedder("test_embedder", config)
 
-        # Mock the actual embedding call
-        with patch.object(embedder, "_call_ollama_api") as mock_api:
-            # Return fake embeddings
-            mock_api.return_value = {
-                "embedding": [0.1, 0.2, 0.3, 0.4, 0.5] * 100  # 500-dim fake embedding
-            }
+        # Mock the actual embedding call (now returns list[float] directly)
+        with patch.object(embedder, "_call_embedding_api") as mock_api:
+            # Return fake embeddings directly
+            mock_api.return_value = [0.1, 0.2, 0.3, 0.4, 0.5] * 100  # 500-dim fake embedding
             yield embedder, mock_api
 
     def test_embedder_initialization(self):
@@ -145,16 +143,19 @@ class TestOllamaEmbedder:
             "fail_fast": False,  # Legacy behavior
         }
         embedder = OllamaEmbedder("legacy_test", config)
+        expected_dim = embedder.get_embedding_dimension()
 
         # With fail_fast=False, empty text should return zero vector
         embedding = embedder.embed_text("")
         assert embedding is not None
         assert isinstance(embedding, list)
+        assert len(embedding) == expected_dim  # Ensure proper dimensions, not empty
         assert all(v == 0.0 for v in embedding)
 
         # Test whitespace only
         embedding = embedder.embed_text("   \n\t   ")
         assert embedding is not None
+        assert len(embedding) == expected_dim  # Ensure proper dimensions, not empty
         assert all(v == 0.0 for v in embedding)
 
     def test_batching_functionality(self, mock_embedder):
@@ -177,7 +178,7 @@ class TestOllamaEmbedder:
         embedder = OllamaEmbedder("error_test")
 
         # Mock failed API call
-        with patch.object(embedder, "_call_ollama_api") as mock_api:
+        with patch.object(embedder, "_call_embedding_api") as mock_api:
             mock_api.side_effect = Exception("API connection failed")
 
             # With fail_fast=True (default), should raise EmbedderUnavailableError
@@ -188,15 +189,17 @@ class TestOllamaEmbedder:
         """Test error handling for API failures with fail_fast=False (legacy mode)."""
         config = {"fail_fast": False}
         embedder = OllamaEmbedder("error_test_legacy", config)
+        expected_dim = embedder.get_embedding_dimension()
 
         # Mock failed API call
-        with patch.object(embedder, "_call_ollama_api") as mock_api:
+        with patch.object(embedder, "_call_embedding_api") as mock_api:
             mock_api.side_effect = Exception("API connection failed")
 
             # With fail_fast=False, should return zero vector
             embedding = embedder.embed_text("test text")
             assert embedding is not None
             assert isinstance(embedding, list)
+            assert len(embedding) == expected_dim  # Ensure proper dimensions, not empty
             assert all(v == 0.0 for v in embedding)
 
     def test_configuration_validation(self):
@@ -243,13 +246,13 @@ class TestOllamaEmbedder:
         """Test that different texts should produce different embeddings."""
         embedder, mock_api = mock_embedder
 
-        # Mock different embeddings for different texts
+        # Mock different embeddings for different texts (returns list[float] directly)
         def mock_api_side_effect(*args, **kwargs):
             text = args[0] if args else kwargs.get("text", "")
             if "first" in text:
-                return {"embedding": [0.1] * 500}
+                return [0.1] * 500
             else:
-                return {"embedding": [0.9] * 500}
+                return [0.9] * 500
 
         mock_api.side_effect = mock_api_side_effect
 
