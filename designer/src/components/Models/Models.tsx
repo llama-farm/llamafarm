@@ -578,21 +578,35 @@ function AddOrChangeModels({
 
   // Fetch GGUF options when dialog opens with a selected model group
   useEffect(() => {
-    if (confirmOpen && selectedModelGroup?.baseModelId) {
+    // Create AbortController for this effect run
+    const abortController = new AbortController()
+    const signal = abortController.signal
+
+    // Capture the current model group ID to check against in callbacks
+    const currentModelGroupId = selectedModelGroup?.baseModelId
+
+    if (confirmOpen && currentModelGroupId) {
       setIsLoadingGgufOptions(true)
       setGgufOptions([])
       setSelectedQuantization(selectedModelGroup.defaultQuantization)
 
       modelService
-        .getGGUFOptions(selectedModelGroup.baseModelId)
+        .getGGUFOptions(currentModelGroupId, signal)
         .then(data => {
+          // Guard: Check if request was aborted or model group changed
+          if (
+            signal.aborted ||
+            selectedModelGroup?.baseModelId !== currentModelGroupId
+          ) {
+            return
+          }
+
           if (data && data.options && data.options.length > 0) {
             const validOptions = data.options.filter(opt => opt.quantization)
             setGgufOptions(data.options)
 
             // Determine recommended quantization (will be set after disk space validation)
-            const recommendation =
-              recommendedQuantizations[selectedModelGroup.baseModelId]
+            const recommendation = recommendedQuantizations[currentModelGroupId]
             let initialQuantization: string | null = null
 
             if (recommendation) {
@@ -625,13 +639,29 @@ function AddOrChangeModels({
 
             // Validate disk space for each option
             validOptions.forEach(option => {
-              const modelIdentifier = `${selectedModelGroup.baseModelId}:${option.quantization}`
+              // Guard: Check if request was aborted or model group changed before each validation
+              if (
+                signal.aborted ||
+                selectedModelGroup?.baseModelId !== currentModelGroupId
+              ) {
+                return
+              }
+
+              const modelIdentifier = `${currentModelGroupId}:${option.quantization}`
 
               // Validate asynchronously - don't block UI
               modelService
-                .validateModelDownload(modelIdentifier)
+                .validateModelDownload(modelIdentifier, signal)
                 .then(
                   (validation: { can_download: boolean; warning: boolean }) => {
+                    // Guard: Check if request was aborted or model group changed
+                    if (
+                      signal.aborted ||
+                      selectedModelGroup?.baseModelId !== currentModelGroupId
+                    ) {
+                      return
+                    }
+
                     setDiskSpaceValidations(prev => {
                       const updated = {
                         ...prev,
@@ -644,7 +674,7 @@ function AddOrChangeModels({
                       // After validation, check if we should update selection
                       // If recommended doesn't fit, switch to a fallback
                       const recommendation =
-                        recommendedQuantizations[selectedModelGroup.baseModelId]
+                        recommendedQuantizations[currentModelGroupId]
                       if (recommendation) {
                         const recommendedValidation =
                           updated[recommendation.quantization]
@@ -681,6 +711,20 @@ function AddOrChangeModels({
                   }
                 )
                 .catch((err: unknown) => {
+                  // Ignore abort errors - they're expected when cleaning up
+                  if (
+                    signal.aborted ||
+                    (err as any)?.name === 'AbortError' ||
+                    (err as any)?.code === 'ERR_CANCELED'
+                  ) {
+                    return
+                  }
+
+                  // Guard: Check if model group changed
+                  if (selectedModelGroup?.baseModelId !== currentModelGroupId) {
+                    return
+                  }
+
                   console.error(
                     `Error validating disk space for ${modelIdentifier}:`,
                     err
@@ -698,26 +742,46 @@ function AddOrChangeModels({
           }
         })
         .catch(err => {
+          // Ignore abort errors - they're expected when cleaning up
+          if (
+            signal.aborted ||
+            (err as any)?.name === 'AbortError' ||
+            (err as any)?.code === 'ERR_CANCELED'
+          ) {
+            return
+          }
+
+          // Guard: Check if model group changed
+          if (selectedModelGroup?.baseModelId !== currentModelGroupId) {
+            return
+          }
+
           console.error('Error loading GGUF options:', err)
           // Don't show error, just continue without options
           setGgufOptions([])
         })
         .finally(() => {
-          setIsLoadingGgufOptions(false)
-          // Scroll to selected option after options load
-          setTimeout(() => {
-            if (optionsScrollRef.current) {
-              const selectedButton = optionsScrollRef.current.querySelector(
-                '[data-selected="true"]'
-              ) as HTMLElement
-              if (selectedButton) {
-                selectedButton.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'center',
-                })
+          // Guard: Only update loading state if this is still the current request
+          if (
+            !signal.aborted &&
+            selectedModelGroup?.baseModelId === currentModelGroupId
+          ) {
+            setIsLoadingGgufOptions(false)
+            // Scroll to selected option after options load
+            setTimeout(() => {
+              if (optionsScrollRef.current) {
+                const selectedButton = optionsScrollRef.current.querySelector(
+                  '[data-selected="true"]'
+                ) as HTMLElement
+                if (selectedButton) {
+                  selectedButton.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                  })
+                }
               }
-            }
-          }, 100)
+            }, 100)
+          }
         })
     } else if (!confirmOpen) {
       // Reset when dialog closes
@@ -725,6 +789,11 @@ function AddOrChangeModels({
       setSelectedQuantization(null)
       setIsLoadingGgufOptions(false)
       setDiskSpaceValidations({})
+    }
+
+    // Cleanup: Cancel all in-flight requests when effect re-runs or unmounts
+    return () => {
+      abortController.abort()
     }
   }, [confirmOpen, selectedModelGroup])
 
@@ -1061,6 +1130,8 @@ function AddOrChangeModels({
             // Check if it's a disk space error
             if (isDiskSpaceError(errorMessage)) {
               await handleDiskSpaceError(customModelInput.trim(), errorMessage)
+              setCustomDownloadState('error')
+              setCustomDownloadError(errorMessage)
             } else {
               setCustomDownloadState('error')
               setCustomDownloadError(errorMessage)
@@ -1075,6 +1146,8 @@ function AddOrChangeModels({
         // Check if it's a disk space error
         if (isDiskSpaceError(errorMessage)) {
           await handleDiskSpaceError(customModelInput.trim(), errorMessage)
+          setCustomDownloadState('error')
+          setCustomDownloadError(errorMessage)
         } else {
           setCustomDownloadState('error')
           setCustomDownloadError(errorMessage)
@@ -2018,6 +2091,8 @@ function AddOrChangeModels({
                             modelIdentifier,
                             errorMessage
                           )
+                          setSubmitState('error')
+                          setDownloadError(errorMessage)
                         } else {
                           setSubmitState('error')
                           setDownloadError(errorMessage)
@@ -2031,6 +2106,8 @@ function AddOrChangeModels({
                     // Check if it's a disk space error
                     if (isDiskSpaceError(errorMessage)) {
                       await handleDiskSpaceError(modelIdentifier, errorMessage)
+                      setSubmitState('error')
+                      setDownloadError(errorMessage)
                     } else {
                       setSubmitState('error')
                       setDownloadError(errorMessage)
@@ -2288,9 +2365,12 @@ const Models = () => {
       projectResponse.project.config.runtime.default_model
 
     // If no explicit default_model is set, use the first model as default
+    // Use the same fallback logic as the mapped models: name || model || 'unnamed-model'
     const effectiveDefaultModelName =
       defaultModelName ||
-      (runtimeModels.length > 0 ? runtimeModels[0]?.name : null)
+      (runtimeModels.length > 0
+        ? runtimeModels[0]?.name || runtimeModels[0]?.model || 'unnamed-model'
+        : null)
 
     const mappedModels: InferenceModel[] = runtimeModels.map((model: any) => {
       const name: string =

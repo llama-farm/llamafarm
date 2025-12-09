@@ -111,9 +111,13 @@ export async function* downloadModel(
 /**
  * Get GGUF quantization options for a model
  * @param modelId - The base model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+ * @param signal - Optional AbortSignal to cancel the request
  * @returns Promise with list of GGUF options with sizes
  */
-export async function getGGUFOptions(modelId: string): Promise<{
+export async function getGGUFOptions(
+  modelId: string,
+  signal?: AbortSignal
+): Promise<{
   options: Array<{
     filename: string
     quantization: string | null
@@ -128,21 +132,26 @@ export async function getGGUFOptions(modelId: string): Promise<{
       size_bytes: number
       size_human: string
     }>
-  }>(`/models/gguf-options/${encodeURIComponent(modelId)}`)
+  }>(`/models/gguf-options/${encodeURIComponent(modelId)}`, {
+    signal,
+  })
   return response.data
 }
 
 /**
  * Validate if there's sufficient disk space for a model download
  * @param modelName - The model identifier to validate (e.g., "meta-llama/Llama-2-7b-hf")
+ * @param signal - Optional AbortSignal to cancel the request
  * @returns Promise<ValidateDownloadResponse> - Validation result with can_download, warning, and space info
  */
 export async function validateModelDownload(
-  modelName: string
+  modelName: string,
+  signal?: AbortSignal
 ): Promise<ValidateDownloadResponse> {
   const response = await apiClient.post<ValidateDownloadResponse>(
     '/models/validate-download',
-    { model_name: modelName }
+    { model_name: modelName },
+    { signal }
   )
   return response.data
 }

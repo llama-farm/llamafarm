@@ -109,12 +109,8 @@ def parse_quantization_from_filename(filename: str) -> str | None:
         r"(I?Q[2-8]_K)(?![_\.])",  # Without separator prefix
         r"(I?Q[2-8]_XS)",  # Without separator prefix
         r"(F16|F32|FP16|FP32)",  # Without separator prefix
-        # Handle cases where quantization might be in the middle of filename
-        r"(I?Q[2-8]_K_[SML])",  # Anywhere in filename
-        r"(I?Q[2-8]_[01])",  # Anywhere in filename
-        r"(I?Q[2-8]_K)(?![_\.A-Za-z0-9])",  # Q2_K, Q3_K, etc. not followed by alphanumeric
-        r"(I?Q[2-8]_XS)",  # Anywhere in filename
-        r"(F16|F32|FP16|FP32)",  # Anywhere in filename
+        # Handle edge cases with stricter boundary checks
+        r"(I?Q[2-8]_K)(?![_\.A-Za-z0-9])",  # Q2_K, Q3_K, etc. not followed by alphanumeric (stricter than above)
     ]
 
     for pattern in patterns:
