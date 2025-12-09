@@ -460,7 +460,7 @@ function getRecommendedQuantization(
   if (fallbackQuant) {
     return {
       quantization: fallbackQuant,
-      description: recommendation.description,
+      description: null, // Don't show description for fallback - it would be misleading
     }
   }
 

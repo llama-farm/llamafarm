@@ -38,19 +38,32 @@ export function ModelDetailsModal({
   const [options, setOptions] = useState<GGUFOption[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedQuantization, setSelectedQuantization] =
-    useState<string | null>(null)
+  const [selectedQuantization, setSelectedQuantization] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
-    if (open && baseModelId && baseModelId.trim()) {
+    // Create AbortController for this effect run
+    const abortController = new AbortController()
+    const signal = abortController.signal
+
+    // Capture the current baseModelId to check against in callbacks
+    const currentBaseModelId = baseModelId
+
+    if (open && currentBaseModelId && currentBaseModelId.trim()) {
       setIsLoading(true)
       setError(null)
       setOptions([])
       setSelectedQuantization(defaultQuantization || null)
 
       modelService
-        .getGGUFOptions(baseModelId)
+        .getGGUFOptions(currentBaseModelId, signal)
         .then(data => {
+          // Guard: Check if request was aborted or baseModelId changed
+          if (signal.aborted || baseModelId !== currentBaseModelId) {
+            return
+          }
+
           if (data && data.options) {
             setOptions(data.options)
             // Set default selection if available
@@ -70,19 +83,43 @@ export function ModelDetailsModal({
           }
         })
         .catch(err => {
+          // Ignore abort errors - they're expected when cleaning up
+          if (
+            signal.aborted ||
+            (err as any)?.name === 'AbortError' ||
+            (err as any)?.code === 'ERR_CANCELED'
+          ) {
+            return
+          }
+
+          // Guard: Check if baseModelId changed
+          if (baseModelId !== currentBaseModelId) {
+            return
+          }
+
           console.error('Error loading GGUF options:', err)
           setError(
-            err?.message || err?.response?.data?.detail || 'Failed to load download options. Please try again.'
+            err?.message ||
+              err?.response?.data?.detail ||
+              'Failed to load download options. Please try again.'
           )
         })
         .finally(() => {
-          setIsLoading(false)
+          // Guard: Only update loading state if this is still the current request
+          if (!signal.aborted && baseModelId === currentBaseModelId) {
+            setIsLoading(false)
+          }
         })
     } else if (!open) {
       // Reset state when modal closes
       setOptions([])
       setError(null)
       setSelectedQuantization(null)
+    }
+
+    // Cleanup: Cancel all in-flight requests when effect re-runs or unmounts
+    return () => {
+      abortController.abort()
     }
   }, [open, baseModelId, defaultQuantization])
 
@@ -143,7 +180,10 @@ export function ModelDetailsModal({
 
             {isLoading && (
               <div className="flex items-center justify-center py-8">
-                <Loader size={24} className="border-blue-400 dark:border-blue-100" />
+                <Loader
+                  size={24}
+                  className="border-blue-400 dark:border-blue-100"
+                />
               </div>
             )}
 
@@ -158,42 +198,45 @@ export function ModelDetailsModal({
                 {sortedOptions
                   .filter(opt => opt.quantization) // Filter out null quantization options
                   .map((option, index) => {
-                    const isSelected = option.quantization === selectedQuantization
+                    const isSelected =
+                      option.quantization === selectedQuantization
                     return (
-                    <button
-                      key={`${option.quantization}-${index}`}
-                      type="button"
-                      onClick={() => setSelectedQuantization(option.quantization)}
-                      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
-                        isSelected
-                          ? 'bg-accent/80 border-primary'
-                          : 'border-border hover:bg-accent/50'
-                      }`}
-                    >
-                      <div className="flex-shrink-0">
-                        {isSelected ? (
-                          <FontIcon
-                            type="checkmark-filled"
-                            className="w-5 h-5 text-primary"
-                          />
-                        ) : (
-                          <div className="w-5 h-5 rounded-full border-2 border-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0 flex items-center gap-3">
-                        <span className="text-sm font-medium px-3 py-1 rounded-md bg-primary/10 text-primary border border-primary/20">
-                          {option.quantization || 'Unknown'}
-                        </span>
-                        <span className="text-sm text-muted-foreground truncate">
-                          {modelName}
-                        </span>
-                      </div>
-                      <div className="flex-shrink-0 text-sm font-medium text-foreground">
-                        {option.size_human}
-                      </div>
-                    </button>
-                  )
-                })}
+                      <button
+                        key={`${option.quantization}-${index}`}
+                        type="button"
+                        onClick={() =>
+                          setSelectedQuantization(option.quantization)
+                        }
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
+                          isSelected
+                            ? 'bg-accent/80 border-primary'
+                            : 'border-border hover:bg-accent/50'
+                        }`}
+                      >
+                        <div className="flex-shrink-0">
+                          {isSelected ? (
+                            <FontIcon
+                              type="checkmark-filled"
+                              className="w-5 h-5 text-primary"
+                            />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 flex items-center gap-3">
+                          <span className="text-sm font-medium px-3 py-1 rounded-md bg-primary/10 text-primary border border-primary/20">
+                            {option.quantization || 'Unknown'}
+                          </span>
+                          <span className="text-sm text-muted-foreground truncate">
+                            {modelName}
+                          </span>
+                        </div>
+                        <div className="flex-shrink-0 text-sm font-medium text-foreground">
+                          {option.size_human}
+                        </div>
+                      </button>
+                    )
+                  })}
               </div>
             )}
 
@@ -219,4 +262,3 @@ export function ModelDetailsModal({
     </Dialog>
   )
 }
-

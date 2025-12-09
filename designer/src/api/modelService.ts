@@ -132,7 +132,7 @@ export async function getGGUFOptions(
       size_bytes: number
       size_human: string
     }>
-  }>(`/models/gguf-options/${encodeURIComponent(modelId)}`, {
+  }>(`/models/${encodeURIComponent(modelId)}/quantizations`, {
     signal,
   })
   return response.data

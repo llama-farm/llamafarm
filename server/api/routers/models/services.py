@@ -27,6 +27,17 @@ class ValidateDownloadRequest(BaseModel):
     model_name: str
 
 
+class GGUFOption(BaseModel):
+    filename: str
+    quantization: str | None
+    size_bytes: int
+    size_human: str
+
+
+class GGUFOptionsResponse(BaseModel):
+    options: list[GGUFOption]
+
+
 router = APIRouter(prefix="/models", tags=["models"])
 
 
@@ -167,15 +178,15 @@ def validate_download(request: ValidateDownloadRequest):
         }
 
 
-@router.get("/gguf-options/{model_id:path}")
-def get_gguf_options(model_id: str):
+@router.get("/{model_id:path}/quantizations", response_model=GGUFOptionsResponse)
+def get_gguf_options(model_id: str) -> GGUFOptionsResponse:
     """Get all available GGUF quantization options for a model with file sizes.
 
     Args:
         model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
 
     Returns:
-        Dict with list of GGUF options, each containing:
+        GGUFOptionsResponse with list of GGUF options, each containing:
         - filename: GGUF filename
         - quantization: Quantization type (e.g., "Q4_K_M")
         - size_bytes: File size in bytes
@@ -225,7 +236,7 @@ def get_gguf_options(model_id: str):
                     logger.info(
                         f"Got {len(options)} GGUF options from siblings for {base_model_id}"
                     )
-                    return {"options": options}
+                    return GGUFOptionsResponse(options=options)
         except Exception as e:
             logger.debug(f"Could not get model info for {base_model_id}: {e}")
 
@@ -259,16 +270,16 @@ def get_gguf_options(model_id: str):
                     logger.info(
                         f"Got {len(options)} GGUF options via file listing for {base_model_id}"
                     )
-                    return {"options": options}
+                    return GGUFOptionsResponse(options=options)
         except Exception as e:
             logger.debug(f"Could not get GGUF options via file listing: {e}")
 
         # If no options found, return empty list
         if not options:
             logger.warning(f"No GGUF files found for {base_model_id}")
-            return {"options": []}
+            return GGUFOptionsResponse(options=[])
 
-        return {"options": options}
+        return GGUFOptionsResponse(options=options)
 
     except ImportError:
         logger.warning("huggingface_hub not available for GGUF options")
