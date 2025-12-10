@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.0.20](https://github.com/llama-farm/llamafarm/compare/v0.0.19...v0.0.20) (2025-12-10)
+
+
+### Features
+
+* **cli:** add auto-start service flag ([#335](https://github.com/llama-farm/llamafarm/issues/335)) ([6f18bde](https://github.com/llama-farm/llamafarm/commit/6f18bdec1300536dbd1ebe7021aa0fc6b4ef06c8))
+* **designer:** more gguf options for download ([#546](https://github.com/llama-farm/llamafarm/issues/546)) ([7f67d97](https://github.com/llama-farm/llamafarm/commit/7f67d97153b21f6a07d1bc9a9f448577daed879a))
+* **rag:** list rag database documents ([#547](https://github.com/llama-farm/llamafarm/issues/547)) ([b99eebc](https://github.com/llama-farm/llamafarm/commit/b99eebc55a4172fbe7a954b6ab70026bcef74db8))
+* **rag:** report rag stats ([#543](https://github.com/llama-farm/llamafarm/issues/543)) ([d6e2837](https://github.com/llama-farm/llamafarm/commit/d6e283748d0bf63566fae7d9316f0d7fef311251))
+* remove db chunks on file deletion ([#549](https://github.com/llama-farm/llamafarm/issues/549)) ([21bd24b](https://github.com/llama-farm/llamafarm/commit/21bd24b1c6ff7fba8cdbb54428fe835afaa1cac5))
+* **server:** start and stop data process ([#489](https://github.com/llama-farm/llamafarm/issues/489)) ([1448b1a](https://github.com/llama-farm/llamafarm/commit/1448b1ab3cb0a41df9da64c0ff6d897093b1decb))
+
+
+### Bug Fixes
+
+* **app:** first run startup failures ([#567](https://github.com/llama-farm/llamafarm/issues/567)) ([f70436e](https://github.com/llama-farm/llamafarm/commit/f70436e12e48aac5f0bf8701fee08ed78493bbb6))
+* **cli:** expand ~ before path resolution ([#563](https://github.com/llama-farm/llamafarm/issues/563)) ([a862716](https://github.com/llama-farm/llamafarm/commit/a8627165c6e95c87d8662cb55ced0e6928e7c2a3))
+* **cli:** ignore python specific env vars ([#564](https://github.com/llama-farm/llamafarm/issues/564)) ([ee4f9af](https://github.com/llama-farm/llamafarm/commit/ee4f9af705f5a1e843d44620916e369eeb2ae892))
+* **cli:** improve process manager locking ([#573](https://github.com/llama-farm/llamafarm/issues/573)) ([863a85a](https://github.com/llama-farm/llamafarm/commit/863a85a2daff56a650ca5e934972e824d60feaa3))
+* **cli:** resolve upgrade hang caused by process stop deadlock ([#566](https://github.com/llama-farm/llamafarm/issues/566)) ([5466de3](https://github.com/llama-farm/llamafarm/commit/5466de34bbb0f6981533cece93731e60497cca54))
+* **designer:** wrong version showing ([#552](https://github.com/llama-farm/llamafarm/issues/552)) ([c10335f](https://github.com/llama-farm/llamafarm/commit/c10335f8fd0357667d49568d6f05cff49eaa09c4))
+* **rag:** prevent storage of failed vectors ([#571](https://github.com/llama-farm/llamafarm/issues/571)) ([4aceb2e](https://github.com/llama-farm/llamafarm/commit/4aceb2e93a177505752863fb1bd9d92c04b811c9))
+* show modal error dialog ([#570](https://github.com/llama-farm/llamafarm/issues/570)) ([70864f1](https://github.com/llama-farm/llamafarm/commit/70864f11b23ecef09354595a1b7beda5368754d3))
+
+
+### Miscellaneous Chores
+
+* release 0.0.20 ([b7538ed](https://github.com/llama-farm/llamafarm/commit/b7538ed4f5da77c2b6106172e55d0d2fd4d31645))
+
 ## [0.0.19](https://github.com/llama-farm/llamafarm/compare/v0.0.18...v0.0.19) (2025-12-03)
 
 
