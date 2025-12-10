@@ -23,7 +23,7 @@
       "options": {
         "commands": [
           "uv python install 3.12",
-          "uv sync"
+          "uv sync --extra classification --extra anomaly --extra document"
         ],
         "cwd": "runtimes/universal",
         "parallel": false

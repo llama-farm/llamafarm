@@ -1463,13 +1463,13 @@ async def score_anomalies(request: AnomalyScoreRequest):
         return {
             "object": "list",
             "data": data,
-            "total_count": len(results),
+            "total_count": len(data),
             "model": request.model,
             "backend": request.backend,
             "summary": {
-                "total_points": len(results),
+                "total_points": len(data),
                 "anomaly_count": anomaly_count,
-                "anomaly_rate": anomaly_count / len(results) if results else 0,
+                "anomaly_rate": anomaly_count / len(data) if data else 0,
                 "threshold": request.threshold or model.threshold,
             },
         }
@@ -1543,7 +1543,8 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             }
 
         # Auto-save model to prevent data loss on restart
-        saved_paths = await _auto_save_anomaly_model(
+        # This is mandatory - models must persist across server restarts
+        await _auto_save_anomaly_model(
             model=model,
             model_name=request.model,
             backend=request.backend,
@@ -1559,8 +1560,6 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             "model_params": result.model_params,
             "encoder": encoder_info,
             "status": "fitted",
-            "auto_saved": saved_paths["model_path"] is not None,
-            "saved_path": saved_paths["model_path"],
         }
 
     except Exception as e:
@@ -1627,11 +1626,11 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         return {
             "object": "list",
             "data": data,
-            "total_count": len(results),
+            "total_count": len(data),
             "model": request.model,
             "backend": request.backend,
             "summary": {
-                "anomalies_detected": len(results),
+                "anomalies_detected": len(data),
                 "threshold": request.threshold or model.threshold,
             },
         }
@@ -1714,46 +1713,46 @@ async def _auto_save_anomaly_model(
     model_name: str,
     backend: str,
     cache_key: str,
-) -> dict[str, str | None]:
+) -> None:
     """Auto-save anomaly model after fit to prevent data loss.
 
     Models are saved immediately after training to ensure they persist
     across server restarts without requiring an explicit /save call.
 
-    Returns:
-        Dict with saved file paths (model_path, encoder_path)
+    Raises:
+        Exception: If model save fails. This is intentionally not caught
+            because models MUST be persisted - a failed save should fail
+            the entire fit operation.
     """
-    try:
-        # Create models directory if needed
-        ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    # Create models directory if needed
+    ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Generate path from model name
-        save_path = _get_model_path(model_name, backend)
-        await model.save(str(save_path))
+    # Generate path from model name
+    save_path = _get_model_path(model_name, backend)
+    await model.save(str(save_path))
 
-        # Determine actual saved file
-        if backend == "autoencoder":
-            actual_path = save_path.with_suffix(".pt")
-        else:
-            actual_path = save_path.with_suffix(".joblib")
-            if not actual_path.exists():
-                actual_path = save_path.with_suffix(".pkl")
+    # Determine actual saved file path for logging.
+    # The model.save() method appends the appropriate extension based on backend:
+    # - autoencoder backend: saves as PyTorch .pt file
+    # - sklearn backends (isolation_forest, etc.): save as .joblib (preferred)
+    #   or .pkl (legacy fallback for older scikit-learn versions)
+    if backend == "autoencoder":
+        actual_path = save_path.with_suffix(".pt")
+    else:
+        # sklearn-based backends prefer joblib for efficient array serialization,
+        # but fall back to pickle (.pkl) for compatibility with older models
+        actual_path = save_path.with_suffix(".joblib")
+        if not actual_path.exists():
+            actual_path = save_path.with_suffix(".pkl")
 
-        # Save encoder if one exists for this model
-        encoder_path = None
-        if cache_key in _encoders:
-            encoder = _encoders[cache_key]
-            encoder_save_path = save_path.parent / f"{save_path.name}_encoder.json"
-            encoder.save(encoder_save_path)
-            encoder_path = str(encoder_save_path)
-            logger.info(f"Auto-saved feature encoder to {encoder_save_path}")
+    logger.debug(f"Model saved to {actual_path}")
 
-        logger.info(f"Auto-saved anomaly model to {actual_path}")
-        return {"model_path": str(actual_path), "encoder_path": encoder_path}
-
-    except Exception as e:
-        logger.warning(f"Auto-save failed (model still in memory): {e}")
-        return {"model_path": None, "encoder_path": None}
+    # Save encoder if one exists for this model
+    if cache_key in _encoders:
+        encoder = _encoders[cache_key]
+        encoder_save_path = save_path.parent / f"{save_path.name}_encoder.json"
+        encoder.save(encoder_save_path)
+        logger.debug(f"Feature encoder saved to {encoder_save_path}")
 
 
 @app.post("/v1/anomaly/save")
