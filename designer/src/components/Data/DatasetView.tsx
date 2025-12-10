@@ -46,6 +46,7 @@ import {
   useListDatasets,
   useDeleteDatasetFile,
   useDeleteDataset,
+  useCancelTask,
 } from '../../hooks/useDatasets'
 import {
   DatasetFile,
@@ -229,6 +230,48 @@ function DatasetView() {
     { enabled: !!currentTaskId && !!activeProject }
   )
 
+  // Cancel task mutation
+  const cancelTaskMutation = useCancelTask()
+
+  const handleStopProcessing = useCallback(() => {
+    if (!currentTaskId || !activeProject?.namespace || !activeProject?.project) return
+
+    cancelTaskMutation.mutate(
+      {
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        taskId: currentTaskId,
+      },
+      {
+        onSuccess: () => {
+          clearDatasetTaskId(
+            activeProject.namespace,
+            activeProject.project,
+            datasetId || ''
+          )
+          setCurrentTaskId(null)
+          toast({
+            message: 'Processing cancelled successfully',
+            variant: 'default',
+          })
+        },
+        onError: (error: any) => {
+          toast({
+            message:
+              error?.message || 'Failed to cancel processing. Please try again.',
+            variant: 'destructive',
+          })
+        },
+      }
+    )
+  }, [
+    currentTaskId,
+    activeProject,
+    datasetId,
+    cancelTaskMutation,
+    toast,
+  ])
+
   // Clear task ID from sessionStorage when processing completes
   useEffect(() => {
     if (
@@ -238,7 +281,11 @@ function DatasetView() {
       activeProject?.project &&
       datasetId
     ) {
-      if (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE') {
+      if (
+        taskStatus.state === 'SUCCESS' ||
+        taskStatus.state === 'FAILURE' ||
+        taskStatus.cancelled
+      ) {
         // Clear from sessionStorage
         clearDatasetTaskId(
           activeProject.namespace,
@@ -1789,6 +1836,26 @@ function DatasetView() {
                         {taskStatus.meta.current || 0} /{' '}
                         {taskStatus.meta.total || 0} files
                       </Badge>
+                      {taskStatus.state !== 'SUCCESS' &&
+                        taskStatus.state !== 'FAILURE' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleStopProcessing}
+                            disabled={cancelTaskMutation.isPending}
+                            className="h-7 px-3 text-xs"
+                            title="Stop processing"
+                          >
+                            {cancelTaskMutation.isPending ? (
+                              <>
+                                <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin mr-1" />
+                                Stopping...
+                              </>
+                            ) : (
+                              'Stop'
+                            )}
+                          </Button>
+                        )}
                     </div>
                   </div>
                   <div className="rounded-md border border-border max-h-80 overflow-auto">

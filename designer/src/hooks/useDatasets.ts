@@ -298,9 +298,13 @@ export function useTaskStatus(
     queryFn: () => datasetService.getTaskStatus(namespace, project, taskId!),
     enabled: !!taskId && !!namespace && !!project && options?.enabled !== false,
     refetchInterval: query => {
-      // Stop polling if task completed or failed
+      // Stop polling if task completed, failed, or cancelled
       const data = query.state.data as any
-      if (data?.state === 'SUCCESS' || data?.state === 'FAILURE') {
+      if (
+        data?.state === 'SUCCESS' ||
+        data?.state === 'FAILURE' ||
+        data?.cancelled
+      ) {
         return false
       }
       return options?.refetchInterval || 2000 // Poll every 2 seconds by default
@@ -408,6 +412,37 @@ export function useDeleteDatasetFile() {
 }
 
 /**
+ * Hook to cancel a running task
+ * @returns Mutation for cancelling tasks
+ */
+export function useCancelTask() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: {
+      namespace: string
+      project: string
+      taskId: string
+    }) =>
+      datasetService.cancelTask(
+        data.namespace,
+        data.project,
+        data.taskId
+      ),
+    onSuccess: (_, variables) => {
+      // Invalidate task status query to stop polling and refresh state
+      queryClient.invalidateQueries({
+        queryKey: ['task-status', variables.namespace, variables.project, variables.taskId],
+      })
+      // Also invalidate datasets list to refresh any status changes
+      queryClient.invalidateQueries({
+        queryKey: datasetKeys.list(variables.namespace, variables.project),
+      })
+    },
+  })
+}
+
+/**
  * Default export with all dataset hooks
  */
 export default {
@@ -423,5 +458,6 @@ export default {
   useTaskStatus,
   useReIngestDataset,
   useDeleteDatasetFile,
+  useCancelTask,
   datasetKeys,
 }

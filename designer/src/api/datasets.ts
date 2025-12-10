@@ -10,6 +10,7 @@ import {
   FileDeleteResponse,
   FileDeleteParams,
   TaskStatusResponse,
+  CancelTaskResponse,
 } from '../types/datasets'
 
 /**
@@ -258,6 +259,24 @@ export async function getTaskStatus(
 }
 
 /**
+ * Cancel a running task
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param taskId - The task identifier to cancel
+ * @returns Promise<CancelTaskResponse> - The cancellation response with cleanup details
+ */
+export async function cancelTask(
+  namespace: string,
+  project: string,
+  taskId: string
+): Promise<CancelTaskResponse> {
+  const response = await apiClient.delete<CancelTaskResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/tasks/${encodeURIComponent(taskId)}`
+  )
+  return response.data
+}
+
+/**
  * Delete a file from a dataset
  * @param namespace - The project namespace
  * @param project - The project identifier
@@ -300,5 +319,6 @@ export default {
   deleteFileFromDataset,
   ingestDataset,
   getTaskStatus,
+  cancelTask,
   deleteDatasetFile,
 }

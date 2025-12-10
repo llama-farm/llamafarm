@@ -144,6 +144,44 @@ export interface TaskStatusResponse {
   error: string | null
   /** Error traceback when failed */
   traceback: string | null
+  /** Whether the task was cancelled */
+  cancelled?: boolean
+}
+
+/**
+ * Cleanup error details
+ */
+export interface CleanupError {
+  /** File hash that failed to revert */
+  file_hash: string
+  /** Error message */
+  error: string
+}
+
+/**
+ * Response from cancelling a task
+ */
+export interface CancelTaskResponse {
+  /** Human-readable message about the cancellation */
+  message: string
+  /** The ID of the cancelled task */
+  task_id: string
+  /** Whether the task was successfully cancelled */
+  cancelled: boolean
+  /** Number of pending tasks that were cancelled */
+  pending_tasks_cancelled: number
+  /** Number of running tasks at the time of cancellation */
+  running_tasks_at_cancel: number
+  /** Number of files that were successfully reverted */
+  files_reverted: number
+  /** Number of files that failed to revert */
+  files_failed_to_revert: number
+  /** List of errors encountered during cleanup */
+  errors?: CleanupError[] | null
+  /** True if the task had already completed before cancellation was requested */
+  already_completed: boolean
+  /** True if the task was already cancelled */
+  already_cancelled: boolean
 }
 
 /**

@@ -56,7 +56,7 @@ import {
   loadDatasetTaskId,
   clearDatasetTaskId,
 } from '../../utils/datasetStorage'
-import { useTaskStatus } from '../../hooks/useDatasets'
+import { useTaskStatus, useCancelTask } from '../../hooks/useDatasets'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
@@ -93,11 +93,13 @@ const DatasetCard = ({
     }
   )
 
-  // Clear task ID when processing completes
+  // Clear task ID when processing completes or is cancelled
   useEffect(() => {
     if (
       taskStatus &&
-      (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE')
+      (taskStatus.state === 'SUCCESS' ||
+        taskStatus.state === 'FAILURE' ||
+        taskStatus.cancelled)
     ) {
       clearDatasetTaskId(
         activeProject?.namespace || '',
@@ -125,6 +127,52 @@ const DatasetCard = ({
 
     return 0
   }, [isProcessing, taskStatus])
+
+  // Cancel task mutation
+  const cancelTaskMutation = useCancelTask()
+  const { toast } = useToast()
+
+  const handleStopProcessing = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (!taskId || !activeProject?.namespace || !activeProject?.project) return
+
+      cancelTaskMutation.mutate(
+        {
+          namespace: activeProject.namespace,
+          project: activeProject.project,
+          taskId,
+        },
+        {
+          onSuccess: () => {
+            clearDatasetTaskId(
+              activeProject.namespace,
+              activeProject.project,
+              dataset.name
+            )
+            toast({
+              message: 'Processing cancelled successfully',
+              variant: 'default',
+            })
+          },
+          onError: (error: any) => {
+            toast({
+              message:
+                error?.message || 'Failed to cancel processing. Please try again.',
+              variant: 'destructive',
+            })
+          },
+        }
+      )
+    },
+    [
+      taskId,
+      activeProject,
+      dataset.name,
+      cancelTaskMutation,
+      toast,
+    ]
+  )
 
   return (
     <div
@@ -203,9 +251,9 @@ const DatasetCard = ({
         {dataset.files.length} {dataset.files.length === 1 ? 'file' : 'files'}
       </div>
 
-      {/* Processing percentage badge */}
+      {/* Processing percentage badge and stop button */}
       {isProcessing && (
-        <div className="absolute bottom-3 right-3">
+        <div className="absolute bottom-3 right-3 flex items-center gap-2">
           <Badge
             variant="secondary"
             size="sm"
@@ -213,6 +261,23 @@ const DatasetCard = ({
           >
             Processing {processingPercent}%...
           </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleStopProcessing}
+            disabled={cancelTaskMutation.isPending}
+            className="h-7 px-2 text-xs"
+            title="Stop processing"
+          >
+            {cancelTaskMutation.isPending ? (
+              <>
+                <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin mr-1" />
+                Stopping...
+              </>
+            ) : (
+              'Stop'
+            )}
+          </Button>
         </div>
       )}
     </div>
