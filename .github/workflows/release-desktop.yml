@@ -281,14 +281,14 @@ jobs:
 
           # Generate SHA256 for all distributable files (using shasum on macOS/Linux)
           if [[ "${{ matrix.platform }}" == "macos" ]]; then
-            for file in *.dmg *.zip; do
+            for file in LlamaFarm-desktop-app-mac*.dmg LlamaFarm-desktop-app-mac*.zip; do
               if [ -f "$file" ]; then
                 shasum -a 256 "$file" > "$file.sha256"
                 echo "✅ Generated checksum for $file"
               fi
             done
           elif [[ "${{ matrix.platform }}" == "linux" ]]; then
-            for file in *.AppImage *.deb; do
+            for file in LlamaFarm-desktop-app-linux*.AppImage LlamaFarm-desktop-app-linux*.deb; do
               if [ -f "$file" ]; then
                 shasum -a 256 "$file" > "$file.sha256"
                 echo "✅ Generated checksum for $file"
@@ -306,7 +306,7 @@ jobs:
           cd "release/$VERSION_NO_V"
 
           # Generate SHA256 for all distributable files (using PowerShell on Windows)
-          Get-ChildItem -Filter "*.exe" | ForEach-Object {
+          Get-ChildItem -Filter "LlamaFarm-desktop-app-windows*.exe" | ForEach-Object {
             $hash = Get-FileHash -Algorithm SHA256 -Path $_.FullName
             "$($hash.Hash.ToLower())  $($_.Name)" | Out-File -FilePath "$($_.Name).sha256" -Encoding ascii
             Write-Host "✅ Generated checksum for $($_.Name)"
@@ -342,11 +342,11 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.version }}
           files: |
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.exe
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.dmg
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.zip
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.deb
-            electron-app/release/${{ steps.version.outputs.version_no_v }}/*.AppImage
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/LlamaFarm-desktop-app-windows*.exe
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/LlamaFarm-desktop-app-mac*.dmg
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/LlamaFarm-desktop-app-mac*.zip
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/LlamaFarm-desktop-app-linux*.deb
+            electron-app/release/${{ steps.version.outputs.version_no_v }}/LlamaFarm-desktop-app-linux*.AppImage
             electron-app/release/${{ steps.version.outputs.version_no_v }}/*.sha256
           fail_on_unmatched_files: false
           append_body: false
@@ -380,33 +380,34 @@ jobs:
             ## Desktop App Downloads
 
             ### macOS
-            Download the universal DMG that works on both Apple Silicon and Intel Macs:
-            - **Universal (Apple Silicon and Intel)**: `LlamaFarm-${{ steps.version.outputs.version_no_v }}.dmg`
+            Download for Apple Silicon (M1+) or Intel Macs:
+            - **Apple Silicon (arm64)**: `LlamaFarm-desktop-app-mac-arm64.dmg` or `.zip`
+            - **Intel (x64)**: `LlamaFarm-desktop-app-mac-x64.dmg` or `.zip`
 
             **Installation:**
-            1. Download the DMG file
-            2. Open the DMG and drag LlamaFarm to Applications
+            1. Download the DMG or ZIP file for your architecture
+            2. Open the DMG and drag LlamaFarm to Applications (or extract the ZIP)
             3. Launch the app (it's signed and notarized, so it will open normally)
             4. The app will auto-install the CLI and start services
 
             ### Linux
             Download the appropriate package for your Linux distribution:
-            - **AppImage** (Universal): `LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage`
-            - **Debian/Ubuntu**: `llamafarm-desktop_${{ steps.version.outputs.version_no_v }}_amd64.deb`
+            - **AppImage** (Universal): `LlamaFarm-desktop-app-linux.AppImage`
+            - **Debian/Ubuntu**: `LlamaFarm-desktop-app-linux.deb`
 
             **Installation:**
             ```bash
             # AppImage (works on all distributions)
-            chmod +x LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage
-            ./LlamaFarm-${{ steps.version.outputs.version_no_v }}.AppImage
+            chmod +x LlamaFarm-desktop-app-linux.AppImage
+            ./LlamaFarm-desktop-app-linux.AppImage
 
             # Debian/Ubuntu
-            sudo dpkg -i llamafarm-desktop_${{ steps.version.outputs.version_no_v }}_amd64.deb
+            sudo dpkg -i LlamaFarm-desktop-app-linux.deb
             ```
 
             ### Windows
             Download the Windows installer:
-            - **Windows Installer**: `LlamaFarm-Setup-${{ steps.version.outputs.version_no_v }}.exe`
+            - **Windows Installer**: `LlamaFarm-desktop-app-windows.exe`
 
             **Installation:**
             1. Download the installer
@@ -444,13 +445,12 @@ jobs:
           echo "Waiting 60 seconds for release assets to be available..."
           sleep 60
 
-      - name: Download and verify DMG (Universal)
+      - name: Download and verify DMG (arm64)
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NO_V="${{ steps.version.outputs.version_no_v }}"
 
-          # Download the Universal DMG
-          DMG_URL="https://github.com/llama-farm/llamafarm/releases/download/${VERSION}/LlamaFarm-${VERSION_NO_V}.dmg"
+          # Download the arm64 DMG (testing on Apple Silicon runner)
+          DMG_URL="https://github.com/llama-farm/llamafarm/releases/download/${VERSION}/LlamaFarm-desktop-app-mac-arm64.dmg"
           echo "Downloading from: $DMG_URL"
 
           # Download with retries
@@ -484,8 +484,8 @@ jobs:
           FILE_SIZE=$(stat -f%z "LlamaFarm.dmg")
           echo "✅ DMG downloaded successfully (${FILE_SIZE} bytes)"
 
-          # Verify minimum file size (DMG should be at least 80MB for universal binary)
-          MIN_SIZE=$((80 * 1024 * 1024))
+          # Verify minimum file size (DMG should be at least 50MB)
+          MIN_SIZE=$((50 * 1024 * 1024))
           if [ $FILE_SIZE -lt $MIN_SIZE ]; then
             echo "❌ ERROR: DMG file is too small (${FILE_SIZE} bytes < ${MIN_SIZE} bytes)"
             echo "The file may be corrupted or incomplete"
@@ -516,17 +516,17 @@ jobs:
 
           echo "✅ App bundle structure is valid"
 
-          # Verify universal binary (contains both arm64 and x86_64)
+          # Verify binary architecture
           ARCHITECTURES=$(lipo -archs "/Volumes/LlamaFarm/LlamaFarm.app/Contents/MacOS/LlamaFarm")
           echo "Binary architectures: $ARCHITECTURES"
 
-          if [[ ! "$ARCHITECTURES" =~ "arm64" ]] || [[ ! "$ARCHITECTURES" =~ "x86_64" ]]; then
-            echo "❌ ERROR: Binary is not universal (missing arm64 or x86_64)"
+          if [[ ! "$ARCHITECTURES" =~ "arm64" ]]; then
+            echo "❌ ERROR: arm64 architecture not found in binary"
             hdiutil detach /Volumes/LlamaFarm
             exit 1
           fi
 
-          echo "✅ Binary is universal (contains both arm64 and x86_64)"
+          echo "✅ Binary contains arm64 architecture"
 
           # Unmount
           hdiutil detach /Volumes/LlamaFarm
