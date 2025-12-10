@@ -1067,6 +1067,25 @@ function DatasetView() {
     return isProcessed || isSkipped
   }
 
+  // Helper function to get chunk count for a file
+  const getFileChunkCount = (fileHash: string | undefined): number | null => {
+    if (!fileHash || !processingResult?.details) {
+      return null // No chunk count available if no hash or no processing data
+    }
+
+    const fileDetail = processingResult.details.find(
+      (detail: FileProcessingDetail) =>
+        detail.hash === fileHash || (detail as any).file_hash === fileHash
+    )
+
+    if (!fileDetail) {
+      return null // No chunk count if not in results
+    }
+
+    // Return chunk count if available
+    return fileDetail.chunks ?? null
+  }
+
   const handleDeleteFile = (fileHash: string) => {
     if (!activeProject?.namespace || !activeProject?.project || !datasetId)
       return
@@ -1087,7 +1106,7 @@ function DatasetView() {
     }
 
     try {
-      await deleteFileMutation.mutateAsync({
+      const result = await deleteFileMutation.mutateAsync({
         namespace: activeProject.namespace,
         project: activeProject.project,
         dataset: datasetId,
@@ -1095,8 +1114,29 @@ function DatasetView() {
         removeFromDisk: true,
       })
 
+      const deletedChunks = result?.deleted_chunks ?? 0
+      
+      // Update processing results to reflect chunk deletion
+      // Remove the file from processing results if it was deleted
+      if (processingResult && pendingDeleteFileHash) {
+        setProcessingResult(prev => {
+          if (!prev) return null
+          return {
+            ...prev,
+            details: prev.details.filter(
+              (detail: FileProcessingDetail) =>
+                detail.hash !== pendingDeleteFileHash &&
+                (detail as any).file_hash !== pendingDeleteFileHash
+            ),
+          }
+        })
+      }
+      
       toast({
-        message: 'File deleted successfully',
+        message:
+          deletedChunks > 0
+            ? `File deleted successfully. ${deletedChunks} chunk${deletedChunks !== 1 ? 's' : ''} removed from vector store.`
+            : 'File deleted successfully.',
         variant: 'default',
       })
     } catch (error) {
@@ -2495,6 +2535,14 @@ function DatasetView() {
                                         Not Processed
                                       </span>
                                     )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {(() => {
+                                      const chunkCount = getFileChunkCount(f.fullHash)
+                                      return chunkCount !== null
+                                        ? `${chunkCount} chunk${chunkCount !== 1 ? 's' : ''}`
+                                        : '-'
+                                    })()}
                                   </div>
                                   <div className="flex items-center gap-6">
                                     {fileUploadStatuses.find(s => s.id === f.id)

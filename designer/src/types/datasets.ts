@@ -126,6 +126,8 @@ export interface FileUploadResponse {
 export interface FileDeleteResponse {
   /** Hash of the deleted file */
   file_hash: string
+  /** Number of chunks deleted from vector store */
+  deleted_chunks: number
 }
 
 /**
