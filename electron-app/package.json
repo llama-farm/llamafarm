@@ -102,8 +102,12 @@
         "nsis",
         "portable"
       ],
+      "arch": [
+        "x64",
+        "arm64"
+      ],
       "icon": "build/icon.ico",
-      "artifactName": "LlamaFarm-desktop-app-windows.${ext}",
+      "artifactName": "LlamaFarm-desktop-app-windows-${arch}.${ext}",
       "signtoolOptions": {
         "sign": "./sign-windows.js"
       }
@@ -115,7 +119,7 @@
       ],
       "category": "Development",
       "icon": "build/icons",
-      "artifactName": "LlamaFarm-desktop-app-linux.${ext}"
+      "artifactName": "LlamaFarm-desktop-app-linux-${arch}.${ext}"
     },
     "extraResources": [
       {
