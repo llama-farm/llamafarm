@@ -24,7 +24,7 @@ env:
 
 jobs:
   generate-prose-changelog:
-    runs-on: ubuntu-latest
+    runs-on: gpu-med
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
