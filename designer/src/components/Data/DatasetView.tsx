@@ -130,6 +130,7 @@ function DatasetView() {
     taskId: string
   } | null>(null)
   const [isResultsOpen, setIsResultsOpen] = useState(false)
+  const [isProcessingQueued, setIsProcessingQueued] = useState(false)
 
   // Transform async task result from [bool, {...}] format to normalized structure
   const normalizeTaskResult = (rawResult: any): ProcessDatasetResponse => {
@@ -345,6 +346,38 @@ function DatasetView() {
         }
         // Refetch datasets to get updated file list
         refetchDatasets()
+
+        // Handle queued processing - trigger after current job completes
+        if (isProcessingQueued) {
+          setIsProcessingQueued(false)
+          // Only trigger if job succeeded or was cancelled (not on failure)
+          // On failure, user can manually retry
+          if (taskStatus.state === 'SUCCESS' || taskStatus.cancelled) {
+            // Use async function inside useEffect
+            ;(async () => {
+              try {
+                const result = await processMutation.mutateAsync({
+                  namespace: activeProject.namespace,
+                  project: activeProject.project,
+                  dataset: datasetId,
+                })
+
+                if (result.task_id) {
+                  setCurrentTaskId(result.task_id)
+                  saveDatasetTaskId(
+                    activeProject.namespace,
+                    activeProject.project,
+                    datasetId,
+                    result.task_id
+                  )
+                }
+              } catch (error) {
+                console.error('Failed to start queued processing:', error)
+                // Don't show error toast - processing can be triggered manually
+              }
+            })()
+          }
+        }
       }
     }
   }, [
@@ -355,6 +388,8 @@ function DatasetView() {
     datasetId,
     taskStatus,
     refetchDatasets,
+    isProcessingQueued,
+    processMutation,
   ])
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
@@ -702,6 +737,37 @@ function DatasetView() {
       // Refetch datasets to update the file list
       await refetchDatasets()
 
+      // Auto-trigger processing if at least one file was successfully uploaded
+      if (successCount > 0 && datasetId && activeProject?.namespace && activeProject?.project) {
+        // Check if processing is currently running
+        if (currentTaskId) {
+          // Queue processing for after current job completes
+          setIsProcessingQueued(true)
+        } else {
+          // Trigger processing immediately
+          try {
+            const result = await processMutation.mutateAsync({
+              namespace: activeProject.namespace,
+              project: activeProject.project,
+              dataset: datasetId,
+            })
+
+            if (result.task_id) {
+              setCurrentTaskId(result.task_id)
+              saveDatasetTaskId(
+                activeProject.namespace,
+                activeProject.project,
+                datasetId,
+                result.task_id
+              )
+            }
+          } catch (error) {
+            console.error('Failed to auto-start processing:', error)
+            // Don't show error toast - processing can be triggered manually
+          }
+        }
+      }
+
       // Clear stats after upload completes
       setTimeout(() => setUploadStats(null), 5000)
     },
@@ -712,6 +778,8 @@ function DatasetView() {
       filterFilesByType,
       uploadMutation,
       refetchDatasets,
+      processMutation,
+      currentTaskId,
     ]
   )
 

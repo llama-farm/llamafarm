@@ -41,6 +41,7 @@ import {
   useCreateDataset,
   useDeleteDataset,
   useAvailableStrategies,
+  useProcessDataset,
 } from '../../hooks/useDatasets'
 import { uploadFileToDataset } from '../../api/datasets'
 import datasetService from '../../api/datasets'
@@ -398,6 +399,9 @@ const Data = () => {
       // Error toasts for actual failures are handled in handleDatasetSelect
     },
   })
+
+  // Process dataset mutation for auto-processing after upload
+  const processMutation = useProcessDataset()
 
   // Fetch available strategies and databases from API
   const { data: availableOptions } = useAvailableStrategies(
@@ -884,6 +888,41 @@ const Data = () => {
         if (successes.length > 0) {
           // Explicitly refetch to ensure fresh data before navigating
           await refetchDatasets()
+
+          // Auto-trigger processing after successful uploads
+          if (activeProject?.namespace && activeProject?.project) {
+            // Check if processing is already running for this dataset
+            const existingTaskId = loadDatasetTaskId(
+              activeProject.namespace,
+              activeProject.project,
+              datasetId
+            )
+
+            if (!existingTaskId) {
+              // No processing running, trigger immediately
+              try {
+                const result = await processMutation.mutateAsync({
+                  namespace: activeProject.namespace,
+                  project: activeProject.project,
+                  dataset: datasetId,
+                })
+
+                if (result.task_id) {
+                  saveDatasetTaskId(
+                    activeProject.namespace,
+                    activeProject.project,
+                    datasetId,
+                    result.task_id
+                  )
+                }
+              } catch (error) {
+                console.error('Failed to auto-start processing:', error)
+                // Don't show error toast - processing can be triggered manually in dataset view
+              }
+            }
+            // If processing is already running, DatasetView will handle queuing
+          }
+
           navigate(`/chat/data/${datasetId}`)
         }
       } catch (error) {
@@ -920,6 +959,7 @@ const Data = () => {
       toast,
       navigate,
       refetchDatasets,
+      processMutation,
     ]
   )
 

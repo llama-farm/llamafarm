@@ -188,6 +188,7 @@ export async function uploadFileToDataset(
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 300000, // 5 minutes for file uploads (larger files need more time)
     }
   )
   return response.data
