@@ -99,12 +99,20 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
-      ],
-      "arch": [
-        "x64",
-        "arm64"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "build/icon.ico",
       "artifactName": "LlamaFarm-desktop-app-windows-${arch}.${ext}",
@@ -114,8 +122,20 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "Development",
       "icon": "build/icons",
