@@ -269,7 +269,7 @@ rag:
 runtime:
   models:
     - description: Default Universal model
-      model: unsloth/gpt-oss-20b-GGUF:Q5_K_M
+      model: unsloth/Qwen3-4B-GGUF:Q5_K_M
       name: default
       prompts:
         - default

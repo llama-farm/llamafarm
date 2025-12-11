@@ -1,16 +1,19 @@
 name: Generate Prose Changelog
 
 on:
+  push:
+    branches:
+      - chore-prose-changelog
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to generate changelog for (e.g., 0.0.19). Leave empty for latest.'
+        description: "Version to generate changelog for (e.g., 0.0.19). Leave empty for latest."
         required: false
         type: string
       model:
-        description: 'LlamaFarm model to use for generation'
+        description: "LlamaFarm model to use for generation"
         required: false
-        default: ''
+        default: ""
         type: string
 
 permissions:
@@ -30,9 +33,8 @@ jobs:
         id: generate
         uses: ./.github/actions/prose-changelog
         with:
-          version: ${{ inputs.version }}
+          version: ${{ inputs.version || '0.0.20' }}
           model: ${{ inputs.model }}
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 
       - name: Add to job summary
         run: |

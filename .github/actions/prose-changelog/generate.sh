@@ -16,7 +16,6 @@
 #   INPUT_MODEL=powerful ./generate.sh               # Use specific model
 
 set -euo pipefail
-set -x
 
 # Configuration from environment or defaults
 VERSION="${INPUT_VERSION:-}"
