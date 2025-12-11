@@ -90,8 +90,10 @@ export interface DeleteDatasetResponse {
  * Request payload for executing dataset actions
  */
 export interface DatasetActionRequest {
-  /** Type of action to execute (currently only 'process') */
-  action_type: 'process'
+  /** Type of action to execute */
+  action_type: 'process' | 'delete_chunks'
+  /** File hash for delete_chunks action */
+  file_hash?: string
 }
 
 /**
@@ -104,6 +106,18 @@ export interface DatasetActionResponse {
   task_uri: string
   /** Task identifier */
   task_id: string
+}
+
+/**
+ * Response from deleting chunks for a file
+ */
+export interface DeleteChunksResponse {
+  /** Status message */
+  message: string
+  /** File hash */
+  file_hash: string
+  /** Number of chunks deleted */
+  deleted_chunks: number
 }
 
 /**

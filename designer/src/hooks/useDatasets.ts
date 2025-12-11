@@ -412,6 +412,28 @@ export function useDeleteDatasetFile() {
 }
 
 /**
+ * Hook to delete chunks for a file from the vector store (without deleting the source file)
+ * Used for reprocessing files
+ * @returns Mutation for deleting file chunks
+ */
+export function useDeleteFileChunks() {
+  return useMutation({
+    mutationFn: (data: {
+      namespace: string
+      project: string
+      dataset: string
+      fileHash: string
+    }) =>
+      datasetService.deleteFileChunks(
+        data.namespace,
+        data.project,
+        data.dataset,
+        data.fileHash
+      ),
+  })
+}
+
+/**
  * Hook to cancel a running task
  * @returns Mutation for cancelling tasks
  */
@@ -458,6 +480,7 @@ export default {
   useTaskStatus,
   useReIngestDataset,
   useDeleteDatasetFile,
+  useDeleteFileChunks,
   useCancelTask,
   datasetKeys,
 }

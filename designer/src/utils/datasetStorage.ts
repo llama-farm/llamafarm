@@ -171,3 +171,31 @@ export function clearAllDatasetResults(): void {
   clearAllFromStorage('local', RESULT_PREFIX)
 }
 
+// Reprocessing file hash storage (sessionStorage)
+const REPROCESSING_FILE_PREFIX = 'dataset-reprocessing-file'
+
+export function saveReprocessingFileHash(
+  namespace: string,
+  project: string,
+  dataset: string,
+  fileHash: string
+): void {
+  saveToStorage('session', REPROCESSING_FILE_PREFIX, namespace, project, dataset, fileHash)
+}
+
+export function loadReprocessingFileHash(
+  namespace: string,
+  project: string,
+  dataset: string
+): string | null {
+  return loadFromStorage<string>('session', REPROCESSING_FILE_PREFIX, namespace, project, dataset)
+}
+
+export function clearReprocessingFileHash(
+  namespace: string,
+  project: string,
+  dataset: string
+): void {
+  clearFromStorage('session', REPROCESSING_FILE_PREFIX, namespace, project, dataset)
+}
+

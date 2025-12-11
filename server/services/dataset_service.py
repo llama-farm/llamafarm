@@ -382,6 +382,51 @@ class DatasetService:
         return result
 
     @classmethod
+    async def delete_file_chunks(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file_hash: str,
+    ) -> dict:
+        """
+        Delete chunks for a file from the vector store WITHOUT deleting the source file.
+        Used for reprocessing files.
+
+        Returns:
+            Dictionary with deletion results including deleted_count from vector store.
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        existing_datasets = project_config.datasets or []
+        dataset_obj = next(
+            (ds for ds in existing_datasets if ds.name == dataset),
+            None,
+        )
+        if dataset_obj is None:
+            raise DatasetNotFoundError(dataset)
+
+        project_dir = ProjectService.get_project_dir(namespace, project)
+        result = await delete_file_from_rag(
+            project_dir=project_dir,
+            database_name=dataset_obj.database,
+            file_hash=file_hash,
+        )
+
+        if result.get("status") == "error":
+            raise Exception(result.get("error"))
+
+        logger.info(
+            "Deleted chunks from vector store (keeping source file)",
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hash=file_hash[:16] + "...",
+            deleted_chunks=result.get("deleted_count", 0),
+        )
+
+        return result
+
+    @classmethod
     def start_dataset_ingestion(
         cls, namespace: str, project: str, dataset: str
     ) -> DatasetIngestLaunchResult:

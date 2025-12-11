@@ -6,6 +6,7 @@ import {
   DeleteDatasetResponse,
   DatasetActionRequest,
   DatasetActionResponse,
+  DeleteChunksResponse,
   FileUploadResponse,
   FileDeleteResponse,
   FileDeleteParams,
@@ -143,6 +144,28 @@ export async function executeDatasetAction(
   const response = await apiClient.post<DatasetActionResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
     request
+  )
+  return response.data
+}
+
+/**
+ * Delete chunks for a file from the vector store (without deleting the source file)
+ * Used for reprocessing files
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param dataset - The dataset name
+ * @param fileHash - The file hash to delete chunks for
+ * @returns Promise<DeleteChunksResponse> - The response with deleted chunk count
+ */
+export async function deleteFileChunks(
+  namespace: string,
+  project: string,
+  dataset: string,
+  fileHash: string
+): Promise<DeleteChunksResponse> {
+  const response = await apiClient.post<DeleteChunksResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
+    { action_type: 'delete_chunks', file_hash: fileHash }
   )
   return response.data
 }
@@ -316,6 +339,7 @@ export default {
   createDataset,
   deleteDataset,
   executeDatasetAction,
+  deleteFileChunks,
   uploadFileToDataset,
   deleteFileFromDataset,
   ingestDataset,

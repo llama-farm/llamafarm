@@ -47,6 +47,7 @@ import {
   useDeleteDatasetFile,
   useDeleteDataset,
   useCancelTask,
+  useDeleteFileChunks,
 } from '../../hooks/useDatasets'
 import {
   DatasetFile,
@@ -64,6 +65,9 @@ import {
   saveDatasetResult,
   loadDatasetResult,
   clearDatasetResult,
+  saveReprocessingFileHash,
+  loadReprocessingFileHash,
+  clearReprocessingFileHash,
 } from '../../utils/datasetStorage'
 
 type Dataset = {
@@ -196,6 +200,18 @@ function DatasetView() {
         }
       }
 
+      // Load reprocessing file hash from sessionStorage
+      if (!reprocessingFileHash) {
+        const savedReprocessingFileHash = loadReprocessingFileHash(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId
+        )
+        if (savedReprocessingFileHash) {
+          setReprocessingFileHash(savedReprocessingFileHash)
+        }
+      }
+
       // Load previous result from localStorage and recalculate counts
       const savedResult = loadDatasetResult(
         activeProject.namespace,
@@ -223,6 +239,7 @@ function DatasetView() {
   ])
   const processMutation = useProcessDataset()
   const deleteFileMutation = useDeleteDatasetFile()
+  const deleteChunksMutation = useDeleteFileChunks()
   const deleteDatasetMutation = useDeleteDataset()
   const { data: taskStatus } = useTaskStatus(
     activeProject?.namespace || '',
@@ -480,6 +497,16 @@ function DatasetView() {
   >(null)
   const [showDeleteFileConfirmation, setShowDeleteFileConfirmation] =
     useState(false)
+  const [pendingReprocessFileHash, setPendingReprocessFileHash] = useState<
+    string | null
+  >(null)
+  const [showReprocessConfirmation, setShowReprocessConfirmation] =
+    useState(false)
+  const [isReprocessing, setIsReprocessing] = useState(false)
+  // Track which file is being reprocessed to filter the progress display
+  const [reprocessingFileHash, setReprocessingFileHash] = useState<
+    string | null
+  >(null)
   const [copyStatus, setCopyStatus] = useState<{
     [id: string]: string | undefined
   }>({})
@@ -844,6 +871,10 @@ function DatasetView() {
       // Task completed successfully
       setCurrentTaskId(null)
       setProcessingFailure(null) // Clear any previous failures
+      setReprocessingFileHash(null) // Clear reprocessing filter
+      if (activeProject?.namespace && activeProject?.project && datasetId) {
+        clearReprocessingFileHash(activeProject.namespace, activeProject.project, datasetId)
+      }
 
       // Store the processing result - merge with previous results to maintain history
       if (taskStatus.result) {
@@ -911,6 +942,10 @@ function DatasetView() {
       console.log('Full taskStatus on failure:', taskStatus)
       console.log('taskStatus.result:', taskStatus.result)
       setCurrentTaskId(null)
+      setReprocessingFileHash(null) // Clear reprocessing filter
+      if (activeProject?.namespace && activeProject?.project && datasetId) {
+        clearReprocessingFileHash(activeProject.namespace, activeProject.project, datasetId)
+      }
 
       // Try to extract partial results from either result or meta fields
       let partialResults = taskStatus.result
@@ -1039,6 +1074,9 @@ function DatasetView() {
     taskStatus?.result,
     toast,
     currentTaskId,
+    activeProject?.namespace,
+    activeProject?.project,
+    datasetId,
   ])
 
   const openEdit = () => {
@@ -1223,6 +1261,91 @@ function DatasetView() {
   const handleCancelDeleteFile = () => {
     setShowDeleteFileConfirmation(false)
     setPendingDeleteFileHash(null)
+  }
+
+  const handleReprocessFile = (fileHash: string) => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId)
+      return
+    setPendingReprocessFileHash(fileHash)
+    setShowReprocessConfirmation(true)
+  }
+
+  const handleConfirmReprocess = async () => {
+    if (
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !datasetId ||
+      !pendingReprocessFileHash
+    ) {
+      setShowReprocessConfirmation(false)
+      setPendingReprocessFileHash(null)
+      return
+    }
+
+    setIsReprocessing(true)
+
+    try {
+      // Clear previous results
+      setProcessingResult(null)
+      clearDatasetResult(
+        activeProject.namespace,
+        activeProject.project,
+        datasetId
+      )
+
+      // Delete chunks for this one file
+      await deleteChunksMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+        fileHash: pendingReprocessFileHash,
+      })
+
+      // Trigger process (will skip already-processed files, only process this one)
+      const result = await processMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+      })
+
+      if (result.task_id) {
+        setCurrentTaskId(result.task_id)
+        // Track which file we're reprocessing to filter the progress display
+        setReprocessingFileHash(pendingReprocessFileHash)
+        saveDatasetTaskId(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId,
+          result.task_id
+        )
+        // Save reprocessing file hash to sessionStorage so it persists across navigation
+        saveReprocessingFileHash(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId,
+          pendingReprocessFileHash
+        )
+        toast({
+          message: 'Reprocessing file...',
+          variant: 'default',
+        })
+      }
+    } catch (error) {
+      console.error('Failed to reprocess file:', error)
+      toast({
+        message: 'Failed to reprocess file. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsReprocessing(false)
+      setShowReprocessConfirmation(false)
+      setPendingReprocessFileHash(null)
+    }
+  }
+
+  const handleCancelReprocess = () => {
+    setShowReprocessConfirmation(false)
+    setPendingReprocessFileHash(null)
   }
 
   // Helper function to check if a specific file is being deleted
@@ -1976,69 +2099,140 @@ function DatasetView() {
                 </DialogContent>
               </Dialog>
 
-              {/* Live Processing Progress - shown while task is running */}
-              {currentTaskId && taskStatus && taskStatus.meta?.files && (
+              {/* Reprocess file confirmation modal */}
+              <Dialog
+                open={showReprocessConfirmation}
+                onOpenChange={open => !open && handleCancelReprocess()}
+              >
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg text-foreground">
+                      Reprocess File
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  <div className="flex flex-col gap-3 pt-1">
+                    <p className="text-muted-foreground">
+                      Are you sure you want to reprocess this file? This will
+                      delete existing chunks and reprocess the file.
+                    </p>
+                    <p className="text-sm text-muted-foreground font-mono bg-muted p-2 rounded">
+                      {pendingReprocessFileHash?.substring(0, 20)}...
+                    </p>
+                  </div>
+
+                  <DialogFooter className="flex flex-row items-center justify-end gap-3 sm:justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={handleCancelReprocess}
+                      disabled={isReprocessing}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={handleConfirmReprocess}
+                      disabled={isReprocessing}
+                    >
+                      {isReprocessing ? 'Reprocessing...' : 'Reprocess'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Reprocessing single file - simple loader */}
+              {currentTaskId && taskStatus && reprocessingFileHash && (
                 <section className="rounded-lg border border-border bg-card p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-medium">Processing Progress</h3>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-xl w-max flex items-center gap-1.5"
-                      >
-                        {taskStatus.state === 'PENDING' && (
-                          <>
-                            <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                            Queued...
-                          </>
-                        )}
-                        {taskStatus.state !== 'PENDING' &&
-                          taskStatus.state !== 'SUCCESS' &&
-                          taskStatus.state !== 'FAILURE' && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                      <span className="text-sm font-medium">
+                        Reprocessing file...
+                      </span>
+                    </div>
+                    {taskStatus.state !== 'SUCCESS' &&
+                      taskStatus.state !== 'FAILURE' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleStopProcessing}
+                          disabled={cancelTaskMutation.isPending}
+                          className="h-7 px-3 text-xs"
+                          title="Stop processing"
+                        >
+                          {cancelTaskMutation.isPending ? 'Stopping...' : 'Stop'}
+                        </Button>
+                      )}
+                  </div>
+                </section>
+              )}
+
+              {/* Live Processing Progress - shown while task is running (for batch processing) */}
+              {currentTaskId &&
+                taskStatus &&
+                taskStatus.meta?.files &&
+                !reprocessingFileHash && (
+                  <section className="rounded-lg border border-border bg-card p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-medium">Processing Progress</h3>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-xl w-max flex items-center gap-1.5"
+                        >
+                          {taskStatus.state === 'PENDING' && (
                             <>
                               <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                              {taskStatus.meta?.progress
-                                ? `Processing ${taskStatus.meta.progress}%`
-                                : taskStatus.meta?.current &&
-                                    taskStatus.meta?.total
-                                  ? `Processing ${Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)}%`
-                                  : 'Processing...'}
+                              Queued...
                             </>
                           )}
-                      </Badge>
-                      <Badge
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-xl"
-                      >
-                        {taskStatus.meta.current || 0} /{' '}
-                        {taskStatus.meta.total || 0} files
-                      </Badge>
-                      {taskStatus.state !== 'SUCCESS' &&
-                        taskStatus.state !== 'FAILURE' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleStopProcessing}
-                            disabled={cancelTaskMutation.isPending}
-                            className="h-7 px-3 text-xs"
-                            title="Stop processing"
-                          >
-                            {cancelTaskMutation.isPending ? (
+                          {taskStatus.state !== 'PENDING' &&
+                            taskStatus.state !== 'SUCCESS' &&
+                            taskStatus.state !== 'FAILURE' && (
                               <>
-                                <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin mr-1" />
-                                Stopping...
+                                <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                                {taskStatus.meta?.progress
+                                  ? `Processing ${taskStatus.meta.progress}%`
+                                  : taskStatus.meta?.current &&
+                                      taskStatus.meta?.total
+                                    ? `Processing ${Math.round((taskStatus.meta.current / taskStatus.meta.total) * 100)}%`
+                                    : 'Processing...'}
                               </>
-                            ) : (
-                              'Stop'
                             )}
-                          </Button>
-                        )}
+                        </Badge>
+                        <Badge
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-xl"
+                        >
+                          {taskStatus.meta.current || 0} /{' '}
+                          {taskStatus.meta.total || 0} files
+                        </Badge>
+                        {taskStatus.state !== 'SUCCESS' &&
+                          taskStatus.state !== 'FAILURE' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleStopProcessing}
+                              disabled={cancelTaskMutation.isPending}
+                              className="h-7 px-3 text-xs"
+                              title="Stop processing"
+                            >
+                              {cancelTaskMutation.isPending ? (
+                                <>
+                                  <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin mr-1" />
+                                  Stopping...
+                                </>
+                              ) : (
+                                'Stop'
+                              )}
+                            </Button>
+                          )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="rounded-md border border-border max-h-80 overflow-auto">
-                    {taskStatus.meta.files.map((file: any, idx: number) => (
+                    <div className="rounded-md border border-border max-h-80 overflow-auto">
+                      {taskStatus.meta.files.map((file: any, idx: number) => (
                       <div
                         key={file.task_id || idx}
                         className="p-3 border-b last:border-b-0 text-xs"
@@ -2714,30 +2908,43 @@ function DatasetView() {
                                         className="w-4 h-4 text-teal-600 dark:text-teal-400"
                                       />
                                     )}
-                                    <button
-                                      className="w-4 h-4 grid place-items-center text-muted-foreground hover:text-red-600 disabled:opacity-50"
-                                      onClick={() =>
-                                        f.fullHash &&
-                                        handleDeleteFile(f.fullHash)
-                                      }
-                                      disabled={
-                                        f.fullHash
-                                          ? isFileDeleting(f.fullHash)
-                                          : true
-                                      }
-                                      aria-label={`Delete ${f.name} from dataset`}
-                                      title="Delete file"
-                                    >
-                                      {f.fullHash &&
-                                      isFileDeleting(f.fullHash) ? (
-                                        <span className="text-xs">...</span>
-                                      ) : (
-                                        <FontIcon
-                                          type="trashcan"
-                                          className="w-4 h-4"
-                                        />
-                                      )}
-                                    </button>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          className="w-6 h-6 grid place-items-center text-muted-foreground hover:text-foreground rounded hover:bg-accent disabled:opacity-50"
+                                          disabled={
+                                            f.fullHash
+                                              ? isFileDeleting(f.fullHash)
+                                              : true
+                                          }
+                                          aria-label={`Actions for ${f.name}`}
+                                        >
+                                          <FontIcon
+                                            type="overflow"
+                                            className="w-4 h-4"
+                                          />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            f.fullHash &&
+                                            handleReprocessFile(f.fullHash)
+                                          }
+                                        >
+                                          Reprocess
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={() =>
+                                            f.fullHash &&
+                                            handleDeleteFile(f.fullHash)
+                                          }
+                                        >
+                                          Delete
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
                                   </div>
                                 </div>
                               </li>

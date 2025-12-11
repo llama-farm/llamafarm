@@ -123,11 +123,15 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
 
 class DatasetActionType(str, Enum):
     PROCESS = "process"
+    DELETE_CHUNKS = "delete_chunks"
 
 
 class DatasetActionRequest(BaseModel):
     action_type: DatasetActionType = Field(
         ..., description="The type of action to execute"
+    )
+    file_hash: str | None = Field(
+        None, description="File hash for delete_chunks action"
     )
 
 
@@ -137,13 +141,19 @@ class DatasetActionResponse(BaseModel):
     task_id: str = Field(..., description="The Celery task ID")
 
 
+class DeleteChunksResponse(BaseModel):
+    message: str = Field(..., description="The status message")
+    file_hash: str = Field(..., description="The file hash")
+    deleted_chunks: int = Field(..., description="Number of chunks deleted")
+
+
 @router.post(
     "/{dataset}/actions",
     operation_id="dataset_actions",
     summary="Execute an action on a dataset",
     description="""Execute an action on a dataset
-    - INGEST: Process all files in the dataset using the configured data processing strategy
     - PROCESS: Process all files in the dataset using the configured data processing strategy
+    - DELETE_CHUNKS: Delete chunks for a specific file from the vector store (requires file_hash)
     """,
     tags=["mcp"],
     responses={200: {"model": DatasetActionResponse}},
@@ -160,13 +170,26 @@ async def actions(
             f"http://localhost:8000/v1/projects/{namespace}/{project}/tasks/{task_id}"
         )
 
-    if action_type in [DatasetActionType.PROCESS]:
+    if action_type == DatasetActionType.PROCESS:
         launch = DatasetService.start_dataset_ingestion(namespace, project, dataset)
         return {
             "message": launch.message,
             "task_uri": task_uri(launch.task_id),
             "task_id": launch.task_id,
         }
+    elif action_type == DatasetActionType.DELETE_CHUNKS:
+        if not request.file_hash:
+            raise HTTPException(
+                status_code=400, detail="file_hash required for delete_chunks action"
+            )
+        result = await DatasetService.delete_file_chunks(
+            namespace, project, dataset, request.file_hash
+        )
+        return DeleteChunksResponse(
+            message="Chunks deleted successfully",
+            file_hash=request.file_hash,
+            deleted_chunks=result.get("deleted_count", 0),
+        )
     else:
         raise HTTPException(
             status_code=400, detail=f"Invalid action type: {action_type}"
