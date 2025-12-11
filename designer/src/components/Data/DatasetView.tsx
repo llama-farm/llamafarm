@@ -2110,7 +2110,7 @@ function DatasetView() {
               {/* Processing strategy and Embedding model sections removed per request */}
 
               {/* Raw data */}
-              <section className="rounded-lg border border-border bg-card p-4 mb-40">
+              <section className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium">Raw data</h3>
                   <div className="flex items-center gap-2">
@@ -2551,7 +2551,7 @@ function DatasetView() {
                     />
                   </div>
                 </div>
-                <div className="rounded-md border border-input bg-background p-0 text-xs">
+                <div className="rounded-lg border border-border bg-card text-xs">
                   {files.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                       <FontIcon
@@ -2575,7 +2575,7 @@ function DatasetView() {
                     </div>
                   ) : (
                     <div>
-                      <div className="p-3 border-b border-border/60 bg-muted/20">
+                      <div className="p-3 border-b border-border/60 bg-muted/50">
                         <div className="text-xs font-medium">
                           {files.length} file{files.length !== 1 ? 's' : ''}
                         </div>
@@ -2643,17 +2643,26 @@ function DatasetView() {
                                           }))
                                         }, 1500)
                                       }}
-                                      className={`text-xs text-left ${
+                                      className={`text-xs text-left flex items-center gap-1 ${
                                         copyStatus?.[f.id] === 'Copied!'
-                                          ? 'text-green-600'
+                                          ? 'text-green-600 dark:text-green-400'
                                           : copyStatus?.[f.id] ===
                                               'Failed to copy'
-                                            ? 'text-red-600'
-                                            : 'text-blue-600 hover:text-blue-800'
+                                            ? 'text-red-600 dark:text-red-400'
+                                            : 'text-muted-foreground/70 hover:text-blue-500 dark:hover:text-blue-300'
                                       }`}
                                       title="Click to copy full hash"
                                     >
-                                      {copyStatus?.[f.id] || f.fullHash}
+                                      <span>
+                                        {copyStatus?.[f.id] ||
+                                          `${f.fullHash.substring(0, 12)}...${f.fullHash.substring(f.fullHash.length - 8)}`}
+                                      </span>
+                                      {!copyStatus?.[f.id] && (
+                                        <FontIcon
+                                          type="copy"
+                                          className="w-3 h-3 flex-shrink-0"
+                                        />
+                                      )}
                                     </button>
                                   )}
                                 </div>
@@ -2740,6 +2749,9 @@ function DatasetView() {
                   )}
                 </div>
               </section>
+
+              {/* Bottom spacer for scroll breathing room */}
+              <div className="h-8 shrink-0" aria-hidden="true" />
 
               {/* File deletion now handled directly via API calls with confirmation dialog */}
             </>
