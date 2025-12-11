@@ -275,6 +275,7 @@ runtime:
         - default
       provider: universal
       tool_call_strategy: native_api
-      max_tokens: 16384
+      model_api_parameters:
+        max_tokens: 16384
       extra_body:
         n_ctx: 20000
