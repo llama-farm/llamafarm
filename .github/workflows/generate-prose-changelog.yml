@@ -1,9 +1,8 @@
 name: Generate Prose Changelog
 
 on:
-  push:
-    branches:
-      - chore-prose-changelog
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
@@ -29,18 +28,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Determine version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            # Strip 'v' prefix from release tag if present
+            echo "version=${RELEASE_TAG#v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${INPUT_VERSION}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate prose changelog
         id: generate
         uses: ./.github/actions/prose-changelog
         with:
-          version: ${{ inputs.version || '0.0.20' }}
+          version: ${{ steps.version.outputs.version }}
           model: ${{ inputs.model }}
 
       - name: Add to job summary
+        env:
+          VERSION: ${{ steps.generate.outputs.version }}
+          CHANGELOG: ${{ steps.generate.outputs.prose_changelog }}
         run: |
-          echo "## Prose Changelog for v${{ steps.generate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "## Prose Changelog for v${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.generate.outputs.prose_changelog }}" >> $GITHUB_STEP_SUMMARY
+          echo "${CHANGELOG}" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload prose changelog artifact
         uses: actions/upload-artifact@v4
