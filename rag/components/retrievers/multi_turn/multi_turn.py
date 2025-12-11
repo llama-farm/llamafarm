@@ -186,10 +186,12 @@ class MultiTurnRAGStrategy(RetrievalStrategy):
                         "reranker_model": self._reranker_strategy.model_id,
                         "initial_count": len(result.documents),
                         "final_count": len(documents),
-                    }
+                    },
                 )
             else:
-                logger.warning(f"Unknown reranker type: {type(self._reranker_strategy)}")
+                logger.warning(
+                    f"Unknown reranker type: {type(self._reranker_strategy)}"
+                )
                 return result
 
         except Exception as e:
@@ -290,7 +292,9 @@ Always use <question> tags. Be direct."""
             logger.info(
                 "Calling LLM for query decomposition",
                 model_id=self.model_id,
-                query_preview=query_text[:100] + "..." if len(query_text) > 100 else query_text,
+                query_preview=query_text[:100] + "..."
+                if len(query_text) > 100
+                else query_text,
             )
 
             response = self._llm_client.chat.completions.create(
@@ -310,7 +314,9 @@ Always use <question> tags. Be direct."""
                 "LLM decomposition response received",
                 raw_content_type=type(raw_content).__name__,
                 raw_content_length=len(raw_content) if raw_content else 0,
-                raw_content_preview=repr(raw_content[:500]) if raw_content else "None/Empty",
+                raw_content_preview=repr(raw_content[:500])
+                if raw_content
+                else "None/Empty",
                 finish_reason=response.choices[0].finish_reason,
             )
 
@@ -318,7 +324,9 @@ Always use <question> tags. Be direct."""
 
             # Strip out <think>...</think> blocks (some models like Qwen3 use thinking mode)
             # We only want the actual output, not the internal reasoning
-            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL | re.IGNORECASE)
+            content = re.sub(
+                r"<think>.*?</think>", "", content, flags=re.DOTALL | re.IGNORECASE
+            )
             content = content.strip()
 
             # Extract questions using regex
@@ -364,11 +372,7 @@ Always use <question> tags. Be direct."""
         return [query_text]
 
     def _retrieve_for_subquery(
-        self,
-        sub_query: str,
-        embedder,
-        vector_store,
-        **kwargs
+        self, sub_query: str, embedder, vector_store, **kwargs
     ) -> tuple[str, RetrievalResult]:
         """
         Retrieve documents for a single sub-query.
@@ -444,9 +448,7 @@ Always use <question> tags. Be direct."""
         return intersection / union
 
     def _merge_and_deduplicate(
-        self,
-        results: list[tuple[str, RetrievalResult]],
-        top_k: int
+        self, results: list[tuple[str, RetrievalResult]], top_k: int
     ) -> RetrievalResult:
         """
         Merge results from multiple sub-queries and remove duplicates.
@@ -571,7 +573,7 @@ Always use <question> tags. Be direct."""
                 query_embedding=query_embedding,
                 vector_store=vector_store,
                 top_k=max(top_k, self.initial_k) if self.enable_reranking else top_k,
-                **kwargs
+                **kwargs,
             )
 
             # Apply reranking if enabled
@@ -594,7 +596,7 @@ Always use <question> tags. Be direct."""
                 query_embedding=query_embedding,
                 vector_store=vector_store,
                 top_k=max(top_k, self.initial_k) if self.enable_reranking else top_k,
-                **kwargs
+                **kwargs,
             )
 
             # Apply reranking if enabled

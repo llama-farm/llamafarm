@@ -88,10 +88,50 @@ def parse_quantization_from_filename(filename: str) -> str | None:
     # Common GGUF quantization patterns:
     # - Q2_K, Q3_K_S, Q3_K_M, Q3_K_L, Q4_0, Q4_1, Q4_K_S, Q4_K_M, Q5_0, Q5_1, Q5_K_S, Q5_K_M
     # - Q6_K, Q8_0, F16, F32
-    pattern = r"[\.-](I?Q[2-8]_(?:K_[SML]|K|[01])|(F(?:16|32)))\."
-    match = re.search(pattern, filename, re.IGNORECASE)
-    if match:
-        return match.group(1).upper()
+    # Also handle patterns like Q2_K, Q3_K_L, Q4_K_M, etc.
+
+    # Normalize filename for matching (handle case insensitivity)
+    filename_lower = filename.lower()
+
+    # Try multiple patterns to catch all variations
+    # Pattern order matters - more specific first
+    # Note: I? prefix supports imatrix-based quantization types (IQ2_K, IQ3_K, IQ4_XS, etc.)
+    patterns = [
+        # Patterns with separators (most common)
+        r"[\._-](I?Q[2-8]_K_[SML])",  # Q3_K_S, Q3_K_M, Q3_K_L, Q4_K_S, Q4_K_M, Q5_K_S, Q5_K_M, IQ2_K, IQ3_K, etc.
+        r"[\._-](I?Q[2-8]_[01])",  # Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, IQ4_0, etc.
+        r"[\._-](I?Q[2-8]_K)(?![_\.])",  # Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, IQ2_K, IQ3_K, etc. (not followed by _ or .)
+        r"[\._-](I?Q[2-8]_XS)",  # IQ4_XS, IQ3_XS, etc. (imatrix extra small variants)
+        r"[\._-](F16|F32|FP16|FP32)",  # F16, F32, FP16, FP32
+        # Patterns without separators (less common but possible)
+        r"(I?Q[2-8]_K_[SML])",  # Without separator prefix
+        r"(I?Q[2-8]_[01])",  # Without separator prefix
+        r"(I?Q[2-8]_K)(?![_\.])",  # Without separator prefix
+        r"(I?Q[2-8]_XS)",  # Without separator prefix
+        r"(F16|F32|FP16|FP32)",  # Without separator prefix
+        # Handle edge cases with stricter boundary checks
+        r"(I?Q[2-8]_K)(?![_\.A-Za-z0-9])",  # Q2_K, Q3_K, etc. not followed by alphanumeric (stricter than above)
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, filename_lower, re.IGNORECASE)
+        if match:
+            quant = match.group(1).upper()
+            # Normalize FP16/FP32 to F16/F32
+            if quant == "FP16":
+                quant = "F16"
+            elif quant == "FP32":
+                quant = "F32"
+            # Validate it's a known quantization type
+            # Supports both regular (Q) and imatrix-based (IQ) quantization types
+            if re.match(
+                r"^(I?Q[2-8](?:_K(?:_[SML])?|_[01]|_K|_XS)|F(?:16|32))$", quant, re.IGNORECASE
+            ):
+                return quant
+
+    # Check for unquantized files (large files without quantization markers)
+    # These might be full precision models
+    # We'll return None for these - they should be filtered out or handled separately
     return None
 
 

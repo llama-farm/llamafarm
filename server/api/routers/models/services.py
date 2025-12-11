@@ -6,6 +6,11 @@ from dataclasses import asdict
 from config.datamodel import Provider
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from llamafarm_common import (
+    list_gguf_files,
+    parse_model_with_quantization,
+    parse_quantization_from_filename,
+)
 from pydantic import BaseModel
 from server.services.disk_space_service import DiskSpaceService
 from server.services.model_service import ModelService
@@ -20,6 +25,17 @@ class DownloadModelRequest(BaseModel):
 
 class ValidateDownloadRequest(BaseModel):
     model_name: str
+
+
+class GGUFOption(BaseModel):
+    filename: str
+    quantization: str | None
+    size_bytes: int
+    size_human: str
+
+
+class GGUFOptionsResponse(BaseModel):
+    options: list[GGUFOption]
 
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -160,6 +176,135 @@ def validate_download(request: ValidateDownloadRequest):
                 "percent_free": 0.0,
             },
         }
+
+
+@router.get("/{model_id:path}/quantizations", response_model=GGUFOptionsResponse)
+def get_gguf_options(model_id: str) -> GGUFOptionsResponse:
+    """Get all available GGUF quantization options for a model with file sizes.
+
+    Args:
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+
+    Returns:
+        GGUFOptionsResponse with list of GGUF options, each containing:
+        - filename: GGUF filename
+        - quantization: Quantization type (e.g., "Q4_K_M")
+        - size_bytes: File size in bytes
+        - size_human: Human-readable size (e.g., "1.2 GB")
+    """
+    try:
+        from huggingface_hub import HfApi
+
+        # Parse model ID to remove quantization suffix if present
+        base_model_id, _ = parse_model_with_quantization(model_id)
+        api = HfApi()
+
+        options = []
+
+        # Primary method: use model_info with files_metadata to get sizes from siblings
+        try:
+            model_info = api.model_info(base_model_id, files_metadata=True)
+            if hasattr(model_info, "siblings") and model_info.siblings:
+                for sibling in model_info.siblings:
+                    filename = getattr(sibling, "rfilename", None) or getattr(
+                        sibling, "filename", None
+                    )
+                    if filename and filename.endswith(".gguf"):
+                        quantization = parse_quantization_from_filename(filename)
+                        size_bytes = getattr(sibling, "size", None) or 0
+
+                        # Log files that don't match quantization pattern for debugging
+                        if not quantization:
+                            logger.debug(
+                                f"GGUF file without quantization pattern: {filename} (size: {size_bytes} bytes)"
+                            )
+
+                        # Only include options with valid quantization and size
+                        if size_bytes > 0 and quantization:
+                            # Format size human-readable
+                            size_human = _format_bytes(size_bytes)
+                            options.append(
+                                {
+                                    "filename": filename,
+                                    "quantization": quantization,
+                                    "size_bytes": size_bytes,
+                                    "size_human": size_human,
+                                }
+                            )
+
+                if options:
+                    logger.info(
+                        f"Got {len(options)} GGUF options from siblings for {base_model_id}"
+                    )
+                    return GGUFOptionsResponse(options=options)
+        except Exception as e:
+            logger.debug(f"Could not get model info for {base_model_id}: {e}")
+
+        # Fallback: list GGUF files and get individual sizes
+        try:
+            gguf_files = list_gguf_files(base_model_id)
+            if gguf_files:
+                for filename in gguf_files:
+                    quantization = parse_quantization_from_filename(filename)
+                    try:
+                        file_info = api.get_path_info(
+                            repo_id=base_model_id, path=filename, repo_type="model"
+                        )
+                        size_bytes = getattr(file_info, "size", None) or 0
+
+                        # Only include options with valid quantization and size
+                        if size_bytes > 0 and quantization:
+                            size_human = _format_bytes(size_bytes)
+                            options.append(
+                                {
+                                    "filename": filename,
+                                    "quantization": quantization,
+                                    "size_bytes": size_bytes,
+                                    "size_human": size_human,
+                                }
+                            )
+                    except Exception:
+                        continue
+
+                if options:
+                    logger.info(
+                        f"Got {len(options)} GGUF options via file listing for {base_model_id}"
+                    )
+                    return GGUFOptionsResponse(options=options)
+        except Exception as e:
+            logger.debug(f"Could not get GGUF options via file listing: {e}")
+
+        # If no options found, return empty list
+        if not options:
+            logger.warning(f"No GGUF files found for {base_model_id}")
+            return GGUFOptionsResponse(options=[])
+
+        return GGUFOptionsResponse(options=options)
+
+    except ImportError:
+        logger.warning("huggingface_hub not available for GGUF options")
+        raise HTTPException(
+            status_code=500, detail="HuggingFace Hub API not available"
+        ) from None
+    except Exception as e:
+        logger.error(f"Error getting GGUF options for {model_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get GGUF options: {str(e)}",
+        ) from e
+
+
+def _format_bytes(num_bytes: int) -> str:
+    """Format bytes to human-readable string."""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(num_bytes)
+    unit_idx = 0
+    while size >= 1024 and unit_idx < len(units) - 1:
+        size /= 1024.0
+        unit_idx += 1
+    if unit_idx == 0:
+        return f"{int(size)}{units[unit_idx]}"
+    return f"{size:.2f}{units[unit_idx]}"
 
 
 @router.delete("/{model_name:path}")

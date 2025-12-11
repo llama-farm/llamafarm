@@ -85,7 +85,9 @@ class DatabaseService:
             namespace=namespace,
             project=project,
             database=database.name,
-            type=database.type.value if hasattr(database.type, "value") else str(database.type),
+            type=database.type.value
+            if hasattr(database.type, "value")
+            else str(database.type),
         )
 
         return database
@@ -209,7 +211,11 @@ class DatabaseService:
         Returns:
             Tuple of (success, error_message)
         """
-        db_type = database.type.value if hasattr(database.type, "value") else str(database.type)
+        db_type = (
+            database.type.value
+            if hasattr(database.type, "value")
+            else str(database.type)
+        )
 
         try:
             VectorStoreFactory = _import_rag_factory()
@@ -276,8 +282,10 @@ class DatabaseService:
             # This is often indicated by a 404 status code in the client's exceptions
             # (e.g., Qdrant client), or by specific error messages.
             is_not_found_error = (
-                hasattr(e, "status_code") and e.status_code == 404
-            ) or "not found" in str(e).lower() or "does not exist" in str(e).lower()
+                (hasattr(e, "status_code") and e.status_code == 404)
+                or "not found" in str(e).lower()
+                or "does not exist" in str(e).lower()
+            )
 
             if is_not_found_error:
                 logger.info(
@@ -346,7 +354,9 @@ class DatabaseService:
         # Delete the vector store collection
         if delete_collection:
             project_dir = ProjectService.get_project_dir(namespace, project)
-            success, error = cls._delete_vector_store_collection(db_to_delete, project_dir)
+            success, error = cls._delete_vector_store_collection(
+                db_to_delete, project_dir
+            )
             if not success:
                 raise ValueError(f"Failed to delete vector store collection: {error}")
 
