@@ -96,21 +96,28 @@ func (u *UnixUpgradeStrategy) upgradeWithSudo(current, new string) error {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
 
-	// Step 2: Copy new binary to location (with sudo)
+	// Step 2: Remove old binary first (required on Linux - can't overwrite running executable)
+	// This works because Linux allows unlinking a running binary, just not overwriting it
 	utils.OutputProgress("Installing new binary...")
+	if err := u.runSudoCommand("rm", "-f", current); err != nil {
+		_ = u.restoreBackupWithSudo(backupPath, current) // Best effort restore
+		return fmt.Errorf("failed to remove old binary: %w", err)
+	}
+
+	// Step 3: Copy new binary to location (with sudo)
 	if err := u.runSudoCommand("cp", new, current); err != nil {
 		_ = u.restoreBackupWithSudo(backupPath, current) // Best effort restore
 		return fmt.Errorf("failed to copy new binary: %w", err)
 	}
 
-	// Step 3: Set executable permissions (with sudo)
+	// Step 4: Set executable permissions (with sudo)
 	utils.OutputProgress("Setting executable permissions...")
 	if err := u.runSudoCommand("chmod", "+x", current); err != nil {
 		_ = u.restoreBackupWithSudo(backupPath, current) // Best effort restore
 		return fmt.Errorf("failed to set executable permissions: %w", err)
 	}
 
-	// Step 4: Verify the installation
+	// Step 5: Verify the installation
 	utils.OutputProgress("Verifying installation...")
 	if err := u.verifyBinary(current); err != nil {
 		utils.OutputError("Verification failed, restoring backup...")
@@ -120,7 +127,7 @@ func (u *UnixUpgradeStrategy) upgradeWithSudo(current, new string) error {
 		return fmt.Errorf("upgrade verification failed, backup restored: %w", err)
 	}
 
-	// Step 5: Cleanup backup (with sudo)
+	// Step 6: Cleanup backup (with sudo)
 	utils.OutputProgress("Cleaning up backup...")
 	if err := u.runSudoCommand("rm", "-f", backupPath); err != nil {
 		utils.LogDebug(fmt.Sprintf("failed to cleanup backup %s: %v", backupPath, err))
