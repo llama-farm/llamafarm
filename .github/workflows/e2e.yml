@@ -6,15 +6,12 @@ permissions:
   statuses: write # Required to create commit status checks for fork PRs
 
 on:
-  # Trigger after CLI build completes (works for both main branch and PRs)
+  # Trigger after CLI build completes - runs in base repo context with write permissions
+  # This approach works correctly for both internal PRs and forked PRs
   workflow_run:
     workflows: ["Build CLI"]
     types: [completed]
-  # Keep pull_request trigger for backward compatibility during transition
-  # TODO: This can be removed once the workflow_run approach is verified working
-  pull_request:
-    branches: [main]
-  # Also allow manual trigger
+  # Allow manual trigger for debugging
   workflow_dispatch:
 
 env:
@@ -25,14 +22,14 @@ jobs:
     name: E2E Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # Run for pull_request events directly, or for workflow_run events if CLI build succeeded
+    # Run for workflow_run events if CLI build succeeded, or manual dispatch
     if: |
-      github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        (github.event.workflow_run.event == 'pull_request' ||
         github.event.workflow_run.head_branch == 'main' ||
-        github.event.workflow_run.head_branch == 'develop'))
+        github.event.workflow_run.head_branch == 'develop')) ||
+      github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -63,8 +60,8 @@ jobs:
 
     steps:
       # ============================================================
-      # Report Status Check (for workflow_run triggered by fork PRs)
-      # Note: Direct pull_request events get status checks automatically
+      # Report Status Check (for fork PRs via workflow_run)
+      # workflow_run events don't automatically report status to the PR commit
       # ============================================================
       - name: Set pending status check
         if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
@@ -97,54 +94,18 @@ jobs:
       # ============================================================
       # Download Pre-built CLI Binary
       # ============================================================
-      - name: Wait for CLI build artifacts (PRs only)
-        if: github.event_name == 'pull_request'
-        id: wait-artifacts
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Waiting for CLI build to produce artifacts..."
-          COMMIT="${{ github.event.pull_request.head.sha }}"
-          ARTIFACT_NAME="${{ matrix.artifact }}"
-          MAX_WAIT=600  # 10 minutes
-          ELAPSED=0
-
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
-            echo "Checking for artifact (${ELAPSED}s elapsed)..."
-
-            # Get artifact info including run ID
-            ARTIFACT_INFO=$(gh api repos/${{ github.repository }}/actions/artifacts \
-              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | select(.workflow_run.head_sha == \"${COMMIT}\") | {id: .id, run_id: .workflow_run.id}" \
-              2>/dev/null | head -n 1)
-
-            if [ -n "$ARTIFACT_INFO" ]; then
-              ARTIFACT_ID=$(echo "$ARTIFACT_INFO" | jq -r '.id')
-              RUN_ID=$(echo "$ARTIFACT_INFO" | jq -r '.run_id')
-              echo "✓ Artifact found! (ID: ${ARTIFACT_ID}, Run: ${RUN_ID})"
-              echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-
-            sleep 10
-            ELAPSED=$((ELAPSED + 10))
-          done
-
-          echo "❌ Timeout waiting for artifact after ${MAX_WAIT}s"
-          exit 1
-
-      - name: Download CLI binary artifact (with run_id)
-        if: github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id
+      - name: Download CLI binary artifact
+        if: github.event.workflow_run.id
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
-          run_id: ${{ github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id }}
+          run_id: ${{ github.event.workflow_run.id }}
           name: ${{ matrix.artifact }}
           path: cli/
           if_no_artifact_found: fail
 
-      - name: Download CLI binary artifact (search by commit)
-        if: ${{ !(github.event.workflow_run.id || steps.wait-artifacts.outputs.run_id) }}
+      - name: Download CLI binary artifact (search by commit - fallback for manual dispatch)
+        if: ${{ !github.event.workflow_run.id }}
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: cli.yml
@@ -167,18 +128,9 @@ jobs:
       - name: Set PR info
         id: pr-info
         shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER_DIRECT: ${{ github.event.pull_request.number }}
-          HEAD_SHA_DIRECT: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Handle direct pull_request events
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            echo "pr_number=${PR_NUMBER_DIRECT}" >> $GITHUB_OUTPUT
-            echo "head_sha=${HEAD_SHA_DIRECT}" >> $GITHUB_OUTPUT
-            echo "✓ PR metadata from pull_request event: PR #${PR_NUMBER_DIRECT}"
-          # Handle workflow_run events (from pr-info artifact)
-          elif [ -f ./pr-info/pr_number.txt ]; then
+          # Load PR metadata from artifact (uploaded by cli.yml for PRs)
+          if [ -f ./pr-info/pr_number.txt ]; then
             # Read and trim whitespace from PR number
             PR_NUMBER=$(cat ./pr-info/pr_number.txt | tr -d '[:space:]')
             if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
@@ -195,7 +147,7 @@ jobs:
             fi
           else
             echo "pr_number=" >> $GITHUB_OUTPUT
-            echo "No PR metadata found (this is a push, not a PR)"
+            echo "No PR metadata found (this is a push or manual dispatch, not a PR)"
           fi
 
       - name: Rename binary to standard name
