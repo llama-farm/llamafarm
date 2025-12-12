@@ -7,6 +7,7 @@ GGUF quantized models, enabling faster inference and lower memory usage.
 
 import asyncio
 import logging
+import sys
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 
@@ -88,6 +89,12 @@ class GGUFLanguageModel(BaseModel):
             self.token,
             preferred_quantization=self.preferred_quantization,
         )
+
+        # On Windows, convert backslashes to forward slashes for llama.cpp compatibility
+        # The underlying C library can have issues with Windows-style paths
+        if sys.platform == "win32":
+            gguf_path = gguf_path.replace("\\", "/")
+
         logger.info(f"GGUF file located at: {gguf_path}")
 
         # Compute optimal context size
@@ -121,14 +128,40 @@ class GGUFLanguageModel(BaseModel):
         loop = asyncio.get_running_loop()
 
         def _load_model():
-            return Llama(
-                model_path=gguf_path,
-                n_ctx=self.actual_n_ctx,  # Use computed context size
-                n_gpu_layers=n_gpu_layers,
-                n_threads=None,  # Auto-detect optimal threads
-                verbose=False,  # Disable verbose logging
-                seed=-1,  # Random seed (-1 = random)
-            )
+            import os
+
+            # Verify file exists and is readable before attempting to load
+            if not os.path.exists(gguf_path):
+                raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
+            if not os.access(gguf_path, os.R_OK):
+                raise PermissionError(f"GGUF file not readable: {gguf_path}")
+
+            file_size_mb = os.path.getsize(gguf_path) / (1024 * 1024)
+            logger.info(f"Loading GGUF file ({file_size_mb:.1f} MB): {gguf_path}")
+
+            try:
+                return Llama(
+                    model_path=gguf_path,
+                    n_ctx=self.actual_n_ctx,  # Use computed context size
+                    n_gpu_layers=n_gpu_layers,
+                    n_threads=None,  # Auto-detect optimal threads
+                    verbose=True,  # Enable verbose logging to debug load issues
+                    seed=-1,  # Random seed (-1 = random)
+                )
+            except ValueError as e:
+                # Provide more helpful error message for common issues
+                error_msg = str(e)
+                if "Failed to load model from file" in error_msg:
+                    logger.error(
+                        f"llama.cpp failed to load model. This can be caused by:\n"
+                        f"  1. Corrupted GGUF file - try deleting and re-downloading\n"
+                        f"  2. Incompatible llama-cpp-python wheel - try reinstalling\n"
+                        f"  3. Unsupported GGUF format version\n"
+                        f"  File: {gguf_path}\n"
+                        f"  Size: {file_size_mb:.1f} MB\n"
+                        f"  Context: {self.actual_n_ctx}"
+                    )
+                raise
 
         self.llama = await loop.run_in_executor(self._executor, _load_model)
 

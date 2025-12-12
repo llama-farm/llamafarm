@@ -7,6 +7,7 @@ GGUF quantized embedding models, enabling faster inference and lower memory usag
 
 import asyncio
 import logging
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from llama_cpp import Llama
@@ -80,6 +81,12 @@ class GGUFEncoderModel(BaseModel):
             self.token,
             preferred_quantization=self.preferred_quantization,
         )
+
+        # On Windows, convert backslashes to forward slashes for llama.cpp compatibility
+        # The underlying C library can have issues with Windows-style paths
+        if sys.platform == "win32":
+            gguf_path = gguf_path.replace("\\", "/")
+
         logger.info(f"GGUF file located at: {gguf_path}")
 
         # Configure GPU layers based on device
