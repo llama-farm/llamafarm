@@ -1,7 +1,8 @@
 """Tests for Universal Runtime embedder."""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from components.embedders.universal_embedder.universal_embedder import UniversalEmbedder
 from utils.embedding_safety import EmbedderUnavailableError

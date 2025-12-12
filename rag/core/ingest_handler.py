@@ -21,9 +21,7 @@ from core.strategies.handler import SchemaHandler
 from utils.embedding_safety import (
     CircuitBreakerOpenError,
     EmbedderUnavailableError,
-    InvalidEmbeddingError,
     is_valid_embedding,
-    is_zero_vector,
 )
 
 repo_root = Path(__file__).parent.parent.parent.parent
