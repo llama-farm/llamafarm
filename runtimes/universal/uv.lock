@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
@@ -3102,7 +3102,6 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "diffusers" },
-    { name = "easyocr" },
     { name = "einops" },
     { name = "fastapi" },
     { name = "gguf" },
@@ -3115,7 +3114,6 @@ dependencies = [
     { name = "pymupdf" },
     { name = "python-multipart" },
     { name = "pyyaml" },
-    { name = "scikit-learn" },
     { name = "sentencepiece" },
     { name = "structlog" },
     { name = "transformers" },
@@ -3140,11 +3138,13 @@ gpu = [
 ]
 ocr = [
     { name = "easyocr" },
+    { name = "opencv-python-headless" },
     { name = "pytesseract" },
     { name = "surya-ocr" },
 ]
 ocr-easyocr = [
     { name = "easyocr" },
+    { name = "opencv-python-headless" },
 ]
 ocr-paddleocr = [
     { name = "paddleocr" },
@@ -3173,7 +3173,6 @@ dev = [
 requires-dist = [
     { name = "accelerate", specifier = ">=0.25.0" },
     { name = "diffusers", specifier = ">=0.25.0" },
-    { name = "easyocr", specifier = ">=1.7.2" },
     { name = "easyocr", marker = "extra == 'ocr'", specifier = ">=1.7.0" },
     { name = "easyocr", marker = "extra == 'ocr-easyocr'", specifier = ">=1.7.0" },
     { name = "einops", specifier = ">=0.8.1" },
@@ -3182,6 +3181,8 @@ requires-dist = [
     { name = "llama-cpp-python", marker = "extra == 'gpu'", specifier = ">=0.3.0" },
     { name = "llamafarm-common", editable = "../../common" },
     { name = "openai", specifier = ">=1.0.0" },
+    { name = "opencv-python-headless", marker = "extra == 'ocr'", specifier = ">=4.8.0" },
+    { name = "opencv-python-headless", marker = "extra == 'ocr-easyocr'", specifier = ">=4.8.0" },
     { name = "paddleocr", marker = "extra == 'ocr-paddleocr'", specifier = ">=2.7.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "protobuf", specifier = ">=6.33.1" },
@@ -3192,7 +3193,6 @@ requires-dist = [
     { name = "pytesseract", marker = "extra == 'ocr-tesseract'", specifier = ">=0.3.10" },
     { name = "python-multipart" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "scikit-learn", specifier = ">=1.7.2" },
     { name = "scikit-learn", marker = "extra == 'anomaly'", specifier = ">=1.3.0" },
     { name = "sentence-transformers", marker = "extra == 'classification'", specifier = ">=3.0.0" },
     { name = "sentencepiece", specifier = ">=0.2.1" },

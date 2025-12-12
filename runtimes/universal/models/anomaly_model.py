@@ -281,6 +281,11 @@ class AnomalyModel(BaseModel):
         # Convert to numpy array
         X = np.array(data) if not isinstance(data, np.ndarray) else data
 
+        # Handle 1D input (e.g., single feature time series)
+        # Must match the handling in score() to avoid dimension mismatches
+        if len(X.shape) == 1:
+            X = X.reshape(-1, 1)
+
         # Fit scaler and transform data
         X_scaled = self._scaler.fit_transform(X)
 

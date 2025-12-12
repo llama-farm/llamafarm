@@ -174,13 +174,24 @@ class ClassifierModel(BaseModel):
         if hasattr(self._classifier, "model_body"):
             self._classifier.model_body = self._classifier.model_body.to(self.device)
 
-        # Load labels from model config
-        if hasattr(self._classifier, "labels"):
+        # Load labels - try multiple sources in order of reliability
+        # 1. First try labels.txt file (most reliable, saved by our save() method)
+        labels_path = model_path / "labels.txt"
+        if labels_path.exists():
+            with open(labels_path) as f:
+                self._labels = [line.strip() for line in f if line.strip()]
+            logger.info(f"Loaded labels from labels.txt: {self._labels}")
+        # 2. Fall back to SetFit model attributes
+        elif hasattr(self._classifier, "labels") and self._classifier.labels:
             self._labels = list(self._classifier.labels)
         elif hasattr(self._classifier, "model_head") and hasattr(
             self._classifier.model_head, "classes_"
         ):
             self._labels = list(self._classifier.model_head.classes_)
+        else:
+            logger.warning(
+                "Could not load labels from model. Classification will return indices."
+            )
 
         self._is_fitted = True
         logger.info(f"Loaded classifier with labels: {self._labels}")
@@ -316,22 +327,36 @@ class ClassifierModel(BaseModel):
         return results
 
     async def save(self, path: str) -> None:
-        """Save the fitted model to disk."""
+        """Save the fitted model to disk.
+
+        Security: Path is validated to be within CLASSIFIER_MODELS_DIR to prevent
+        path traversal attacks.
+        """
         if not self._is_fitted:
             raise RuntimeError("Model not fitted. Nothing to save.")
 
         model_path = Path(path)
-        model_path.mkdir(parents=True, exist_ok=True)
+
+        # Validate path is within the safe directory
+        # First ensure CLASSIFIER_MODELS_DIR exists
+        CLASSIFIER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # If path is relative or doesn't start with safe dir, make it relative to safe dir
+        if not model_path.is_absolute():
+            model_path = CLASSIFIER_MODELS_DIR / model_path
+        validated_path = _validate_model_path(model_path)
+
+        validated_path.mkdir(parents=True, exist_ok=True)
 
         # Save the SetFit model
-        self._classifier.save_pretrained(str(model_path))
+        self._classifier.save_pretrained(str(validated_path))
 
-        # Save labels separately for easy loading
-        labels_path = model_path / "labels.txt"
+        # Save labels separately for loading (SetFit doesn't always preserve labels)
+        labels_path = validated_path / "labels.txt"
         with open(labels_path, "w") as f:
             f.write("\n".join(self._labels))
 
-        logger.info(f"Classifier model saved to {path}")
+        logger.info(f"Classifier model saved to {validated_path}")
 
     async def unload(self) -> None:
         """Unload the model and free resources."""

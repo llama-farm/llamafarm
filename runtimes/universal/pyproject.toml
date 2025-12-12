@@ -21,9 +21,9 @@ dependencies = [
   "pyyaml>=6.0",
   "gguf>=0.17.1",
   # hf-transfer is now provided by llamafarm-common
-  "pymupdf>=1.26.6",
-  "easyocr>=1.7.2",
-  "scikit-learn>=1.7.2",
+  "pymupdf>=1.26.6",  # Required for PDF file uploads
+  # Note: easyocr moved to optional [ocr-easyocr] extra to avoid forcing torch install
+  # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
   "protobuf>=6.33.1",
   "sentencepiece>=0.2.1",
 ]
@@ -54,13 +54,14 @@ gpu = ["torch>=2.0.0", "llama-cpp-python>=0.3.0"]
 # OCR backends - install the one(s) you need
 # Usage: uv pip install "universal-runtime[ocr-surya]"
 ocr-surya = ["surya-ocr>=0.6.0"]
-ocr-easyocr = ["easyocr>=1.7.0"]
+ocr-easyocr = ["easyocr>=1.7.0", "opencv-python-headless>=4.8.0"]
 ocr-paddleocr = ["paddleocr>=2.7.0"]
 ocr-tesseract = ["pytesseract>=0.3.10"]
 # Install recommended OCR backends (surya + easyocr + tesseract)
 ocr = [
     "surya-ocr>=0.6.0",
     "easyocr>=1.7.0",
+    "opencv-python-headless>=4.8.0",  # Required by easyocr, explicit to avoid version conflicts
     "pytesseract>=0.3.10",
 ]
 

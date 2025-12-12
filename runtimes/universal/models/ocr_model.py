@@ -81,8 +81,11 @@ class OCRModel(BaseModel):
         # Backend-specific components
         self._reader = None  # EasyOCR reader
         self._ocr = None  # PaddleOCR instance
-        self._surya_model = None  # Surya model
-        self._surya_processor = None  # Surya processor
+        # Surya components (detection + recognition models and processors)
+        self._surya_det_model = None
+        self._surya_det_processor = None
+        self._surya_rec_model = None
+        self._surya_rec_processor = None
 
     async def load(self) -> None:
         """Load the OCR model based on selected backend."""
@@ -189,8 +192,11 @@ class OCRModel(BaseModel):
 
         Args:
             images: List of images (base64 strings or raw bytes)
-            languages: Override default languages for this request
-            detect_layout: Whether to detect document layout
+            languages: Override default languages for this request.
+                Note: Only supported for tesseract backend. EasyOCR and PaddleOCR
+                use the languages specified at initialization time.
+            detect_layout: Whether to detect document layout (surya backend only).
+                When False, treats the entire image as a single text block.
             return_boxes: Whether to return bounding boxes
 
         Returns:
@@ -199,13 +205,23 @@ class OCRModel(BaseModel):
         results = []
         langs = languages or self.languages
 
+        # Warn if trying to override languages for backends that don't support it
+        if languages and self.backend in ("easyocr", "paddleocr", "surya"):
+            logger.warning(
+                f"Language override not supported for {self.backend} backend. "
+                f"Using init-time languages: {self.languages}"
+            )
+            langs = self.languages
+
         for img_data in images:
             # Decode image
             pil_image = self._decode_image(img_data)
 
             # Run OCR based on backend
             if self.backend == "surya":
-                result = await self._recognize_surya(pil_image, return_boxes)
+                result = await self._recognize_surya(
+                    pil_image, return_boxes, detect_layout
+                )
             elif self.backend == "easyocr":
                 result = await self._recognize_easyocr(pil_image, return_boxes)
             elif self.backend == "paddleocr":
@@ -233,21 +249,34 @@ class OCRModel(BaseModel):
         return Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
     async def _recognize_surya(
-        self, image: Image.Image, return_boxes: bool
+        self, image: Image.Image, return_boxes: bool, detect_layout: bool = True
     ) -> OCRResult:
-        """Run Surya OCR."""
-        from surya.detection import batch_text_detection
+        """Run Surya OCR.
+
+        Args:
+            image: PIL Image to process
+            return_boxes: Whether to return bounding boxes
+            detect_layout: If True, run text detection first to find text regions.
+                If False, treat entire image as single text block (faster but less accurate).
+        """
         from surya.recognition import batch_recognition
 
-        # Detect text regions
-        det_results = batch_text_detection(
-            [image], self._surya_det_model, self._surya_det_processor
-        )
+        if detect_layout:
+            from surya.detection import batch_text_detection
 
-        # Recognize text in detected regions
+            # Detect text regions first
+            det_results = batch_text_detection(
+                [image], self._surya_det_model, self._surya_det_processor
+            )
+            detection_result = det_results[0]
+        else:
+            # Skip detection - pass None to recognition (processes whole image)
+            detection_result = None
+
+        # Recognize text in detected regions (or whole image if no detection)
         rec_results = batch_recognition(
             [image],
-            [det_results[0]],
+            [detection_result] if detection_result else [None],
             self._surya_rec_model,
             self._surya_rec_processor,
         )
@@ -376,6 +405,53 @@ class OCRModel(BaseModel):
             boxes=boxes if return_boxes else None,
         )
 
+    # Common ISO-639-1 (2-letter) to Tesseract (3-letter) language code mappings
+    # Tesseract requires 3-letter codes, but users often pass 2-letter codes
+    LANG_CODE_MAP = {
+        "en": "eng",
+        "de": "deu",
+        "fr": "fra",
+        "es": "spa",
+        "it": "ita",
+        "pt": "por",
+        "nl": "nld",
+        "ru": "rus",
+        "zh": "chi_sim",
+        "ja": "jpn",
+        "ko": "kor",
+        "ar": "ara",
+        "hi": "hin",
+        "pl": "pol",
+        "tr": "tur",
+        "vi": "vie",
+        "th": "tha",
+        "sv": "swe",
+        "da": "dan",
+        "no": "nor",
+        "fi": "fin",
+        "cs": "ces",
+        "el": "ell",
+        "he": "heb",
+        "hu": "hun",
+        "id": "ind",
+        "ms": "msa",
+        "ro": "ron",
+        "sk": "slk",
+        "uk": "ukr",
+    }
+
+    def _convert_lang_codes(self, languages: list[str]) -> list[str]:
+        """Convert 2-letter ISO-639-1 codes to Tesseract 3-letter codes."""
+        converted = []
+        for lang in languages:
+            # If it's a 2-letter code, try to convert; otherwise use as-is
+            if len(lang) == 2 and lang.lower() in self.LANG_CODE_MAP:
+                converted.append(self.LANG_CODE_MAP[lang.lower()])
+            else:
+                # Assume it's already a valid Tesseract code
+                converted.append(lang)
+        return converted
+
     async def _recognize_tesseract(
         self, image: Image.Image, languages: list[str], return_boxes: bool
     ) -> OCRResult:
@@ -384,8 +460,10 @@ class OCRModel(BaseModel):
 
         import pytesseract
 
+        # Convert 2-letter codes to Tesseract 3-letter codes
+        tesseract_langs = self._convert_lang_codes(languages)
         # Join languages with + for tesseract
-        lang_str = "+".join(languages)
+        lang_str = "+".join(tesseract_langs)
 
         if return_boxes:
             # Get detailed output with bounding boxes

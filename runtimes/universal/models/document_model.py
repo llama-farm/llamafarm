@@ -347,7 +347,12 @@ class DocumentModel(BaseModel):
         self, image: Image.Image, question: str | None
     ) -> DocumentResult:
         """Extract using LayoutLM model."""
-        if self.task == "vqa" and question:
+        if self.task == "vqa":
+            if not question:
+                raise ValueError(
+                    "VQA task requires a question/prompt. "
+                    "Please provide a question in the 'prompts' field."
+                )
             return await self._layoutlm_vqa(image, question)
         elif self.task == "classification":
             return await self._layoutlm_classify(image)
@@ -368,17 +373,33 @@ class DocumentModel(BaseModel):
             end_logits = outputs.end_logits
 
             # Get best answer span
-            start_idx = torch.argmax(start_logits)
-            end_idx = torch.argmax(end_logits)
+            start_idx = torch.argmax(start_logits).item()
+            end_idx = torch.argmax(end_logits).item()
+
+            # Handle invalid span (end before start) - model is uncertain
+            # Swap indices to get a valid span, or return empty answer
+            if end_idx < start_idx:
+                # Try swapping - sometimes the model predicts them reversed
+                start_idx, end_idx = end_idx, start_idx
+                logger.debug(
+                    f"VQA: Swapped start/end indices (model uncertainty): {start_idx}-{end_idx}"
+                )
 
             # Decode answer
             answer_ids = encoding["input_ids"][0][start_idx : end_idx + 1]
-            answer = self.processor.tokenizer.decode(answer_ids)
+            answer = self.processor.tokenizer.decode(
+                answer_ids, skip_special_tokens=True
+            )
 
-            # Calculate confidence
-            start_prob = torch.softmax(start_logits, dim=-1)[0][start_idx].item()
-            end_prob = torch.softmax(end_logits, dim=-1)[0][end_idx].item()
-            confidence = (start_prob + end_prob) / 2
+            # If answer is empty after swap, indicate no answer found
+            if not answer.strip():
+                answer = "[No answer found]"
+                confidence = 0.0
+            else:
+                # Calculate confidence
+                start_prob = torch.softmax(start_logits, dim=-1)[0][start_idx].item()
+                end_prob = torch.softmax(end_logits, dim=-1)[0][end_idx].item()
+                confidence = (start_prob + end_prob) / 2
 
         return DocumentResult(
             answer=answer,

@@ -405,7 +405,23 @@ Score data points for anomalies. Returns all points with scores.
 
 Detect anomalies (returns only anomalous points).
 
-Same request format as `/score`, but response only includes points where `is_anomaly: true`.
+Same request format as `/score`, but response only includes points classified as anomalies.
+The response does not include an `is_anomaly` field since all returned points are anomalies.
+
+**Response:**
+```json
+{
+  "object": "list",
+  "data": [
+    {"index": 1, "score": 0.89, "raw_score": -0.45}
+  ],
+  "total_count": 1,
+  "summary": {
+    "anomalies_detected": 1,
+    "threshold": 0.5
+  }
+}
+```
 
 ### POST /v1/anomaly/save
 
