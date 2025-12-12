@@ -21,6 +21,11 @@ dependencies = [
   "pyyaml>=6.0",
   "gguf>=0.17.1",
   # hf-transfer is now provided by llamafarm-common
+  "pymupdf>=1.26.6",  # Required for PDF file uploads
+  # Note: easyocr moved to optional [ocr-easyocr] extra to avoid forcing torch install
+  # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
+  "protobuf>=6.33.1",
+  "sentencepiece>=0.2.1",
 ]
 
 [dependency-groups]
@@ -45,6 +50,37 @@ gpu = ["torch>=2.0.0", "llama-cpp-python>=0.3.0"]
 # xformers is GPU-only and must be installed manually when needed:
 #   uv pip install xformers
 # (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
+
+# OCR backends - install the one(s) you need
+# Usage: uv pip install "universal-runtime[ocr-surya]"
+ocr-surya = ["surya-ocr>=0.6.0"]
+ocr-easyocr = ["easyocr>=1.7.0", "opencv-python-headless>=4.8.0"]
+ocr-paddleocr = ["paddleocr>=2.7.0"]
+ocr-tesseract = ["pytesseract>=0.3.10"]
+# Install recommended OCR backends (surya + easyocr + tesseract)
+ocr = [
+    "surya-ocr>=0.6.0",
+    "easyocr>=1.7.0",
+    "opencv-python-headless>=4.8.0",  # Required by easyocr, explicit to avoid version conflicts
+    "pytesseract>=0.3.10",
+]
+
+# Document understanding models
+document = [
+    "transformers>=4.35.0",
+    "sentencepiece>=0.1.99",
+]
+
+# Anomaly detection
+anomaly = [
+    "scikit-learn>=1.3.0",
+]
+
+# Text classification (few-shot learning with SetFit)
+classification = [
+    "setfit>=1.1.0",
+    "sentence-transformers>=3.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

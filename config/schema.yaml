@@ -144,6 +144,35 @@ properties:
                     model training context, and pattern-based defaults.
                     See Universal runtime documentation for auto-detection behavior.
               additionalProperties: true
+            encoder_config:
+              type: object
+              description: |
+                Configuration for BERT-style encoder models (Universal runtime only).
+                Used for embeddings, classification, reranking, and NER endpoints.
+              properties:
+                max_length:
+                  type: integer
+                  minimum: 1
+                  description: |
+                    Maximum sequence length for tokenization. Auto-detected if not specified.
+                    ModernBERT supports up to 8,192 tokens, classic BERT supports 512.
+                    Must be a positive integer if specified.
+                use_flash_attention:
+                  type: boolean
+                  description: |
+                    Enable Flash Attention 2 for faster inference on CUDA devices.
+                    Requires flash_attn package and compatible GPU.
+                  default: true
+                task:
+                  type: string
+                  enum: [embedding, classification, reranking, ner]
+                  description: |
+                    Task type for the encoder model:
+                    - embedding: Generate dense vector representations
+                    - classification: Sentiment, spam detection, intent routing
+                    - reranking: Cross-encoder document reranking
+                    - ner: Named entity recognition
+                  default: embedding
             prompts:
               type: array
               description: List of prompt set names to use for this model (merged in order)

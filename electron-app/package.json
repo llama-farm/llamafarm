@@ -93,6 +93,7 @@
           ]
         }
       ],
+      "artifactName": "LlamaFarm-desktop-app-mac-${arch}.${ext}",
       "identity": null,
       "darkModeSupport": true
     },
@@ -102,6 +103,7 @@
         "portable"
       ],
       "icon": "build/icon.ico",
+      "artifactName": "LlamaFarm-desktop-app-windows.${ext}",
       "signtoolOptions": {
         "sign": "./sign-windows.js"
       }
@@ -112,7 +114,8 @@
         "deb"
       ],
       "category": "Development",
-      "icon": "build/icons"
+      "icon": "build/icons",
+      "artifactName": "LlamaFarm-desktop-app-linux.${ext}"
     },
     "extraResources": [
       {

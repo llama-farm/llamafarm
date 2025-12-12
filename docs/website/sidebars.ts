@@ -86,7 +86,10 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Models & Runtime',
       link: { type: 'doc', id: 'models/index' },
-      items: [],
+      items: [
+        { type: 'doc', id: 'models/specialized-ml', label: 'Specialized ML Models' },
+        { type: 'doc', id: 'models/anomaly-detection', label: 'Anomaly Detection' },
+      ],
     },
     {
       type: 'category',

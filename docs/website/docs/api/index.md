@@ -2353,6 +2353,105 @@ console.log(result.choices[0].message.content);
 
 ---
 
+## Universal Runtime API
+
+The Universal Runtime is a separate service (port 11540) that provides specialized ML endpoints for document processing, text analysis, embeddings, and anomaly detection.
+
+**Base URL:** `http://localhost:11540`
+
+### Starting the Universal Runtime
+
+```bash
+nx start universal-runtime
+```
+
+### Universal Runtime Endpoints
+
+| Category | Endpoint | Description |
+|----------|----------|-------------|
+| **Health** | `GET /health` | Runtime health and loaded models |
+| **Models** | `GET /v1/models` | List currently loaded models |
+| **Chat** | `POST /v1/chat/completions` | OpenAI-compatible chat completions |
+| **Embeddings** | `POST /v1/embeddings` | Generate text embeddings |
+| **Files** | `POST /v1/files` | Upload files for processing |
+| **Files** | `GET /v1/files` | List uploaded files |
+| **Files** | `GET /v1/files/{id}` | Get file metadata |
+| **Files** | `GET /v1/files/{id}/images` | Get file as base64 images |
+| **Files** | `DELETE /v1/files/{id}` | Delete uploaded file |
+| **OCR** | `POST /v1/ocr` | Extract text from images/PDFs |
+| **Documents** | `POST /v1/documents/extract` | Extract structured data from documents |
+| **Classification** | `POST /v1/classify` | Classify text using pre-trained models (sentiment, etc.) |
+| **Custom Classifier** | `POST /v1/classifier/fit` | Train custom classifier (SetFit few-shot) |
+| **Custom Classifier** | `POST /v1/classifier/predict` | Classify with trained custom model |
+| **Custom Classifier** | `POST /v1/classifier/save` | Save trained classifier |
+| **Custom Classifier** | `POST /v1/classifier/load` | Load saved classifier |
+| **Custom Classifier** | `GET /v1/classifier/models` | List saved classifiers |
+| **Custom Classifier** | `DELETE /v1/classifier/models/{name}` | Delete saved classifier |
+| **NER** | `POST /v1/ner` | Named entity recognition |
+| **Reranking** | `POST /v1/rerank` | Rerank documents by relevance |
+| **Anomaly** | `POST /v1/anomaly/fit` | Train anomaly detector |
+| **Anomaly** | `POST /v1/anomaly/score` | Score data for anomalies |
+| **Anomaly** | `POST /v1/anomaly/detect` | Detect anomalies (filtered) |
+| **Anomaly** | `POST /v1/anomaly/save` | Save trained model |
+| **Anomaly** | `POST /v1/anomaly/load` | Load saved model |
+| **Anomaly** | `GET /v1/anomaly/models` | List saved models |
+| **Anomaly** | `DELETE /v1/anomaly/models/{filename}` | Delete saved model |
+
+### Quick Examples
+
+**OCR:**
+```bash
+curl -X POST http://localhost:11540/v1/ocr \
+  -H "Content-Type: application/json" \
+  -d '{"model": "surya", "images": ["base64..."], "languages": ["en"]}'
+```
+
+**Embeddings:**
+```bash
+curl -X POST http://localhost:11540/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model": "sentence-transformers/all-MiniLM-L6-v2", "input": "Hello world"}'
+```
+
+**Custom Classification (SetFit):**
+```bash
+# Train a custom classifier with few examples
+curl -X POST http://localhost:11540/v1/classifier/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier",
+    "training_data": [
+      {"text": "Book a flight", "label": "booking"},
+      {"text": "Cancel my order", "label": "cancellation"}
+    ]
+  }'
+
+# Classify new texts
+curl -X POST http://localhost:11540/v1/classifier/predict \
+  -H "Content-Type: application/json" \
+  -d '{"model": "intent-classifier", "texts": ["I need to reserve a room"]}'
+```
+
+**Anomaly Detection:**
+```bash
+# Train
+curl -X POST http://localhost:11540/v1/anomaly/fit \
+  -H "Content-Type: application/json" \
+  -d '{"model": "my-detector", "backend": "isolation_forest", "data": [[1,2],[3,4]]}'
+
+# Detect
+curl -X POST http://localhost:11540/v1/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{"model": "my-detector", "data": [[1,2],[100,200]]}'
+```
+
+For complete documentation, see:
+- [Specialized ML Models](../models/specialized-ml.md) - OCR, documents, classification, NER, reranking
+- [Anomaly Detection Guide](../models/anomaly-detection.md) - Complete anomaly detection documentation
+- [Models & Runtime](../models/index.md) - Runtime configuration
+
+---
+
 ## Next Steps
 
 - Learn about [Configuration](../configuration/index.md)
