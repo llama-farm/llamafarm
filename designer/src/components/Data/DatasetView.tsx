@@ -512,6 +512,7 @@ function DatasetView() {
   // Reprocess all files state
   const [showReprocessAllConfirmation, setShowReprocessAllConfirmation] =
     useState(false)
+  const [isReprocessingAll, setIsReprocessingAll] = useState(false)
   const [copyStatus, setCopyStatus] = useState<{
     [id: string]: string | undefined
   }>({})
@@ -1359,8 +1360,9 @@ function DatasetView() {
       return
     }
 
-    // Close modal immediately
+    // Close modal and show loading state immediately
     setShowReprocessAllConfirmation(false)
+    setIsReprocessingAll(true)
 
     try {
       // Clear previous results
@@ -1407,12 +1409,15 @@ function DatasetView() {
           variant: 'default',
         })
       }
+      // Clear the preparing state once task has started
+      setIsReprocessingAll(false)
     } catch (error) {
       console.error('Failed to reprocess all files:', error)
       toast({
         message: 'Failed to reprocess files. Please try again.',
         variant: 'destructive',
       })
+      setIsReprocessingAll(false)
     }
   }
 
@@ -2251,6 +2256,18 @@ function DatasetView() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+
+              {/* Preparing to reprocess all files - shown during chunk deletion */}
+              {isReprocessingAll && (
+                <section className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    <span className="text-sm font-medium">
+                      Preparing to reprocess all files...
+                    </span>
+                  </div>
+                </section>
+              )}
 
               {/* Reprocessing single file - simple loader */}
               {currentTaskId && taskStatus && reprocessingFileHash && (
