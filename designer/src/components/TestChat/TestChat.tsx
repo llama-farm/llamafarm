@@ -199,7 +199,15 @@ export default function TestChat({
   const getCurrentDatabase = useCallback(() => {
     try {
       const ragConfig = (projectDetail as any)?.project?.config?.rag
-      return ragConfig?.default_database || ''
+      // First try explicit default_database, then fall back to first database
+      if (ragConfig?.default_database) {
+        return ragConfig.default_database
+      }
+      // If no default set, use first database
+      if (ragConfig?.databases && Array.isArray(ragConfig.databases) && ragConfig.databases.length > 0) {
+        return ragConfig.databases[0]?.name || ''
+      }
+      return ''
     } catch {
       return ''
     }
@@ -254,6 +262,67 @@ export default function TestChat({
 
   // Get the current database value for rendering
   const currentDatabase = getCurrentDatabase()
+
+  // Get retrieval strategies for the current database
+  const { availableStrategies, defaultStrategy } = useMemo(() => {
+    try {
+      const ragConfig = (projectDetail as any)?.project?.config?.rag
+      if (!ragConfig?.databases || !Array.isArray(ragConfig.databases)) {
+        return { availableStrategies: [], defaultStrategy: null }
+      }
+
+      const dbName = currentDatabase
+      const dbConfig = ragConfig.databases.find(
+        (db: any) => db?.name === dbName
+      )
+      if (!dbConfig?.retrieval_strategies || !Array.isArray(dbConfig.retrieval_strategies)) {
+        return { availableStrategies: [], defaultStrategy: null }
+      }
+
+      const strategies = dbConfig.retrieval_strategies
+        .filter((s: any) => s?.name)
+        .map((s: any) => ({
+          name: String(s.name),
+          type: String(s.type || ''),
+          isDefault: Boolean(s.default),
+        }))
+
+      // Find the default strategy: explicit default_retrieval_strategy, or one marked default, or first
+      let defaultStrat: string | null = null
+      if (dbConfig.default_retrieval_strategy) {
+        defaultStrat = String(dbConfig.default_retrieval_strategy)
+      } else {
+        const markedDefault = strategies.find((s: any) => s.isDefault)
+        if (markedDefault) {
+          defaultStrat = markedDefault.name
+        } else if (strategies.length > 0) {
+          defaultStrat = strategies[0].name
+        }
+      }
+
+      return { availableStrategies: strategies, defaultStrategy: defaultStrat }
+    } catch {
+      return { availableStrategies: [], defaultStrategy: null }
+    }
+  }, [projectDetail, currentDatabase])
+
+  // Selected retrieval strategy state
+  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
+
+  // Reset selected strategy to default when database changes or when strategies become available
+  useEffect(() => {
+    if (defaultStrategy && selectedStrategy !== defaultStrategy) {
+      // Only reset if current selection is not in the available strategies
+      const isValidSelection = availableStrategies.some(
+        (s: any) => s.name === selectedStrategy
+      )
+      if (!isValidSelection) {
+        setSelectedStrategy(defaultStrategy)
+      }
+    } else if (!defaultStrategy) {
+      setSelectedStrategy(null)
+    }
+  }, [currentDatabase, defaultStrategy, availableStrategies, selectedStrategy])
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -587,6 +656,7 @@ export default function TestChat({
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
+            rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
@@ -671,6 +741,7 @@ export default function TestChat({
     ragEnabled,
     ragTopK,
     ragScoreThreshold,
+    selectedStrategy,
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -831,6 +902,7 @@ export default function TestChat({
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
+            rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
@@ -902,6 +974,7 @@ export default function TestChat({
     ragEnabled,
     ragTopK,
     ragScoreThreshold,
+    selectedStrategy,
     projectSession,
     setStreamingMessage,
     projectChatStreamingSession.sessionId,
@@ -979,6 +1052,29 @@ export default function TestChat({
                 </select>
               </div>
             )}
+
+            {/* Retrieval Strategy selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Strategy
+              </span>
+              <select
+                value={selectedStrategy || ''}
+                onChange={e => setSelectedStrategy(e.target.value || null)}
+                disabled={availableStrategies.length === 0}
+                className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {availableStrategies.length === 0 ? (
+                  <option value="">No strategies found</option>
+                ) : (
+                  availableStrategies.map((strategy: { name: string; type: string; isDefault: boolean }) => (
+                    <option key={strategy.name} value={strategy.name}>
+                      {strategy.name} {strategy.name === defaultStrategy ? '(default)' : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
           </div>
         )}
         <button
