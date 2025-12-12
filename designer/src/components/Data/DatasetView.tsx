@@ -136,6 +136,10 @@ function DatasetView() {
   } | null>(null)
   const [isResultsOpen, setIsResultsOpen] = useState(false)
   const [isProcessingQueued, setIsProcessingQueued] = useState(false)
+  // Track which file is being reprocessed to filter the progress display
+  const [reprocessingFileHash, setReprocessingFileHash] = useState<
+    string | null
+  >(null)
 
   // Transform async task result from [bool, {...}] format to normalized structure
   const normalizeTaskResult = (rawResult: any): ProcessDatasetResponse => {
@@ -253,6 +257,36 @@ function DatasetView() {
   // Cancel task mutation
   const cancelTaskMutation = useCancelTask()
 
+  // Helper to start processing and save task ID - reduces duplication
+  const startProcessingAndSaveTask = useCallback(async () => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId) {
+      return null
+    }
+    const result = await processMutation.mutateAsync({
+      namespace: activeProject.namespace,
+      project: activeProject.project,
+      dataset: datasetId,
+    })
+    if (result.task_id) {
+      setCurrentTaskId(result.task_id)
+      saveDatasetTaskId(
+        activeProject.namespace,
+        activeProject.project,
+        datasetId,
+        result.task_id
+      )
+    }
+    return result
+  }, [activeProject?.namespace, activeProject?.project, datasetId, processMutation])
+
+  // Helper to clear reprocessing file hash from state and storage
+  const clearReprocessingState = useCallback(() => {
+    setReprocessingFileHash(null)
+    if (activeProject?.namespace && activeProject?.project && datasetId) {
+      clearReprocessingFileHash(activeProject.namespace, activeProject.project, datasetId)
+    }
+  }, [activeProject?.namespace, activeProject?.project, datasetId])
+
   const handleStopProcessing = useCallback(() => {
     if (!currentTaskId || !activeProject?.namespace || !activeProject?.project)
       return
@@ -366,31 +400,10 @@ function DatasetView() {
         if (isProcessingQueued) {
           setIsProcessingQueued(false)
           // Only trigger if job succeeded or was cancelled (not on failure)
-          // On failure, user can manually retry
           if (taskStatus.state === 'SUCCESS' || taskStatus.cancelled) {
-            // Use async function inside useEffect
-            ;(async () => {
-              try {
-                const result = await processMutation.mutateAsync({
-                  namespace: activeProject.namespace,
-                  project: activeProject.project,
-                  dataset: datasetId,
-                })
-
-                if (result.task_id) {
-                  setCurrentTaskId(result.task_id)
-                  saveDatasetTaskId(
-                    activeProject.namespace,
-                    activeProject.project,
-                    datasetId,
-                    result.task_id
-                  )
-                }
-              } catch (error) {
-                console.error('Failed to start queued processing:', error)
-                // Don't show error toast - processing can be triggered manually
-              }
-            })()
+            startProcessingAndSaveTask().catch(error => {
+              console.error('Failed to start queued processing:', error)
+            })
           }
         }
       }
@@ -404,7 +417,7 @@ function DatasetView() {
     taskStatus,
     refetchDatasets,
     isProcessingQueued,
-    processMutation,
+    startProcessingAndSaveTask,
   ])
 
   const [dataset, setDataset] = useState<Dataset | null>(null)
@@ -505,10 +518,6 @@ function DatasetView() {
   const [showReprocessConfirmation, setShowReprocessConfirmation] =
     useState(false)
   const [isReprocessing, setIsReprocessing] = useState(false)
-  // Track which file is being reprocessed to filter the progress display
-  const [reprocessingFileHash, setReprocessingFileHash] = useState<
-    string | null
-  >(null)
   // Reprocess all files state
   const [showReprocessAllConfirmation, setShowReprocessAllConfirmation] =
     useState(false)
@@ -767,38 +776,16 @@ function DatasetView() {
       await refetchDatasets()
 
       // Auto-trigger processing if at least one file was successfully uploaded
-      if (
-        successCount > 0 &&
-        datasetId &&
-        activeProject?.namespace &&
-        activeProject?.project
-      ) {
+      if (successCount > 0) {
         // Check if processing is currently running
         if (currentTaskId) {
           // Queue processing for after current job completes
           setIsProcessingQueued(true)
         } else {
           // Trigger processing immediately
-          try {
-            const result = await processMutation.mutateAsync({
-              namespace: activeProject.namespace,
-              project: activeProject.project,
-              dataset: datasetId,
-            })
-
-            if (result.task_id) {
-              setCurrentTaskId(result.task_id)
-              saveDatasetTaskId(
-                activeProject.namespace,
-                activeProject.project,
-                datasetId,
-                result.task_id
-              )
-            }
-          } catch (error) {
+          await startProcessingAndSaveTask().catch(error => {
             console.error('Failed to auto-start processing:', error)
-            // Don't show error toast - processing can be triggered manually
-          }
+          })
         }
       }
 
@@ -812,7 +799,7 @@ function DatasetView() {
       filterFilesByType,
       uploadMutation,
       refetchDatasets,
-      processMutation,
+      startProcessingAndSaveTask,
       currentTaskId,
     ]
   )
@@ -877,10 +864,7 @@ function DatasetView() {
       // Task completed successfully
       setCurrentTaskId(null)
       setProcessingFailure(null) // Clear any previous failures
-      setReprocessingFileHash(null) // Clear reprocessing filter
-      if (activeProject?.namespace && activeProject?.project && datasetId) {
-        clearReprocessingFileHash(activeProject.namespace, activeProject.project, datasetId)
-      }
+      clearReprocessingState()
 
       // Store the processing result - merge with previous results to maintain history
       if (taskStatus.result) {
@@ -944,14 +928,8 @@ function DatasetView() {
       })
     } else if (taskStatus.state === 'FAILURE') {
       // Task failed - but preserve partial results if they exist
-      console.error('Task failed:', taskStatus.error, taskStatus.traceback)
-      console.log('Full taskStatus on failure:', taskStatus)
-      console.log('taskStatus.result:', taskStatus.result)
       setCurrentTaskId(null)
-      setReprocessingFileHash(null) // Clear reprocessing filter
-      if (activeProject?.namespace && activeProject?.project && datasetId) {
-        clearReprocessingFileHash(activeProject.namespace, activeProject.project, datasetId)
-      }
+      clearReprocessingState()
 
       // Try to extract partial results from either result or meta fields
       let partialResults = taskStatus.result
@@ -984,7 +962,6 @@ function DatasetView() {
             reason: f.error,
           })),
         }
-        console.log('Constructed partial results from meta:', partialResults)
       }
 
       // Keep partial results to show what succeeded and what failed
@@ -1291,13 +1268,35 @@ function DatasetView() {
     setIsReprocessing(true)
 
     try {
-      // Clear previous results
-      setProcessingResult(null)
-      clearDatasetResult(
-        activeProject.namespace,
-        activeProject.project,
-        datasetId
-      )
+      // Only remove the specific file from results, keep others intact
+      setProcessingResult(prev => {
+        if (!prev) return null
+        const updatedDetails = prev.details.filter(
+          (detail: FileProcessingDetail) =>
+            detail.hash !== pendingReprocessFileHash &&
+            (detail as any).file_hash !== pendingReprocessFileHash
+        )
+        // Recalculate counts
+        const processedCount = updatedDetails.filter(
+          (d: FileProcessingDetail) => d.status === 'processed' || (d.success && d.status !== 'skipped')
+        ).length
+        const failedCount = updatedDetails.filter(
+          (d: FileProcessingDetail) => d.status === 'failed' || (!d.success && d.status !== 'skipped')
+        ).length
+        const skippedCount = updatedDetails.filter(
+          (d: FileProcessingDetail) => d.status === 'skipped'
+        ).length
+        const updated = {
+          ...prev,
+          processed_files: processedCount,
+          failed_files: failedCount,
+          skipped_files: skippedCount,
+          details: updatedDetails,
+        }
+        // Save updated result to localStorage
+        saveDatasetResult(activeProject.namespace, activeProject.project, datasetId, updated)
+        return updated
+      })
 
       // Delete chunks for this one file
       await deleteChunksMutation.mutateAsync({
@@ -1307,41 +1306,21 @@ function DatasetView() {
         fileHash: pendingReprocessFileHash,
       })
 
-      // Trigger process (will skip already-processed files, only process this one)
-      const result = await processMutation.mutateAsync({
-        namespace: activeProject.namespace,
-        project: activeProject.project,
-        dataset: datasetId,
-      })
-
-      if (result.task_id) {
-        setCurrentTaskId(result.task_id)
-        // Track which file we're reprocessing to filter the progress display
+      // Trigger process and track which file we're reprocessing
+      const result = await startProcessingAndSaveTask()
+      if (result?.task_id) {
         setReprocessingFileHash(pendingReprocessFileHash)
-        saveDatasetTaskId(
-          activeProject.namespace,
-          activeProject.project,
-          datasetId,
-          result.task_id
-        )
-        // Save reprocessing file hash to sessionStorage so it persists across navigation
         saveReprocessingFileHash(
           activeProject.namespace,
           activeProject.project,
           datasetId,
           pendingReprocessFileHash
         )
-        toast({
-          message: 'Reprocessing file...',
-          variant: 'default',
-        })
+        toast({ message: 'Reprocessing file...', variant: 'default' })
       }
     } catch (error) {
       console.error('Failed to reprocess file:', error)
-      toast({
-        message: 'Failed to reprocess file. Please try again.',
-        variant: 'destructive',
-      })
+      toast({ message: 'Failed to reprocess file. Please try again.', variant: 'destructive' })
     } finally {
       setIsReprocessing(false)
       setShowReprocessConfirmation(false)
@@ -1368,11 +1347,7 @@ function DatasetView() {
       // Clear previous results
       setProcessingResult(null)
       setProcessingFailure(null)
-      clearDatasetResult(
-        activeProject.namespace,
-        activeProject.project,
-        datasetId
-      )
+      clearDatasetResult(activeProject.namespace, activeProject.project, datasetId)
 
       // Delete ALL chunks first
       await deleteAllChunksMutation.mutateAsync({
@@ -1382,41 +1357,15 @@ function DatasetView() {
       })
 
       // Trigger process (will process all files since chunks were deleted)
-      const result = await processMutation.mutateAsync({
-        namespace: activeProject.namespace,
-        project: activeProject.project,
-        dataset: datasetId,
-      })
-
-      if (result.task_id) {
-        setCurrentTaskId(result.task_id)
-        saveDatasetTaskId(
-          activeProject.namespace,
-          activeProject.project,
-          datasetId,
-          result.task_id
-        )
-        // Clear reprocessingFileHash to ensure full file list shows (not single-file loader)
-        setReprocessingFileHash(null)
-        clearReprocessingFileHash(
-          activeProject.namespace,
-          activeProject.project,
-          datasetId
-        )
-
-        toast({
-          message: 'Reprocessing all files...',
-          variant: 'default',
-        })
+      const result = await startProcessingAndSaveTask()
+      if (result?.task_id) {
+        clearReprocessingState() // Ensure full file list shows
+        toast({ message: 'Reprocessing all files...', variant: 'default' })
       }
-      // Clear the preparing state once task has started
       setIsReprocessingAll(false)
     } catch (error) {
       console.error('Failed to reprocess all files:', error)
-      toast({
-        message: 'Failed to reprocess files. Please try again.',
-        variant: 'destructive',
-      })
+      toast({ message: 'Failed to reprocess files. Please try again.', variant: 'destructive' })
       setIsReprocessingAll(false)
     }
   }
@@ -1658,27 +1607,10 @@ function DatasetView() {
                                         className="inline-flex items-center cursor-help"
                                         aria-label="Why files are skipped"
                                       >
-                                        <svg
-                                          xmlns="http://www.w3.org/2000/svg"
-                                          width="12"
-                                          height="12"
-                                          viewBox="0 0 32 32"
-                                          fill="none"
-                                          className="text-muted-foreground hover:text-foreground"
-                                        >
-                                          <path
-                                            d="M16 2C13.2311 2 10.5243 2.82109 8.22202 4.35943C5.91973 5.89777 4.12532 8.08427 3.06569 10.6424C2.00607 13.2006 1.72882 16.0155 2.26901 18.7313C2.80921 21.447 4.14258 23.9416 6.10051 25.8995C8.05845 27.8574 10.553 29.1908 13.2687 29.731C15.9845 30.2712 18.7994 29.9939 21.3576 28.9343C23.9157 27.8747 26.1022 26.0803 27.6406 23.778C29.1789 21.4757 30 18.7689 30 16C30 12.287 28.525 8.72601 25.8995 6.1005C23.274 3.475 19.713 2 16 2V2ZM16 28C13.6266 28 11.3066 27.2962 9.33316 25.9776C7.35977 24.6591 5.8217 22.7849 4.91345 20.5922C4.0052 18.3995 3.76756 15.9867 4.23058 13.6589C4.69361 11.3311 5.83649 9.19295 7.51472 7.51472C9.19295 5.83649 11.3312 4.6936 13.6589 4.23058C15.9867 3.76755 18.3995 4.00519 20.5922 4.91345C22.7849 5.8217 24.6591 7.35977 25.9776 9.33316C27.2962 11.3065 28 13.6266 28 16C28 19.1826 26.7357 22.2348 24.4853 24.4853C22.2349 26.7357 19.1826 28 16 28Z"
-                                            fill="currentColor"
-                                          />
-                                          <path
-                                            d="M16 25C16.8284 25 17.5 24.3284 17.5 23.5C17.5 22.6716 16.8284 22 16 22C15.1716 22 14.5 22.6716 14.5 23.5C14.5 24.3284 15.1716 25 16 25Z"
-                                            fill="currentColor"
-                                          />
-                                          <path
-                                            d="M17 8.00001H15.5C14.9087 7.99869 14.3229 8.11419 13.7764 8.33987C13.2298 8.56555 12.7332 8.89696 12.3151 9.31509C11.897 9.73322 11.5655 10.2298 11.3399 10.7764C11.1142 11.3229 10.9987 11.9087 11 12.5V13H13V12.5C13 11.837 13.2634 11.2011 13.7322 10.7322C14.2011 10.2634 14.837 10 15.5 10H17C17.6631 10 18.2989 10.2634 18.7678 10.7322C19.2366 11.2011 19.5 11.837 19.5 12.5C19.5 13.1631 19.2366 13.7989 18.7678 14.2678C18.2989 14.7366 17.6631 15 17 15H15V19.5H17V17C18.1935 17 19.3381 16.5259 20.182 15.682C21.0259 14.8381 21.5 13.6935 21.5 12.5C21.5 11.3065 21.0259 10.1619 20.182 9.31803C19.3381 8.47412 18.1935 8.00001 17 8.00001V8.00001Z"
-                                            fill="currentColor"
-                                          />
-                                        </svg>
+                                        <FontIcon
+                                          type="info"
+                                          className="w-3 h-3 text-muted-foreground hover:text-foreground"
+                                        />
                                       </button>
                                     </TooltipTrigger>
                                     <TooltipContent className="max-w-[280px]">
@@ -1718,245 +1650,237 @@ function DatasetView() {
                                         (fileResult: FileProcessingDetail) =>
                                           fileResult.status !== 'skipped'
                                       )
-                                    return filteredDetails.length > 0
-                                      ? filteredDetails.map(
-                                          (
-                                            fileResult: FileProcessingDetail,
-                                            idx: number
-                                          ) => {
-                                            const isSkipped =
-                                              fileResult.status === 'skipped'
-                                            const isFailed = !fileResult.success
-                                            const isSuccess =
-                                              fileResult.success && !isSkipped
+                                    return filteredDetails.length > 0 ? (
+                                      filteredDetails.map(
+                                        (
+                                          fileResult: FileProcessingDetail,
+                                          idx: number
+                                        ) => {
+                                          const isSkipped =
+                                            fileResult.status === 'skipped'
+                                          const isFailed = !fileResult.success
+                                          const isSuccess =
+                                            fileResult.success && !isSkipped
 
-                                            // Get filename or fall back to hash
-                                            const displayFilename =
-                                              fileResult.filename ||
-                                              fileResult.hash
-                                            // Show hash when we have both a real filename AND a different has
+                                          // Get filename or fall back to hash
+                                          const displayFilename =
+                                            fileResult.filename ||
+                                            fileResult.hash
+                                          // Show hash when we have both a real filename AND a different has
 
-                                            // Get chunks information
-                                            const totalChunks =
-                                              fileResult.chunks || 0
-                                            const storedChunks =
-                                              fileResult.stored_count ?? 0
-                                            const skippedChunks =
-                                              fileResult.skipped_count ?? 0
+                                          // Get chunks information
+                                          const totalChunks =
+                                            fileResult.chunks || 0
+                                          const storedChunks =
+                                            fileResult.stored_count ?? 0
+                                          const skippedChunks =
+                                            fileResult.skipped_count ?? 0
 
-                                            return (
-                                              <div
-                                                key={idx}
-                                                className="px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors flex gap-3"
-                                              >
-                                                {/* Status icon column - spans full height */}
-                                                <div className="flex-shrink-0 w-4 flex items-start pt-0.5">
-                                                  {isSuccess && (
-                                                    <FontIcon
-                                                      type="checkmark-filled"
-                                                      className="w-4 h-4 text-green-600"
-                                                    />
-                                                  )}
-                                                  {isSkipped && (
-                                                    <div className="w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center">
-                                                      <span className="text-foreground text-[10px] font-bold">
-                                                        !
-                                                      </span>
-                                                    </div>
-                                                  )}
-                                                  {isFailed && (
-                                                    <FontIcon
-                                                      type="close"
-                                                      className="w-4 h-4 text-red-600 dark:text-red-400"
-                                                    />
-                                                  )}
-                                                </div>
+                                          return (
+                                            <div
+                                              key={idx}
+                                              className="px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-colors flex gap-3"
+                                            >
+                                              {/* Status icon column - spans full height */}
+                                              <div className="flex-shrink-0 w-4 flex items-start pt-0.5">
+                                                {isSuccess && (
+                                                  <FontIcon
+                                                    type="checkmark-filled"
+                                                    className="w-4 h-4 text-green-600"
+                                                  />
+                                                )}
+                                                {isSkipped && (
+                                                  <div className="w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center">
+                                                    <span className="text-foreground text-[10px] font-bold">
+                                                      !
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {isFailed && (
+                                                  <FontIcon
+                                                    type="close"
+                                                    className="w-4 h-4 text-red-600 dark:text-red-400"
+                                                  />
+                                                )}
+                                              </div>
 
-                                                {/* Content column */}
-                                                <div className="flex-1 min-w-0 space-y-1.5">
-                                                  {/* File header with status */}
-                                                  <div className="flex items-start justify-between gap-3">
-                                                    {/* Filename */}
-                                                    <div className="flex flex-col flex-1 min-w-0 gap-1">
-                                                      <span className="text-sm font-medium truncate">
-                                                        {displayFilename}
-                                                      </span>
-                                                      <TooltipProvider>
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="text-xs text-muted-foreground text-blue-600 text-mono">
-                                                              {fileResult.hash}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                            <p className="font-mono text-xs">
-                                                              {fileResult.hash}
-                                                            </p>
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      </TooltipProvider>
-                                                    </div>
-
-                                                    {/* Status badge */}
-                                                    <Badge
-                                                      variant={
-                                                        isSuccess
-                                                          ? 'default'
-                                                          : isSkipped
-                                                            ? 'secondary'
-                                                            : 'outline'
-                                                      }
-                                                      size="sm"
-                                                      className="rounded-xl flex-shrink-0 font-medium"
-                                                    >
-                                                      {isSuccess && 'SUCCESS'}
-                                                      {isSkipped &&
-                                                        `SKIPPED${fileResult.reason ? ` (${fileResult.reason})` : ''}`}
-                                                      {isFailed && 'FAILED'}
-                                                    </Badge>
+                                              {/* Content column */}
+                                              <div className="flex-1 min-w-0 space-y-1.5">
+                                                {/* File header with status */}
+                                                <div className="flex items-start justify-between gap-3">
+                                                  {/* Filename */}
+                                                  <div className="flex flex-col flex-1 min-w-0 gap-1">
+                                                    <span className="text-sm font-medium truncate">
+                                                      {displayFilename}
+                                                    </span>
+                                                    <TooltipProvider>
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <span className="text-xs text-muted-foreground text-blue-600 text-mono">
+                                                            {fileResult.hash}
+                                                          </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                          <p className="font-mono text-xs">
+                                                            {fileResult.hash}
+                                                          </p>
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    </TooltipProvider>
                                                   </div>
 
-                                                  {/* Processing stats - condensed */}
-                                                  <div className="space-y-1.5 text-xs">
-                                                    {/* Chunks info with reason inline */}
-                                                    {totalChunks > 0 && (
-                                                      <div className="flex items-center justify-between gap-3">
-                                                        <div className="flex items-center gap-3 flex-wrap">
-                                                          <div className="flex items-center gap-1.5">
-                                                            <span className="font-semibold text-foreground">
-                                                              {totalChunks}
+                                                  {/* Status badge */}
+                                                  <Badge
+                                                    variant={
+                                                      isSuccess
+                                                        ? 'default'
+                                                        : isSkipped
+                                                          ? 'secondary'
+                                                          : 'outline'
+                                                    }
+                                                    size="sm"
+                                                    className="rounded-xl flex-shrink-0 font-medium"
+                                                  >
+                                                    {isSuccess && 'SUCCESS'}
+                                                    {isSkipped &&
+                                                      `SKIPPED${fileResult.reason ? ` (${fileResult.reason})` : ''}`}
+                                                    {isFailed && 'FAILED'}
+                                                  </Badge>
+                                                </div>
+
+                                                {/* Processing stats - condensed */}
+                                                <div className="space-y-1.5 text-xs">
+                                                  {/* Chunks info with reason inline */}
+                                                  {totalChunks > 0 && (
+                                                    <div className="flex items-center justify-between gap-3">
+                                                      <div className="flex items-center gap-3 flex-wrap">
+                                                        <div className="flex items-center gap-1.5">
+                                                          <span className="font-semibold text-foreground">
+                                                            {totalChunks}
+                                                          </span>
+                                                          <span className="text-muted-foreground">
+                                                            chunk
+                                                            {totalChunks !== 1
+                                                              ? 's'
+                                                              : ''}{' '}
+                                                            created
+                                                          </span>
+                                                        </div>
+                                                        {storedChunks > 0 && (
+                                                          <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
+                                                            <span className="font-semibold">
+                                                              {storedChunks}
                                                             </span>
-                                                            <span className="text-muted-foreground">
-                                                              chunk
-                                                              {totalChunks !== 1
-                                                                ? 's'
-                                                                : ''}{' '}
-                                                              created
-                                                            </span>
+                                                            <span>stored</span>
                                                           </div>
-                                                          {storedChunks > 0 && (
-                                                            <div className="flex items-center gap-1 text-green-600 dark:text-green-500">
-                                                              <span className="font-semibold">
-                                                                {storedChunks}
-                                                              </span>
-                                                              <span>
-                                                                stored
-                                                              </span>
-                                                            </div>
-                                                          )}
-                                                          {skippedChunks >
-                                                            0 && (
-                                                            <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
-                                                              <span className="font-semibold">
-                                                                {skippedChunks}
-                                                              </span>
-                                                              <span>
-                                                                skipped
-                                                              </span>
-                                                            </div>
-                                                          )}
-                                                        </div>
-                                                        {/* Reason inline - only show for failed files (not skipped, since badge already shows reason) */}
-                                                        {fileResult.reason &&
-                                                          isFailed && (
-                                                            <div className="flex items-center gap-1">
-                                                              <span className="font-medium text-red-600 dark:text-red-400">
-                                                                Reason:
-                                                              </span>
-                                                              <span className="text-red-600 dark:text-red-400">
-                                                                {
-                                                                  fileResult.reason
-                                                                }
-                                                              </span>
-                                                            </div>
-                                                          )}
-                                                      </div>
-                                                    )}
-
-                                                    {/* Processing details - horizontal single row */}
-                                                    <div className="flex items-center gap-3 flex-wrap text-muted-foreground">
-                                                      {/* Parser info */}
-                                                      {fileResult.parser && (
-                                                        <div>
-                                                          <span className="font-medium text-foreground">
-                                                            Parser:
-                                                          </span>{' '}
-                                                          <span className="font-mono text-xs">
-                                                            {fileResult.parser}
-                                                          </span>
-                                                        </div>
-                                                      )}
-
-                                                      {/* Embedder */}
-                                                      {fileResult.embedder && (
-                                                        <div>
-                                                          <span className="font-medium text-foreground">
-                                                            Embedder:
-                                                          </span>{' '}
-                                                          <span className="font-mono text-xs">
-                                                            {
-                                                              fileResult.embedder
-                                                            }
-                                                          </span>
-                                                        </div>
-                                                      )}
-
-                                                      {/* Extractors - inline */}
-                                                      {fileResult.extractors &&
-                                                        fileResult.extractors
-                                                          .length > 0 && (
-                                                          <div className="flex items-center gap-1.5">
-                                                            <span className="font-medium text-foreground">
-                                                              Extractors:
+                                                        )}
+                                                        {skippedChunks > 0 && (
+                                                          <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
+                                                            <span className="font-semibold">
+                                                              {skippedChunks}
                                                             </span>
-                                                            <div className="inline-flex flex-wrap gap-1">
-                                                              {fileResult.extractors.map(
-                                                                (
-                                                                  ext: string,
-                                                                  i: number
-                                                                ) => (
-                                                                  <Badge
-                                                                    key={i}
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="rounded font-mono text-[10px] px-1.5 py-0"
-                                                                  >
-                                                                    {ext}
-                                                                  </Badge>
-                                                                )
-                                                              )}
-                                                            </div>
+                                                            <span>skipped</span>
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                      {/* Reason inline - only show for failed files (not skipped, since badge already shows reason) */}
+                                                      {fileResult.reason &&
+                                                        isFailed && (
+                                                          <div className="flex items-center gap-1">
+                                                            <span className="font-medium text-red-600 dark:text-red-400">
+                                                              Reason:
+                                                            </span>
+                                                            <span className="text-red-600 dark:text-red-400">
+                                                              {
+                                                                fileResult.reason
+                                                              }
+                                                            </span>
                                                           </div>
                                                         )}
                                                     </div>
+                                                  )}
 
-                                                    {/* Error message for failures - keep on separate line for visibility */}
-                                                    {isFailed &&
-                                                      fileResult.error && (
-                                                        <div className="mt-1.5 px-2 py-1.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
-                                                          <span className="font-medium text-red-800 dark:text-red-400">
-                                                            Error:
-                                                          </span>{' '}
-                                                          <span className="text-red-700 dark:text-red-400">
-                                                            {fileResult.error}
+                                                  {/* Processing details - horizontal single row */}
+                                                  <div className="flex items-center gap-3 flex-wrap text-muted-foreground">
+                                                    {/* Parser info */}
+                                                    {fileResult.parser && (
+                                                      <div>
+                                                        <span className="font-medium text-foreground">
+                                                          Parser:
+                                                        </span>{' '}
+                                                        <span className="font-mono text-xs">
+                                                          {fileResult.parser}
+                                                        </span>
+                                                      </div>
+                                                    )}
+
+                                                    {/* Embedder */}
+                                                    {fileResult.embedder && (
+                                                      <div>
+                                                        <span className="font-medium text-foreground">
+                                                          Embedder:
+                                                        </span>{' '}
+                                                        <span className="font-mono text-xs">
+                                                          {fileResult.embedder}
+                                                        </span>
+                                                      </div>
+                                                    )}
+
+                                                    {/* Extractors - inline */}
+                                                    {fileResult.extractors &&
+                                                      fileResult.extractors
+                                                        .length > 0 && (
+                                                        <div className="flex items-center gap-1.5">
+                                                          <span className="font-medium text-foreground">
+                                                            Extractors:
                                                           </span>
+                                                          <div className="inline-flex flex-wrap gap-1">
+                                                            {fileResult.extractors.map(
+                                                              (
+                                                                ext: string,
+                                                                i: number
+                                                              ) => (
+                                                                <Badge
+                                                                  key={i}
+                                                                  variant="outline"
+                                                                  size="sm"
+                                                                  className="rounded font-mono text-[10px] px-1.5 py-0"
+                                                                >
+                                                                  {ext}
+                                                                </Badge>
+                                                              )
+                                                            )}
+                                                          </div>
                                                         </div>
                                                       )}
                                                   </div>
+
+                                                  {/* Error message for failures - keep on separate line for visibility */}
+                                                  {isFailed &&
+                                                    fileResult.error && (
+                                                      <div className="mt-1.5 px-2 py-1.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded">
+                                                        <span className="font-medium text-red-800 dark:text-red-400">
+                                                          Error:
+                                                        </span>{' '}
+                                                        <span className="text-red-700 dark:text-red-400">
+                                                          {fileResult.error}
+                                                        </span>
+                                                      </div>
+                                                    )}
                                                 </div>
                                               </div>
-                                            )
-                                          }
-                                        )
-                                      : (
-                                          <div className="px-4 py-8 text-center">
-                                            <p className="text-sm text-muted-foreground">
-                                              No processed or failed files to display
-                                            </p>
-                                          </div>
-                                        )
+                                            </div>
+                                          )
+                                        }
+                                      )
+                                    ) : (
+                                      <div className="px-4 py-8 text-center">
+                                        <p className="text-sm text-muted-foreground">
+                                          No processed or failed files to
+                                          display
+                                        </p>
+                                      </div>
+                                    )
                                   })()}
                                 </div>
                               </div>
@@ -2232,8 +2156,8 @@ function DatasetView() {
                   <div className="flex flex-col gap-3 pt-1">
                     <p className="text-muted-foreground">
                       Are you sure you want to reprocess all files? This will
-                      delete all existing chunks and reprocess every file in
-                      the dataset.
+                      delete all existing chunks and reprocess every file in the
+                      dataset.
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {files.length} file(s) will be reprocessed.
@@ -2289,7 +2213,9 @@ function DatasetView() {
                           className="h-7 px-3 text-xs"
                           title="Stop processing"
                         >
-                          {cancelTaskMutation.isPending ? 'Stopping...' : 'Stop'}
+                          {cancelTaskMutation.isPending
+                            ? 'Stopping...'
+                            : 'Stop'}
                         </Button>
                       )}
                   </div>
@@ -2303,7 +2229,9 @@ function DatasetView() {
                 !reprocessingFileHash && (
                   <section className="rounded-lg border border-border bg-card p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-medium">Processing Progress</h3>
+                      <h3 className="text-sm font-medium">
+                        Processing Progress
+                      </h3>
                       <div className="flex items-center gap-2">
                         <Badge
                           variant="secondary"
@@ -2362,73 +2290,73 @@ function DatasetView() {
                     </div>
                     <div className="rounded-md border border-border max-h-80 overflow-auto">
                       {taskStatus.meta.files.map((file: any, idx: number) => (
-                      <div
-                        key={file.task_id || idx}
-                        className="p-3 border-b last:border-b-0 text-xs"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            {/* Status icon */}
-                            {file.state === 'pending' && (
-                              <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
-                            )}
-                            {file.state === 'processing' && (
-                              <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex-shrink-0" />
-                            )}
-                            {file.state === 'success' && (
-                              <FontIcon
-                                type="checkmark-filled"
-                                className="w-4 h-4 text-green-600 flex-shrink-0"
-                              />
-                            )}
-                            {file.state === 'failure' && (
-                              <FontIcon
-                                type="close"
-                                className="w-4 h-4 text-red-600 flex-shrink-0"
-                              />
-                            )}
+                        <div
+                          key={file.task_id || idx}
+                          className="p-3 border-b last:border-b-0 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {/* Status icon */}
+                              {file.state === 'pending' && (
+                                <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
+                              )}
+                              {file.state === 'processing' && (
+                                <div className="w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex-shrink-0" />
+                              )}
+                              {file.state === 'success' && (
+                                <FontIcon
+                                  type="checkmark-filled"
+                                  className="w-4 h-4 text-green-600 flex-shrink-0"
+                                />
+                              )}
+                              {file.state === 'failure' && (
+                                <FontIcon
+                                  type="close"
+                                  className="w-4 h-4 text-red-600 flex-shrink-0"
+                                />
+                              )}
 
-                            {/* Filename */}
-                            <span className="font-mono text-muted-foreground truncate">
-                              {file.filename || `File ${idx + 1}`}
-                            </span>
+                              {/* Filename */}
+                              <span className="font-mono text-muted-foreground truncate">
+                                {file.filename || `File ${idx + 1}`}
+                              </span>
+                            </div>
+
+                            {/* Status badge */}
+                            <Badge
+                              variant={
+                                file.state === 'success'
+                                  ? 'default'
+                                  : file.state === 'failure'
+                                    ? 'outline'
+                                    : 'secondary'
+                              }
+                              size="sm"
+                              className="rounded-xl flex-shrink-0"
+                            >
+                              {file.state === 'pending' && 'Queued'}
+                              {file.state === 'processing' && 'Processing'}
+                              {file.state === 'success' && 'Complete'}
+                              {file.state === 'failure' && 'Failed'}
+                            </Badge>
                           </div>
 
-                          {/* Status badge */}
-                          <Badge
-                            variant={
-                              file.state === 'success'
-                                ? 'default'
-                                : file.state === 'failure'
-                                  ? 'outline'
-                                  : 'secondary'
-                            }
-                            size="sm"
-                            className="rounded-xl flex-shrink-0"
-                          >
-                            {file.state === 'pending' && 'Queued'}
-                            {file.state === 'processing' && 'Processing'}
-                            {file.state === 'success' && 'Complete'}
-                            {file.state === 'failure' && 'Failed'}
-                          </Badge>
+                          {/* Additional info */}
+                          {file.chunks && (
+                            <div className="text-muted-foreground mt-1 ml-6">
+                              {file.chunks} chunks created
+                            </div>
+                          )}
+                          {file.error && (
+                            <div className="text-red-600 mt-1 ml-6 text-xs">
+                              Error: {file.error}
+                            </div>
+                          )}
                         </div>
-
-                        {/* Additional info */}
-                        {file.chunks && (
-                          <div className="text-muted-foreground mt-1 ml-6">
-                            {file.chunks} chunks created
-                          </div>
-                        )}
-                        {file.error && (
-                          <div className="text-red-600 mt-1 ml-6 text-xs">
-                            Error: {file.error}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+                      ))}
+                    </div>
+                  </section>
+                )}
 
               {/* Processing strategy and Embedding model sections removed per request */}
 
@@ -2554,41 +2482,15 @@ function DatasetView() {
                               return
 
                             try {
-                              // Don't clear previous results - keep them so already processed files still show as processed
                               // Only clear failures since we're starting a new job
                               setProcessingFailure(null)
-
-                              const result = await processMutation.mutateAsync({
-                                namespace: activeProject.namespace,
-                                project: activeProject.project,
-                                dataset: datasetId,
-                              })
-
-                              // The process endpoint returns task_id directly
-                              if (result.task_id) {
-                                setCurrentTaskId(result.task_id)
-                                // Save task ID to sessionStorage so it persists across navigation
-                                saveDatasetTaskId(
-                                  activeProject.namespace,
-                                  activeProject.project,
-                                  datasetId,
-                                  result.task_id
-                                )
-                                toast({
-                                  message: 'Processing new files...',
-                                  variant: 'default',
-                                })
+                              const result = await startProcessingAndSaveTask()
+                              if (result?.task_id) {
+                                toast({ message: 'Processing new files...', variant: 'default' })
                               }
                             } catch (error) {
-                              console.error(
-                                'Failed to start processing:',
-                                error
-                              )
-                              toast({
-                                message:
-                                  'Failed to start processing. Please try again.',
-                                variant: 'destructive',
-                              })
+                              console.error('Failed to start processing:', error)
+                              toast({ message: 'Failed to start processing. Please try again.', variant: 'destructive' })
                             }
                           }}
                         >

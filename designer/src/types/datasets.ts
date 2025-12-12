@@ -213,68 +213,11 @@ export interface CancelTaskResponse {
 }
 
 /**
- * Parameters for API calls that require path parameters
- */
-export interface DatasetPathParams {
-  /** Project namespace */
-  namespace: string
-  /** Project identifier */
-  project: string
-  /** Dataset name */
-  dataset?: string
-  /** File hash for file-specific operations */
-  file_hash?: string
-}
-
-/**
  * Query parameters for file deletion
  */
 export interface FileDeleteParams {
   /** Whether to remove the file from disk (optional) */
   remove_from_disk?: boolean
-}
-
-/**
- * Standard error response structure
- */
-export interface DatasetApiError {
-  /** Error detail message */
-  detail?: string
-}
-
-/**
- * Base error classes for Dataset API operations
- */
-export class DatasetError extends Error {
-  constructor(
-    message: string,
-    public statusCode?: number,
-    public data?: any
-  ) {
-    super(message)
-    this.name = 'DatasetError'
-  }
-}
-
-export class DatasetValidationError extends DatasetError {
-  constructor(message: string, data?: any) {
-    super(message, 422, data)
-    this.name = 'DatasetValidationError'
-  }
-}
-
-export class DatasetNotFoundError extends DatasetError {
-  constructor(message: string, data?: any) {
-    super(message, 404, data)
-    this.name = 'DatasetNotFoundError'
-  }
-}
-
-export class DatasetNetworkError extends DatasetError {
-  constructor(message: string, originalError?: any) {
-    super(message, undefined, originalError)
-    this.name = 'DatasetNetworkError'
-  }
 }
 
 /**
@@ -362,41 +305,4 @@ export interface ProcessDatasetResponse {
   details: FileProcessingDetail[]
   /** Task ID for async processing */
   task_id?: string | null
-}
-
-/**
- * Frontend-specific Dataset type with additional UI properties
- * This extends the API Dataset type with local state management fields
- */
-export interface UIDataset extends Dataset {
-  /** Local UI identifier */
-  id: string
-  /** Last run timestamp for UI display */
-  lastRun: Date
-  /** Embedding model used */
-  embedModel: string
-  /** Number of chunks processed */
-  numChunks: number
-  /** Processing percentage (0-100) */
-  processedPercent: number
-  /** Version identifier */
-  version: string
-  /** Optional description */
-  description?: string
-}
-
-/**
- * Frontend File representation for UI components
- */
-export interface UIFile {
-  /** Stable identifier for the file */
-  id: string
-  /** File name */
-  name: string
-  /** File size in bytes */
-  size: number
-  /** Last modified timestamp */
-  lastModified: number
-  /** MIME type (optional) */
-  type?: string
 }
