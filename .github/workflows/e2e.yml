@@ -75,7 +75,7 @@ jobs:
               repo: context.repo.repo,
               sha: sha,
               state: 'pending',
-              context: 'E2E Tests / ${{ matrix.os }}',
+              context: 'E2E Tests (${{ matrix.os }})',
               description: 'E2E tests are running...',
               target_url: `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             });
@@ -574,7 +574,7 @@ jobs:
               repo: context.repo.repo,
               sha: sha,
               state: state,
-              context: 'E2E Tests / ${{ matrix.os }}',
+              context: 'E2E Tests (${{ matrix.os }})',
               description: description,
               target_url: `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             });
@@ -839,7 +839,7 @@ jobs:
                 repo: context.repo.repo,
                 sha: sha,
                 state: 'failure',
-                context: `E2E Tests / ${os}`,
+                context: `E2E Tests (${os})`,
                 description: 'CLI build failed - E2E tests skipped',
                 target_url: context.payload.workflow_run.html_url
               });
