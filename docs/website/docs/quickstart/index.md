@@ -49,6 +49,7 @@ For best RAG results with longer documents, increase the Ollama context window t
 
 ```bash
 lf init my-project
+cd my-project
 ```
 
 This reaches the server (auto-started if needed) and writes `llamafarm.yaml` with default runtime, prompts, and RAG configuration.
