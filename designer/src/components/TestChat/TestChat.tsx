@@ -984,24 +984,44 @@ export default function TestChat({
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
-        <div className="text-xs md:text-sm text-muted-foreground">
-          {USE_PROJECT_CHAT && chatParams ? (
-            <span>
-              Project: {chatParams.namespace}/{chatParams.projectId}
-              {projectChatStreamingSession.sessionId && (
-                <span className="ml-2 opacity-60">
-                  • Session: {projectChatStreamingSession.sessionId.slice(-8)}
-                </span>
-              )}
-            </span>
-          ) : (
-            'Session'
-          )}
+      <div className="flex flex-col gap-2 px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
+        {/* First row: Project info + Clear button */}
+        <div className="flex items-center justify-between">
+          <div className="text-xs md:text-sm text-muted-foreground">
+            {USE_PROJECT_CHAT && chatParams ? (
+              <span>
+                Project: {chatParams.namespace}/{chatParams.projectId}
+                {projectChatStreamingSession.sessionId && (
+                  <span className="ml-2 opacity-60">
+                    • Session: {projectChatStreamingSession.sessionId.slice(-8)}
+                  </span>
+                )}
+              </span>
+            ) : (
+              'Session'
+            )}
+          </div>
+          {/* Clear button - far right */}
+          <button
+            type="button"
+            onClick={() => {
+              clearChat()
+              if (!MOCK_MODE && chatParams) {
+                projectChatStreamingSession.clearSession()
+              }
+              // Reset sending state to ensure input isn't stuck disabled
+              setIsProjectSending(false)
+              setStreamingMessage(null)
+            }}
+            disabled={isClearing || !hasMessages}
+            className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isClearing ? 'Clearing…' : 'Clear'}
+          </button>
         </div>
-        {/* Model and Database selectors (if available) */}
+        {/* Second row: Model, Database, Strategy selectors */}
         {USE_PROJECT_CHAT && (
-          <div className="flex flex-wrap items-center gap-4 md:gap-8">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:gap-x-5">
             {/* Model selector */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -1015,7 +1035,8 @@ export default function TestChat({
                   ''
                 }
                 onChange={e => setSelectedModel(e.target.value)}
-                className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+                className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] max-w-[220px] truncate appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
               >
                 {modelsLoading && <option value="">Loading…</option>}
                 {!modelsLoading && unifiedModels.length === 0 && (
@@ -1042,7 +1063,8 @@ export default function TestChat({
                     const value = e.target.value
                     if (value) handleDatabaseChange(value)
                   }}
-                  className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+                  className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
                 >
                   {availableDatabases.map((dbName: string) => (
                     <option key={dbName} value={dbName}>
@@ -1062,7 +1084,8 @@ export default function TestChat({
                 value={selectedStrategy || ''}
                 onChange={e => setSelectedStrategy(e.target.value || null)}
                 disabled={availableStrategies.length === 0}
-                className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
               >
                 {availableStrategies.length === 0 ? (
                   <option value="">No strategies found</option>
@@ -1077,19 +1100,6 @@ export default function TestChat({
             </div>
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            clearChat()
-            if (!MOCK_MODE && chatParams) {
-              projectChatStreamingSession.clearSession()
-            }
-          }}
-          disabled={isClearing}
-          className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isClearing ? 'Clearing…' : 'Clear'}
-        </button>
       </div>
 
       {/* Error */}
@@ -1112,8 +1122,8 @@ export default function TestChat({
         ref={listRef}
         className={
           !hasMessages
-            ? 'flex-1 overflow-hidden p-3 md:p-4'
-            : 'flex-1 overflow-y-auto p-3 md:p-4'
+            ? 'flex-1 overflow-hidden p-3 md:p-4 relative'
+            : 'flex-1 overflow-y-auto p-3 md:p-4 relative'
         }
       >
         {!hasMessages ? (
@@ -1277,7 +1287,7 @@ export function TestChatMessage({
       <div
         className={
           isUser
-            ? 'px-4 py-3 md:px-4 md:py-3 rounded-lg bg-primary/10 text-foreground'
+            ? 'px-4 py-2.5 rounded-lg bg-primary/10 text-foreground leading-snug'
             : isAssistant
               ? 'px-0 md:px-0 text-[15px] md:text-base leading-relaxed text-foreground/90'
               : 'px-4 py-3 rounded-lg bg-muted text-foreground'
@@ -1343,7 +1353,11 @@ export function TestChatMessage({
             )}
 
             {/* Final answer content (without <think> … </think>) */}
-            <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-4 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-headings:my-4 prose-pre:my-3 [&>*]:mb-4">
+            <div className={
+              isUser
+                ? 'prose prose-sm dark:prose-invert max-w-none leading-snug prose-p:my-0 [&>*]:mb-0 [&>*:last-child]:mb-0'
+                : 'prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-4 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-headings:my-4 prose-pre:my-3 [&>*]:mb-4'
+            }>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {contentWithoutThinking.replace(/\n{3,}/g, '\n\n')}
               </ReactMarkdown>
