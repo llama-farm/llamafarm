@@ -7,6 +7,7 @@ import {
   DatasetActionRequest,
   DatasetActionResponse,
   DeleteChunksResponse,
+  DeleteAllChunksResponse,
   FileUploadResponse,
   FileDeleteResponse,
   FileDeleteParams,
@@ -166,6 +167,26 @@ export async function deleteFileChunks(
   const response = await apiClient.post<DeleteChunksResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
     { action_type: 'delete_chunks', file_hash: fileHash }
+  )
+  return response.data
+}
+
+/**
+ * Delete chunks for ALL files from the vector store (without deleting the source files)
+ * Used for reprocessing entire dataset
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param dataset - The dataset name
+ * @returns Promise<DeleteAllChunksResponse> - The response with deleted chunk count and files cleared
+ */
+export async function deleteAllChunks(
+  namespace: string,
+  project: string,
+  dataset: string
+): Promise<DeleteAllChunksResponse> {
+  const response = await apiClient.post<DeleteAllChunksResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
+    { action_type: 'delete_all_chunks' }
   )
   return response.data
 }
@@ -340,6 +361,7 @@ export default {
   deleteDataset,
   executeDatasetAction,
   deleteFileChunks,
+  deleteAllChunks,
   uploadFileToDataset,
   deleteFileFromDataset,
   ingestDataset,

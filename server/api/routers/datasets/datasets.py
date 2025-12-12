@@ -124,6 +124,7 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
 class DatasetActionType(str, Enum):
     PROCESS = "process"
     DELETE_CHUNKS = "delete_chunks"
+    DELETE_ALL_CHUNKS = "delete_all_chunks"
 
 
 class DatasetActionRequest(BaseModel):
@@ -147,6 +148,14 @@ class DeleteChunksResponse(BaseModel):
     deleted_chunks: int = Field(..., description="Number of chunks deleted")
 
 
+class DeleteAllChunksResponse(BaseModel):
+    message: str = Field(..., description="The status message")
+    deleted_chunks: int = Field(..., description="Total number of chunks deleted")
+    files_cleared: int = Field(
+        ..., description="Number of files whose chunks were deleted"
+    )
+
+
 @router.post(
     "/{dataset}/actions",
     operation_id="dataset_actions",
@@ -154,6 +163,7 @@ class DeleteChunksResponse(BaseModel):
     description="""Execute an action on a dataset
     - PROCESS: Process all files in the dataset using the configured data processing strategy
     - DELETE_CHUNKS: Delete chunks for a specific file from the vector store (requires file_hash)
+    - DELETE_ALL_CHUNKS: Delete chunks for ALL files from the vector store (for reprocessing entire dataset)
     """,
     tags=["mcp"],
     responses={200: {"model": DatasetActionResponse}},
@@ -189,6 +199,13 @@ async def actions(
             message="Chunks deleted successfully",
             file_hash=request.file_hash,
             deleted_chunks=result.get("deleted_count", 0),
+        )
+    elif action_type == DatasetActionType.DELETE_ALL_CHUNKS:
+        result = await DatasetService.delete_all_chunks(namespace, project, dataset)
+        return DeleteAllChunksResponse(
+            message="All chunks deleted successfully",
+            deleted_chunks=result.get("deleted_count", 0),
+            files_cleared=result.get("files_cleared", 0),
         )
     else:
         raise HTTPException(

@@ -48,6 +48,7 @@ import {
   useDeleteDataset,
   useCancelTask,
   useDeleteFileChunks,
+  useDeleteAllChunks,
 } from '../../hooks/useDatasets'
 import {
   DatasetFile,
@@ -240,6 +241,7 @@ function DatasetView() {
   const processMutation = useProcessDataset()
   const deleteFileMutation = useDeleteDatasetFile()
   const deleteChunksMutation = useDeleteFileChunks()
+  const deleteAllChunksMutation = useDeleteAllChunks()
   const deleteDatasetMutation = useDeleteDataset()
   const { data: taskStatus } = useTaskStatus(
     activeProject?.namespace || '',
@@ -507,6 +509,9 @@ function DatasetView() {
   const [reprocessingFileHash, setReprocessingFileHash] = useState<
     string | null
   >(null)
+  // Reprocess all files state
+  const [showReprocessAllConfirmation, setShowReprocessAllConfirmation] =
+    useState(false)
   const [copyStatus, setCopyStatus] = useState<{
     [id: string]: string | undefined
   }>({})
@@ -1348,6 +1353,69 @@ function DatasetView() {
     setPendingReprocessFileHash(null)
   }
 
+  const handleConfirmReprocessAll = async () => {
+    if (!activeProject?.namespace || !activeProject?.project || !datasetId) {
+      setShowReprocessAllConfirmation(false)
+      return
+    }
+
+    // Close modal immediately
+    setShowReprocessAllConfirmation(false)
+
+    try {
+      // Clear previous results
+      setProcessingResult(null)
+      setProcessingFailure(null)
+      clearDatasetResult(
+        activeProject.namespace,
+        activeProject.project,
+        datasetId
+      )
+
+      // Delete ALL chunks first
+      await deleteAllChunksMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+      })
+
+      // Trigger process (will process all files since chunks were deleted)
+      const result = await processMutation.mutateAsync({
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetId,
+      })
+
+      if (result.task_id) {
+        setCurrentTaskId(result.task_id)
+        saveDatasetTaskId(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId,
+          result.task_id
+        )
+        // Clear reprocessingFileHash to ensure full file list shows (not single-file loader)
+        setReprocessingFileHash(null)
+        clearReprocessingFileHash(
+          activeProject.namespace,
+          activeProject.project,
+          datasetId
+        )
+
+        toast({
+          message: 'Reprocessing all files...',
+          variant: 'default',
+        })
+      }
+    } catch (error) {
+      console.error('Failed to reprocess all files:', error)
+      toast({
+        message: 'Failed to reprocess files. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   // Helper function to check if a specific file is being deleted
   const isFileDeleting = (fileHash: string) => {
     return (
@@ -2140,6 +2208,50 @@ function DatasetView() {
                 </DialogContent>
               </Dialog>
 
+              {/* Reprocess all files confirmation modal */}
+              <Dialog
+                open={showReprocessAllConfirmation}
+                onOpenChange={open => {
+                  if (!open) {
+                    setShowReprocessAllConfirmation(false)
+                  }
+                }}
+              >
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg text-foreground">
+                      Reprocess All Files
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  <div className="flex flex-col gap-3 pt-1">
+                    <p className="text-muted-foreground">
+                      Are you sure you want to reprocess all files? This will
+                      delete all existing chunks and reprocess every file in
+                      the dataset.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {files.length} file(s) will be reprocessed.
+                    </p>
+                  </div>
+
+                  <DialogFooter className="flex flex-row items-center justify-end gap-3 sm:justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowReprocessAllConfirmation(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={handleConfirmReprocessAll}
+                    >
+                      Reprocess All
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
               {/* Reprocessing single file - simple loader */}
               {currentTaskId && taskStatus && reprocessingFileHash && (
                 <section className="rounded-lg border border-border bg-card p-4">
@@ -2466,56 +2578,10 @@ function DatasetView() {
                           Process new files
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={async () => {
-                            if (
-                              !datasetId ||
-                              !activeProject?.namespace ||
-                              !activeProject?.project
-                            )
-                              return
-
-                            try {
-                              // Clear previous results from state and localStorage
-                              setProcessingResult(null)
-                              clearDatasetResult(
-                                activeProject.namespace,
-                                activeProject.project,
-                                datasetId
-                              )
-
-                              const result = await processMutation.mutateAsync({
-                                namespace: activeProject.namespace,
-                                project: activeProject.project,
-                                dataset: datasetId,
-                              })
-
-                              // The process endpoint returns task_id directly
-                              if (result.task_id) {
-                                setCurrentTaskId(result.task_id)
-                                // Save task ID to sessionStorage so it persists across navigation
-                                saveDatasetTaskId(
-                                  activeProject.namespace,
-                                  activeProject.project,
-                                  datasetId,
-                                  result.task_id
-                                )
-                                toast({
-                                  message: 'Reprocessing all files...',
-                                  variant: 'default',
-                                })
-                              }
-                            } catch (error) {
-                              console.error(
-                                'Failed to start processing:',
-                                error
-                              )
-                              toast({
-                                message:
-                                  'Failed to start processing. Please try again.',
-                                variant: 'destructive',
-                              })
-                            }
-                          }}
+                          onClick={() => setShowReprocessAllConfirmation(true)}
+                          disabled={
+                            processMutation.isPending || !!currentTaskId
+                          }
                         >
                           Reprocess all files
                         </DropdownMenuItem>
