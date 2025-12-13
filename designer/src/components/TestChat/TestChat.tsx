@@ -311,18 +311,17 @@ export default function TestChat({
 
   // Reset selected strategy to default when database changes or when strategies become available
   useEffect(() => {
-    if (defaultStrategy && selectedStrategy !== defaultStrategy) {
-      // Only reset if current selection is not in the available strategies
-      const isValidSelection = availableStrategies.some(
-        (s: any) => s.name === selectedStrategy
-      )
-      if (!isValidSelection) {
-        setSelectedStrategy(defaultStrategy)
-      }
-    } else if (!defaultStrategy) {
-      setSelectedStrategy(null)
+    // Check if the current selection is still valid
+    const isValidSelection = availableStrategies.some(
+      (s: any) => s.name === selectedStrategy
+    )
+
+    // If the selection is not valid, reset it to the new default.
+    // This handles switching databases or config changes.
+    if (!isValidSelection) {
+      setSelectedStrategy(defaultStrategy)
     }
-  }, [currentDatabase, defaultStrategy, availableStrategies, selectedStrategy])
+  }, [currentDatabase, defaultStrategy, availableStrategies])
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({

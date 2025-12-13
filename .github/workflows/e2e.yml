@@ -761,21 +761,22 @@ jobs:
           PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
           OS: ${{ matrix.os }}
         with:
+          retries: 3
           script: |
             const fs = require('fs');
             const prNumber = process.env.PR_NUMBER;
             const os = process.env.OS;
             const commentFile = `comment-body-${os}.txt`;
-            
+
             if (!fs.existsSync(commentFile)) {
               console.log(`Comment file not found: ${commentFile}`);
               return;
             }
-            
+
             const newCommentBody = fs.readFileSync(commentFile, 'utf8');
             const commentExists = '${{ steps.find-comment.outputs.exists }}' === 'true';
             const existingCommentId = '${{ steps.find-comment.outputs.comment_id }}';
-            
+
             if (commentExists && existingCommentId) {
               // Get existing comment and append new results
               const { data: existingComment } = await github.rest.issues.getComment({
@@ -783,10 +784,10 @@ jobs:
                 repo: context.repo.repo,
                 comment_id: existingCommentId,
               });
-              
+
               // Append new OS results to existing comment
               const updatedBody = existingComment.body + '\n\n---\n\n' + newCommentBody;
-              
+
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
