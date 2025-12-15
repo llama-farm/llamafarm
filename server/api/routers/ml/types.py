@@ -9,7 +9,7 @@ Note: OCR and Document extraction types have moved to vision/types.py
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # SetFit Classifier Types
@@ -66,7 +66,12 @@ class AnomalyFitRequest(BaseModel):
     backend: str = "isolation_forest"  # Backend to use
     data: list[list[float]] | list[dict[str, Any]]  # Training data
     schema: dict[str, str] | None = None  # Feature encoding schema
-    contamination: float = 0.1  # Expected proportion of anomalies
+    contamination: float = Field(
+        default=0.1,
+        gt=0,
+        le=0.5,
+        description="Expected proportion of anomalies (0-0.5]",
+    )
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
     overwrite: bool = (

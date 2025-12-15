@@ -177,11 +177,11 @@ else
     while IFS= read -r pred; do
         expected="${EXPECTED_LABELS[$i]}"
         if [ "$pred" = "$expected" ]; then
-            ((CORRECT++))
+            CORRECT=$((CORRECT + 1))
         else
             echo "   Mismatch at index $i: expected '$expected', got '$pred'"
         fi
-        ((i++))
+        i=$((i + 1))
     done <<< "$PREDICTED_LABELS"
 
     ACCURACY=$(echo "scale=1; $CORRECT * 100 / $TOTAL" | bc)
@@ -189,7 +189,7 @@ else
     echo "   Correct: $CORRECT / $TOTAL"
     echo "   Accuracy: ${ACCURACY}%"
 
-    if (( CORRECT >= 16 )); then
+    if [ "$CORRECT" -ge 16 ]; then
         echo "   PASSED (>= 80% accuracy)"
     else
         echo "   WARNING: Accuracy below 80% threshold"

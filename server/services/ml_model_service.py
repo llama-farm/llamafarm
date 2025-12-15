@@ -223,12 +223,17 @@ class MLModelService:
             for item in model_dir.iterdir():
                 if item.is_file() and item.suffix == ".joblib":
                     name_without_ext = item.stem
-                    # Parse backend from name
-                    if "." in name_without_ext:
-                        model_name, backend = name_without_ext.rsplit(".", 1)
-                    else:
-                        model_name = name_without_ext
-                        backend = "unknown"
+
+                    # Parse backend from name using known backends
+                    # Filename format: {model}_{backend}.joblib
+                    model_name = name_without_ext
+                    backend = "unknown"
+                    for known_backend in cls.ANOMALY_BACKENDS:
+                        suffix = f"_{known_backend}"
+                        if name_without_ext.endswith(suffix):
+                            model_name = name_without_ext[: -len(suffix)]
+                            backend = known_backend
+                            break
 
                     # Parse version info
                     match = cls.VERSION_PATTERN.match(model_name)
@@ -270,6 +275,38 @@ class MLModelService:
         return cls.get_model_dir(model_type) / name
 
     @classmethod
+    def _validate_path(cls, model_dir: Path, name: str) -> Path:
+        """Validate that a model path is within the model directory.
+
+        Prevents path traversal attacks by ensuring the resolved path
+        stays within the expected model directory.
+
+        Args:
+            model_dir: The base model directory
+            name: The model name to validate
+
+        Returns:
+            The validated, resolved path
+
+        Raises:
+            ValueError: If the path would escape the model directory
+        """
+        # Reject names with path separators
+        if "/" in name or "\\" in name:
+            raise ValueError(f"Invalid model name: {name}")
+
+        path = model_dir / name
+        resolved = path.resolve()
+
+        # Ensure resolved path is within model_dir
+        try:
+            resolved.relative_to(model_dir.resolve())
+        except ValueError:
+            raise ValueError(f"Invalid model name: {name}") from None
+
+        return resolved
+
+    @classmethod
     def delete_model(cls, model_type: str, name: str) -> bool:
         """Delete a model.
 
@@ -279,27 +316,30 @@ class MLModelService:
 
         Returns:
             True if deleted, False if not found
+
+        Raises:
+            ValueError: If the model name is invalid (e.g., path traversal)
         """
         import shutil
 
         model_dir = cls.get_model_dir(model_type)
 
         if model_type == "classifier":
-            path = model_dir / name
+            path = cls._validate_path(model_dir, name)
             if path.is_dir():
                 shutil.rmtree(path)
                 logger.info(f"Deleted classifier model: {name}")
                 return True
         else:
             # For anomaly, name might be just the model name or the full filename
-            path = model_dir / name
+            path = cls._validate_path(model_dir, name)
             if path.is_file():
                 path.unlink()
                 logger.info(f"Deleted anomaly model: {name}")
                 return True
 
             # Try with .joblib extension
-            path = model_dir / f"{name}.joblib"
+            path = cls._validate_path(model_dir, f"{name}.joblib")
             if path.is_file():
                 path.unlink()
                 logger.info(f"Deleted anomaly model: {name}.joblib")

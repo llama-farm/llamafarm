@@ -194,6 +194,12 @@ async def delete_classifier_model(model_name: str) -> dict[str, Any]:
 
     Removes the model directory from disk. Does not affect cached models.
     """
+    # Validate model name to prevent path traversal
+    if "/" in model_name or "\\" in model_name or ".." in model_name:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=f"Invalid model name: {model_name}")
+
     return await UniversalRuntimeService.classifier_delete_model(model_name)
 
 
@@ -394,4 +400,10 @@ async def delete_anomaly_model(filename: str) -> dict[str, Any]:
 
     Removes the model file from disk. Does not affect cached models.
     """
+    # Validate filename to prevent path traversal
+    if "/" in filename or "\\" in filename or ".." in filename:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
+
     return await UniversalRuntimeService.anomaly_delete_model(filename)

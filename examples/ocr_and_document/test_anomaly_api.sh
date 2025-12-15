@@ -135,7 +135,7 @@ echo ""
 
 echo -e "${YELLOW}Listing available models...${NC}"
 
-LIST_RESPONSE=$(curl -s -X GET "${BASE_URL}/anomaly/models")
+LIST_RESPONSE=$(curl -s -X GET "${BASE_URL}/anomaly/models" --max-time 60)
 
 echo "Models Response:"
 echo "$LIST_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LIST_RESPONSE"
