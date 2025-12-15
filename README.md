@@ -80,7 +80,7 @@ Need the full walkthrough with dataset ingestion and troubleshooting tips? Jump 
 
 > Prefer building from source? Clone the repo and follow the steps in [Development & Testing](#-development--testing).
 
-**Run services manually (without Docker auto-start):**
+**Run services manually (without Docker auto-start):** Useful when developing the server or RAG worker locally. Ensure Node.js/npm are available for Nx. Prefer `lf start` for day-to-day use; you can also start each service directly from `server` and `rag` as noted in **Development & Testing**.
 
 ```bash
 git clone https://github.com/llama-farm/llamafarm.git

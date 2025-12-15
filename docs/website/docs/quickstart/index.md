@@ -75,7 +75,7 @@ See the [Designer documentation](../designer/index.md) for details.
 
 ### Running Services Manually (no Docker auto-start)
 
-If you want to control each service yourself (useful when hacking on code), launch them with Nx from the repository root:
+If you want to control each service yourself (useful when developing the stack locally), launch them with Nx from the repository root. Ensure Node.js/npm are available. For normal workflows, `lf start` is simpler; per-service `uv` commands live in the **Development & Testing** section of the repo README.
 
 ```bash
 git clone https://github.com/llama-farm/llamafarm.git
