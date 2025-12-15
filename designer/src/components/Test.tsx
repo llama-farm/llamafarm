@@ -601,9 +601,8 @@ const Test = () => {
                     </div>
                     {ragEnabledUI && (
                       <>
-                        <div className="h-px w-full bg-border mt-2" />
                         {/* RAG retrieval controls */}
-                        <div className="grid grid-cols-3 gap-2 items-center">
+                        <div className="grid grid-cols-3 gap-2 items-center mt-3">
                           <span className="text-sm text-muted-foreground">
                             Top‑K
                           </span>
@@ -623,7 +622,7 @@ const Test = () => {
                             className="col-span-2"
                           />
                         </div>
-                        <div className="grid grid-cols-3 gap-2 items-center">
+                        <div className="grid grid-cols-3 gap-2 items-center mt-3">
                           <span className="text-sm text-muted-foreground">
                             Threshold
                           </span>
@@ -643,62 +642,10 @@ const Test = () => {
                             className="col-span-2"
                           />
                         </div>
-                        <div className="h-px w-full bg-border" />
                       </>
                     )}
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-sm text-muted-foreground">
-                        Temperature
-                      </span>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="2"
-                        value={gen.temperature}
-                        onChange={e =>
-                          setGen({
-                            ...gen,
-                            temperature: Number(e.target.value),
-                          })
-                        }
-                        className="col-span-2"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-sm text-muted-foreground">
-                        Top‑p
-                      </span>
-                      <Input
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        value={gen.topP}
-                        onChange={e =>
-                          setGen({ ...gen, topP: Number(e.target.value) })
-                        }
-                        className="col-span-2"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-sm text-muted-foreground">
-                        Max tokens
-                      </span>
-                      <Input
-                        type="number"
-                        step="1"
-                        min="1"
-                        value={gen.maxTokens}
-                        onChange={e =>
-                          setGen({ ...gen, maxTokens: Number(e.target.value) })
-                        }
-                        className="col-span-2"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 items-center">
+                    <div className="h-px w-full bg-border mt-3" />
+                    <div className="grid grid-cols-3 gap-2 items-center mt-3">
                       <span className="text-sm text-muted-foreground">
                         Thinking budget
                       </span>
@@ -711,67 +658,13 @@ const Test = () => {
                           setGen({
                             ...gen,
                             thinkingBudget: Number(e.target.value),
+                            enableThinking: true,
                           })
                         }
                         className="col-span-2"
-                        disabled={!gen.enableThinking}
-                        title={
-                          gen.enableThinking
-                            ? 'Max tokens for thinking process'
-                            : 'Enable thinking to set budget'
-                        }
+                        title="Max tokens for thinking process"
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-sm text-muted-foreground">
-                        Presence penalty
-                      </span>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="-2"
-                        max="2"
-                        value={gen.presencePenalty}
-                        onChange={e =>
-                          setGen({
-                            ...gen,
-                            presencePenalty: Number(e.target.value),
-                          })
-                        }
-                        className="col-span-2"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <span className="text-sm text-muted-foreground">
-                        Frequency penalty
-                      </span>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="-2"
-                        max="2"
-                        value={gen.frequencyPenalty}
-                        onChange={e =>
-                          setGen({
-                            ...gen,
-                            frequencyPenalty: Number(e.target.value),
-                          })
-                        }
-                        className="col-span-2"
-                      />
-                    </div>
-                    <div className="h-px w-full bg-border" />
-                    <label className="inline-flex items-center gap-2">
-                      <Checkbox
-                        checked={showGenSettings}
-                        onCheckedChange={(v: boolean | 'indeterminate') =>
-                          setShowGenSettings(Boolean(v))
-                        }
-                      />
-                      <span className="whitespace-nowrap">
-                        Show generation settings in responses
-                      </span>
-                    </label>
                   </div>
                 </div>
               )}
