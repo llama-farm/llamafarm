@@ -1,19 +1,17 @@
 #!/bin/bash
 # Test OCR endpoint via LlamaFarm API (proxied to Universal Runtime)
 #
-# This script demonstrates:
-# 1. Uploading a PDF file (auto-converts to images) via /v1/vision/files
-# 2. Running OCR on the uploaded file via /v1/vision/ocr
-# 3. Cleaning up the file via /v1/vision/files
+# This script demonstrates running OCR by passing base64-encoded images
+# directly to the /v1/vision/ocr endpoint.
 #
-# Usage: ./test_ocr_api.sh [PORT] [PDF_FILE]
+# Usage: ./test_ocr_api.sh [PORT] [IMAGE_FILE]
 #   PORT defaults to 8000 (LlamaFarm API)
-#   PDF_FILE defaults to the sample PDF in this directory
+#   IMAGE_FILE defaults to the sample image in this directory
 
 set -e
 
 PORT=${1:-8000}
-PDF_FILE=${2:-"$(dirname "$0")/llamafarm - Healthcare - Aug 2025 2 .pdf"}
+IMAGE_FILE=${2:-"$(dirname "$0")/receipt.png"}
 BASE_URL="http://localhost:${PORT}/v1/vision"
 
 # Colors for output
@@ -49,51 +47,35 @@ echo -e "${GREEN}✓ Universal Runtime is healthy${NC}"
 echo ""
 
 # Check if file exists
-if [ ! -f "$PDF_FILE" ]; then
-    echo -e "${RED}Error: File not found: ${PDF_FILE}${NC}"
+if [ ! -f "$IMAGE_FILE" ]; then
+    echo -e "${RED}Error: File not found: ${IMAGE_FILE}${NC}"
     exit 1
 fi
 
-echo -e "${YELLOW}1. Uploading PDF file...${NC}"
-echo "   File: $(basename "$PDF_FILE")"
+echo -e "${YELLOW}1. Encoding image to base64...${NC}"
+echo "   File: $(basename "$IMAGE_FILE")"
 echo ""
 
-# Upload the file
-UPLOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/files" \
-    -F "file=@${PDF_FILE}" \
-    -F "convert_pdf=true" \
-    -F "pdf_dpi=150")
-
-echo "Upload Response:"
-echo "$UPLOAD_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$UPLOAD_RESPONSE"
-echo ""
-
-# Extract file_id from response
-FILE_ID=$(echo "$UPLOAD_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
-
-if [ -z "$FILE_ID" ]; then
-    echo -e "${RED}Error: Failed to get file_id from upload response${NC}"
-    exit 1
+# Encode image to base64
+BASE64_IMAGE=$(base64 < "$IMAGE_FILE" | tr -d '\n')
+MIME_TYPE="image/png"
+if [[ "$IMAGE_FILE" == *.jpg ]] || [[ "$IMAGE_FILE" == *.jpeg ]]; then
+    MIME_TYPE="image/jpeg"
 fi
 
-echo -e "${GREEN}✓ File uploaded: ${FILE_ID}${NC}"
+echo -e "${GREEN}✓ Image encoded (${#BASE64_IMAGE} chars)${NC}"
 echo ""
 
-# Get file images info
-echo -e "${YELLOW}2. Getting file images info...${NC}"
-curl -s "${BASE_URL}/files/${FILE_ID}" | python3 -m json.tool 2>/dev/null
-echo ""
-
-echo -e "${YELLOW}3. Running OCR with EasyOCR backend...${NC}"
+echo -e "${YELLOW}2. Running OCR with EasyOCR backend...${NC}"
 echo "   (EasyOCR is widely available and doesn't require GPU)"
 echo ""
 
-# Run OCR using file_id
+# Run OCR with base64 image
 OCR_RESPONSE=$(curl -s -X POST "${BASE_URL}/ocr" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"easyocr\",
-        \"file_id\": \"${FILE_ID}\",
+        \"images\": [\"data:${MIME_TYPE};base64,${BASE64_IMAGE}\"],
         \"languages\": [\"en\"],
         \"return_boxes\": false
     }")
@@ -115,7 +97,7 @@ import sys, json
 try:
     data = json.load(sys.stdin)
     for item in data.get('data', []):
-        print(f\"Page {item['index'] + 1}:\")
+        print(f\"Image {item['index'] + 1}:\")
         print(item.get('text', 'No text found')[:500])
         print('...' if len(item.get('text', '')) > 500 else '')
         print()
@@ -130,13 +112,6 @@ else
     echo "  - The image quality is too low"
     echo "  - The document contains no recognizable text"
 fi
-echo ""
-
-# Clean up - delete the uploaded file
-echo -e "${YELLOW}4. Cleaning up uploaded file...${NC}"
-DELETE_RESPONSE=$(curl -s -X DELETE "${BASE_URL}/files/${FILE_ID}")
-echo "$DELETE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DELETE_RESPONSE"
-echo -e "${GREEN}✓ Cleanup complete${NC}"
 echo ""
 
 echo -e "${BLUE}================================================${NC}"

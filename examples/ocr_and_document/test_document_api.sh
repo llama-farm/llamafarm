@@ -1,10 +1,8 @@
 #!/bin/bash
 # Test Document Understanding endpoint via LlamaFarm API
 #
-# This script demonstrates:
-# 1. Uploading a receipt image via /v1/vision/files
-# 2. Running document VQA using Donut DocVQA model via /v1/vision/documents/extract
-# 3. Cleaning up the file
+# This script demonstrates running document VQA by passing base64-encoded images
+# directly to the /v1/vision/documents/extract endpoint.
 #
 # Usage: ./test_document_api.sh [PORT] [IMAGE_FILE]
 #   PORT defaults to 8000 (LlamaFarm API)
@@ -54,27 +52,18 @@ if [ ! -f "$IMAGE_FILE" ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}1. Uploading receipt image...${NC}"
+echo -e "${YELLOW}1. Encoding image to base64...${NC}"
 echo "   File: $(basename "$IMAGE_FILE")"
 echo ""
 
-# Upload the file
-UPLOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/files" \
-    -F "file=@${IMAGE_FILE}")
-
-echo "Upload Response:"
-echo "$UPLOAD_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$UPLOAD_RESPONSE"
-echo ""
-
-# Extract file_id from response
-FILE_ID=$(echo "$UPLOAD_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
-
-if [ -z "$FILE_ID" ]; then
-    echo -e "${RED}Error: Failed to get file_id from upload response${NC}"
-    exit 1
+# Encode image to base64
+BASE64_IMAGE=$(base64 < "$IMAGE_FILE" | tr -d '\n')
+MIME_TYPE="image/png"
+if [[ "$IMAGE_FILE" == *.jpg ]] || [[ "$IMAGE_FILE" == *.jpeg ]]; then
+    MIME_TYPE="image/jpeg"
 fi
 
-echo -e "${GREEN}✓ File uploaded: ${FILE_ID}${NC}"
+echo -e "${GREEN}✓ Image encoded (${#BASE64_IMAGE} chars)${NC}"
 echo ""
 
 echo -e "${YELLOW}2. Running Document VQA with Donut DocVQA...${NC}"
@@ -100,7 +89,7 @@ for QUESTION in "${QUESTIONS[@]}"; do
         --max-time 300 \
         -d "{
             \"model\": \"naver-clova-ix/donut-base-finetuned-docvqa\",
-            \"file_id\": \"${FILE_ID}\",
+            \"images\": [\"data:${MIME_TYPE};base64,${BASE64_IMAGE}\"],
             \"prompts\": [\"${QUESTION}\"],
             \"task\": \"vqa\"
         }")
@@ -132,13 +121,6 @@ except Exception as e:
     echo "$ANSWER"
     echo ""
 done
-
-# Clean up - delete the uploaded file
-echo -e "${YELLOW}3. Cleaning up uploaded file...${NC}"
-DELETE_RESPONSE=$(curl -s -X DELETE "${BASE_URL}/files/${FILE_ID}")
-echo "$DELETE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DELETE_RESPONSE"
-echo -e "${GREEN}✓ Cleanup complete${NC}"
-echo ""
 
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}  Test Complete!${NC}"
