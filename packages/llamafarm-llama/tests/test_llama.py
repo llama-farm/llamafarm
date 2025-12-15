@@ -115,6 +115,84 @@ class TestEmbeddings:
         assert "input" in params
 
 
+class TestUtf8Streaming:
+    """Test UTF-8 streaming decoder for handling multi-byte sequences."""
+
+    def test_decode_complete_ascii(self):
+        """Complete ASCII should decode fully."""
+        from llamafarm_llama.llama import Llama
+
+        text, pending = Llama._decode_utf8_streaming(b"Hello World")
+        assert text == "Hello World"
+        assert pending == b""
+
+    def test_decode_complete_emoji(self):
+        """Complete emoji should decode fully."""
+        from llamafarm_llama.llama import Llama
+
+        # 😎 = \xf0\x9f\x98\x8e (4 bytes)
+        text, pending = Llama._decode_utf8_streaming(b"\xf0\x9f\x98\x8e")
+        assert text == "😎"
+        assert pending == b""
+
+    def test_decode_partial_emoji_1_byte(self):
+        """Partial emoji (1 of 4 bytes) should be buffered."""
+        from llamafarm_llama.llama import Llama
+
+        # First byte of 😎
+        text, pending = Llama._decode_utf8_streaming(b"\xf0")
+        assert text == ""
+        assert pending == b"\xf0"
+
+    def test_decode_partial_emoji_2_bytes(self):
+        """Partial emoji (2 of 4 bytes) should be buffered."""
+        from llamafarm_llama.llama import Llama
+
+        # First 2 bytes of 😎
+        text, pending = Llama._decode_utf8_streaming(b"\xf0\x9f")
+        assert text == ""
+        assert pending == b"\xf0\x9f"
+
+    def test_decode_partial_emoji_3_bytes(self):
+        """Partial emoji (3 of 4 bytes) should be buffered."""
+        from llamafarm_llama.llama import Llama
+
+        # First 3 bytes of 😎
+        text, pending = Llama._decode_utf8_streaming(b"\xf0\x9f\x98")
+        assert text == ""
+        assert pending == b"\xf0\x9f\x98"
+
+    def test_decode_text_with_partial_emoji(self):
+        """Text followed by partial emoji should decode text and buffer emoji."""
+        from llamafarm_llama.llama import Llama
+
+        # "Hi " + first 2 bytes of 😎
+        text, pending = Llama._decode_utf8_streaming(b"Hi \xf0\x9f")
+        assert text == "Hi "
+        assert pending == b"\xf0\x9f"
+
+    def test_decode_continuation_completes_emoji(self):
+        """Adding remaining bytes should complete the emoji."""
+        from llamafarm_llama.llama import Llama
+
+        # Simulate streaming: first get partial, then complete
+        _, pending = Llama._decode_utf8_streaming(b"\xf0\x9f")
+        assert pending == b"\xf0\x9f"
+
+        # Now add the remaining bytes
+        text, pending = Llama._decode_utf8_streaming(pending + b"\x98\x8e")
+        assert text == "😎"
+        assert pending == b""
+
+    def test_decode_empty_bytes(self):
+        """Empty bytes should return empty results."""
+        from llamafarm_llama.llama import Llama
+
+        text, pending = Llama._decode_utf8_streaming(b"")
+        assert text == ""
+        assert pending == b""
+
+
 class TestResponseTypes:
     """Test response type compatibility."""
 

@@ -49,7 +49,7 @@ class Llama:
         model_path: str,
         *,
         n_ctx: int = 2048,
-        n_batch: int = 512,
+        n_batch: int = 2048,  # Larger batch = faster prompt processing
         n_threads: Optional[int] = None,
         n_threads_batch: Optional[int] = None,
         n_gpu_layers: int = 0,
@@ -62,8 +62,9 @@ class Llama:
         rope_freq_base: float = 0.0,
         rope_freq_scale: float = 0.0,
         embedding: bool = False,
-        flash_attn: bool = False,
+        flash_attn: bool = True,  # Enable by default for faster inference
         verbose: bool = True,
+        warmup: bool = True,  # Run warmup inference to compile shaders
         **kwargs,
     ):
         """
@@ -72,7 +73,7 @@ class Llama:
         Args:
             model_path: Path to the GGUF model file.
             n_ctx: Context window size.
-            n_batch: Batch size for prompt processing.
+            n_batch: Batch size for prompt processing. Larger = faster TTFT.
             n_threads: Number of threads for generation. None = auto.
             n_threads_batch: Number of threads for batch processing. None = auto.
             n_gpu_layers: Number of layers to offload to GPU. -1 = all.
@@ -85,8 +86,11 @@ class Llama:
             rope_freq_base: RoPE frequency base.
             rope_freq_scale: RoPE frequency scale.
             embedding: Enable embedding mode.
-            flash_attn: Use flash attention.
+            flash_attn: Use flash attention for faster inference.
             verbose: Print verbose output.
+            warmup: Run warmup inference to pre-compile GPU shaders.
+                    This moves shader compilation cost to load time,
+                    significantly reducing TTFT on first request.
         """
         # Ensure backend is initialized
         ensure_backend()
@@ -146,11 +150,19 @@ class Llama:
         ctx_params = self._lib.llama_context_default_params()
         ctx_params.n_ctx = n_ctx
         ctx_params.n_batch = n_batch
+        ctx_params.n_ubatch = n_batch  # Match ubatch to batch for max GPU parallelism
         ctx_params.n_threads = n_threads
         ctx_params.n_threads_batch = n_threads_batch
         ctx_params.embeddings = embedding
+
+        # Performance optimizations for GPU inference
         # flash_attn_type: -1 = auto, 0 = disabled, 1 = enabled
-        ctx_params.flash_attn_type = 1 if flash_attn else 0
+        # Use auto (-1) by default to let llama.cpp decide based on hardware
+        ctx_params.flash_attn_type = 1 if flash_attn else -1
+        # Offload KV cache to GPU (critical for performance)
+        ctx_params.offload_kqv = True
+        # Offload operations to GPU
+        ctx_params.op_offload = True
 
         if rope_freq_base > 0:
             ctx_params.rope_freq_base = rope_freq_base
@@ -191,6 +203,48 @@ class Llama:
             logger.info(
                 f"Model loaded: vocab={n_vocab}, ctx_train={n_ctx_train}, embd={n_embd}"
             )
+
+        # Warmup: run a dummy decode to compile Metal shaders and warm caches
+        # This significantly reduces TTFT on the first real request
+        if warmup and not embedding:
+            self._warmup()
+
+    def _warmup(self):
+        """Run a warmup inference to compile GPU shaders and warm caches.
+
+        On first inference, Metal/CUDA need to compile shaders which adds
+        significant latency. Running a short warmup moves this cost to
+        model loading time rather than first request time.
+        """
+        t_start = time.perf_counter()
+        logger.debug("Running warmup inference...")
+
+        try:
+            # Clear KV cache
+            self._lib.llama_memory_clear(self._memory, True)
+
+            # Tokenize a short prompt
+            warmup_text = "Hello"
+            tokens = self.tokenize(warmup_text, add_special=True, parse_special=False)
+
+            # Decode the tokens (this compiles shaders)
+            if tokens:
+                self._decode_batch(tokens)
+
+            # Sample one token to warm up the sampler path
+            self._create_sampler(temperature=0.7, top_p=0.95, top_k=40)
+            self._sample_token()
+
+            # Clear state for real inference
+            self._lib.llama_memory_clear(self._memory, True)
+            if self._sampler is not None:
+                self._lib.llama_sampler_free(self._sampler)
+                self._sampler = None
+
+            t_end = time.perf_counter()
+            logger.info(f"Warmup completed in {(t_end - t_start)*1000:.1f}ms")
+        except Exception as e:
+            logger.warning(f"Warmup failed (non-fatal): {e}")
 
     def __del__(self):
         """Clean up resources."""
@@ -279,8 +333,25 @@ class Llama:
         Returns:
             Decoded text.
         """
+        raw_bytes = self._detokenize_bytes(tokens, remove_special)
+        return raw_bytes.decode("utf-8", errors="replace")
+
+    def _detokenize_bytes(self, tokens: List[int], remove_special: bool = False) -> bytes:
+        """
+        Convert tokens back to raw bytes (without UTF-8 decoding).
+
+        This is useful for streaming where we need to buffer incomplete
+        UTF-8 sequences (e.g., emojis split across multiple tokens).
+
+        Args:
+            tokens: List of token IDs.
+            remove_special: Remove special tokens.
+
+        Returns:
+            Raw bytes from detokenization.
+        """
         if not tokens:
-            return ""
+            return b""
 
         tokens_array = ffi.new(f"llama_token[{len(tokens)}]", tokens)
         buf_size = len(tokens) * 16  # Estimate
@@ -310,7 +381,43 @@ class Llama:
                 False,
             )
 
-        return ffi.string(buf, n_chars).decode("utf-8", errors="replace")
+        return ffi.buffer(buf, n_chars)[:]
+
+    @staticmethod
+    def _decode_utf8_streaming(data: bytes) -> tuple[str, bytes]:
+        """
+        Decode UTF-8 bytes, returning complete text and any incomplete trailing bytes.
+
+        This handles the case where multi-byte UTF-8 sequences (like emojis)
+        are split across multiple tokens. We decode only the complete characters
+        and return incomplete trailing bytes to be buffered.
+
+        Args:
+            data: Raw bytes to decode.
+
+        Returns:
+            Tuple of (decoded_text, incomplete_trailing_bytes).
+        """
+        if not data:
+            return "", b""
+
+        # Try to decode everything first
+        try:
+            return data.decode("utf-8"), b""
+        except UnicodeDecodeError:
+            pass
+
+        # Find the longest valid UTF-8 prefix
+        # UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
+        # Start bytes: 0xxxxxxx (ASCII), 110xxxxx (2-byte), 1110xxxx (3-byte), 11110xxx (4-byte)
+        for i in range(len(data) - 1, max(len(data) - 4, -1), -1):
+            try:
+                return data[:i].decode("utf-8"), data[i:]
+            except UnicodeDecodeError:
+                continue
+
+        # Nothing decodable, return all as pending
+        return "", data
 
     def _apply_chat_template(
         self,
@@ -489,11 +596,14 @@ class Llama:
         Returns:
             Chat completion response or stream of chunks.
         """
+        t_start = time.perf_counter()
+
         # Apply chat template
         prompt = self._apply_chat_template(messages, add_generation_prompt=True)
 
         # Tokenize
         tokens = self.tokenize(prompt, add_special=False, parse_special=True)
+        t_tokenize = time.perf_counter()
 
         if len(tokens) > self._n_ctx:
             raise ValueError(
@@ -503,9 +613,15 @@ class Llama:
         # Clear KV cache
         self._lib.llama_memory_clear(self._memory, True)
 
-        # Decode prompt
+        # Decode prompt (this is the main TTFT cost)
         if not self._decode_batch(tokens):
             raise RuntimeError("Failed to decode prompt")
+        t_prompt = time.perf_counter()
+
+        logger.info(
+            f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+            f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
+        )
 
         # Create sampler
         self._create_sampler(
@@ -518,9 +634,9 @@ class Llama:
         )
 
         if stream:
-            return self._stream_completion(tokens, max_tokens, stop, logits_processor)
+            return self._stream_completion(tokens, max_tokens, stop, logits_processor, t_start)
         else:
-            return self._complete(tokens, max_tokens, stop, logits_processor)
+            return self._complete(tokens, max_tokens, stop, logits_processor, t_start)
 
     def _complete(
         self,
@@ -528,12 +644,14 @@ class Llama:
         max_tokens: int,
         stop: Optional[List[str]],
         logits_processor: Optional[Callable],
+        t_start: float,
     ) -> ChatCompletionResponse:
         """Generate a non-streaming completion."""
         generated_tokens = []
         finish_reason = "length"
+        t_first_token = None
 
-        for _ in range(max_tokens):
+        for i in range(max_tokens):
             # Apply logits processor if provided
             if logits_processor is not None:
                 logits = self._lib.llama_get_logits(self._ctx)
@@ -544,11 +662,16 @@ class Llama:
                     prompt_tokens + generated_tokens, logits_list
                 )
                 # Write back
-                for i, v in enumerate(processed):
-                    logits[i] = v
+                for j, v in enumerate(processed):
+                    logits[j] = v
 
             token = self._sample_token()
             generated_tokens.append(token)
+
+            # Log TTFT on first token
+            if i == 0:
+                t_first_token = time.perf_counter()
+                logger.info(f"[TTFT] First token: {(t_first_token - t_start)*1000:.1f}ms total")
 
             # Check for EOS
             if self._lib.llama_vocab_is_eog(self._vocab, token):
@@ -575,8 +698,17 @@ class Llama:
                 raise RuntimeError("Failed to decode token")
 
         # Build response
+        t_end = time.perf_counter()
         content = self.detokenize(generated_tokens)
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+
+        # Log generation stats
+        gen_time = t_end - t_first_token if t_first_token else t_end - t_start
+        tokens_per_sec = len(generated_tokens) / gen_time if gen_time > 0 else 0
+        logger.info(
+            f"[Perf] Generated {len(generated_tokens)} tokens in {gen_time*1000:.1f}ms "
+            f"({tokens_per_sec:.1f} tok/s)"
+        )
 
         return {
             "id": completion_id,
@@ -603,30 +735,57 @@ class Llama:
         max_tokens: int,
         stop: Optional[List[str]],
         logits_processor: Optional[Callable],
+        t_start: float,
     ) -> Iterator[ChatCompletionChunk]:
         """Generate a streaming completion."""
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
         created = int(time.time())
         generated_tokens = []
         accumulated_text = ""
+        # Track bytes we've already processed to compute deltas
+        prev_bytes_len = 0
+        # Buffer for incomplete UTF-8 byte sequences (e.g., partial emojis)
+        pending_bytes = b""
 
-        for _ in range(max_tokens):
+        for i in range(max_tokens):
             # Apply logits processor if provided
             if logits_processor is not None:
                 logits = self._lib.llama_get_logits(self._ctx)
                 n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
-                logits_list = [logits[i] for i in range(n_vocab)]
+                logits_list = [logits[j] for j in range(n_vocab)]
                 processed = logits_processor(
                     prompt_tokens + generated_tokens, logits_list
                 )
-                for i, v in enumerate(processed):
-                    logits[i] = v
+                for j, v in enumerate(processed):
+                    logits[j] = v
 
             token = self._sample_token()
             generated_tokens.append(token)
 
+            # Log TTFT on first token
+            if i == 0:
+                t_first_token = time.perf_counter()
+                logger.info(f"[TTFT] First token: {(t_first_token - t_start)*1000:.1f}ms total")
+
             # Check for EOS
             if self._lib.llama_vocab_is_eog(self._vocab, token):
+                # Flush any pending bytes (decode with replacement for incomplete sequences)
+                if pending_bytes:
+                    final_text = pending_bytes.decode("utf-8", errors="replace")
+                    if final_text:
+                        yield {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": self._model_path,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": final_text},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
                 yield {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -642,10 +801,20 @@ class Llama:
                 }
                 break
 
-            # Decode to get the new text
-            new_text = self.detokenize(generated_tokens)
-            delta = new_text[len(accumulated_text) :]
-            accumulated_text = new_text
+            # Decode to get the new text, handling incomplete UTF-8 sequences
+            # (e.g., emojis that span multiple tokens)
+            all_bytes = self._detokenize_bytes(generated_tokens)
+            # New bytes = all bytes minus what we've already processed
+            # prev_bytes_len tracks how many bytes we've already decoded into accumulated_text
+            new_bytes = all_bytes[prev_bytes_len:]
+            combined_bytes = pending_bytes + new_bytes
+
+            # Decode only complete UTF-8 sequences, buffer incomplete ones
+            decoded_text, pending_bytes = self._decode_utf8_streaming(combined_bytes)
+            delta = decoded_text
+            accumulated_text += decoded_text
+            # Update how many bytes we've fully processed (not counting pending)
+            prev_bytes_len = len(all_bytes) - len(pending_bytes)
 
             # Check stop sequences
             finish_reason = None
@@ -672,13 +841,59 @@ class Llama:
                 }
 
             if finish_reason:
+                # Flush any pending bytes before stopping
+                if pending_bytes:
+                    final_text = pending_bytes.decode("utf-8", errors="replace")
+                    if final_text:
+                        yield {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": self._model_path,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": final_text},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                yield {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": self._model_path,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": finish_reason,
+                        }
+                    ],
+                }
                 break
 
             # Decode single token for next iteration
             if not self._decode_batch([token]):
                 raise RuntimeError("Failed to decode token")
         else:
-            # Max tokens reached
+            # Max tokens reached - flush any pending bytes first
+            if pending_bytes:
+                final_text = pending_bytes.decode("utf-8", errors="replace")
+                if final_text:
+                    yield {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": self._model_path,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": final_text},
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
             yield {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
