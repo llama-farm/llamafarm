@@ -355,9 +355,9 @@ export const validateStrategyName = (name: string): string | null => {
     return `"${trimmedName}" is a reserved name. Please choose a different name.`
   }
   
-  // Check for valid characters (alphanumeric, spaces, hyphens, underscores only)
-  if (!/^[a-zA-Z0-9\s_-]+$/.test(trimmedName)) {
-    return 'Strategy name can only contain letters, numbers, spaces, hyphens, and underscores'
+  // Check for valid characters (alphanumeric, hyphens, underscores only - no spaces)
+  if (!/^[a-zA-Z0-9_-]+$/.test(trimmedName)) {
+    return 'Cannot contain spaces or special characters'
   }
   
   // Check length

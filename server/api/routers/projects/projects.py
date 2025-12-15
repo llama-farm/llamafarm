@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from agents.base.types import ToolDefinition
 from agents.chat_orchestrator import ChatOrchestratorAgent, ChatOrchestratorAgentFactory
-from api.errors import ErrorResponse, ProjectNotFoundError
+from api.errors import ErrorResponse, NamespaceNotFoundError, ProjectNotFoundError
 
 # RAG imports moved to function level to avoid circular imports
 from api.routers.shared.response_utils import (
@@ -124,7 +124,13 @@ async def list_projects(
     ),
 ):
     # Use safe method to handle projects with validation errors
-    safe_projects = ProjectService.list_projects_safe(namespace)
+    # If namespace doesn't exist, return empty list instead of 404
+    try:
+        safe_projects = ProjectService.list_projects_safe(namespace)
+    except NamespaceNotFoundError:
+        # Namespace doesn't exist yet - return empty list (not an error)
+        return ListProjectsResponse(total=0, projects=[])
+
     return ListProjectsResponse(
         total=len(safe_projects),
         projects=[
@@ -602,62 +608,54 @@ class GetTaskResponse(BaseModel):
 
 class CleanupError(BaseModel):
     """Error details for a file cleanup failure."""
+
     file_hash: str = Field(..., description="Hash of the file that failed to clean up")
     error: str = Field(..., description="Error message describing the cleanup failure")
 
 
 class CancelTaskResponse(BaseModel):
     """Response from cancelling a task."""
-    
+
     message: str = Field(
         ...,
         description="Human-readable message about the cancellation",
-        example="Task cancelled successfully"
+        example="Task cancelled successfully",
     )
-    
-    task_id: str = Field(
-        ...,
-        description="The ID of the cancelled task"
-    )
-    
+
+    task_id: str = Field(..., description="The ID of the cancelled task")
+
     cancelled: bool = Field(
-        ...,
-        description="Whether the task was successfully cancelled"
+        ..., description="Whether the task was successfully cancelled"
     )
-    
+
     pending_tasks_cancelled: int = Field(
-        default=0,
-        description="Number of pending tasks that were cancelled"
+        default=0, description="Number of pending tasks that were cancelled"
     )
-    
+
     running_tasks_at_cancel: int = Field(
-        default=0,
-        description="Number of running tasks at the time of cancellation"
+        default=0, description="Number of running tasks at the time of cancellation"
     )
-    
+
     files_reverted: int = Field(
-        default=0,
-        description="Number of files that were successfully reverted"
+        default=0, description="Number of files that were successfully reverted"
     )
-    
+
     files_failed_to_revert: int = Field(
-        default=0,
-        description="Number of files that failed to revert"
+        default=0, description="Number of files that failed to revert"
     )
-    
+
     errors: list[CleanupError] | None = Field(
-        None,
-        description="List of errors encountered during cleanup"
+        None, description="List of errors encountered during cleanup"
     )
-    
+
     already_completed: bool = Field(
         default=False,
-        description="True if the task had already completed before cancellation was requested"
+        description="True if the task had already completed before cancellation was requested",
     )
-    
+
     already_cancelled: bool = Field(
         default=False,
-        description="True if the task was already cancelled before this request"
+        description="True if the task was already cancelled before this request",
     )
 
 
@@ -818,7 +816,10 @@ async def get_task(namespace: str, project_id: str, task_id: str):
         if not is_cancelled:
             try:
                 result_value = res.result
-                if isinstance(result_value, dict) and result_value.get("type") == "group":
+                if (
+                    isinstance(result_value, dict)
+                    and result_value.get("type") == "group"
+                ):
                     is_cancelled = result_value.get("cancelled", False)
             except Exception:
                 pass
@@ -865,8 +866,12 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             # SECURITY: Verify task belongs to the requested namespace/project
             task_namespace = group_info.get("namespace")
             task_project = group_info.get("project")
-            
-            if task_namespace and task_project and (task_namespace != namespace or task_project != project_id):
+
+            if (
+                task_namespace
+                and task_project
+                and (task_namespace != namespace or task_project != project_id)
+            ):
                 logger.warning(
                     "Authorization failed: task does not belong to requested namespace/project",
                     task_id=task_id,
@@ -875,11 +880,8 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                     requested_namespace=namespace,
                     requested_project=project_id,
                 )
-                raise HTTPException(
-                        status_code=404,
-                        detail="Task not found"
-                    )
-            
+                raise HTTPException(status_code=404, detail="Task not found")
+
             # We have stored group metadata - query child tasks directly
             logger.info(
                 "Found stored group metadata",
@@ -1212,41 +1214,41 @@ async def cancel_task(
 ) -> CancelTaskResponse:
     """
     Cancel a running task and revert any files that were successfully processed.
-    
+
     This endpoint is primarily used for cancelling dataset processing operations.
     It will:
     1. Revoke the Celery task(s) to stop processing
     2. Mark the task as cancelled in the backend
     3. Clean up any files that were successfully processed (remove chunks from vector store)
-    
+
     Args:
         namespace: Project namespace
         project_id: Project name
         task_id: The Celery task ID to cancel
-    
+
     Returns:
         Cancellation status with cleanup details
-        
+
     Raises:
         HTTPException: 404 if task not found, 500 for other errors
     """
     from datetime import datetime
-    
+
     from celery.result import AsyncResult  # type: ignore[import-untyped]
-    
+
     from core.celery import app as celery_app
     from core.logging import FastAPIStructLogger
-    
+
     logger = FastAPIStructLogger(__name__)
     logger.bind(namespace=namespace, project=project_id, task_id=task_id)
-    
+
     try:
         # Get task result
         group_result: AsyncResult = celery_app.AsyncResult(task_id)
-        
+
         # Get stored metadata - try multiple approaches
         result_meta = None
-        
+
         # Approach 1: Try to get from result when state is PENDING
         # This is how metadata is stored in the existing code
         try:
@@ -1258,17 +1260,20 @@ async def cancel_task(
                 result_meta = group_result.result
         except Exception as e:
             logger.debug(f"Could not get metadata from PENDING result: {e}")
-        
+
         # Approach 2: Try accessing result property directly for other states
         # Sometimes the metadata is still accessible even if state changed
         if not result_meta:
             try:
                 result_value = group_result.result
-                if isinstance(result_value, dict) and result_value.get("type") == "group":
+                if (
+                    isinstance(result_value, dict)
+                    and result_value.get("type") == "group"
+                ):
                     result_meta = result_value
             except Exception as e:
                 logger.debug(f"Could not get metadata from result property: {e}")
-        
+
         # Approach 3: Try to access via backend's _get_task_meta_for method if available
         # This is a fallback for filesystem backend
         if not result_meta:
@@ -1283,17 +1288,17 @@ async def cancel_task(
                     result_meta = meta["result"]
             except Exception as e:
                 logger.debug(f"Could not get metadata via backend method: {e}")
-        
+
         if not result_meta or result_meta.get("type") != "group":
             raise HTTPException(
-                status_code=404, 
-                detail="Task not found or not a group task. Only group tasks (dataset processing) can be cancelled."
+                status_code=404,
+                detail="Task not found or not a group task. Only group tasks (dataset processing) can be cancelled.",
             )
-        
+
         # SECURITY: Verify task belongs to the requested namespace/project
         task_namespace = result_meta.get("namespace")
         task_project = result_meta.get("project")
-        
+
         if task_namespace != namespace or task_project != project_id:
             logger.warning(
                 "Authorization failed: task does not belong to requested namespace/project",
@@ -1305,16 +1310,16 @@ async def cancel_task(
             )
             raise HTTPException(
                 status_code=404,
-                detail="Task not found or not a group task. Only group tasks (dataset processing) can be cancelled."
+                detail="Task not found or not a group task. Only group tasks (dataset processing) can be cancelled.",
             )
-        
+
         # Check if already cancelled
         if result_meta.get("cancelled"):
             # Already cancelled, return current state
             child_task_ids = result_meta.get("children", [])
             pending_count = 0
             running_count = 0
-            
+
             # Count current states
             for child_id in child_task_ids:
                 child_result = celery_app.AsyncResult(child_id)
@@ -1325,12 +1330,12 @@ async def cancel_task(
                         running_count += 1
                 except Exception:
                     pass
-            
+
             logger.info("Task already cancelled", task_id=task_id)
-            
+
             # Get previous cleanup results if available
             cleanup_status = result_meta.get("cleanup_status", {})
-            
+
             # Convert errors to CleanupError objects if present
             cleanup_errors = None
             if cleanup_status.get("errors"):
@@ -1338,7 +1343,7 @@ async def cancel_task(
                     CleanupError(file_hash=e["file_hash"], error=e["error"])
                     for e in cleanup_status["errors"]
                 ]
-            
+
             return CancelTaskResponse(
                 message="Task already cancelled",
                 task_id=task_id,
@@ -1350,7 +1355,7 @@ async def cancel_task(
                 errors=cleanup_errors,
                 already_cancelled=True,
             )
-        
+
         # Check if already completed
         if group_result.state in ("SUCCESS", "FAILURE"):
             logger.info(
@@ -1364,25 +1369,25 @@ async def cancel_task(
                 cancelled=False,
                 already_completed=True,
             )
-        
+
         # Get child task IDs
         child_task_ids = result_meta.get("children", [])
-        
+
         # Revoke child tasks
         pending_cancelled = 0
         running_count = 0
-        
+
         for child_id in child_task_ids:
             try:
                 child_result = celery_app.AsyncResult(child_id)
-                
+
                 # Get current state (may raise exception if task doesn't exist)
                 try:
                     child_state = child_result.state
                 except Exception:
                     # Task may not exist or be inaccessible, skip it
                     continue
-                
+
                 if child_state == "PENDING":
                     # Revoke pending tasks (prevent from starting)
                     celery_app.control.revoke(child_id, terminate=False)
@@ -1396,47 +1401,49 @@ async def cancel_task(
             except Exception as e:
                 logger.warning(f"Error revoking child task {child_id}: {e}")
                 # Continue with other tasks
-        
+
         # Update group metadata with cancellation flag
         result_meta["cancelled"] = True
         result_meta["cancelled_at"] = datetime.now().isoformat()
-        
+
         # Store updated metadata
         # Use the current state or "CANCELLED" if backend supports it
-        current_state = group_result.state if hasattr(group_result, "state") else "PENDING"
+        current_state = (
+            group_result.state if hasattr(group_result, "state") else "PENDING"
+        )
         celery_app.backend.store_result(
             task_id,
             result_meta,
             current_state,  # Keep original state, cancellation is tracked in metadata
         )
-        
+
         logger.info(
             "Task cancellation requested",
             task_id=task_id,
             pending_cancelled=pending_cancelled,
             running_count=running_count,
         )
-        
+
         # Trigger cleanup for successfully processed files
         cleanup_result = {
             "files_reverted": 0,
             "files_failed_to_revert": 0,
             "errors": None,
         }
-        
+
         try:
             from services.dataset_cleanup_service import DatasetCleanupService
-            
+
             # Extract dataset name from metadata if available
             # Task metadata stores dataset name as "dataset" key
             dataset_name = result_meta.get("dataset")
-            
+
             if dataset_name:
                 cleanup_service = DatasetCleanupService()
                 cleanup_result = await cleanup_service.cleanup_processed_files(
                     namespace, project_id, dataset_name, task_id
                 )
-                
+
                 # Update metadata with cleanup results
                 result_meta["cleanup_status"] = cleanup_result
             else:
@@ -1444,7 +1451,7 @@ async def cancel_task(
                     "No dataset name in task metadata, skipping cleanup",
                     task_id=task_id,
                 )
-        
+
         except Exception as e:
             logger.error(
                 f"Error during cleanup (cancellation still succeeded): {e}",
@@ -1452,15 +1459,17 @@ async def cancel_task(
             )
             # Don't fail cancellation if cleanup fails
             cleanup_result["errors"] = [{"file_hash": "unknown", "error": str(e)}]
-        
+
         # Store updated metadata with cleanup status
-        current_state = group_result.state if hasattr(group_result, "state") else "PENDING"
+        current_state = (
+            group_result.state if hasattr(group_result, "state") else "PENDING"
+        )
         celery_app.backend.store_result(
             task_id,
             result_meta,
             current_state,
         )
-        
+
         # Build response message
         if cleanup_result["files_failed_to_revert"] == 0:
             message = (
@@ -1474,7 +1483,7 @@ async def cancel_task(
                 f"{cleanup_result['files_reverted']} reverted, "
                 f"{cleanup_result['files_failed_to_revert']} failed"
             )
-        
+
         # Convert errors to CleanupError objects if present
         cleanup_errors = None
         if cleanup_result.get("errors"):
@@ -1482,13 +1491,13 @@ async def cancel_task(
                 CleanupError(file_hash=e["file_hash"], error=e["error"])
                 for e in cleanup_result["errors"]
             ]
-        
+
         logger.info(
             "Task cancellation completed",
             task_id=task_id,
             message=message,
         )
-        
+
         return CancelTaskResponse(
             message=message,
             task_id=task_id,
@@ -1499,7 +1508,7 @@ async def cancel_task(
             files_failed_to_revert=cleanup_result["files_failed_to_revert"],
             errors=cleanup_errors,
         )
-    
+
     except HTTPException:
         raise  # Re-raise HTTP exceptions
     except Exception as e:
