@@ -28,6 +28,8 @@ import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
 import { useDemoModal } from './contexts/DemoModalContext'
 import { AVAILABLE_DEMOS } from './config/demos'
+import { useGitHubStars } from './hooks/useGitHubStars'
+import { Star } from 'lucide-react'
 
 function Home() {
   // Demo modal context
@@ -60,6 +62,7 @@ function Home() {
 
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
+  const { data: githubData } = useGitHubStars()
 
   // Convert API projects to project names for UI compatibility
   const projectsList = useMemo(
@@ -349,9 +352,25 @@ function Home() {
         {!hasManyProjects && (
           <>
             <div className="space-y-4">
-              <p className="text-sm font-medium tracking-wide text-foreground/80">
-                Welcome to LlamaFarm 🦙
-              </p>
+              <div className="flex items-center justify-center gap-2">
+                <p className="text-sm font-medium tracking-wide text-foreground/80">
+                  Welcome to LlamaFarm
+                </p>
+                {githubData && (
+                  <a
+                    href="https://github.com/llama-farm/llamafarm"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-input bg-secondary hover:bg-accent/20 transition-colors text-xs text-foreground"
+                  >
+                    <span>GitHub</span>
+                    <Star className="w-3 h-3 text-primary fill-primary" />
+                    <span className="font-medium">
+                      {githubData.stargazers_count.toLocaleString()}
+                    </span>
+                  </a>
+                )}
+              </div>
 
               <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-foreground">
                 Create a new project

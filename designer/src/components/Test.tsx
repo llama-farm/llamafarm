@@ -356,36 +356,38 @@ const Test = () => {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <div>
-          <h2 className="text-2xl ">
+      <div className="mb-3 flex-shrink-0">
+        {/* First row: Title + switcher + Package button */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl">
             {mode === 'designer' ? 'Test' : 'Config editor'}
           </h2>
-          {mode === 'designer' && (
-            <div className="text-sm text-muted-foreground mt-1">
-              Chat with your model to test and evaluate responses
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <ModeToggle mode={mode} onToggle={handleModeChange} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openPackageModal}
+              disabled
+            >
+              Package
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <ModeToggle mode={mode} onToggle={handleModeChange} />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={openPackageModal}
-            disabled
-          >
-            Package
-          </Button>
-        </div>
+        {/* Subtitle on its own row */}
+        {mode === 'designer' && (
+          <div className="text-sm text-muted-foreground mt-2">
+            Chat with your model to test and evaluate responses
+          </div>
+        )}
       </div>
 
       {/* Settings bar (designer mode only) */}
       {mode === 'designer' && (
         <div className="mb-4 flex flex-col xl:flex-row xl:flex-wrap items-stretch xl:items-start gap-3">
           <div className="flex-1 xl:min-w-[480px] rounded-xl bg-muted/30 border border-border px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 min-h-11 py-2 sm:py-0">
-            {/* Toggles group - no wrapping to prevent awkward breaks */}
-            <div className="flex flex-nowrap items-center gap-3 text-xs min-w-0 overflow-x-auto w-full">
+            {/* Toggles group - wrap on smaller screens */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs w-full">
               <label className="inline-flex items-center gap-2 flex-shrink-0">
                 <Checkbox
                   id="show-processed"
