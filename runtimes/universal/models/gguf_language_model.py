@@ -259,9 +259,8 @@ class GGUFLanguageModel(BaseModel):
         Uses llama-cpp's create_chat_completion() with streaming, which applies
         the chat template embedded in the GGUF metadata.
 
-        Note: For streaming, thinking_budget is advisory only - we track tokens
-        but cannot force </think> mid-stream. Use non-streaming for strict
-        budget enforcement.
+        Thinking budget is enforced via logits processor, which forces the model
+        to generate </think> when the budget is reached.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys
@@ -269,7 +268,7 @@ class GGUFLanguageModel(BaseModel):
             temperature: Sampling temperature (0.0 = greedy, higher = more random)
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
-            thinking_budget: Maximum tokens for thinking (advisory for streaming)
+            thinking_budget: Maximum tokens for thinking before forcing </think>
 
         Yields:
             Generated text tokens as strings
@@ -291,6 +290,17 @@ class GGUFLanguageModel(BaseModel):
                 thinking_ended = False
                 accumulated_text = ""
 
+                # Set up logits processor for thinking budget enforcement
+                logits_processor = None
+                if thinking_budget is not None:
+                    from utils.thinking import ThinkingBudgetProcessor
+
+                    logits_processor = [
+                        ThinkingBudgetProcessor(
+                            self.llama, max_thinking_tokens=thinking_budget
+                        )
+                    ]
+
                 for chunk in self.llama.create_chat_completion(
                     messages=messages,
                     max_tokens=max_tokens,
@@ -298,6 +308,7 @@ class GGUFLanguageModel(BaseModel):
                     top_p=top_p,
                     stop=stop or [],
                     stream=True,
+                    logits_processor=logits_processor,
                 ):
                     delta = chunk["choices"][0].get("delta", {})
                     content = delta.get("content", "")
@@ -319,18 +330,6 @@ class GGUFLanguageModel(BaseModel):
                             queue.put(content), loop
                         )
                         future.result()
-
-                        # Log warning once if budget exceeded
-                        if (
-                            thinking_budget
-                            and thinking_tokens == thinking_budget
-                            and in_thinking
-                            and not thinking_ended
-                        ):
-                            logger.warning(
-                                f"Thinking budget ({thinking_budget}) exceeded in streaming mode. "
-                                "Consider using non-streaming for strict budget enforcement."
-                            )
             except Exception as e:
                 logger.error(f"Error in GGUF chat stream: {e}", exc_info=True)
                 future = asyncio.run_coroutine_threadsafe(queue.put(e), loop)

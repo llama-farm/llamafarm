@@ -99,6 +99,8 @@ class LFAgentClientOpenAI(LFAgentClient):
         extra_body_copy = dict(extra_body or {})
         if "max_tokens" in extra_body_copy:
             api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+        # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
+        # The universal runtime extracts them from extra_body
 
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
@@ -181,6 +183,8 @@ class LFAgentClientOpenAI(LFAgentClient):
         extra_body_copy = dict(extra_body or {})
         if "max_tokens" in extra_body_copy:
             api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+        # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
+        # The universal runtime extracts them from extra_body
 
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
