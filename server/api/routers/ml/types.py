@@ -3,41 +3,13 @@ Pydantic models for ML endpoints.
 
 These models mirror the Universal Runtime's request/response schemas
 to provide a consistent API experience.
+
+Note: OCR and Document extraction types have moved to vision/types.py
 """
 
 from typing import Any
 
 from pydantic import BaseModel
-
-# =============================================================================
-# OCR Types
-# =============================================================================
-
-
-class OCRRequest(BaseModel):
-    """OCR request for text extraction from images."""
-
-    model: str = "surya"  # Backend: surya, easyocr, paddleocr, tesseract
-    images: list[str] | None = None  # Base64-encoded images
-    file_id: str | None = None  # File ID from /v1/ml/files upload
-    languages: list[str] | None = None  # Language codes (e.g., ['en', 'fr'])
-    return_boxes: bool = False  # Return bounding boxes for detected text
-
-
-# =============================================================================
-# Document Extraction Types
-# =============================================================================
-
-
-class DocumentExtractRequest(BaseModel):
-    """Document extraction request."""
-
-    model: str  # HuggingFace model ID
-    images: list[str] | None = None  # Base64-encoded document images
-    file_id: str | None = None  # File ID from /v1/ml/files upload
-    prompts: list[str] | None = None  # Optional prompts for each image
-    task: str = "extraction"  # extraction, vqa, classification
-
 
 # =============================================================================
 # SetFit Classifier Types
@@ -52,6 +24,9 @@ class ClassifierFitRequest(BaseModel):
     training_data: list[dict[str, str]]  # List of {"text": "...", "label": "..."}
     num_iterations: int = 20
     batch_size: int = 16
+    overwrite: bool = (
+        False  # If False, version with timestamp; if True, overwrite existing
+    )
 
 
 class ClassifierPredictRequest(BaseModel):
@@ -94,6 +69,9 @@ class AnomalyFitRequest(BaseModel):
     contamination: float = 0.1  # Expected proportion of anomalies
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
+    overwrite: bool = (
+        False  # If False, version with timestamp; if True, overwrite existing
+    )
 
 
 class AnomalyScoreRequest(BaseModel):

@@ -2,9 +2,9 @@
 # Test OCR endpoint via LlamaFarm API (proxied to Universal Runtime)
 #
 # This script demonstrates:
-# 1. Uploading a PDF file (auto-converts to images) via /v1/ml/files
-# 2. Running OCR on the uploaded file via /v1/ml/ocr
-# 3. Cleaning up the file via /v1/ml/files
+# 1. Uploading a PDF file (auto-converts to images) via /v1/vision/files
+# 2. Running OCR on the uploaded file via /v1/vision/ocr
+# 3. Cleaning up the file via /v1/vision/files
 #
 # Usage: ./test_ocr_api.sh [PORT] [PDF_FILE]
 #   PORT defaults to 8000 (LlamaFarm API)
@@ -14,7 +14,7 @@ set -e
 
 PORT=${1:-8000}
 PDF_FILE=${2:-"$(dirname "$0")/llamafarm - Healthcare - Aug 2025 2 .pdf"}
-BASE_URL="http://localhost:${PORT}/v1/ml"
+BASE_URL="http://localhost:${PORT}/v1/vision"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -24,7 +24,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}================================================${NC}"
-echo -e "${BLUE}  LlamaFarm API OCR Test (via /v1/ml proxy)${NC}"
+echo -e "${BLUE}  LlamaFarm API OCR Test (via /v1/vision)${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 
@@ -38,9 +38,9 @@ fi
 echo -e "${GREEN}✓ Server is healthy${NC}"
 echo ""
 
-# Check Universal Runtime health via proxy
-echo -e "${YELLOW}Checking Universal Runtime health via proxy...${NC}"
-if ! curl -sf "${BASE_URL}/health" > /dev/null 2>&1; then
+# Check Universal Runtime health via ML proxy (health is still on /v1/ml)
+echo -e "${YELLOW}Checking Universal Runtime health...${NC}"
+if ! curl -sf "http://localhost:${PORT}/v1/ml/health" > /dev/null 2>&1; then
     echo -e "${RED}Error: Universal Runtime not available${NC}"
     echo "Start it with: nx start universal"
     exit 1

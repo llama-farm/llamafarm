@@ -2,8 +2,8 @@
 # Test Document Understanding endpoint via LlamaFarm API
 #
 # This script demonstrates:
-# 1. Uploading a receipt image via /v1/ml/files
-# 2. Running document VQA using Donut DocVQA model via /v1/ml/documents/extract
+# 1. Uploading a receipt image via /v1/vision/files
+# 2. Running document VQA using Donut DocVQA model via /v1/vision/documents/extract
 # 3. Cleaning up the file
 #
 # Usage: ./test_document_api.sh [PORT] [IMAGE_FILE]
@@ -14,7 +14,7 @@ set -e
 
 PORT=${1:-8000}
 IMAGE_FILE=${2:-"$(dirname "$0")/receipt.png"}
-BASE_URL="http://localhost:${PORT}/v1/ml"
+BASE_URL="http://localhost:${PORT}/v1/vision"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -25,7 +25,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}  LlamaFarm API Document Understanding Test${NC}"
-echo -e "${BLUE}  (via /v1/ml proxy)${NC}"
+echo -e "${BLUE}  (via /v1/vision)${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 
@@ -38,9 +38,9 @@ if ! curl -s "http://localhost:${PORT}/health" > /dev/null 2>&1; then
 fi
 echo -e "${GREEN}✓ LlamaFarm API is healthy${NC}"
 
-# Check Universal Runtime via proxy
-echo -e "${YELLOW}Checking Universal Runtime via proxy...${NC}"
-if ! curl -s "${BASE_URL}/health" > /dev/null 2>&1; then
+# Check Universal Runtime via ML health endpoint
+echo -e "${YELLOW}Checking Universal Runtime...${NC}"
+if ! curl -s "http://localhost:${PORT}/v1/ml/health" > /dev/null 2>&1; then
     echo -e "${RED}Error: Universal Runtime not available${NC}"
     echo "Start it with: nx start universal"
     exit 1

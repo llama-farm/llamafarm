@@ -1,17 +1,18 @@
 """
-ML Router - Proxy endpoints to Universal Runtime's specialized ML capabilities.
+ML Router - Endpoints for ML model training and inference.
 
 Provides access to:
-- OCR (text extraction from images/PDFs)
-- Document Extraction (structured data from forms/invoices)
 - Custom Text Classification (SetFit few-shot learning)
 - Anomaly Detection (train and detect anomalies)
+
+Note: OCR and Document extraction have moved to /v1/vision/*
 """
 
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Form, UploadFile
+from fastapi import APIRouter
+from server.services.ml_model_service import MLModelService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
 from .types import (
@@ -23,8 +24,6 @@ from .types import (
     ClassifierLoadRequest,
     ClassifierPredictRequest,
     ClassifierSaveRequest,
-    DocumentExtractRequest,
-    OCRRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,153 +46,6 @@ async def health_check() -> dict[str, Any]:
 
 
 # =============================================================================
-# File Management
-# =============================================================================
-
-
-@router.post("/files")
-async def upload_file(
-    file: UploadFile,
-    convert_pdf: bool = Form(default=True),
-    pdf_dpi: int = Form(default=150),
-) -> dict[str, Any]:
-    """Upload a file for use with OCR, document extraction, or image generation.
-
-    Uploaded files are stored temporarily (5 minutes TTL) and can be referenced
-    by their file ID in subsequent API calls.
-
-    For PDFs, pages are automatically converted to images for OCR/document processing.
-
-    Args:
-        file: The file to upload (images, PDFs supported, max 100MB)
-        convert_pdf: If True, convert PDF pages to images (default: True)
-        pdf_dpi: DPI for PDF to image conversion (default: 150)
-
-    Returns:
-        File metadata including ID for referencing in other endpoints
-    """
-    return await UniversalRuntimeService.upload_file(
-        file=file,
-        convert_pdf=convert_pdf,
-        pdf_dpi=pdf_dpi,
-    )
-
-
-@router.get("/files")
-async def list_files() -> dict[str, Any]:
-    """List all uploaded files with their metadata."""
-    return await UniversalRuntimeService.list_files()
-
-
-@router.get("/files/{file_id}")
-async def get_file(file_id: str) -> dict[str, Any]:
-    """Get metadata for a specific uploaded file."""
-    return await UniversalRuntimeService.get_file(file_id)
-
-
-@router.get("/files/{file_id}/images")
-async def get_file_images(file_id: str) -> dict[str, Any]:
-    """Get base64-encoded images for a file.
-
-    For PDFs, returns one image per page.
-    For image files, returns the image itself.
-    """
-    return await UniversalRuntimeService.get_file_images(file_id)
-
-
-@router.delete("/files/{file_id}")
-async def delete_file(file_id: str) -> dict[str, Any]:
-    """Delete an uploaded file."""
-    return await UniversalRuntimeService.delete_file(file_id)
-
-
-# =============================================================================
-# OCR Endpoints
-# =============================================================================
-
-
-@router.post("/ocr")
-async def extract_text(request: OCRRequest) -> dict[str, Any]:
-    """OCR endpoint for text extraction from images.
-
-    Supports multiple OCR backends:
-    - surya: Best accuracy, transformer-based, layout-aware (recommended)
-    - easyocr: Good multilingual support (80+ languages), widely used
-    - paddleocr: Fast, optimized for production, excellent for Asian languages
-    - tesseract: Classic OCR engine, CPU-only, widely deployed
-
-    You can provide images either as:
-    1. Base64-encoded strings in the `images` field
-    2. A file ID from a previous upload via `file_id` field
-
-    Example with file_id (from /v1/ml/files upload):
-    ```json
-    {
-        "model": "surya",
-        "file_id": "file_abc123_def456",
-        "languages": ["en"]
-    }
-    ```
-    """
-    return await UniversalRuntimeService.ocr(
-        model=request.model,
-        images=request.images,
-        file_id=request.file_id,
-        languages=request.languages,
-        return_boxes=request.return_boxes,
-    )
-
-
-# =============================================================================
-# Document Extraction Endpoints
-# =============================================================================
-
-
-@router.post("/documents/extract")
-async def extract_from_documents(request: DocumentExtractRequest) -> dict[str, Any]:
-    """Document understanding endpoint.
-
-    Extract structured information from documents using vision-language models.
-    Supports forms, invoices, receipts, and other document types.
-
-    Model types:
-    - Donut models: End-to-end, no OCR needed (naver-clova-ix/donut-*)
-    - LayoutLM models: Uses OCR + layout features (microsoft/layoutlmv3-*)
-
-    Tasks:
-    - extraction: Extract key-value pairs from documents
-    - vqa: Answer questions about document content
-    - classification: Classify document types
-
-    Example with file_id:
-    ```json
-    {
-        "model": "naver-clova-ix/donut-base-finetuned-cord-v2",
-        "file_id": "file_abc123_def456",
-        "task": "extraction"
-    }
-    ```
-
-    For VQA, include prompts:
-    ```json
-    {
-        "model": "naver-clova-ix/donut-base-finetuned-docvqa",
-        "file_id": "file_abc123_def456",
-        "prompts": ["What is the total amount?"],
-        "task": "vqa"
-    }
-    ```
-    """
-    return await UniversalRuntimeService.extract_documents(
-        model=request.model,
-        images=request.images,
-        file_id=request.file_id,
-        prompts=request.prompts,
-        task=request.task,
-    )
-
-
-# =============================================================================
 # SetFit Classifier Endpoints
 # =============================================================================
 
@@ -206,6 +58,13 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
     SetFit uses contrastive learning to fine-tune a sentence-transformer,
     then trains a small classification head.
 
+    Models are stored in ~/.llamafarm/models/classifier/
+
+    Args:
+        model: Base name for the model
+        overwrite: If False (default), creates versioned model {model}_{timestamp}
+                   If True, overwrites existing model with same name
+
     Example request:
     ```json
     {
@@ -216,24 +75,45 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
             {"text": "Cancel my reservation", "label": "cancellation"},
             {"text": "What's the weather?", "label": "weather"}
         ],
-        "num_iterations": 20
+        "num_iterations": 20,
+        "overwrite": false
     }
     ```
 
     After fitting, use /v1/ml/classifier/predict to classify new texts.
+    Use "{model}-latest" in predict/load to get the most recent version.
     """
-    return await UniversalRuntimeService.classifier_fit(
-        model=request.model,
+    # Get versioned model name
+    versioned_name = MLModelService.get_versioned_name(request.model, request.overwrite)
+    logger.info(f"Training classifier: {request.model} -> {versioned_name}")
+
+    result = await UniversalRuntimeService.classifier_fit(
+        model=versioned_name,
         training_data=request.training_data,
         base_model=request.base_model,
         num_iterations=request.num_iterations,
         batch_size=request.batch_size,
     )
 
+    # Add versioning info to response
+    result["base_name"] = request.model
+    result["versioned_name"] = versioned_name
+    result["overwrite"] = request.overwrite
+
+    return result
+
 
 @router.post("/classifier/predict")
 async def predict_classifier(request: ClassifierPredictRequest) -> dict[str, Any]:
     """Classify texts using a fitted classifier.
+
+    Supports "-latest" suffix to use the most recent version:
+    ```json
+    {
+        "model": "intent-classifier-latest",
+        "texts": ["I want to cancel my trip", "Book me a hotel"]
+    }
+    ```
 
     Example request:
     ```json
@@ -245,8 +125,11 @@ async def predict_classifier(request: ClassifierPredictRequest) -> dict[str, Any
 
     Returns predictions with confidence scores for each text.
     """
+    # Resolve -latest to actual model name
+    resolved_model = MLModelService.resolve_model_name("classifier", request.model)
+
     return await UniversalRuntimeService.classifier_predict(
-        model=request.model,
+        model=resolved_model,
         texts=request.texts,
     )
 
@@ -271,6 +154,13 @@ async def load_classifier(request: ClassifierLoadRequest) -> dict[str, Any]:
     Load a previously saved model for production inference without
     re-training.
 
+    Supports "-latest" suffix to load the most recent version:
+    ```json
+    {
+        "model": "intent-classifier-latest"
+    }
+    ```
+
     Example request:
     ```json
     {
@@ -278,7 +168,10 @@ async def load_classifier(request: ClassifierLoadRequest) -> dict[str, Any]:
     }
     ```
     """
-    return await UniversalRuntimeService.classifier_load(model=request.model)
+    # Resolve -latest to actual model name
+    resolved_model = MLModelService.resolve_model_name("classifier", request.model)
+
+    return await UniversalRuntimeService.classifier_load(model=resolved_model)
 
 
 @router.get("/classifier/models")
@@ -316,6 +209,13 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
     Train an anomaly detection model on data assumed to be mostly normal.
     The model learns what "normal" looks like and can then detect deviations.
 
+    Models are stored in ~/.llamafarm/models/anomaly/
+
+    Args:
+        model: Base name for the model
+        overwrite: If False (default), creates versioned model {model}_{timestamp}
+                   If True, overwrites existing model with same name
+
     Backends:
     - isolation_forest: Fast, works well out of the box (recommended)
     - one_class_svm: Good for small datasets
@@ -328,32 +228,20 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         "model": "sensor-detector",
         "backend": "isolation_forest",
         "data": [[1.0, 2.0], [1.1, 2.1], [0.9, 1.9]],
-        "contamination": 0.1
-    }
-    ```
-
-    Example request (dict data with schema):
-    ```json
-    {
-        "model": "api-monitor",
-        "backend": "isolation_forest",
-        "data": [
-            {"response_time_ms": 100, "bytes": 1024, "method": "GET"},
-            {"response_time_ms": 105, "bytes": 1100, "method": "POST"}
-        ],
-        "schema": {
-            "response_time_ms": "numeric",
-            "bytes": "numeric",
-            "method": "label"
-        },
-        "contamination": 0.1
+        "contamination": 0.1,
+        "overwrite": false
     }
     ```
 
     After fitting, use /v1/ml/anomaly/score or /v1/ml/anomaly/detect.
+    Use "{model}-latest" in score/detect/load to get the most recent version.
     """
-    return await UniversalRuntimeService.anomaly_fit(
-        model=request.model,
+    # Get versioned model name
+    versioned_name = MLModelService.get_versioned_name(request.model, request.overwrite)
+    logger.info(f"Training anomaly detector: {request.model} -> {versioned_name}")
+
+    result = await UniversalRuntimeService.anomaly_fit(
+        model=versioned_name,
         data=request.data,
         backend=request.backend,
         schema=request.schema,
@@ -361,6 +249,13 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
+
+    # Add versioning info to response
+    result["base_name"] = request.model
+    result["versioned_name"] = versioned_name
+    result["overwrite"] = request.overwrite
+
+    return result
 
 
 @router.post("/anomaly/score")
@@ -372,12 +267,12 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
 
     Note: Model must be fitted first via /v1/ml/anomaly/fit or loaded from disk.
 
-    Example request:
+    Supports "-latest" suffix to use the most recent version:
     ```json
     {
-        "model": "sensor-detector",
+        "model": "sensor-detector-latest",
         "backend": "isolation_forest",
-        "data": [[1.0, 2.0], [1.1, 2.1], [100.0, 200.0]],
+        "data": [[1.0, 2.0], [100.0, 200.0]],
         "threshold": 0.5
     }
     ```
@@ -387,8 +282,11 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
     - is_anomaly: Boolean based on threshold
     - raw_score: Backend-specific raw score
     """
+    # Resolve -latest to actual model name
+    resolved_model = MLModelService.resolve_model_name("anomaly", request.model)
+
     return await UniversalRuntimeService.anomaly_score(
-        model=request.model,
+        model=resolved_model,
         data=request.data,
         backend=request.backend,
         schema=request.schema,
@@ -403,18 +301,23 @@ async def detect_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
     Same as /v1/ml/anomaly/score but filters to return only points
     classified as anomalies.
 
+    Supports "-latest" suffix to use the most recent version.
+
     Example request:
     ```json
     {
-        "model": "sensor-detector",
+        "model": "sensor-detector-latest",
         "backend": "isolation_forest",
         "data": [[1.0, 2.0], [1.1, 2.1], [100.0, 200.0]],
         "threshold": 0.5
     }
     ```
     """
+    # Resolve -latest to actual model name
+    resolved_model = MLModelService.resolve_model_name("anomaly", request.model)
+
     return await UniversalRuntimeService.anomaly_detect(
-        model=request.model,
+        model=resolved_model,
         data=request.data,
         backend=request.backend,
         schema=request.schema,
@@ -445,6 +348,14 @@ async def load_anomaly_model(request: AnomalyLoadRequest) -> dict[str, Any]:
     Load a previously saved model for production inference without
     re-training.
 
+    Supports "-latest" suffix to load the most recent version:
+    ```json
+    {
+        "model": "sensor-detector-latest",
+        "backend": "isolation_forest"
+    }
+    ```
+
     Example request:
     ```json
     {
@@ -453,8 +364,11 @@ async def load_anomaly_model(request: AnomalyLoadRequest) -> dict[str, Any]:
     }
     ```
     """
+    # Resolve -latest to actual model name
+    resolved_model = MLModelService.resolve_model_name("anomaly", request.model)
+
     return await UniversalRuntimeService.anomaly_load(
-        model=request.model,
+        model=resolved_model,
         backend=request.backend,
     )
 

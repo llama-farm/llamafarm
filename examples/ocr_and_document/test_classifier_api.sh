@@ -105,14 +105,22 @@ else
     exit 1
 fi
 
+# Extract versioned model name from response
+VERSIONED_MODEL=$(echo "$TRAIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('versioned_name', ''))" 2>/dev/null)
+if [ -z "$VERSIONED_MODEL" ]; then
+    VERSIONED_MODEL="$MODEL_NAME"
+fi
+echo "   Versioned model: $VERSIONED_MODEL"
+
 # Test data: 20 examples (5 per class)
 echo ""
 echo "4. Testing classifier with 20 new examples..."
+echo "   Using: ${MODEL_NAME}-latest (resolves to $VERSIONED_MODEL)"
 
 TEST_RESPONSE=$(curl -sf -X POST "$BASE_URL/classifier/predict" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'",
+        "model": "'"$MODEL_NAME"'-latest",
         "texts": [
             "Book me a flight to Paris tomorrow",
             "I need a room for three nights",
@@ -188,13 +196,13 @@ else
     fi
 fi
 
-# Save the model
+# Save the model (use versioned name)
 echo ""
 echo "6. Saving classifier model..."
 SAVE_RESPONSE=$(curl -sf -X POST "$BASE_URL/classifier/save" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'"
+        "model": "'"$VERSIONED_MODEL"'"
     }')
 
 echo "   Save response:"
@@ -206,13 +214,13 @@ echo "7. Listing saved classifier models..."
 LIST_RESPONSE=$(curl -sf "$BASE_URL/classifier/models")
 echo "$LIST_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LIST_RESPONSE"
 
-# Test loading the model (simulating server restart)
+# Test loading the model using -latest (simulating server restart)
 echo ""
-echo "8. Testing model load (simulating restart)..."
+echo "8. Testing model load using -latest suffix..."
 LOAD_RESPONSE=$(curl -sf -X POST "$BASE_URL/classifier/load" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'"
+        "model": "'"$MODEL_NAME"'-latest"
     }')
 
 echo "   Load response:"
@@ -224,17 +232,17 @@ echo "9. Testing prediction after reload..."
 RELOAD_TEST=$(curl -sf -X POST "$BASE_URL/classifier/predict" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'",
+        "model": "'"$MODEL_NAME"'-latest",
         "texts": ["I want to book a flight", "Cancel my order"]
     }')
 
 echo "   Predictions after reload:"
 echo "$RELOAD_TEST" | python3 -m json.tool 2>/dev/null || echo "$RELOAD_TEST"
 
-# Cleanup - delete the test model
+# Cleanup - delete the test model (use versioned name)
 echo ""
-echo "10. Cleaning up test model..."
-DELETE_RESPONSE=$(curl -sf -X DELETE "$BASE_URL/classifier/models/$MODEL_NAME")
+echo "10. Cleaning up test model ($VERSIONED_MODEL)..."
+DELETE_RESPONSE=$(curl -sf -X DELETE "$BASE_URL/classifier/models/$VERSIONED_MODEL")
 echo "   Delete response:"
 echo "$DELETE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DELETE_RESPONSE"
 

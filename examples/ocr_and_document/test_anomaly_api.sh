@@ -88,6 +88,10 @@ if echo "$FIT_RESPONSE" | grep -q '"samples_fitted"'; then
 else
     echo -e "${YELLOW}Fit may have failed${NC}"
 fi
+
+# Extract versioned model name from response
+VERSIONED_MODEL=$(echo "$FIT_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('versioned_name', 'sensor_anomaly_detector'))" 2>/dev/null)
+echo "   Versioned model: $VERSIONED_MODEL"
 echo ""
 
 # ============================================================================
@@ -106,7 +110,7 @@ SAVE_RESPONSE=$(curl -s -X POST "${BASE_URL}/anomaly/save" \
     -H "Content-Type: application/json" \
     --max-time 60 \
     -d '{
-        "model": "sensor_anomaly_detector",
+        "model": "'"$VERSIONED_MODEL"'",
         "backend": "isolation_forest"
     }')
 
@@ -138,7 +142,7 @@ echo "$LIST_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LIST_RESPONSE
 echo ""
 
 # ============================================================================
-# Test 4: Detect Anomalies
+# Test 4: Detect Anomalies (using model still in memory from training)
 # ============================================================================
 echo -e "${BLUE}============================================${NC}"
 echo -e "${BLUE}  Test 4: Detect Anomalies${NC}"
@@ -146,6 +150,7 @@ echo -e "${BLUE}============================================${NC}"
 echo ""
 
 echo -e "${YELLOW}Detecting anomalies in batch data...${NC}"
+echo "   Model: $VERSIONED_MODEL (still in memory from training)"
 echo "   Threshold: 0.5 (normalized score)"
 echo ""
 
@@ -153,7 +158,7 @@ DETECT_RESPONSE=$(curl -s -X POST "${BASE_URL}/anomaly/detect" \
     -H "Content-Type: application/json" \
     --max-time 60 \
     -d '{
-        "model": "sensor_anomaly_detector",
+        "model": "'"$VERSIONED_MODEL"'",
         "backend": "isolation_forest",
         "data": [
             [22.0], [23.5], [0.0], [21.5], [100.0],
@@ -208,7 +213,7 @@ SCORE_RESPONSE=$(curl -s -X POST "${BASE_URL}/anomaly/score" \
     -H "Content-Type: application/json" \
     --max-time 60 \
     -d '{
-        "model": "sensor_anomaly_detector",
+        "model": "'"$VERSIONED_MODEL"'",
         "backend": "isolation_forest",
         "data": [
             [22.0], [23.5], [0.0], [21.5], [100.0]
@@ -236,7 +241,7 @@ LOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/anomaly/load" \
     -H "Content-Type: application/json" \
     --max-time 60 \
     -d '{
-        "model": "sensor_anomaly_detector",
+        "model": "sensor_anomaly_detector-latest",
         "backend": "isolation_forest"
     }')
 
@@ -255,7 +260,7 @@ if echo "$LOAD_RESPONSE" | grep -q '"loaded"'; then
         -H "Content-Type: application/json" \
         --max-time 60 \
         -d '{
-            "model": "sensor_anomaly_detector",
+            "model": "sensor_anomaly_detector-latest",
             "backend": "isolation_forest",
             "data": [[22.5], [100.0], [23.0]],
             "threshold": 0.5
