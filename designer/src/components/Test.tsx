@@ -235,7 +235,7 @@ const Test = () => {
     const v = localStorage.getItem('lf_test_showReferences')
     return v == null ? true : v === 'true'
   })
-  const [showGenSettings, setShowGenSettings] = useState<boolean>(() => {
+  const [showGenSettings, _setShowGenSettings] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     const v = localStorage.getItem('lf_test_showGenSettings')
     return v == null ? false : v === 'true'
@@ -457,101 +457,116 @@ const Test = () => {
                       <span className="mr-2">New test</span>
                       <FontIcon type="add" className="w-4 h-4" />
                     </Button>
-                    <div className="mt-4 h-px w-full bg-border" />
                   </div>
-                  <div className="w-full rounded-md overflow-hidden border border-border mt-4">
-                    <div className="max-h-[60vh] overflow-auto">
-                      <div className="flex flex-col divide-y divide-border">
-                        {tests.map(test => (
-                          <div
-                            key={test.id}
-                            className="px-4 py-4 bg-card/60 hover:bg-accent/40 transition-colors"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <div className="text-sm truncate">
-                                    {test.name}
-                                  </div>
-                                  <FontIcon
-                                    type="edit"
-                                    isButton
-                                    handleOnClick={() => openEdit(test.id)}
-                                    className="w-4 h-4 text-primary"
-                                  />
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  Last run {test.lastRun}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRun(test.id)}
-                                  disabled={Boolean(running[test.id])}
-                                >
-                                  {running[test.id] ? 'Running…' : 'Run'}
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="mt-3 flex items-center">
-                              <span
-                                className={`px-2 py-0.5 rounded-2xl text-xs ${scorePillClasses(test.score)}`}
-                              >
-                                {test.score}%
-                              </span>
-                              {test.score < 80 && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="ml-3 h-7 px-2 py-0 text-teal-700 border-teal-500/50 hover:bg-teal-500/10 dark:text-teal-300"
-                                  onClick={() => {
-                                    setDiagnosing(prev => ({
-                                      ...prev,
-                                      [String(test.id)]: true,
-                                    }))
-                                    try {
-                                      window.dispatchEvent(
-                                        new CustomEvent('lf-diagnose', {
-                                          detail: {
-                                            source: 'low_score',
-                                            testId: test.id,
-                                            testName: test.name,
-                                            input: test.input ?? '',
-                                            expected: test.expected ?? '',
-                                            matchScore: test.score,
-                                          },
-                                        })
-                                      )
-                                    } catch {}
-                                    setIsPanelOpen(false)
-                                    setTimeout(
-                                      () =>
-                                        setDiagnosing(prev => ({
-                                          ...prev,
-                                          [String(test.id)]: false,
-                                        })),
-                                      1000
-                                    )
-                                  }}
-                                >
-                                  {diagnosing[String(test.id)] ? (
-                                    <span className="inline-flex items-center gap-2">
-                                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-                                      <span>Diagnosing…</span>
-                                    </span>
-                                  ) : (
-                                    'Diagnose'
-                                  )}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                  {tests.length === 0 ? (
+                    <div className="w-full rounded-md border border-border mt-3 p-4">
+                      <div className="text-center">
+                        <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+                          <FontIcon type="test" className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="text-sm font-medium text-foreground mb-1">
+                          Better tests coming soon
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          We're working on an improved testing experience.
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="w-full rounded-md overflow-hidden border border-border mt-4">
+                      <div className="max-h-[60vh] overflow-auto">
+                        <div className="flex flex-col divide-y divide-border">
+                          {tests.map(test => (
+                            <div
+                              key={test.id}
+                              className="px-4 py-4 bg-card/60 hover:bg-accent/40 transition-colors"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm truncate">
+                                      {test.name}
+                                    </div>
+                                    <FontIcon
+                                      type="edit"
+                                      isButton
+                                      handleOnClick={() => openEdit(test.id)}
+                                      className="w-4 h-4 text-primary"
+                                    />
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Last run {test.lastRun}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRun(test.id)}
+                                    disabled={Boolean(running[test.id])}
+                                  >
+                                    {running[test.id] ? 'Running…' : 'Run'}
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex items-center">
+                                <span
+                                  className={`px-2 py-0.5 rounded-2xl text-xs ${scorePillClasses(test.score)}`}
+                                >
+                                  {test.score}%
+                                </span>
+                                {test.score < 80 && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="ml-3 h-7 px-2 py-0 text-teal-700 border-teal-500/50 hover:bg-teal-500/10 dark:text-teal-300"
+                                    onClick={() => {
+                                      setDiagnosing(prev => ({
+                                        ...prev,
+                                        [String(test.id)]: true,
+                                      }))
+                                      try {
+                                        window.dispatchEvent(
+                                          new CustomEvent('lf-diagnose', {
+                                            detail: {
+                                              source: 'low_score',
+                                              testId: test.id,
+                                              testName: test.name,
+                                              input: test.input ?? '',
+                                              expected: test.expected ?? '',
+                                              matchScore: test.score,
+                                            },
+                                          })
+                                        )
+                                      } catch {}
+                                      setIsPanelOpen(false)
+                                      setTimeout(
+                                        () =>
+                                          setDiagnosing(prev => ({
+                                            ...prev,
+                                            [String(test.id)]: false,
+                                          })),
+                                        1000
+                                      )
+                                    }}
+                                  >
+                                    {diagnosing[String(test.id)] ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+                                        <span>Diagnosing…</span>
+                                      </span>
+                                    ) : (
+                                      'Diagnose'
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -645,6 +660,26 @@ const Test = () => {
                       </>
                     )}
                     <div className="h-px w-full bg-border mt-3" />
+                    <div className="grid grid-cols-3 gap-2 items-center mt-3">
+                      <span className="text-sm text-muted-foreground">
+                        Max tokens
+                      </span>
+                      <Input
+                        type="number"
+                        step="64"
+                        min="1"
+                        max="32768"
+                        value={gen.maxTokens}
+                        onChange={e =>
+                          setGen({
+                            ...gen,
+                            maxTokens: Number(e.target.value),
+                          })
+                        }
+                        className="col-span-2"
+                        title="Maximum tokens in the response"
+                      />
+                    </div>
                     <div className="grid grid-cols-3 gap-2 items-center mt-3">
                       <span className="text-sm text-muted-foreground">
                         Thinking budget

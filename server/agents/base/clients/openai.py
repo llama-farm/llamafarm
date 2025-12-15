@@ -94,6 +94,12 @@ class LFAgentClientOpenAI(LFAgentClient):
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
+        # Extract standard OpenAI parameters from extra_body into api_params
+        # These are first-class OpenAI API parameters, not provider-specific extensions
+        extra_body_copy = dict(extra_body or {})
+        if "max_tokens" in extra_body_copy:
+            api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
         if self._model_config.extra_body:
@@ -106,7 +112,7 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Project-level config takes precedence over per-request params
         # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
-            **(extra_body or {}),
+            **extra_body_copy,
             **config_extra_body,
         }
 
@@ -170,6 +176,12 @@ class LFAgentClientOpenAI(LFAgentClient):
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
+        # Extract standard OpenAI parameters from extra_body into api_params
+        # These are first-class OpenAI API parameters, not provider-specific extensions
+        extra_body_copy = dict(extra_body or {})
+        if "max_tokens" in extra_body_copy:
+            api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
         if self._model_config.extra_body:
@@ -182,7 +194,7 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Project-level config takes precedence over per-request params
         # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
-            **(extra_body or {}),
+            **extra_body_copy,
             **config_extra_body,
         }
 
