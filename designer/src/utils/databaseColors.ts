@@ -9,7 +9,7 @@ interface Database {
 
 /**
  * Get the color classes for a database badge based on its position in the databases array
- * Colors cycle through 6 options: blue, sky, indigo, purple, fuchsia, emerald
+ * Colors cycle through 6 options: teal, sky, indigo, purple, fuchsia, emerald
  *
  * @param databaseName - The name of the database
  * @param databases - Array of all databases from project config
@@ -22,9 +22,9 @@ export function getDatabaseColor(
   // Find the index of this database in the list
   const index = databases.findIndex(db => db.name === databaseName)
 
-  // If database not found, return default color
+  // If database not found, return default teal color
   if (index === -1) {
-    return 'bg-[rgba(211,221,255,1)] text-slate-900 dark:bg-[rgba(211,221,255,1)] dark:text-slate-900'
+    return 'bg-teal-300 text-white dark:bg-teal-500 dark:text-slate-900'
   }
 
   // Cycle through 6 colors using modulo
@@ -32,7 +32,7 @@ export function getDatabaseColor(
 
   // Map index to color classes
   const colors = [
-    'bg-[rgba(211,221,255,1)] text-slate-900 dark:bg-[rgba(211,221,255,1)] dark:text-slate-900', // 0: light blue/lavender
+    'bg-teal-300 text-slate-900 dark:bg-teal-400 dark:text-slate-900', // 0: teal
     'bg-sky-300 text-slate-900 dark:bg-sky-400 dark:text-slate-900', // 1: sky
     'bg-indigo-300 text-slate-900 dark:bg-indigo-400 dark:text-slate-900', // 2: indigo
     'bg-purple-300 text-slate-900 dark:bg-purple-400 dark:text-slate-900', // 3: purple
