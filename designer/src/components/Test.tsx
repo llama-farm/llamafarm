@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import FontIcon from '../common/FontIcon'
 import ModeToggle from './ModeToggle'
@@ -230,6 +230,7 @@ const Test = () => {
 
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
   const [showReferences, setShowReferences] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     const v = localStorage.getItem('lf_test_showReferences')
@@ -331,6 +332,23 @@ const Test = () => {
       localStorage.setItem('lf_gen_defaults', JSON.stringify(gen))
     } catch {}
   }, [gen])
+
+  // Close generation settings when clicking outside
+  useEffect(() => {
+    if (!isSettingsOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        settingsRef.current &&
+        !settingsRef.current.contains(event.target as Node)
+      ) {
+        setIsSettingsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isSettingsOpen])
 
   // Persist RAG settings
   useEffect(() => {
@@ -572,7 +590,7 @@ const Test = () => {
                 </div>
               )}
             </div>
-            <div className="flex-1 relative">
+            <div className="flex-1 relative" ref={settingsRef}>
               {isSettingsOpen ? (
                 <button
                   type="button"
