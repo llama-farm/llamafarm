@@ -5,18 +5,22 @@ Provides the same interface as LanguageModel but uses llama-cpp-python for
 GGUF quantized models, enabling faster inference and lower memory usage.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import sys
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
-
-from llama_cpp import Llama
+from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
 from utils.model_format import get_gguf_file_path
 
 from .base import BaseModel
+
+if TYPE_CHECKING:
+    from llamafarm_llama import Llama
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +133,14 @@ class GGUFLanguageModel(BaseModel):
 
         def _load_model():
             import os
+
+            try:
+                from llamafarm_llama import Llama
+            except ImportError as e:
+                raise ImportError(
+                    "llamafarm-llama is required for GGUF models but is not installed. "
+                    "Install it with: pip install llamafarm-llama"
+                ) from e
 
             # Verify file exists and is readable before attempting to load
             if not os.path.exists(gguf_path):

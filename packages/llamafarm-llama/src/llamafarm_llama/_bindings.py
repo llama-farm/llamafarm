@@ -6,6 +6,7 @@ Uses ABI mode to dynamically load the pre-built libllama library.
 
 from __future__ import annotations
 
+import atexit
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,6 +28,8 @@ LLAMA_CDEF = """
     typedef struct llama_model llama_model;
     typedef struct llama_context llama_context;
     typedef struct llama_sampler llama_sampler;
+    typedef struct llama_vocab llama_vocab;
+    typedef struct llama_memory_i * llama_memory_t;
 
     typedef int32_t llama_pos;
     typedef int32_t llama_token;
@@ -99,22 +102,40 @@ LLAMA_CDEF = """
         LLAMA_ATTENTION_TYPE_NON_CAUSAL  = 1,
     };
 
-    // Model parameters
+    // Flash attention type
+    enum llama_flash_attn_type {
+        LLAMA_FLASH_ATTN_TYPE_AUTO     = -1,
+        LLAMA_FLASH_ATTN_TYPE_DISABLED = 0,
+        LLAMA_FLASH_ATTN_TYPE_ENABLED  = 1,
+    };
+
+    // Split mode enum
+    enum llama_split_mode {
+        LLAMA_SPLIT_MODE_NONE  = 0,
+        LLAMA_SPLIT_MODE_LAYER = 1,
+        LLAMA_SPLIT_MODE_ROW   = 2,
+    };
+
+    // Model parameters - must match llama.cpp b7376+ layout exactly
     struct llama_model_params {
+        void * devices;                      // ggml_backend_dev_t * (NULL = use all)
+        void * tensor_buft_overrides;        // const struct llama_model_tensor_buft_override *
         int32_t n_gpu_layers;
-        int32_t split_mode;
+        int32_t split_mode;                  // enum llama_split_mode
         int32_t main_gpu;
         const float * tensor_split;
-        void * progress_callback;
+        void * progress_callback;            // llama_progress_callback
         void * progress_callback_user_data;
-        void * kv_overrides;
+        void * kv_overrides;                 // const struct llama_model_kv_override *
         bool vocab_only;
         bool use_mmap;
         bool use_mlock;
         bool check_tensors;
+        bool use_extra_bufts;
+        bool no_host;
     };
 
-    // Context parameters
+    // Context parameters - must match llama.cpp b7376+ layout exactly
     struct llama_context_params {
         uint32_t n_ctx;
         uint32_t n_batch;
@@ -122,9 +143,10 @@ LLAMA_CDEF = """
         uint32_t n_seq_max;
         int32_t n_threads;
         int32_t n_threads_batch;
-        int32_t rope_scaling_type;
-        int32_t pooling_type;
-        int32_t attention_type;
+        int32_t rope_scaling_type;           // enum llama_rope_scaling_type
+        int32_t pooling_type;                // enum llama_pooling_type
+        int32_t attention_type;              // enum llama_attention_type
+        int32_t flash_attn_type;             // enum llama_flash_attn_type
         float rope_freq_base;
         float rope_freq_scale;
         float yarn_ext_factor;
@@ -133,16 +155,18 @@ LLAMA_CDEF = """
         float yarn_beta_slow;
         uint32_t yarn_orig_ctx;
         float defrag_thold;
-        void * cb_eval;
+        void * cb_eval;                      // ggml_backend_sched_eval_callback
         void * cb_eval_user_data;
-        int32_t type_k;
-        int32_t type_v;
-        bool logits_all;
+        int32_t type_k;                      // enum ggml_type
+        int32_t type_v;                      // enum ggml_type
+        void * abort_callback;               // ggml_abort_callback
+        void * abort_callback_data;
         bool embeddings;
         bool offload_kqv;
-        bool flash_attn;
         bool no_perf;
-        ...;
+        bool op_offload;
+        bool swa_full;
+        bool kv_unified;
     };
 
     // Batch
@@ -192,37 +216,37 @@ LLAMA_CDEF = """
     struct llama_context * llama_new_context_with_model(struct llama_model * model, struct llama_context_params params);
     void llama_free(struct llama_context * ctx);
 
-    // Model info
-    int32_t llama_n_vocab(const struct llama_model * model);
-    int32_t llama_n_ctx_train(const struct llama_model * model);
-    int32_t llama_n_embd(const struct llama_model * model);
-    int32_t llama_n_layer(const struct llama_model * model);
-    int32_t llama_n_head(const struct llama_model * model);
+    // Model info (new API - llama.cpp b7376+)
+    const struct llama_vocab * llama_model_get_vocab(const struct llama_model * model);
+    int32_t llama_model_n_ctx_train(const struct llama_model * model);
+    int32_t llama_model_n_embd(const struct llama_model * model);
+    int32_t llama_model_n_layer(const struct llama_model * model);
+    int32_t llama_model_n_head(const struct llama_model * model);
+
+    // Vocab info (new API - llama.cpp b7376+)
+    int32_t llama_vocab_n_tokens(const struct llama_vocab * vocab);
+    const char * llama_vocab_get_text(const struct llama_vocab * vocab, llama_token token);
+    float llama_vocab_get_score(const struct llama_vocab * vocab, llama_token token);
+    int32_t llama_vocab_get_attr(const struct llama_vocab * vocab, llama_token token);
+    bool llama_vocab_is_eog(const struct llama_vocab * vocab, llama_token token);
+    bool llama_vocab_is_control(const struct llama_vocab * vocab, llama_token token);
+
+    // Special tokens (new API - llama.cpp b7376+)
+    llama_token llama_vocab_bos(const struct llama_vocab * vocab);
+    llama_token llama_vocab_eos(const struct llama_vocab * vocab);
+    llama_token llama_vocab_eot(const struct llama_vocab * vocab);
+    llama_token llama_vocab_sep(const struct llama_vocab * vocab);
+    llama_token llama_vocab_nl(const struct llama_vocab * vocab);
+    llama_token llama_vocab_pad(const struct llama_vocab * vocab);
 
     // Context info
     uint32_t llama_n_ctx(const struct llama_context * ctx);
     uint32_t llama_n_batch(const struct llama_context * ctx);
     uint32_t llama_n_ubatch(const struct llama_context * ctx);
 
-    // Vocab
-    const char * llama_token_get_text(const struct llama_model * model, llama_token token);
-    float llama_token_get_score(const struct llama_model * model, llama_token token);
-    int32_t llama_token_get_attr(const struct llama_model * model, llama_token token);
-
-    // Special tokens
-    llama_token llama_token_bos(const struct llama_model * model);
-    llama_token llama_token_eos(const struct llama_model * model);
-    llama_token llama_token_eot(const struct llama_model * model);
-    llama_token llama_token_cls(const struct llama_model * model);
-    llama_token llama_token_sep(const struct llama_model * model);
-    llama_token llama_token_nl(const struct llama_model * model);
-    llama_token llama_token_pad(const struct llama_model * model);
-    bool llama_token_is_eog(const struct llama_model * model, llama_token token);
-    bool llama_token_is_control(const struct llama_model * model, llama_token token);
-
-    // Tokenization
+    // Tokenization (llama.cpp b7376+ uses vocab instead of model)
     int32_t llama_tokenize(
-        const struct llama_model * model,
+        const struct llama_vocab * vocab,
         const char * text,
         int32_t text_len,
         llama_token * tokens,
@@ -231,9 +255,9 @@ LLAMA_CDEF = """
         bool parse_special
     );
 
-    // Detokenization
+    // Detokenization (llama.cpp b7376+ uses vocab instead of model)
     int32_t llama_token_to_piece(
-        const struct llama_model * model,
+        const struct llama_vocab * vocab,
         llama_token token,
         char * buf,
         int32_t length,
@@ -242,7 +266,7 @@ LLAMA_CDEF = """
     );
 
     int32_t llama_detokenize(
-        const struct llama_model * model,
+        const struct llama_vocab * vocab,
         const llama_token * tokens,
         int32_t n_tokens,
         char * text,
@@ -251,9 +275,8 @@ LLAMA_CDEF = """
         bool unparse_special
     );
 
-    // Chat templates
+    // Chat templates (llama.cpp b7376+ - model param removed)
     int32_t llama_chat_apply_template(
-        const struct llama_model * model,
         const char * tmpl,
         const struct llama_chat_message * chat,
         size_t n_msg,
@@ -276,12 +299,13 @@ LLAMA_CDEF = """
 
     void llama_batch_free(struct llama_batch batch);
 
-    // KV cache
-    void llama_kv_cache_clear(struct llama_context * ctx);
-    bool llama_kv_cache_seq_rm(struct llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1);
-    void llama_kv_cache_seq_cp(struct llama_context * ctx, llama_seq_id seq_id_src, llama_seq_id seq_id_dst, llama_pos p0, llama_pos p1);
-    void llama_kv_cache_seq_keep(struct llama_context * ctx, llama_seq_id seq_id);
-    void llama_kv_cache_seq_add(struct llama_context * ctx, llama_seq_id seq_id, llama_pos p0, llama_pos p1, llama_pos delta);
+    // Memory/KV cache (new API - llama.cpp b7376+)
+    llama_memory_t llama_get_memory(const struct llama_context * ctx);
+    void llama_memory_clear(llama_memory_t mem, bool data);
+    bool llama_memory_seq_rm(llama_memory_t mem, llama_seq_id seq_id, llama_pos p0, llama_pos p1);
+    void llama_memory_seq_cp(llama_memory_t mem, llama_seq_id seq_id_src, llama_seq_id seq_id_dst, llama_pos p0, llama_pos p1);
+    void llama_memory_seq_keep(llama_memory_t mem, llama_seq_id seq_id);
+    void llama_memory_seq_add(llama_memory_t mem, llama_seq_id seq_id, llama_pos p0, llama_pos p1, llama_pos delta);
 
     // Decoding
     int32_t llama_decode(struct llama_context * ctx, struct llama_batch batch);
@@ -366,10 +390,26 @@ def get_lib():
 
 def _load_library():
     """Load the llama.cpp shared library."""
+    import os
+    import platform
+
     from ._binary import get_lib_path
 
     lib_path = get_lib_path()
+    lib_dir = lib_path.parent
     logger.debug(f"Loading llama.cpp library from: {lib_path}")
+
+    # On macOS, set GGML_METAL_PATH_RESOURCES so Metal backend can find shaders
+    # The ggml-metal.metal shader file must be in the same directory as the library
+    if platform.system() == "Darwin":
+        metal_shader = lib_dir / "ggml-metal.metal"
+        if metal_shader.exists():
+            os.environ["GGML_METAL_PATH_RESOURCES"] = str(lib_dir)
+            logger.debug(f"Set GGML_METAL_PATH_RESOURCES={lib_dir}")
+        else:
+            logger.warning(
+                f"Metal shader not found at {metal_shader}. GPU acceleration may not work."
+            )
 
     try:
         lib = ffi.dlopen(str(lib_path))
@@ -440,6 +480,17 @@ def _setup_log_callback(lib):
     # Set the callback
     lib.llama_log_set(log_callback, ffi.NULL)
     logger.debug("llama.cpp logging callback installed")
+
+    # Register cleanup to unset callback before Python exits
+    # This prevents segfaults when llama.cpp tries to call the callback
+    # after Python's interpreter has started shutting down
+    def _cleanup_log_callback():
+        try:
+            lib.llama_log_set(ffi.NULL, ffi.NULL)
+        except Exception:
+            pass  # Ignore errors during shutdown
+
+    atexit.register(_cleanup_log_callback)
 
 
 def init_backend():

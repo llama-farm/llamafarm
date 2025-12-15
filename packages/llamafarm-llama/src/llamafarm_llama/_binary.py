@@ -351,6 +351,7 @@ def _copy_dependencies(src_dir: Path, dest_dir: Path):
         "libcublas*.so*",
         "libcudart*.so*",
         "libcublasLt*.so*",
+        "*.metal",  # Metal shader source (required for macOS GPU acceleration)
     ]
 
     for pattern in patterns:

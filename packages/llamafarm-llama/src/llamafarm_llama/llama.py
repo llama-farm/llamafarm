@@ -112,6 +112,10 @@ class Llama:
 
         # Model parameters
         model_params = self._lib.llama_model_default_params()
+        # In llama.cpp b7376+, n_gpu_layers=-1 is interpreted literally (no layers)
+        # Use a large number (999) to mean "all layers on GPU"
+        if n_gpu_layers < 0:
+            n_gpu_layers = 999  # Offload all layers to GPU
         model_params.n_gpu_layers = n_gpu_layers
         model_params.main_gpu = main_gpu
         model_params.vocab_only = vocab_only
@@ -145,7 +149,8 @@ class Llama:
         ctx_params.n_threads = n_threads
         ctx_params.n_threads_batch = n_threads_batch
         ctx_params.embeddings = embedding
-        ctx_params.flash_attn = flash_attn
+        # flash_attn_type: -1 = auto, 0 = disabled, 1 = enabled
+        ctx_params.flash_attn_type = 1 if flash_attn else 0
 
         if rope_freq_base > 0:
             ctx_params.rope_freq_base = rope_freq_base
@@ -170,13 +175,19 @@ class Llama:
         self._n_batch = n_batch
         self._n_threads = n_threads
 
+        # Get vocab from model (new API - llama.cpp b7376+)
+        self._vocab = self._lib.llama_model_get_vocab(self._model)
+
+        # Get memory handle for KV cache operations (new API - llama.cpp b7376+)
+        self._memory = self._lib.llama_get_memory(self._ctx)
+
         # Initialize sampler chain
         self._sampler = None
 
         if verbose:
-            n_vocab = self._lib.llama_n_vocab(self._model)
-            n_ctx_train = self._lib.llama_n_ctx_train(self._model)
-            n_embd = self._lib.llama_n_embd(self._model)
+            n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
+            n_ctx_train = self._lib.llama_model_n_ctx_train(self._model)
+            n_embd = self._lib.llama_model_n_embd(self._model)
             logger.info(
                 f"Model loaded: vocab={n_vocab}, ctx_train={n_ctx_train}, embd={n_embd}"
             )
@@ -187,11 +198,13 @@ class Llama:
             self._lib.llama_sampler_free(self._sampler)
             self._sampler = None
 
-        if hasattr(self, "_ctx") and self._ctx != ffi.NULL:
+        if hasattr(self, "_ctx") and self._ctx is not None and self._ctx != ffi.NULL:
             self._lib.llama_free(self._ctx)
+            self._ctx = ffi.NULL  # Mark as freed to prevent double-free
 
-        if hasattr(self, "_model") and self._model != ffi.NULL:
+        if hasattr(self, "_model") and self._model is not None and self._model != ffi.NULL:
             self._lib.llama_free_model(self._model)
+            self._model = ffi.NULL  # Mark as freed to prevent double-free
 
     @property
     def n_ctx(self) -> int:
@@ -201,12 +214,12 @@ class Llama:
     @property
     def n_vocab(self) -> int:
         """Get the vocabulary size."""
-        return self._lib.llama_n_vocab(self._model)
+        return self._lib.llama_vocab_n_tokens(self._vocab)
 
     @property
     def n_embd(self) -> int:
         """Get the embedding dimension."""
-        return self._lib.llama_n_embd(self._model)
+        return self._lib.llama_model_n_embd(self._model)
 
     def tokenize(
         self,
@@ -230,7 +243,7 @@ class Llama:
 
         tokens = ffi.new(f"llama_token[{n_tokens_max}]")
         n_tokens = self._lib.llama_tokenize(
-            self._model,
+            self._vocab,
             text_bytes,
             len(text_bytes),
             tokens,
@@ -244,7 +257,7 @@ class Llama:
             n_tokens_max = -n_tokens
             tokens = ffi.new(f"llama_token[{n_tokens_max}]")
             n_tokens = self._lib.llama_tokenize(
-                self._model,
+                self._vocab,
                 text_bytes,
                 len(text_bytes),
                 tokens,
@@ -274,7 +287,7 @@ class Llama:
         buf = ffi.new(f"char[{buf_size}]")
 
         n_chars = self._lib.llama_detokenize(
-            self._model,
+            self._vocab,
             tokens_array,
             len(tokens),
             buf,
@@ -288,7 +301,7 @@ class Llama:
             buf_size = -n_chars
             buf = ffi.new(f"char[{buf_size}]")
             n_chars = self._lib.llama_detokenize(
-                self._model,
+                self._vocab,
                 tokens_array,
                 len(tokens),
                 buf,
@@ -325,8 +338,9 @@ class Llama:
         buf_size = 4096
         buf = ffi.new(f"char[{buf_size}]")
 
+        # llama.cpp b7376+: model param removed, first arg is now template string
+        # Pass NULL to use model's default template
         n_chars = self._lib.llama_chat_apply_template(
-            self._model,
             ffi.NULL,  # Use model's default template
             chat_array,
             n_msg,
@@ -343,7 +357,6 @@ class Llama:
             buf_size = n_chars + 1
             buf = ffi.new(f"char[{buf_size}]")
             n_chars = self._lib.llama_chat_apply_template(
-                self._model,
                 ffi.NULL,
                 chat_array,
                 n_msg,
@@ -404,15 +417,34 @@ class Llama:
         self._sampler = chain
 
     def _decode_batch(self, tokens: List[int]) -> bool:
-        """Decode a batch of tokens."""
+        """Decode a batch of tokens, chunking if necessary.
+
+        llama.cpp has a batch size limit (n_batch). If the token count exceeds
+        this limit, we need to decode in chunks.
+        """
         if not tokens:
             return True
 
-        tokens_array = ffi.new(f"llama_token[{len(tokens)}]", tokens)
-        batch = self._lib.llama_batch_get_one(tokens_array, len(tokens))
+        # Process tokens in chunks of n_batch size
+        n_batch = self._n_batch
+        offset = 0
 
-        result = self._lib.llama_decode(self._ctx, batch)
-        return result == 0
+        while offset < len(tokens):
+            # Get the chunk for this iteration
+            chunk = tokens[offset:offset + n_batch]
+            chunk_size = len(chunk)
+
+            tokens_array = ffi.new(f"llama_token[{chunk_size}]", chunk)
+            batch = self._lib.llama_batch_get_one(tokens_array, chunk_size)
+
+            result = self._lib.llama_decode(self._ctx, batch)
+            if result != 0:
+                logger.error(f"Failed to decode batch at offset {offset}")
+                return False
+
+            offset += chunk_size
+
+        return True
 
     def _sample_token(self) -> int:
         """Sample the next token."""
@@ -469,7 +501,7 @@ class Llama:
             )
 
         # Clear KV cache
-        self._lib.llama_kv_cache_clear(self._ctx)
+        self._lib.llama_memory_clear(self._memory, True)
 
         # Decode prompt
         if not self._decode_batch(tokens):
@@ -505,7 +537,7 @@ class Llama:
             # Apply logits processor if provided
             if logits_processor is not None:
                 logits = self._lib.llama_get_logits(self._ctx)
-                n_vocab = self._lib.llama_n_vocab(self._model)
+                n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
                 # Convert to list for processor
                 logits_list = [logits[i] for i in range(n_vocab)]
                 processed = logits_processor(
@@ -519,7 +551,7 @@ class Llama:
             generated_tokens.append(token)
 
             # Check for EOS
-            if self._lib.llama_token_is_eog(self._model, token):
+            if self._lib.llama_vocab_is_eog(self._vocab, token):
                 finish_reason = "stop"
                 break
 
@@ -582,7 +614,7 @@ class Llama:
             # Apply logits processor if provided
             if logits_processor is not None:
                 logits = self._lib.llama_get_logits(self._ctx)
-                n_vocab = self._lib.llama_n_vocab(self._model)
+                n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
                 logits_list = [logits[i] for i in range(n_vocab)]
                 processed = logits_processor(
                     prompt_tokens + generated_tokens, logits_list
@@ -594,7 +626,7 @@ class Llama:
             generated_tokens.append(token)
 
             # Check for EOS
-            if self._lib.llama_token_is_eog(self._model, token):
+            if self._lib.llama_vocab_is_eog(self._vocab, token):
                 yield {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -686,7 +718,7 @@ class Llama:
             tokens = self.tokenize(text, add_special=True, parse_special=False)
 
             # Clear KV cache
-            self._lib.llama_kv_cache_clear(self._ctx)
+            self._lib.llama_memory_clear(self._memory, True)
 
             # Decode
             if not self._decode_batch(tokens):
@@ -701,7 +733,7 @@ class Llama:
             if emb_ptr == ffi.NULL:
                 raise RuntimeError("Failed to get embeddings")
 
-            n_embd = self._lib.llama_n_embd(self._model)
+            n_embd = self._lib.llama_model_n_embd(self._model)
             embedding = [emb_ptr[i] for i in range(n_embd)]
 
             # L2 normalize
@@ -735,7 +767,7 @@ class Llama:
 
     def reset(self):
         """Reset the context state."""
-        self._lib.llama_kv_cache_clear(self._ctx)
+        self._lib.llama_memory_clear(self._memory, True)
         if self._sampler is not None:
             self._lib.llama_sampler_reset(self._sampler)
 
