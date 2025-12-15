@@ -1,0 +1,439 @@
+"""
+Download and manage pre-built llama.cpp binaries from GitHub releases.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+import platform
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path
+from typing import Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
+
+# Pin to specific llama.cpp release
+LLAMA_CPP_VERSION = "b7376"
+LLAMA_CPP_REPO = "ggml-org/llama.cpp"
+
+# Binary URLs from llama.cpp GitHub releases
+# Format: https://github.com/ggml-org/llama.cpp/releases/download/{version}/{artifact}
+# Note: All releases are .zip format; paths vary by platform
+BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
+    # Linux x86_64
+    ("linux", "x86_64", "cpu"): {
+        "artifact": "llama-{version}-bin-ubuntu-x64.zip",
+        "lib": "build/bin/libllama.so",
+        "sha256": None,  # Populated at release time
+    },
+    ("linux", "x86_64", "vulkan"): {
+        "artifact": "llama-{version}-bin-ubuntu-vulkan-x64.zip",
+        "lib": "build/bin/libllama.so",
+        "sha256": None,
+    },
+    # Linux ARM64
+    ("linux", "arm64", "cpu"): {
+        "artifact": "llama-{version}-bin-ubuntu-arm64.zip",
+        "lib": "build/bin/libllama.so",
+        "sha256": None,
+    },
+    # macOS
+    ("darwin", "arm64", "metal"): {
+        "artifact": "llama-{version}-bin-macos-arm64.zip",
+        "lib": "build/bin/libllama.dylib",
+        "sha256": None,
+    },
+    ("darwin", "x86_64", "cpu"): {
+        "artifact": "llama-{version}-bin-macos-x64.zip",
+        "lib": "build/bin/libllama.dylib",
+        "sha256": None,
+    },
+    # Windows
+    ("win32", "amd64", "cpu"): {
+        "artifact": "llama-{version}-bin-win-cpu-x64.zip",
+        "lib": "llama.dll",  # Windows: library is in root
+        "sha256": None,
+    },
+    ("win32", "amd64", "cuda12"): {
+        "artifact": "llama-{version}-bin-win-cuda12.4-x64.zip",
+        "lib": "llama.dll",
+        "sha256": None,
+    },
+    ("win32", "amd64", "cuda11"): {
+        "artifact": "llama-{version}-bin-win-cuda11.7-x64.zip",
+        "lib": "llama.dll",
+        "sha256": None,
+    },
+    ("win32", "amd64", "vulkan"): {
+        "artifact": "llama-{version}-bin-win-vulkan-x64.zip",
+        "lib": "llama.dll",
+        "sha256": None,
+    },
+}
+
+
+def get_platform_key(backend_override: Optional[str] = None) -> tuple[str, str, str]:
+    """Detect current platform and best available backend."""
+    system = platform.system().lower()
+    if system == "windows":
+        system = "win32"
+
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        machine = "x86_64" if system != "win32" else "amd64"
+    elif machine == "arm64" or machine == "aarch64":
+        machine = "arm64"
+
+    # Allow backend override via environment
+    if backend_override is None:
+        backend_override = os.environ.get("LLAMAFARM_BACKEND")
+
+    if backend_override:
+        return (system, machine, backend_override)
+
+    # Detect best backend
+    backend = _detect_backend(system, machine)
+    return (system, machine, backend)
+
+
+def _detect_backend(system: str, machine: str) -> str:
+    """Detect the best available GPU backend."""
+    if system == "darwin" and machine == "arm64":
+        return "metal"  # Apple Silicon always has Metal
+
+    # Check for CUDA
+    if _has_cuda():
+        cuda_version = _get_cuda_version()
+        return "cuda12" if cuda_version >= 12 else "cuda11"
+
+    # Check for Vulkan
+    if _has_vulkan():
+        return "vulkan"
+
+    return "cpu"
+
+
+def _has_cuda() -> bool:
+    """Check if CUDA is available."""
+    import subprocess
+
+    try:
+        subprocess.check_output(["nvidia-smi"], stderr=subprocess.DEVNULL)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    # Check environment variables
+    if os.environ.get("CUDA_PATH") or os.environ.get("CUDA_HOME"):
+        return True
+
+    # Check common paths
+    cuda_paths = ["/usr/local/cuda", "/usr/lib/cuda", "/opt/cuda"]
+    for path in cuda_paths:
+        if Path(path).exists():
+            return True
+
+    return False
+
+
+def _get_cuda_version() -> int:
+    """Get major CUDA version."""
+    import subprocess
+
+    try:
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        # Map driver version to CUDA version (approximate)
+        driver = float(output.strip().split(".")[0])
+        if driver >= 525:
+            return 12
+        return 11
+    except Exception:
+        return 11
+
+
+def _has_vulkan() -> bool:
+    """Check if Vulkan is available."""
+    if os.environ.get("VULKAN_SDK"):
+        return True
+    if Path("/usr/share/vulkan").exists():
+        return True
+    return False
+
+
+def get_lib_path() -> Path:
+    """Get path to libllama, downloading if necessary."""
+    # Check for bundled binary (platform wheel)
+    bundled = Path(__file__).parent / "lib" / _get_lib_name()
+    if bundled.exists():
+        logger.debug(f"Using bundled binary: {bundled}")
+        return bundled
+
+    # Check for cached download
+    cache_dir = _get_cache_dir()
+    cached = cache_dir / LLAMA_CPP_VERSION / _get_lib_name()
+    if cached.exists():
+        logger.debug(f"Using cached binary: {cached}")
+        return cached
+
+    # Download
+    logger.info(f"Downloading llama.cpp {LLAMA_CPP_VERSION}...")
+    return download_binary(cache_dir / LLAMA_CPP_VERSION)
+
+
+def _get_lib_name() -> str:
+    """Get platform-specific library name."""
+    system = platform.system().lower()
+    if system == "darwin":
+        return "libllama.dylib"
+    elif system == "windows":
+        return "llama.dll"
+    else:
+        return "libllama.so"
+
+
+def _get_cache_dir() -> Path:
+    """Get cache directory for downloaded binaries."""
+    if os.environ.get("LLAMAFARM_CACHE_DIR"):
+        return Path(os.environ["LLAMAFARM_CACHE_DIR"])
+
+    # Platform-specific cache
+    system = platform.system().lower()
+    if system == "darwin":
+        return Path.home() / "Library" / "Caches" / "llamafarm-llama"
+    elif system == "windows":
+        local_app_data = os.environ.get("LOCALAPPDATA", str(Path.home()))
+        return Path(local_app_data) / "llamafarm-llama" / "cache"
+    else:
+        xdg_cache = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+        return Path(xdg_cache) / "llamafarm-llama"
+
+
+def download_binary(
+    dest_dir: Path, platform_key: Optional[tuple[str, str, str]] = None
+) -> Path:
+    """Download the appropriate llama.cpp binary."""
+    if platform_key is None:
+        platform_key = get_platform_key()
+
+    if platform_key not in BINARY_MANIFEST:
+        # Try falling back to CPU
+        system, machine, _ = platform_key
+        cpu_key = (system, machine, "cpu")
+        if cpu_key in BINARY_MANIFEST:
+            logger.warning(f"No binary for {platform_key}, falling back to CPU")
+            platform_key = cpu_key
+        else:
+            raise RuntimeError(f"No pre-built binary available for {platform_key}")
+
+    manifest = BINARY_MANIFEST[platform_key]
+    version = os.environ.get("LLAMAFARM_LLAMA_VERSION", LLAMA_CPP_VERSION)
+    artifact = manifest["artifact"].format(version=version)
+    url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
+
+    print(f"Downloading llama.cpp {version} for {platform_key}...")
+    print(f"  URL: {url}")
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        archive_path = tmpdir_path / artifact
+
+        # Download with progress
+        try:
+            req = Request(url, headers={"User-Agent": "llamafarm-llama"})
+            with urlopen(req, timeout=300) as response:
+                total_size = int(response.headers.get("content-length", 0))
+                downloaded = 0
+                chunk_size = 8192
+
+                with open(archive_path, "wb") as f:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            pct = downloaded * 100 // total_size
+                            print(
+                                f"\r  Progress: {pct}% ({downloaded}/{total_size} bytes)",
+                                end="",
+                                flush=True,
+                            )
+                print()  # Newline after progress
+        except (URLError, HTTPError) as e:
+            raise RuntimeError(f"Failed to download {url}: {e}") from e
+
+        # Verify checksum if available
+        if manifest.get("sha256"):
+            actual = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+            if actual != manifest["sha256"]:
+                raise RuntimeError(
+                    f"Checksum mismatch: expected {manifest['sha256']}, got {actual}"
+                )
+
+        # Extract (all llama.cpp releases are .zip format)
+        extract_dir = tmpdir_path / "extracted"
+        extract_dir.mkdir()
+
+        if artifact.endswith(".zip"):
+            with zipfile.ZipFile(archive_path, "r") as z:
+                z.extractall(extract_dir)
+        else:
+            raise RuntimeError(f"Unknown archive format: {artifact}")
+
+        # Find the library file
+        lib_path = manifest["lib"]
+        lib_src = extract_dir / lib_path
+
+        # Handle nested directories - search for the library
+        if not lib_src.exists():
+            # Try to find it
+            lib_name = Path(lib_path).name
+            candidates = list(extract_dir.rglob(lib_name))
+            if candidates:
+                lib_src = candidates[0]
+                logger.debug(f"Found library at: {lib_src}")
+            else:
+                raise RuntimeError(
+                    f"Could not find {lib_name} in archive. Contents: {list(extract_dir.rglob('*'))}"
+                )
+
+        # Handle symlinks: newer llama.cpp releases use symlinks like:
+        # libllama.dylib -> libllama.0.dylib -> libllama.0.0.7376.dylib
+        # We need to find the actual versioned library file
+        if lib_src.stat().st_size < 100:  # Symlink text files are tiny
+            # This is likely a symlink reference, find the actual versioned library
+            lib_base = lib_src.stem  # e.g., "libllama"
+            lib_ext = lib_src.suffix  # e.g., ".dylib"
+            parent_dir = lib_src.parent
+
+            # Look for versioned file like libllama.0.0.7376.dylib
+            versioned_pattern = f"{lib_base}.*.*.*{lib_ext}"
+            versioned_candidates = list(parent_dir.glob(versioned_pattern))
+
+            if versioned_candidates:
+                # Pick the largest file (the actual library, not symlinks)
+                lib_src = max(versioned_candidates, key=lambda p: p.stat().st_size)
+                logger.debug(f"Using versioned library: {lib_src}")
+
+        lib_dest = dest_dir / _get_lib_name()
+        shutil.copy2(lib_src, lib_dest)
+
+        # Copy any additional dependencies (Windows DLLs, CUDA libs, etc.)
+        _copy_dependencies(extract_dir, dest_dir)
+
+        print(f"  Installed to: {lib_dest}")
+        return lib_dest
+
+
+def _copy_dependencies(src_dir: Path, dest_dir: Path):
+    """Copy additional runtime dependencies (ggml libs, CUDA libs, etc.)."""
+    lib_name = _get_lib_name()
+
+    # For versioned libraries (e.g., libggml-base.0.9.4.dylib), copy the actual
+    # versioned file, not the symlinks
+    patterns = [
+        "*.dll",
+        "libggml*.so*",
+        "libggml*.*.*.*dylib",  # Versioned dylibs
+        "libcublas*.so*",
+        "libcudart*.so*",
+        "libcublasLt*.so*",
+    ]
+
+    for pattern in patterns:
+        for f in src_dir.rglob(pattern):
+            # Skip symlinks (small text files) and the main library
+            if f.is_file() and f.name != lib_name and f.stat().st_size > 100:
+                dest = dest_dir / f.name
+                if not dest.exists():
+                    shutil.copy2(f, dest)
+                    logger.debug(f"Copied dependency: {f.name}")
+
+    # Create symlinks for versioned dylibs on macOS/Linux
+    # e.g., libggml.0.9.4.dylib needs libggml.0.dylib and libggml.dylib symlinks
+    if platform.system().lower() != "windows":
+        _create_version_symlinks(dest_dir)
+
+
+def _create_version_symlinks(dest_dir: Path):
+    """Create symlinks for versioned libraries.
+
+    Newer llama.cpp releases use versioned libraries like libggml.0.9.4.dylib
+    with symlinks libggml.0.dylib -> libggml.0.9.4.dylib and
+    libggml.dylib -> libggml.0.dylib. We need to recreate these symlinks.
+    """
+    import re
+
+    # Find all versioned libraries (e.g., libggml.0.9.4.dylib, libggml-base.0.9.4.dylib)
+    ext = ".dylib" if platform.system().lower() == "darwin" else ".so"
+
+    for lib_file in dest_dir.glob(f"*{ext}"):
+        # Match pattern like libggml.0.9.4.dylib or libggml-base.0.9.4.dylib
+        match = re.match(r"^(lib[\w-]+)\.(\d+)\.(\d+)\.(\d+)(\.dylib|\.so)$", lib_file.name)
+        if match:
+            base_name = match.group(1)  # e.g., "libggml" or "libggml-base"
+            major = match.group(2)  # e.g., "0"
+            ext_part = match.group(5)  # e.g., ".dylib"
+
+            # Create libggml.0.dylib -> libggml.0.9.4.dylib
+            major_symlink = dest_dir / f"{base_name}.{major}{ext_part}"
+            if not major_symlink.exists():
+                major_symlink.symlink_to(lib_file.name)
+                logger.debug(f"Created symlink: {major_symlink.name} -> {lib_file.name}")
+
+            # Create libggml.dylib -> libggml.0.dylib
+            base_symlink = dest_dir / f"{base_name}{ext_part}"
+            if not base_symlink.exists():
+                base_symlink.symlink_to(major_symlink.name)
+                logger.debug(f"Created symlink: {base_symlink.name} -> {major_symlink.name}")
+
+
+def clear_cache():
+    """Clear the download cache."""
+    cache_dir = _get_cache_dir()
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
+        print(f"Cleared cache: {cache_dir}")
+
+
+def get_binary_info() -> dict:
+    """Get information about the current binary configuration."""
+    platform_key = get_platform_key()
+    lib_path = None
+
+    # Check bundled
+    bundled = Path(__file__).parent / "lib" / _get_lib_name()
+    if bundled.exists():
+        lib_path = bundled
+        source = "bundled"
+    else:
+        # Check cached
+        cache_dir = _get_cache_dir()
+        cached = cache_dir / LLAMA_CPP_VERSION / _get_lib_name()
+        if cached.exists():
+            lib_path = cached
+            source = "cached"
+        else:
+            source = "not_downloaded"
+
+    return {
+        "version": LLAMA_CPP_VERSION,
+        "platform_key": platform_key,
+        "lib_path": str(lib_path) if lib_path else None,
+        "lib_name": _get_lib_name(),
+        "source": source,
+        "cache_dir": str(_get_cache_dir()),
+    }

@@ -65,6 +65,12 @@ log_level = os.getenv("LOG_LEVEL", "INFO")
 json_logs = os.getenv("LOG_JSON_FORMAT", "false").lower() in ("true", "1", "yes")
 setup_logging(json_logs=json_logs, log_level=log_level, log_file=log_file)
 
+# Configure GGML/llama.cpp logging to route through Python's logging system
+# Must be done after setup_logging() but before any llama-cpp-python imports
+from utils.ggml_logging import setup_ggml_logging
+
+setup_ggml_logging()
+
 logger = UniversalRuntimeLogger("universal-runtime")
 
 

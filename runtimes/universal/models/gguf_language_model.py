@@ -145,7 +145,7 @@ class GGUFLanguageModel(BaseModel):
                     n_ctx=self.actual_n_ctx,  # Use computed context size
                     n_gpu_layers=n_gpu_layers,
                     n_threads=None,  # Auto-detect optimal threads
-                    verbose=True,  # Enable verbose logging to debug load issues
+                    verbose=False,  # Disable verbose logging (managed by ggml_logging)
                     seed=-1,  # Random seed (-1 = random)
                 )
             except ValueError as e:
