@@ -39,9 +39,7 @@ class TestGGUFEncoderModel:
                 "models.gguf_encoder_model.get_gguf_file_path",
                 return_value=str(gguf_file),
             ),
-            patch(
-                "models.gguf_encoder_model.Llama", return_value=mock_llama
-            ) as mock_llama_cls,
+            patch("llamafarm_llama.Llama", return_value=mock_llama) as mock_llama_cls,
         ):
             await model.load()
             assert model.llama is not None
@@ -69,9 +67,7 @@ class TestGGUFEncoderModel:
                 "models.gguf_encoder_model.get_gguf_file_path",
                 return_value=str(gguf_file),
             ),
-            patch(
-                "models.gguf_encoder_model.Llama", return_value=mock_llama
-            ) as mock_llama_cls,
+            patch("llamafarm_llama.Llama", return_value=mock_llama) as mock_llama_cls,
         ):
             await model.load()
             assert model.llama is not None
@@ -111,7 +107,7 @@ class TestGGUFEncoderModel:
                 "models.gguf_encoder_model.get_gguf_file_path",
                 return_value=str(gguf_file),
             ),
-            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
             embeddings = await model.embed(["Hello world"], normalize=False)
@@ -150,7 +146,7 @@ class TestGGUFEncoderModel:
                 "models.gguf_encoder_model.get_gguf_file_path",
                 return_value=str(gguf_file),
             ),
-            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
             embeddings = await model.embed(["Hello", "World", "Test"], normalize=False)
@@ -183,7 +179,7 @@ class TestGGUFEncoderModel:
                 "models.gguf_encoder_model.get_gguf_file_path",
                 return_value=str(gguf_file),
             ),
-            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
 
@@ -221,7 +217,7 @@ class TestGGUFEncoderModel:
                 "models.gguf_encoder_model.get_gguf_file_path",
                 return_value=str(gguf_file),
             ),
-            patch("models.gguf_encoder_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
 
