@@ -37,12 +37,9 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
         "lib": "build/bin/libllama.so",
         "sha256": None,
     },
-    # Linux ARM64
-    ("linux", "arm64", "cpu"): {
-        "artifact": "llama-{version}-bin-ubuntu-arm64.zip",
-        "lib": "build/bin/libllama.so",
-        "sha256": None,
-    },
+    # Note: Linux ARM64 binaries are not published by llama.cpp
+    # Users on ARM64 Linux will need to compile from source or use
+    # a different inference backend
     # macOS
     ("darwin", "arm64", "metal"): {
         "artifact": "llama-{version}-bin-macos-arm64.zip",
