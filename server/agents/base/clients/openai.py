@@ -96,9 +96,14 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Extract standard OpenAI parameters from extra_body into api_params
         # These are first-class OpenAI API parameters, not provider-specific extensions
+        # Only use per-request value if project config doesn't already define it
         extra_body_copy = dict(extra_body or {})
         if "max_tokens" in extra_body_copy:
-            api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            if "max_tokens" not in api_params:
+                api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            else:
+                # Project config takes precedence, discard per-request value
+                extra_body_copy.pop("max_tokens")
         # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
         # The universal runtime extracts them from extra_body
 
@@ -180,9 +185,14 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Extract standard OpenAI parameters from extra_body into api_params
         # These are first-class OpenAI API parameters, not provider-specific extensions
+        # Only use per-request value if project config doesn't already define it
         extra_body_copy = dict(extra_body or {})
         if "max_tokens" in extra_body_copy:
-            api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            if "max_tokens" not in api_params:
+                api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            else:
+                # Project config takes precedence, discard per-request value
+                extra_body_copy.pop("max_tokens")
         # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
         # The universal runtime extracts them from extra_body
 

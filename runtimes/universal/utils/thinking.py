@@ -213,22 +213,28 @@ class ThinkingBudgetProcessor:
         if self.in_thinking and not self.thinking_ended:
             self.thinking_tokens += 1
 
-        # If in thinking, over budget, and have end tokens - force </think>
+        # If in thinking, over budget, and have end tokens - start forcing </think>
         if (
             self.in_thinking
             and not self.thinking_ended
             and self.thinking_tokens >= self.max_thinking_tokens
             and self.think_end_tokens
+            and not self.forcing_end
         ):
             self.forcing_end = True
 
-            if self._force_token_idx < len(self.think_end_tokens):
-                target_token = self.think_end_tokens[self._force_token_idx]
-                self._force_token_idx += 1
+        # If we are actively forcing the end token sequence
+        if self.forcing_end and self._force_token_idx < len(self.think_end_tokens):
+            target_token = self.think_end_tokens[self._force_token_idx]
+            self._force_token_idx += 1
 
-                # Set all logits to -inf except the target token
-                scores[:] = -np.inf
-                if target_token < len(scores):
-                    scores[target_token] = 0.0
+            # Set all logits to -inf except the target token
+            scores[:] = -np.inf
+            if target_token < len(scores):
+                scores[target_token] = 0.0
+        elif self.forcing_end and self._force_token_idx >= len(self.think_end_tokens):
+            # Finalize state when forcing completes
+            self.thinking_ended = True
+            self.in_thinking = False
 
         return scores
