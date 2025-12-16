@@ -469,6 +469,7 @@ export default function TestChat({
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const lastUserInputRef = useRef<string>('')
+  const userJustSentRef = useRef<boolean>(false)
 
   // Auto-grow textarea up to a comfortable max height before scrolling
   const resizeTextarea = useCallback(() => {
@@ -482,10 +483,30 @@ export default function TestChat({
   }, [])
 
   useEffect(() => {
+    const container = listRef.current
+
+    // If user just sent a message, always scroll and keep scrolling with output
+    // Otherwise, only scroll if already near the bottom
+    if (userJustSentRef.current) {
+      // Keep the flag true while streaming continues, reset when near bottom
+      if (container) {
+        const isNearBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight < 150
+        if (isNearBottom) {
+          // We've caught up, can reset the flag
+          userJustSentRef.current = false
+        }
+      }
+    } else if (container) {
+      const isNearBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight < 150
+      if (!isNearBottom) return
+    }
+
     if (endRef.current) {
       endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    } else if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
+    } else if (container) {
+      container.scrollTop = container.scrollHeight
     }
   }, [messages])
 
@@ -525,6 +546,9 @@ export default function TestChat({
     if (combinedIsSending) {
       return
     }
+
+    // Flag that user just sent - scroll should follow the response
+    userJustSentRef.current = true
 
     if (MOCK_MODE) {
       // Local-only optimistic flow without backend
@@ -1206,12 +1230,14 @@ export function TestChatMessage({
   const [thumb, setThumb] = useState<null | 'up' | 'down'>(null)
   const [showExpected, setShowExpected] = useState<boolean>(false)
   const [openPrompts, setOpenPrompts] = useState<boolean>(true)
-  const [openThinking, setOpenThinking] = useState<boolean>(true)
+  // Thinking UI state - collapsed by default, user can expand
+  const [userExpandedThinking, setUserExpandedThinking] = useState<boolean>(false)
 
   // Extract optional <think> ... </think> section from assistant content
   // If there is no closing tag, assume thinking continues to end of content
   let thinkingFromTags = ''
   let contentWithoutThinking = message.content
+  let isThinkingInProgress = false
   if (
     isAssistant &&
     typeof message.content === 'string' &&
@@ -1226,12 +1252,24 @@ export function TestChatMessage({
         message.content.slice(end + 8)
       ).trim()
     } else {
+      // No closing tag yet - thinking is in progress
+      isThinkingInProgress = true
       thinkingFromTags = message.content.slice(start).trim()
       contentWithoutThinking = message.content
         .slice(0, message.content.indexOf('<think>'))
         .trim()
     }
   }
+
+  // Ref for auto-scrolling thinking box
+  const thinkingBoxRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll thinking box to bottom as content streams in
+  useEffect(() => {
+    if (isThinkingInProgress && thinkingBoxRef.current) {
+      thinkingBoxRef.current.scrollTop = thinkingBoxRef.current.scrollHeight
+    }
+  }, [thinkingFromTags, isThinkingInProgress])
 
   // Remove raw <tool_call> XML tags from display (handled as separate messages)
   if (isAssistant && typeof contentWithoutThinking === 'string') {
@@ -1262,6 +1300,11 @@ export function TestChatMessage({
       if (saved === 'up' || saved === 'down') setThumb(saved)
     } catch {}
   }, [message.id])
+
+  // Handle user toggle of thinking section
+  const handleThinkingToggle = useCallback(() => {
+    setUserExpandedThinking(prev => !prev)
+  }, [])
 
   const onThumb = useCallback(
     (kind: 'up' | 'down') => {
@@ -1305,49 +1348,53 @@ export function TestChatMessage({
           </div>
         ) : (
           <>
-            {/* Model thinking card - assistant final responses only */}
-            {showThinking && isAssistant && !message.isLoading && (
-              <div className="mb-2 rounded-md border border-border bg-card/40">
+            {/* Thinking card - unified component */}
+            {showThinking && isAssistant && thinkingFromTags && (
+              <div className={`mb-2 rounded-md border border-border bg-card/40 overflow-hidden ${isThinkingInProgress ? 'animate-pulse' : ''}`}>
                 <button
                   type="button"
-                  onClick={() => setOpenThinking(o => !o)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground rounded-t-md hover:bg-accent/40"
-                  aria-expanded={openThinking}
+                  onClick={isThinkingInProgress ? undefined : handleThinkingToggle}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground ${isThinkingInProgress ? '' : 'hover:bg-accent/40 cursor-pointer'}`}
+                  aria-expanded={isThinkingInProgress || userExpandedThinking}
+                  disabled={isThinkingInProgress}
                 >
                   <span className="font-medium flex items-center gap-2">
                     <span className="text-purple-400">💭</span>
-                    Model thinking process
+                    {isThinkingInProgress ? 'Thinking...' : 'Thinking steps'}
                   </span>
-                  <span className="text-[11px]">
-                    {openThinking ? 'Hide' : 'Show'}
-                  </span>
+                  {!isThinkingInProgress && (
+                    <span className="text-[11px]">
+                      {userExpandedThinking ? 'Hide' : 'Show'}
+                    </span>
+                  )}
                 </button>
-                {openThinking && (
-                  <div className="px-3 py-2 text-sm border-t border-border text-muted-foreground/70">
-                    {thinkingFromTags ? (
-                      <div className="prose prose-sm max-w-none leading-normal prose-p:my-4 prose-li:my-0.5 prose-ul:my-3 prose-ol:my-3 prose-headings:my-4 prose-pre:my-3 [&_*]:text-muted-foreground/70">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {thinkingFromTags.replace(/\n{3,}/g, '\n\n')}
-                        </ReactMarkdown>
-                      </div>
-                    ) : Array.isArray((message as any)?.metadata?.thinking) &&
-                      (message as any).metadata.thinking.length > 0 ? (
-                      <ul className="list-disc pl-5 text-sm">
-                        {(message as any).metadata.thinking.map(
-                          (t: string, i: number) => (
-                            <li key={i} className="my-1">
-                              {t}
-                            </li>
-                          )
-                        )}
-                      </ul>
-                    ) : (
-                      <div className="text-xs text-muted-foreground/50">
-                        No thinking steps
-                      </div>
-                    )}
+                {/* Content area - fixed height during streaming, collapsible when done */}
+                <div
+                  ref={thinkingBoxRef}
+                  className={`border-t border-border overflow-hidden transition-all duration-300 ease-in-out ${
+                    isThinkingInProgress
+                      ? 'h-[150px] overflow-y-scroll scrollbar-none'
+                      : ''
+                  }`}
+                  style={
+                    isThinkingInProgress
+                      ? { pointerEvents: 'none' }
+                      : {
+                          maxHeight: userExpandedThinking ? '2000px' : '0px',
+                          opacity: userExpandedThinking ? 1 : 0,
+                        }
+                  }
+                >
+                  <div className="px-3 py-3 text-sm text-muted-foreground/70">
+                    <div className="prose prose-sm max-w-none leading-relaxed prose-p:my-3 prose-li:my-1 prose-ul:my-2 prose-ol:my-2 prose-headings:my-3 prose-headings:font-medium prose-pre:my-2 [&_*]:text-muted-foreground/70 space-y-3">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {thinkingFromTags
+                          .replace(/\n{3,}/g, '\n\n')
+                          .replace(/([.!?])\n(?=[A-Z])/g, '$1\n\n')}
+                      </ReactMarkdown>
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -1576,27 +1623,36 @@ export function TestChatMessage({
       {isAssistant &&
         showThinking &&
         Array.isArray(message.metadata?.thinking) && (
-          <div className="mt-2 rounded-md border border-border bg-card/40">
+          <div className="mt-2 rounded-md border border-border bg-card/40 overflow-hidden">
             <button
               type="button"
-              onClick={() => setOpenThinking(o => !o)}
+              onClick={handleThinkingToggle}
               className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground rounded-t-md hover:bg-accent/40"
-              aria-expanded={openThinking}
+              aria-expanded={userExpandedThinking}
             >
-              <span className="font-medium">Thinking steps</span>
+              <span className="font-medium flex items-center gap-2">
+                <span className="text-purple-400">💭</span>
+                Thinking steps
+              </span>
               <span className="text-[11px]">
-                {openThinking ? 'Hide' : 'Show'}
+                {userExpandedThinking ? 'Hide' : 'Show'}
               </span>
             </button>
-            {openThinking && (
-              <ol className="px-5 py-2 text-sm list-decimal marker:text-muted-foreground/70">
+            <div
+              className="transition-all duration-300 ease-in-out overflow-hidden"
+              style={{
+                maxHeight: userExpandedThinking ? '2000px' : '0px',
+                opacity: userExpandedThinking ? 1 : 0,
+              }}
+            >
+              <ol className="px-5 py-3 text-sm list-decimal marker:text-muted-foreground/70 space-y-2">
                 {message.metadata.thinking.map((step: string, i: number) => (
-                  <li key={i} className="py-1">
+                  <li key={i} className="leading-relaxed">
                     {step}
                   </li>
                 ))}
               </ol>
-            )}
+            </div>
           </div>
         )}
     </div>
