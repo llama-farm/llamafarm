@@ -230,6 +230,7 @@ const Test = () => {
 
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
+  const testsRef = useRef<HTMLDivElement>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
   const [showReferences, setShowReferences] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
@@ -332,6 +333,23 @@ const Test = () => {
       localStorage.setItem('lf_gen_defaults', JSON.stringify(gen))
     } catch {}
   }, [gen])
+
+  // Close tests panel when clicking outside
+  useEffect(() => {
+    if (!isPanelOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        testsRef.current &&
+        !testsRef.current.contains(event.target as Node)
+      ) {
+        setIsPanelOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isPanelOpen])
 
   // Close generation settings when clicking outside
   useEffect(() => {
@@ -445,7 +463,7 @@ const Test = () => {
             </div>
           </div>
           <div className="w-full xl:basis-[640px] xl:flex-none flex flex-col sm:flex-row gap-2">
-            <div className="flex-1 relative">
+            <div className="flex-1 relative" ref={testsRef}>
               {isPanelOpen ? (
                 <button
                   type="button"

@@ -12,7 +12,7 @@ import { ChatStreamChunk } from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
-import { useProject, useUpdateProject } from '../../hooks/useProjects'
+import { useProject } from '../../hooks/useProjects'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -153,26 +153,35 @@ export default function TestChat({
 
   // Validate selected model and set default if needed
   useEffect(() => {
+    // Don't validate until models are loaded - this prevents resetting
+    // a valid localStorage selection before we know what models are available
+    if (unifiedModels.length === 0) {
+      return
+    }
+
     // Build list of valid model names from current config
     const validModelNames = unifiedModels.map(m => m.name)
 
-    if (!selectedModel || !validModelNames.includes(selectedModel)) {
-      // Selected model is invalid or doesn't exist - fall back to default
-      const apiDefaultName = (defaultModel as any)?.name
-      if (apiDefaultName && validModelNames.includes(apiDefaultName)) {
-        setSelectedModel(apiDefaultName)
-      } else if (
-        fallbackDefaultName &&
-        validModelNames.includes(fallbackDefaultName)
-      ) {
-        setSelectedModel(fallbackDefaultName)
-      } else if (validModelNames.length > 0) {
-        // Use first available model as last resort
-        setSelectedModel(validModelNames[0])
-      } else {
-        // No valid models available, clear selection
-        setSelectedModel(undefined)
-      }
+    // If user has a selected model and it's valid, keep it
+    if (selectedModel && validModelNames.includes(selectedModel)) {
+      return
+    }
+
+    // Selected model is invalid or doesn't exist - fall back to default
+    const apiDefaultName = (defaultModel as any)?.name
+    if (apiDefaultName && validModelNames.includes(apiDefaultName)) {
+      setSelectedModel(apiDefaultName)
+    } else if (
+      fallbackDefaultName &&
+      validModelNames.includes(fallbackDefaultName)
+    ) {
+      setSelectedModel(fallbackDefaultName)
+    } else if (validModelNames.length > 0) {
+      // Use first available model as last resort
+      setSelectedModel(validModelNames[0])
+    } else {
+      // No valid models available, clear selection
+      setSelectedModel(undefined)
     }
   }, [
     (defaultModel as any)?.name,
@@ -192,10 +201,7 @@ export default function TestChat({
     }
   }, [selectedModel, unifiedModels])
 
-  // Database selection management
-  const updateProjectMutation = useUpdateProject()
-
-  // Get current default database from config - using ref to avoid re-render issues
+  // Get current default database from config
   const getCurrentDatabase = useCallback(() => {
     try {
       const ragConfig = (projectDetail as any)?.project?.config?.rag
@@ -229,39 +235,36 @@ export default function TestChat({
     }
   }, [projectDetail])
 
-  // Handler to update default database in config
-  const handleDatabaseChange = useCallback(
-    async (newDatabase: string) => {
-      if (!chatParams?.namespace || !chatParams?.projectId || !newDatabase) {
-        return
-      }
+  // Selected database state - persisted to localStorage for UI preference
+  const [selectedDatabase, setSelectedDatabase] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('lf_testchat_selected_database')
+  })
 
-      try {
-        const currentConfig = (projectDetail as any)?.project?.config
-        if (!currentConfig) return
+  // Get the current database value for rendering - prefer UI selection, fall back to config default
+  const currentDatabase = selectedDatabase && availableDatabases.includes(selectedDatabase)
+    ? selectedDatabase
+    : getCurrentDatabase()
 
-        const updatedConfig = {
-          ...currentConfig,
-          rag: {
-            ...currentConfig.rag,
-            default_database: newDatabase,
-          },
-        }
+  // Validate and persist database selection
+  useEffect(() => {
+    // Don't validate until databases are loaded
+    if (availableDatabases.length === 0) {
+      return
+    }
 
-        await updateProjectMutation.mutateAsync({
-          namespace: chatParams.namespace,
-          projectId: chatParams.projectId,
-          request: { config: updatedConfig },
-        })
-      } catch (error) {
-        console.error('Failed to update default database:', error)
-      }
-    },
-    [chatParams, projectDetail, updateProjectMutation]
-  )
+    // If user has a selected database and it's valid, keep it
+    if (selectedDatabase && availableDatabases.includes(selectedDatabase)) {
+      localStorage.setItem('lf_testchat_selected_database', selectedDatabase)
+      return
+    }
 
-  // Get the current database value for rendering
-  const currentDatabase = getCurrentDatabase()
+    // Selected database is invalid - clear it and fall back to config default
+    if (selectedDatabase) {
+      setSelectedDatabase(null)
+      localStorage.removeItem('lf_testchat_selected_database')
+    }
+  }, [selectedDatabase, availableDatabases])
 
   // Get retrieval strategies for the current database
   const { availableStrategies, defaultStrategy } = useMemo(() => {
@@ -306,22 +309,39 @@ export default function TestChat({
     }
   }, [projectDetail, currentDatabase])
 
-  // Selected retrieval strategy state
-  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
+  // Selected retrieval strategy state - persisted to localStorage
+  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('lf_testchat_selected_strategy')
+  })
 
-  // Reset selected strategy to default when database changes or when strategies become available
+  // Validate and persist strategy selection
   useEffect(() => {
-    // Check if the current selection is still valid
-    const isValidSelection = availableStrategies.some(
-      (s: any) => s.name === selectedStrategy
-    )
-
-    // If the selection is not valid, reset it to the new default.
-    // This handles switching databases or config changes.
-    if (!isValidSelection) {
-      setSelectedStrategy(defaultStrategy)
+    // Don't validate until strategies are loaded
+    if (availableStrategies.length === 0) {
+      return
     }
-  }, [currentDatabase, defaultStrategy, availableStrategies])
+
+    const validStrategyNames = availableStrategies.map((s: any) => s.name)
+
+    // If user has a selected strategy and it's valid for current database, keep it
+    if (selectedStrategy && validStrategyNames.includes(selectedStrategy)) {
+      localStorage.setItem('lf_testchat_selected_strategy', selectedStrategy)
+      return
+    }
+
+    // Selected strategy is invalid or doesn't exist for this database - fall back to default
+    if (defaultStrategy) {
+      setSelectedStrategy(defaultStrategy)
+      localStorage.setItem('lf_testchat_selected_strategy', defaultStrategy)
+    } else if (validStrategyNames.length > 0) {
+      setSelectedStrategy(validStrategyNames[0])
+      localStorage.setItem('lf_testchat_selected_strategy', validStrategyNames[0])
+    } else {
+      setSelectedStrategy(null)
+      localStorage.removeItem('lf_testchat_selected_strategy')
+    }
+  }, [currentDatabase, defaultStrategy, availableStrategies, selectedStrategy])
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -1143,14 +1163,14 @@ export default function TestChat({
                   value={currentDatabase || ''}
                   onChange={e => {
                     const value = e.target.value
-                    if (value) handleDatabaseChange(value)
+                    if (value) setSelectedDatabase(value)
                   }}
                   className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
                 >
                   {availableDatabases.map((dbName: string) => (
                     <option key={dbName} value={dbName}>
-                      {dbName} {currentDatabase === dbName ? '(default)' : ''}
+                      {dbName} {dbName === getCurrentDatabase() ? '(default)' : ''}
                     </option>
                   ))}
                 </select>
