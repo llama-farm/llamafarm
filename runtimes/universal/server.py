@@ -115,9 +115,10 @@ app = FastAPI(
 )
 app.include_router(chat_completions_router)
 
-# Global model cache
-_models: dict[str, BaseModel] = {}
-_model_last_access: dict[str, datetime] = {}  # Track last access time for each model
+# Global model caches
+_models: dict[str, BaseModel] = {}  # General model cache (OCR, Document, Anomaly, etc.)
+_classifiers: dict[str, "ClassifierModel"] = {}  # Classifier model cache (SetFit)
+_model_last_access: dict[str, datetime] = {}  # Track last access time for ALL models
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -189,13 +190,29 @@ async def _cleanup_idle_models() -> None:
                             )
                             continue
 
+                        # Check both model caches (_models and _classifiers)
                         model = _models.get(cache_key)
+                        model_cache = "_models"
+                        if model is None:
+                            model = _classifiers.get(cache_key)
+                            model_cache = "_classifiers"
+
                         if model:
                             logger.info(f"Unloading idle model: {cache_key}")
                             await model.unload()
-                            del _models[cache_key]
+                            if model_cache == "_models":
+                                del _models[cache_key]
+                            else:
+                                del _classifiers[cache_key]
                             del _model_last_access[cache_key]
                             logger.info(f"Successfully unloaded: {cache_key}")
+                        else:
+                            # Model not found in any cache but was in _model_last_access
+                            # Clean up the orphaned access tracking entry
+                            logger.warning(
+                                f"Removing orphaned access tracking for: {cache_key}"
+                            )
+                            del _model_last_access[cache_key]
                     except Exception as e:
                         logger.error(
                             f"Error unloading model {cache_key}: {e}", exc_info=True
@@ -2037,9 +2054,6 @@ async def delete_anomaly_model(filename: str):
 
 # Classifier model storage directory
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
-
-# Classifier model cache (separate from _models to avoid conflicts)
-_classifiers: dict[str, "ClassifierModel"] = {}
 
 
 def _make_classifier_cache_key(model_name: str) -> str:
