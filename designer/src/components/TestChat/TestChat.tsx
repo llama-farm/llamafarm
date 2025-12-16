@@ -1300,7 +1300,7 @@ export function TestChatMessage({
   showReferences,
   allowRanking,
   showPrompts,
-  showThinking,
+  // showThinking - no longer used here; thinking is always shown if present in message
   lastUserInput,
   showGenSettings,
 }: TestChatMessageProps) {
@@ -1350,7 +1350,7 @@ export function TestChatMessage({
     }
   }, [thinkingFromTags, isThinkingInProgress])
 
-  // Remove raw <tool_call> XML tags from display (handled as separate messages)
+  // Remove raw XML tags from display
   if (isAssistant && typeof contentWithoutThinking === 'string') {
     // Remove complete tool_call blocks
     contentWithoutThinking = contentWithoutThinking.replace(
@@ -1367,6 +1367,12 @@ export function TestChatMessage({
       /<\/tool_call>/g,
       ''
     )
+    // Remove any remaining think tags (opening and closing)
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<think>[\s\S]*?<\/think>/g,
+      ''
+    )
+    contentWithoutThinking = contentWithoutThinking.replace(/<\/?think>/g, '')
     contentWithoutThinking = contentWithoutThinking.trim()
   }
 
@@ -1427,8 +1433,8 @@ export function TestChatMessage({
           </div>
         ) : (
           <>
-            {/* Thinking card - unified component */}
-            {showThinking && isAssistant && thinkingFromTags && (
+            {/* Thinking card - always show if message has thinking content (toggle only affects new messages) */}
+            {isAssistant && thinkingFromTags && (
               <div className={`mb-2 rounded-md border border-border bg-card/40 overflow-hidden ${isThinkingInProgress ? 'animate-pulse' : ''}`}>
                 <button
                   type="button"
@@ -1491,8 +1497,8 @@ export function TestChatMessage({
         )}
       </div>
 
-      {/* Assistant footer actions */}
-      {isAssistant && (
+      {/* Assistant footer actions - hidden during streaming */}
+      {isAssistant && !message.isStreaming && !message.isLoading && (
         <div className="mt-2 flex items-center gap-3 text-muted-foreground">
           {allowRanking && (
             <>
@@ -1694,8 +1700,8 @@ export function TestChatMessage({
           </div>
         )}
 
+      {/* Metadata thinking - always show if exists (toggle only affects new messages) */}
       {isAssistant &&
-        showThinking &&
         Array.isArray(message.metadata?.thinking) && (
           <div className="mt-2 rounded-md border border-border bg-card/40 overflow-hidden">
             <button
