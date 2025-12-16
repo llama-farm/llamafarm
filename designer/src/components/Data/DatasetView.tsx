@@ -2916,6 +2916,7 @@ function DatasetView() {
                                             f.fullHash &&
                                             handleReprocessFile(f.fullHash)
                                           }
+                                          disabled={isReprocessing || !!currentTaskId}
                                         >
                                           Reprocess
                                         </DropdownMenuItem>

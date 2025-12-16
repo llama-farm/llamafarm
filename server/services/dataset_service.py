@@ -454,6 +454,7 @@ class DatasetService:
 
         total_deleted = 0
         files_cleared = 0
+        files_failed = 0
         project_dir = ProjectService.get_project_dir(namespace, project)
 
         for file_info in files:
@@ -467,7 +468,17 @@ class DatasetService:
                 file_hash=file_hash,
             )
 
-            if result.get("status") != "error":
+            if result.get("status") == "error":
+                files_failed += 1
+                logger.warning(
+                    "Failed to delete chunks for file",
+                    namespace=namespace,
+                    project=project,
+                    dataset=dataset,
+                    file_hash=file_hash[:16] + "...",
+                    error=result.get("error"),
+                )
+            else:
                 total_deleted += result.get("deleted_count", 0)
                 files_cleared += 1
 
@@ -478,9 +489,14 @@ class DatasetService:
             dataset=dataset,
             total_deleted=total_deleted,
             files_cleared=files_cleared,
+            files_failed=files_failed,
         )
 
-        return {"deleted_count": total_deleted, "files_cleared": files_cleared}
+        return {
+            "deleted_count": total_deleted,
+            "files_cleared": files_cleared,
+            "files_failed": files_failed,
+        }
 
     @classmethod
     def start_dataset_ingestion(
