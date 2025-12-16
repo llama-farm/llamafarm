@@ -469,7 +469,50 @@ export default function TestChat({
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const lastUserInputRef = useRef<string>('')
-  const userJustSentRef = useRef<boolean>(false)
+  const rafRef = useRef<number | null>(null)
+
+  // Sticky scroll state (matching Chatbox pattern)
+  const BOTTOM_THRESHOLD = 24 // pixels from bottom to consider "at bottom"
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
+  const [wantsAutoScroll, setWantsAutoScroll] = useState(true)
+
+  // Check if user is at bottom of scroll container
+  const checkIfAtBottom = useCallback(() => {
+    if (!listRef.current) return false
+    const { scrollTop, scrollHeight, clientHeight } = listRef.current
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+    return distanceFromBottom <= BOTTOM_THRESHOLD
+  }, [])
+
+  // Handle scroll events with RAF debouncing
+  const handleScroll = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+    }
+
+    rafRef.current = requestAnimationFrame(() => {
+      const atBottom = checkIfAtBottom()
+      setIsUserAtBottom(atBottom)
+
+      if (atBottom) {
+        setWantsAutoScroll(true)
+      } else {
+        setWantsAutoScroll(false)
+      }
+    })
+  }, [checkIfAtBottom])
+
+  // Jump to latest handler
+  const handleJumpToLatest = useCallback(() => {
+    if (listRef.current) {
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
+      setWantsAutoScroll(true)
+      setIsUserAtBottom(true)
+    }
+  }, [])
 
   // Auto-grow textarea up to a comfortable max height before scrolling
   const resizeTextarea = useCallback(() => {
@@ -482,33 +525,44 @@ export default function TestChat({
     el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
   }, [])
 
+  // RAF cleanup on unmount
   useEffect(() => {
-    const container = listRef.current
-
-    // If user just sent a message, always scroll and keep scrolling with output
-    // Otherwise, only scroll if already near the bottom
-    if (userJustSentRef.current) {
-      // Keep the flag true while streaming continues, reset when near bottom
-      if (container) {
-        const isNearBottom =
-          container.scrollHeight - container.scrollTop - container.clientHeight < 150
-        if (isNearBottom) {
-          // We've caught up, can reset the flag
-          userJustSentRef.current = false
-        }
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
       }
-    } else if (container) {
-      const isNearBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight < 150
-      if (!isNearBottom) return
+    }
+  }, [])
+
+  // Handle window resize - recompute scroll position (matching Chatbox)
+  useEffect(() => {
+    const handleResize = () => {
+      // Recompute if we're at bottom after resize
+      const atBottom = checkIfAtBottom()
+      setIsUserAtBottom(atBottom)
+
+      // If we were wanting to auto-scroll and we're now at bottom, maintain that
+      if (wantsAutoScroll && atBottom && listRef.current) {
+        listRef.current.scrollTo({
+          top: listRef.current.scrollHeight,
+          behavior: 'auto',
+        })
+      }
     }
 
-    if (endRef.current) {
-      endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    } else if (container) {
-      container.scrollTop = container.scrollHeight
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [checkIfAtBottom, wantsAutoScroll])
+
+  // Auto-scroll when messages change (only if user wants it)
+  useEffect(() => {
+    if (wantsAutoScroll && listRef.current) {
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: 'auto', // 'auto' prevents jank during streaming
+      })
     }
-  }, [messages])
+  }, [messages, wantsAutoScroll])
 
   // Resize textarea on mount and input changes
   useEffect(() => {
@@ -547,8 +601,9 @@ export default function TestChat({
       return
     }
 
-    // Flag that user just sent - scroll should follow the response
-    userJustSentRef.current = true
+    // Re-enable auto-scroll when sending a message
+    setWantsAutoScroll(true)
+    setIsUserAtBottom(true)
 
     if (MOCK_MODE) {
       // Local-only optimistic flow without backend
@@ -865,6 +920,10 @@ export default function TestChat({
         return
       }
 
+      // Re-enable auto-scroll when running a test
+      setWantsAutoScroll(true)
+      setIsUserAtBottom(true)
+
       try {
         // Add test input message to project session
         const userMessage = input || '(no input provided)'
@@ -1140,20 +1199,18 @@ export default function TestChat({
         </div>
       )}
 
-      {/* Messages */}
-      <div
-        ref={listRef}
-        className={
-          !hasMessages
-            ? 'flex-1 overflow-hidden p-3 md:p-4 relative'
-            : 'flex-1 overflow-y-auto p-3 md:p-4 relative'
-        }
-      >
-        {!hasMessages ? (
-          <EmptyState />
-        ) : (
-          <div className="flex flex-col gap-4 min-h-full pb-80">
-            {messages.map((m: ChatboxMessage) => (
+      {/* Messages - wrapper with relative positioning for button (matching Chatbox) */}
+      <div className="relative flex-1 min-h-0">
+        {/* Scrollable message container - always overflow-y-auto like Chatbox */}
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          className="absolute inset-0 overflow-y-auto flex flex-col gap-4 p-3 md:p-4"
+        >
+          {!hasMessages ? (
+            <EmptyState />
+          ) : (
+            messages.map((m: ChatboxMessage) => (
               <TestChatMessage
                 key={m.id}
                 message={m}
@@ -1164,9 +1221,31 @@ export default function TestChat({
                 lastUserInput={lastUserInputRef.current}
                 showGenSettings={showGenSettings}
               />
-            ))}
-            <div ref={endRef} />
-          </div>
+            ))
+          )}
+          <div ref={endRef} />
+        </div>
+        {/* Jump to latest button - positioned outside scroll container */}
+        {!isUserAtBottom && hasMessages && (
+          <button
+            onClick={handleJumpToLatest}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-2 rounded-full bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg transition-all hover:shadow-xl"
+            aria-label="Jump to latest message"
+          >
+            <span className="text-sm font-medium">Jump to latest</span>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="7 13 12 18 17 13" />
+              <polyline points="7 6 12 11 17 6" />
+            </svg>
+          </button>
         )}
       </div>
 
@@ -1414,7 +1493,7 @@ export function TestChatMessage({
 
       {/* Assistant footer actions */}
       {isAssistant && (
-        <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+        <div className="mt-2 flex items-center gap-3 text-muted-foreground">
           {allowRanking && (
             <>
               <ThumbButton
@@ -1436,11 +1515,8 @@ export function TestChatMessage({
                   }
                 }}
               />
-              <span className="mx-1 opacity-40">•</span>
             </>
           )}
-          {/* Copy button removed */}
-          <span className="opacity-40">•</span>
           <ActionLink
             label="Diagnose"
             className={
@@ -1462,7 +1538,6 @@ export function TestChatMessage({
               )
             }}
           />
-          <span className="opacity-40">/</span>
           <ActionLink
             label="Retry"
             onClick={() =>
@@ -1471,7 +1546,6 @@ export function TestChatMessage({
               )
             }
           />
-          <span className="opacity-40">/</span>
           <ActionLink
             label="Use as prompt"
             onClick={() =>
