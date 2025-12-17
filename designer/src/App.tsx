@@ -27,6 +27,8 @@ import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
 import Models from './components/Models/Models'
 import AddInferenceModels from './components/Models/AddInferenceModels'
+import AnomalyModel from './components/Models/AnomalyModel'
+import ClassifierModel from './components/Models/ClassifierModel'
 import Databases from './components/Rag/Databases'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
@@ -179,6 +181,10 @@ function AppContent() {
                         />
                         <Route path="models" element={<Models />} />
                         <Route path="models/add" element={<AddInferenceModels />} />
+                        <Route path="models/train/anomaly/new" element={<AnomalyModel />} />
+                        <Route path="models/train/anomaly/:id" element={<AnomalyModel />} />
+                        <Route path="models/train/classifier/new" element={<ClassifierModel />} />
+                        <Route path="models/train/classifier/:id" element={<ClassifierModel />} />
                         {/* Redirect old /rag routes to /databases */}
                         <Route
                           path="rag"

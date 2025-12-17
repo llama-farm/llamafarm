@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -56,6 +56,7 @@ import {
 } from './modelConstants'
 import type { InferenceModel, ModelStatus } from './types'
 import { CloudModelsForm } from './CloudModelsForm'
+import TrainedModels from './TrainedModels'
 
 interface TabBarProps {
   activeTab: string
@@ -2301,16 +2302,6 @@ export function AddOrChangeModels({
   )
 }
 
-function TrainingData() {
-  return (
-    <div className="rounded-xl border border-border bg-card p-10 flex items-center justify-center">
-      <div className="text-sm text-muted-foreground">
-        Training data features coming soon.
-      </div>
-    </div>
-  )
-}
-
 const Models = () => {
   const navigate = useNavigate()
   const activeProject = useActiveProject()
@@ -2321,7 +2312,9 @@ const Models = () => {
   )
   const updateProject = useUpdateProject()
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState('project')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab') === 'training' ? 'training' : 'project'
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -2827,7 +2820,7 @@ const Models = () => {
             onChange={setActiveTab}
             tabs={[
               { id: 'project', label: 'Inference models' },
-              { id: 'training', label: 'Trainable models' },
+              { id: 'training', label: 'Trained models' },
             ]}
           />
 
@@ -2877,7 +2870,7 @@ const Models = () => {
               />
               </>
             ))}
-          {activeTab === 'training' && <TrainingData />}
+          {activeTab === 'training' && <TrainedModels />}
         </>
       )}
 
