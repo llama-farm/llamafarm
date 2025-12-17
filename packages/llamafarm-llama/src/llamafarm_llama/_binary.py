@@ -394,18 +394,28 @@ def download_binary(
 def _copy_dependencies(src_dir: Path, dest_dir: Path):
     """Copy additional runtime dependencies (ggml libs, CUDA libs, etc.)."""
     lib_name = _get_lib_name()
+    system = platform.system().lower()
 
-    # For versioned libraries (e.g., libggml-base.0.9.4.dylib), copy the actual
-    # versioned file, not the symlinks
+    # For versioned libraries, copy the actual versioned file, not the symlinks
+    # Note: Linux uses libfoo.so.0.0.0 format, macOS uses libfoo.0.0.0.dylib
     patterns = [
         "*.dll",
-        "libggml*.so*",
-        "libggml*.*.*.*dylib",  # Versioned dylibs
-        "libcublas*.so*",
-        "libcudart*.so*",
-        "libcublasLt*.so*",
         "*.metal",  # Metal shader source (required for macOS GPU acceleration)
     ]
+
+    if system == "darwin":
+        # macOS: version before extension (libggml.0.0.0.dylib)
+        patterns.extend([
+            "libggml*.*.*.*dylib",
+        ])
+    else:
+        # Linux: version after extension (libggml.so.0.0.0)
+        patterns.extend([
+            "libggml*.so.*",
+            "libcublas*.so.*",
+            "libcudart*.so.*",
+            "libcublasLt*.so.*",
+        ])
 
     for pattern in patterns:
         for f in src_dir.rglob(pattern):
@@ -425,34 +435,57 @@ def _copy_dependencies(src_dir: Path, dest_dir: Path):
 def _create_version_symlinks(dest_dir: Path):
     """Create symlinks for versioned libraries.
 
-    Newer llama.cpp releases use versioned libraries like libggml.0.9.4.dylib
-    with symlinks libggml.0.dylib -> libggml.0.9.4.dylib and
-    libggml.dylib -> libggml.0.dylib. We need to recreate these symlinks.
+    Newer llama.cpp releases use versioned libraries:
+    - macOS: libggml.0.9.4.dylib with symlinks libggml.0.dylib -> libggml.0.9.4.dylib
+    - Linux: libggml.so.0.9.4 with symlinks libggml.so.0 -> libggml.so.0.9.4
+
+    We need to recreate these symlinks.
     """
     import re
 
-    # Find all versioned libraries (e.g., libggml.0.9.4.dylib, libggml-base.0.9.4.dylib)
-    ext = ".dylib" if platform.system().lower() == "darwin" else ".so"
+    system = platform.system().lower()
 
-    for lib_file in dest_dir.glob(f"*{ext}"):
-        # Match pattern like libggml.0.9.4.dylib or libggml-base.0.9.4.dylib
-        match = re.match(r"^(lib[\w-]+)\.(\d+)\.(\d+)\.(\d+)(\.dylib|\.so)$", lib_file.name)
-        if match:
-            base_name = match.group(1)  # e.g., "libggml" or "libggml-base"
-            major = match.group(2)  # e.g., "0"
-            ext_part = match.group(5)  # e.g., ".dylib"
+    if system == "darwin":
+        # macOS: libfoo.MAJOR.MINOR.PATCH.dylib
+        for lib_file in dest_dir.glob("*.dylib"):
+            match = re.match(r"^(lib[\w-]+)\.(\d+)\.(\d+)\.(\d+)\.dylib$", lib_file.name)
+            if match:
+                base_name = match.group(1)  # e.g., "libggml" or "libggml-base"
+                major = match.group(2)  # e.g., "0"
 
-            # Create libggml.0.dylib -> libggml.0.9.4.dylib
-            major_symlink = dest_dir / f"{base_name}.{major}{ext_part}"
-            if not major_symlink.exists():
-                major_symlink.symlink_to(lib_file.name)
-                logger.debug(f"Created symlink: {major_symlink.name} -> {lib_file.name}")
+                # Create libggml.0.dylib -> libggml.0.9.4.dylib
+                major_symlink = dest_dir / f"{base_name}.{major}.dylib"
+                if not major_symlink.exists():
+                    major_symlink.symlink_to(lib_file.name)
+                    logger.debug(f"Created symlink: {major_symlink.name} -> {lib_file.name}")
 
-            # Create libggml.dylib -> libggml.0.dylib
-            base_symlink = dest_dir / f"{base_name}{ext_part}"
-            if not base_symlink.exists():
-                base_symlink.symlink_to(major_symlink.name)
-                logger.debug(f"Created symlink: {base_symlink.name} -> {major_symlink.name}")
+                # Create libggml.dylib -> libggml.0.dylib
+                base_symlink = dest_dir / f"{base_name}.dylib"
+                if not base_symlink.exists():
+                    base_symlink.symlink_to(major_symlink.name)
+                    logger.debug(f"Created symlink: {base_symlink.name} -> {major_symlink.name}")
+    else:
+        # Linux: libfoo.so.MAJOR.MINOR.PATCH
+        for lib_file in dest_dir.iterdir():
+            if not lib_file.is_file():
+                continue
+            # Match libggml.so.0.0.0 or libggml-base.so.0.0.0
+            match = re.match(r"^(lib[\w-]+)\.so\.(\d+)\.(\d+)\.(\d+)$", lib_file.name)
+            if match:
+                base_name = match.group(1)  # e.g., "libggml" or "libggml-base"
+                major = match.group(2)  # e.g., "0"
+
+                # Create libggml.so.0 -> libggml.so.0.0.0
+                major_symlink = dest_dir / f"{base_name}.so.{major}"
+                if not major_symlink.exists():
+                    major_symlink.symlink_to(lib_file.name)
+                    logger.debug(f"Created symlink: {major_symlink.name} -> {lib_file.name}")
+
+                # Create libggml.so -> libggml.so.0
+                base_symlink = dest_dir / f"{base_name}.so"
+                if not base_symlink.exists():
+                    base_symlink.symlink_to(major_symlink.name)
+                    logger.debug(f"Created symlink: {base_symlink.name} -> {major_symlink.name}")
 
 
 def clear_cache():

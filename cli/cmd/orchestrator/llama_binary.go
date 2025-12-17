@@ -254,19 +254,21 @@ func extractDependencies(archivePath, destDir string) error {
 	}
 	defer r.Close()
 
-	// Determine which file extensions to look for based on platform
+	// Determine which file patterns to look for based on platform
 	var mainLib string
-	var extensions []string
+	var patterns []string
 	switch runtime.GOOS {
 	case "windows":
 		mainLib = "llama.dll"
-		extensions = []string{".dll"}
+		patterns = []string{".dll"}
 	case "darwin":
 		mainLib = "libllama.dylib"
-		extensions = []string{".dylib", ".metal"} // Include metal shader files
+		// macOS: version before extension (libggml.0.0.0.dylib)
+		patterns = []string{".dylib", ".metal"}
 	default: // Linux
 		mainLib = "libllama.so"
-		extensions = []string{".so"}
+		// Linux: version after extension (libggml.so.0.0.0)
+		patterns = []string{".so."}
 	}
 
 	extractedCount := 0
@@ -286,13 +288,13 @@ func extractDependencies(archivePath, destDir string) error {
 
 		// Check if this is a dependency file we should extract
 		shouldExtract := false
-		for _, ext := range extensions {
-			if strings.Contains(nameLower, ext) {
+		for _, pattern := range patterns {
+			if strings.Contains(nameLower, pattern) {
 				// Skip the main library (already extracted via extractZip)
 				if nameLower == strings.ToLower(mainLib) {
 					continue
 				}
-				// For versioned libraries like libllama.0.0.7376.dylib, skip those too
+				// For versioned libraries like libllama.0.0.7376.dylib or libllama.so.0.0.0, skip those too
 				if strings.HasPrefix(nameLower, "libllama.") || strings.HasPrefix(nameLower, "llama.") {
 					continue
 				}
@@ -361,77 +363,105 @@ func extractDependencies(archivePath, destDir string) error {
 }
 
 // createDependencySymlinks creates symlinks for versioned libraries
-// e.g., libggml.0.dylib -> libggml.0.0.0.dylib, libggml.dylib -> libggml.0.dylib
+// macOS: libggml.0.0.0.dylib -> libggml.0.dylib -> libggml.dylib
+// Linux: libggml.so.0.0.0 -> libggml.so.0 -> libggml.so
 func createDependencySymlinks(destDir string) error {
 	entries, err := os.ReadDir(destDir)
 	if err != nil {
 		return err
 	}
 
-	// Find versioned libraries and create symlinks
-	// Pattern: libXXX.MAJOR.MINOR.PATCH.dylib or libXXX.MAJOR.MINOR.PATCH.so
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
 
-		// Match versioned library pattern: libfoo.0.0.0.dylib or libfoo.0.0.0.so
-		// We need to create libfoo.0.dylib -> libfoo.0.0.0.dylib and libfoo.dylib -> libfoo.0.dylib
-		var ext string
-		if strings.HasSuffix(name, ".dylib") {
-			ext = ".dylib"
-		} else if strings.Contains(name, ".so") {
-			// Handle .so.0.0.0 pattern
-			ext = ".so"
+		if runtime.GOOS == "darwin" {
+			// macOS: libfoo.MAJOR.MINOR.PATCH.dylib
+			if !strings.HasSuffix(name, ".dylib") {
+				continue
+			}
+
+			// Check if this looks like a versioned library (has version numbers before .dylib)
+			// e.g., libggml-base.0.0.0.dylib or libggml.0.0.0.dylib
+			parts := strings.Split(name, ".")
+			if len(parts) < 5 { // libggml.0.0.0.dylib = 5 parts
+				continue
+			}
+
+			// Find the base name (everything before the version numbers)
+			baseName := ""
+			versionStart := -1
+			for i, part := range parts {
+				if _, err := fmt.Sscanf(part, "%d", new(int)); err == nil {
+					versionStart = i
+					break
+				}
+				if baseName != "" {
+					baseName += "."
+				}
+				baseName += part
+			}
+
+			if versionStart < 0 || baseName == "" {
+				continue
+			}
+
+			majorVersion := parts[versionStart]
+
+			// Create libfoo.0.dylib -> libfoo.0.0.0.dylib
+			majorSymlink := filepath.Join(destDir, fmt.Sprintf("%s.%s.dylib", baseName, majorVersion))
+			if _, err := os.Lstat(majorSymlink); os.IsNotExist(err) {
+				if err := os.Symlink(name, majorSymlink); err == nil {
+					utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(majorSymlink), name))
+				}
+			}
+
+			// Create libfoo.dylib -> libfoo.0.dylib
+			baseSymlink := filepath.Join(destDir, fmt.Sprintf("%s.dylib", baseName))
+			if _, err := os.Lstat(baseSymlink); os.IsNotExist(err) {
+				majorName := filepath.Base(majorSymlink)
+				if err := os.Symlink(majorName, baseSymlink); err == nil {
+					utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(baseSymlink), majorName))
+				}
+			}
 		} else {
-			continue
-		}
-
-		// Check if this looks like a versioned library (has multiple dots before extension)
-		// e.g., libggml-base.0.0.0.dylib or libggml.0.0.0.dylib
-		parts := strings.Split(name, ".")
-		if len(parts) < 4 {
-			continue
-		}
-
-		// Find the base name (everything before the version numbers)
-		// libggml-base.0.0.0.dylib -> libggml-base
-		// libggml.0.0.0.dylib -> libggml
-		baseName := ""
-		versionStart := -1
-		for i, part := range parts {
-			if _, err := fmt.Sscanf(part, "%d", new(int)); err == nil {
-				versionStart = i
-				break
+			// Linux: libfoo.so.MAJOR.MINOR.PATCH
+			if !strings.Contains(name, ".so.") {
+				continue
 			}
-			if baseName != "" {
-				baseName += "."
+
+			// Parse libggml.so.0.0.0 or libggml-base.so.0.0.0
+			soIndex := strings.Index(name, ".so.")
+			if soIndex < 0 {
+				continue
 			}
-			baseName += part
-		}
 
-		if versionStart < 0 || baseName == "" {
-			continue
-		}
-
-		// Get major version
-		majorVersion := parts[versionStart]
-
-		// Create libfoo.0.dylib -> libfoo.0.0.0.dylib (or .so)
-		majorSymlink := filepath.Join(destDir, fmt.Sprintf("%s.%s%s", baseName, majorVersion, ext))
-		if _, err := os.Lstat(majorSymlink); os.IsNotExist(err) {
-			if err := os.Symlink(name, majorSymlink); err == nil {
-				utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(majorSymlink), name))
+			baseName := name[:soIndex]        // libggml or libggml-base
+			versionPart := name[soIndex+4:]   // 0.0.0
+			versionParts := strings.Split(versionPart, ".")
+			if len(versionParts) < 1 {
+				continue
 			}
-		}
 
-		// Create libfoo.dylib -> libfoo.0.dylib (or .so)
-		baseSymlink := filepath.Join(destDir, fmt.Sprintf("%s%s", baseName, ext))
-		if _, err := os.Lstat(baseSymlink); os.IsNotExist(err) {
-			majorName := filepath.Base(majorSymlink)
-			if err := os.Symlink(majorName, baseSymlink); err == nil {
-				utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(baseSymlink), majorName))
+			majorVersion := versionParts[0]
+
+			// Create libfoo.so.0 -> libfoo.so.0.0.0
+			majorSymlink := filepath.Join(destDir, fmt.Sprintf("%s.so.%s", baseName, majorVersion))
+			if _, err := os.Lstat(majorSymlink); os.IsNotExist(err) {
+				if err := os.Symlink(name, majorSymlink); err == nil {
+					utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(majorSymlink), name))
+				}
+			}
+
+			// Create libfoo.so -> libfoo.so.0
+			baseSymlink := filepath.Join(destDir, fmt.Sprintf("%s.so", baseName))
+			if _, err := os.Lstat(baseSymlink); os.IsNotExist(err) {
+				majorName := filepath.Base(majorSymlink)
+				if err := os.Symlink(majorName, baseSymlink); err == nil {
+					utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(baseSymlink), majorName))
+				}
 			}
 		}
 	}
