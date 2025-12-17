@@ -112,11 +112,22 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Create non-streaming request
         stream_param: Literal[False] = False
-        # Filter out None values from messages to avoid OpenAI validation errors
+
+        # Filter out None, empty strings, and empty arrays from messages to avoid OpenAI validation errors
+        # OpenAI rejects:
+        # - empty strings for 'name': "Expected a string with minimum length 1"
+        # - empty arrays for 'tool_calls': "Expected an array with minimum length 1"
+        def _is_valid_value(v: Any) -> bool:
+            if v is None:
+                return False
+            if v == "":
+                return False
+            return not (isinstance(v, list) and len(v) == 0)
+
         cleaned_messages = [
             cast(
                 LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if v is not None},
+                {k: v for k, v in msg.items() if _is_valid_value(v)},
             )
             for msg in messages
         ]
