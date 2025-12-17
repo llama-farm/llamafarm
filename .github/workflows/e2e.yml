@@ -281,6 +281,27 @@ jobs:
             END_TIME=$(date +%s)
             DURATION=$((END_TIME - START_TIME))
             echo ""
+
+            # Check that the response isn't a fallback/error response
+            # These patterns indicate the model failed to load but we got an error echo back
+            RESPONSE=$(cat /tmp/prewarm.log)
+            if echo "$RESPONSE" | grep -qi "I notice my previous response"; then
+              echo "❌ Model pre-warming failed - got fallback error response!"
+              echo "Response indicates model loading failed."
+              echo ""
+              echo "Full response:"
+              echo "$RESPONSE"
+              exit 1
+            fi
+
+            if echo "$RESPONSE" | grep -qi "error loading model\|failed to load model\|no backends are loaded"; then
+              echo "❌ Model pre-warming failed - error detected in response!"
+              echo ""
+              echo "Full response:"
+              echo "$RESPONSE"
+              exit 1
+            fi
+
             echo "✓ Models successfully pre-warmed in ${DURATION}s"
           else
             echo ""

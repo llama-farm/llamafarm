@@ -203,6 +203,10 @@ LLAMA_CDEF = """
     void llama_backend_init(void);
     void llama_backend_free(void);
 
+    // GGML backend loading (required for llama.cpp b7376+)
+    // Must be called after llama_backend_init() to load compute backends (CPU, CUDA, Metal, etc.)
+    void ggml_backend_load_all(void);
+
     // NUMA initialization
     void llama_numa_init(int32_t numa);
 
@@ -399,9 +403,11 @@ def _load_library():
     lib_dir = lib_path.parent
     logger.debug(f"Loading llama.cpp library from: {lib_path}")
 
+    system = platform.system()
+
     # On macOS, set GGML_METAL_PATH_RESOURCES so Metal backend can find shaders
     # The ggml-metal.metal shader file must be in the same directory as the library
-    if platform.system() == "Darwin":
+    if system == "Darwin":
         metal_shader = lib_dir / "ggml-metal.metal"
         if metal_shader.exists():
             os.environ["GGML_METAL_PATH_RESOURCES"] = str(lib_dir)
@@ -410,6 +416,30 @@ def _load_library():
             logger.warning(
                 f"Metal shader not found at {metal_shader}. GPU acceleration may not work."
             )
+
+    # On Windows, add the library directory to DLL search path so that
+    # ggml_backend_load_all() can find backend DLLs (ggml-cpu.dll, etc.)
+    if system == "Windows":
+        # Use add_dll_directory for Python 3.8+ (recommended method)
+        try:
+            os.add_dll_directory(str(lib_dir))
+            logger.debug(f"Added DLL directory: {lib_dir}")
+        except AttributeError:
+            pass  # Python < 3.8, fall back to PATH modification
+
+        # Also add to PATH as fallback (needed for some DLL loading scenarios)
+        path = os.environ.get("PATH", "")
+        if str(lib_dir) not in path:
+            os.environ["PATH"] = f"{lib_dir};{path}" if path else str(lib_dir)
+            logger.debug(f"Added to PATH: {lib_dir}")
+
+    # On Linux, set LD_LIBRARY_PATH to include the library directory
+    # so ggml_backend_load_all() can find backend .so files
+    if system == "Linux":
+        ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+        if str(lib_dir) not in ld_path:
+            os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{ld_path}" if ld_path else str(lib_dir)
+            logger.debug(f"Updated LD_LIBRARY_PATH to include: {lib_dir}")
 
     try:
         lib = ffi.dlopen(str(lib_path))
@@ -502,6 +532,12 @@ def init_backend():
 
     lib.llama_backend_init()
     logger.debug("llama.cpp backend initialized")
+
+    # Load all available compute backends (CPU, CUDA, Metal, Vulkan, etc.)
+    # Required for llama.cpp b7376+ - without this, model loading fails with
+    # "no backends are loaded" error
+    lib.ggml_backend_load_all()
+    logger.debug("GGML backends loaded")
 
 
 def free_backend():
