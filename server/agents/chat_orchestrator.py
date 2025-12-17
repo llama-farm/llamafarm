@@ -39,6 +39,7 @@ from core.mcp_registry import register_mcp_service
 from services.mcp_service import MCPService
 from services.model_service import ModelService
 from services.prompt_service import PromptService  # type: ignore  # type: ignore
+from services.prompt_variable_service import PromptVariableService
 from services.runtime_service.runtime_service import RuntimeService
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
@@ -61,6 +62,7 @@ class ChatOrchestratorAgent(LFAgent):
     _mcp_service: MCPService | None = None
     _mcp_tool_factory: MCPToolFactory | None = None
     _mcp_tools: list[type[BaseTool]] = []
+    _prompt_variables: dict[str, str] | None = None
 
     def __init__(
         self,
@@ -68,11 +70,13 @@ class ChatOrchestratorAgent(LFAgent):
         project_config: LlamaFarmConfig,
         project_dir: str,
         model_name: str | None = None,
+        prompt_variables: dict[str, str] | None = None,
     ):
         self._project_config = project_config
         self._project_dir = project_dir
         self._session_id = None
         self._persist_enabled = False
+        self._prompt_variables = prompt_variables
 
         # Get the model config - if model_name is None, get_model returns the default
         model_config = ModelService.get_model(project_config, model_name)
@@ -87,7 +91,9 @@ class ChatOrchestratorAgent(LFAgent):
         client = provider.get_client()
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
-            prompts=self._get_prompt_messages_for_model(model_config.name)
+            prompts=self._get_prompt_messages_for_model(
+                model_config.name, prompt_variables
+            )
         )
         config = LFAgentConfig(
             history=history,
@@ -549,7 +555,10 @@ class ChatOrchestratorAgent(LFAgent):
     def _populate_history_with_non_system_prompts(
         self, history: LFAgentHistory, project_config: LlamaFarmConfig
     ):
-        prompts = self._get_prompt_messages_for_model(self.model_name)
+        # Use stored prompt_variables for history population
+        prompts = self._get_prompt_messages_for_model(
+            self.model_name, self._prompt_variables
+        )
         for prompt in prompts:
             # Only add non-system prompts to the history
             if prompt.get("role") != "system":
@@ -561,7 +570,9 @@ class ChatOrchestratorAgent(LFAgent):
         return history
 
     def _get_prompt_messages_for_model(
-        self, model_name: str
+        self,
+        model_name: str,
+        request_variables: dict[str, str] | None = None,
     ) -> list[LFChatCompletionMessageParam]:
         model_config = ModelService.get_model(self._project_config, model_name)
         provider = RuntimeService.get_provider(model_config)
@@ -571,9 +582,24 @@ class ChatOrchestratorAgent(LFAgent):
             self._project_config, model_config
         )
 
+        # Convert to dicts for variable substitution
+        message_dicts = [msg.model_dump() for msg in messages]
+
+        # Apply prompt variable substitution
+        # Priority: request_variables > model config prompt_variables
+        model_defaults = model_config.prompt_variables
+        substituted = PromptVariableService.substitute_messages(
+            message_dicts, model_defaults, request_variables
+        )
+
+        # Convert back to PromptMessage for the client transformation
+        from config.datamodel import PromptMessage
+
+        prompt_messages = [PromptMessage(**msg) for msg in substituted]
+
         return [
             ClientClass.prompt_message_to_chat_completion_message(message)
-            for message in messages
+            for message in prompt_messages
         ]
 
     @property
@@ -642,11 +668,13 @@ class ChatOrchestratorAgentFactory:
         session_id: str | None = None,
         active_project_namespace: str | None = None,
         active_project_name: str | None = None,
+        prompt_variables: dict[str, str] | None = None,
     ) -> LFAgent:
         agent = ChatOrchestratorAgent(
             project_config=project_config,
             project_dir=project_dir,
             model_name=model_name,
+            prompt_variables=prompt_variables,
         )
         if session_id:
             agent.enable_persistence(session_id=session_id)

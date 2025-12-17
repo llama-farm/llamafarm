@@ -200,6 +200,69 @@ properties:
               items:
                 $ref: "#/definitions/Tool"
               default: []
+            prompt_variables:
+              type: object
+              description: |
+                Default values for prompt template variables.
+                Variables in prompts use {{variable_name}} syntax (e.g., "You are {{persona}}").
+                These defaults can be overridden per-request via the prompt_variables parameter.
+              additionalProperties:
+                type: string
+            chat_defaults:
+              type: object
+              description: |
+                Default chat parameters for this model.
+                These are applied to all chat/completions requests unless overridden in the request.
+                Useful for setting model-specific defaults like temperature, RAG settings, or thinking mode.
+              properties:
+                temperature:
+                  type: number
+                  minimum: 0
+                  maximum: 2
+                  description: Sampling temperature (0-2). Lower = more deterministic.
+                top_p:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  description: Nucleus sampling threshold (0-1).
+                max_tokens:
+                  type: integer
+                  minimum: 1
+                  description: Maximum tokens to generate.
+                rag_enabled:
+                  type: boolean
+                  description: Enable RAG (retrieval-augmented generation) by default.
+                database:
+                  type: string
+                  description: Default RAG database name.
+                rag_retrieval_strategy:
+                  type: string
+                  description: Default retrieval strategy name.
+                rag_top_k:
+                  type: integer
+                  minimum: 1
+                  description: Default number of chunks to retrieve.
+                rag_score_threshold:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  description: Minimum similarity score for RAG results.
+                rag_queries:
+                  type: array
+                  items:
+                    type: string
+                  description: Default custom RAG queries.
+                think:
+                  type: boolean
+                  description: Enable thinking/reasoning mode by default.
+                thinking_budget:
+                  type: integer
+                  minimum: 1
+                  description: Default thinking token budget.
+                n_ctx:
+                  type: integer
+                  minimum: 1
+                  description: Default context window size (GGUF models).
 
   mcp:
     type: object

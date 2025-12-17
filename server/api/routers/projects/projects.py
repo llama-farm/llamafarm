@@ -30,7 +30,9 @@ from api.routers.shared.response_utils import (
 )
 from core.celery import app
 from core.settings import settings
+from services.chat_defaults_service import ChatDefaultsService
 from services.docs_context_service import get_docs_service
+from services.model_service import ModelService
 from services.project_chat_service import (
     FALLBACK_ECHO_RESPONSE,
     project_chat_service,
@@ -434,6 +436,14 @@ class ChatRequest(BaseModel):
     # max_tokens is used for the final answer, thinking_budget is additional
     thinking_budget: int | None = None
 
+    # Prompt template variables
+    # Variables in prompts use {{variable_name}} syntax
+    # These override model-level prompt_variables defaults
+    prompt_variables: dict[str, str] | None = Field(
+        default=None,
+        description="Variables to substitute in prompt templates. Overrides model defaults.",
+    )
+
 
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
@@ -450,6 +460,28 @@ async def chat(
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
+
+    # Get model config to access chat_defaults
+    model_config = ModelService.get_model(project_config, request.model)
+
+    # Resolve chat parameters: merge model defaults with request parameters
+    resolved_params = ChatDefaultsService.resolve(
+        model_defaults=model_config.chat_defaults,
+        request_params={
+            "temperature": request.temperature,
+            "top_p": request.top_p,
+            "max_tokens": request.max_tokens,
+            "rag_enabled": request.rag_enabled,
+            "database": request.database,
+            "rag_retrieval_strategy": request.rag_retrieval_strategy,
+            "rag_top_k": request.rag_top_k,
+            "rag_score_threshold": request.rag_score_threshold,
+            "rag_queries": request.rag_queries,
+            "think": request.think,
+            "thinking_budget": request.thinking_budget,
+            "n_ctx": request.n_ctx,
+        },
+    )
 
     # Parse active project from header (format: "namespace/project")
     active_project_namespace = None
@@ -469,6 +501,7 @@ async def chat(
             model_name=request.model,
             active_project_namespace=active_project_namespace,
             active_project_name=active_project_name,
+            prompt_variables=request.prompt_variables,
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -494,6 +527,7 @@ async def chat(
                     session_id=session_id,
                     active_project_namespace=active_project_namespace,
                     active_project_name=active_project_name,
+                    prompt_variables=request.prompt_variables,
                 )
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(
@@ -543,15 +577,15 @@ async def chat(
                 chat_agent=agent,
                 messages=request.messages,
                 tools=tools,
-                rag_enabled=request.rag_enabled,
-                database=request.database,
-                retrieval_strategy=request.rag_retrieval_strategy,
-                rag_top_k=request.rag_top_k,
-                rag_score_threshold=request.rag_score_threshold,
-                n_ctx=request.n_ctx,
-                rag_queries=request.rag_queries,
-                think=request.think,
-                thinking_budget=request.thinking_budget,
+                rag_enabled=resolved_params.rag_enabled,
+                database=resolved_params.database,
+                retrieval_strategy=resolved_params.rag_retrieval_strategy,
+                rag_top_k=resolved_params.rag_top_k,
+                rag_score_threshold=resolved_params.rag_score_threshold,
+                n_ctx=resolved_params.n_ctx,
+                rag_queries=resolved_params.rag_queries,
+                think=resolved_params.think,
+                thinking_budget=resolved_params.thinking_budget,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -564,15 +598,15 @@ async def chat(
             chat_agent=agent,
             messages=request.messages,
             tools=tools,
-            rag_enabled=request.rag_enabled,
-            database=request.database,
-            retrieval_strategy=request.rag_retrieval_strategy,
-            rag_top_k=request.rag_top_k,
-            n_ctx=request.n_ctx,
-            rag_score_threshold=request.rag_score_threshold,
-            rag_queries=request.rag_queries,
-            think=request.think,
-            thinking_budget=request.thinking_budget,
+            rag_enabled=resolved_params.rag_enabled,
+            database=resolved_params.database,
+            retrieval_strategy=resolved_params.rag_retrieval_strategy,
+            rag_top_k=resolved_params.rag_top_k,
+            n_ctx=resolved_params.n_ctx,
+            rag_score_threshold=resolved_params.rag_score_threshold,
+            rag_queries=resolved_params.rag_queries,
+            think=resolved_params.think,
+            thinking_budget=resolved_params.thinking_budget,
         )
     except Exception as e:
         raise HTTPException(
