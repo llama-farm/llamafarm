@@ -26,6 +26,7 @@ import Prompt from './components/Prompt/Prompt'
 import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
 import Models from './components/Models/Models'
+import AddInferenceModels from './components/Models/AddInferenceModels'
 import Databases from './components/Rag/Databases'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
@@ -177,6 +178,7 @@ function AppContent() {
                           element={<StrategyView />}
                         />
                         <Route path="models" element={<Models />} />
+                        <Route path="models/add" element={<AddInferenceModels />} />
                         {/* Redirect old /rag routes to /databases */}
                         <Route
                           path="rag"
