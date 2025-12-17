@@ -377,6 +377,23 @@ jobs:
             fi
           fi
 
+          # On Windows, verify dependencies are present
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo ""
+            echo "Checking Windows dependencies..."
+            CACHE_DIR="$LLAMA_CACHE/$LLAMA_VERSION"
+            DLL_COUNT=$(find "$CACHE_DIR" -maxdepth 1 -name "*.dll" 2>/dev/null | wc -l || ls "$CACHE_DIR"/*.dll 2>/dev/null | wc -l || echo "0")
+            echo "Found $DLL_COUNT DLL files in cache:"
+            ls -la "$CACHE_DIR"/*.dll 2>/dev/null || dir "$CACHE_DIR\\*.dll" 2>/dev/null || echo "Could not list DLLs"
+
+            # Check for common dependencies
+            for dep in ggml.dll ggml-base.dll ggml-cpu.dll; do
+              if [ -f "$CACHE_DIR/$dep" ]; then
+                echo "  ✓ $dep found"
+              fi
+            done
+          fi
+
           echo ""
           echo "✓ llama.cpp binary verified successfully"
           echo "  Version: $LLAMA_VERSION"

@@ -232,11 +232,210 @@ func InstallLlamaBinary(destDir string) error {
 		if err := extractZip(tmpFile.Name(), info.LibPath, destPath); err != nil {
 			return fmt.Errorf("failed to extract: %w", err)
 		}
+
+		// Extract all dependencies (ggml libs, metal shaders, etc.)
+		if err := extractDependencies(tmpFile.Name(), destDir); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: failed to extract some dependencies: %v", err))
+		}
 	} else {
 		return fmt.Errorf("unknown archive format: %s", info.URL)
 	}
 
 	utils.LogDebug(fmt.Sprintf("Installed llama.cpp to %s", destPath))
+	return nil
+}
+
+// extractDependencies extracts all library dependencies from a llama.cpp release
+// This includes ggml libs (.dll/.dylib/.so), metal shaders, CUDA libs, etc.
+func extractDependencies(archivePath, destDir string) error {
+	r, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	// Determine which file extensions to look for based on platform
+	var mainLib string
+	var extensions []string
+	switch runtime.GOOS {
+	case "windows":
+		mainLib = "llama.dll"
+		extensions = []string{".dll"}
+	case "darwin":
+		mainLib = "libllama.dylib"
+		extensions = []string{".dylib", ".metal"} // Include metal shader files
+	default: // Linux
+		mainLib = "libllama.so"
+		extensions = []string{".so"}
+	}
+
+	extractedCount := 0
+	for _, f := range r.File {
+		// Skip directories
+		if f.FileInfo().IsDir() {
+			continue
+		}
+
+		// Skip symlinks (we handle the actual files)
+		if f.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		name := filepath.Base(f.Name)
+		nameLower := strings.ToLower(name)
+
+		// Check if this is a dependency file we should extract
+		shouldExtract := false
+		for _, ext := range extensions {
+			if strings.Contains(nameLower, ext) {
+				// Skip the main library (already extracted via extractZip)
+				if nameLower == strings.ToLower(mainLib) {
+					continue
+				}
+				// For versioned libraries like libllama.0.0.7376.dylib, skip those too
+				if strings.HasPrefix(nameLower, "libllama.") || strings.HasPrefix(nameLower, "llama.") {
+					continue
+				}
+				shouldExtract = true
+				break
+			}
+		}
+
+		if !shouldExtract {
+			continue
+		}
+
+		destPath := filepath.Join(destDir, name)
+
+		// Skip if already exists
+		if _, err := os.Stat(destPath); err == nil {
+			continue
+		}
+
+		// Check file size - skip tiny files that are likely symlink text files
+		if f.UncompressedSize64 < 100 {
+			utils.LogDebug(fmt.Sprintf("Skipping small file (likely symlink): %s (%d bytes)", name, f.UncompressedSize64))
+			continue
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: could not open %s: %v", f.Name, err))
+			continue
+		}
+
+		destFile, err := os.Create(destPath)
+		if err != nil {
+			rc.Close()
+			utils.LogDebug(fmt.Sprintf("Warning: could not create %s: %v", destPath, err))
+			continue
+		}
+
+		written, err := io.Copy(destFile, rc)
+		rc.Close()
+		destFile.Close()
+
+		if err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: could not write %s: %v", destPath, err))
+			continue
+		}
+
+		// Set executable permission on Unix for libraries
+		if runtime.GOOS != "windows" && !strings.HasSuffix(nameLower, ".metal") {
+			os.Chmod(destPath, 0755)
+		}
+
+		utils.LogDebug(fmt.Sprintf("Extracted dependency: %s (%d bytes)", name, written))
+		extractedCount++
+	}
+
+	// Create symlinks for versioned libraries on Unix
+	if runtime.GOOS != "windows" {
+		if err := createDependencySymlinks(destDir); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: could not create dependency symlinks: %v", err))
+		}
+	}
+
+	utils.LogDebug(fmt.Sprintf("Extracted %d dependencies", extractedCount))
+	return nil
+}
+
+// createDependencySymlinks creates symlinks for versioned libraries
+// e.g., libggml.0.dylib -> libggml.0.0.0.dylib, libggml.dylib -> libggml.0.dylib
+func createDependencySymlinks(destDir string) error {
+	entries, err := os.ReadDir(destDir)
+	if err != nil {
+		return err
+	}
+
+	// Find versioned libraries and create symlinks
+	// Pattern: libXXX.MAJOR.MINOR.PATCH.dylib or libXXX.MAJOR.MINOR.PATCH.so
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+
+		// Match versioned library pattern: libfoo.0.0.0.dylib or libfoo.0.0.0.so
+		// We need to create libfoo.0.dylib -> libfoo.0.0.0.dylib and libfoo.dylib -> libfoo.0.dylib
+		var ext string
+		if strings.HasSuffix(name, ".dylib") {
+			ext = ".dylib"
+		} else if strings.Contains(name, ".so") {
+			// Handle .so.0.0.0 pattern
+			ext = ".so"
+		} else {
+			continue
+		}
+
+		// Check if this looks like a versioned library (has multiple dots before extension)
+		// e.g., libggml-base.0.0.0.dylib or libggml.0.0.0.dylib
+		parts := strings.Split(name, ".")
+		if len(parts) < 4 {
+			continue
+		}
+
+		// Find the base name (everything before the version numbers)
+		// libggml-base.0.0.0.dylib -> libggml-base
+		// libggml.0.0.0.dylib -> libggml
+		baseName := ""
+		versionStart := -1
+		for i, part := range parts {
+			if _, err := fmt.Sscanf(part, "%d", new(int)); err == nil {
+				versionStart = i
+				break
+			}
+			if baseName != "" {
+				baseName += "."
+			}
+			baseName += part
+		}
+
+		if versionStart < 0 || baseName == "" {
+			continue
+		}
+
+		// Get major version
+		majorVersion := parts[versionStart]
+
+		// Create libfoo.0.dylib -> libfoo.0.0.0.dylib (or .so)
+		majorSymlink := filepath.Join(destDir, fmt.Sprintf("%s.%s%s", baseName, majorVersion, ext))
+		if _, err := os.Lstat(majorSymlink); os.IsNotExist(err) {
+			if err := os.Symlink(name, majorSymlink); err == nil {
+				utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(majorSymlink), name))
+			}
+		}
+
+		// Create libfoo.dylib -> libfoo.0.dylib (or .so)
+		baseSymlink := filepath.Join(destDir, fmt.Sprintf("%s%s", baseName, ext))
+		if _, err := os.Lstat(baseSymlink); os.IsNotExist(err) {
+			majorName := filepath.Base(majorSymlink)
+			if err := os.Symlink(majorName, baseSymlink); err == nil {
+				utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", filepath.Base(baseSymlink), majorName))
+			}
+		}
+	}
+
 	return nil
 }
 
