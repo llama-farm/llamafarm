@@ -84,6 +84,7 @@ def llama_farm_api() -> fastapi.FastAPI:
 
     app.include_router(routers.projects_router, prefix=API_PREFIX)
     app.include_router(routers.datasets_router, prefix=API_PREFIX)
+    app.include_router(routers.prompts_router, prefix=API_PREFIX)
     app.include_router(routers.rag_router, prefix=API_PREFIX)
     app.include_router(routers.disk_router, prefix=API_PREFIX)
     app.include_router(routers.upgrades_router, prefix=API_PREFIX)

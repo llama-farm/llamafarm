@@ -5,6 +5,7 @@ from .health import router as health_router
 from .ml import router as ml_router
 from .models import router as models_router
 from .projects import router as projects_router
+from .prompts import router as prompts_router
 from .rag import router as rag_router
 from .system import disk_router, upgrades_router
 from .vision import vision_router
@@ -21,4 +22,5 @@ __all__ = [
     "models_router",
     "ml_router",
     "vision_router",
+    "prompts_router",
 ]
