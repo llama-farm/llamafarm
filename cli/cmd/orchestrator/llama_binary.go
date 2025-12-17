@@ -240,7 +240,7 @@ func InstallLlamaBinary(destDir string) error {
 	return nil
 }
 
-// extractZip extracts a specific file from a zip archive
+// extractZip extracts a specific file from a zip archive, following symlinks if needed
 func extractZip(archivePath, srcPath, destPath string) error {
 	r, err := zip.OpenReader(archivePath)
 	if err != nil {
@@ -248,35 +248,127 @@ func extractZip(archivePath, srcPath, destPath string) error {
 	}
 	defer r.Close()
 
+	destDir := filepath.Dir(destPath)
 	srcName := filepath.Base(srcPath)
 
+	// Build a map of all files in the archive for symlink resolution
+	fileMap := make(map[string]*zip.File)
 	for _, f := range r.File {
-		// Check if this is the file we want
-		if strings.HasSuffix(f.Name, srcName) || f.Name == srcPath {
-			rc, err := f.Open()
-			if err != nil {
-				return err
-			}
-			defer rc.Close()
+		fileMap[f.Name] = f
+	}
 
-			destFile, err := os.Create(destPath)
-			if err != nil {
-				return err
-			}
-			defer destFile.Close()
-
-			if _, err := io.Copy(destFile, rc); err != nil {
-				return err
-			}
-
-			// Set executable permission on Unix
-			if runtime.GOOS != "windows" {
-				os.Chmod(destPath, 0755)
-			}
-
-			return nil
+	// Find the target file
+	var targetFile *zip.File
+	var targetPath string
+	for name, f := range fileMap {
+		if strings.HasSuffix(name, srcName) || name == srcPath {
+			targetFile = f
+			targetPath = name
+			break
 		}
 	}
 
-	return fmt.Errorf("file %s not found in archive", srcPath)
+	if targetFile == nil {
+		return fmt.Errorf("file %s not found in archive", srcPath)
+	}
+
+	// Follow symlink chain and extract all files in the chain
+	return extractFileWithSymlinks(r, fileMap, targetFile, targetPath, destDir, srcName)
+}
+
+// extractFileWithSymlinks extracts a file, following and preserving symlink chains
+func extractFileWithSymlinks(r *zip.ReadCloser, fileMap map[string]*zip.File, f *zip.File, fPath, destDir, finalName string) error {
+	// Check if this is a symlink
+	if f.Mode()&os.ModeSymlink != 0 {
+		// Read the symlink target
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("failed to open symlink %s: %w", f.Name, err)
+		}
+		targetBytes, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return fmt.Errorf("failed to read symlink target for %s: %w", f.Name, err)
+		}
+		target := string(targetBytes)
+		utils.LogDebug(fmt.Sprintf("Found symlink: %s -> %s", f.Name, target))
+
+		// Resolve the target path relative to the symlink's directory
+		symlinkDir := filepath.Dir(fPath)
+		resolvedTarget := filepath.Join(symlinkDir, target)
+		// Normalize path separators for zip (always forward slashes)
+		resolvedTarget = strings.ReplaceAll(resolvedTarget, "\\", "/")
+		// Clean the path to handle ../ etc
+		resolvedTarget = filepath.Clean(resolvedTarget)
+		resolvedTarget = strings.ReplaceAll(resolvedTarget, "\\", "/")
+
+		// Find the target file in the archive
+		targetFile, ok := fileMap[resolvedTarget]
+		if !ok {
+			// Try matching by basename if exact path doesn't work
+			targetBase := filepath.Base(target)
+			for name, tf := range fileMap {
+				if strings.HasSuffix(name, targetBase) && filepath.Dir(name) == symlinkDir {
+					targetFile = tf
+					resolvedTarget = name
+					ok = true
+					break
+				}
+			}
+		}
+
+		if !ok {
+			return fmt.Errorf("symlink target %s (resolved: %s) not found in archive", target, resolvedTarget)
+		}
+
+		// Recursively extract the target (which may also be a symlink)
+		targetBaseName := filepath.Base(target)
+		if err := extractFileWithSymlinks(r, fileMap, targetFile, resolvedTarget, destDir, targetBaseName); err != nil {
+			return err
+		}
+
+		// Create the symlink in the destination
+		symlinkPath := filepath.Join(destDir, finalName)
+		// Remove existing file/symlink if it exists
+		os.Remove(symlinkPath)
+
+		if err := os.Symlink(target, symlinkPath); err != nil {
+			return fmt.Errorf("failed to create symlink %s -> %s: %w", symlinkPath, target, err)
+		}
+		utils.LogDebug(fmt.Sprintf("Created symlink: %s -> %s", symlinkPath, target))
+
+		return nil
+	}
+
+	// Regular file - extract it
+	destPath := filepath.Join(destDir, finalName)
+	utils.LogDebug(fmt.Sprintf("Extracting file: %s -> %s", f.Name, destPath))
+
+	rc, err := f.Open()
+	if err != nil {
+		return fmt.Errorf("failed to open %s: %w", f.Name, err)
+	}
+	defer rc.Close()
+
+	// Remove existing file if it exists
+	os.Remove(destPath)
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("failed to create %s: %w", destPath, err)
+	}
+	defer destFile.Close()
+
+	written, err := io.Copy(destFile, rc)
+	if err != nil {
+		return fmt.Errorf("failed to write %s: %w", destPath, err)
+	}
+	utils.LogDebug(fmt.Sprintf("Wrote %d bytes to %s", written, destPath))
+
+	// Set executable permission on Unix
+	if runtime.GOOS != "windows" {
+		os.Chmod(destPath, 0755)
+	}
+
+	return nil
 }

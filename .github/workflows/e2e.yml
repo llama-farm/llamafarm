@@ -317,40 +317,63 @@ jobs:
           LIB_PATH="$LLAMA_CACHE/$LLAMA_VERSION/$LIB_NAME"
 
           echo "Expected binary location: $LIB_PATH"
+          echo ""
+          echo "Cache directory contents:"
+          ls -la "$LLAMA_CACHE/$LLAMA_VERSION/" 2>/dev/null || echo "Cache directory does not exist"
+          echo ""
 
-          # Check if binary exists
-          if [ ! -f "$LIB_PATH" ]; then
+          # Check if binary exists (could be a file or symlink)
+          if [ ! -e "$LIB_PATH" ]; then
             echo "❌ llama.cpp binary not found at $LIB_PATH"
-            echo ""
-            echo "Cache directory contents:"
-            ls -laR "$LLAMA_CACHE" 2>/dev/null || echo "Cache directory does not exist"
+            exit 1
+          fi
+
+          # Check if it's a symlink and follow it
+          ACTUAL_PATH="$LIB_PATH"
+          if [ -L "$LIB_PATH" ]; then
+            echo "Found symlink: $LIB_NAME -> $(readlink "$LIB_PATH")"
+            # Follow symlink chain to find actual file
+            ACTUAL_PATH=$(readlink -f "$LIB_PATH" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$LIB_PATH'))")
+            echo "Resolved to: $ACTUAL_PATH"
+          fi
+
+          # Verify the actual file exists and has reasonable size
+          if [ ! -f "$ACTUAL_PATH" ]; then
+            echo "❌ Resolved path $ACTUAL_PATH is not a file"
             exit 1
           fi
 
           # Check file size (should be > 1MB for a real library)
-          FILE_SIZE=$(stat -f%z "$LIB_PATH" 2>/dev/null || stat -c%s "$LIB_PATH" 2>/dev/null)
+          # Use -L flag with stat to follow symlinks
+          FILE_SIZE=$(stat -f%z "$ACTUAL_PATH" 2>/dev/null || stat -c%s "$ACTUAL_PATH" 2>/dev/null)
           echo "Binary size: $FILE_SIZE bytes"
 
           if [ "$FILE_SIZE" -lt 1000000 ]; then
-            echo "❌ Binary file is too small ($FILE_SIZE bytes), may be corrupted or a symlink text file"
+            echo "❌ Binary file is too small ($FILE_SIZE bytes), may be corrupted"
+            echo "File contents (if text):"
+            head -c 200 "$ACTUAL_PATH" 2>/dev/null || true
             exit 1
           fi
 
           # On macOS, verify it's a valid Mach-O binary
           if [ "$RUNNER_OS" = "macOS" ]; then
-            if file "$LIB_PATH" | grep -q "Mach-O"; then
+            FILE_TYPE=$(file "$ACTUAL_PATH")
+            echo "File type: $FILE_TYPE"
+            if echo "$FILE_TYPE" | grep -q "Mach-O"; then
               echo "✓ Valid Mach-O binary"
             else
-              echo "⚠ File type: $(file "$LIB_PATH")"
+              echo "⚠ Warning: Not recognized as Mach-O binary"
             fi
           fi
 
           # On Linux, verify it's a valid ELF binary
           if [ "$RUNNER_OS" = "Linux" ]; then
-            if file "$LIB_PATH" | grep -q "ELF"; then
+            FILE_TYPE=$(file "$ACTUAL_PATH")
+            echo "File type: $FILE_TYPE"
+            if echo "$FILE_TYPE" | grep -q "ELF"; then
               echo "✓ Valid ELF binary"
             else
-              echo "⚠ File type: $(file "$LIB_PATH")"
+              echo "⚠ Warning: Not recognized as ELF binary"
             fi
           fi
 
@@ -358,6 +381,9 @@ jobs:
           echo "✓ llama.cpp binary verified successfully"
           echo "  Version: $LLAMA_VERSION"
           echo "  Path: $LIB_PATH"
+          if [ "$ACTUAL_PATH" != "$LIB_PATH" ]; then
+            echo "  Actual: $ACTUAL_PATH"
+          fi
           echo "  Size: $FILE_SIZE bytes"
 
       # ============================================================

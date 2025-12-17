@@ -215,6 +215,77 @@ def _get_cache_dir() -> Path:
         return Path(xdg_cache) / "llamafarm-llama"
 
 
+def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
+    """Extract a file, following symlink chains and preserving symlinks.
+
+    Handles cases where libllama.dylib -> libllama.0.dylib -> libllama.0.0.7376.dylib
+    by following the chain, copying the actual file, and recreating symlinks.
+    """
+    dest_dir = dest_path.parent
+
+    # Follow symlink chain to find the actual file
+    current = src_path
+    symlink_chain: list[tuple[Path, str]] = []  # (symlink_path, target_name)
+
+    while current.is_symlink() or (current.exists() and current.stat().st_size < 100):
+        if current.is_symlink():
+            # It's a real symlink
+            target = os.readlink(current)
+            logger.debug(f"Following symlink: {current.name} -> {target}")
+            symlink_chain.append((current, target))
+            # Resolve relative to symlink's directory
+            current = (current.parent / target).resolve()
+        elif current.exists() and current.stat().st_size < 100:
+            # Might be a text file containing symlink target (some extractors do this)
+            try:
+                target = current.read_text().strip()
+                if target and not target.startswith("/") and len(target) < 256:
+                    logger.debug(f"Following text symlink: {current.name} -> {target}")
+                    symlink_chain.append((current, target))
+                    potential_target = current.parent / target
+                    if potential_target.exists():
+                        current = potential_target
+                        continue
+            except Exception:
+                pass
+            # Not a symlink reference, treat as actual file
+            break
+        else:
+            break
+
+    # Verify we found an actual file
+    if not current.exists():
+        raise RuntimeError(f"Could not resolve symlink chain from {src_path}")
+
+    if current.stat().st_size < 1000:
+        raise RuntimeError(
+            f"Resolved file {current} is too small ({current.stat().st_size} bytes), "
+            "likely not a valid library"
+        )
+
+    logger.debug(f"Found actual library: {current} ({current.stat().st_size} bytes)")
+
+    # Copy the actual file first - use the final target name
+    if symlink_chain:
+        # Copy actual file with its real name
+        actual_dest = dest_dir / current.name
+        if not actual_dest.exists():
+            shutil.copy2(current, actual_dest)
+            logger.debug(f"Copied actual file: {current.name}")
+
+        # Recreate symlink chain in reverse order (from innermost to outermost)
+        for symlink_src, target in reversed(symlink_chain):
+            symlink_dest = dest_dir / symlink_src.name
+            if symlink_dest.exists() or symlink_dest.is_symlink():
+                symlink_dest.unlink()
+            symlink_dest.symlink_to(target)
+            logger.debug(f"Created symlink: {symlink_src.name} -> {target}")
+    else:
+        # No symlinks, just copy the file directly
+        shutil.copy2(current, dest_path)
+        logger.debug(f"Copied file: {current.name} -> {dest_path.name}")
+
+
 def download_binary(
     dest_dir: Path, platform_key: Optional[tuple[str, str, str]] = None
 ) -> Path:
@@ -309,24 +380,9 @@ def download_binary(
 
         # Handle symlinks: newer llama.cpp releases use symlinks like:
         # libllama.dylib -> libllama.0.dylib -> libllama.0.0.7376.dylib
-        # We need to find the actual versioned library file
-        if lib_src.stat().st_size < 100:  # Symlink text files are tiny
-            # This is likely a symlink reference, find the actual versioned library
-            lib_base = lib_src.stem  # e.g., "libllama"
-            lib_ext = lib_src.suffix  # e.g., ".dylib"
-            parent_dir = lib_src.parent
-
-            # Look for versioned file like libllama.0.0.7376.dylib
-            versioned_pattern = f"{lib_base}.*.*.*{lib_ext}"
-            versioned_candidates = list(parent_dir.glob(versioned_pattern))
-
-            if versioned_candidates:
-                # Pick the largest file (the actual library, not symlinks)
-                lib_src = max(versioned_candidates, key=lambda p: p.stat().st_size)
-                logger.debug(f"Using versioned library: {lib_src}")
-
+        # We need to follow the chain and copy the actual file + recreate symlinks
         lib_dest = dest_dir / _get_lib_name()
-        shutil.copy2(lib_src, lib_dest)
+        _extract_with_symlinks(lib_src, lib_dest)
 
         # Copy any additional dependencies (Windows DLLs, CUDA libs, etc.)
         _copy_dependencies(extract_dir, dest_dir)
