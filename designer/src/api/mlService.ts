@@ -1,0 +1,234 @@
+/**
+ * ML Service - API client for classifier and anomaly detection endpoints
+ * Endpoints proxy to Universal Runtime via LlamaFarm server
+ */
+
+import { apiClient } from './client'
+import type {
+  // Classifier types
+  ClassifierFitRequest,
+  ClassifierFitResponse,
+  ClassifierPredictRequest,
+  ClassifierPredictResponse,
+  ClassifierSaveRequest,
+  ClassifierSaveResponse,
+  ClassifierLoadRequest,
+  ClassifierLoadResponse,
+  ClassifierListModelsResponse,
+  // Anomaly types
+  AnomalyFitRequest,
+  AnomalyFitResponse,
+  AnomalyScoreRequest,
+  AnomalyScoreResponse,
+  AnomalySaveRequest,
+  AnomalySaveResponse,
+  AnomalyLoadRequest,
+  AnomalyLoadResponse,
+  AnomalyListModelsResponse,
+  // Shared types
+  MLHealthResponse,
+  MLDeleteResponse,
+} from '../types/ml'
+
+// =============================================================================
+// Health Check
+// =============================================================================
+
+/**
+ * Check ML service health (Universal Runtime availability)
+ */
+export async function checkMLHealth(): Promise<MLHealthResponse> {
+  const response = await apiClient.get<MLHealthResponse>('/ml/health')
+  return response.data
+}
+
+// =============================================================================
+// Classifier Endpoints
+// =============================================================================
+
+/**
+ * Train a text classifier using SetFit few-shot learning
+ */
+export async function fitClassifier(
+  request: ClassifierFitRequest
+): Promise<ClassifierFitResponse> {
+  const response = await apiClient.post<ClassifierFitResponse>(
+    '/ml/classifier/fit',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Classify texts using a trained classifier
+ */
+export async function predictClassifier(
+  request: ClassifierPredictRequest
+): Promise<ClassifierPredictResponse> {
+  const response = await apiClient.post<ClassifierPredictResponse>(
+    '/ml/classifier/predict',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Save a trained classifier to disk
+ */
+export async function saveClassifier(
+  request: ClassifierSaveRequest
+): Promise<ClassifierSaveResponse> {
+  const response = await apiClient.post<ClassifierSaveResponse>(
+    '/ml/classifier/save',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Load a pre-trained classifier from disk
+ */
+export async function loadClassifier(
+  request: ClassifierLoadRequest
+): Promise<ClassifierLoadResponse> {
+  const response = await apiClient.post<ClassifierLoadResponse>(
+    '/ml/classifier/load',
+    request
+  )
+  return response.data
+}
+
+/**
+ * List all saved classifier models
+ */
+export async function listClassifierModels(): Promise<ClassifierListModelsResponse> {
+  const response =
+    await apiClient.get<ClassifierListModelsResponse>('/ml/classifier/models')
+  return response.data
+}
+
+/**
+ * Delete a saved classifier model
+ */
+export async function deleteClassifierModel(
+  modelName: string
+): Promise<MLDeleteResponse> {
+  const response = await apiClient.delete<MLDeleteResponse>(
+    `/ml/classifier/models/${encodeURIComponent(modelName)}`
+  )
+  return response.data
+}
+
+// =============================================================================
+// Anomaly Detection Endpoints
+// =============================================================================
+
+/**
+ * Train an anomaly detection model
+ */
+export async function fitAnomaly(
+  request: AnomalyFitRequest
+): Promise<AnomalyFitResponse> {
+  const response = await apiClient.post<AnomalyFitResponse>(
+    '/ml/anomaly/fit',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Score data points for anomalies (returns all points with scores)
+ */
+export async function scoreAnomaly(
+  request: AnomalyScoreRequest
+): Promise<AnomalyScoreResponse> {
+  const response = await apiClient.post<AnomalyScoreResponse>(
+    '/ml/anomaly/score',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Detect anomalies (returns only anomalous points)
+ */
+export async function detectAnomaly(
+  request: AnomalyScoreRequest
+): Promise<AnomalyScoreResponse> {
+  const response = await apiClient.post<AnomalyScoreResponse>(
+    '/ml/anomaly/detect',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Save a trained anomaly model to disk
+ */
+export async function saveAnomaly(
+  request: AnomalySaveRequest
+): Promise<AnomalySaveResponse> {
+  const response = await apiClient.post<AnomalySaveResponse>(
+    '/ml/anomaly/save',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Load a pre-trained anomaly model from disk
+ */
+export async function loadAnomaly(
+  request: AnomalyLoadRequest
+): Promise<AnomalyLoadResponse> {
+  const response = await apiClient.post<AnomalyLoadResponse>(
+    '/ml/anomaly/load',
+    request
+  )
+  return response.data
+}
+
+/**
+ * List all saved anomaly models
+ */
+export async function listAnomalyModels(): Promise<AnomalyListModelsResponse> {
+  const response =
+    await apiClient.get<AnomalyListModelsResponse>('/ml/anomaly/models')
+  return response.data
+}
+
+/**
+ * Delete a saved anomaly model
+ */
+export async function deleteAnomalyModel(
+  filename: string
+): Promise<MLDeleteResponse> {
+  const response = await apiClient.delete<MLDeleteResponse>(
+    `/ml/anomaly/models/${encodeURIComponent(filename)}`
+  )
+  return response.data
+}
+
+// =============================================================================
+// Default Export
+// =============================================================================
+
+export default {
+  // Health
+  checkMLHealth,
+  // Classifier
+  fitClassifier,
+  predictClassifier,
+  saveClassifier,
+  loadClassifier,
+  listClassifierModels,
+  deleteClassifierModel,
+  // Anomaly
+  fitAnomaly,
+  scoreAnomaly,
+  detectAnomaly,
+  saveAnomaly,
+  loadAnomaly,
+  listAnomalyModels,
+  deleteAnomalyModel,
+}

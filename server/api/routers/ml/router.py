@@ -95,10 +95,19 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
         batch_size=request.batch_size,
     )
 
+    # Save metadata if description provided
+    if request.description:
+        MLModelService.save_metadata(
+            "classifier",
+            versioned_name,
+            {"description": request.description},
+        )
+
     # Add versioning info to response
     result["base_name"] = request.model
     result["versioned_name"] = versioned_name
     result["overwrite"] = request.overwrite
+    result["description"] = request.description
 
     return result
 
@@ -183,9 +192,11 @@ async def list_classifier_models() -> dict[str, Any]:
     Response includes:
     - name: Name of the saved model
     - path: Full path to the model directory
+    - description: Model description (if set)
     - labels: Class labels (if labels.txt exists)
     """
-    return await UniversalRuntimeService.classifier_list_models()
+    models = MLModelService.list_all_models("classifier")
+    return {"models": models}
 
 
 @router.delete("/classifier/models/{model_name}")
@@ -256,10 +267,19 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         batch_size=request.batch_size,
     )
 
+    # Save metadata if description provided
+    if request.description:
+        MLModelService.save_metadata(
+            "anomaly",
+            versioned_name,
+            {"description": request.description},
+        )
+
     # Add versioning info to response
     result["base_name"] = request.model
     result["versioned_name"] = versioned_name
     result["overwrite"] = request.overwrite
+    result["description"] = request.description
 
     return result
 
@@ -390,8 +410,10 @@ async def list_anomaly_models() -> dict[str, Any]:
     - size_bytes: File size
     - modified: Last modification timestamp
     - backend: Detected backend type (from file extension)
+    - description: Model description (if set)
     """
-    return await UniversalRuntimeService.anomaly_list_models()
+    models = MLModelService.list_all_models("anomaly")
+    return {"models": models}
 
 
 @router.delete("/anomaly/models/{filename}")

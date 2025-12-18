@@ -1447,12 +1447,13 @@ async def score_anomalies(request: AnomalyScoreRequest):
         )
 
         # Format response
+        # Note: Convert numpy types to Python native types for JSON serialization
         data = [
             {
-                "index": r.index,
-                "score": r.score,
-                "is_anomaly": r.is_anomaly,
-                "raw_score": r.raw_score,
+                "index": int(r.index),
+                "score": float(r.score),
+                "is_anomaly": bool(r.is_anomaly),
+                "raw_score": float(r.raw_score),
             }
             for r in results
         ]
@@ -1469,9 +1470,13 @@ async def score_anomalies(request: AnomalyScoreRequest):
             "summary": {
                 "total_points": len(data),
                 "anomaly_count": anomaly_count,
-                "anomaly_rate": anomaly_count / len(data) if data else 0,
-                "threshold": request.threshold or model.threshold,
+                "anomaly_rate": float(anomaly_count / len(data)) if data else 0.0,
+                "threshold": float(request.threshold or model.threshold),
             },
+            "results": data,  # Alias for compatibility with frontend
+            "threshold": float(
+                request.threshold or model.threshold
+            ),  # Top-level for frontend
         }
 
     except HTTPException:
@@ -1614,11 +1619,12 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         )
 
         # Format response
+        # Note: Convert numpy types to Python native types for JSON serialization
         data = [
             {
-                "index": r.index,
-                "score": r.score,
-                "raw_score": r.raw_score,
+                "index": int(r.index),
+                "score": float(r.score),
+                "raw_score": float(r.raw_score),
             }
             for r in results
         ]
@@ -1631,7 +1637,7 @@ async def detect_anomalies(request: AnomalyScoreRequest):
             "backend": request.backend,
             "summary": {
                 "anomalies_detected": len(data),
-                "threshold": request.threshold or model.threshold,
+                "threshold": float(request.threshold or model.threshold),
             },
         }
 

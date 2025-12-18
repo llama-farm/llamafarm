@@ -27,6 +27,8 @@ export interface TrainedModelVersion {
   isActive: boolean
   threshold?: number
   baseModel?: string
+  // Full versioned name from API (e.g., "model-name_20251218_143022")
+  versionedName?: string
 }
 
 export interface TrainedModel {
@@ -40,6 +42,10 @@ export interface TrainedModel {
   versions?: TrainedModelVersion[]
   threshold?: number
   baseModel?: string
+  // Anomaly-specific fields
+  backend?: string
+  // Classifier-specific fields
+  labels?: string[]
 }
 
 // Test result types
@@ -58,5 +64,6 @@ export interface AnomalyTestResult {
   score: number
   threshold: number
   timestamp: string
+  status?: 'success' | 'error' // undefined means success for backward compatibility
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
@@ -9,57 +9,149 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import FontIcon from '../../common/FontIcon'
-import type { TrainedModel } from './types'
+import type { TrainedModel, TrainedModelType } from './types'
+import {
+  useListAnomalyModels,
+  useListClassifierModels,
+  useDeleteAnomalyModel,
+  useDeleteClassifierModel,
+} from '../../hooks/useMLModels'
+import {
+  parseVersionedModelName,
+  formatModelTimestamp,
+  type AnomalyModelInfo,
+  type ClassifierModelInfo,
+} from '../../types/ml'
 
-// Storage key for trained models
-const TRAINED_MODELS_KEY = 'llamafarm_trained_models'
-
-// Helper to get trained models from localStorage
-export function getTrainedModels(): TrainedModel[] {
-  try {
-    const stored = localStorage.getItem(TRAINED_MODELS_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch {
-    return []
+// Convert API model to unified TrainedModel type
+function toTrainedModel(
+  model: AnomalyModelInfo | ClassifierModelInfo,
+  type: TrainedModelType,
+  versionCount: number
+): TrainedModel {
+  const parsed = parseVersionedModelName(model.name)
+  return {
+    id: parsed.baseName, // Use base name as ID for navigation
+    name: parsed.baseName,
+    type,
+    status: 'ready',
+    versionCount,
+    lastTrained: model.created || new Date().toISOString(),
+    description: model.description,
+    // Anomaly-specific
+    ...(type === 'anomaly_detection' && {
+      backend: (model as AnomalyModelInfo).backend,
+    }),
+    // Classifier-specific
+    ...(type === 'classifier' && {
+      labels: (model as ClassifierModelInfo).labels,
+    }),
   }
 }
 
-// Helper to save trained models to localStorage
-export function saveTrainedModels(models: TrainedModel[]) {
-  localStorage.setItem(TRAINED_MODELS_KEY, JSON.stringify(models))
-}
-
-// Helper to add or update a trained model
-export function saveTrainedModel(model: TrainedModel) {
-  const models = getTrainedModels()
-  const existingIndex = models.findIndex(m => m.id === model.id)
-  if (existingIndex >= 0) {
-    models[existingIndex] = model
-  } else {
-    models.push(model)
+// Group models by base name and count versions
+function groupModelsByBaseName<T extends { name: string }>(
+  models: T[]
+): Map<string, T[]> {
+  const groups = new Map<string, T[]>()
+  for (const model of models) {
+    const parsed = parseVersionedModelName(model.name)
+    const existing = groups.get(parsed.baseName) || []
+    existing.push(model)
+    groups.set(parsed.baseName, existing)
   }
-  saveTrainedModels(models)
-}
-
-// Helper to delete a trained model
-export function deleteTrainedModel(modelId: string) {
-  const models = getTrainedModels()
-  saveTrainedModels(models.filter(m => m.id !== modelId))
+  return groups
 }
 
 function TrainedModels() {
   const navigate = useNavigate()
-  const [trainedModels, setTrainedModels] = useState<TrainedModel[]>([])
 
-  // Load models from localStorage on mount
-  useEffect(() => {
-    setTrainedModels(getTrainedModels())
-  }, [])
+  // Fetch models from API
+  const {
+    data: anomalyData,
+    isLoading: isLoadingAnomaly,
+    error: anomalyError,
+  } = useListAnomalyModels()
+  const {
+    data: classifierData,
+    isLoading: isLoadingClassifier,
+    error: classifierError,
+  } = useListClassifierModels()
 
-  const handleDeleteModel = (modelId: string) => {
-    deleteTrainedModel(modelId)
-    setTrainedModels(getTrainedModels())
+  const deleteAnomalyMutation = useDeleteAnomalyModel()
+  const deleteClassifierMutation = useDeleteClassifierModel()
+
+  // Combine and normalize models
+  const trainedModels = useMemo(() => {
+    const models: TrainedModel[] = []
+
+    // Process anomaly models
+    if (anomalyData?.models) {
+      const grouped = groupModelsByBaseName(anomalyData.models)
+      for (const [, versions] of grouped) {
+        // Get the most recent version for metadata
+        const sortedVersions = [...versions].sort((a, b) => {
+          const parsedA = parseVersionedModelName(a.name)
+          const parsedB = parseVersionedModelName(b.name)
+          return (parsedB.timestamp || '').localeCompare(parsedA.timestamp || '')
+        })
+        const latest = sortedVersions[0]
+        models.push(toTrainedModel(latest, 'anomaly_detection', versions.length))
+      }
+    }
+
+    // Process classifier models
+    if (classifierData?.models) {
+      const grouped = groupModelsByBaseName(classifierData.models)
+      for (const [, versions] of grouped) {
+        const sortedVersions = [...versions].sort((a, b) => {
+          const parsedA = parseVersionedModelName(a.name)
+          const parsedB = parseVersionedModelName(b.name)
+          return (parsedB.timestamp || '').localeCompare(parsedA.timestamp || '')
+        })
+        const latest = sortedVersions[0]
+        models.push(toTrainedModel(latest, 'classifier', versions.length))
+      }
+    }
+
+    // Sort by last trained date (newest first)
+    return models.sort(
+      (a, b) =>
+        new Date(b.lastTrained).getTime() - new Date(a.lastTrained).getTime()
+    )
+  }, [anomalyData, classifierData])
+
+  const handleDeleteModel = async (model: TrainedModel) => {
+    // Delete all versions of this model
+    if (model.type === 'anomaly_detection' && anomalyData?.models) {
+      const versions = anomalyData.models.filter((m: AnomalyModelInfo) => {
+        const parsed = parseVersionedModelName(m.name)
+        return parsed.baseName === model.id
+      })
+      for (const version of versions) {
+        try {
+          await deleteAnomalyMutation.mutateAsync(version.filename)
+        } catch (error) {
+          console.error('Failed to delete anomaly model:', error)
+        }
+      }
+    } else if (model.type === 'classifier' && classifierData?.models) {
+      const versions = classifierData.models.filter((m: ClassifierModelInfo) => {
+        const parsed = parseVersionedModelName(m.name)
+        return parsed.baseName === model.id
+      })
+      for (const version of versions) {
+        try {
+          await deleteClassifierMutation.mutateAsync(version.name)
+        } catch (error) {
+          console.error('Failed to delete classifier model:', error)
+        }
+      }
+    }
   }
+
+  const isLoading = isLoadingAnomaly || isLoadingClassifier
+  const hasError = anomalyError || classifierError
 
   return (
     <div className="flex flex-col gap-6">
@@ -126,7 +218,17 @@ function TrainedModels() {
       <div className="flex flex-col gap-3">
         <h3 className="font-medium">Your trained models</h3>
 
-        {trainedModels.length === 0 ? (
+        {isLoading ? (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <p className="text-sm text-muted-foreground">Loading models...</p>
+          </div>
+        ) : hasError ? (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+            <p className="text-sm text-destructive">
+              Failed to load models. Make sure the server is running.
+            </p>
+          </div>
+        ) : trainedModels.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <p className="text-sm text-muted-foreground">
               No models yet. Create your first model above to get started.
@@ -136,9 +238,13 @@ function TrainedModels() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {trainedModels.map(model => (
               <TrainedModelCard
-                key={model.id}
+                key={`${model.type}-${model.id}`}
                 model={model}
-                onDelete={() => handleDeleteModel(model.id)}
+                onDelete={() => handleDeleteModel(model)}
+                isDeleting={
+                  deleteAnomalyMutation.isPending ||
+                  deleteClassifierMutation.isPending
+                }
               />
             ))}
           </div>
@@ -151,9 +257,11 @@ function TrainedModels() {
 function TrainedModelCard({
   model,
   onDelete,
+  isDeleting,
 }: {
   model: TrainedModel
   onDelete: () => void
+  isDeleting?: boolean
 }) {
   const navigate = useNavigate()
   const typeLabel =
@@ -168,6 +276,20 @@ function TrainedModelCard({
     model.type === 'anomaly_detection'
       ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
       : 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300'
+
+  // Format the last trained date
+  const lastTrainedDisplay = (() => {
+    try {
+      // Try to parse timestamp from model name if available
+      const parsed = parseVersionedModelName(model.name)
+      if (parsed.timestamp) {
+        return formatModelTimestamp(parsed.timestamp)
+      }
+      return new Date(model.lastTrained).toLocaleDateString()
+    } catch {
+      return 'Unknown'
+    }
+  })()
 
   return (
     <div
@@ -200,8 +322,9 @@ function TrainedModelCard({
                 onDelete()
               }}
               className="text-destructive"
+              disabled={isDeleting}
             >
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -214,11 +337,11 @@ function TrainedModelCard({
       <div className="flex items-center gap-2 mt-1">
         <Badge className={typeColorClasses}>{typeLabel}</Badge>
         <span className="text-xs text-muted-foreground">
-          v{model.versionCount}
+          {model.versionCount} version{model.versionCount !== 1 ? 's' : ''}
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        Last trained: {new Date(model.lastTrained).toLocaleDateString()}
+        Last trained: {lastTrainedDisplay}
       </p>
     </div>
   )

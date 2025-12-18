@@ -145,6 +145,12 @@ class AnomalyModel(BaseModel):
         self._encoder = None
         self._decoder = None
 
+        # Training score statistics for normalization during inference
+        # These are computed during fit() and used during score() to ensure
+        # consistent normalization even when testing single points
+        self._train_score_median: float | None = None
+        self._train_score_iqr: float | None = None
+
     @property
     def threshold(self) -> float:
         """Get anomaly threshold."""
@@ -199,6 +205,8 @@ class AnomalyModel(BaseModel):
             self._decoder = checkpoint.get("decoder")
             self._threshold = checkpoint.get("threshold", 0.5)
             self._scaler = checkpoint.get("scaler")
+            self._train_score_median = checkpoint.get("train_score_median")
+            self._train_score_iqr = checkpoint.get("train_score_iqr")
             self._is_fitted = True
         else:
             # Sklearn model (pickle or joblib)
@@ -215,6 +223,8 @@ class AnomalyModel(BaseModel):
             self._detector = data.get("detector")
             self._scaler = data.get("scaler")
             self._threshold = data.get("threshold", 0.5)
+            self._train_score_median = data.get("train_score_median")
+            self._train_score_iqr = data.get("train_score_iqr")
             self._is_fitted = True
 
     async def _initialize_backend(self) -> None:
@@ -297,15 +307,27 @@ class AnomalyModel(BaseModel):
 
         self._is_fitted = True
 
+        # Compute and store training score statistics for normalization
+        # These are used during inference to ensure consistent scoring
+        raw_scores = await self._compute_raw_scores(X_scaled)
+        self._train_score_median = float(np.median(raw_scores))
+        self._train_score_iqr = float(
+            np.percentile(raw_scores, 75) - np.percentile(raw_scores, 25)
+        )
+
         # Auto-determine threshold if not set
         # Threshold is computed on normalized scores (0-1 range) for consistency
         if self._threshold is None:
-            raw_scores = await self._compute_raw_scores(X_scaled)
             normalized_scores = self._normalize_scores(raw_scores)
-            # Set threshold at (1 - contamination) percentile of normalized scores
-            self._threshold = float(
-                np.percentile(normalized_scores, (1 - self.contamination) * 100)
-            )
+            # Use a robust threshold: median + 1.5 * (max - median) of normalized scores
+            # This ensures any score above the typical training range is flagged
+            # For small datasets, percentile-based thresholds can be too strict
+            median_norm = float(np.median(normalized_scores))
+            max_norm = float(np.max(normalized_scores))
+
+            # Threshold is set between median and max, weighted toward detecting outliers
+            # A score significantly above the training median should be anomalous
+            self._threshold = median_norm + 0.5 * (max_norm - median_norm)
 
         training_time = (time.time() - start_time) * 1000
 
@@ -473,12 +495,25 @@ class AnomalyModel(BaseModel):
         return reconstruction_error.cpu().numpy()
 
     def _normalize_scores(self, scores: np.ndarray) -> np.ndarray:
-        """Normalize scores to 0-1 range."""
-        # Use sigmoid-like normalization
-        # Center around median and scale by IQR
-        median = np.median(scores)
-        iqr = np.percentile(scores, 75) - np.percentile(scores, 25)
+        """Normalize scores to 0-1 range using training data statistics.
 
+        Uses the median and IQR computed during fit() to ensure consistent
+        normalization across all inference calls, even for single data points.
+        This is critical because sigmoid normalization on a single point would
+        always return 0.5 (since the point equals its own median).
+        """
+        # Use training statistics if available (preferred for inference)
+        # Fall back to computing from input for backward compatibility during fit()
+        if self._train_score_median is not None:
+            median = self._train_score_median
+            iqr = self._train_score_iqr if self._train_score_iqr else 0.0
+        else:
+            # During initial fit() call, training stats aren't set yet
+            median = float(np.median(scores))
+            iqr = float(np.percentile(scores, 75) - np.percentile(scores, 25))
+
+        # Scale by IQR (with fallback for zero IQR)
+        # If IQR is 0 (all training scores same), use raw difference from median
         normalized = (scores - median) / (2 * iqr) if iqr > 0 else scores - median
 
         # Clip to prevent numerical overflow in np.exp
@@ -516,6 +551,8 @@ class AnomalyModel(BaseModel):
                     "decoder": self._decoder,
                     "threshold": self._threshold,
                     "scaler": self._scaler,
+                    "train_score_median": self._train_score_median,
+                    "train_score_iqr": self._train_score_iqr,
                 },
                 model_path.with_suffix(".pt"),
             )
@@ -528,6 +565,8 @@ class AnomalyModel(BaseModel):
                         "detector": self._detector,
                         "scaler": self._scaler,
                         "threshold": self._threshold,
+                        "train_score_median": self._train_score_median,
+                        "train_score_iqr": self._train_score_iqr,
                     },
                     model_path.with_suffix(".joblib"),
                 )
@@ -538,6 +577,8 @@ class AnomalyModel(BaseModel):
                             "detector": self._detector,
                             "scaler": self._scaler,
                             "threshold": self._threshold,
+                            "train_score_median": self._train_score_median,
+                            "train_score_iqr": self._train_score_iqr,
                         },
                         f,
                     )
@@ -551,6 +592,8 @@ class AnomalyModel(BaseModel):
         self._encoder = None
         self._decoder = None
         self._is_fitted = False
+        self._train_score_median = None
+        self._train_score_iqr = None
         await super().unload()
 
     def get_model_info(self) -> dict[str, Any]:

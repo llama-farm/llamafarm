@@ -5,12 +5,15 @@ Provides:
 - Versioned model storage in ~/.llamafarm/models/
 - {base-name}_{timestamp} versioning when overwrite=False
 - {base-name}-latest resolution to find most recent version
+- Model metadata storage (description, labels, etc.)
 """
 
+import json
 import logging
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +213,9 @@ class MLModelService:
                         base_name = item.name
                         created = datetime.fromtimestamp(item.stat().st_mtime)
 
+                    # Load metadata if available
+                    metadata = cls.load_metadata(model_type, item.name)
+
                     models.append(
                         {
                             "name": item.name,
@@ -217,6 +223,9 @@ class MLModelService:
                             "path": str(item),
                             "created": created.isoformat(),
                             "is_versioned": match is not None,
+                            "description": metadata.get("description")
+                            if metadata
+                            else None,
                         }
                     )
         else:
@@ -244,6 +253,9 @@ class MLModelService:
                         base_name = model_name
                         created = datetime.fromtimestamp(item.stat().st_mtime)
 
+                    # Load metadata if available
+                    metadata = cls.load_metadata(model_type, model_name)
+
                     models.append(
                         {
                             "name": model_name,
@@ -254,6 +266,9 @@ class MLModelService:
                             "size_bytes": item.stat().st_size,
                             "created": created.isoformat(),
                             "is_versioned": match is not None,
+                            "description": metadata.get("description")
+                            if metadata
+                            else None,
                         }
                     )
 
@@ -345,4 +360,77 @@ class MLModelService:
                 logger.info(f"Deleted anomaly model: {name}.joblib")
                 return True
 
+        return False
+
+    # =========================================================================
+    # Metadata Management
+    # =========================================================================
+
+    @classmethod
+    def _get_metadata_path(cls, model_type: str, name: str) -> Path:
+        """Get the path for a model's metadata file.
+
+        Args:
+            model_type: 'classifier' or 'anomaly'
+            name: Model name
+
+        Returns:
+            Path to the metadata JSON file
+        """
+        model_dir = cls.get_model_dir(model_type)
+        return model_dir / f"{name}.meta.json"
+
+    @classmethod
+    def save_metadata(
+        cls, model_type: str, name: str, metadata: dict[str, Any]
+    ) -> None:
+        """Save metadata for a model.
+
+        Args:
+            model_type: 'classifier' or 'anomaly'
+            name: Model name
+            metadata: Metadata dict to save
+        """
+        path = cls._get_metadata_path(model_type, name)
+        with open(path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        logger.info(f"Saved metadata for {model_type} model: {name}")
+
+    @classmethod
+    def load_metadata(cls, model_type: str, name: str) -> dict[str, Any] | None:
+        """Load metadata for a model.
+
+        Args:
+            model_type: 'classifier' or 'anomaly'
+            name: Model name
+
+        Returns:
+            Metadata dict, or None if not found
+        """
+        path = cls._get_metadata_path(model_type, name)
+        if not path.exists():
+            return None
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to load metadata for {name}: {e}")
+            return None
+
+    @classmethod
+    def delete_metadata(cls, model_type: str, name: str) -> bool:
+        """Delete metadata for a model.
+
+        Args:
+            model_type: 'classifier' or 'anomaly'
+            name: Model name
+
+        Returns:
+            True if deleted, False if not found
+        """
+        path = cls._get_metadata_path(model_type, name)
+        if path.exists():
+            path.unlink()
+            logger.info(f"Deleted metadata for {model_type} model: {name}")
+            return True
         return False
