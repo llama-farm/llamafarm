@@ -199,7 +199,15 @@ export default function TestChat({
   const getCurrentDatabase = useCallback(() => {
     try {
       const ragConfig = (projectDetail as any)?.project?.config?.rag
-      return ragConfig?.default_database || ''
+      // First try explicit default_database, then fall back to first database
+      if (ragConfig?.default_database) {
+        return ragConfig.default_database
+      }
+      // If no default set, use first database
+      if (ragConfig?.databases && Array.isArray(ragConfig.databases) && ragConfig.databases.length > 0) {
+        return ragConfig.databases[0]?.name || ''
+      }
+      return ''
     } catch {
       return ''
     }
@@ -254,6 +262,66 @@ export default function TestChat({
 
   // Get the current database value for rendering
   const currentDatabase = getCurrentDatabase()
+
+  // Get retrieval strategies for the current database
+  const { availableStrategies, defaultStrategy } = useMemo(() => {
+    try {
+      const ragConfig = (projectDetail as any)?.project?.config?.rag
+      if (!ragConfig?.databases || !Array.isArray(ragConfig.databases)) {
+        return { availableStrategies: [], defaultStrategy: null }
+      }
+
+      const dbName = currentDatabase
+      const dbConfig = ragConfig.databases.find(
+        (db: any) => db?.name === dbName
+      )
+      if (!dbConfig?.retrieval_strategies || !Array.isArray(dbConfig.retrieval_strategies)) {
+        return { availableStrategies: [], defaultStrategy: null }
+      }
+
+      const strategies = dbConfig.retrieval_strategies
+        .filter((s: any) => s?.name)
+        .map((s: any) => ({
+          name: String(s.name),
+          type: String(s.type || ''),
+          isDefault: Boolean(s.default),
+        }))
+
+      // Find the default strategy: explicit default_retrieval_strategy, or one marked default, or first
+      let defaultStrat: string | null = null
+      if (dbConfig.default_retrieval_strategy) {
+        defaultStrat = String(dbConfig.default_retrieval_strategy)
+      } else {
+        const markedDefault = strategies.find((s: any) => s.isDefault)
+        if (markedDefault) {
+          defaultStrat = markedDefault.name
+        } else if (strategies.length > 0) {
+          defaultStrat = strategies[0].name
+        }
+      }
+
+      return { availableStrategies: strategies, defaultStrategy: defaultStrat }
+    } catch {
+      return { availableStrategies: [], defaultStrategy: null }
+    }
+  }, [projectDetail, currentDatabase])
+
+  // Selected retrieval strategy state
+  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
+
+  // Reset selected strategy to default when database changes or when strategies become available
+  useEffect(() => {
+    // Check if the current selection is still valid
+    const isValidSelection = availableStrategies.some(
+      (s: any) => s.name === selectedStrategy
+    )
+
+    // If the selection is not valid, reset it to the new default.
+    // This handles switching databases or config changes.
+    if (!isValidSelection) {
+      setSelectedStrategy(defaultStrategy)
+    }
+  }, [currentDatabase, defaultStrategy, availableStrategies])
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -587,6 +655,7 @@ export default function TestChat({
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
+            rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
@@ -671,6 +740,7 @@ export default function TestChat({
     ragEnabled,
     ragTopK,
     ragScoreThreshold,
+    selectedStrategy,
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -831,6 +901,7 @@ export default function TestChat({
             rag_enabled: ragEnabled,
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
+            rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
@@ -902,6 +973,7 @@ export default function TestChat({
     ragEnabled,
     ragTopK,
     ragScoreThreshold,
+    selectedStrategy,
     projectSession,
     setStreamingMessage,
     projectChatStreamingSession.sessionId,
@@ -911,24 +983,44 @@ export default function TestChat({
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
-        <div className="text-xs md:text-sm text-muted-foreground">
-          {USE_PROJECT_CHAT && chatParams ? (
-            <span>
-              Project: {chatParams.namespace}/{chatParams.projectId}
-              {projectChatStreamingSession.sessionId && (
-                <span className="ml-2 opacity-60">
-                  • Session: {projectChatStreamingSession.sessionId.slice(-8)}
-                </span>
-              )}
-            </span>
-          ) : (
-            'Session'
-          )}
+      <div className="flex flex-col gap-2 px-3 md:px-4 py-2 border-b border-border rounded-t-xl bg-background/50">
+        {/* First row: Project info + Clear button */}
+        <div className="flex items-center justify-between">
+          <div className="text-xs md:text-sm text-muted-foreground">
+            {USE_PROJECT_CHAT && chatParams ? (
+              <span>
+                Project: {chatParams.namespace}/{chatParams.projectId}
+                {projectChatStreamingSession.sessionId && (
+                  <span className="ml-2 opacity-60">
+                    • Session: {projectChatStreamingSession.sessionId.slice(-8)}
+                  </span>
+                )}
+              </span>
+            ) : (
+              'Session'
+            )}
+          </div>
+          {/* Clear button - far right */}
+          <button
+            type="button"
+            onClick={() => {
+              clearChat()
+              if (!MOCK_MODE && chatParams) {
+                projectChatStreamingSession.clearSession()
+              }
+              // Reset sending state to ensure input isn't stuck disabled
+              setIsProjectSending(false)
+              setStreamingMessage(null)
+            }}
+            disabled={isClearing || !hasMessages}
+            className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isClearing ? 'Clearing…' : 'Clear'}
+          </button>
         </div>
-        {/* Model and Database selectors (if available) */}
+        {/* Second row: Model, Database, Strategy selectors */}
         {USE_PROJECT_CHAT && (
-          <div className="flex flex-wrap items-center gap-4 md:gap-8">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:gap-x-5">
             {/* Model selector */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -942,7 +1034,8 @@ export default function TestChat({
                   ''
                 }
                 onChange={e => setSelectedModel(e.target.value)}
-                className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+                className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] max-w-[220px] truncate appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
               >
                 {modelsLoading && <option value="">Loading…</option>}
                 {!modelsLoading && unifiedModels.length === 0 && (
@@ -969,7 +1062,8 @@ export default function TestChat({
                     const value = e.target.value
                     if (value) handleDatabaseChange(value)
                   }}
-                  className="text-xs px-2 py-1 rounded bg-card border border-input text-foreground min-w-[140px]"
+                  className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
                 >
                   {availableDatabases.map((dbName: string) => (
                     <option key={dbName} value={dbName}>
@@ -979,21 +1073,32 @@ export default function TestChat({
                 </select>
               </div>
             )}
+
+            {/* Retrieval Strategy selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Strategy
+              </span>
+              <select
+                value={selectedStrategy || ''}
+                onChange={e => setSelectedStrategy(e.target.value || null)}
+                disabled={availableStrategies.length === 0}
+                className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
+              >
+                {availableStrategies.length === 0 ? (
+                  <option value="">No strategies found</option>
+                ) : (
+                  availableStrategies.map((strategy: { name: string; type: string; isDefault: boolean }) => (
+                    <option key={strategy.name} value={strategy.name}>
+                      {strategy.name} {strategy.name === defaultStrategy ? '(default)' : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            clearChat()
-            if (!MOCK_MODE && chatParams) {
-              projectChatStreamingSession.clearSession()
-            }
-          }}
-          disabled={isClearing}
-          className="text-xs px-2 py-1 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isClearing ? 'Clearing…' : 'Clear'}
-        </button>
       </div>
 
       {/* Error */}
@@ -1016,8 +1121,8 @@ export default function TestChat({
         ref={listRef}
         className={
           !hasMessages
-            ? 'flex-1 overflow-hidden p-3 md:p-4'
-            : 'flex-1 overflow-y-auto p-3 md:p-4'
+            ? 'flex-1 overflow-hidden p-3 md:p-4 relative'
+            : 'flex-1 overflow-y-auto p-3 md:p-4 relative'
         }
       >
         {!hasMessages ? (
@@ -1181,7 +1286,7 @@ export function TestChatMessage({
       <div
         className={
           isUser
-            ? 'px-4 py-3 md:px-4 md:py-3 rounded-lg bg-primary/10 text-foreground'
+            ? 'px-4 py-2.5 rounded-lg bg-primary/10 text-foreground leading-snug'
             : isAssistant
               ? 'px-0 md:px-0 text-[15px] md:text-base leading-relaxed text-foreground/90'
               : 'px-4 py-3 rounded-lg bg-muted text-foreground'
@@ -1247,7 +1352,11 @@ export function TestChatMessage({
             )}
 
             {/* Final answer content (without <think> … </think>) */}
-            <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-4 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-headings:my-4 prose-pre:my-3 [&>*]:mb-4">
+            <div className={
+              isUser
+                ? 'prose prose-sm dark:prose-invert max-w-none leading-snug prose-p:my-0 [&>*]:mb-0 [&>*:last-child]:mb-0'
+                : 'prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-4 prose-li:my-1 prose-ul:my-4 prose-ol:my-4 prose-headings:my-4 prose-pre:my-3 [&>*]:mb-4'
+            }>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {contentWithoutThinking.replace(/\n{3,}/g, '\n\n')}
               </ReactMarkdown>

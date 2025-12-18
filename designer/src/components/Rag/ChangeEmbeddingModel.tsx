@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import {
+  useNavigate,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-// Badge import removed after removing summary card
-// import { Badge } from '../ui/badge'
+import { Badge } from '../ui/badge'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useToast } from '../ui/toast'
@@ -28,9 +33,18 @@ import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
-import { validateEmbeddingNavigationState } from '../../utils/security'
+import { validateEmbeddingNavigationState, validateStrategyName } from '../../utils/security'
 import type { ProjectConfig } from '../../types/config'
+import { useCachedModels } from '../../hooks/useModels'
+import modelService from '../../api/modelService'
+import { useUnsavedChanges } from '../../contexts/UnsavedChangesContext'
+import UnsavedChangesModal from '../ConfigEditor/UnsavedChangesModal'
 import { encryptAPIKey } from '../../utils/encryption'
+import {
+  LocalModelTable,
+  type Variant,
+  type LocalGroup,
+} from './LocalModelTable'
 
 function ChangeEmbeddingModel() {
   const navigate = useNavigate()
@@ -39,8 +53,9 @@ function ChangeEmbeddingModel() {
   const { strategyId } = useParams()
   const [searchParams] = useSearchParams()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const activeProject = useActiveProject()
-  
+
   // Get project config and database manager
   const { data: projectResp } = useProject(
     activeProject?.namespace || '',
@@ -51,12 +66,14 @@ function ChangeEmbeddingModel() {
     activeProject?.namespace || '',
     activeProject?.project || ''
   )
-  
+
   // Get data from navigation state with validation, or URL params (for backward compatibility)
   const validatedState = validateEmbeddingNavigationState(location.state)
-  
+
   // Config pointer for config editor mode
-  const projectConfig = (projectResp as any)?.project?.config as ProjectConfig | undefined
+  const projectConfig = (projectResp as any)?.project?.config as
+    | ProjectConfig
+    | undefined
   const getEmbeddingLocation = useCallback(() => {
     if (strategyId) {
       return {
@@ -74,21 +91,62 @@ function ChangeEmbeddingModel() {
   })
 
   // Use validated state or fall back to URL params for backward compatibility
-  const database = validatedState.database !== 'main_database' 
-    ? validatedState.database 
-    : (searchParams.get('database') || 'main_database')
+  const database =
+    validatedState.database !== 'main_database'
+      ? validatedState.database
+      : searchParams.get('database') || 'main_database'
   const originalStrategyName = validatedState.strategyName || strategyId || ''
-  const strategyType = validatedState.strategyType
-  const currentConfig = validatedState.currentConfig
-  const isDefaultStrategy = validatedState.isDefault
-  const priority = validatedState.priority
+
+  // Get strategy data from project config (server source of truth) instead of navigation state
+  const strategyFromConfig = useMemo(() => {
+    if (!projectConfig || !originalStrategyName) return null
+    const db = projectConfig.rag?.databases?.find(
+      (d: any) => d.name === database
+    )
+    return db?.embedding_strategies?.find(
+      (s: any) => s.name === originalStrategyName
+    )
+  }, [projectConfig, database, originalStrategyName])
+
+  // Use server data if available, fall back to navigation state for backward compatibility
+  const strategyType =
+    strategyFromConfig?.type || validatedState.strategyType || 'OllamaEmbedder'
+  const currentConfig =
+    strategyFromConfig?.config || validatedState.currentConfig || {}
+  const isDefaultStrategy =
+    projectConfig?.rag?.databases?.find((d: any) => d.name === database)
+      ?.default_embedding_strategy === originalStrategyName ||
+    validatedState.isDefault ||
+    false
+  const priority = strategyFromConfig?.priority || validatedState.priority || 0
 
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Unsaved changes tracking
+  const unsavedChangesContext = useUnsavedChanges()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(
+    null
+  )
+  const [isInitialized, setIsInitialized] = useState(false)
+  const [initialValues, setInitialValues] = useState<{
+    strategyName: string
+    selected: typeof selected
+    provider: Provider
+    model: string
+    customModel: string
+    dimension: number
+    batchSize: number
+    timeoutSec: number
+    baseUrl: string
+    ollamaAutoPull: boolean
+  } | null>(null)
+
   // Editable strategy name - initialize from state
   const [strategyName, setStrategyName] = useState<string>(originalStrategyName)
-  
+  const [nameTouched, setNameTouched] = useState(false)
+
   // Initialize strategy name from state
   useEffect(() => {
     if (originalStrategyName) {
@@ -108,27 +166,94 @@ function ChangeEmbeddingModel() {
 
   // UI state
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
-  const [query] = useState('')
-  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
+  const [query, setQuery] = useState('')
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false)
 
-  type Variant = {
-    id: string
-    label: string
-    dim: string
-    quality: string
-    download: string
-  }
-  type LocalGroup = {
-    id: number
-    name: string
-    dim: string
-    quality: string
-    ramVram: string
-    download: string
-    variants: Variant[]
+  // Download state per model
+  const [downloadStates, setDownloadStates] = useState<
+    Record<
+      string,
+      {
+        state: 'idle' | 'downloading' | 'success' | 'error'
+        progress: number
+        downloadedBytes: number
+        totalBytes: number
+        error?: string
+      }
+    >
+  >({})
+
+  // Download confirmation modal state
+  const [downloadConfirmOpen, setDownloadConfirmOpen] = useState(false)
+  const [pendingDownloadVariant, setPendingDownloadVariant] =
+    useState<Variant | null>(null)
+  const [showBackgroundDownload, setShowBackgroundDownload] = useState(false)
+  const [backgroundDownloadName, setBackgroundDownloadName] = useState('')
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
+
+  // Show/hide model table
+  const [showModelTable, setShowModelTable] = useState(true)
+
+  // Fetch cached models from disk
+  const {
+    data: cachedModelsResponse,
+    isLoading: isLoadingCachedModels,
+    refetch: refetchCachedModels,
+  } = useCachedModels()
+
+  // Helper to format bytes
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${Math.round((bytes / Math.pow(k, i)) * 100) / 100} ${sizes[i]}`
   }
 
-  const localGroups: LocalGroup[] = [
+  // Map model IDs to HuggingFace identifiers
+  const modelIdToHuggingFace: Record<string, string> = {
+    'bge-small-en-v1.5': 'BAAI/bge-small-en-v1.5',
+    'bge-base-en-v1.5': 'BAAI/bge-base-en-v1.5',
+    'bge-large-en-v1.5': 'BAAI/bge-large-en-v1.5',
+    'bge-m3': 'BAAI/bge-m3',
+    'e5-base-v2': 'intfloat/e5-base-v2',
+    'e5-large-v2': 'intfloat/e5-large-v2',
+    'all-MiniLM-L6-v2': 'sentence-transformers/all-MiniLM-L6-v2',
+  }
+
+  // Check if a model is on disk
+  const isModelOnDisk = (modelId: string): boolean => {
+    if (!cachedModelsResponse?.data) return false
+    const hfId = modelIdToHuggingFace[modelId] || modelId
+    return cachedModelsResponse.data.some(m => {
+      // Check if model name matches (could be full path or just name)
+      const modelName = m.name.toLowerCase()
+      const searchId = hfId.toLowerCase()
+      return (
+        modelName.includes(searchId.split('/').pop() || '') ||
+        modelName === searchId
+      )
+    })
+  }
+
+  // Get disk size for a model
+  const getModelDiskSize = (modelId: string): number | null => {
+    if (!cachedModelsResponse?.data) return null
+    const hfId = modelIdToHuggingFace[modelId] || modelId
+    const found = cachedModelsResponse.data.find(m => {
+      const modelName = m.name.toLowerCase()
+      const searchId = hfId.toLowerCase()
+      return (
+        modelName.includes(searchId.split('/').pop() || '') ||
+        modelName === searchId
+      )
+    })
+    return found?.size || null
+  }
+
+
+  // Base local groups with model identifiers
+  const baseLocalGroups: LocalGroup[] = [
     {
       id: 1,
       name: 'BAAI — BGE (English)',
@@ -143,6 +268,7 @@ function ChangeEmbeddingModel() {
           dim: '384',
           quality: 'General',
           download: '120MB',
+          modelIdentifier: 'BAAI/bge-small-en-v1.5',
         },
         {
           id: 'bge-base-en-v1.5',
@@ -150,6 +276,7 @@ function ChangeEmbeddingModel() {
           dim: '768',
           quality: 'General',
           download: '340MB',
+          modelIdentifier: 'BAAI/bge-base-en-v1.5',
         },
         {
           id: 'bge-large-en-v1.5',
@@ -157,6 +284,7 @@ function ChangeEmbeddingModel() {
           dim: '1024',
           quality: 'General',
           download: '650MB',
+          modelIdentifier: 'BAAI/bge-large-en-v1.5',
         },
       ],
     },
@@ -174,6 +302,7 @@ function ChangeEmbeddingModel() {
           dim: '1024',
           quality: 'Multilingual',
           download: '900MB',
+          modelIdentifier: 'BAAI/bge-m3',
         },
       ],
     },
@@ -191,6 +320,7 @@ function ChangeEmbeddingModel() {
           dim: '768',
           quality: 'General',
           download: '400MB',
+          modelIdentifier: 'intfloat/e5-base-v2',
         },
         {
           id: 'e5-large-v2',
@@ -198,6 +328,7 @@ function ChangeEmbeddingModel() {
           dim: '1024',
           quality: 'General',
           download: '800MB',
+          modelIdentifier: 'intfloat/e5-large-v2',
         },
       ],
     },
@@ -215,10 +346,28 @@ function ChangeEmbeddingModel() {
           dim: '384',
           quality: 'Fast',
           download: '60MB',
+          modelIdentifier: 'sentence-transformers/all-MiniLM-L6-v2',
         },
       ],
     },
   ]
+
+  // Enhance local groups with disk status
+  const localGroups: LocalGroup[] = useMemo(() => {
+    return baseLocalGroups.map(group => ({
+      ...group,
+      variants: group.variants.map(variant => {
+        const isDownloaded = isModelOnDisk(variant.id)
+        const diskSize = getModelDiskSize(variant.id)
+        return {
+          ...variant,
+          isDownloaded,
+          diskSize,
+          download: diskSize ? formatBytes(diskSize) : variant.download,
+        }
+      }),
+    }))
+  }, [cachedModelsResponse])
 
   const filteredGroups: LocalGroup[] = useMemo(() => {
     if (!query.trim()) return localGroups
@@ -233,7 +382,7 @@ function ChangeEmbeddingModel() {
           g.name.toLowerCase().includes(q) ||
           (g.variants && g.variants.length > 0)
       )
-  }, [query])
+  }, [query, localGroups])
 
   const providerOptions = [
     'OpenAI',
@@ -275,9 +424,47 @@ function ChangeEmbeddingModel() {
   const [dimension, setDimension] = useState<number>(768)
   const [timeoutSec, setTimeoutSec] = useState(60)
   const [ollamaAutoPull, setOllamaAutoPull] = useState(true)
+
+  // Sync isDirty with context
+  useEffect(() => {
+    unsavedChangesContext.setIsDirty(hasUnsavedChanges)
+  }, [hasUnsavedChanges, unsavedChangesContext])
+
+  // Track changes to form fields - only after initialization
+  useEffect(() => {
+    // Don't track changes until form is initialized
+    if (!isInitialized || !initialValues) return
+
+    // Check if any form field has changed from initial values
+    const hasChanges =
+      strategyName !== initialValues.strategyName ||
+      selected !== initialValues.selected ||
+      provider !== initialValues.provider ||
+      model !== initialValues.model ||
+      customModel !== initialValues.customModel ||
+      dimension !== initialValues.dimension ||
+      batchSize !== initialValues.batchSize ||
+      timeoutSec !== initialValues.timeoutSec ||
+      baseUrl !== initialValues.baseUrl ||
+      ollamaAutoPull !== initialValues.ollamaAutoPull
+
+    setHasUnsavedChanges(hasChanges)
+  }, [
+    strategyName,
+    selected,
+    provider,
+    model,
+    customModel,
+    dimension,
+    batchSize,
+    timeoutSec,
+    baseUrl,
+    ollamaAutoPull,
+    isInitialized,
+    initialValues,
+  ])
   const [openaiOrg, setOpenaiOrg] = useState('')
   const [openaiMaxRetries, setOpenaiMaxRetries] = useState(3)
-  const [confirmOpen, setConfirmOpen] = useState(false)
   const [makeDefault, setMakeDefault] = useState(false)
   const [reembedOpen, setReembedOpen] = useState(false)
   const [azureDeployment, setAzureDeployment] = useState('')
@@ -326,8 +513,10 @@ function ChangeEmbeddingModel() {
   const selectedKey = model === 'Custom' ? customModel.trim() : model
   const meta = embeddingMeta[selectedKey]
 
-  // Initialize form fields from currentConfig state
+  // Initialize form fields from currentConfig (from server or navigation state)
   useEffect(() => {
+    // Wait for project config to load if we're using server data
+    if (strategyFromConfig === null && !validatedState.currentConfig) return
     if (!currentConfig || Object.keys(currentConfig).length === 0) return
 
     try {
@@ -340,12 +529,41 @@ function ChangeEmbeddingModel() {
         setBatchSize(currentConfig.batchSize)
       if (typeof currentConfig.timeout === 'number')
         setTimeoutSec(currentConfig.timeout)
-      
+
       // Initialize model and provider based on strategy type
       let targetProvider: Provider = 'Ollama (remote)'
       let targetTab: 'local' | 'cloud' = 'local'
-      
-      if (strategyType === 'OllamaEmbedder') {
+
+      if (strategyType === 'UniversalEmbedder') {
+        // UniversalEmbedder uses local HuggingFace models
+        targetProvider = 'Ollama (remote)' // This is just for UI state, actual provider is handled via selected
+        targetTab = 'local'
+        if (currentConfig.base_url) setBaseUrl(currentConfig.base_url)
+
+        // Try to find matching variant from localGroups
+        if (currentConfig.model) {
+          const modelId = currentConfig.model
+          // Find variant by modelIdentifier or by mapping
+          const variant = localGroups
+            .flatMap(g => g.variants)
+            .find(
+              v =>
+                v.modelIdentifier === modelId ||
+                modelIdToHuggingFace[v.id] === modelId ||
+                v.id === modelId
+            )
+
+          if (variant) {
+            // Set selected state for local HuggingFace model
+            setSelected({
+              runtime: 'Local',
+              provider: 'Ollama',
+              modelId: variant.id,
+            })
+            setShowModelTable(false) // Hide table, show selected card
+          }
+        }
+      } else if (strategyType === 'OllamaEmbedder') {
         targetProvider = 'Ollama (remote)'
         targetTab = 'local'
         if (currentConfig.base_url) setBaseUrl(currentConfig.base_url)
@@ -361,13 +579,16 @@ function ChangeEmbeddingModel() {
       } else if (strategyType.includes('Azure')) {
         targetProvider = 'Azure OpenAI'
         targetTab = 'cloud'
-        if (currentConfig.deployment) setAzureDeployment(currentConfig.deployment)
+        if (currentConfig.deployment)
+          setAzureDeployment(currentConfig.deployment)
         if (currentConfig.endpoint) setAzureResource(currentConfig.endpoint)
-        if (currentConfig.api_version) setAzureApiVersion(currentConfig.api_version)
+        if (currentConfig.api_version)
+          setAzureApiVersion(currentConfig.api_version)
       } else if (strategyType.includes('Google')) {
         targetProvider = 'Google'
         targetTab = 'cloud'
-        if (currentConfig.project_id) setVertexProjectId(currentConfig.project_id)
+        if (currentConfig.project_id)
+          setVertexProjectId(currentConfig.project_id)
         if (currentConfig.region) setVertexLocation(currentConfig.region)
         if (currentConfig.endpoint) setVertexEndpoint(currentConfig.endpoint)
       } else if (strategyType.includes('Bedrock')) {
@@ -375,15 +596,15 @@ function ChangeEmbeddingModel() {
         targetTab = 'cloud'
         if (currentConfig.region) setBedrockRegion(currentConfig.region)
       }
-      
+
       setProvider(targetProvider)
       setSourceTab(targetTab)
-      
-      // Initialize model
-      if (currentConfig.model) {
+
+      // Initialize model (skip for UniversalEmbedder as it's handled above)
+      if (currentConfig.model && strategyType !== 'UniversalEmbedder') {
         const modelName = currentConfig.model
         setExistingModelId(modelName)
-        
+
         // Set model in the UI (check if it's in the provider's model list)
         const providerModels = modelMap[targetProvider] || []
         const modelInList = providerModels.includes(modelName)
@@ -393,11 +614,71 @@ function ChangeEmbeddingModel() {
           setModel('Custom')
           setCustomModel(modelName)
         }
+      } else if (currentConfig.model && strategyType === 'UniversalEmbedder') {
+        // For UniversalEmbedder, we already set selected above, but also set existingModelId
+        setExistingModelId(currentConfig.model)
       }
+
+      // Mark that we're ready to capture initial values
+      // We'll capture them in a separate effect after state updates complete
+      setIsInitialized(false)
     } catch (e) {
       console.error('Failed to initialize form from config:', e)
+      // Even if initialization fails, mark as initialized to prevent false positives
+      setIsInitialized(true)
     }
-  }, [currentConfig, strategyType])
+  }, [
+    currentConfig,
+    strategyType,
+    strategyFromConfig,
+    validatedState.currentConfig,
+    // Note: We intentionally don't include form fields in deps to avoid re-initialization
+    // This effect should only run when config/strategyType changes
+  ])
+
+  // Capture initial values after form is initialized
+  // This runs after the initialization effect has set all the form fields
+  useEffect(() => {
+    // Only capture once, when we have config but haven't initialized yet
+    if (
+      isInitialized ||
+      !currentConfig ||
+      Object.keys(currentConfig).length === 0
+    )
+      return
+
+    // Use a small delay to ensure all state updates from initialization have completed
+    const timer = setTimeout(() => {
+      setInitialValues({
+        strategyName,
+        selected,
+        provider,
+        model,
+        customModel,
+        dimension,
+        batchSize,
+        timeoutSec,
+        baseUrl,
+        ollamaAutoPull,
+      })
+      setIsInitialized(true)
+    }, 150)
+
+    return () => clearTimeout(timer)
+  }, [
+    currentConfig,
+    strategyName,
+    selected,
+    provider,
+    model,
+    customModel,
+    dimension,
+    batchSize,
+    timeoutSec,
+    baseUrl,
+    ollamaAutoPull,
+    isInitialized,
+  ])
 
   // Sync dimension from model metadata when model/provider changes
   useEffect(() => {
@@ -418,8 +699,180 @@ function ChangeEmbeddingModel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider])
 
-  const openConfirmLocal = (group: any, variant: Variant) => {
-    setSelected({ runtime: 'Local', provider: group.name, modelId: variant.id })
+  // Helper to format ETA
+  const formatETA = (seconds: number): string => {
+    if (seconds < 60) return `${Math.round(seconds)}s`
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`
+    return `${Math.round(seconds / 3600)}h`
+  }
+
+  // Download a model
+  const downloadModel = async (variant: Variant, background = false) => {
+    const modelIdentifier =
+      variant.modelIdentifier || modelIdToHuggingFace[variant.id] || variant.id
+
+    // Initialize download state
+    setDownloadStates(prev => ({
+      ...prev,
+      [variant.id]: {
+        state: 'downloading',
+        progress: 0,
+        downloadedBytes: 0,
+        totalBytes: 0,
+      },
+    }))
+
+    if (background) {
+      setShowBackgroundDownload(true)
+      setBackgroundDownloadName(variant.label)
+      setDownloadConfirmOpen(false)
+    }
+
+    try {
+      if (!background) {
+        toast({
+          message: `Downloading ${variant.label}...`,
+          variant: 'default',
+        })
+      }
+
+      const start = Date.now()
+      for await (const event of modelService.downloadModel({
+        model_name: modelIdentifier,
+        provider: 'universal',
+      })) {
+        if (event.event === 'progress') {
+          const d = Number(event.downloaded || 0)
+          const t = Number(event.total || 0)
+          const progress = t > 0 ? Math.round((d / t) * 100) : 0
+
+          setDownloadStates(prev => ({
+            ...prev,
+            [variant.id]: {
+              state: 'downloading',
+              progress,
+              downloadedBytes: d,
+              totalBytes: t,
+            },
+          }))
+
+          // Calculate ETA
+          if (t > 0 && d > 0) {
+            const elapsedSec = (Date.now() - start) / 1000
+            if (elapsedSec > 0) {
+              const speed = d / elapsedSec
+              const remain = (t - d) / (speed || 1)
+              setEstimatedTimeRemaining(formatETA(remain))
+            }
+          }
+        } else if (event.event === 'done') {
+          setDownloadStates(prev => ({
+            ...prev,
+            [variant.id]: {
+              state: 'success',
+              progress: 100,
+              downloadedBytes: prev[variant.id]?.totalBytes || 0,
+              totalBytes: prev[variant.id]?.totalBytes || 0,
+            },
+          }))
+
+          // Refresh cached models
+          await refetchCachedModels()
+
+          if (!background) {
+            toast({
+              message: `${variant.label} downloaded successfully`,
+              variant: 'default',
+            })
+          }
+
+          // Auto-select after download
+          setTimeout(() => {
+            setSelected({
+              runtime: 'Local',
+              provider: 'Ollama',
+              modelId: variant.id,
+            })
+            // Close the model selection area when a new model is selected
+            setShowModelTable(false)
+            setDownloadConfirmOpen(false)
+            if (background) {
+              setShowBackgroundDownload(false)
+            }
+          }, 500)
+        } else if (event.event === 'error') {
+          setDownloadStates(prev => ({
+            ...prev,
+            [variant.id]: {
+              state: 'error',
+              progress: 0,
+              downloadedBytes: 0,
+              totalBytes: 0,
+              error: event.message || 'Download failed',
+            },
+          }))
+
+          toast({
+            message: event.message || `Failed to download ${variant.label}`,
+            variant: 'destructive',
+          })
+
+          if (background) {
+            setShowBackgroundDownload(false)
+          }
+        }
+      }
+    } catch (error: any) {
+      setDownloadStates(prev => ({
+        ...prev,
+        [variant.id]: {
+          state: 'error',
+          progress: 0,
+          downloadedBytes: 0,
+          totalBytes: 0,
+          error: error.message || 'Download failed',
+        },
+      }))
+
+      toast({
+        message: error.message || `Failed to download ${variant.label}`,
+        variant: 'destructive',
+      })
+
+      if (background) {
+        setShowBackgroundDownload(false)
+      }
+    }
+  }
+
+  const openConfirmLocal = async (group: any, variant: Variant) => {
+    // Check if model needs to be downloaded
+    if (!variant.isDownloaded && variant.modelIdentifier) {
+      // Show confirmation modal
+      setPendingDownloadVariant(variant)
+      setDownloadConfirmOpen(true)
+    } else {
+      // Model is already on disk, just select it
+      setSelected({
+        runtime: 'Local',
+        provider: group.name,
+        modelId: variant.id,
+      })
+      // Close the model selection area when a new model is selected
+      setShowModelTable(false)
+    }
+  }
+
+  // Refresh disk models
+  const handleRefresh = async () => {
+    setIsManuallyRefreshing(true)
+    const startTime = Date.now()
+    await refetchCachedModels()
+    const elapsed = Date.now() - startTime
+    const remaining = Math.max(0, 800 - elapsed)
+    setTimeout(() => {
+      setIsManuallyRefreshing(false)
+    }, remaining)
   }
 
   const checkConnection = async () => {
@@ -456,8 +909,41 @@ function ChangeEmbeddingModel() {
 
   // Header with Save strategy
   const summaryProvider = (() => {
-    if (selected)
-      return selected.runtime === 'Local' ? 'Ollama' : selected.provider
+    // First check if we have a selected model (user just selected one)
+    if (selected) {
+      // Check if this is a UniversalEmbedder (HuggingFace model from local groups)
+      if (selected.runtime === 'Local' && selected.modelId) {
+        const variant = localGroups
+          .flatMap(g => g.variants)
+          .find(v => v.id === selected.modelId)
+        if (variant?.modelIdentifier) {
+          // This is a HuggingFace model, show "Universal"
+          return 'Universal'
+        }
+        // Otherwise it's Ollama
+        return 'Ollama'
+      }
+      return selected.provider
+    }
+    // Check strategy type from config (when editing existing strategy)
+    if (strategyType === 'UniversalEmbedder') {
+      return 'Universal'
+    }
+    // Check if currentConfig has a model that matches a HuggingFace model
+    if (currentConfig?.model) {
+      const modelId = currentConfig.model
+      const variant = localGroups
+        .flatMap(g => g.variants)
+        .find(
+          v =>
+            v.modelIdentifier === modelId ||
+            modelIdToHuggingFace[v.id] === modelId ||
+            v.id === modelId
+        )
+      if (variant?.modelIdentifier) {
+        return 'Universal'
+      }
+    }
     return provider === 'Ollama (remote)' ? 'Ollama' : provider
   })()
   const summaryModel = selected?.modelId || existingModelId || null
@@ -470,51 +956,61 @@ function ChangeEmbeddingModel() {
       return baseUrl || null
     }
   })()
-  const runtimeLabel = selected
-    ? selected.runtime
-    : provider === 'Ollama (remote)'
-      ? 'Local'
-      : 'Cloud'
+  // runtimeLabel removed - unused variable
 
   // Helper functions similar to AddEmbeddingStrategy
   const mapProviderToType = (providerLabel: string): string => {
     const typeMap: Record<string, string> = {
-      'Ollama': 'OllamaEmbedder',
+      Ollama: 'OllamaEmbedder',
       'Ollama (remote)': 'OllamaEmbedder',
-      'OpenAI': 'OpenAIEmbedder',
+      OpenAI: 'OpenAIEmbedder',
       'Azure OpenAI': 'AzureOpenAIEmbedder',
-      'Google': 'VertexAIEmbedder',
+      Google: 'VertexAIEmbedder',
       'AWS Bedrock': 'BedrockEmbedder',
-      'Cohere': 'CohereEmbedder',
+      Cohere: 'CohereEmbedder',
       'Voyage AI': 'VoyageEmbedder',
-      'HuggingFace': 'HuggingFaceEmbedder',
-      'SentenceTransformer': 'SentenceTransformerEmbedder'
+      HuggingFace: 'HuggingFaceEmbedder',
+      SentenceTransformer: 'SentenceTransformerEmbedder',
     }
-    
+
     const mappedType = typeMap[providerLabel]
-    
+
     if (!mappedType) {
       console.error(`Unknown embedding provider: ${providerLabel}`)
       // Return a safe fallback but log the issue
       return 'OllamaEmbedder'
     }
-    
+
     return mappedType
   }
 
   const buildStrategyConfig = (encryptedKey?: string) => {
     const config: Record<string, any> = {}
-    
-    const chosenModelId =
-      selected?.modelId ||
-      existingModelId ||
-      (model === 'Custom' ? customModel.trim() : model)
-    
+
+    // For local models, get the full HuggingFace model identifier
+    let chosenModelId: string | undefined
+    if (selected?.runtime === 'Local' && selected?.modelId) {
+      // Find the variant to get the modelIdentifier
+      const variant = localGroups
+        .flatMap(g => g.variants)
+        .find(v => v.id === selected.modelId)
+      chosenModelId =
+        variant?.modelIdentifier ||
+        modelIdToHuggingFace[selected.modelId] ||
+        selected.modelId
+    } else {
+      // For cloud models or existing, use the existing logic
+      chosenModelId =
+        selected?.modelId ||
+        existingModelId ||
+        (model === 'Custom' ? customModel.trim() : model)
+    }
+
     if (chosenModelId) config.model = chosenModelId
     if (dimension) config.dimension = parseInt(String(dimension))
     if (batchSize) config.batch_size = parseInt(String(batchSize))
     if (timeoutSec) config.timeout = parseInt(String(timeoutSec))
-    
+
     const runtimeStr = selected
       ? selected.runtime === 'Local'
         ? 'local'
@@ -522,8 +1018,21 @@ function ChangeEmbeddingModel() {
       : provider === 'Ollama (remote)'
         ? 'local'
         : 'cloud'
-    
-    if (runtimeStr === 'local' || provider === 'Ollama (remote)') {
+
+    // Check if this is a UniversalEmbedder (HuggingFace model from local groups)
+    const isUniversalEmbedder =
+      selected?.runtime === 'Local' &&
+      selected?.modelId &&
+      localGroups
+        .flatMap(g => g.variants)
+        .some(v => v.id === selected.modelId && v.modelIdentifier)
+
+    if (isUniversalEmbedder) {
+      // UniversalEmbedder config
+      config.base_url = baseUrl?.trim() || 'http://127.0.0.1:11540/v1'
+      config.api_key = 'universal'
+    } else if (runtimeStr === 'local' || provider === 'Ollama (remote)') {
+      // OllamaEmbedder config
       if (baseUrl) config.base_url = baseUrl.trim()
       config.auto_pull = ollamaAutoPull !== undefined ? ollamaAutoPull : true
     } else if (summaryProvider === 'OpenAI') {
@@ -545,7 +1054,7 @@ function ChangeEmbeddingModel() {
       if (bedrockRegion) config.region = bedrockRegion.trim()
       if (encryptedKey) config.api_key = encryptedKey
     }
-    
+
     return config
   }
 
@@ -554,7 +1063,7 @@ function ChangeEmbeddingModel() {
       setError('Strategy name is required')
       return
     }
-    
+
     try {
       setIsSaving(true)
       setError(null)
@@ -566,9 +1075,15 @@ function ChangeEmbeddingModel() {
         apiKey.trim()
       ) {
         try {
-          encryptedKey = await encryptAPIKey(apiKey.trim(), getClientSideSecret())
+          encryptedKey = await encryptAPIKey(
+            apiKey.trim(),
+            getClientSideSecret()
+          )
         } catch (e) {
-          toast({ message: 'Failed to encrypt API key', variant: 'destructive' })
+          toast({
+            message: 'Failed to encrypt API key',
+            variant: 'destructive',
+          })
           return
         }
       }
@@ -583,35 +1098,57 @@ function ChangeEmbeddingModel() {
       const currentDb = projectConfig.rag?.databases?.find(
         (db: any) => db.name === database
       )
-      
+
       if (!currentDb) {
         throw new Error(`Database ${database} not found in configuration`)
       }
 
-      // Validate strategy name uniqueness (if renamed)
+      // Validate strategy name uniqueness (if renamed, case-insensitive)
       const trimmedName = strategyName.trim() || originalStrategyName
-      if (trimmedName !== originalStrategyName) {
+      if (trimmedName.toLowerCase() !== originalStrategyName?.toLowerCase()) {
+        const nameLower = trimmedName.toLowerCase()
+        const originalLower = originalStrategyName?.toLowerCase()
         const nameExists = currentDb.embedding_strategies?.some(
-          (s: any) => s.name === trimmedName && s.name !== originalStrategyName
+          (s: any) =>
+            s.name?.toLowerCase() === nameLower &&
+            s.name?.toLowerCase() !== originalLower
         )
         if (nameExists) {
-          throw new Error(`An embedding strategy with name "${trimmedName}" already exists`)
+          throw new Error(
+            'A strategy with this name already exists'
+          )
+        }
+      }
+
+      // Determine the correct strategy type
+      // Local HuggingFace models should use UniversalEmbedder, not OllamaEmbedder
+      let strategyType = mapProviderToType(summaryProvider)
+      if (selected?.runtime === 'Local' && selected?.modelId) {
+        // Check if this is a HuggingFace model from local groups
+        const variant = localGroups
+          .flatMap(g => g.variants)
+          .find(v => v.id === selected.modelId)
+        if (variant?.modelIdentifier) {
+          // This is a HuggingFace model, use UniversalEmbedder
+          strategyType = 'UniversalEmbedder'
         }
       }
 
       // Find and update the specific strategy
-      const updatedStrategies = currentDb.embedding_strategies?.map((strategy: any) => {
-        if (strategy.name === originalStrategyName) {
-          return {
-            ...strategy,
-            name: trimmedName,
-            type: mapProviderToType(summaryProvider),
-            priority: priority,
-            config: buildStrategyConfig(encryptedKey)
+      const updatedStrategies = currentDb.embedding_strategies?.map(
+        (strategy: any) => {
+          if (strategy.name === originalStrategyName) {
+            return {
+              ...strategy,
+              name: trimmedName,
+              type: strategyType,
+              priority: priority,
+              config: buildStrategyConfig(encryptedKey),
+            }
           }
+          return strategy
         }
-        return strategy
-      })
+      )
 
       // Verify the updated strategy exists (using NEW name after rename)
       if (!updatedStrategies?.some((s: any) => s.name === trimmedName)) {
@@ -633,20 +1170,47 @@ function ChangeEmbeddingModel() {
         oldName: database,
         updates: {
           embedding_strategies: updatedStrategies,
-          default_embedding_strategy: updatedDefaultStrategy
+          default_embedding_strategy: updatedDefaultStrategy,
         },
-        projectConfig
+        projectConfig,
       })
 
-      if (makeDefault || (isDefaultStrategy && strategyName.trim() !== originalStrategyName)) {
+      // Invalidate queries to refresh data from server
+      await queryClient.invalidateQueries({
+        queryKey: [
+          'rag',
+          'databases',
+          activeProject?.namespace,
+          activeProject?.project,
+        ],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['project', activeProject?.namespace, activeProject?.project],
+      })
+
+      // Clear unsaved changes flags BEFORE navigation to prevent modal from showing
+      setHasUnsavedChanges(false)
+      unsavedChangesContext.setIsDirty(false)
+
+      if (
+        makeDefault ||
+        (isDefaultStrategy && strategyName.trim() !== originalStrategyName)
+      ) {
         setReembedOpen(true)
       } else {
         toast({ message: 'Strategy saved', variant: 'default' })
-        navigate('/chat/databases')
+        // Use requestAnimationFrame to ensure state updates propagate before navigation
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            navigate('/chat/databases')
+          })
+        })
       }
+      return true
     } catch (error: any) {
       console.error('Failed to save embedding strategy:', error)
       setError(error.message || 'Failed to save strategy')
+      return false
     } finally {
       setIsSaving(false)
     }
@@ -745,7 +1309,10 @@ function ChangeEmbeddingModel() {
                   Make default
                 </label>
               )}
-              <Button onClick={() => setConfirmOpen(true)} disabled={isSaving}>
+              <Button 
+                onClick={saveEdited} 
+                disabled={isSaving || (nameTouched && !!validateStrategyName(strategyName))}
+              >
                 {isSaving ? 'Saving...' : 'Save strategy'}
               </Button>
             </div>
@@ -775,10 +1342,30 @@ function ChangeEmbeddingModel() {
                 </Label>
                 <Input
                   value={strategyName}
-                  onChange={e => setStrategyName(e.target.value)}
+                  onChange={e => {
+                    setStrategyName(e.target.value)
+                    if (nameTouched) {
+                      // Clear error state when user starts typing
+                      const nameError = validateStrategyName(e.target.value)
+                      if (!nameError) {
+                        setError(null)
+                      }
+                    }
+                  }}
+                  onBlur={() => setNameTouched(true)}
                   placeholder="Enter a name"
-                  className="h-9"
+                  className={`h-9 ${nameTouched && validateStrategyName(strategyName) ? 'border-destructive' : ''}`}
                 />
+                {nameTouched && validateStrategyName(strategyName) && (
+                  <p className="text-xs text-destructive mt-1">
+                    {validateStrategyName(strategyName)}
+                  </p>
+                )}
+                {(!nameTouched || !validateStrategyName(strategyName)) && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Can only contain letters, numbers, hyphens, and underscores
+                  </p>
+                )}
               </div>
             </div>
 
@@ -874,136 +1461,165 @@ function ChangeEmbeddingModel() {
               </div>
             )}
 
-            <div className="text-sm text-muted-foreground">
-              Select a new embedding model and configure connection/performance
-              options.
+            <div className="text-sm text-muted-foreground flex items-center gap-2">
+              {showModelTable ? (
+                // When in change mode, show current model
+                selected?.runtime === 'Local' && selected?.modelId ? (
+                  <>
+                    <span>Change model</span>
+                    <span>•</span>
+                    <span className="font-mono text-foreground">
+                      {localGroups
+                        .flatMap(g => g.variants)
+                        .find(v => v.id === selected.modelId)?.label ||
+                        selected.modelId}
+                    </span>
+                  </>
+                ) : selected?.runtime === 'Cloud' && selected?.modelId ? (
+                  <>
+                    <span>Change model</span>
+                    <span>•</span>
+                    <span className="font-mono text-foreground">
+                      {selected.modelId}
+                    </span>
+                  </>
+                ) : existingModelId ? (
+                  <>
+                    <span>Change model</span>
+                    <span>•</span>
+                    <span className="font-mono text-foreground">
+                      {existingModelId}
+                    </span>
+                  </>
+                ) : (
+                  'Embedding strategy model'
+                )
+              ) : (
+                // When not in change mode, show default text
+                'Embedding strategy model'
+              )}
             </div>
 
-            {/* Source switcher */}
-            <div className="w-full flex items-center">
-              <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
-                <button
-                  className={`flex-1 h-10 text-sm ${sourceTab === 'local' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
-                  onClick={() => setSourceTab('local')}
-                  aria-pressed={sourceTab === 'local'}
-                >
-                  Local models
-                </button>
-                <button
-                  className={`flex-1 h-10 text-sm ${sourceTab === 'cloud' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
-                  onClick={() => setSourceTab('cloud')}
-                  aria-pressed={sourceTab === 'cloud'}
-                >
-                  Cloud models
-                </button>
-              </div>
-            </div>
-
-            {sourceTab === 'local' && (
-              <div className="w-full overflow-hidden rounded-lg border border-border">
-                <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
-                  <div className="col-span-4">Model</div>
-                  <div className="col-span-2">dim</div>
-                  <div className="col-span-2">Quality</div>
-                  <div className="col-span-2">Download</div>
-                  <div className="col-span-1">RAM/VRAM</div>
-                  <div className="col-span-1" />
-                </div>
-                {filteredGroups.map(group => {
-                  const isOpen = expandedGroupId === group.id
-                  return (
-                    <div key={group.id} className="border-t border-border">
-                      <div
-                        className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
-                        onClick={() =>
-                          setExpandedGroupId(prev =>
-                            prev === group.id ? null : group.id
-                          )
-                        }
-                      >
-                        <div className="col-span-4 flex items-center gap-2">
-                          <FontIcon
-                            type="chevron-down"
-                            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                          />
-                          <span className="truncate font-medium">
-                            {group.name}
-                          </span>
-                        </div>
-                        <div className="col-span-2 text-xs text-muted-foreground">
-                          {group.dim}
-                        </div>
-                        <div className="col-span-2 text-xs text-muted-foreground">
-                          {group.quality}
-                        </div>
-                        <div className="col-span-2 text-xs text-muted-foreground">
-                          {group.download}
-                        </div>
-                        <div className="col-span-1 text-xs text-muted-foreground">
-                          {group.ramVram}
-                        </div>
-                        <div className="col-span-1" />
+            {/* Selected model card - show when model is selected and table is hidden */}
+            {selected?.runtime === 'Local' &&
+              selected?.modelId &&
+              !showModelTable && (
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-foreground">
+                        {localGroups
+                          .flatMap(g => g.variants)
+                          .find(v => v.id === selected.modelId)?.label ||
+                          selected.modelId}
                       </div>
-                      {group.variants && isOpen && (
-                        <div className="px-3 pb-2">
-                          {group.variants.map(v => {
-                            const isUsing =
-                              selected?.runtime === 'Local' &&
-                              selected?.modelId === v.id
+                      <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                        {(() => {
+                          const variant = localGroups
+                            .flatMap(g => g.variants)
+                            .find(v => v.id === selected.modelId)
+                          if (variant?.isDownloaded) {
                             return (
-                              <div
-                                key={v.id}
-                                className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                              >
-                                <div className="col-span-4 flex items-center text-muted-foreground">
-                                  <span className="inline-block w-4" />
-                                  <span className="ml-2 font-mono text-xs truncate">
-                                    {v.label}
-                                  </span>
-                                </div>
-                                <div className="col-span-2 text-xs text-muted-foreground">
-                                  {v.dim}
-                                </div>
-                                <div className="col-span-2 text-xs text-muted-foreground">
-                                  {v.quality}
-                                </div>
-                                <div className="col-span-2 text-xs text-muted-foreground">
-                                  {group.download}
-                                </div>
-                                <div className="col-span-1 text-xs text-muted-foreground">
-                                  {group.ramVram}
-                                </div>
-                                <div className="col-span-1 flex items-center justify-end pr-2">
-                                  <Button
-                                    size="sm"
-                                    className="h-8 px-3"
-                                    onClick={() => openConfirmLocal(group, v)}
-                                  >
-                                    {isUsing ? (
-                                      <span className="inline-flex items-center gap-1">
-                                        <FontIcon
-                                          type="checkmark-filled"
-                                          className="w-4 h-4"
-                                        />{' '}
-                                        Using
-                                      </span>
-                                    ) : (
-                                      'Use'
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
+                              <>
+                                <Badge
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-xl text-muted-foreground border-muted"
+                                >
+                                  On disk
+                                </Badge>
+                                <span>• {variant.download}</span>
+                              </>
                             )
-                          })}
-                        </div>
-                      )}
+                          }
+                          return 'Local model'
+                        })()}
+                      </div>
                     </div>
-                  )
-                })}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowModelTable(true)}
+                    >
+                      Change
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+            {/* Model selection area - show when showModelTable is true OR no model selected */}
+            {(showModelTable ||
+              !(selected?.runtime === 'Local' && selected?.modelId)) && (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-medium text-foreground">
+                      Select model
+                    </div>
+                    {selected?.runtime === 'Local' && selected?.modelId && (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <span>•</span>
+                        <span className="font-mono">
+                          {localGroups
+                            .flatMap(g => g.variants)
+                            .find(v => v.id === selected.modelId)?.label ||
+                            selected.modelId}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowModelTable(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                <div className="w-full flex items-center mb-4">
+                  <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
+                    <button
+                      className={`flex-1 h-10 text-sm ${sourceTab === 'local' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
+                      onClick={() => setSourceTab('local')}
+                      aria-pressed={sourceTab === 'local'}
+                    >
+                      Local models
+                    </button>
+                    <button
+                      className={`flex-1 h-10 text-sm ${sourceTab === 'cloud' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
+                      onClick={() => setSourceTab('cloud')}
+                      aria-pressed={sourceTab === 'cloud'}
+                    >
+                      Cloud models
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
-            {sourceTab === 'cloud' && (
+            {sourceTab === 'local' && showModelTable && (
+              <LocalModelTable
+                filteredGroups={filteredGroups}
+                query={query}
+                onQueryChange={setQuery}
+                selected={selected}
+                downloadStates={downloadStates}
+                onSelect={v => {
+                  const group = filteredGroups.find(g =>
+                    g.variants.some(variant => variant.id === v.id)
+                  )
+                  if (group) {
+                    openConfirmLocal(group, v)
+                  }
+                }}
+                onDownloadRetry={downloadModel}
+                onRefresh={handleRefresh}
+                isRefreshing={isManuallyRefreshing}
+                isLoadingCachedModels={isLoadingCachedModels}
+              />
+            )}
+
+            {sourceTab === 'cloud' && showModelTable && (
               <div className="w-full rounded-lg border border-border p-4 md:p-6 flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <Label className="text-xs text-muted-foreground">
@@ -1268,14 +1884,16 @@ function ChangeEmbeddingModel() {
                     </Button>
                   </div>
                   <Button
-                    onClick={() =>
+                    onClick={() => {
                       setSelected({
                         runtime: 'Cloud',
                         provider,
                         modelId:
                           model === 'Custom' ? customModel.trim() : model,
                       })
-                    }
+                      // Close the model selection area when a new model is selected
+                      setShowModelTable(false)
+                    }}
                     disabled={
                       provider !== 'Ollama (remote)' &&
                       apiKey.trim().length === 0
@@ -1315,108 +1933,208 @@ function ChangeEmbeddingModel() {
             )}
           </section>
 
-          {/* Save modal */}
-          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+
+          {/* Download confirmation modal */}
+          <Dialog
+            open={downloadConfirmOpen}
+            onOpenChange={open => {
+              setDownloadConfirmOpen(open)
+              if (!open) {
+                setPendingDownloadVariant(null)
+              }
+            }}
+          >
             <DialogContent>
-              <DialogTitle>Save this embedding strategy?</DialogTitle>
+              <DialogTitle>Download this embedding model?</DialogTitle>
               <DialogDescription>
-                <div className="mt-2 text-sm">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                    <div className="text-muted-foreground">Strategy name</div>
-                    <div className="truncate">
-                      {strategyName || '(unnamed)'}
+                {pendingDownloadVariant && (
+                  <div className="mt-2 flex flex-col gap-3">
+                    <p className="text-sm">
+                      You are about to download
+                      <span className="mx-1 font-medium text-foreground">
+                        {pendingDownloadVariant.label}
+                      </span>
+                      for use in this embedding strategy.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="text-muted-foreground">Model</div>
+                      <div className="truncate font-mono">
+                        {pendingDownloadVariant.modelIdentifier ||
+                          pendingDownloadVariant.label}
+                      </div>
+                      <div className="text-muted-foreground">Size</div>
+                      <div>{pendingDownloadVariant.download}</div>
+                      <div className="text-muted-foreground">Dimension</div>
+                      <div>{pendingDownloadVariant.dim}</div>
+                      <div className="text-muted-foreground">Quality</div>
+                      <div>{pendingDownloadVariant.quality}</div>
                     </div>
-                    <div className="text-muted-foreground">Runtime</div>
-                    <div>{runtimeLabel}</div>
-                    <div className="text-muted-foreground">Provider</div>
-                    <div>{summaryProvider || 'n/a'}</div>
-                    <div className="text-muted-foreground">Model</div>
-                    <div className="font-mono truncate">
-                      {summaryModel || 'n/a'}
-                    </div>
-                    <div className="text-muted-foreground">
-                      Base URL / Location
-                    </div>
-                    <div className="truncate">{summaryLocation || 'n/a'}</div>
-                    <div className="text-muted-foreground">
-                      Vector dimension (d)
-                    </div>
-                    <div>{dimension ?? meta?.dim ?? 'n/a'}</div>
-                    <div className="text-muted-foreground">Batch size</div>
-                    <div>{batchSize}</div>
-                    <div className="text-muted-foreground">Timeout (sec)</div>
-                    <div>{timeoutSec}</div>
-                    <div className="text-muted-foreground">Auto-pull model</div>
-                    <div>{ollamaAutoPull ? 'Enabled' : 'Disabled'}</div>
-                    {summaryProvider === 'OpenAI' ? (
-                      <>
-                        <div className="text-muted-foreground">
-                          Organization
+
+                    {downloadStates[pendingDownloadVariant.id]?.state ===
+                      'downloading' && (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Downloading...{' '}
+                            {downloadStates[pendingDownloadVariant.id]
+                              ?.downloadedBytes > 0 &&
+                              formatBytes(
+                                downloadStates[pendingDownloadVariant.id]
+                                  .downloadedBytes
+                              )}{' '}
+                            /{' '}
+                            {downloadStates[pendingDownloadVariant.id]
+                              ?.totalBytes > 0 &&
+                              formatBytes(
+                                downloadStates[pendingDownloadVariant.id]
+                                  .totalBytes
+                              )}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {
+                              downloadStates[pendingDownloadVariant.id]
+                                ?.progress
+                            }
+                            %
+                            {estimatedTimeRemaining &&
+                              ` • ${estimatedTimeRemaining} left`}
+                          </span>
                         </div>
-                        <div className="truncate">{openaiOrg || '(none)'}</div>
-                        <div className="text-muted-foreground">Max retries</div>
-                        <div>{openaiMaxRetries}</div>
-                      </>
-                    ) : null}
-                    {summaryProvider === 'Azure OpenAI' ? (
-                      <>
-                        <div className="text-muted-foreground">Deployment</div>
-                        <div className="truncate">
-                          {azureDeployment || 'n/a'}
+                        <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all duration-300"
+                            style={{
+                              width: `${downloadStates[pendingDownloadVariant.id]?.progress || 0}%`,
+                            }}
+                          />
                         </div>
-                        <div className="text-muted-foreground">Endpoint</div>
-                        <div className="truncate">{azureResource || 'n/a'}</div>
-                        <div className="text-muted-foreground">API version</div>
-                        <div className="truncate">
-                          {azureApiVersion || '(default)'}
-                        </div>
-                      </>
-                    ) : null}
-                    {summaryProvider === 'Google' ? (
-                      <>
-                        <div className="text-muted-foreground">Project ID</div>
-                        <div className="truncate">
-                          {vertexProjectId || 'n/a'}
-                        </div>
-                        <div className="text-muted-foreground">Location</div>
-                        <div className="truncate">
-                          {vertexLocation || 'n/a'}
-                        </div>
-                        <div className="text-muted-foreground">Endpoint</div>
-                        <div className="truncate">
-                          {vertexEndpoint || '(auto)'}
-                        </div>
-                      </>
-                    ) : null}
-                    {summaryProvider === 'AWS Bedrock' ? (
-                      <>
-                        <div className="text-muted-foreground">Region</div>
-                        <div className="truncate">{bedrockRegion || 'n/a'}</div>
-                      </>
-                    ) : null}
+                      </div>
+                    )}
+
+                    {downloadStates[pendingDownloadVariant.id]?.state ===
+                      'error' && (
+                      <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                        <p className="text-sm text-destructive">
+                          {downloadStates[pendingDownloadVariant.id]?.error ||
+                            'Download failed'}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  {!isDefaultStrategy && makeDefault ? (
-                    <div className="mt-3 text-xs">Will set as default</div>
-                  ) : null}
-                </div>
+                )}
               </DialogDescription>
               <DialogFooter>
+                {downloadStates[pendingDownloadVariant?.id || '']?.state ===
+                'downloading' ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (pendingDownloadVariant) {
+                        setShowBackgroundDownload(true)
+                        setBackgroundDownloadName(pendingDownloadVariant.label)
+                        setDownloadConfirmOpen(false)
+                      }
+                    }}
+                  >
+                    Continue in background
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setDownloadConfirmOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                )}
                 <Button
-                  variant="secondary"
-                  onClick={() => setConfirmOpen(false)}
+                  disabled={
+                    downloadStates[pendingDownloadVariant?.id || '']?.state ===
+                    'downloading'
+                  }
+                  onClick={async () => {
+                    if (!pendingDownloadVariant) return
+                    await downloadModel(pendingDownloadVariant, false)
+                  }}
                 >
-                  Cancel
-                </Button>
-                <Button onClick={saveEdited} disabled={isSaving}>
-                  {isSaving 
-                    ? 'Saving...'
-                    : selected?.runtime === 'Local'
-                      ? 'Download and save strategy'
-                      : 'Save strategy'}
+                  {downloadStates[pendingDownloadVariant?.id || '']?.state ===
+                  'downloading'
+                    ? 'Downloading...'
+                    : 'Download and use'}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Background download indicator */}
+          {showBackgroundDownload &&
+            downloadStates[pendingDownloadVariant?.id || '']?.state ===
+              'downloading' && (
+              <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card shadow-lg p-4 flex flex-col gap-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">
+                      Downloading {backgroundDownloadName}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {downloadStates[pendingDownloadVariant?.id || '']
+                        ?.downloadedBytes > 0 &&
+                        formatBytes(
+                          downloadStates[pendingDownloadVariant?.id || '']
+                            .downloadedBytes
+                        )}{' '}
+                      /{' '}
+                      {downloadStates[pendingDownloadVariant?.id || '']
+                        ?.totalBytes > 0 &&
+                        formatBytes(
+                          downloadStates[pendingDownloadVariant?.id || '']
+                            .totalBytes
+                        )}{' '}
+                      {estimatedTimeRemaining &&
+                        `• ${estimatedTimeRemaining} left`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowBackgroundDownload(false)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <FontIcon type="close" className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Progress</span>
+                    <span className="text-muted-foreground">
+                      {downloadStates[pendingDownloadVariant?.id || '']
+                        ?.progress || 0}
+                      %
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{
+                        width: `${
+                          downloadStates[pendingDownloadVariant?.id || '']
+                            ?.progress || 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDownloadConfirmOpen(true)
+                    setShowBackgroundDownload(false)
+                  }}
+                  className="w-full"
+                >
+                  Show details
+                </Button>
+              </div>
+            )}
 
           {/* Re-embed confirmation modal */}
           <Dialog open={reembedOpen} onOpenChange={setReembedOpen}>
@@ -1431,8 +2149,15 @@ function ChangeEmbeddingModel() {
                   variant="destructive"
                   onClick={() => {
                     setReembedOpen(false)
+                    // Clear unsaved changes flags BEFORE navigation
+                    setHasUnsavedChanges(false)
+                    unsavedChangesContext.setIsDirty(false)
                     toast({ message: 'Strategy saved', variant: 'default' })
-                    navigate('/chat/rag')
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => {
+                        navigate('/chat/rag')
+                      })
+                    })
                   }}
                 >
                   I'll do it later
@@ -1440,8 +2165,15 @@ function ChangeEmbeddingModel() {
                 <Button
                   onClick={() => {
                     setReembedOpen(false)
+                    // Clear unsaved changes flags BEFORE navigation
+                    setHasUnsavedChanges(false)
+                    unsavedChangesContext.setIsDirty(false)
                     toast({ message: 'Strategy saved', variant: 'default' })
-                    navigate('/chat/rag')
+                    requestAnimationFrame(() => {
+                      requestAnimationFrame(() => {
+                        navigate('/chat/rag')
+                      })
+                    })
                   }}
                 >
                   Yes, proceed with re-embed
@@ -1449,6 +2181,36 @@ function ChangeEmbeddingModel() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Unsaved changes modal */}
+          <UnsavedChangesModal
+            isOpen={unsavedChangesContext.showModal}
+            onSave={async () => {
+              const result = await saveEdited()
+              if (!result) {
+                // Save failed - keep modal open with error
+                setModalErrorMessage(error || 'Failed to save strategy')
+                return
+              }
+              // Save succeeded - clear error and confirm navigation
+              setModalErrorMessage(null)
+              unsavedChangesContext.confirmNavigation()
+            }}
+            onDiscard={() => {
+              // Clear unsaved changes flag and confirm navigation
+              // The form will be reset when the component unmounts
+              setHasUnsavedChanges(false)
+              setModalErrorMessage(null)
+              unsavedChangesContext.confirmNavigation()
+            }}
+            onCancel={() => {
+              setModalErrorMessage(null)
+              unsavedChangesContext.cancelNavigation()
+            }}
+            isSaving={isSaving}
+            errorMessage={modalErrorMessage}
+            isError={!!modalErrorMessage}
+          />
         </>
       )}
     </div>
