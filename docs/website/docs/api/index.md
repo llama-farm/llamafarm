@@ -419,6 +419,7 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 - `rag_queries` (optional): Array of custom queries for RAG retrieval, overriding the user message. Can be a single query `["my query"]` or multiple queries `["query1", "query2"]` - results from multiple queries are executed concurrently, merged, and deduplicated
 - `think` (optional): Enable thinking/reasoning mode for supported models like Qwen3 (default: `false`)
 - `thinking_budget` (optional): Maximum tokens for thinking process when `think: true` (default: `1024`)
+- `prompt_variables` (optional): Object of key-value pairs to substitute in prompt templates. Variables use `{{variable_name}}` syntax. Overrides model-level defaults.
 
 **Response (Non-Streaming):**
 
@@ -604,6 +605,27 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 ```
 
 Results from multiple queries are automatically executed concurrently, merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
+
+**Example (With Prompt Variables):**
+
+Override prompt template variables at request time. If your model config has `prompt_variables` defaults, these will be merged (request values take precedence):
+
+```bash
+curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Introduce yourself"}
+    ],
+    "model": "analyst",
+    "prompt_variables": {
+      "persona_name": "CustomBot",
+      "tone": "casual"
+    }
+  }'
+```
+
+If your prompt template contains `You are {{persona_name}}, respond in a {{tone}} tone`, the variables will be substituted before sending to the model. Variables not provided in the request use the model's `prompt_variables` defaults, or become empty strings if no default exists.
 
 ### Get Chat History
 

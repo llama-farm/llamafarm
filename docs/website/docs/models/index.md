@@ -35,6 +35,46 @@ runtime:
 
 **Legacy single-model configs are still supported** and automatically converted internally.
 
+### Model-Level Defaults
+
+Each model can define default values for prompt variables and chat parameters:
+
+```yaml
+runtime:
+  default_model: analyst
+
+  models:
+    - name: analyst
+      provider: ollama
+      model: qwen3:8b
+      prompts: [persona_prompt]
+
+      # Template variables for prompts ({{variable_name}} syntax)
+      prompt_variables:
+        persona_name: "DataBot"
+        persona_role: "senior data analyst"
+        tone: "professional"
+
+      # Default chat parameters
+      chat_defaults:
+        temperature: 0.3
+        rag_enabled: true
+        database: "analytics_db"
+        think: true
+        thinking_budget: 1500
+```
+
+**Prompt Variables** (`prompt_variables`):
+- Define defaults for `{{variable_name}}` placeholders in your prompts
+- Can be overridden per-request via `prompt_variables` in the API call
+- See [Prompts Guide](../prompts/index.md#prompt-variables) for detailed syntax
+
+**Chat Defaults** (`chat_defaults`):
+- Set default temperature, RAG settings, thinking mode, etc.
+- Applied to all requests unless overridden in the API call
+- Supports: `temperature`, `top_p`, `max_tokens`, `rag_enabled`, `database`, `rag_retrieval_strategy`, `rag_top_k`, `rag_score_threshold`, `think`, `thinking_budget`, `n_ctx`
+- See [Configuration Guide](../configuration/index.md#model-chat-defaults) for full field reference
+
 ## Runtime Responsibilities
 
 - Route chat requests to the configured provider.

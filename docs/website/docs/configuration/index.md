@@ -95,6 +95,8 @@ runtime:
 | `instructor_mode`      | string or null                        | Optional                                                                   | `json`, `md_json`, `tools` for structured output modes                                                                 |
 | `prompt_format`        | string                                | Optional                                                                   | `unstructured` or other format                                                                                         |
 | `model_api_parameters` | object                                | Optional                                                                   | Passthrough parameters (temperature, top_p, etc.)                                                                      |
+| `prompt_variables`     | object                                | Optional                                                                   | Default values for prompt template variables (`{{variable_name}}` syntax). See [Prompt Variables](#prompt-variables). |
+| `chat_defaults`        | object                                | Optional                                                                   | Default chat parameters for this model. See [Model Chat Defaults](#model-chat-defaults).                              |
 | `lemonade`             | object                                | ⚠️ Required for `provider: lemonade`                                      | Lemonade-specific configuration (see below)                                                                            |
 
 **Lemonade-specific fields:**
@@ -106,6 +108,77 @@ runtime:
 | `context_size` | number | Optional | Context window size (default: 32768)         |
 
 > **Extending providers:** To add a new provider enum, update `config/schema.yaml`, regenerate types via `config/generate_types.py`, and implement routing in the server/CLI. See [Extending runtimes](../extending/index.md#extend-runtimes).
+
+#### Prompt Variables
+
+Models can define default values for template variables used in prompts. Variables use `{{variable_name}}` syntax and are substituted before the prompt is sent to the model.
+
+```yaml
+runtime:
+  models:
+    - name: analyst
+      provider: ollama
+      model: qwen3:8b
+      prompts: [persona_prompt]
+
+      # Default values for {{variable}} placeholders in prompts
+      prompt_variables:
+        persona_name: "DataBot"
+        persona_role: "senior data analyst"
+        expertise: "statistical analysis"
+        tone: "professional"
+```
+
+**Resolution priority:** Request > Model defaults > Empty string
+
+- Variables in the API request override model defaults
+- Unset variables become empty strings
+- See [Prompts](#prompts) for template syntax
+
+#### Model Chat Defaults
+
+Define default chat parameters at the model level. These apply to all chat requests unless overridden in the API call.
+
+```yaml
+runtime:
+  models:
+    - name: analyst
+      provider: ollama
+      model: qwen3:8b
+
+      # Default chat parameters for this model
+      chat_defaults:
+        temperature: 0.3
+        top_p: 0.9
+        max_tokens: 2000
+        rag_enabled: true
+        database: "analytics_db"
+        rag_retrieval_strategy: "reranked"
+        rag_top_k: 10
+        rag_score_threshold: 0.7
+        think: true
+        thinking_budget: 1500
+        n_ctx: 32768
+```
+
+**Available chat_defaults fields:**
+
+| Field                    | Type    | Description                                    |
+| ------------------------ | ------- | ---------------------------------------------- |
+| `temperature`            | number  | Sampling temperature (0.0-2.0)                 |
+| `top_p`                  | number  | Nucleus sampling parameter                     |
+| `max_tokens`             | integer | Maximum tokens for the answer                  |
+| `rag_enabled`            | boolean | Enable RAG for this model by default           |
+| `database`               | string  | Default RAG database name                      |
+| `rag_retrieval_strategy` | string  | Default retrieval strategy                     |
+| `rag_top_k`              | integer | Number of RAG results to retrieve              |
+| `rag_score_threshold`    | number  | Minimum similarity score for RAG results       |
+| `rag_queries`            | array   | Default custom RAG queries                     |
+| `think`                  | boolean | Enable thinking/reasoning mode                 |
+| `thinking_budget`        | integer | Max tokens for thinking when `think: true`     |
+| `n_ctx`                  | integer | Context window size                            |
+
+**Resolution priority:** Request > Model defaults > None
 
 ### Prompts
 
