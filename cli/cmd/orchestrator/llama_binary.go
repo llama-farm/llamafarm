@@ -293,6 +293,13 @@ func extractDependencies(archivePath, destDir string) error {
 		}
 
 		name := filepath.Base(f.Name)
+
+		// Validate filename to prevent path traversal attacks
+		if name == "" || name == "." || name == ".." ||
+			strings.ContainsAny(name, "/\\") || filepath.IsAbs(name) {
+			continue
+		}
+
 		nameLower := strings.ToLower(name)
 
 		// Check if this is a dependency file we should extract
