@@ -309,15 +309,16 @@ class LlamaFarmApp {
 
   /**
    * Get the version from the CLI binary.
-   * Returns the version string (e.g., "v1.2.3") or null if unable to determine.
+   * Returns the version string (e.g., "v1.2.3" or "v1.2.3-beta.1") or null if unable to determine.
    */
   private async getCLIVersion(): Promise<string | null> {
     try {
       const { stdout } = await execAsync(`"${this.cliInstaller.getCLIPath()}" version`, {
         timeout: 10000
       })
-      // Parse version from output - handles formats like "LlamaFarm CLI v1.2.3" or "Version: v1.2.3"
-      const match = stdout.match(/(?:version|v)\s*(v?[\d.]+)/i)
+      // Parse version from output - handles formats like "LlamaFarm CLI v1.2.3" or "Version: v1.2.3-beta.1"
+      // Captures full semver including pre-release tags (-beta.1, -rc1) and build metadata (+build.123)
+      const match = stdout.match(/(?:version|v)\s*(v?[\d.]+(?:-[\w.]+)?(?:\+[\w.]+)?)/i)
       if (match) {
         // Normalize to include 'v' prefix
         const version = match[1]
