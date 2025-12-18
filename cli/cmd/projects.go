@@ -55,31 +55,20 @@ var projectsListCmd = &cobra.Command{
 		}
 		projectsRoot = filepath.Clean(projectsRoot)
 
-		cwd := utils.GetEffectiveCWD()
-		currentInfo, currentPath := findCurrentProject(cwd)
-
 		projects, warnings, err := discoverProjects(projectsRoot)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error listing projects: %v\n", err)
 			os.Exit(1)
 		}
 
-		markCurrentProject(projects, currentInfo, currentPath)
 		sortProjectsByModTime(projects)
 
 		if len(projects) == 0 {
 			fmt.Printf("No projects found in %s\n", projectsRoot)
-			if currentInfo != nil {
-				fmt.Println("Current directory does not match any project in that location.")
-			}
 			return
 		}
 
 		printProjectsTable(projects)
-
-		if currentInfo == nil {
-			fmt.Println("\n(Current directory is not inside a LlamaFarm project.)")
-		}
 
 		for _, w := range warnings {
 			fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
@@ -181,6 +170,7 @@ func findConfigFileInDir(dir string) string {
 }
 
 func discoverProjects(projectsRoot string) ([]projectRow, []string, error) {
+	currentInfo, currentPath := findCurrentProject(utils.GetEffectiveCWD())
 	var rows []projectRow
 	var warnings []string
 
@@ -245,11 +235,18 @@ func discoverProjects(projectsRoot string) ([]projectRow, []string, error) {
 				absProjPath = projPath
 			}
 
+			isCurrent := currentInfo != nil &&
+				projectsEqual(projectInfo, currentInfo)
+			if isCurrent && currentPath != "" {
+				absProjPath = currentPath
+			}
+
 			rows = append(rows, projectRow{
 				Namespace: projectInfo.Namespace,
 				Name:      projectInfo.Project,
 				ModTime:   stat.ModTime(),
 				Path:      absProjPath,
+				IsCurrent: isCurrent,
 			})
 		}
 	}
@@ -279,18 +276,12 @@ func findCurrentProject(startDir string) (*config.ProjectInfo, string) {
 	return nil, ""
 }
 
-func markCurrentProject(projects []projectRow, current *config.ProjectInfo, currentPath string) {
-	if current == nil {
-		return
+func projectsEqual(a *config.ProjectInfo, b *config.ProjectInfo) bool {
+	if a == nil || b == nil {
+		return false
 	}
-	for i := range projects {
-		if projects[i].Namespace == strings.TrimSpace(current.Namespace) && projects[i].Name == strings.TrimSpace(current.Project) {
-			projects[i].IsCurrent = true
-			if currentPath != "" {
-				projects[i].Path = currentPath
-			}
-		}
-	}
+	return strings.TrimSpace(a.Namespace) == strings.TrimSpace(b.Namespace) &&
+		strings.TrimSpace(a.Project) == strings.TrimSpace(b.Project)
 }
 
 func sortProjectsByModTime(projects []projectRow) {

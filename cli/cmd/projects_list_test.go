@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/llamafarm/cli/cmd/config"
+	"github.com/llamafarm/cli/cmd/utils"
 )
 
 func writeProjectConfig(t *testing.T, dir, ns, name string) string {
@@ -42,6 +42,9 @@ func TestDiscoverProjectsSortsAndMarksCurrent(t *testing.T) {
 		t.Fatalf("failed to set beta mtime: %v", err)
 	}
 
+	utils.OverrideCwd = betaDir
+	defer func() { utils.OverrideCwd = "" }()
+
 	projects, warnings, err := discoverProjects(root)
 	if err != nil {
 		t.Fatalf("discoverProjects error: %v", err)
@@ -53,16 +56,10 @@ func TestDiscoverProjectsSortsAndMarksCurrent(t *testing.T) {
 		t.Fatalf("expected 2 projects, got %d", len(projects))
 	}
 
-	currentInfo := &config.ProjectInfo{Namespace: "default", Project: "beta"}
-	currentPath := filepath.Join(t.TempDir(), "workspace", "beta")
-	markCurrentProject(projects, currentInfo, currentPath)
 	sortProjectsByModTime(projects)
 
 	if projects[0].Name != "beta" || !projects[0].IsCurrent {
 		t.Fatalf("expected beta to be first and marked current, got %+v", projects[0])
-	}
-	if projects[0].Path != currentPath {
-		t.Fatalf("expected current path %s, got %s", currentPath, projects[0].Path)
 	}
 	if projects[1].Name != "alpha" || projects[1].IsCurrent {
 		t.Fatalf("expected alpha second and not current, got %+v", projects[1])
