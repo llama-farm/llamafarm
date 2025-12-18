@@ -287,11 +287,114 @@ class LlamaFarmApp {
   }
 
   /**
+   * Read the source version from ~/.llamafarm/.source_version
+   * This file is written by the CLI when it downloads/syncs source code.
+   */
+  private async getSourceVersion(): Promise<string | null> {
+    try {
+      const homeDir = os.homedir()
+      const versionPath = path.join(homeDir, '.llamafarm', '.source_version')
+
+      if (!fs.existsSync(versionPath)) {
+        return null
+      }
+
+      const version = await fsPromises.readFile(versionPath, 'utf-8')
+      return version.trim()
+    } catch (error) {
+      console.error('Failed to read .source_version:', error)
+      return null
+    }
+  }
+
+  /**
+   * Get the version from the CLI binary.
+   * Returns the version string (e.g., "v1.2.3") or null if unable to determine.
+   */
+  private async getCLIVersion(): Promise<string | null> {
+    try {
+      const { stdout } = await execAsync(`"${this.cliInstaller.getCLIPath()}" version`, {
+        timeout: 10000
+      })
+      // Parse version from output - handles formats like "LlamaFarm CLI v1.2.3" or "Version: v1.2.3"
+      const match = stdout.match(/(?:version|v)\s*(v?[\d.]+)/i)
+      if (match) {
+        // Normalize to include 'v' prefix
+        const version = match[1]
+        return version.startsWith('v') ? version : `v${version}`
+      }
+      console.warn(`Could not parse CLI version from output: "${stdout.trim()}"`)
+      return null
+    } catch (error) {
+      console.error('Failed to get CLI version:', error)
+      return null
+    }
+  }
+
+  /**
+   * Check for version mismatch between CLI and source, and handle upgrade if needed.
+   * Returns true if version check passed or was handled, false if there was an error.
+   */
+  private async checkVersionConsistency(): Promise<void> {
+    console.log('Checking version consistency...')
+
+    const cliVersion = await this.getCLIVersion()
+    const sourceVersion = await this.getSourceVersion()
+
+    console.log(`Version check: CLI=${cliVersion || 'unknown'}, Source=${sourceVersion || 'not installed'}`)
+
+    // If we can't determine CLI version, we can't do a meaningful check
+    if (!cliVersion) {
+      console.warn('Could not determine CLI version - skipping version consistency check')
+      return
+    }
+
+    // If source isn't installed yet, the CLI will handle it during service start
+    if (!sourceVersion) {
+      console.log('No source version found - fresh install, CLI will download source')
+      return
+    }
+
+    // Normalize versions for comparison (both should have 'v' prefix)
+    const normalizedCliVersion = cliVersion.startsWith('v') ? cliVersion : `v${cliVersion}`
+    const normalizedSourceVersion = sourceVersion.startsWith('v') ? sourceVersion : `v${sourceVersion}`
+
+    if (normalizedCliVersion !== normalizedSourceVersion) {
+      console.warn(`Version mismatch detected: CLI=${normalizedCliVersion}, Source=${normalizedSourceVersion}`)
+      console.log('Forcing source upgrade by removing .source_version file')
+
+      this.windowManager.updateSplash({
+        message: 'Updating LlamaFarm components...',
+        progress: 52
+      })
+
+      const homeDir = os.homedir()
+      const versionPath = path.join(homeDir, '.llamafarm', '.source_version')
+
+      try {
+        await fsPromises.unlink(versionPath)
+        console.log('Removed .source_version - services will sync to correct version on startup')
+      } catch (error) {
+        // File might not exist or we might not have permissions
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        console.error(`Failed to remove .source_version: ${errorMsg}`)
+        // Continue anyway - the CLI's EnsureSource() might still handle it
+      }
+    } else {
+      console.log(`Versions match: ${normalizedCliVersion}`)
+    }
+  }
+
+  /**
    * Check and start services if needed.
    * The status check triggers environment setup (source download, dependency sync).
    * We use generous timeouts since first-time setup can take 10+ minutes.
    */
   private async startServices(): Promise<void> {
+    // First, check for version mismatch between CLI and source modules
+    // This ensures we upgrade source code before starting services with mismatched versions
+    await this.checkVersionConsistency()
+
     // Check services status - this also triggers environment setup if needed
     // (the CLI's ServiceManager calls EnsureNativeEnvironment on init)
     console.log('Checking services status (this triggers environment setup if needed)...')
@@ -377,20 +480,28 @@ class LlamaFarmApp {
           console.warn('Services may not have started properly. Status:', verifyResult.stdout)
         }
 
-        // Success - exit retry loop
+        // Success - log version info and exit retry loop
+        const cliVersion = await this.getCLIVersion()
+        const sourceVersion = await this.getSourceVersion()
+        console.log(`Services started successfully. CLI version: ${cliVersion || 'unknown'}, Source version: ${sourceVersion || 'unknown'}`)
         return
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
         console.error(`Service start attempt ${attempt} failed:`, errorMsg)
 
         if (attempt >= maxRetries) {
+          // Include version info in error for debugging
+          const cliVersion = await this.getCLIVersion()
+          const sourceVersion = await this.getSourceVersion()
+          const versionInfo = `(CLI: ${cliVersion || 'unknown'}, Source: ${sourceVersion || 'unknown'})`
+
           if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
             throw new Error(
-              `Services failed to start within ${timeout / 1000} seconds. ` +
+              `Services failed to start within ${timeout / 1000} seconds ${versionInfo}. ` +
               `Please check logs in ${path.join(os.homedir(), '.llamafarm', 'logs')} and try again.`
             )
           }
-          throw new Error(`Failed to start services: ${errorMsg}`)
+          throw new Error(`Failed to start services ${versionInfo}: ${errorMsg}`)
         }
       }
     }
