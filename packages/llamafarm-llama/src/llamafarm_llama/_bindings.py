@@ -658,9 +658,9 @@ def _load_ggml_backends():
         logger.info(f"Error calling ggml_backend_load_all from libllama: {e}")
         print(f"[llamafarm_llama] Error calling from libllama: {e}", file=sys.stderr, flush=True)
 
-    # FALLBACK: Try loading from ggml library via ctypes with RTLD_GLOBAL
-    # This is less reliable because it's a different library context, but may work
-    # on Windows where ggml_backend_load_all is only in ggml.dll
+    # FALLBACK: Try loading from ggml library via ctypes
+    # On Windows, ggml_backend_load_all is only in ggml.dll, not llama.dll
+    # On Linux, this is less reliable because it's a different library context
     ggml_lib_path = None
     if system == "Windows":
         ggml_lib_path = lib_dir / "ggml.dll"
@@ -681,20 +681,42 @@ def _load_ggml_backends():
     if ggml_lib_path and ggml_lib_path.exists():
         try:
             import ctypes
-            print(f"[llamafarm_llama] FALLBACK: Loading backends from {ggml_lib_path} with RTLD_GLOBAL...", file=sys.stderr, flush=True)
+            print(f"[llamafarm_llama] FALLBACK: Loading ggml library from {ggml_lib_path}...", file=sys.stderr, flush=True)
 
-            # Load with RTLD_GLOBAL so backend registrations are visible globally
-            RTLD_GLOBAL = 0x100 if system == "Linux" else 0x8  # Linux vs macOS
-            RTLD_NOW = 0x2
-            ggml_lib = ctypes.CDLL(str(ggml_lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
+            # Load with RTLD_GLOBAL on Linux so backend registrations are visible globally
+            # On Windows, the mode parameter is ignored by ctypes
+            if system == "Linux":
+                RTLD_GLOBAL = 0x100
+                RTLD_NOW = 0x2
+                ggml_lib = ctypes.CDLL(str(ggml_lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
+            else:
+                ggml_lib = ctypes.CDLL(str(ggml_lib_path))
 
-            # Call ggml_backend_load_all - it's a void function with no args
+            # CRITICAL for Windows: ggml_backend_load_all() searches for plugins relative
+            # to the executable (Python.exe), NOT relative to ggml.dll. We MUST use
+            # ggml_backend_load_all_from_path() with the explicit cache directory.
+            try:
+                print(f"[llamafarm_llama] Calling ggml_backend_load_all_from_path({lib_dir_str}) from {ggml_lib_path.name}...", file=sys.stderr, flush=True)
+                ggml_backend_load_all_from_path = ggml_lib.ggml_backend_load_all_from_path
+                ggml_backend_load_all_from_path.argtypes = [ctypes.c_char_p]
+                ggml_backend_load_all_from_path.restype = None
+                ggml_backend_load_all_from_path(lib_dir_str.encode('utf-8'))
+
+                logger.info(f"GGML backends loaded from path {lib_dir_str} via {ggml_lib_path.name} (fallback)")
+                print(f"[llamafarm_llama] ggml_backend_load_all_from_path() from {ggml_lib_path.name} succeeded (fallback)", file=sys.stderr, flush=True)
+                return
+            except (AttributeError, OSError) as e:
+                logger.info(f"ggml_backend_load_all_from_path not available in {ggml_lib_path.name}: {e}")
+                print(f"[llamafarm_llama] ggml_backend_load_all_from_path not in {ggml_lib_path.name}: {e}", file=sys.stderr, flush=True)
+
+            # Fall back to ggml_backend_load_all() without explicit path
+            print(f"[llamafarm_llama] Calling ggml_backend_load_all() from {ggml_lib_path.name}...", file=sys.stderr, flush=True)
             ggml_backend_load_all = ggml_lib.ggml_backend_load_all
             ggml_backend_load_all.argtypes = []
             ggml_backend_load_all.restype = None
             ggml_backend_load_all()
 
-            logger.info(f"GGML backends loaded from {ggml_lib_path} with RTLD_GLOBAL (fallback)")
+            logger.info(f"GGML backends loaded from {ggml_lib_path} (fallback)")
             print(f"[llamafarm_llama] ggml_backend_load_all() from {ggml_lib_path.name} succeeded (fallback)", file=sys.stderr, flush=True)
             return
         except Exception as e:
