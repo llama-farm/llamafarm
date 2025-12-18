@@ -75,29 +75,32 @@ var WindowsBinarySpec = map[HardwareCapability]BinaryInfo{
 
 // GetLlamaCacheDir returns the cache directory for llama.cpp binaries.
 // This matches the paths used by the Python llamafarm-llama package.
-func GetLlamaCacheDir() string {
+func GetLlamaCacheDir() (string, error) {
 	// Check for environment override
 	if cacheDir := os.Getenv("LLAMAFARM_CACHE_DIR"); cacheDir != "" {
-		return cacheDir
+		return cacheDir, nil
 	}
 
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
 
 	switch runtime.GOOS {
 	case "darwin":
-		return filepath.Join(homeDir, "Library", "Caches", "llamafarm-llama")
+		return filepath.Join(homeDir, "Library", "Caches", "llamafarm-llama"), nil
 	case "windows":
 		localAppData := os.Getenv("LOCALAPPDATA")
 		if localAppData == "" {
 			localAppData = homeDir
 		}
-		return filepath.Join(localAppData, "llamafarm-llama", "cache")
+		return filepath.Join(localAppData, "llamafarm-llama", "cache"), nil
 	default: // Linux and others
 		xdgCache := os.Getenv("XDG_CACHE_HOME")
 		if xdgCache == "" {
 			xdgCache = filepath.Join(homeDir, ".cache")
 		}
-		return filepath.Join(xdgCache, "llamafarm-llama")
+		return filepath.Join(xdgCache, "llamafarm-llama"), nil
 	}
 }
 
@@ -115,16 +118,22 @@ func GetLlamaLibName() string {
 
 // IsLlamaBinaryInstalled checks if llama.cpp binaries are already installed
 func IsLlamaBinaryInstalled() bool {
-	cacheDir := GetLlamaCacheDir()
+	cacheDir, err := GetLlamaCacheDir()
+	if err != nil {
+		return false
+	}
 	libPath := filepath.Join(cacheDir, LlamaCppVersion, GetLlamaLibName())
-	_, err := os.Stat(libPath)
+	_, err = os.Stat(libPath)
 	return err == nil
 }
 
 // EnsureLlamaBinary downloads llama.cpp binaries if not already installed.
 // Returns the path to the installed binaries.
 func EnsureLlamaBinary() (string, error) {
-	cacheDir := GetLlamaCacheDir()
+	cacheDir, err := GetLlamaCacheDir()
+	if err != nil {
+		return "", err
+	}
 	versionDir := filepath.Join(cacheDir, LlamaCppVersion)
 	libPath := filepath.Join(versionDir, GetLlamaLibName())
 

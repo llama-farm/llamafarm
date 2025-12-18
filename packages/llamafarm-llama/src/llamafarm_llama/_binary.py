@@ -121,9 +121,9 @@ def _has_cuda() -> bool:
     import subprocess
 
     try:
-        subprocess.check_output(["nvidia-smi"], stderr=subprocess.DEVNULL)
+        subprocess.check_output(["nvidia-smi"], stderr=subprocess.DEVNULL, timeout=5)
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     # Check environment variables
@@ -148,6 +148,7 @@ def _get_cuda_version() -> int:
             ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
             stderr=subprocess.DEVNULL,
             text=True,
+            timeout=5,
         )
         # Map driver version to CUDA version (approximate)
         driver = float(output.strip().split(".")[0])
@@ -196,6 +197,30 @@ def _get_lib_name() -> str:
         return "llama.dll"
     else:
         return "libllama.so"
+
+
+def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
+    """Safely extract a zip file, preventing Zip Slip path traversal attacks.
+
+    Validates that all extracted paths stay within the destination directory.
+    """
+    dest_dir = dest_dir.resolve()
+
+    with zipfile.ZipFile(zip_path, "r") as z:
+        for member in z.namelist():
+            # Resolve the target path
+            member_path = (dest_dir / member).resolve()
+
+            # Ensure the resolved path is within dest_dir
+            try:
+                member_path.relative_to(dest_dir)
+            except ValueError:
+                raise RuntimeError(
+                    f"Zip Slip detected: {member!r} would extract outside target directory"
+                )
+
+        # All paths validated, safe to extract
+        z.extractall(dest_dir)
 
 
 def _get_cache_dir() -> Path:
@@ -356,8 +381,7 @@ def download_binary(
         extract_dir.mkdir()
 
         if artifact.endswith(".zip"):
-            with zipfile.ZipFile(archive_path, "r") as z:
-                z.extractall(extract_dir)
+            _safe_extract_zip(archive_path, extract_dir)
         else:
             raise RuntimeError(f"Unknown archive format: {artifact}")
 

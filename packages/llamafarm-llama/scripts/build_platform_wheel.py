@@ -49,7 +49,10 @@ def build_wheel(platform_str: str, output_dir: Path):
     # Clear any existing binaries
     for f in lib_dir.glob("*"):
         if f.name != ".gitkeep":
-            f.unlink()
+            if f.is_dir():
+                shutil.rmtree(f)
+            else:
+                f.unlink()
 
     # Download for target platform
     print(f"Downloading binary for {platform_str}...")
@@ -76,7 +79,10 @@ def build_wheel(platform_str: str, output_dir: Path):
     # Clean up lib directory
     for f in lib_dir.glob("*"):
         if f.name != ".gitkeep":
-            f.unlink()
+            if f.is_dir():
+                shutil.rmtree(f)
+            else:
+                f.unlink()
 
     return wheel_path
 
