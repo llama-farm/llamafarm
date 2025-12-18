@@ -524,6 +524,12 @@ func extractZip(archivePath, srcPath, destPath string) error {
 
 // extractFileWithSymlinks extracts a file, following and preserving symlink chains
 func extractFileWithSymlinks(r *zip.ReadCloser, fileMap map[string]*zip.File, f *zip.File, fPath, destDir, finalName string) error {
+	// Validate finalName to prevent path traversal attacks
+	if finalName == "" || finalName == "." || finalName == ".." ||
+		strings.ContainsAny(finalName, "/\\") || filepath.IsAbs(finalName) {
+		return fmt.Errorf("invalid filename: %s", finalName)
+	}
+
 	// Check if this is a symlink
 	if f.Mode()&os.ModeSymlink != 0 {
 		// Read the symlink target
@@ -575,6 +581,16 @@ func extractFileWithSymlinks(r *zip.ReadCloser, fileMap map[string]*zip.File, f 
 
 		// Create the symlink in the destination
 		symlinkPath := filepath.Join(destDir, finalName)
+
+		// Validate symlink target to prevent path traversal
+		// Resolve where the symlink would point and ensure it stays within destDir
+		resolvedSymlinkTarget := filepath.Join(destDir, target)
+		resolvedSymlinkTarget = filepath.Clean(resolvedSymlinkTarget)
+		if !strings.HasPrefix(resolvedSymlinkTarget, filepath.Clean(destDir)+string(filepath.Separator)) &&
+			resolvedSymlinkTarget != filepath.Clean(destDir) {
+			return fmt.Errorf("symlink target %s would escape destination directory", target)
+		}
+
 		// Remove existing file/symlink if it exists
 		os.Remove(symlinkPath)
 
