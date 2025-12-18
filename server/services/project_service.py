@@ -22,6 +22,7 @@ from api.errors import (
 )
 from core.logging import FastAPIStructLogger
 from core.settings import settings
+from services.env_service import EnvService
 
 logger = FastAPIStructLogger()
 
@@ -487,7 +488,30 @@ class ProjectService:
 
     @classmethod
     def load_config(cls, namespace: str, project_id: str) -> LlamaFarmConfig:
-        return load_config(cls.get_project_dir(namespace, project_id))
+        """Load and validate a project configuration with env var substitution.
+
+        Supports ${VAR} syntax for environment variable substitution:
+        - ${VAR_NAME} - Look up in .env file, then os.environ
+        - ${VAR_NAME:-default} - With fallback default value
+        - ${file:.env-llamafarm:VAR_NAME} - Load from specific file
+
+        Args:
+            namespace: Project namespace
+            project_id: Project ID
+
+        Returns:
+            Validated LlamaFarmConfig with env vars substituted
+        """
+        project_dir = cls.get_project_dir(namespace, project_id)
+
+        # Load raw config dict (validates schema but not Pydantic model)
+        config_dict = load_config_dict(project_dir)
+
+        # Substitute environment variables
+        config_dict = EnvService.substitute_in_dict(config_dict, project_dir)
+
+        # Validate and return as Pydantic model
+        return LlamaFarmConfig(**config_dict)
 
     @classmethod
     def save_config(

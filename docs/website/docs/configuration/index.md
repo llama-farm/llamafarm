@@ -196,9 +196,100 @@ datasets:
 
 Example: To support a new provider `together`, add it to the `provider` enum, regenerate types, and update runtime selection to issue HTTP requests to Together’s API.
 
+## Environment Variable Substitution
+
+LlamaFarm supports `${VAR}` syntax for injecting secrets and environment-specific values into your config. This lets you commit `llamafarm.yaml` to version control while keeping secrets in a `.env` file (which you can gitignore).
+
+### Basic Syntax
+
+```yaml
+runtime:
+  models:
+    - name: gpt4
+      provider: openai
+      model: gpt-4
+      api_key: ${OPENAI_API_KEY}           # From .env or environment
+      base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}  # With default
+```
+
+### Supported Patterns
+
+| Pattern | Description |
+| ------- | ----------- |
+| `${VAR}` | Look up in `.env` file, then `os.environ`. Empty string if not found. |
+| `${VAR:-default}` | Same as above, but use `default` if not found. |
+| `${file:.env-llamafarm:VAR}` | Look up in specific file (e.g., `.env-llamafarm`). |
+| `${file:.env.local:VAR:-default}` | Specific file with default fallback. |
+
+### Resolution Priority
+
+1. **Project `.env` file** (in the project directory) - checked first for `${VAR}` syntax
+2. **Environment variables** (`os.environ`) - fallback if not in `.env`
+3. **Default value** (if specified with `:-`) - fallback if not found anywhere
+
+### Example Setup
+
+**Project structure:**
+```
+~/.llamafarm/projects/default/my-project/
+├── llamafarm.yaml     # Committed to git
+└── .env               # Gitignored, contains secrets
+```
+
+**llamafarm.yaml:**
+```yaml
+version: v1
+name: my-project
+namespace: default
+
+runtime:
+  models:
+    - name: openai-gpt4
+      provider: openai
+      model: gpt-4
+      api_key: ${OPENAI_API_KEY}
+
+    - name: anthropic-claude
+      provider: openai
+      model: claude-3-opus
+      base_url: https://api.anthropic.com/v1
+      api_key: ${file:.env-anthropic:ANTHROPIC_API_KEY}
+```
+
+**.env:**
+```bash
+OPENAI_API_KEY=sk-abc123...
+```
+
+**.env-anthropic:** (separate file for Anthropic secrets)
+```bash
+ANTHROPIC_API_KEY=sk-ant-xyz789...
+```
+
+### Using Different Env Files
+
+The `${file:filename:VAR}` syntax lets you organize secrets into separate files:
+
+```yaml
+# Use different env files for different providers
+api_key: ${file:.env-openai:API_KEY}      # From .env-openai
+api_key: ${file:.env-anthropic:API_KEY}   # From .env-anthropic
+api_key: ${file:secrets.env:API_KEY}      # From secrets.env
+```
+
+This is useful when:
+- You want to separate LlamaFarm secrets from other project secrets
+- Different team members have access to different API keys
+- You're using multiple AI providers with separate credentials
+
+### Cache Behavior
+
+Environment files are cached for performance. If you update a `.env` file, restart the server for changes to take effect.
+
 ## Best Practices
 
-- Keep secrets out of YAML; use environment variables and reference them at runtime.
+- Keep secrets out of YAML; use `${VAR}` references to load from `.env` files.
+- Add `.env`, `.env-*`, and `secrets.env` to `.gitignore`.
 - Version control your config; treat `llamafarm.yaml` like application code.
 - Use separate namespaces or configs for dev/staging/prod to avoid cross-talk.
 - Document uncommon parser/extractor choices for future maintainers.
