@@ -376,7 +376,7 @@ jobs:
             exit 1
           fi
 
-          # On macOS, verify it's a valid Mach-O binary
+          # On macOS, verify it's a valid Mach-O binary and check dependencies
           if [ "$RUNNER_OS" = "macOS" ]; then
             FILE_TYPE=$(file "$ACTUAL_PATH")
             echo "File type: $FILE_TYPE"
@@ -385,9 +385,25 @@ jobs:
             else
               echo "⚠ Warning: Not recognized as Mach-O binary"
             fi
+
+            echo ""
+            echo "Checking macOS dependencies..."
+            CACHE_DIR="$LLAMA_CACHE/$LLAMA_VERSION"
+            DYLIB_COUNT=$(find "$CACHE_DIR" -maxdepth 1 -name "*.dylib" 2>/dev/null | wc -l || echo "0")
+            echo "Found $DYLIB_COUNT .dylib files in cache:"
+            ls -la "$CACHE_DIR"/*.dylib 2>/dev/null || echo "Could not list .dylib files"
+
+            # Check for common dependencies
+            for dep in libggml.dylib libggml.0.dylib libggml-base.dylib libggml-cpu.dylib; do
+              if [ -e "$CACHE_DIR/$dep" ]; then
+                echo "  ✓ $dep found"
+              else
+                echo "  ⚠ $dep not found"
+              fi
+            done
           fi
 
-          # On Linux, verify it's a valid ELF binary
+          # On Linux, verify it's a valid ELF binary and check dependencies
           if [ "$RUNNER_OS" = "Linux" ]; then
             FILE_TYPE=$(file "$ACTUAL_PATH")
             echo "File type: $FILE_TYPE"
@@ -396,6 +412,22 @@ jobs:
             else
               echo "⚠ Warning: Not recognized as ELF binary"
             fi
+
+            echo ""
+            echo "Checking Linux dependencies..."
+            CACHE_DIR="$LLAMA_CACHE/$LLAMA_VERSION"
+            SO_COUNT=$(find "$CACHE_DIR" -maxdepth 1 -name "*.so*" 2>/dev/null | wc -l || echo "0")
+            echo "Found $SO_COUNT .so files in cache:"
+            ls -la "$CACHE_DIR"/*.so* 2>/dev/null || echo "Could not list .so files"
+
+            # Check for common dependencies
+            for dep in libggml.so libggml.so.0 libggml-base.so libggml-cpu.so; do
+              if [ -e "$CACHE_DIR/$dep" ]; then
+                echo "  ✓ $dep found"
+              else
+                echo "  ⚠ $dep not found"
+              fi
+            done
           fi
 
           # On Windows, verify dependencies are present

@@ -267,8 +267,8 @@ func extractDependencies(archivePath, destDir string) error {
 		patterns = []string{".dylib", ".metal"}
 	default: // Linux
 		mainLib = "libllama.so"
-		// Linux: version after extension (libggml.so.0.0.0)
-		patterns = []string{".so."}
+		// Linux: versioned (libggml.so.0.0.0) and unversioned (libggml.so, ggml-cpu.so)
+		patterns = []string{".so.", ".so"}
 	}
 
 	extractedCount := 0

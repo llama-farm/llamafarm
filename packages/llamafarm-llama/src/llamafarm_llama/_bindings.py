@@ -523,6 +523,71 @@ def _setup_log_callback(lib):
     atexit.register(_cleanup_log_callback)
 
 
+def _load_ggml_backends():
+    """Load GGML compute backends (CPU, CUDA, Metal, Vulkan, etc.).
+
+    On Windows, ggml_backend_load_all() is in ggml.dll, not llama.dll.
+    On Linux, it may be in libggml.so.
+    On macOS, it's typically linked into libllama.
+    """
+    import platform
+    from ._binary import get_lib_path
+
+    lib_path = get_lib_path()
+    lib_dir = lib_path.parent
+    system = platform.system()
+
+    # First try to call from the main llama library
+    lib = get_lib()
+    try:
+        lib.ggml_backend_load_all()
+        logger.debug("GGML backends loaded from llama library")
+        return
+    except (AttributeError, OSError) as e:
+        logger.debug(f"ggml_backend_load_all not in llama library: {e}")
+    except Exception as e:
+        # Catch any other cffi errors
+        logger.debug(f"Error calling ggml_backend_load_all from llama library: {e}")
+
+    # Try loading from the separate ggml library
+    if system == "Windows":
+        ggml_lib_path = lib_dir / "ggml.dll"
+    elif system == "Linux":
+        # Try versioned first, then unversioned
+        ggml_lib_path = None
+        for pattern in ["libggml.so.0", "libggml.so"]:
+            candidate = lib_dir / pattern
+            if candidate.exists():
+                ggml_lib_path = candidate
+                break
+        if ggml_lib_path is None:
+            # Search for any libggml*.so file
+            candidates = list(lib_dir.glob("libggml.so*"))
+            if candidates:
+                ggml_lib_path = candidates[0]
+    else:
+        ggml_lib_path = None  # macOS should have it in libllama
+
+    if ggml_lib_path and ggml_lib_path.exists():
+        try:
+            # Create a minimal FFI for just this function
+            ggml_ffi = cffi.FFI()
+            ggml_ffi.cdef("void ggml_backend_load_all(void);")
+            ggml_lib = ggml_ffi.dlopen(str(ggml_lib_path))
+            ggml_lib.ggml_backend_load_all()
+            logger.debug(f"GGML backends loaded from {ggml_lib_path}")
+            return
+        except Exception as e:
+            logger.warning(f"Failed to load backends from {ggml_lib_path}: {e}")
+
+    # If we get here, backends couldn't be loaded - this may cause model loading to fail
+    logger.warning(
+        "Could not load GGML backends. Model loading may fail with "
+        "'no backends are loaded' error. "
+        f"Searched in: {lib_dir}"
+    )
+
+
 def init_backend():
     """Initialize the llama.cpp backend."""
     lib = get_lib()
@@ -536,8 +601,7 @@ def init_backend():
     # Load all available compute backends (CPU, CUDA, Metal, Vulkan, etc.)
     # Required for llama.cpp b7376+ - without this, model loading fails with
     # "no backends are loaded" error
-    lib.ggml_backend_load_all()
-    logger.debug("GGML backends loaded")
+    _load_ggml_backends()
 
 
 def free_backend():

@@ -410,8 +410,11 @@ def _copy_dependencies(src_dir: Path, dest_dir: Path):
         ])
     else:
         # Linux: version after extension (libggml.so.0.0.0)
+        # Also include unversioned .so files for backend loading
         patterns.extend([
-            "libggml*.so.*",
+            "libggml*.so.*",      # Versioned: libggml.so.0.0.0
+            "libggml*.so",        # Unversioned: libggml.so, libggml-cpu.so
+            "ggml-*.so",          # Backend plugins: ggml-cpu.so, ggml-cuda.so
             "libcublas*.so.*",
             "libcudart*.so.*",
             "libcublasLt*.so.*",
