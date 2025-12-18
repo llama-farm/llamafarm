@@ -246,8 +246,12 @@ class Llama:
         except Exception as e:
             logger.warning(f"Warmup failed (non-fatal): {e}")
 
-    def __del__(self):
-        """Clean up resources."""
+    def _cleanup(self):
+        """Internal cleanup logic. Safe to call multiple times."""
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+
         if hasattr(self, "_sampler") and self._sampler is not None:
             self._lib.llama_sampler_free(self._sampler)
             self._sampler = None
@@ -259,6 +263,10 @@ class Llama:
         if hasattr(self, "_model") and self._model is not None and self._model != ffi.NULL:
             self._lib.llama_free_model(self._model)
             self._model = ffi.NULL  # Mark as freed to prevent double-free
+
+    def __del__(self):
+        """Clean up resources on garbage collection."""
+        self._cleanup()
 
     @property
     def n_ctx(self) -> int:
@@ -988,4 +996,4 @@ class Llama:
 
     def close(self):
         """Explicitly close and free resources."""
-        self.__del__()
+        self._cleanup()
