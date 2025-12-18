@@ -495,13 +495,14 @@ func extractZip(archivePath, srcPath, destPath string) error {
 		fileMap[f.Name] = f
 	}
 
-	// Find the target file
+	// Find the target file by iterating over r.File (preserves archive order)
+	// to ensure deterministic file selection when multiple files match
 	var targetFile *zip.File
 	var targetPath string
-	for name, f := range fileMap {
-		if strings.HasSuffix(name, srcName) || name == srcPath {
+	for _, f := range r.File {
+		if strings.HasSuffix(f.Name, srcName) || f.Name == srcPath {
 			targetFile = f
-			targetPath = name
+			targetPath = f.Name
 			break
 		}
 	}
