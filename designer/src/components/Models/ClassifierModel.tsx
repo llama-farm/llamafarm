@@ -255,7 +255,7 @@ function ClassifierModel() {
   const activeClass = classLabels.find(c => c.id === activeClassId)
 
   return (
-    <div className="h-full w-full flex flex-col gap-4 pb-20 px-4 md:px-6 pt-4">
+    <div className="h-full w-full flex flex-col gap-4 pb-20">
       {/* Breadcrumb + Done button */}
       <div className="flex items-center justify-between">
         <nav className="text-sm md:text-base flex items-center gap-1.5">
@@ -613,6 +613,9 @@ function ClassifierModel() {
           </div>
         )}
       </div>
+
+      {/* Bottom spacer */}
+      <div className="h-20" />
     </div>
   )
 }

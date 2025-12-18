@@ -27,7 +27,9 @@ function AnomalyModel() {
   const [model, setModel] = useState<TrainedModel | null>(null)
 
   // Form state
-  const [modelName, setModelName] = useState(isNewModel ? 'new-anomaly-model' : '')
+  const [modelName, setModelName] = useState(
+    isNewModel ? 'new-anomaly-model' : ''
+  )
   const [description, setDescription] = useState('')
   const [trainingData, setTrainingData] = useState('')
 
@@ -153,7 +155,18 @@ function AnomalyModel() {
       setTrainingState('error')
       setTrainingError('Training failed. Please try again.')
     }
-  }, [canTrain, trainingData, versions, threshold, baseModel, isNewModel, id, modelName, description, navigate])
+  }, [
+    canTrain,
+    trainingData,
+    versions,
+    threshold,
+    baseModel,
+    isNewModel,
+    id,
+    modelName,
+    description,
+    navigate,
+  ])
 
   const handleTest = useCallback(() => {
     if (!testInput.trim()) return
@@ -186,7 +199,7 @@ function AnomalyModel() {
     : modelName || 'Anomaly detection model'
 
   return (
-    <div className="h-full w-full flex flex-col gap-4 pb-20 px-4 md:px-6 pt-4">
+    <div className="h-full w-full flex flex-col gap-4 pb-20">
       {/* Breadcrumb + Done button */}
       <div className="flex items-center justify-between">
         <nav className="text-sm md:text-base flex items-center gap-1.5">
@@ -199,7 +212,10 @@ function AnomalyModel() {
           <span className="text-muted-foreground px-1">/</span>
           <span className="text-foreground">{pageTitle}</span>
         </nav>
-        <Button variant="outline" onClick={() => navigate('/chat/models?tab=training')}>
+        <Button
+          variant="outline"
+          onClick={() => navigate('/chat/models?tab=training')}
+        >
           Done
         </Button>
       </div>
@@ -211,7 +227,8 @@ function AnomalyModel() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="model-name" className="text-sm font-medium">
-            Model name {isNewModel && <span className="text-destructive">*</span>}
+            Model name{' '}
+            {isNewModel && <span className="text-destructive">*</span>}
           </Label>
           <Input
             id="model-name"
@@ -267,13 +284,17 @@ function AnomalyModel() {
               {/* Left: Training Data */}
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="training-data" className="text-sm font-medium">
-                    Training data {isNewModel && <span className="text-destructive">*</span>}
+                  <Label
+                    htmlFor="training-data"
+                    className="text-sm font-medium"
+                  >
+                    Training data{' '}
+                    {isNewModel && <span className="text-destructive">*</span>}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Provide examples of NORMAL data. The model learns this pattern and
-                    will flag anything that deviates significantly. Separate entries by
-                    new lines or commas.
+                    Provide examples of NORMAL data. The model learns this
+                    pattern and will flag anything that deviates significantly.
+                    Separate entries by new lines or commas.
                   </p>
                   <Textarea
                     id="training-data"
@@ -371,7 +392,9 @@ function AnomalyModel() {
         {trainingState === 'success' && (
           <div className="flex items-center gap-2 text-primary bg-primary/10 border border-primary/20 rounded-md p-3">
             <FontIcon type="checkmark-filled" className="w-4 h-4" />
-            <span className="text-sm font-medium">Model trained successfully</span>
+            <span className="text-sm font-medium">
+              Model trained successfully
+            </span>
           </div>
         )}
 
@@ -447,7 +470,9 @@ function AnomalyModel() {
               <thead className="bg-muted/50">
                 <tr>
                   <th className="text-left px-4 py-2 font-medium">Version</th>
-                  <th className="text-left px-4 py-2 font-medium">Date created</th>
+                  <th className="text-left px-4 py-2 font-medium">
+                    Date created
+                  </th>
                   <th className="text-left px-4 py-2 font-medium">
                     Training samples
                   </th>
@@ -509,6 +534,9 @@ function AnomalyModel() {
           </div>
         )}
       </div>
+
+      {/* Bottom spacer */}
+      <div className="h-20" />
     </div>
   )
 }

@@ -1226,7 +1226,7 @@ function StrategyView() {
 
   return (
     <div
-      className={`w-full h-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-20 px-4 md:px-6 pt-4' : ''}`}
+      className={`w-full h-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-20' : ''}`}
     >
       {/* Header / Breadcrumbs */}
       {mode === 'designer' ? (
