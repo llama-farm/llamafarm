@@ -392,6 +392,57 @@ def get_lib():
     return _lib
 
 
+def _preload_ggml_with_global(lib_dir, system):
+    """Pre-load libggml with RTLD_GLOBAL so backend registrations are visible.
+
+    On Linux, when libllama.so is loaded, it pulls in libggml.so as a dependency.
+    If libggml.so is loaded with RTLD_LOCAL (the default), then backend registrations
+    made by ggml_backend_load_all() won't be visible to libllama.so.
+
+    By pre-loading libggml.so with RTLD_GLOBAL before libllama.so, we ensure that
+    the backend registry is globally visible.
+    """
+    import ctypes
+    import sys
+
+    if system == "Darwin":
+        # On macOS, everything is usually linked into libllama.dylib
+        return
+
+    # Find libggml
+    ggml_lib_path = None
+    if system == "Windows":
+        ggml_lib_path = lib_dir / "ggml.dll"
+    elif system == "Linux":
+        # Try versioned first, then unversioned
+        for pattern in ["libggml.so.0", "libggml.so"]:
+            candidate = lib_dir / pattern
+            if candidate.exists():
+                ggml_lib_path = candidate
+                break
+
+    if not ggml_lib_path or not ggml_lib_path.exists():
+        logger.debug(f"libggml not found in {lib_dir}, skipping preload")
+        return
+
+    try:
+        # Platform-specific RTLD flags
+        if system == "Linux":
+            RTLD_GLOBAL = 0x100
+            RTLD_NOW = 0x2
+        else:  # Windows
+            RTLD_GLOBAL = 0
+            RTLD_NOW = 0
+
+        print(f"[llamafarm_llama] Pre-loading {ggml_lib_path.name} with RTLD_GLOBAL...", file=sys.stderr, flush=True)
+        ctypes.CDLL(str(ggml_lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
+        logger.info(f"Pre-loaded {ggml_lib_path} with RTLD_GLOBAL")
+        print(f"[llamafarm_llama] Pre-loaded {ggml_lib_path.name} successfully", file=sys.stderr, flush=True)
+    except Exception as e:
+        logger.warning(f"Failed to pre-load {ggml_lib_path}: {e}")
+        print(f"[llamafarm_llama] Failed to pre-load {ggml_lib_path.name}: {e}", file=sys.stderr, flush=True)
+
+
 def _load_library():
     """Load the llama.cpp shared library."""
     import os
@@ -440,6 +491,10 @@ def _load_library():
         if str(lib_dir) not in ld_path:
             os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{ld_path}" if ld_path else str(lib_dir)
             logger.debug(f"Updated LD_LIBRARY_PATH to include: {lib_dir}")
+
+    # CRITICAL: Pre-load libggml with RTLD_GLOBAL before loading libllama
+    # This ensures backend registrations are globally visible when ggml_backend_load_all() is called
+    _preload_ggml_with_global(lib_dir, system)
 
     try:
         lib = ffi.dlopen(str(lib_path))
@@ -579,15 +634,26 @@ def _load_ggml_backends():
                 logger.info(f"Found ggml library via glob: {ggml_lib_path}")
 
     # Try loading from ggml library first (more reliable on Linux/Windows)
+    # IMPORTANT: We must use RTLD_GLOBAL so that the registered backends are visible
+    # to libllama.so when it tries to use them for model loading
     if ggml_lib_path and ggml_lib_path.exists():
         try:
-            print(f"[llamafarm_llama] Loading backends from {ggml_lib_path}...", file=sys.stderr, flush=True)
-            ggml_ffi = cffi.FFI()
-            ggml_ffi.cdef("void ggml_backend_load_all(void);")
-            ggml_lib = ggml_ffi.dlopen(str(ggml_lib_path))
-            ggml_lib.ggml_backend_load_all()
-            logger.info(f"GGML backends loaded from {ggml_lib_path}")
-            print(f"[llamafarm_llama] ggml_backend_load_all() from {ggml_lib_path.name} succeeded", file=sys.stderr, flush=True)
+            import ctypes
+            print(f"[llamafarm_llama] Loading backends from {ggml_lib_path} with RTLD_GLOBAL...", file=sys.stderr, flush=True)
+
+            # Load with RTLD_GLOBAL so backend registrations are visible globally
+            RTLD_GLOBAL = 0x100 if system == "Linux" else 0x8  # Linux vs macOS
+            RTLD_NOW = 0x2
+            ggml_lib = ctypes.CDLL(str(ggml_lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
+
+            # Call ggml_backend_load_all - it's a void function with no args
+            ggml_backend_load_all = ggml_lib.ggml_backend_load_all
+            ggml_backend_load_all.argtypes = []
+            ggml_backend_load_all.restype = None
+            ggml_backend_load_all()
+
+            logger.info(f"GGML backends loaded from {ggml_lib_path} with RTLD_GLOBAL")
+            print(f"[llamafarm_llama] ggml_backend_load_all() from {ggml_lib_path.name} with RTLD_GLOBAL succeeded", file=sys.stderr, flush=True)
             return
         except Exception as e:
             logger.warning(f"Failed to load backends from {ggml_lib_path}: {e}")
