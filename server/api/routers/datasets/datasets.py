@@ -123,8 +123,8 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
 
 class DatasetActionType(str, Enum):
     PROCESS = "process"
-    DELETE_CHUNKS = "delete_chunks"
-    DELETE_ALL_CHUNKS = "delete_all_chunks"
+    DELETE_FILE_CHUNKS = "delete_file_chunks"
+    DELETE_DATASET_CHUNKS = "delete_dataset_chunks"
 
 
 class DatasetActionRequest(BaseModel):
@@ -132,7 +132,7 @@ class DatasetActionRequest(BaseModel):
         ..., description="The type of action to execute"
     )
     file_hash: str | None = Field(
-        None, description="File hash for delete_chunks action"
+        None, description="File hash for delete_file_chunks action"
     )
 
 
@@ -150,9 +150,12 @@ class DeleteChunksResponse(BaseModel):
 
 class DeleteAllChunksResponse(BaseModel):
     message: str = Field(..., description="The status message")
-    deleted_chunks: int = Field(..., description="Total number of chunks deleted")
-    files_cleared: int = Field(
+    total_deleted_chunks: int = Field(..., description="Total number of chunks deleted")
+    total_files_cleared: int = Field(
         ..., description="Number of files whose chunks were deleted"
+    )
+    total_files_failed: int = Field(
+        ..., description="Number of files that failed to have chunks deleted"
     )
 
 
@@ -162,8 +165,8 @@ class DeleteAllChunksResponse(BaseModel):
     summary="Execute an action on a dataset",
     description="""Execute an action on a dataset
     - PROCESS: Process all files in the dataset using the configured data processing strategy
-    - DELETE_CHUNKS: Delete chunks for a specific file from the vector store (requires file_hash)
-    - DELETE_ALL_CHUNKS: Delete chunks for ALL files from the vector store (for reprocessing entire dataset)
+    - DELETE_FILE_CHUNKS: Delete chunks for a specific file from the vector store (requires file_hash)
+    - DELETE_DATASET_CHUNKS: Delete chunks for ALL files from the vector store (for reprocessing entire dataset)
     """,
     tags=["mcp"],
     responses={200: {"model": DatasetActionResponse}},
@@ -187,10 +190,11 @@ async def actions(
             "task_uri": task_uri(launch.task_id),
             "task_id": launch.task_id,
         }
-    elif action_type == DatasetActionType.DELETE_CHUNKS:
+    elif action_type == DatasetActionType.DELETE_FILE_CHUNKS:
         if not request.file_hash:
             raise HTTPException(
-                status_code=400, detail="file_hash required for delete_chunks action"
+                status_code=400,
+                detail="file_hash required for delete_file_chunks action",
             )
         result = await DatasetService.delete_file_chunks(
             namespace, project, dataset, request.file_hash
@@ -200,12 +204,13 @@ async def actions(
             file_hash=request.file_hash,
             deleted_chunks=result.get("deleted_count", 0),
         )
-    elif action_type == DatasetActionType.DELETE_ALL_CHUNKS:
-        result = await DatasetService.delete_all_chunks(namespace, project, dataset)
+    elif action_type == DatasetActionType.DELETE_DATASET_CHUNKS:
+        result = await DatasetService.delete_dataset_chunks(namespace, project, dataset)
         return DeleteAllChunksResponse(
             message="All chunks deleted successfully",
-            deleted_chunks=result.get("deleted_count", 0),
-            files_cleared=result.get("files_cleared", 0),
+            total_deleted_chunks=result.get("total_deleted_chunks", 0),
+            total_files_cleared=result.get("total_files_cleared", 0),
+            total_files_failed=result.get("total_files_failed", 0),
         )
     else:
         raise HTTPException(

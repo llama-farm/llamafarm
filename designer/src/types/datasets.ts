@@ -91,8 +91,8 @@ export interface DeleteDatasetResponse {
  */
 export interface DatasetActionRequest {
   /** Type of action to execute */
-  action_type: 'process' | 'delete_chunks' | 'delete_all_chunks'
-  /** File hash for delete_chunks action */
+  action_type: 'process' | 'delete_file_chunks' | 'delete_dataset_chunks'
+  /** File hash for delete_file_chunks action */
   file_hash?: string
 }
 
@@ -127,9 +127,11 @@ export interface DeleteAllChunksResponse {
   /** Status message */
   message: string
   /** Total number of chunks deleted */
-  deleted_chunks: number
+  total_deleted_chunks: number
   /** Number of files whose chunks were deleted */
-  files_cleared: number
+  total_files_cleared: number
+  /** Number of files that failed to have chunks deleted */
+  total_files_failed: number
 }
 
 /**

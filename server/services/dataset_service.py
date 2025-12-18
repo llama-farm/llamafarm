@@ -427,7 +427,7 @@ class DatasetService:
         return result
 
     @classmethod
-    async def delete_all_chunks(
+    async def delete_dataset_chunks(
         cls,
         namespace: str,
         project: str,
@@ -438,7 +438,7 @@ class DatasetService:
         Used for reprocessing entire dataset.
 
         Returns:
-            Dictionary with total deleted_count and files_cleared count.
+            Dictionary with total_deleted_chunks, total_files_cleared, and total_files_failed counts.
         """
         project_config = ProjectService.load_config(namespace, project)
         existing_datasets = project_config.datasets or []
@@ -493,9 +493,9 @@ class DatasetService:
         )
 
         return {
-            "deleted_count": total_deleted,
-            "files_cleared": files_cleared,
-            "files_failed": files_failed,
+            "total_deleted_chunks": total_deleted,
+            "total_files_cleared": files_cleared,
+            "total_files_failed": files_failed,
         }
 
     @classmethod

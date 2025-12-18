@@ -166,7 +166,7 @@ export async function deleteFileChunks(
 ): Promise<DeleteChunksResponse> {
   const response = await apiClient.post<DeleteChunksResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
-    { action_type: 'delete_chunks', file_hash: fileHash }
+    { action_type: 'delete_file_chunks', file_hash: fileHash }
   )
   return response.data
 }
@@ -186,7 +186,7 @@ export async function deleteAllChunks(
 ): Promise<DeleteAllChunksResponse> {
   const response = await apiClient.post<DeleteAllChunksResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
-    { action_type: 'delete_all_chunks' }
+    { action_type: 'delete_dataset_chunks' }
   )
   return response.data
 }
