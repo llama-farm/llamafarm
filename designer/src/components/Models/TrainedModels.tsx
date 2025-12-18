@@ -163,6 +163,12 @@ function TrainedModelCard({
       ? `/chat/models/train/anomaly/${model.id}`
       : `/chat/models/train/classifier/${model.id}`
 
+  // Use project colors: teal for anomaly detection, purple for classifier
+  const typeColorClasses =
+    model.type === 'anomaly_detection'
+      ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
+      : 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300'
+
   return (
     <div
       className="rounded-lg border border-border bg-card p-4 flex flex-col gap-2 cursor-pointer hover:border-primary/50 transition-colors"
@@ -206,7 +212,7 @@ function TrainedModelCard({
         </p>
       )}
       <div className="flex items-center gap-2 mt-1">
-        <Badge variant="secondary">{typeLabel}</Badge>
+        <Badge className={typeColorClasses}>{typeLabel}</Badge>
         <span className="text-xs text-muted-foreground">
           v{model.versionCount}
         </span>

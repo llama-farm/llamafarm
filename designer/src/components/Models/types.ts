@@ -42,3 +42,21 @@ export interface TrainedModel {
   baseModel?: string
 }
 
+// Test result types
+export interface ClassifierTestResult {
+  id: string
+  input: string
+  label: string
+  confidence: number
+  timestamp: string
+}
+
+export interface AnomalyTestResult {
+  id: string
+  input: string
+  isAnomaly: boolean
+  score: number
+  threshold: number
+  timestamp: string
+}
+

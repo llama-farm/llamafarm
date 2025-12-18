@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import FontIcon from '../../common/FontIcon'
-import type { TrainedModel, TrainedModelVersion } from './types'
+import type { TrainedModel, TrainedModelVersion, ClassifierTestResult } from './types'
 import { saveTrainedModel, getTrainedModels } from './TrainedModels'
 
 type TrainingState = 'idle' | 'training' | 'success' | 'error'
@@ -52,10 +52,7 @@ function ClassifierModel() {
 
   // Test state
   const [testInput, setTestInput] = useState('')
-  const [testResult, setTestResult] = useState<{
-    label: string
-    confidence: number
-  } | null>(null)
+  const [testHistory, setTestHistory] = useState<ClassifierTestResult[]>([])
 
   // Versions
   const [versions, setVersions] = useState<TrainedModelVersion[]>([])
@@ -196,10 +193,16 @@ function ClassifierModel() {
       validClasses[Math.floor(Math.random() * validClasses.length)]
     const mockConfidence = 0.6 + Math.random() * 0.4 // 0.6 - 1.0
 
-    setTestResult({
+    const newResult: ClassifierTestResult = {
+      id: String(Date.now()),
+      input: testInput.trim(),
       label: randomClass?.name || 'Unknown',
       confidence: mockConfidence,
-    })
+      timestamp: new Date().toISOString(),
+    }
+
+    setTestHistory(prev => [newResult, ...prev])
+    setTestInput('')
   }, [testInput, validClasses])
 
   const handleSetActiveVersion = useCallback((versionId: string) => {
@@ -222,7 +225,8 @@ function ClassifierModel() {
     : modelName || 'Classifier model'
 
   return (
-    <div className="h-full w-full flex flex-col gap-4 pb-20">
+    <div className="flex-1 min-h-0 overflow-auto pb-20">
+      <div className="flex flex-col gap-4">
       {/* Breadcrumb + Done button */}
       <div className="flex items-center justify-between">
         <nav className="text-sm md:text-base flex items-center gap-1.5">
@@ -456,7 +460,14 @@ function ClassifierModel() {
         )}
 
         <div className="flex flex-col gap-1.5">
-          <Label className="text-sm font-medium">Test your model</Label>
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">Test your model</Label>
+            {versions.find(v => v.isActive) && (
+              <Badge variant="secondary" className="text-xs font-normal">
+                v{versions.find(v => v.isActive)?.version}
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
             {canTest
               ? 'Enter text to see which class it would be assigned to.'
@@ -482,17 +493,38 @@ function ClassifierModel() {
           </Button>
         </div>
 
-        {testResult && (
-          <div className="rounded-md p-3 bg-primary/10 border border-primary/20">
-            <div className="flex items-center gap-2 mb-1">
-              <FontIcon type="checkmark-filled" className="w-4 h-4 text-primary" />
-              <span className="font-medium text-primary">
-                {testResult.label}
-              </span>
+        {testHistory.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Test history</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTestHistory([])}
+                className="text-xs h-5 px-1.5 text-muted-foreground"
+              >
+                Clear
+              </Button>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Confidence: {(testResult.confidence * 100).toFixed(1)}%
-            </p>
+            <div className="flex flex-col gap-0.5 max-h-[150px] overflow-y-auto">
+              {testHistory.map(result => (
+                <div
+                  key={result.id}
+                  className="flex items-center gap-2 px-2 py-1 rounded text-sm bg-muted/50"
+                >
+                  <FontIcon type="checkmark-filled" className="w-3 h-3 text-primary shrink-0" />
+                  <span className="font-medium text-primary w-20 shrink-0 truncate" title={result.label}>
+                    {result.label}
+                  </span>
+                  <span className="text-muted-foreground w-10 shrink-0">
+                    {(result.confidence * 100).toFixed(0)}%
+                  </span>
+                  <span className="text-muted-foreground truncate" title={result.input}>
+                    {result.input}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -569,8 +601,7 @@ function ClassifierModel() {
         )}
       </div>
 
-      {/* Bottom spacer */}
-      <div className="h-20" />
+      </div>
     </div>
   )
 }
