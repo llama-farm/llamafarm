@@ -556,7 +556,44 @@ def _load_ggml_backends():
             os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{ld_path}" if ld_path else str(lib_dir)
             logger.info(f"Set LD_LIBRARY_PATH to include: {lib_dir}")
 
-    # First try to call from the main llama library
+    # On Linux, call ggml_backend_load_all() from libggml.so directly
+    # This is more reliable because libggml.so knows its own location for finding backend plugins
+    # On macOS, it's typically linked into libllama.dylib
+    # On Windows, it's in ggml.dll
+
+    ggml_lib_path = None
+    if system == "Windows":
+        ggml_lib_path = lib_dir / "ggml.dll"
+    elif system == "Linux":
+        # Try versioned first, then unversioned
+        for pattern in ["libggml.so.0", "libggml.so"]:
+            candidate = lib_dir / pattern
+            if candidate.exists():
+                ggml_lib_path = candidate
+                logger.info(f"Found ggml library: {candidate}")
+                break
+        if ggml_lib_path is None:
+            candidates = list(lib_dir.glob("libggml.so*"))
+            if candidates:
+                ggml_lib_path = candidates[0]
+                logger.info(f"Found ggml library via glob: {ggml_lib_path}")
+
+    # Try loading from ggml library first (more reliable on Linux/Windows)
+    if ggml_lib_path and ggml_lib_path.exists():
+        try:
+            print(f"[llamafarm_llama] Loading backends from {ggml_lib_path}...", file=sys.stderr, flush=True)
+            ggml_ffi = cffi.FFI()
+            ggml_ffi.cdef("void ggml_backend_load_all(void);")
+            ggml_lib = ggml_ffi.dlopen(str(ggml_lib_path))
+            ggml_lib.ggml_backend_load_all()
+            logger.info(f"GGML backends loaded from {ggml_lib_path}")
+            print(f"[llamafarm_llama] ggml_backend_load_all() from {ggml_lib_path.name} succeeded", file=sys.stderr, flush=True)
+            return
+        except Exception as e:
+            logger.warning(f"Failed to load backends from {ggml_lib_path}: {e}")
+            print(f"[llamafarm_llama] Failed to load from {ggml_lib_path}: {e}", file=sys.stderr, flush=True)
+
+    # Fall back to calling from the main llama library (works on macOS)
     lib = get_lib()
     try:
         print(f"[llamafarm_llama] Calling ggml_backend_load_all() from llama library...", file=sys.stderr, flush=True)
@@ -571,41 +608,6 @@ def _load_ggml_backends():
         # Catch any other cffi errors
         logger.info(f"Error calling ggml_backend_load_all from llama library: {e}")
         print(f"[llamafarm_llama] Error calling ggml_backend_load_all: {e}", file=sys.stderr, flush=True)
-
-    # Try loading from the separate ggml library
-    if system == "Windows":
-        ggml_lib_path = lib_dir / "ggml.dll"
-    elif system == "Linux":
-        # Try versioned first, then unversioned
-        ggml_lib_path = None
-        for pattern in ["libggml.so.0", "libggml.so"]:
-            candidate = lib_dir / pattern
-            if candidate.exists():
-                ggml_lib_path = candidate
-                logger.info(f"Found ggml library: {candidate}")
-                break
-        if ggml_lib_path is None:
-            # Search for any libggml*.so file
-            candidates = list(lib_dir.glob("libggml.so*"))
-            if candidates:
-                ggml_lib_path = candidates[0]
-                logger.info(f"Found ggml library via glob: {ggml_lib_path}")
-            else:
-                logger.warning(f"No libggml.so* found in {lib_dir}")
-    else:
-        ggml_lib_path = None  # macOS should have it in libllama
-
-    if ggml_lib_path and ggml_lib_path.exists():
-        try:
-            # Create a minimal FFI for just this function
-            ggml_ffi = cffi.FFI()
-            ggml_ffi.cdef("void ggml_backend_load_all(void);")
-            ggml_lib = ggml_ffi.dlopen(str(ggml_lib_path))
-            ggml_lib.ggml_backend_load_all()
-            logger.info(f"GGML backends loaded from {ggml_lib_path}")
-            return
-        except Exception as e:
-            logger.warning(f"Failed to load backends from {ggml_lib_path}: {e}")
 
     # If we get here, backends couldn't be loaded - this may cause model loading to fail
     logger.warning(
