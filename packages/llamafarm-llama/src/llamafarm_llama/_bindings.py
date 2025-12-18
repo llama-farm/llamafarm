@@ -457,6 +457,11 @@ def _load_library():
 
     system = platform.system()
 
+    # On Windows, prevent OpenMP conflicts between llama.cpp (libomp140) and
+    # other libraries like numpy (libiomp5md). This must be set BEFORE loading.
+    if system == "Windows":
+        os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
     # On macOS, set GGML_METAL_PATH_RESOURCES so Metal backend can find shaders
     # The ggml-metal.metal shader file must be in the same directory as the library
     if system == "Darwin":
