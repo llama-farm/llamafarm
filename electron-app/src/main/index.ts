@@ -334,9 +334,9 @@ class LlamaFarmApp {
 
   /**
    * Check for version mismatch between CLI and source, and handle upgrade if needed.
-   * Returns true if version check passed or was handled, false if there was an error.
+   * Returns an object with the cached version info for reuse by callers.
    */
-  private async checkVersionConsistency(): Promise<void> {
+  private async checkVersionConsistency(): Promise<{ cliVersion: string | null; sourceVersion: string | null }> {
     console.log('Checking version consistency...')
 
     const cliVersion = await this.getCLIVersion()
@@ -347,13 +347,13 @@ class LlamaFarmApp {
     // If we can't determine CLI version, we can't do a meaningful check
     if (!cliVersion) {
       console.warn('Could not determine CLI version - skipping version consistency check')
-      return
+      return { cliVersion, sourceVersion }
     }
 
     // If source isn't installed yet, the CLI will handle it during service start
     if (!sourceVersion) {
       console.log('No source version found - fresh install, CLI will download source')
-      return
+      return { cliVersion, sourceVersion }
     }
 
     // Normalize versions for comparison (both should have 'v' prefix)
@@ -375,15 +375,20 @@ class LlamaFarmApp {
       try {
         await fsPromises.unlink(versionPath)
         console.log('Removed .source_version - services will sync to correct version on startup')
-      } catch (error) {
-        // File might not exist or we might not have permissions
-        const errorMsg = error instanceof Error ? error.message : String(error)
-        console.error(`Failed to remove .source_version: ${errorMsg}`)
+      } catch (error: unknown) {
+        // Skip logging if file just doesn't exist (ENOENT) - that's fine
+        const nodeError = error as NodeJS.ErrnoException
+        if (nodeError.code !== 'ENOENT') {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          console.error(`Failed to remove .source_version: ${errorMsg}`)
+        }
         // Continue anyway - the CLI's EnsureSource() might still handle it
       }
     } else {
       console.log(`Versions match: ${normalizedCliVersion}`)
     }
+
+    return { cliVersion, sourceVersion }
   }
 
   /**
@@ -394,7 +399,8 @@ class LlamaFarmApp {
   private async startServices(): Promise<void> {
     // First, check for version mismatch between CLI and source modules
     // This ensures we upgrade source code before starting services with mismatched versions
-    await this.checkVersionConsistency()
+    // We cache the versions to avoid duplicate CLI calls later
+    const { cliVersion, sourceVersion } = await this.checkVersionConsistency()
 
     // Check services status - this also triggers environment setup if needed
     // (the CLI's ServiceManager calls EnsureNativeEnvironment on init)
@@ -481,19 +487,16 @@ class LlamaFarmApp {
           console.warn('Services may not have started properly. Status:', verifyResult.stdout)
         }
 
-        // Success - log version info and exit retry loop
-        const cliVersion = await this.getCLIVersion()
-        const sourceVersion = await this.getSourceVersion()
-        console.log(`Services started successfully. CLI version: ${cliVersion || 'unknown'}, Source version: ${sourceVersion || 'unknown'}`)
+        // Success - log version info (use cached values, fetch fresh source version since it may have changed)
+        const freshSourceVersion = await this.getSourceVersion()
+        console.log(`Services started successfully. CLI version: ${cliVersion || 'unknown'}, Source version: ${freshSourceVersion || 'unknown'}`)
         return
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
         console.error(`Service start attempt ${attempt} failed:`, errorMsg)
 
         if (attempt >= maxRetries) {
-          // Include version info in error for debugging
-          const cliVersion = await this.getCLIVersion()
-          const sourceVersion = await this.getSourceVersion()
+          // Include version info in error for debugging (use cached CLI version)
           const versionInfo = `(CLI: ${cliVersion || 'unknown'}, Source: ${sourceVersion || 'unknown'})`
 
           if (errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT')) {
