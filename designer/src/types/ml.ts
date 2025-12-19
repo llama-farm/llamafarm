@@ -111,11 +111,49 @@ export const ANOMALY_BACKEND_DISPLAY: Record<AnomalyBackend, string> = {
   'autoencoder': 'Autoencoder',
 }
 
+// Schema encoding types for mixed data
+export type FeatureEncodingType =
+  | 'numeric' // pass through as-is (int/float)
+  | 'hash' // MD5 hash to integer (high-cardinality strings)
+  | 'label' // category → integer mapping (low-cardinality)
+  | 'onehot' // one-hot encoding (< 20 categories)
+  | 'binary' // boolean-like (yes/no, true/false → 0/1)
+  | 'frequency' // encode as occurrence frequency
+
+export const ENCODING_TYPE_OPTIONS: {
+  value: FeatureEncodingType
+  label: string
+  description: string
+}[] = [
+  { value: 'numeric', label: 'Numeric', description: 'Numbers (int/float)' },
+  { value: 'label', label: 'Text', description: 'Text values (auto-encoded)' },
+]
+
+// Full encoding options (for advanced use or future expansion)
+export const ENCODING_TYPE_OPTIONS_FULL: {
+  value: FeatureEncodingType
+  label: string
+  description: string
+}[] = [
+  { value: 'numeric', label: 'Numeric', description: 'Numbers (int/float)' },
+  { value: 'hash', label: 'Hash', description: 'High-cardinality text (IDs, user agents)' },
+  { value: 'label', label: 'Label', description: 'Categories (< 20 unique values)' },
+  { value: 'onehot', label: 'One-Hot', description: 'Low-cardinality categories' },
+  { value: 'binary', label: 'Binary', description: 'Yes/No, True/False' },
+  { value: 'frequency', label: 'Frequency', description: 'Encode by occurrence count' },
+]
+
+// Feature schema definition for table view
+export interface FeatureColumn {
+  name: string
+  type: FeatureEncodingType
+}
+
 export interface AnomalyFitRequest {
   model: string
   backend?: AnomalyBackend // default: "isolation_forest"
-  data: number[][] // 2D array of numeric features
-  schema?: Record<string, string> // optional feature encoding schema
+  data: number[][] | Record<string, unknown>[] // numeric arrays OR dict-based with schema
+  schema?: Record<string, FeatureEncodingType> // required for dict-based data
   contamination?: number // 0-0.5, default: 0.1
   epochs?: number // for autoencoder, default: 100
   batch_size?: number // for autoencoder, default: 32
@@ -136,8 +174,8 @@ export interface AnomalyFitResponse {
 export interface AnomalyScoreRequest {
   model: string
   backend?: AnomalyBackend
-  data: number[][]
-  schema?: Record<string, string>
+  data: number[][] | Record<string, unknown>[]
+  schema?: Record<string, FeatureEncodingType>
   threshold?: number
 }
 
