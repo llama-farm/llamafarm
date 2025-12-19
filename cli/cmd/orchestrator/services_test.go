@@ -30,9 +30,9 @@ func TestResolveDependencies(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "resolve rag with server and universal-runtime dependencies",
+			name:        "resolve rag with server dependency only",
 			serviceName: "rag",
-			wantOrder:   []string{"server", "universal-runtime", "rag"},
+			wantOrder:   []string{"server", "rag"},
 			wantErr:     false,
 		},
 		{
@@ -214,9 +214,9 @@ func TestFindDependents(t *testing.T) {
 			wantContain: []string{"server", "rag"}, // rag depends on server
 		},
 		{
-			name:        "find dependents of universal-runtime",
+			name:        "find dependents of universal-runtime (no dependents)",
 			serviceName: "universal-runtime",
-			wantContain: []string{"universal-runtime", "rag"}, // rag depends on universal-runtime
+			wantContain: []string{"universal-runtime"}, // nothing depends on universal-runtime anymore
 		},
 		{
 			name:        "find dependents of rag (no dependents)",
