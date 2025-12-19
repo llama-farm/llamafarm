@@ -90,6 +90,17 @@ async def _get_images_from_input(
         try:
             parsed = json.loads(images)
             if isinstance(parsed, list):
+                # Validate all elements are strings (base64 data URIs)
+                if not all(isinstance(item, str) for item in parsed):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Invalid 'images' format: all array elements must be base64 data URI strings",
+                    )
+                if not parsed:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Invalid 'images' format: array cannot be empty",
+                    )
                 return parsed
         except json.JSONDecodeError:
             pass
