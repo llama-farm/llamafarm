@@ -73,8 +73,9 @@ The Designer web interface is available at `http://localhost:8000`.
 git clone https://github.com/llama-farm/llamafarm.git
 cd llamafarm
 
-# Install Nx globally
+# Install Nx globally and initialize the workspace
 npm install -g nx
+nx init --useDotNxInstallation --interactive=false  # Required on first clone
 
 # Start all services (run each in a separate terminal)
 nx start server           # FastAPI server (port 8000)
