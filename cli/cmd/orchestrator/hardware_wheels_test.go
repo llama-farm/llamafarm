@@ -58,58 +58,8 @@ func TestPyTorchSpec(t *testing.T) {
 	}
 }
 
-func TestLlamaCppSpec(t *testing.T) {
-	tests := []struct {
-		name     string
-		hardware HardwareCapability
-		wantURL  string
-	}{
-		{
-			name:     "CPU hardware uses CPU llama-cpp-python index",
-			hardware: HardwareCPU,
-			wantURL:  "https://abetlen.github.io/llama-cpp-python/whl/cpu",
-		},
-		{
-			name:     "CUDA hardware uses CUDA llama-cpp-python index",
-			hardware: HardwareCUDA,
-			wantURL:  "https://abetlen.github.io/llama-cpp-python/whl/cu121",
-		},
-		{
-			name:     "Metal hardware uses Metal llama-cpp-python index",
-			hardware: HardwareMetal,
-			wantURL:  "https://abetlen.github.io/llama-cpp-python/whl/metal",
-		},
-		{
-			name:     "ROCm hardware uses ROCm llama-cpp-python index",
-			hardware: HardwareROCm,
-			wantURL:  "https://abetlen.github.io/llama-cpp-python/whl/rocm",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotURL, ok := LlamaCppSpec.WheelURLs[tt.hardware]
-			if !ok {
-				t.Errorf("LlamaCppSpec.WheelURLs[%s] not found", tt.hardware)
-				return
-			}
-			if gotURL != tt.wantURL {
-				t.Errorf("LlamaCppSpec.WheelURLs[%s] = %v, want %v", tt.hardware, gotURL, tt.wantURL)
-			}
-		})
-	}
-
-	// Verify package properties
-	if LlamaCppSpec.Name != "llama-cpp-python" {
-		t.Errorf("LlamaCppSpec.Name = %v, want llama-cpp-python", LlamaCppSpec.Name)
-	}
-	if LlamaCppSpec.UseIndexURL {
-		t.Error("LlamaCppSpec.UseIndexURL should be false (uses --extra-index-url)")
-	}
-	if !LlamaCppSpec.FallbackToDefault {
-		t.Error("LlamaCppSpec.FallbackToDefault should be true")
-	}
-}
+// Note: LlamaFarmLlamaSpec was removed - llama.cpp binaries are now downloaded
+// via EnsureLlamaBinary in llama_binary.go, not via pip HardwarePackageSpec.
 
 func TestGetComponentPackages(t *testing.T) {
 	t.Run("universal-runtime has hardware packages", func(t *testing.T) {
@@ -117,26 +67,22 @@ func TestGetComponentPackages(t *testing.T) {
 		if len(packages) == 0 {
 			t.Error("universal-runtime should have hardware-specific packages")
 		}
-		if len(packages) != 2 {
-			t.Errorf("universal-runtime should have 2 packages, got %d", len(packages))
+		// Only PyTorch is installed via HardwarePackages
+		// llama.cpp binaries are downloaded separately via EnsureLlamaBinary
+		if len(packages) != 1 {
+			t.Errorf("universal-runtime should have 1 package (PyTorch), got %d", len(packages))
 		}
 
-		// Verify we have PyTorch and llama-cpp-python
-		var hasTorch, hasLlamaCpp bool
+		// Verify we have PyTorch
+		var hasTorch bool
 		for _, pkg := range packages {
 			if pkg.Name == "torch" {
 				hasTorch = true
-			}
-			if pkg.Name == "llama-cpp-python" {
-				hasLlamaCpp = true
 			}
 		}
 
 		if !hasTorch {
 			t.Error("universal-runtime packages missing torch")
-		}
-		if !hasLlamaCpp {
-			t.Error("universal-runtime packages missing llama-cpp-python")
 		}
 	})
 
@@ -177,8 +123,9 @@ func TestServiceGraphIntegration(t *testing.T) {
 			t.Fatal("universal-runtime not found in ServiceGraph")
 		}
 
-		if len(svc.HardwarePackages) != 2 {
-			t.Errorf("universal-runtime.HardwarePackages should have 2 items, got %d", len(svc.HardwarePackages))
+		// Only PyTorch is in HardwarePackages; llama.cpp binaries are handled separately
+		if len(svc.HardwarePackages) != 1 {
+			t.Errorf("universal-runtime.HardwarePackages should have 1 item (PyTorch), got %d", len(svc.HardwarePackages))
 		}
 	})
 
@@ -222,13 +169,7 @@ func TestHardwarePackageSpec_AllHardwareSupported(t *testing.T) {
 		}
 	})
 
-	t.Run("llama-cpp-python supports all hardware types", func(t *testing.T) {
-		for _, hw := range allHardware {
-			if _, ok := LlamaCppSpec.WheelURLs[hw]; !ok {
-				t.Errorf("LlamaCppSpec missing hardware type: %s", hw)
-			}
-		}
-	})
+	// Note: llama.cpp binaries are handled via EnsureLlamaBinary, not HardwarePackageSpec
 }
 
 func TestHardwarePackageSpec_URLValidation(t *testing.T) {
@@ -245,33 +186,19 @@ func TestHardwarePackageSpec_URLValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("llama-cpp-python URLs", func(t *testing.T) {
-		expectedPrefix := "https://abetlen.github.io/llama-cpp-python/whl/"
-		for hw, url := range LlamaCppSpec.WheelURLs {
-			if url == "" {
-				t.Errorf("LlamaCppSpec[%s] has empty URL (should have wheel URL)", hw)
-			}
-			if !strings.HasPrefix(url, expectedPrefix) {
-				t.Errorf("LlamaCppSpec[%s] URL doesn't start with %s: %s", hw, expectedPrefix, url)
-			}
-		}
-	})
+	// Note: llama.cpp binaries are handled via EnsureLlamaBinary, not HardwarePackageSpec
 }
 
 func TestHardwarePackageSpec_VersionConstraints(t *testing.T) {
-	// Verify version constraints are set
+	// Verify version constraints are set for PyTorch
 	if PyTorchSpec.Version == "" {
 		t.Error("PyTorchSpec.Version should not be empty")
 	}
-	if LlamaCppSpec.Version == "" {
-		t.Error("LlamaCppSpec.Version should not be empty")
-	}
 
-	// Verify they use >= constraints (allowing newer versions)
+	// Verify PyTorch uses >= constraints (allowing newer versions)
 	if !strings.HasPrefix(PyTorchSpec.Version, ">=") {
 		t.Errorf("PyTorchSpec.Version should start with >=, got: %s", PyTorchSpec.Version)
 	}
-	if !strings.HasPrefix(LlamaCppSpec.Version, ">=") {
-		t.Errorf("LlamaCppSpec.Version should start with >=, got: %s", LlamaCppSpec.Version)
-	}
+
+	// Note: llama.cpp binaries are handled via EnsureLlamaBinary, not HardwarePackageSpec
 }

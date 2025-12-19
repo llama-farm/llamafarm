@@ -1,4 +1,4 @@
-# 🦙 LlamaFarm - Run your own AI anywhere
+# LlamaFarm - Run your own AI anywhere
 
 > Build powerful AI locally, extend anywhere.
 
@@ -8,452 +8,398 @@
 [![Docs](https://img.shields.io/badge/docs-latest-4C51BF.svg)](docs/website/docs/intro.md)
 [![Discord](https://img.shields.io/discord/1392890421771899026.svg)](https://discord.gg/RrAUXTCVNF)
 
-### 🖥️ Desktop App Downloads
+### Desktop App Downloads
 
 Get started instantly — no command line required:
 
 | Platform | Download |
 |----------|----------|
-| **Mac (M1+)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20-arm64-mac.zip) |
-| **Windows** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm.Setup.0.0.20.exe) |
-| **Linux** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20.AppImage) |
+| **Mac (M1+)** | [Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20-arm64-mac.zip) |
+| **Windows** | [Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm.Setup.0.0.20.exe) |
+| **Linux** | [Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20.AppImage) |
 
 ---
 
-LlamaFarm is an open-source framework for building retrieval-augmented and agentic AI applications. It ships with opinionated defaults (Ollama for local models, Chroma for vector storage) while staying 100% extendable—swap in vLLM, remote OpenAI-compatible hosts, new parsers, or custom stores without rewriting your app.
+LlamaFarm is an open-source framework for building retrieval-augmented and agentic AI applications. It provides a complete platform with multiple runtime options, composable RAG pipelines, and specialized ML capabilities—all configured through YAML.
 
-- **Local-first developer experience** with a single CLI (`lf`) that manages projects, datasets, and chat sessions.
-- **Production-ready architecture** that mirrors server endpoints and enforces schema-based configuration.
-- **Composable RAG pipelines** you can tailor through YAML, not bespoke code.
-- **Extendable everything**: runtimes, embedders, databases, extractors, and CLI tooling.
+- **Local-first developer experience** with a single CLI (`lf`) that manages projects, datasets, and chat sessions
+- **Multiple runtime options** including Universal Runtime (HuggingFace models, OCR, anomaly detection), Ollama, and OpenAI-compatible endpoints
+- **Composable RAG pipelines** configured through YAML, not code
+- **Extendable everything**: runtimes, embedders, databases, parsers, extractors, and CLI commands
 
-**📺 Video demo (90 seconds):** https://youtu.be/W7MHGyN0MdQ
+**Video demo (90 seconds):** https://youtu.be/W7MHGyN0MdQ
 
 ---
 
-## 🚀 Quickstart (TL;DR)
+## Quickstart
 
-**Prerequisites:**
+### Option 1: Desktop App
 
-- [Docker](https://www.docker.com/get-started/)
-- [Ollama](https://ollama.com/download) _(local runtime)_ **OR** [Lemonade](runtimes/lemonade/QUICKSTART.md) _(local GGUF models with NPU/GPU acceleration)_
+Download the desktop app above and run it. No additional setup required.
+
+### Option 2: CLI + Development Mode
 
 1. **Install the CLI**
 
-   macOS / Linux
-
+   macOS / Linux:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
    ```
 
-   Windows (via winget)
-
+   Windows (via winget):
    ```
    winget install LlamaFarm.CLI
    ```
 
-2. **Adjust Ollama context window**
-
-   - Open the Ollama app, go to **Settings → Advanced**, and set the context window to match production (e.g., 100K tokens).
-   - Larger context windows improve RAG answers when long documents are ingested.
-
-3. **Create and run a project**
+2. **Create and run a project**
 
    ```bash
-   lf init my-project            # Generates llamafarm.yaml using the server template
-   lf start                      # Spins up Docker services, opens dev chat UI & Designer web UI
+   lf init my-project      # Generates llamafarm.yaml
+   lf start                # Starts services and opens Designer UI
    ```
 
-   The Designer web interface will be available at `http://localhost:8000` for visual project management.
+3. **Chat with your AI**
 
-4. **Start an interactive project chat or send a one-off message**
+   ```bash
+   lf chat                           # Interactive chat
+   lf chat "Hello, LlamaFarm!"       # One-off message
+   ```
 
-```bash
-# Interactive project chat (auto-detects namespace/project from llamafarm.yaml)
-lf chat
+The Designer web interface is available at `http://localhost:8000`.
 
-# One-off message
-lf chat "Hello, LlamaFarm!"
-```
-
-Need the full walkthrough with dataset ingestion and troubleshooting tips? Jump to the [Quickstart guide](docs/website/docs/quickstart/index.md).
-
-> Prefer building from source? Clone the repo and follow the steps in [Development & Testing](#-development--testing).
-
-**Run services manually (without Docker auto-start):**
+### Option 3: Development from Source
 
 ```bash
 git clone https://github.com/llama-farm/llamafarm.git
 cd llamafarm
 
-# Install Nx globally and bootstrap the workspace
+# Install Nx globally and initialize the workspace
 npm install -g nx
-nx init --useDotNxInstallation --interactive=false
+nx init --useDotNxInstallation --interactive=false  # Required on first clone
 
-# Option 1: start both server and RAG worker with one command
-nx dev
-
-# Option 2: start services in separate terminals
-# Terminal 1
-nx start rag
-# Terminal 2
-nx start server
+# Start all services (run each in a separate terminal)
+nx start server           # FastAPI server (port 8000)
+nx start rag              # RAG worker for document processing
+nx start universal-runtime # ML models, OCR, embeddings (port 11540)
 ```
 
-Open another terminal to run `lf` commands (installed or built from source). This is equivalent to what `lf start` orchestrates automatically.
+---
+
+## Architecture
+
+LlamaFarm consists of three main services:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| **Server** | 8000 | FastAPI REST API, Designer web UI, project management |
+| **RAG Worker** | - | Celery worker for async document processing |
+| **Universal Runtime** | 11540 | ML model inference, embeddings, OCR, anomaly detection |
+
+All configuration lives in `llamafarm.yaml`—no scattered settings or hidden defaults.
 
 ---
 
-## 🌟 Why LlamaFarm
+## Runtime Options
 
-- **Own your stack** – Run small local models today and swap to hosted vLLM, Together, or custom APIs tomorrow by changing `llamafarm.yaml`.
-- **Battle-tested RAG** – Configure parsers, extractors, embedding strategies, and databases without touching orchestration code.
-- **Config over code** – Every project is defined by YAML schemas that are validated at runtime and easy to version control.
-- **Friendly CLI & Web UI** – `lf` CLI handles project bootstrapping, dataset lifecycle, and RAG queries. Prefer visual tools? Use the Designer web interface for drag-and-drop dataset management and interactive configuration.
-- **Built to extend** – Add a new provider or vector store by registering a backend and regenerating schema types.
+### Universal Runtime (Recommended)
+
+The Universal Runtime provides access to HuggingFace models plus specialized ML capabilities:
+
+- **Text Generation** - Any HuggingFace text model
+- **Embeddings** - sentence-transformers and other embedding models
+- **OCR** - Text extraction from images/PDFs (Surya, EasyOCR, PaddleOCR, Tesseract)
+- **Document Extraction** - Forms, invoices, receipts via vision models
+- **Text Classification** - Pre-trained or custom models via SetFit
+- **Named Entity Recognition** - Extract people, organizations, locations
+- **Reranking** - Cross-encoder models for improved RAG quality
+- **Anomaly Detection** - Isolation Forest, One-Class SVM, Local Outlier Factor, Autoencoders
+
+```yaml
+runtime:
+  models:
+    default:
+      provider: universal
+      model: Qwen/Qwen2.5-1.5B-Instruct
+      base_url: http://127.0.0.1:11540/v1
+```
+
+### Ollama
+
+Simple setup for GGUF models with CPU/GPU acceleration:
+
+```yaml
+runtime:
+  models:
+    default:
+      provider: ollama
+      model: qwen3:8b
+      base_url: http://localhost:11434/v1
+```
+
+### OpenAI-Compatible
+
+Works with vLLM, Together, Mistral API, or any OpenAI-compatible endpoint:
+
+```yaml
+runtime:
+  models:
+    default:
+      provider: openai
+      model: gpt-4o
+      base_url: https://api.openai.com/v1
+      api_key: ${OPENAI_API_KEY}
+```
 
 ---
 
-## 🔧 Core Workflows
+## Core Workflows
 
 ### CLI Commands
 
-| Task                       | Command                                                                    | Notes                                                         |
-| -------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Initialize a project       | `lf init my-project`                                                       | Creates `llamafarm.yaml` from server template.                |
-| Start dev stack + chat TUI | `lf start`                                                                 | Spins up server, rag worker, monitors Ollama/vLLM.            |
-| Interactive project chat   | `lf chat`                                                                  | Opens TUI using project from `llamafarm.yaml`.                |
-| List available models      | `lf models list`                                                           | Shows all configured models (Ollama, Lemonade, OpenAI, etc.). |
-| Use specific model         | `lf chat --model powerful "question"`                                      | Switch between models in multi-model configs.                 |
-| Send single prompt         | `lf chat "Explain retrieval augmented generation"`                         | Uses RAG by default; add `--no-rag` for pure LLM.             |
-| Preview REST call          | `lf chat --curl "What models are configured?"`                             | Prints sanitized `curl` command.                              |
-| Create dataset             | `lf datasets create -s pdf_ingest -b main_db research-notes`               | Validates strategy/database against project config.           |
-| Upload files               | `lf datasets upload research-notes ./docs/*.pdf`                           | Supports globs and directories.                               |
-| Process dataset            | `lf datasets process research-notes`                                       | Streams heartbeat dots during long processing.                |
-| Semantic query             | `lf rag query --database main_db "What did the 2024 FDA letters require?"` | Use `--filter`, `--include-metadata`, etc.                    |
+| Task | Command |
+|------|---------|
+| Initialize project | `lf init my-project` |
+| Start services | `lf start` |
+| Interactive chat | `lf chat` |
+| One-off message | `lf chat "Your question"` |
+| List models | `lf models list` |
+| Use specific model | `lf chat --model powerful "Question"` |
+| Create dataset | `lf datasets create -s pdf_ingest -b main_db research` |
+| Upload files | `lf datasets upload research ./docs/*.pdf` |
+| Process dataset | `lf datasets process research` |
+| Query RAG | `lf rag query --database main_db "Your query"` |
+| Check RAG health | `lf rag health` |
 
-### Global Flags
+### RAG Pipeline
 
-All `lf` commands support these global flags:
+1. **Create a dataset** linked to a processing strategy and database
+2. **Upload files** (PDF, DOCX, Markdown, TXT)
+3. **Process** to parse, chunk, and embed documents
+4. **Query** using semantic search with optional metadata filtering
 
-| Flag | Description | Use Case |
-| ---- | ----------- | -------- |
-| `--auto-start` | Automatically start services when needed (default: true). Use `--auto-start=false` to disable. | CI/CD pipelines, manual service management, debugging |
-| `--server-url <url>` | Connect to a specific server | Remote deployments, custom ports |
-| `--debug` | Enable verbose debug output | Troubleshooting, development |
-| `--cwd <path>` | Override working directory | Scripting, automation |
-
-**Example: Manual Service Management**
 ```bash
-# Start services manually
-lf start
-
-# In another terminal, run commands without auto-start
-lf chat --auto-start=false "What is LlamaFarm?"
-lf datasets list --auto-start=false
+lf datasets create -s default -b main_db research
+lf datasets upload research ./papers/*.pdf
+lf datasets process research
+lf rag query --database main_db "What are the key findings?"
 ```
-
-### Common Scenarios
-
-**CI/CD Pipeline (GitHub Actions)**
-```yaml
-# .github/workflows/test.yml
-- name: Start LlamaFarm services
-  run: |
-    docker-compose up -d llamafarm-server llamafarm-rag-worker
-    
-- name: Wait for services
-  run: |
-    timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
-    
-- name: Run tests with --auto-start=false
-  run: |
-    lf datasets create --auto-start=false -s pdf_ingest -b main_db test-data
-    lf datasets upload --auto-start=false test-data ./test-files/*.pdf
-    lf datasets process --auto-start=false test-data
-    lf rag query --auto-start=false "test query"
-```
-
-**Development Workflow (Two Terminal Setup)**
-```bash
-# Terminal 1: Start and monitor services
-lf start
-# This keeps services running and shows logs
-
-# Terminal 2: Run commands without triggering restarts
-lf chat --auto-start=false "Develop with stable services"
-lf datasets list --auto-start=false
-lf rag stats --auto-start=false
-
-# Benefits:
-# - Services stay up between commands
-# - Faster command execution (no health checks/restarts)
-# - Easier to debug service issues
-```
-
-**Troubleshooting Tips**
-
-If you see: `Service 'server' is not running and auto-start is disabled`
-
-1. **Check if services are running:**
-   ```bash
-   docker ps | grep llamafarm
-   curl http://localhost:8000/health
-   ```
-
-2. **Start services manually:**
-   ```bash
-   lf start
-   # Or with Docker Compose:
-   docker-compose up -d
-   ```
-
-3. **Remove the flag to enable auto-start:**
-   ```bash
-   # Instead of:
-   lf chat --auto-start=false "query"
-   
-   # Use:
-   lf chat "query"  # Auto-starts if needed
-   ```
-
-4. **Check service logs:**
-   ```bash
-   docker logs llamafarm-server
-   docker logs llamafarm-rag-worker
-   ```
-
-See the [CLI reference](docs/website/docs/cli/index.md) for full command details and troubleshooting advice.
 
 ### Designer Web UI
 
-Prefer a visual interface? The Designer provides a browser-based way to manage projects:
+The Designer at `http://localhost:8000` provides:
 
-- **Visual dataset management** – Drag-and-drop file uploads, see processing status in real-time
-- **Interactive configuration** – Edit your project settings with live validation and helpful hints
-- **Integrated chat** – Test your AI with full RAG context directly in the browser
-- **Dual-mode editing** – Switch between visual designer and direct YAML editing
-
-Access the Designer at `http://localhost:8000` after running `lf start`.
-
-See the [Designer documentation](docs/website/docs/designer/index.md) for a complete feature walkthrough.
+- Visual dataset management with drag-and-drop uploads
+- Interactive configuration editor with live validation
+- Integrated chat with RAG context
+- Switch between visual and YAML editing modes
 
 ---
 
-## 🌐 REST API
+## Configuration
 
-LlamaFarm provides a comprehensive REST API (compatible with OpenAI's format) for integrating with your applications. The API runs at `http://localhost:8000`.
-
-### Key Endpoints
-
-**Chat Completions** (OpenAI-compatible)
-
-```bash
-curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {"role": "user", "content": "What are the FDA requirements?"}
-    ],
-    "stream": false,
-    "rag_enabled": true,
-    "database": "main_db"
-  }'
-```
-
-**RAG Query**
-
-```bash
-curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/rag/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "clinical trial requirements",
-    "database": "main_db",
-    "top_k": 5
-  }'
-```
-
-**Dataset Management**
-
-```bash
-# Upload file
-curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/data \
-  -F "file=@document.pdf"
-
-# Start async processing (returns Celery task info)
-curl -X POST http://localhost:8000/v1/projects/{namespace}/{project}/datasets/{dataset}/actions \
-  -H "Content-Type: application/json" \
-  -d '{"action_type":"process"}'
-```
-
-### Finding Your Namespace and Project
-
-Check your `llamafarm.yaml`:
-
-```yaml
-name: my-project # Your project name
-namespace: my-org # Your namespace
-```
-
-Or inspect the file system: `~/.llamafarm/projects/{namespace}/{project}/`
-
-See the complete [API Reference](docs/website/docs/api/index.md) for all endpoints, request/response formats, Python/TypeScript clients, and examples.
-
----
-
-## 🗂️ Configuration Snapshot
-
-`llamafarm.yaml` is the source of truth for each project. The schema enforces required fields and documents every extension point.
-
-### Multi-Model Configuration (Recommended)
+`llamafarm.yaml` is the source of truth for each project:
 
 ```yaml
 version: v1
-name: fda-assistant
+name: my-assistant
 namespace: default
 
+# Multi-model configuration
 runtime:
-  default_model: fast # Which model to use by default
+  default_model: fast
 
   models:
     fast:
-      description: 'Fast Ollama model'
-      provider: ollama
-      model: gemma3:1b
+      description: "Fast local model"
+      provider: universal
+      model: Qwen/Qwen2.5-1.5B-Instruct
+      base_url: http://127.0.0.1:11540/v1
 
     powerful:
-      description: 'More capable Ollama model'
-      provider: ollama
-      model: qwen3:8b
+      description: "More capable model"
+      provider: universal
+      model: Qwen/Qwen2.5-7B-Instruct
+      base_url: http://127.0.0.1:11540/v1
 
-    lemon:
-      description: 'Lemonade local model with NPU/GPU'
-      provider: lemonade
-      model: user.Qwen3-4B
-      base_url: 'http://127.0.0.1:11534/v1'
-      lemonade:
-        backend: llamacpp
-        port: 11534
-        context_size: 32768
-
+# System prompts
 prompts:
   - name: default
     messages:
       - role: system
-        content: >-
-          You are an FDA specialist. Answer using short paragraphs and cite document titles when available.
+        content: You are a helpful assistant.
 
+# RAG configuration
 rag:
   databases:
     - name: main_db
       type: ChromaStore
       default_embedding_strategy: default_embeddings
-      default_retrieval_strategy: filtered_search
+      default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            model: nomic-embed-text:latest
+            model: sentence-transformers/all-MiniLM-L6-v2
+            base_url: http://127.0.0.1:11540/v1
       retrieval_strategies:
-        - name: filtered_search
-          type: MetadataFilteredStrategy
+        - name: semantic_search
+          type: BasicSimilarityStrategy
           config:
             top_k: 5
+
   data_processing_strategies:
-    - name: pdf_ingest
+    - name: default
       parsers:
         - type: PDFParser_LlamaIndex
           config:
-            chunk_size: 1500
-            chunk_overlap: 200
-      extractors:
-        - type: HeadingExtractor
-        - type: ContentStatisticsExtractor
+            chunk_size: 1000
+            chunk_overlap: 100
+        - type: MarkdownParser_Python
+          config:
+            chunk_size: 1000
+      extractors: []
 
+# Dataset definitions
 datasets:
-  - name: research-notes
-    data_processing_strategy: pdf_ingest
+  - name: research
+    data_processing_strategy: default
     database: main_db
 ```
 
-**Using your models:**
+### Environment Variable Substitution
 
-```bash
-lf models list                              # See all configured models
-lf chat "Question"                          # Uses default model (fast)
-lf chat --model powerful "Complex question" # Use specific model
-lf chat --model lemon "Local GGUF model"    # Use Lemonade model
+Use `${VAR}` syntax to inject secrets from `.env` files:
+
+```yaml
+runtime:
+  models:
+    openai:
+      api_key: ${OPENAI_API_KEY}
+      # With default: ${OPENAI_API_KEY:-sk-default}
+      # From specific file: ${file:.env.production:API_KEY}
 ```
 
-> **Note:** Lemonade models require manual startup via `nx start lemonade` from the project root. The `nx start lemonade` command automatically picks up configuration from your `llamafarm.yaml`. In the future, Lemonade will run as a container and be auto-started. See [Lemonade Quickstart](runtimes/lemonade/QUICKSTART.md) for setup.
-
-Configuration reference: [Configuration Guide](docs/website/docs/configuration/index.md) • [Extending LlamaFarm](docs/website/docs/extending/index.md)
+See the [Configuration Guide](docs/website/docs/configuration/index.md) for complete reference.
 
 ---
 
-## 🧩 Extensibility Highlights
+## REST API
 
-- **Swap runtimes** by pointing to any OpenAI-compatible endpoint (vLLM, Mistral, Anyscale). Update `runtime.provider`, `base_url`, and `api_key`; regenerate schema types if you add a new provider enum.
-- **Bring your own vector store** by implementing a store backend, adding it to `rag/schema.yaml`, and updating the server service registry.
-- **Add parsers/extractors** to support new file formats or metadata pipelines. Register implementations and extend the schema definitions.
-- **Extend the CLI** with new Cobra commands under `cli/cmd`; the docs include guidance on adding dataset utilities or project tooling.
+LlamaFarm provides an OpenAI-compatible REST API:
 
-Check the [Extending guide](docs/website/docs/extending/index.md) for step-by-step instructions.
+**Chat Completions**
+```bash
+curl -X POST http://localhost:8000/v1/projects/default/my-project/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false,
+    "rag_enabled": true
+  }'
+```
+
+**RAG Query**
+```bash
+curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the requirements?",
+    "database": "main_db",
+    "top_k": 5
+  }'
+```
+
+See the [API Reference](docs/website/docs/api/index.md) for all endpoints.
 
 ---
 
-## 📚 Examples
+## Specialized ML Capabilities
 
-| Example                     | What it Shows                                                               | Location                                                                                      |
-| --------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| FDA Letters Assistant       | Multi-document PDF ingestion, RAG queries, reference-style prompts          | `examples/fda_rag/` & [Docs](docs/website/docs/examples/index.md#fda-letters-assistant)       |
-| Raleigh UDO Planning Helper | Large ordinance ingestion, long-running processing tips, geospatial queries | `examples/gov_rag/` & [Docs](docs/website/docs/examples/index.md#raleigh-udo-planning-helper) |
+The Universal Runtime provides endpoints beyond chat:
 
-Run `lf datasets` and `lf rag query` commands from each example folder to reproduce the flows demonstrated in the docs.
-
----
-
-## 🧪 Development & Testing
+### OCR & Document Extraction
 
 ```bash
-# Python server + RAG tests
-cd server
-uv sync
-uv run --group test python -m pytest
+curl -X POST http://localhost:11540/v1/ocr \
+  -F "file=@document.pdf" \
+  -F "backend=surya"
+```
+
+### Anomaly Detection
+
+```bash
+# Train on normal data
+curl -X POST http://localhost:11540/v1/anomaly/fit \
+  -H "Content-Type: application/json" \
+  -d '{"model": "sensor-detector", "backend": "isolation_forest", "data": [[22.1], [23.5], ...]}'
+
+# Detect anomalies
+curl -X POST http://localhost:11540/v1/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{"model": "sensor-detector", "data": [[22.0], [100.0], [23.0]], "threshold": 0.5}'
+```
+
+### Text Classification & NER
+
+See the [Models Guide](docs/website/docs/models/index.md) for complete documentation.
+
+---
+
+## Examples
+
+| Example | Description | Location |
+|---------|-------------|----------|
+| FDA Letters Assistant | Multi-PDF ingestion, regulatory queries | `examples/fda_rag/` |
+| Raleigh Planning Helper | Large ordinance documents, geospatial queries | `examples/gov_rag/` |
+| OCR & Document Processing | Image text extraction, form parsing | `examples/ocr_and_document/` |
+
+---
+
+## Development & Testing
+
+```bash
+# Python server tests
+cd server && uv sync && uv run --group test python -m pytest
 
 # CLI tests
-cd ../cli
-go test ./...
+cd cli && go test ./...
 
-# RAG tooling smoke tests
-cd ../rag
-uv sync
-uv run python cli.py test
+# RAG tests
+cd rag && uv sync && uv run pytest tests/
 
-# Docs build (ensures navigation/link integrity)
-cd ..
+# Universal Runtime tests
+cd runtimes/universal && uv sync && uv run pytest tests/
+
+# Build docs
 nx build docs
 ```
 
-Linting: `uv run ruff check --fix .` (Python), `go fmt ./...` and `go vet ./...` (Go).
+---
+
+## Extensibility
+
+- **Add runtimes** by implementing provider support and updating schema
+- **Add vector stores** by implementing store backends (Chroma, Qdrant, etc.)
+- **Add parsers** for new file formats (PDF, DOCX, HTML, CSV, etc.)
+- **Add extractors** for custom metadata extraction
+- **Add CLI commands** under `cli/cmd/`
+
+See the [Extending Guide](docs/website/docs/extending/index.md) for step-by-step instructions.
 
 ---
 
-## 🤝 Community & Support
+## Community & Support
 
-- [Discord](https://discord.gg/RrAUXTCVNF) – chat with the team, share feedback, find collaborators.
-- [GitHub Issues](https://github.com/llama-farm/llamafarm/issues) – bug reports and feature requests.
-- [Discussions](https://github.com/llama-farm/llamafarm/discussions) – ideas, RFCs, roadmap proposals.
-- [Contributing Guide](CONTRIBUTING.md) – code style, testing expectations, doc updates, schema regeneration steps.
-
-Want to add a new provider, parser, or example? Start a discussion or open a draft PR—we love extensions!
+- [Discord](https://discord.gg/RrAUXTCVNF) - Chat with the team and community
+- [GitHub Issues](https://github.com/llama-farm/llamafarm/issues) - Bug reports and feature requests
+- [Discussions](https://github.com/llama-farm/llamafarm/discussions) - Ideas and proposals
+- [Contributing Guide](CONTRIBUTING.md) - Code style and contribution process
 
 ---
 
-## 📄 License & Acknowledgments
+## License
 
-- Licensed under the [Apache 2.0 License](LICENSE).
-- Built by the LlamaFarm community and inspired by the broader open-source AI ecosystem. See [CREDITS](CREDITS.md) for detailed acknowledgments.
+Licensed under the [Apache 2.0 License](LICENSE). See [CREDITS](CREDITS.md) for acknowledgments.
 
 ---
 

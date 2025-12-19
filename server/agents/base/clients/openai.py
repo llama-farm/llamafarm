@@ -2,7 +2,7 @@ import json
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Literal, cast
+from typing import Literal
 
 from config.datamodel import ToolCallStrategy
 from openai import NOT_GIVEN, AsyncOpenAI
@@ -37,6 +37,7 @@ from .client import (
 )
 
 logger = FastAPIStructLogger(__name__)
+
 
 TOOLS_SYSTEM_MESSAGE_PREFIX = """
 
@@ -112,16 +113,9 @@ class LFAgentClientOpenAI(LFAgentClient):
 
         # Create non-streaming request
         stream_param: Literal[False] = False
-        # Filter out None values from messages to avoid OpenAI validation errors
-        cleaned_messages = [
-            cast(
-                LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if v is not None},
-            )
-            for msg in messages
-        ]
+
         completion = await client.chat.completions.create(
-            messages=cleaned_messages,
+            messages=messages,
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,
@@ -187,16 +181,9 @@ class LFAgentClientOpenAI(LFAgentClient):
         }
 
         stream_param: Literal[True] = True
-        # Filter out None values from messages to avoid OpenAI validation errors
-        cleaned_messages = [
-            cast(
-                LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if v is not None},
-            )
-            for msg in messages
-        ]
+
         response_stream = await client.chat.completions.create(
-            messages=cleaned_messages,
+            messages=messages,
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,

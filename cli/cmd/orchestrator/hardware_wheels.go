@@ -10,7 +10,7 @@ import (
 
 // HardwarePackageSpec defines a Python package that requires hardware-specific installation
 type HardwarePackageSpec struct {
-	Name              string                        // Package name (e.g., "torch", "llama-cpp-python")
+	Name              string                        // Package name (e.g., "torch")
 	Version           string                        // Version constraint (e.g., ">=2.0.0")
 	UseIndexURL       bool                          // If true, use --index-url; if false, use --extra-index-url
 	WheelURLs         map[HardwareCapability]string // Hardware-specific wheel index URLs
@@ -31,19 +31,8 @@ var PyTorchSpec = HardwarePackageSpec{
 	},
 }
 
-// LlamaCppSpec defines the hardware-specific installation for llama-cpp-python
-var LlamaCppSpec = HardwarePackageSpec{
-	Name:              "llama-cpp-python",
-	Version:           ">=0.3.0",
-	UseIndexURL:       false, // llama-cpp-python uses --extra-index-url
-	FallbackToDefault: true,
-	WheelURLs: map[HardwareCapability]string{
-		HardwareCPU:   "https://abetlen.github.io/llama-cpp-python/whl/cpu",
-		HardwareCUDA:  "https://abetlen.github.io/llama-cpp-python/whl/cu121",
-		HardwareMetal: "https://abetlen.github.io/llama-cpp-python/whl/metal",
-		HardwareROCm:  "https://abetlen.github.io/llama-cpp-python/whl/rocm",
-	},
-}
+// Note: llama.cpp binaries are downloaded via EnsureLlamaBinary in llama_binary.go,
+// not via pip. The llamafarm-llama package is a regular dependency in pyproject.toml.
 
 // GetComponentPackages returns the hardware-dependent packages for a given component
 // It looks up the component in ServiceGraph and returns its HardwarePackages field

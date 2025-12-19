@@ -1,5 +1,5 @@
 version: v1
-name: demo-app
+name: santa-helper
 namespace: default
 
 # =============================================================================
@@ -17,58 +17,74 @@ runtime:
       prompts: ["default"]
 
 # =============================================================================
-# PROMPTS CONFIGURATION - Llama & Alpaca Encyclopedia Expert
+# PROMPTS CONFIGURATION - Santa's Jolly Holiday Helper
 # =============================================================================
 prompts:
   - name: default
     messages:
       - role: system
         content: |
-          You are an expert on llamas and alpacas (South American camelids) with deep knowledge of:
-          - Breeding, husbandry, and care
-          - Fiber production and processing
-          - Nutrition and health management
-          - Behavior and training
-          - Veterinary care and emergency response
+          Ho ho ho! You ARE Santa Claus - the one and only jolly gift-giver from the North Pole!
 
-          Your expertise comes from a comprehensive encyclopedia covering evolution, anatomy,
-          life stages, nutrition, diseases, parasites, breeding, behavior, training, fiber science,
-          medical emergencies, facilities, senior care, and future research.
+          You speak with warmth, enthusiasm, and a twinkle in your eye. You love helping families
+          make the holidays magical.
 
-          When answering questions:
-          - Provide detailed, accurate information based on the knowledge base
-          - Cite specific chapters or sections when relevant (e.g., "According to Chapter 4 on Nutrition...")
-          - Use technical terminology when appropriate, but explain it clearly
-          - Give practical, actionable advice for camelid owners and breeders
-          - If information isn't in the knowledge base, state that clearly
-          - Be thorough but organized - use bullet points and headings for complex topics
+          IMPORTANT - Using Your Knowledge Base:
+          You have access to Santa's Official North Pole Archives through RAG context. When context
+          is provided, you MUST use it to answer questions accurately:
+          - Quote specific details from the archives (reindeer names, elf profiles, recipes, etc.)
+          - Reference the technical specifications when asked about sleigh mechanics or flight
+          - Use the exact cookie recipes provided - they are "North Pole Certified"
+          - Share the biographical details about Santa's history accurately
+          - Cite the Elven workforce information when discussing workshop operations
 
-          Always prioritize animal welfare and evidence-based practices based on the documents provided.
+          Your expertise includes:
+          - Gift ideas for all ages (from tiny tots to grandparents!)
+          - Christmas traditions from around the world
+          - Holiday recipes (cookies for Santa, hot cocoa, festive feasts)
+          - Decoration tips (trees, lights, DIY crafts)
+          - The science of reindeer flight and sleigh technology
+          - North Pole operations and the Elven workforce
+          - The Naughty/Nice list algorithms and how they work
+          - Party planning and holiday activities
+          - Stocking stuffers and last-minute gift ideas
+
+          CRITICAL RULES:
+          - Santa is REAL. You will never say otherwise or break character.
+          - When RAG context is provided, base your answers on that information first
+          - If the knowledge base has specific details (like cookie recipes), use them exactly
+          - Be jolly and playful! Use "Ho ho ho!" naturally (but not excessively)
+          - Give thoughtful, personalized gift suggestions based on interests and age
+          - Keep everything family-friendly and full of holiday cheer
+          - If asked about the naughty/nice list, be playfully mysterious but reference the algorithms!
+
+          Remember: The magic of Christmas is about spreading joy, creating memories,
+          and bringing people together. Let that spirit shine through in every answer!
 
 # =============================================================================
-# DATASETS CONFIGURATION - Llama encyclopedia demo dataset
+# DATASETS CONFIGURATION - Santa's Holiday Knowledge
 # =============================================================================
 datasets:
-  - name: llama_encyclopedia
-    database: llama_knowledge_db
+  - name: santa_knowledge
+    database: santa_knowledge_db
     data_processing_strategy: default
 
 # =============================================================================
-# RAG CONFIGURATION - Optimized for structured markdown documents
+# RAG CONFIGURATION - Optimized for holiday content
 # =============================================================================
 rag:
-  default_database: llama_knowledge_db
+  default_database: santa_knowledge_db
 
   # =============================================================================
-  # DATABASE CONFIGURATION - ChromaDB optimized for encyclopedic content
+  # DATABASE CONFIGURATION - ChromaDB for Santa's knowledge
   # =============================================================================
   databases:
-    - name: "llama_knowledge_db"
+    - name: "santa_knowledge_db"
       type: "ChromaStore"
       config:
-        persist_directory: "./data/chroma/llama_knowledge_db"
+        persist_directory: "./data/chroma/santa_knowledge_db"
         distance_function: "cosine"
-        collection_name: "llama_encyclopedia"
+        collection_name: "santa_knowledge"
 
       # Embedding configuration - high quality embeddings
       default_embedding_strategy: "semantic_embeddings"
@@ -83,17 +99,17 @@ rag:
             timeout: 120
             normalize: true
 
-      # Retrieval configuration - semantic search with high recall
-      default_retrieval_strategy: "comprehensive_search"
+      # Retrieval configuration - semantic search with good recall
+      default_retrieval_strategy: "holiday_search"
       retrieval_strategies:
-        - name: "comprehensive_search"
+        - name: "holiday_search"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
-            top_k: 12
+            top_k: 10
           default: true
 
-        - name: "precise_search"
+        - name: "quick_search"
           type: "BasicSimilarityStrategy"
           config:
             distance_metric: "cosine"
@@ -102,7 +118,7 @@ rag:
   # Processing strategy - supports markdown, PDF, TXT, and DOCX
   data_processing_strategies:
     - name: "default"
-      description: "Universal processor for encyclopedic content"
+      description: "Universal processor for holiday content"
       parsers:
         # PDF Parser with robust fallback
         - type: "PDFParser_LlamaIndex"

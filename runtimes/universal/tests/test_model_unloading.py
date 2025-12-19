@@ -6,11 +6,14 @@ to free up VRAM/RAM.
 """
 
 import asyncio
+import contextlib
 import os
-from datetime import datetime, timedelta
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from utils.model_cache import ModelCache
 
 
 @pytest.fixture
@@ -28,40 +31,114 @@ def reset_server_globals():
     # Import here to avoid circular imports
     import server
 
-    # Store original values
-    original_models = server._models.copy()
-    original_access = server._model_last_access.copy()
+    # Store original caches
+    original_models = server._models
+    original_classifiers = server._classifiers
     original_task = server._cleanup_task
 
-    # Clear for test
-    server._models.clear()
-    server._model_last_access.clear()
+    # Replace with fresh caches for test
+    server._models = ModelCache(ttl=server.MODEL_UNLOAD_TIMEOUT)
+    server._classifiers = ModelCache(ttl=server.MODEL_UNLOAD_TIMEOUT)
     server._cleanup_task = None
 
     yield
 
-    # Restore original values
+    # Restore original caches
     server._models = original_models
-    server._model_last_access = original_access
+    server._classifiers = original_classifiers
     server._cleanup_task = original_task
 
 
-@pytest.mark.asyncio
-async def test_track_model_access(reset_server_globals):
-    """Test that model access is tracked with timestamp."""
-    import server
+class TestModelCache:
+    """Test the ModelCache class directly."""
 
-    cache_key = "test:model"
+    def test_set_and_get(self):
+        """Test basic set and get operations."""
+        cache = ModelCache(ttl=300)
+        model = MagicMock()
+        cache["test:key"] = model
+        assert cache.get("test:key") is model
 
-    # Track access
-    before = datetime.now()
-    server._track_model_access(cache_key)
-    after = datetime.now()
+    def test_contains(self):
+        """Test __contains__ method."""
+        cache = ModelCache(ttl=300)
+        model = MagicMock()
+        cache["test:key"] = model
+        assert "test:key" in cache
+        assert "nonexistent" not in cache
 
-    # Verify timestamp was recorded
-    assert cache_key in server._model_last_access
-    access_time = server._model_last_access[cache_key]
-    assert before <= access_time <= after
+    def test_get_refreshes_ttl(self):
+        """Test that get() refreshes the TTL."""
+        cache = ModelCache(ttl=1)  # 1 second TTL
+        model = MagicMock()
+        cache["test:key"] = model
+
+        # Wait a bit but not past TTL
+        time.sleep(0.5)
+
+        # Access should refresh TTL
+        cache.get("test:key")
+
+        # Check idle time was reset
+        idle_time = cache.get_idle_time("test:key")
+        assert idle_time is not None
+        assert idle_time < 0.2  # Should be very recent
+
+    def test_get_expired_keys(self):
+        """Test get_expired_keys returns expired keys."""
+        cache = ModelCache(ttl=0.1)  # 100ms TTL
+        model = MagicMock()
+        cache["test:key"] = model
+
+        # Wait for expiry
+        time.sleep(0.2)
+
+        expired = cache.get_expired_keys()
+        assert "test:key" in expired
+
+    def test_pop_expired(self):
+        """Test pop_expired removes and returns expired items."""
+        cache = ModelCache(ttl=0.1)  # 100ms TTL
+        model = MagicMock()
+        cache["test:key"] = model
+
+        # Wait for expiry
+        time.sleep(0.2)
+
+        expired = cache.pop_expired()
+        assert len(expired) == 1
+        assert expired[0][0] == "test:key"
+        assert expired[0][1] is model
+        assert "test:key" not in cache
+
+    def test_recent_items_not_expired(self):
+        """Test that recently accessed items are not expired."""
+        cache = ModelCache(ttl=1)  # 1 second TTL
+        model = MagicMock()
+        cache["test:key"] = model
+
+        # Check immediately
+        expired = cache.get_expired_keys()
+        assert "test:key" not in expired
+
+    def test_pop(self):
+        """Test pop removes and returns item."""
+        cache = ModelCache(ttl=300)
+        model = MagicMock()
+        cache["test:key"] = model
+
+        result = cache.pop("test:key")
+        assert result is model
+        assert "test:key" not in cache
+
+    def test_clear(self):
+        """Test clear removes all items."""
+        cache = ModelCache(ttl=300)
+        cache["key1"] = MagicMock()
+        cache["key2"] = MagicMock()
+
+        cache.clear()
+        assert len(cache) == 0
 
 
 @pytest.mark.asyncio
@@ -74,31 +151,21 @@ async def test_cleanup_idle_models(reset_server_globals, mock_model):
     # Add model to cache
     server._models[cache_key] = mock_model
 
-    # Set last access to old time (beyond timeout)
-    old_time = datetime.now() - timedelta(seconds=server.MODEL_UNLOAD_TIMEOUT + 10)
-    server._model_last_access[cache_key] = old_time
+    # Manually set access time to old time by manipulating internal state
+    # Since ModelCache uses time.monotonic(), we need to mock the TTL behavior
+    old_ttl = server._models._ttl
+    server._models._ttl = 0  # Make everything appear expired
 
-    # Run one iteration of cleanup (manually, not as background task)
-    now = datetime.now()
-    models_to_unload = []
+    # Pop expired items (simulates cleanup task)
+    expired = server._models.pop_expired()
 
-    for key, last_access in server._model_last_access.items():
-        idle_time = (now - last_access).total_seconds()
-        if idle_time > server.MODEL_UNLOAD_TIMEOUT:
-            models_to_unload.append(key)
+    # Restore TTL
+    server._models._ttl = old_ttl
 
-    # Unload idle models
-    for key in models_to_unload:
-        model = server._models.get(key)
-        if model:
-            await model.unload()
-            del server._models[key]
-            del server._model_last_access[key]
-
-    # Verify model was unloaded
-    mock_model.unload.assert_called_once()
-    assert cache_key not in server._models
-    assert cache_key not in server._model_last_access
+    # Verify model was returned as expired
+    assert len(expired) == 1
+    assert expired[0][0] == cache_key
+    assert expired[0][1] is mock_model
 
 
 @pytest.mark.asyncio
@@ -111,26 +178,12 @@ async def test_cleanup_does_not_unload_recent_models(reset_server_globals, mock_
     # Add model to cache
     server._models[cache_key] = mock_model
 
-    # Set last access to recent time (within timeout)
-    recent_time = datetime.now() - timedelta(seconds=10)
-    server._model_last_access[cache_key] = recent_time
+    # Immediately check for expired (nothing should be expired)
+    expired = server._models.pop_expired()
 
-    # Run one iteration of cleanup
-    now = datetime.now()
-    models_to_unload = []
-
-    for key, last_access in server._model_last_access.items():
-        idle_time = (now - last_access).total_seconds()
-        if idle_time > server.MODEL_UNLOAD_TIMEOUT:
-            models_to_unload.append(key)
-
-    # Verify no models were marked for unloading
-    assert len(models_to_unload) == 0
-
-    # Verify model was NOT unloaded
-    mock_model.unload.assert_not_called()
+    # Verify no models were expired
+    assert len(expired) == 0
     assert cache_key in server._models
-    assert cache_key in server._model_last_access
 
 
 @pytest.mark.asyncio
@@ -154,7 +207,6 @@ async def test_load_language_tracks_access(reset_server_globals):
 
         # Verify model is tracked (new cache key includes quantization)
         cache_key = f"language:{model_id}:ctxauto:quantdefault"
-        assert cache_key in server._model_last_access
         assert cache_key in server._models
 
 
@@ -179,7 +231,6 @@ async def test_load_encoder_tracks_access(reset_server_globals):
 
         # Verify model is tracked (new cache key includes quantization and max_length)
         cache_key = "encoder:embedding:transformers:test/embedding-model:quantdefault:lenauto"
-        assert cache_key in server._model_last_access
         assert cache_key in server._models
 
 
@@ -203,17 +254,17 @@ async def test_model_reaccess_updates_timestamp(reset_server_globals):
         await server.load_language(model_id)
         # New cache key includes quantization
         cache_key = f"language:{model_id}:ctxauto:quantdefault"
-        first_access = server._model_last_access[cache_key]
+        first_idle = server._models.get_idle_time(cache_key)
 
         # Wait a bit
         await asyncio.sleep(0.1)
 
         # Load model second time (should use cache)
         await server.load_language(model_id)
-        second_access = server._model_last_access[cache_key]
+        second_idle = server._models.get_idle_time(cache_key)
 
-        # Verify timestamp was updated
-        assert second_access > first_access
+        # Verify idle time was reset (second access should have lower idle time)
+        assert second_idle < first_idle + 0.1  # Should be close to 0
 
 
 @pytest.mark.asyncio
@@ -235,7 +286,7 @@ async def test_environment_variables_override_defaults():
 
 
 @pytest.mark.asyncio
-async def test_cleanup_handles_unload_errors(reset_server_globals, mock_model):
+async def test_cleanup_handles_unload_errors(reset_server_globals):
     """Test that cleanup continues even if a model unload fails."""
     import server
 
@@ -249,39 +300,25 @@ async def test_cleanup_handles_unload_errors(reset_server_globals, mock_model):
     mock_model2 = MagicMock()
     mock_model2.unload = AsyncMock()
 
-    # Add both models to cache with old timestamps
-    old_time = datetime.now() - timedelta(seconds=server.MODEL_UNLOAD_TIMEOUT + 10)
+    # Add both models to cache
     server._models[cache_key1] = mock_model1
-    server._model_last_access[cache_key1] = old_time
     server._models[cache_key2] = mock_model2
-    server._model_last_access[cache_key2] = old_time
 
-    # Run cleanup iteration
-    now = datetime.now()
-    models_to_unload = []
+    # Set TTL to 0 to make everything appear expired
+    original_ttl = server._models._ttl
+    server._models._ttl = 0
 
-    for key, last_access in server._model_last_access.items():
-        idle_time = (now - last_access).total_seconds()
-        if idle_time > server.MODEL_UNLOAD_TIMEOUT:
-            models_to_unload.append(key)
+    # Pop expired items
+    expired = server._models.pop_expired()
 
-    # Unload with error handling
-    for key in models_to_unload:
-        model = server._models.get(key)
-        if model:
-            try:
-                await model.unload()
-                del server._models[key]
-                del server._model_last_access[key]
-            except Exception:
-                # Log error but continue (in real code)
-                pass
+    # Restore TTL
+    server._models._ttl = original_ttl
 
-    # Verify first model unload was attempted but failed (still in cache)
+    # Simulate cleanup task unloading expired models
+    for _key, model in expired:
+        with contextlib.suppress(Exception):
+            await model.unload()
+
+    # Verify both unloads were attempted
     mock_model1.unload.assert_called_once()
-    assert cache_key1 in server._models  # Still there due to error
-
-    # Verify second model was unloaded successfully
     mock_model2.unload.assert_called_once()
-    assert cache_key2 not in server._models
-    assert cache_key2 not in server._model_last_access

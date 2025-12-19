@@ -431,7 +431,7 @@ class AnomalyModel(BaseModel):
                 AnomalyScore(
                     index=i,
                     score=float(norm),
-                    is_anomaly=norm > thresh,
+                    is_anomaly=bool(norm > thresh),
                     raw_score=float(raw),
                 )
             )

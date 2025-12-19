@@ -57,6 +57,7 @@ from utils.file_handler import (
     list_files,
     store_file,
 )
+from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 
 # Configure logging FIRST, before anything else
@@ -102,7 +103,16 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.error(f"Error unloading model {cache_key}: {e}")
         _models.clear()
-        _model_last_access.clear()
+
+    if _classifiers:
+        logger.info(f"Unloading {len(_classifiers)} remaining classifier(s)")
+        for cache_key, model in list(_classifiers.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded classifier: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading classifier {cache_key}: {e}")
+        _classifiers.clear()
 
     logger.info("Shutdown complete")
 
@@ -115,16 +125,6 @@ app = FastAPI(
 )
 app.include_router(chat_completions_router)
 
-# Global model cache
-_models: dict[str, BaseModel] = {}
-_model_last_access: dict[str, datetime] = {}  # Track last access time for each model
-_model_load_lock = asyncio.Lock()
-_current_device = None
-
-# Feature encoder cache for anomaly detection with mixed data types
-_encoders: dict[str, FeatureEncoder] = {}
-_cleanup_task: asyncio.Task | None = None
-
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
 MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT", "300"))
@@ -132,22 +132,28 @@ MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT", "300"))
 # Default: 30 seconds
 CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 
+# Global model caches using TTL-based caching (via cachetools)
+# Models are automatically tracked for idle time and cleaned up by background task
+_models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_model_load_lock = asyncio.Lock()
+_current_device = None
+
+# Feature encoder cache for anomaly detection with mixed data types
+_encoders: dict[str, FeatureEncoder] = {}
+_cleanup_task: asyncio.Task | None = None
+
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
 
 
-def _track_model_access(cache_key: str) -> None:
-    """Track that a model was accessed."""
-    _model_last_access[cache_key] = datetime.now()
-
-
 async def _cleanup_idle_models() -> None:
     """Background task that periodically unloads idle models.
 
-    Runs continuously, checking every CLEANUP_CHECK_INTERVAL seconds for models
-    that haven't been accessed in MODEL_UNLOAD_TIMEOUT seconds.
+    Uses ModelCache's TTL-based expiration to find and unload models that
+    haven't been accessed in MODEL_UNLOAD_TIMEOUT seconds.
     """
     logger.info(
         f"Model cleanup task started (timeout={MODEL_UNLOAD_TIMEOUT}s, "
@@ -158,48 +164,19 @@ async def _cleanup_idle_models() -> None:
         try:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
-            now = datetime.now()
-            models_to_unload = []
-
-            # Find idle models
-            for cache_key, last_access in _model_last_access.items():
-                idle_time = (now - last_access).total_seconds()
-                if idle_time > MODEL_UNLOAD_TIMEOUT:
-                    models_to_unload.append(cache_key)
-
-            # Unload idle models
-            if models_to_unload:
-                logger.info(f"Unloading {len(models_to_unload)} idle model(s)")
-
-                for cache_key in models_to_unload:
-                    try:
-                        # Re-check idle time immediately before unloading to handle race conditions
-                        # A concurrent request could have accessed the model after we built the unload list
-                        if cache_key not in _model_last_access:
-                            continue  # Model already removed
-
-                        last_access = _model_last_access[cache_key]
-                        current_idle_time = (
-                            datetime.now() - last_access
-                        ).total_seconds()
-                        if current_idle_time < MODEL_UNLOAD_TIMEOUT:
-                            logger.debug(
-                                f"Skipping unload of {cache_key}: accessed during cleanup "
-                                f"(idle time now {current_idle_time:.1f}s < {MODEL_UNLOAD_TIMEOUT}s)"
-                            )
-                            continue
-
-                        model = _models.get(cache_key)
-                        if model:
-                            logger.info(f"Unloading idle model: {cache_key}")
+            # Cleanup expired models from both caches
+            for cache, cache_name in [(_models, "models"), (_classifiers, "classifiers")]:
+                expired_items = cache.pop_expired()
+                if expired_items:
+                    logger.info(f"Unloading {len(expired_items)} idle {cache_name}")
+                    for cache_key, model in expired_items:
+                        try:
                             await model.unload()
-                            del _models[cache_key]
-                            del _model_last_access[cache_key]
                             logger.info(f"Successfully unloaded: {cache_key}")
-                    except Exception as e:
-                        logger.error(
-                            f"Error unloading model {cache_key}: {e}", exc_info=True
-                        )
+                        except Exception as e:
+                            logger.error(
+                                f"Error unloading model {cache_key}: {e}", exc_info=True
+                            )
 
         except asyncio.CancelledError:
             logger.info("Model cleanup task cancelled")
@@ -288,12 +265,9 @@ async def load_language(
 
                 await model.load()
                 _models[cache_key] = model
-                _track_model_access(cache_key)
-    else:
-        # Model already loaded, track access
-        _track_model_access(cache_key)
 
-    return _models[cache_key]
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
 
 
 def _make_encoder_cache_key(
@@ -385,12 +359,9 @@ async def load_encoder(
 
                 await model.load()
                 _models[cache_key] = model
-                _track_model_access(cache_key)
-    else:
-        # Model already loaded, track access
-        _track_model_access(cache_key)
 
-    return _models[cache_key]
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
 
 
 # ============================================================================
@@ -928,11 +899,9 @@ async def load_document(
 
                 await model.load()
                 _models[cache_key] = model
-                _track_model_access(cache_key)
-    else:
-        _track_model_access(cache_key)
 
-    return _models[cache_key]
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
 
 
 class DocumentExtractRequest(PydanticBaseModel):
@@ -1115,11 +1084,9 @@ async def load_ocr(backend: str = "surya", languages: list[str] | None = None):
 
                 await model.load()
                 _models[cache_key] = model
-                _track_model_access(cache_key)
-    else:
-        _track_model_access(cache_key)
 
-    return _models[cache_key]
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
 
 
 class OCRRequest(PydanticBaseModel):
@@ -1282,11 +1249,9 @@ async def load_anomaly(
 
                 await model.load()
                 _models[cache_key] = model
-                _track_model_access(cache_key)
-    else:
-        _track_model_access(cache_key)
 
-    return _models[cache_key]
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
 
 
 def _prepare_anomaly_data(
@@ -1896,7 +1861,6 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
 
             await model.load()
             _models[cache_key] = model
-            _track_model_access(cache_key)
 
         # Try to load encoder if one exists
         encoder_loaded = False
@@ -2038,9 +2002,6 @@ async def delete_anomaly_model(filename: str):
 # Classifier model storage directory
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
 
-# Classifier model cache (separate from _models to avoid conflicts)
-_classifiers: dict[str, "ClassifierModel"] = {}
-
 
 def _make_classifier_cache_key(model_name: str) -> str:
     """Create a cache key for classifier models."""
@@ -2091,30 +2052,24 @@ async def load_classifier(
     """Load or get cached classifier model."""
     cache_key = _make_classifier_cache_key(model_id)
 
-    if cache_key in _classifiers:
-        _track_model_access(cache_key)
-        return _classifiers[cache_key]
+    if cache_key not in _classifiers:
+        async with _model_load_lock:
+            # Double-check after acquiring lock
+            if cache_key not in _classifiers:
+                logger.info(f"Loading classifier model: {model_id}")
+                device = get_device()
 
-    async with _model_load_lock:
-        # Double-check after acquiring lock
-        if cache_key in _classifiers:
-            _track_model_access(cache_key)
-            return _classifiers[cache_key]
+                model = ClassifierModel(
+                    model_id=model_id,
+                    device=device,
+                    base_model=base_model,
+                )
 
-        logger.info(f"Loading classifier model: {model_id}")
-        device = get_device()
+                await model.load()
+                _classifiers[cache_key] = model
 
-        model = ClassifierModel(
-            model_id=model_id,
-            device=device,
-            base_model=base_model,
-        )
-
-        await model.load()
-        _classifiers[cache_key] = model
-        _track_model_access(cache_key)
-
-        return model
+    # Return model (get() refreshes TTL automatically)
+    return _classifiers.get(cache_key)
 
 
 class ClassifierFitRequest(PydanticBaseModel):
@@ -2239,15 +2194,14 @@ async def predict_classifier(request: ClassifierPredictRequest):
     try:
         cache_key = _make_classifier_cache_key(request.model)
 
-        if cache_key not in _classifiers:
+        # get() refreshes TTL automatically
+        model = _classifiers.get(cache_key)
+        if model is None:
             raise HTTPException(
                 status_code=404,
                 detail=f"Classifier '{request.model}' not found. "
                 "Fit with /v1/classifier/fit or load with /v1/classifier/load first.",
             )
-
-        model = _classifiers[cache_key]
-        _track_model_access(cache_key)
 
         if not model.is_fitted:
             raise HTTPException(
@@ -2376,8 +2330,9 @@ async def load_classifier_endpoint(request: ClassifierLoadRequest):
 
         # Remove existing model from cache if present
         if cache_key in _classifiers:
-            await _classifiers[cache_key].unload()
-            del _classifiers[cache_key]
+            existing = _classifiers.pop(cache_key)
+            if existing:
+                await existing.unload()
 
         async with _model_load_lock:
             logger.info(f"Loading pre-trained classifier: {model_path}")
@@ -2390,7 +2345,6 @@ async def load_classifier_endpoint(request: ClassifierLoadRequest):
 
             await model.load()
             _classifiers[cache_key] = model
-            _track_model_access(cache_key)
 
         return {
             "object": "load_result",

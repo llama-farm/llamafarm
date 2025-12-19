@@ -1,4 +1,21 @@
-# Use Python 3.12 slim image with multi-arch support
+# Stage 1: Build the designer (React frontend)
+FROM node:20-slim AS designer-builder
+
+WORKDIR /app/designer
+
+# Copy designer package files
+COPY designer/package.json designer/package-lock.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy designer source
+COPY designer/ ./
+
+# Build the designer
+RUN npm run build
+
+# Stage 2: Build the server (Python backend)
 FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
 
 # Disable/limit bytecode compilation to avoid CI stalls
@@ -53,6 +70,12 @@ RUN chmod -R 777 /tmp/uv-cache /tmp/uv-venv
 
 # Copy server source code
 COPY server/ ./server/
+
+# Copy built designer from stage 1
+COPY --from=designer-builder /app/designer/dist ./designer/dist
+
+# Set designer dist path so server can find the static files
+ENV DESIGNER_DIST_PATH=/app/designer/dist
 
 # Expose port
 EXPOSE 8000
