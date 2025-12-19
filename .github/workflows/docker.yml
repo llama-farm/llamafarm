@@ -119,6 +119,7 @@ jobs:
           retention-days: 1
 
   # Build ARM64 images on native ARM64 runners for efficiency
+  # Note: runtime is excluded because llama.cpp doesn't publish Linux ARM64 binaries
   build-arm64:
     name: Build ARM64 Docker Images
     runs-on: ${{ matrix.service == 'runner' && 'lf-large-arm64' || 'ubuntu-24.04-arm' }}
@@ -127,7 +128,8 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime]
+        # Note: runtime excluded - llama.cpp doesn't publish Linux ARM64 binaries
+        service: [designer, server, rag]
         include:
           - service: designer
             context: ./designer
@@ -141,31 +143,10 @@ jobs:
             context: ./
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
-          - service: runtime
-            context: ./
-            dockerfile: ./runtimes/universal/Dockerfile
-            description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Free disk space for large images
-        if: matrix.service == 'runtime'
-        run: |
-          echo "Disk space before cleanup:"
-          df -h
-
-          # Remove large unnecessary packages to free up ~10GB
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune -a -f
-          sudo apt-get clean
-
-          echo "Disk space after cleanup:"
-          df -h
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -212,7 +193,6 @@ jobs:
           outputs: ${{ github.event_name == 'pull_request' && format('type=docker,dest={0}/{1}-arm64.tar', runner.temp, matrix.service) || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
-            PYTORCH_VARIANT=${{ matrix.service == 'runtime' && github.event_name == 'pull_request' && 'cpu' || '' }}
 
       - name: Upload ARM64 image artifact (PR only)
         if: github.event_name == 'pull_request'

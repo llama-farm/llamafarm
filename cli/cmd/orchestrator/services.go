@@ -153,7 +153,8 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		HealthComponent: "universal-runtime",
 		HardwarePackages: []HardwarePackageSpec{
 			PyTorchSpec,
-			LlamaCppSpec,
+			// Note: llama.cpp binaries are downloaded separately via InstallLlamaBinary,
+			// not via pip. The llamafarm-llama package is installed as a regular dependency.
 		},
 	},
 	"server": {

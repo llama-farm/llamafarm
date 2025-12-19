@@ -16,12 +16,13 @@ dependencies = [
   "einops>=0.8.1",
   "openai>=1.0.0",
   "llamafarm-common",
+  "llamafarm-llama",
   "structlog>=24.0.0",
   "psutil>=5.9.0",
   "pyyaml>=6.0",
   "gguf>=0.17.1",
   # hf-transfer is now provided by llamafarm-common
-  "pymupdf>=1.26.6",  # Required for PDF file uploads
+  "pymupdf>=1.26.6", # Required for PDF file uploads
   # Note: easyocr moved to optional [ocr-easyocr] extra to avoid forcing torch install
   # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
   "protobuf>=6.33.1",
@@ -37,16 +38,15 @@ dev = [
   "pytest-timeout>=2.1.0",
   "httpx>=0.24.0",
   "numpy>=1.24.0",
-  # For testing: torch and llama-cpp-python will use CPU wheels via UV_EXTRA_INDEX_URL in CI
+  # For testing: torch will use CPU wheels via UV_EXTRA_INDEX_URL in CI
   "torch>=2.0.0",
-  "llama-cpp-python>=0.3.0",
 ]
 
 [project.optional-dependencies]
 # Hardware-accelerated packages installed separately via CLI based on detected hardware
 # These are not installed during 'uv sync' to avoid compilation dependencies
-# Note: torch and llama-cpp-python are now in dev group for testing
-gpu = ["torch>=2.0.0", "llama-cpp-python>=0.3.0"]
+# Note: torch is now in dev group for testing
+gpu = ["torch>=2.0.0"]
 # xformers is GPU-only and must be installed manually when needed:
 #   uv pip install xformers
 # (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
@@ -59,28 +59,20 @@ ocr-paddleocr = ["paddleocr>=2.7.0"]
 ocr-tesseract = ["pytesseract>=0.3.10"]
 # Install recommended OCR backends (surya + easyocr + tesseract)
 ocr = [
-    "surya-ocr>=0.6.0",
-    "easyocr>=1.7.0",
-    "opencv-python-headless>=4.8.0",  # Required by easyocr, explicit to avoid version conflicts
-    "pytesseract>=0.3.10",
+  "surya-ocr>=0.6.0",
+  "easyocr>=1.7.0",
+  "opencv-python-headless>=4.8.0", # Required by easyocr, explicit to avoid version conflicts
+  "pytesseract>=0.3.10",
 ]
 
 # Document understanding models
-document = [
-    "transformers>=4.35.0",
-    "sentencepiece>=0.1.99",
-]
+document = ["transformers>=4.35.0", "sentencepiece>=0.1.99"]
 
 # Anomaly detection
-anomaly = [
-    "scikit-learn>=1.3.0",
-]
+anomaly = ["scikit-learn>=1.3.0"]
 
 # Text classification (few-shot learning with SetFit)
-classification = [
-    "setfit>=1.1.0",
-    "sentence-transformers>=3.0.0",
-]
+classification = ["setfit>=1.1.0", "sentence-transformers>=3.0.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -113,6 +105,7 @@ index-url = "https://pypi.org/simple"
 
 [tool.uv.sources]
 llamafarm-common = { path = "../../common", editable = true }
+llamafarm-llama = { path = "../../packages/llamafarm-llama", editable = true }
 
 # Ruff configuration is shared across all Python components
 # See ../../ruff.toml for the actual configuration
