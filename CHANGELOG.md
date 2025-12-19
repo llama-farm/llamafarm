@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.22](https://github.com/llama-farm/llamafarm/compare/v0.0.21...v0.0.22) (2025-12-19)
+
+
+### Bug Fixes
+
+* **universal:** pass logits_processor as callable, not list ([#628](https://github.com/llama-farm/llamafarm/issues/628)) ([84cf924](https://github.com/llama-farm/llamafarm/commit/84cf924e1494877a01c7bcfb01d81447c2746531)), closes [#627](https://github.com/llama-farm/llamafarm/issues/627)
+
 ## [0.0.21](https://github.com/llama-farm/llamafarm/compare/v0.0.20...v0.0.21) (2025-12-19)
 
 
