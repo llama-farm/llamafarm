@@ -84,7 +84,7 @@ class TestGGUFLanguageModel:
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
             ),
-            patch("models.gguf_language_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
             assert model.llama is not None
@@ -112,9 +112,7 @@ class TestGGUFLanguageModel:
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
             ),
-            patch(
-                "models.gguf_language_model.Llama", return_value=mock_llama
-            ) as mock_llama_cls,
+            patch("llamafarm_llama.Llama", return_value=mock_llama) as mock_llama_cls,
         ):
             await model.load()
             assert model.llama is not None
@@ -155,7 +153,7 @@ class TestGGUFLanguageModel:
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
             ),
-            patch("models.gguf_language_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
             result = await model.generate(

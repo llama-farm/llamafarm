@@ -5,15 +5,20 @@ Provides the same interface as EncoderModel but uses llama-cpp-python for
 GGUF quantized embedding models, enabling faster inference and lower memory usage.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+import sys
 from concurrent.futures import ThreadPoolExecutor
-
-from llama_cpp import Llama
+from typing import TYPE_CHECKING
 
 from utils.model_format import get_gguf_file_path
 
 from .base import BaseModel
+
+if TYPE_CHECKING:
+    from llamafarm_llama import Llama
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +85,12 @@ class GGUFEncoderModel(BaseModel):
             self.token,
             preferred_quantization=self.preferred_quantization,
         )
+
+        # On Windows, convert backslashes to forward slashes for llama.cpp compatibility
+        # The underlying C library can have issues with Windows-style paths
+        if sys.platform == "win32":
+            gguf_path = gguf_path.replace("\\", "/")
+
         logger.info(f"GGUF file located at: {gguf_path}")
 
         # Configure GPU layers based on device
@@ -99,6 +110,14 @@ class GGUFEncoderModel(BaseModel):
         loop = asyncio.get_running_loop()
 
         def _load_model():
+            try:
+                from llamafarm_llama import Llama
+            except ImportError as e:
+                raise ImportError(
+                    "llamafarm-llama is required for GGUF models but is not installed. "
+                    "Install it with: pip install llamafarm-llama"
+                ) from e
+
             return Llama(
                 model_path=gguf_path,
                 embedding=True,  # Enable embedding mode

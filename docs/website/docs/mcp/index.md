@@ -1,13 +1,33 @@
 ---
-title: MCP (Model Context Protocol)
+title: Tool Calling
 sidebar_position: 6
 ---
 
-# MCP (Model Context Protocol)
+# Tool Calling
+
+LlamaFarm supports two methods for giving AI models access to tools:
+
+1. **MCP (Model Context Protocol)** - Connect to external tool servers using the standardized MCP protocol
+2. **Inline Tools** - Define tools directly in your `llamafarm.yaml` configuration
+
+Both methods allow models to execute functions, query databases, access file systems, and interact with external services.
+
+## Two Approaches
+
+| Approach | Best For | Configuration |
+|----------|----------|---------------|
+| **MCP Servers** | External tools, shared services, complex integrations | `mcp.servers[]` + `mcp_servers` on model |
+| **Inline Tools** | Simple functions, CLI commands, project-specific tools | `tools[]` on model |
+
+You can use both approaches together—they are merged at runtime.
+
+---
+
+## MCP (Model Context Protocol)
 
 MCP is a standardized protocol that gives AI models access to external tools, APIs, and data sources. LlamaFarm supports MCP both as a **client** (connecting to external MCP servers) and as a **server** (exposing its own API as MCP tools).
 
-## Why MCP?
+### Why MCP?
 
 Instead of limiting your AI to text generation, MCP lets you connect models to:
 
@@ -16,9 +36,9 @@ Instead of limiting your AI to text generation, MCP lets you connect models to:
 - **APIs** - Interact with external services (weather, CRM, calendars)
 - **Custom tools** - Expose your own business logic
 
-## Quick Start
+### Quick Start
 
-### 1. Add an MCP Server to Your Project
+#### 1. Add an MCP Server to Your Project
 
 In your `llamafarm.yaml`:
 
@@ -34,7 +54,7 @@ mcp:
         - '/path/to/allowed/directory'
 ```
 
-### 2. Assign It to a Model
+#### 2. Assign It to a Model
 
 ```yaml
 runtime:
@@ -46,7 +66,7 @@ runtime:
         - filesystem
 ```
 
-### 3. Chat with Tool Access
+#### 3. Chat with Tool Access
 
 ```bash
 lf chat "What files are in my documents folder?"
@@ -274,7 +294,7 @@ LlamaFarm supports two strategies for tool calling:
 
 ### Native API (Recommended)
 
-Uses the model provider's native tool calling capabilities.
+Uses the model provider's native tool calling capabilities (e.g., OpenAI's `tools` parameter).
 
 ```yaml
 runtime:
@@ -285,11 +305,11 @@ runtime:
       tool_call_strategy: native_api
 ```
 
-**Supported providers:** OpenAI, Anthropic, most modern LLM APIs
+**Supported providers:** OpenAI, Anthropic, Ollama (with compatible models), Universal Runtime
 
 ### Prompt-Based
 
-Injects tool definitions into the system prompt for models that don't support native tool calling.
+Injects tool definitions into the system prompt for models that don't support native tool calling. The tools are formatted as XML and the model is instructed to output `<tool_call>` tags when it wants to invoke a tool.
 
 ```yaml
 runtime:
@@ -301,6 +321,182 @@ runtime:
 ```
 
 **Use when:** Using older models or providers without native tool support
+
+**How it works:** When `prompt_based` is set, LlamaFarm appends the following to your system prompt:
+
+```
+You may call one or more tools to assist with the user query.
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+<tool>{"type": "function", "function": {...}}</tool>
+</tools>
+For each tool call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call>
+```
+
+The orchestrator detects these XML tags in the model's response and executes the corresponding tools.
+
+---
+
+## Inline Tool Definitions
+
+In addition to MCP servers, you can define tools directly in your model configuration using the `tools` array. This is useful for:
+
+- Exposing CLI commands as tools
+- Creating custom function interfaces
+- Defining tools without running an MCP server
+
+### Configuration
+
+```yaml
+runtime:
+  models:
+    - name: assistant
+      provider: universal
+      model: Qwen/Qwen2.5-7B-Instruct
+      tool_call_strategy: native_api
+      tools:
+        - type: function
+          name: cli.dataset_upload
+          description: Upload a file to a dataset
+          parameters:
+            type: object
+            required:
+              - filepath
+              - namespace
+              - project
+              - dataset
+            properties:
+              filepath:
+                type: string
+                description: The path to the file to upload
+              namespace:
+                type: string
+                description: The namespace of the project
+              project:
+                type: string
+                description: The project name
+              dataset:
+                type: string
+                description: The dataset name
+```
+
+### Tool Schema
+
+Each tool in the `tools` array follows this schema:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | Yes | Must be `"function"` |
+| `name` | string | Yes | Unique identifier for the tool (e.g., `cli.dataset_upload`) |
+| `description` | string | Yes | Human-readable description shown to the model |
+| `parameters` | object | Yes | JSON Schema defining the tool's input parameters |
+
+### Parameters Schema
+
+The `parameters` field follows [JSON Schema](https://json-schema.org/) format:
+
+```yaml
+parameters:
+  type: object
+  required:
+    - param1
+    - param2
+  properties:
+    param1:
+      type: string
+      description: Description of parameter 1
+    param2:
+      type: integer
+      description: Description of parameter 2
+    param3:
+      type: boolean
+      description: Optional boolean parameter
+      default: false
+```
+
+**Supported parameter types:**
+- `string` - Text values
+- `integer` - Whole numbers
+- `number` - Decimal numbers
+- `boolean` - True/false values
+- `array` - Lists of items
+- `object` - Nested objects
+
+### How Tool Execution Works
+
+1. **Model Response:** When the model decides to call a tool, it returns a response with `tool_calls` containing the tool name and arguments.
+
+2. **Orchestrator Loop:** The `ChatOrchestratorAgent` receives the response and checks if the tool can be executed:
+   - For MCP tools: Executes via the MCP tool factory
+   - For inline tools: Currently passed back to the client for execution (the `_can_execute_tool_call` method checks if a tool is registered)
+
+3. **Result Injection:** The tool result is added to the conversation history as a `tool` message, and the model continues generating a response.
+
+4. **Max Iterations:** The orchestrator limits tool call loops to 10 iterations to prevent infinite loops.
+
+### Example: Tool Call Flow
+
+```
+User: "Upload the file report.pdf to my research dataset"
+
+Model Response:
+{
+  "role": "assistant",
+  "tool_calls": [{
+    "id": "call_abc123",
+    "type": "function",
+    "function": {
+      "name": "cli.dataset_upload",
+      "arguments": "{\"filepath\": \"report.pdf\", \"namespace\": \"default\", \"project\": \"my-project\", \"dataset\": \"research\"}"
+    }
+  }]
+}
+
+Tool Execution → Result: "File uploaded successfully"
+
+Model Response (after tool result):
+"I've uploaded report.pdf to your research dataset. The file is now available for processing."
+```
+
+### Combining MCP and Inline Tools
+
+You can use both MCP servers and inline tools together. They are merged at runtime:
+
+```yaml
+mcp:
+  servers:
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '/data']
+
+runtime:
+  models:
+    - name: assistant
+      provider: openai
+      model: gpt-4
+      tool_call_strategy: native_api
+      mcp_servers:
+        - filesystem
+      tools:
+        - type: function
+          name: custom.send_notification
+          description: Send a notification to the user
+          parameters:
+            type: object
+            required: [message]
+            properties:
+              message:
+                type: string
+                description: The notification message
+```
+
+The model will have access to:
+- All tools from the `filesystem` MCP server
+- The `custom.send_notification` inline tool
 
 ---
 
