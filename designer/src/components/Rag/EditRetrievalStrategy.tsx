@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -46,9 +46,10 @@ function EditRetrievalStrategy() {
 
   // Form state
   const [name, setName] = useState(originalStrategyName)
+  const [nameTouched, setNameTouched] = useState(false)
   const [makeDefault, setMakeDefault] = useState(isDefaultStrategy)
   const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [_error, setError] = useState<string | null>(null)
 
   // Shared UI helpers
   const inputClass =
@@ -234,6 +235,31 @@ function EditRetrievalStrategy() {
     )
   }
 
+  // Real-time duplicate name validation (case-insensitive)
+  // Check immediately for default names, or after field is touched
+  const duplicateNameError = useMemo(() => {
+    if (!projectResp || !name.trim()) return null
+    
+    // Always check for duplicates (don't wait for touch) so default names are validated
+    const projectConfig = (projectResp as any)?.project?.config
+    const currentDb = projectConfig?.rag?.databases?.find(
+      (db: any) => db.name === database
+    )
+    if (currentDb) {
+      const nameLower = name.trim().toLowerCase()
+      const originalLower = originalStrategyName?.toLowerCase()
+      const nameExists = currentDb.retrieval_strategies?.some(
+        (s: any) =>
+          s.name?.toLowerCase() === nameLower &&
+          s.name?.toLowerCase() !== originalLower
+      )
+      if (nameExists) {
+        return 'A strategy with this name already exists'
+      }
+    }
+    return null
+  }, [name, projectResp, database, originalStrategyName])
+
   // Validation function
   const validateStrategy = (): string[] => {
     const errors: string[] = []
@@ -242,6 +268,11 @@ function EditRetrievalStrategy() {
     const nameError = validateStrategyName(name)
     if (nameError) {
       errors.push(nameError)
+    }
+    
+    // Check for duplicate strategy name
+    if (duplicateNameError) {
+      errors.push(duplicateNameError)
     }
     
     // Type-specific validation
@@ -308,13 +339,17 @@ function EditRetrievalStrategy() {
         throw new Error(`Database ${database} not found in configuration`)
       }
 
-      // Check if renamed to an existing name
-      if (name.trim() !== originalStrategyName) {
+      // Check if renamed to an existing name (case-insensitive)
+      if (name.trim().toLowerCase() !== originalStrategyName?.toLowerCase()) {
+        const nameLower = name.trim().toLowerCase()
+        const originalLower = originalStrategyName?.toLowerCase()
         const existingStrategy = currentDb.retrieval_strategies?.find(
-          (s: any) => s.name === name.trim() && s.name !== originalStrategyName
+          (s: any) =>
+            s.name?.toLowerCase() === nameLower &&
+            s.name?.toLowerCase() !== originalLower
         )
         if (existingStrategy) {
-          throw new Error(`A retrieval strategy with name "${name.trim()}" already exists`)
+          throw new Error('A strategy with this name already exists')
         }
       }
 
@@ -440,14 +475,19 @@ function EditRetrievalStrategy() {
       })
 
       toast({
-        message: `Retrieval strategy "${name.trim()}" updated successfully`,
+        message: 'Strategy saved',
         variant: 'default',
       })
 
       navigate('/chat/databases')
     } catch (error: any) {
       console.error('Failed to update retrieval strategy:', error)
-      setError(error.message || 'Failed to update strategy')
+      const errorMessage = error.message || 'Failed to update strategy'
+      setError(errorMessage)
+      toast({
+        message: errorMessage,
+        variant: 'destructive',
+      })
     } finally {
       setIsSaving(false)
     }
@@ -482,18 +522,17 @@ function EditRetrievalStrategy() {
           </Button>
           <Button
             onClick={onSave}
-            disabled={isSaving || !name.trim()}
+            disabled={
+              isSaving || 
+              !name.trim() || 
+              !!validateStrategyName(name) || 
+              !!duplicateNameError
+            }
           >
             {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </div>
-
-      {error && (
-        <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-2 rounded-md text-sm">
-          {error}
-        </div>
-      )}
 
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -503,10 +542,39 @@ function EditRetrievalStrategy() {
             </Label>
             <Input
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => {
+                setName(e.target.value)
+                // Clear error state when user starts typing if validation passes
+                if (nameTouched) {
+                  const nameError = validateStrategyName(e.target.value)
+                  if (!nameError && !duplicateNameError) {
+                    setError(null)
+                  }
+                }
+              }}
+              onBlur={() => setNameTouched(true)}
               placeholder="Enter a name"
-              className="h-9"
+              className={`h-9 ${
+                (validateStrategyName(name) || duplicateNameError)
+                  ? 'border-destructive'
+                  : ''
+              }`}
             />
+            {validateStrategyName(name) && (
+              <p className="text-xs text-destructive mt-1">
+                {validateStrategyName(name)}
+              </p>
+            )}
+            {!validateStrategyName(name) && duplicateNameError && (
+              <p className="text-xs text-destructive mt-1">
+                {duplicateNameError}
+              </p>
+            )}
+            {!validateStrategyName(name) && !duplicateNameError && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Can only contain letters, numbers, hyphens, and underscores
+              </p>
+            )}
           </div>
           <div className="flex items-end">
             <label className="inline-flex items-center gap-2 text-sm">
@@ -529,6 +597,16 @@ function EditRetrievalStrategy() {
               </div>
               <div className="text-xl md:text-2xl font-medium">
                 {STRATEGY_LABELS[strategyType]}
+              </div>
+              <div className="text-xs text-muted-foreground mt-2">
+                After being created, retrieval strategy types cannot be changed, but you may always{' '}
+                <button
+                  className="text-teal-600 dark:text-teal-400 hover:underline"
+                  onClick={() => navigate(`/chat/databases/add-retrieval?database=${database}`)}
+                >
+                  create a new retrieval strategy
+                </button>
+                .
               </div>
             </div>
           </div>

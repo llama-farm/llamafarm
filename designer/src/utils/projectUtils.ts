@@ -12,33 +12,8 @@ export interface ProjectItem {
   description?: string
 }
 
-// Legacy default project names for backward compatibility
-export const DEFAULT_PROJECT_NAMES = [
-  'aircraft-mx-flow',
-  'Option 1',
-  'Option 2',
-  'Option 3',
-  'Option 4',
-]
-
-// Legacy default projects for UI fallback when API is not available
-export const DEFAULT_PROJECTS: ProjectItem[] = [
-  { id: 1, name: 'Aircraft MX', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 2, name: 'SkyGuard', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 3, name: 'FalconEye', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 4, name: 'EagleVision', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 5, name: 'ThunderStrike', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 6, name: 'ViperWatch', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 7, name: 'HawkEye', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 8, name: 'StealthOps MX', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 9, name: 'JetStream', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 10, name: 'RaptorControl', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 11, name: 'AeroSentinel', model: 'TinyLama', lastEdited: '8/15/2025' },
-  { id: 12, name: 'CloudSurge', model: 'TinyLama', lastEdited: '8/15/2025' },
-]
-
 /**
- * Get project list from localStorage with fallback to defaults
+ * Get project list from localStorage (legacy function - returns empty if none found)
  */
 export const getProjectsList = (): string[] => {
   try {
@@ -47,7 +22,7 @@ export const getProjectsList = (): string[] => {
   } catch (error) {
     console.error('Failed to read projectsList from localStorage:', error)
   }
-  return DEFAULT_PROJECT_NAMES
+  return []
 }
 
 /**
@@ -64,12 +39,12 @@ export const saveProjectsList = (projects: string[]): void => {
 /**
  * Get active project from localStorage
  */
-export const getActiveProject = (): string => {
+export const getActiveProject = (): string | null => {
   try {
-    return localStorage.getItem('activeProject') ?? DEFAULT_PROJECT_NAMES[0]
+    return localStorage.getItem('activeProject')
   } catch (error) {
     console.error('Failed to get active project:', error)
-    return DEFAULT_PROJECT_NAMES[0]
+    return null
   }
 }
 

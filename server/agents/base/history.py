@@ -53,15 +53,21 @@ class LFAgentHistory:
                 role="user", content=data.get("content", "")
             )
         elif role == "assistant":
-            return LFChatCompletionAssistantMessageParam(
-                role="assistant",
-                content=data.get("content"),
-                audio=data.get("audio"),
-                name=data.get("name") or "",
-                refusal=data.get("refusal"),
-                tool_calls=data.get("tool_calls") or [],
-                # reasoning=data.get("reasoning"),
-            )
+            # Only include optional fields if they have valid values
+            # OpenAI rejects empty strings for 'name' and empty arrays for 'tool_calls'
+            params: dict = {
+                "role": "assistant",
+                "content": data.get("content"),
+            }
+            if data.get("audio"):
+                params["audio"] = data["audio"]
+            if data.get("name"):  # Only include if non-empty
+                params["name"] = data["name"]
+            if data.get("refusal"):
+                params["refusal"] = data["refusal"]
+            if data.get("tool_calls"):  # Only include if non-empty
+                params["tool_calls"] = data["tool_calls"]
+            return LFChatCompletionAssistantMessageParam(**params)
         elif role == "tool":
             return LFChatCompletionToolMessageParam(
                 role="tool",

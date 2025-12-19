@@ -23,14 +23,23 @@ import {
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { getClientSideSecret } from '../../utils/crypto'
 import { validateStrategyName } from '../../utils/security'
+import { useCachedModels } from '../../hooks/useModels'
+import modelService from '../../api/modelService'
+import { useUnsavedChanges } from '../../contexts/UnsavedChangesContext'
+import UnsavedChangesModal from '../ConfigEditor/UnsavedChangesModal'
 import { encryptAPIKey } from '../../utils/encryption'
+import {
+  LocalModelTable,
+  type Variant,
+  type LocalGroup,
+} from './LocalModelTable'
 
 function AddEmbeddingStrategy() {
   const navigate = useNavigate()
   const { toast } = useToast()
   const [searchParams] = useSearchParams()
   const activeProject = useActiveProject()
-  
+
   // Get project config and database manager
   const { data: projectResp } = useProject(
     activeProject?.namespace || '',
@@ -44,12 +53,33 @@ function AddEmbeddingStrategy() {
 
   // Get the database from URL query params (defaults to main_database if not provided)
   const database = searchParams.get('database') || 'main_database'
-  
+
+  // Get existing embedding strategies for copy from dropdown
+  const existingStrategies = useMemo(() => {
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig) return []
+    const db = projectConfig.rag?.databases?.find(
+      (d: any) => d.name === database
+    )
+    return db?.embedding_strategies || []
+  }, [projectResp, database])
+
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Name
-  const [name, setName] = useState('New embedding strategy')
+  const [name, setName] = useState('new-embedding-strategy')
+  const [nameTouched, setNameTouched] = useState(false)
+
+  // Copy from existing strategy
+  const [copyFrom, setCopyFrom] = useState<string>('')
+
+  // Unsaved changes tracking
+  const unsavedChangesContext = useUnsavedChanges()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [modalErrorMessage, setModalErrorMessage] = useState<string | null>(
+    null
+  )
 
   // Editable settings shown at top
   const [baseUrl, setBaseUrl] = useState('http://localhost:11434')
@@ -58,29 +88,95 @@ function AddEmbeddingStrategy() {
   const [timeoutSec, setTimeoutSec] = useState<number>(60)
   const [autoPull, setAutoPull] = useState<boolean>(true)
 
-  // Selection UI state (reusing the edit page’s structure)
+  // Selection UI state (reusing the edit page's structure)
   const [sourceTab, setSourceTab] = useState<'local' | 'cloud'>('local')
   const [query, setQuery] = useState('')
-  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false)
 
-  type Variant = {
-    id: string
-    label: string
-    dim: string
-    quality: string
-    download: string
-  }
-  type LocalGroup = {
-    id: number
-    name: string
-    dim: string
-    quality: string
-    ramVram: string
-    download: string
-    variants: Variant[]
+  // Download state per model
+  const [downloadStates, setDownloadStates] = useState<
+    Record<
+      string,
+      {
+        state: 'idle' | 'downloading' | 'success' | 'error'
+        progress: number
+        downloadedBytes: number
+        totalBytes: number
+        error?: string
+      }
+    >
+  >({})
+
+  // Download confirmation modal state
+  const [downloadConfirmOpen, setDownloadConfirmOpen] = useState(false)
+  const [pendingDownloadVariant, setPendingDownloadVariant] =
+    useState<Variant | null>(null)
+  const [showBackgroundDownload, setShowBackgroundDownload] = useState(false)
+  const [backgroundDownloadName, setBackgroundDownloadName] = useState('')
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
+
+  // Show/hide model table
+  const [showModelTable, setShowModelTable] = useState(true)
+
+  // Fetch cached models from disk
+  const {
+    data: cachedModelsResponse,
+    isLoading: isLoadingCachedModels,
+    refetch: refetchCachedModels,
+  } = useCachedModels()
+
+  // Helper to format bytes
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${Math.round((bytes / Math.pow(k, i)) * 100) / 100} ${sizes[i]}`
   }
 
-  const localGroups: LocalGroup[] = [
+  // Map model IDs to HuggingFace identifiers
+  const modelIdToHuggingFace: Record<string, string> = {
+    'bge-small-en-v1.5': 'BAAI/bge-small-en-v1.5',
+    'bge-base-en-v1.5': 'BAAI/bge-base-en-v1.5',
+    'bge-large-en-v1.5': 'BAAI/bge-large-en-v1.5',
+    'bge-m3': 'BAAI/bge-m3',
+    'e5-base-v2': 'intfloat/e5-base-v2',
+    'e5-large-v2': 'intfloat/e5-large-v2',
+    'all-MiniLM-L6-v2': 'sentence-transformers/all-MiniLM-L6-v2',
+  }
+
+  // Check if a model is on disk
+  const isModelOnDisk = (modelId: string): boolean => {
+    if (!cachedModelsResponse?.data) return false
+    const hfId = modelIdToHuggingFace[modelId] || modelId
+    return cachedModelsResponse.data.some(m => {
+      const modelName = m.name.toLowerCase()
+      const searchId = hfId.toLowerCase()
+      return (
+        modelName.includes(searchId.split('/').pop() || '') ||
+        modelName === searchId
+      )
+    })
+  }
+
+  // Get disk size for a model
+  const getModelDiskSize = (modelId: string): number | null => {
+    if (!cachedModelsResponse?.data) return null
+    const hfId = modelIdToHuggingFace[modelId] || modelId
+    const found = cachedModelsResponse.data.find(m => {
+      const modelName = m.name.toLowerCase()
+      const searchId = hfId.toLowerCase()
+      return (
+        modelName.includes(searchId.split('/').pop() || '') ||
+        modelName === searchId
+      )
+    })
+    return found?.size || null
+  }
+
+
+  // Base local groups with model identifiers
+  const baseLocalGroups: LocalGroup[] = [
     {
       id: 1,
       name: 'BAAI — BGE (English)',
@@ -95,6 +191,7 @@ function AddEmbeddingStrategy() {
           dim: '384',
           quality: 'General',
           download: '120MB',
+          modelIdentifier: 'BAAI/bge-small-en-v1.5',
         },
         {
           id: 'bge-base-en-v1.5',
@@ -102,6 +199,7 @@ function AddEmbeddingStrategy() {
           dim: '768',
           quality: 'General',
           download: '340MB',
+          modelIdentifier: 'BAAI/bge-base-en-v1.5',
         },
         {
           id: 'bge-large-en-v1.5',
@@ -109,6 +207,7 @@ function AddEmbeddingStrategy() {
           dim: '1024',
           quality: 'General',
           download: '650MB',
+          modelIdentifier: 'BAAI/bge-large-en-v1.5',
         },
       ],
     },
@@ -126,6 +225,7 @@ function AddEmbeddingStrategy() {
           dim: '1024',
           quality: 'Multilingual',
           download: '900MB',
+          modelIdentifier: 'BAAI/bge-m3',
         },
       ],
     },
@@ -143,6 +243,7 @@ function AddEmbeddingStrategy() {
           dim: '768',
           quality: 'General',
           download: '400MB',
+          modelIdentifier: 'intfloat/e5-base-v2',
         },
         {
           id: 'e5-large-v2',
@@ -150,6 +251,7 @@ function AddEmbeddingStrategy() {
           dim: '1024',
           quality: 'General',
           download: '800MB',
+          modelIdentifier: 'intfloat/e5-large-v2',
         },
       ],
     },
@@ -167,10 +269,28 @@ function AddEmbeddingStrategy() {
           dim: '384',
           quality: 'Fast',
           download: '60MB',
+          modelIdentifier: 'sentence-transformers/all-MiniLM-L6-v2',
         },
       ],
     },
   ]
+
+  // Enhance local groups with disk status
+  const localGroups: LocalGroup[] = useMemo(() => {
+    return baseLocalGroups.map(group => ({
+      ...group,
+      variants: group.variants.map(variant => {
+        const isDownloaded = isModelOnDisk(variant.id)
+        const diskSize = getModelDiskSize(variant.id)
+        return {
+          ...variant,
+          isDownloaded,
+          diskSize,
+          download: diskSize ? formatBytes(diskSize) : variant.download,
+        }
+      }),
+    }))
+  }, [cachedModelsResponse, query])
 
   const filteredGroups: LocalGroup[] = useMemo(() => {
     if (!query.trim()) return localGroups
@@ -258,6 +378,263 @@ function AddEmbeddingStrategy() {
     modelId: string
   } | null>(null)
 
+  // Track changes to form fields (after all state is declared)
+  useEffect(() => {
+    // Check if any form field has been modified from defaults
+    const hasChanges =
+      name !== 'new-embedding-strategy' ||
+      copyFrom !== '' ||
+      selected !== null ||
+      baseUrl !== 'http://localhost:11434' ||
+      dimension !== 768 ||
+      batchSize !== 16 ||
+      timeoutSec !== 60 ||
+      autoPull !== true ||
+      provider !== 'Ollama (remote)' ||
+      model !== 'nomic-embed-text' ||
+      customModel !== '' ||
+      apiKey !== '' ||
+      openaiOrg !== '' ||
+      openaiMaxRetries !== 3 ||
+      azureDeployment !== '' ||
+      azureResource !== '' ||
+      azureApiVersion !== '' ||
+      vertexProjectId !== '' ||
+      vertexLocation !== '' ||
+      vertexEndpoint !== '' ||
+      bedrockRegion !== ''
+
+    setHasUnsavedChanges(hasChanges)
+  }, [
+    name,
+    copyFrom,
+    selected,
+    baseUrl,
+    dimension,
+    batchSize,
+    timeoutSec,
+    autoPull,
+    provider,
+    model,
+    customModel,
+    apiKey,
+    openaiOrg,
+    openaiMaxRetries,
+    azureDeployment,
+    azureResource,
+    azureApiVersion,
+    vertexProjectId,
+    vertexLocation,
+    vertexEndpoint,
+    bedrockRegion,
+  ])
+
+  // Sync isDirty with context
+  useEffect(() => {
+    unsavedChangesContext.setIsDirty(hasUnsavedChanges)
+  }, [hasUnsavedChanges, unsavedChangesContext])
+
+  // Handle copy from existing strategy
+  useEffect(() => {
+    if (!copyFrom || !projectResp) return
+
+    const projectConfig = (projectResp as any)?.project?.config
+    if (!projectConfig) return
+
+    const db = projectConfig.rag?.databases?.find(
+      (d: any) => d.name === database
+    )
+    const strategy = db?.embedding_strategies?.find(
+      (s: any) => s.name === copyFrom
+    )
+
+    if (!strategy?.config) return
+
+    const config = strategy.config
+    const strategyType = strategy.type || 'OllamaEmbedder'
+
+    // Populate common fields
+    if (typeof config.dimension === 'number') setDimension(config.dimension)
+    if (typeof config.batch_size === 'number') setBatchSize(config.batch_size)
+    if (typeof config.timeout === 'number') setTimeoutSec(config.timeout)
+    if (config.base_url) setBaseUrl(config.base_url)
+    if (typeof config.auto_pull === 'boolean') setAutoPull(config.auto_pull)
+
+    // Handle model and provider based on strategy type
+    if (strategyType === 'UniversalEmbedder') {
+      // UniversalEmbedder - local HuggingFace model
+      setSourceTab('local')
+      setProvider('Ollama (remote)')
+
+      if (config.model) {
+        const modelId = config.model
+        // Use a timeout to ensure localGroups is populated
+        setTimeout(() => {
+          // Find variant by modelIdentifier or mapping
+          const variant = localGroups
+            .flatMap(g => g.variants)
+            .find(
+              v =>
+                v.modelIdentifier === modelId ||
+                modelIdToHuggingFace[v.id] === modelId ||
+                v.id === modelId
+            )
+
+          if (variant) {
+            setSelected({
+              runtime: 'Local',
+              provider: 'Ollama',
+              modelId: variant.id,
+            })
+            setShowModelTable(false)
+          }
+        }, 100)
+      }
+    } else if (strategyType === 'OllamaEmbedder') {
+      setSourceTab('local')
+      setProvider('Ollama (remote)')
+      if (config.model) {
+        const modelName = config.model
+        const providerModels = modelMap['Ollama (remote)'] || []
+        if (providerModels.includes(modelName)) {
+          setModel(modelName)
+        } else {
+          setModel('Custom')
+          setCustomModel(modelName)
+        }
+        setSelected({
+          runtime: 'Local',
+          provider: 'Ollama',
+          modelId: modelName,
+        })
+      }
+    } else if (strategyType === 'OpenAIEmbedder') {
+      setSourceTab('cloud')
+      setProvider('OpenAI')
+      if (config.model) {
+        const modelName = config.model
+        const providerModels = modelMap['OpenAI'] || []
+        if (providerModels.includes(modelName)) {
+          setModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'OpenAI',
+            modelId: modelName,
+          })
+        } else {
+          setModel('Custom')
+          setCustomModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'OpenAI',
+            modelId: modelName,
+          })
+        }
+      }
+      if (config.organization) setOpenaiOrg(config.organization)
+      if (config.max_retries) setOpenaiMaxRetries(config.max_retries)
+    } else if (strategyType.includes('Azure')) {
+      setSourceTab('cloud')
+      setProvider('Azure OpenAI')
+      if (config.model) {
+        const modelName = config.model
+        const providerModels = modelMap['Azure OpenAI'] || []
+        if (providerModels.includes(modelName)) {
+          setModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'Azure OpenAI',
+            modelId: modelName,
+          })
+        } else {
+          setModel('Custom')
+          setCustomModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'Azure OpenAI',
+            modelId: modelName,
+          })
+        }
+      }
+      if (config.deployment) setAzureDeployment(config.deployment)
+      if (config.endpoint) setAzureResource(config.endpoint)
+      if (config.api_version) setAzureApiVersion(config.api_version)
+    } else if (strategyType.includes('Google')) {
+      setSourceTab('cloud')
+      setProvider('Google')
+      if (config.model) {
+        const modelName = config.model
+        const providerModels = modelMap['Google'] || []
+        if (providerModels.includes(modelName)) {
+          setModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'Google',
+            modelId: modelName,
+          })
+        } else {
+          setModel('Custom')
+          setCustomModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'Google',
+            modelId: modelName,
+          })
+        }
+      }
+      if (config.project_id) setVertexProjectId(config.project_id)
+      if (config.region) setVertexLocation(config.region)
+      if (config.endpoint) setVertexEndpoint(config.endpoint)
+    } else if (strategyType.includes('Bedrock')) {
+      setSourceTab('cloud')
+      setProvider('AWS Bedrock')
+      if (config.model) {
+        const modelName = config.model
+        const providerModels = modelMap['AWS Bedrock'] || []
+        if (providerModels.includes(modelName)) {
+          setModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'AWS Bedrock',
+            modelId: modelName,
+          })
+        } else {
+          setModel('Custom')
+          setCustomModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'AWS Bedrock',
+            modelId: modelName,
+          })
+        }
+      }
+      if (config.region) setBedrockRegion(config.region)
+    } else if (strategyType === 'CohereEmbedder') {
+      setSourceTab('cloud')
+      setProvider('Cohere')
+      if (config.model) {
+        const modelName = config.model
+        const providerModels = modelMap['Cohere'] || []
+        if (providerModels.includes(modelName)) {
+          setModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'Cohere',
+            modelId: modelName,
+          })
+        } else {
+          setModel('Custom')
+          setCustomModel(modelName)
+          setSelected({
+            runtime: 'Cloud',
+            provider: 'Cohere',
+            modelId: modelName,
+          })
+        }
+      }
+    }
+  }, [copyFrom, projectResp, database, localGroups])
+
   // Update defaults when provider/model changes
   useEffect(() => {
     const key = model === 'Custom' ? customModel.trim() : model
@@ -281,12 +658,185 @@ function AddEmbeddingStrategy() {
   const isModelChosen =
     model === 'Custom' ? customModel.trim().length > 0 : !!model
 
+  // Helper to format ETA
+  const formatETA = (seconds: number): string => {
+    if (seconds < 60) return `${Math.round(seconds)}s`
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`
+    return `${Math.round(seconds / 3600)}h`
+  }
+
+  // Download a model
+  const downloadModel = async (variant: Variant, background = false) => {
+    const modelIdentifier =
+      variant.modelIdentifier || modelIdToHuggingFace[variant.id] || variant.id
+
+    // Initialize download state
+    setDownloadStates(prev => ({
+      ...prev,
+      [variant.id]: {
+        state: 'downloading',
+        progress: 0,
+        downloadedBytes: 0,
+        totalBytes: 0,
+      },
+    }))
+
+    if (background) {
+      setShowBackgroundDownload(true)
+      setBackgroundDownloadName(variant.label)
+      setDownloadConfirmOpen(false)
+    }
+
+    try {
+      if (!background) {
+        toast({
+          message: `Downloading ${variant.label}...`,
+          variant: 'default',
+        })
+      }
+
+      const start = Date.now()
+      for await (const event of modelService.downloadModel({
+        model_name: modelIdentifier,
+        provider: 'universal',
+      })) {
+        if (event.event === 'progress') {
+          const d = Number(event.downloaded || 0)
+          const t = Number(event.total || 0)
+          const progress = t > 0 ? Math.round((d / t) * 100) : 0
+
+          setDownloadStates(prev => ({
+            ...prev,
+            [variant.id]: {
+              state: 'downloading',
+              progress,
+              downloadedBytes: d,
+              totalBytes: t,
+            },
+          }))
+
+          // Calculate ETA
+          if (t > 0 && d > 0) {
+            const elapsedSec = (Date.now() - start) / 1000
+            if (elapsedSec > 0) {
+              const speed = d / elapsedSec
+              const remain = (t - d) / (speed || 1)
+              setEstimatedTimeRemaining(formatETA(remain))
+            }
+          }
+        } else if (event.event === 'done') {
+          setDownloadStates(prev => ({
+            ...prev,
+            [variant.id]: {
+              state: 'success',
+              progress: 100,
+              downloadedBytes: prev[variant.id]?.totalBytes || 0,
+              totalBytes: prev[variant.id]?.totalBytes || 0,
+            },
+          }))
+
+          // Refresh cached models
+          await refetchCachedModels()
+
+          if (!background) {
+            toast({
+              message: `${variant.label} downloaded successfully`,
+              variant: 'default',
+            })
+          }
+
+          // Auto-select after download
+          setTimeout(() => {
+            const meta = embeddingMeta[variant.id]
+            if (meta?.dim)
+              setDimension(Number(String(meta.dim).replace(/[^0-9]/g, '')))
+            if (!baseUrl.trim()) setBaseUrl('http://localhost:11434')
+            setSelected({
+              runtime: 'Local',
+              provider: 'Ollama',
+              modelId: variant.id,
+            })
+            // Close the model selection area when a new model is selected
+            setShowModelTable(false)
+            setDownloadConfirmOpen(false)
+            if (background) {
+              setShowBackgroundDownload(false)
+            }
+          }, 500)
+        } else if (event.event === 'error') {
+          setDownloadStates(prev => ({
+            ...prev,
+            [variant.id]: {
+              state: 'error',
+              progress: 0,
+              downloadedBytes: 0,
+              totalBytes: 0,
+              error: event.message || 'Download failed',
+            },
+          }))
+
+          toast({
+            message: event.message || `Failed to download ${variant.label}`,
+            variant: 'destructive',
+          })
+
+          if (background) {
+            setShowBackgroundDownload(false)
+          }
+        }
+      }
+    } catch (error: any) {
+      setDownloadStates(prev => ({
+        ...prev,
+        [variant.id]: {
+          state: 'error',
+          progress: 0,
+          downloadedBytes: 0,
+          totalBytes: 0,
+          error: error.message || 'Download failed',
+        },
+      }))
+
+      toast({
+        message: error.message || `Failed to download ${variant.label}`,
+        variant: 'destructive',
+      })
+
+      if (background) {
+        setShowBackgroundDownload(false)
+      }
+    }
+  }
+
   // Handlers to select models (no modal here)
-  const selectLocal = (v: Variant) => {
-    const meta = embeddingMeta[v.id]
-    if (meta?.dim) setDimension(Number(String(meta.dim).replace(/[^0-9]/g, '')))
-    if (!baseUrl.trim()) setBaseUrl('http://localhost:11434')
-    setSelected({ runtime: 'Local', provider: 'Ollama', modelId: v.id })
+  const selectLocal = async (v: Variant) => {
+    // Check if model needs to be downloaded
+    if (!v.isDownloaded && v.modelIdentifier) {
+      // Show confirmation modal
+      setPendingDownloadVariant(v)
+      setDownloadConfirmOpen(true)
+    } else {
+      // Model is already on disk, just select it
+      const meta = embeddingMeta[v.id]
+      if (meta?.dim)
+        setDimension(Number(String(meta.dim).replace(/[^0-9]/g, '')))
+      if (!baseUrl.trim()) setBaseUrl('http://localhost:11434')
+      setSelected({ runtime: 'Local', provider: 'Ollama', modelId: v.id })
+      // Close the model selection area when a new model is selected
+      setShowModelTable(false)
+    }
+  }
+
+  // Refresh disk models
+  const handleRefresh = async () => {
+    setIsManuallyRefreshing(true)
+    const startTime = Date.now()
+    await refetchCachedModels()
+    const elapsed = Date.now() - startTime
+    const remaining = Math.max(0, 800 - elapsed)
+    setTimeout(() => {
+      setIsManuallyRefreshing(false)
+    }, remaining)
   }
 
   const selectCloud = () => {
@@ -297,8 +847,21 @@ function AddEmbeddingStrategy() {
   }
 
   // Derived summary
-  const summaryProvider =
-    selected?.runtime === 'Local' ? 'Ollama' : selected?.provider || null
+  const summaryProvider = (() => {
+    if (selected?.runtime === 'Local' && selected?.modelId) {
+      // Check if this is a UniversalEmbedder (HuggingFace model from local groups)
+      const variant = localGroups
+        .flatMap(g => g.variants)
+        .find(v => v.id === selected.modelId)
+      if (variant?.modelIdentifier) {
+        // This is a HuggingFace model, show "Universal"
+        return 'Universal'
+      }
+      // Otherwise it's Ollama
+      return 'Ollama'
+    }
+    return selected?.provider || null
+  })()
   const summaryModel = selected?.modelId || null
   const summaryLocation = (() => {
     try {
@@ -331,13 +894,13 @@ function AddEmbeddingStrategy() {
   // Helper to map UI provider names to config types
   const mapProviderToType = (providerLabel: string): string => {
     const typeMap: Record<string, string> = {
-      'Ollama': 'OllamaEmbedder',
+      Ollama: 'OllamaEmbedder',
       'Ollama (remote)': 'OllamaEmbedder',
-      'OpenAI': 'OpenAIEmbedder',
-      'Google': 'OpenAIEmbedder', // Uses OpenAI-compatible endpoint
+      OpenAI: 'OpenAIEmbedder',
+      Google: 'OpenAIEmbedder', // Uses OpenAI-compatible endpoint
       'Azure OpenAI': 'OpenAIEmbedder',
-      'HuggingFace': 'HuggingFaceEmbedder',
-      'SentenceTransformer': 'SentenceTransformerEmbedder'
+      HuggingFace: 'HuggingFaceEmbedder',
+      SentenceTransformer: 'SentenceTransformerEmbedder',
     }
     return typeMap[providerLabel] || 'OllamaEmbedder'
   }
@@ -350,15 +913,40 @@ function AddEmbeddingStrategy() {
     encryptedApiKey?: string
   ) => {
     const config: Record<string, any> = {}
-    
+
+    // For local models, get the full HuggingFace model identifier
+    let modelIdentifier = chosenModel
+    if (runtime === 'Local') {
+      // Find the variant to get the modelIdentifier
+      const variant = localGroups
+        .flatMap(g => g.variants)
+        .find(v => v.id === chosenModel)
+      modelIdentifier =
+        variant?.modelIdentifier ||
+        modelIdToHuggingFace[chosenModel] ||
+        chosenModel
+    }
+
     // Add common fields
-    if (chosenModel) config.model = chosenModel
+    if (modelIdentifier) config.model = modelIdentifier
     if (dimension) config.dimension = parseInt(String(dimension))
     if (batchSize) config.batch_size = parseInt(String(batchSize))
     if (timeoutSec) config.timeout = parseInt(String(timeoutSec))
-    
+
+    // Check if this is a UniversalEmbedder (HuggingFace model from local groups)
+    const isUniversalEmbedder =
+      runtime === 'Local' &&
+      localGroups
+        .flatMap(g => g.variants)
+        .some(v => v.id === chosenModel && v.modelIdentifier)
+
     // Add provider-specific fields
-    if (runtime === 'Local' || providerLabel === 'Ollama (remote)') {
+    if (isUniversalEmbedder) {
+      // UniversalEmbedder config
+      config.base_url = baseUrl?.trim() || 'http://127.0.0.1:11540/v1'
+      config.api_key = 'universal'
+    } else if (runtime === 'Local' || providerLabel === 'Ollama (remote)') {
+      // OllamaEmbedder config
       if (baseUrl) config.base_url = baseUrl.trim()
       config.auto_pull = autoPull !== undefined ? autoPull : true
     } else if (runtime === 'Cloud') {
@@ -388,71 +976,87 @@ function AddEmbeddingStrategy() {
         if (encryptedApiKey) config.api_key = encryptedApiKey
       }
     }
-    
+
     return config
   }
+
+  // Real-time duplicate name validation (case-insensitive)
+  // Check immediately for default names, or after field is touched
+  const duplicateNameError = useMemo(() => {
+    if (!projectResp || !name.trim()) return null
+    
+    // Always check for duplicates (don't wait for touch) so default names are validated
+    const projectConfig = (projectResp as any)?.project?.config
+    const currentDb = projectConfig?.rag?.databases?.find(
+      (db: any) => db.name === database
+    )
+    if (currentDb) {
+      const nameLower = name.trim().toLowerCase()
+      const nameExists = currentDb.embedding_strategies?.some(
+        (s: any) => s.name?.toLowerCase() === nameLower
+      )
+      if (nameExists) {
+        return 'A strategy with this name already exists'
+      }
+    }
+    return null
+  }, [name, projectResp, database])
 
   // Validation
   const validateStrategy = (): string[] => {
     const errors: string[] = []
-    
+
     // Validate strategy name with security checks
     const nameError = validateStrategyName(name)
     if (nameError) {
       errors.push(nameError)
     }
-    
+
     // Validate model selection
     if (!selected) {
       errors.push('Please select a model')
     } else {
       // Validate the selected model is valid
       const selectedModelId = selected.modelId
-      
+
       // For custom models, validate the custom model name
       if (selectedModelId === 'Custom' || model === 'Custom') {
         if (!customModel || !customModel.trim()) {
           errors.push('Custom model name is required')
         } else if (!/^[a-zA-Z0-9\/_.-]+$/.test(customModel)) {
-          errors.push('Custom model name contains invalid characters. Only letters, numbers, slashes, hyphens, dots, and underscores are allowed.')
+          errors.push(
+            'Custom model name contains invalid characters. Only letters, numbers, slashes, hyphens, dots, and underscores are allowed.'
+          )
         }
       } else {
         // Validate non-custom model exists in our list
-        const isValidLocal = localGroups.some(group => 
-          group.name === selectedModelId || 
-          group.variants?.some(v => v.id === selectedModelId)
+        const isValidLocal = localGroups.some(
+          group =>
+            group.name === selectedModelId ||
+            group.variants?.some(v => v.id === selectedModelId)
         )
-        
+
         // For cloud providers, we trust the selected object since it came from our provider data
         const isCloudProvider = selected.runtime === 'Cloud'
-        
+
         if (!isValidLocal && !isCloudProvider) {
-          errors.push('Selected model is not supported. Please choose a valid model.')
+          errors.push(
+            'Selected model is not supported. Please choose a valid model.'
+          )
         }
       }
     }
-    
+
     // Validate dimension
     if (dimension && (dimension < 1 || dimension > 8192)) {
       errors.push('Dimension must be between 1 and 8192')
     }
-    
+
     // Check for duplicate strategy name
-    if (projectResp && name.trim()) {
-      const projectConfig = (projectResp as any)?.project?.config
-      const currentDb = projectConfig?.rag?.databases?.find(
-        (db: any) => db.name === database
-      )
-      if (currentDb) {
-        const nameExists = currentDb.embedding_strategies?.some(
-          (s: any) => s.name === name.trim()
-        )
-        if (nameExists) {
-          errors.push(`An embedding strategy with name "${name.trim()}" already exists`)
-        }
-      }
+    if (duplicateNameError) {
+      errors.push(duplicateNameError)
     }
-    
+
     return errors
   }
 
@@ -466,10 +1070,22 @@ function AddEmbeddingStrategy() {
       setIsSaving(true)
       setError(null)
 
-      // Validate
+      // Validate BEFORE attempting save
+      setNameTouched(true) // Mark as touched when attempting save
       const validationErrors = validateStrategy()
       if (validationErrors.length > 0) {
-        setError(validationErrors.join(', '))
+        const errorMessage = validationErrors.join(', ')
+        setError(errorMessage)
+        // Only show toast for non-duplicate-name errors
+        const duplicateNameError = validationErrors.some(e => 
+          e.includes('already exists')
+        )
+        if (!duplicateNameError) {
+          toast({
+            message: errorMessage,
+            variant: 'destructive',
+          })
+        }
         return false
       }
 
@@ -483,23 +1099,42 @@ function AddEmbeddingStrategy() {
       const currentDb = projectConfig.rag?.databases?.find(
         (db: any) => db.name === database
       )
-      
+
       if (!currentDb) {
         throw new Error(`Database ${database} not found in configuration`)
+      }
+
+      // Determine the correct strategy type
+      // Local HuggingFace models should use UniversalEmbedder, not OllamaEmbedder
+      let strategyType = mapProviderToType(providerLabel)
+      if (runtime === 'Local' && chosenModel) {
+        // Check if this is a HuggingFace model from local groups
+        const variant = localGroups
+          .flatMap(g => g.variants)
+          .find(v => v.id === chosenModel)
+        if (variant?.modelIdentifier) {
+          // This is a HuggingFace model, use UniversalEmbedder
+          strategyType = 'UniversalEmbedder'
+        }
       }
 
       // Build the new strategy
       const newStrategy = {
         name: name.trim(),
-        type: mapProviderToType(providerLabel),
+        type: strategyType,
         priority: (currentDb.embedding_strategies?.length || 0) * 10,
-        config: buildStrategyConfig(runtime, providerLabel, chosenModel, encryptedApiKey)
+        config: buildStrategyConfig(
+          runtime,
+          providerLabel,
+          chosenModel,
+          encryptedApiKey
+        ),
       }
 
       // Add to existing strategies
       const updatedStrategies = [
         ...(currentDb.embedding_strategies || []),
-        newStrategy
+        newStrategy,
       ]
 
       // Determine if this should be default
@@ -510,11 +1145,11 @@ function AddEmbeddingStrategy() {
         oldName: database,
         updates: {
           embedding_strategies: updatedStrategies,
-          default_embedding_strategy: shouldBeDefault 
-            ? newStrategy.name 
-            : currentDb.default_embedding_strategy
+          default_embedding_strategy: shouldBeDefault
+            ? newStrategy.name
+            : currentDb.default_embedding_strategy,
         },
-        projectConfig
+        projectConfig,
       })
 
       return true
@@ -528,8 +1163,16 @@ function AddEmbeddingStrategy() {
   }
 
   const finalizeAndRedirect = () => {
-    toast({ message: 'Embedding strategy created', variant: 'default' })
+    // Clear unsaved changes flags BEFORE navigation to prevent modal from showing
+    setHasUnsavedChanges(false)
+    unsavedChangesContext.setIsDirty(false)
+    toast({ message: 'Strategy saved', variant: 'default' })
+    // Use requestAnimationFrame to ensure state updates propagate before navigation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
     navigate('/chat/databases')
+      })
+    })
   }
 
   return (
@@ -580,7 +1223,12 @@ function AddEmbeddingStrategy() {
               }
               setConfirmOpen(true)
             }}
-            disabled={!selected || name.trim().length === 0}
+            disabled={
+              !selected || 
+              name.trim().length === 0 || 
+              !!validateStrategyName(name) || 
+              !!duplicateNameError
+            }
           >
             Save strategy
           </Button>
@@ -588,7 +1236,7 @@ function AddEmbeddingStrategy() {
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4 md:p-6 flex flex-col gap-4">
-        {/* Name */}
+        {/* Name and Copy from */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">
@@ -596,10 +1244,98 @@ function AddEmbeddingStrategy() {
             </Label>
             <Input
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => {
+                setName(e.target.value)
+                // Clear error state when user starts typing if validation passes
+                if (nameTouched) {
+                  const nameError = validateStrategyName(e.target.value)
+                  const dupError = duplicateNameError
+                  if (!nameError && !dupError) {
+                    setError(null)
+                  }
+                }
+              }}
+              onBlur={() => setNameTouched(true)}
               placeholder="Enter a name"
-              className="h-9"
+              className={`h-9 ${
+                (validateStrategyName(name) || duplicateNameError)
+                  ? 'border-destructive'
+                  : ''
+              }`}
             />
+            {validateStrategyName(name) && (
+              <p className="text-xs text-destructive mt-1">
+                {validateStrategyName(name)}
+              </p>
+            )}
+            {!validateStrategyName(name) && duplicateNameError && (
+              <p className="text-xs text-destructive mt-1">
+                {duplicateNameError}
+              </p>
+            )}
+            {!validateStrategyName(name) && !duplicateNameError && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Can only contain letters, numbers, hyphens, and underscores
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Copy from</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="w-full h-9 rounded-md border border-border bg-background px-3 text-left flex items-center justify-between text-sm">
+                  <span
+                    className={
+                      copyFrom ? 'text-foreground' : 'text-muted-foreground'
+                    }
+                  >
+                    {copyFrom || 'Select a strategy to copy...'}
+                  </span>
+                  <FontIcon type="chevron-down" className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-64">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setCopyFrom('')
+                    // Reset form to defaults
+                    setName('new-embedding-strategy')
+                    setBaseUrl('http://localhost:11434')
+                    setDimension(768)
+                    setBatchSize(16)
+                    setTimeoutSec(60)
+                    setAutoPull(true)
+                    setProvider('Ollama (remote)')
+                    setModel('nomic-embed-text')
+                    setCustomModel('')
+                    setSelected(null)
+                    setSourceTab('local')
+                    setShowModelTable(true)
+                    // Reset cloud fields
+                    setApiKey('')
+                    setOpenaiOrg('')
+                    setOpenaiMaxRetries(3)
+                    setAzureDeployment('')
+                    setAzureResource('')
+                    setAzureApiVersion('')
+                    setVertexProjectId('')
+                    setVertexLocation('')
+                    setVertexEndpoint('')
+                    setBedrockRegion('')
+                  }}
+                >
+                  None
+                </DropdownMenuItem>
+                {existingStrategies.map((strategy: any) => (
+                  <DropdownMenuItem
+                    key={strategy.name}
+                    onClick={() => setCopyFrom(strategy.name)}
+                  >
+                    {strategy.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -671,157 +1407,99 @@ function AddEmbeddingStrategy() {
         {/* Selection UI */}
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Select the model you would like to use for this strategy.
+            {selected?.runtime === 'Local' && selected?.modelId
+              ? 'Change model'
+              : 'Select the model you would like to use for this strategy.'}
           </div>
           <div />
         </div>
 
-        <div className="w-full flex items-center">
-          <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
-            <button
-              className={`flex-1 h-10 text-sm ${sourceTab === 'local' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
-              onClick={() => setSourceTab('local')}
-              aria-pressed={sourceTab === 'local'}
-            >
-              Local models
-            </button>
-            <button
-              className={`flex-1 h-10 text-sm ${sourceTab === 'cloud' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
-              onClick={() => setSourceTab('cloud')}
-              aria-pressed={sourceTab === 'cloud'}
-            >
-              Cloud models
-            </button>
-          </div>
-        </div>
-
-        {sourceTab === 'local' && (
-          <>
-            <div className="relative w-full">
-              <FontIcon
-                type="search"
-                className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2"
-              />
-              <Input
-                placeholder="Search local options"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                className="pl-9 h-10"
-              />
-            </div>
-            <div className="w-full overflow-hidden rounded-lg border border-border">
-              <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-2">
-                <div className="col-span-4">Model</div>
-                <div className="col-span-2">dim</div>
-                <div className="col-span-2">Quality</div>
-                <div className="col-span-2">Download</div>
-                <div className="col-span-1">RAM/VRAM</div>
-                <div className="col-span-1" />
+        {/* Selected model card - always show when model is selected */}
+        {selected?.runtime === 'Local' && selected?.modelId && (
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">
+                  {localGroups
+                    .flatMap(g => g.variants)
+                    .find(v => v.id === selected.modelId)?.label ||
+                    selected.modelId}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {(() => {
+                    const variant = localGroups
+                      .flatMap(g => g.variants)
+                      .find(v => v.id === selected.modelId)
+                    if (variant?.isDownloaded) {
+                      return `On disk • ${variant.download}`
+                    }
+                    return 'Local model'
+                  })()}
+                </div>
               </div>
-              {filteredGroups.map(group => {
-                const isOpen = expandedGroupId === group.id
-                return (
-                  <div key={group.id} className="border-t border-border">
-                    <div
-                      className="grid grid-cols-12 items-center px-3 py-3 text-sm cursor-pointer hover:bg-accent/40"
-                      onClick={() =>
-                        setExpandedGroupId(prev =>
-                          prev === group.id ? null : group.id
-                        )
-                      }
-                    >
-                      <div className="col-span-4 flex items-center gap-2">
-                        <FontIcon
-                          type="chevron-down"
-                          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                        />
-                        <span className="truncate font-medium">
-                          {group.name}
-                        </span>
-                      </div>
-                      <div className="col-span-2 text-xs text-muted-foreground">
-                        {group.dim}
-                      </div>
-                      <div className="col-span-2 text-xs text-muted-foreground">
-                        {group.quality}
-                      </div>
-                      <div className="col-span-2 text-xs text-muted-foreground">
-                        {group.download}
-                      </div>
-                      <div className="col-span-1 text-xs text-muted-foreground">
-                        {group.ramVram}
-                      </div>
-                      <div className="col-span-1" />
-                    </div>
-                    {group.variants && isOpen && (
-                      <div className="px-3 pb-2">
-                        {group.variants.map(v => {
-                          const isUsing =
-                            selected?.runtime === 'Local' &&
-                            selected?.modelId === v.id
-                          return (
-                            <div
-                              key={v.id}
-                              className="grid grid-cols-12 items-center px-3 py-3 text-sm rounded-md hover:bg-accent/40"
-                            >
-                              <div className="col-span-4 flex items-center text-muted-foreground">
-                                <span className="inline-block w-4" />
-                                <span className="ml-2 font-mono text-xs truncate">
-                                  {v.label}
-                                </span>
-                              </div>
-                              <div className="col-span-2 text-xs text-muted-foreground">
-                                {v.dim}
-                              </div>
-                              <div className="col-span-2 text-xs text-muted-foreground">
-                                {v.quality}
-                              </div>
-                              <div className="col-span-2 text-xs text-muted-foreground">
-                                {group.download}
-                              </div>
-                              <div className="col-span-1 text-xs text-muted-foreground">
-                                {group.ramVram}
-                              </div>
-                              <div className="col-span-1 flex items-center justify-end pr-2">
-                                <Button
-                                  size="sm"
-                                  className="h-8 px-3"
-                                  onClick={() => selectLocal(v)}
-                                >
-                                  {isUsing ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <FontIcon
-                                        type="checkmark-filled"
-                                        className="w-4 h-4"
-                                      />{' '}
-                                      Using
-                                    </span>
-                                  ) : (
-                                    'Use'
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                        <div className="flex justify-end pr-3">
-                          <button
-                            className="text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => setExpandedGroupId(null)}
-                          >
-                            Hide
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowModelTable(true)}
+              >
+                Change
+              </Button>
             </div>
-          </>
+          </div>
         )}
 
-        {sourceTab === 'cloud' && (
+        {/* Model selection area - show when showModelTable is true */}
+        {showModelTable && (
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-sm font-medium text-foreground">
+                Select model
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowModelTable(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+            <div className="w-full flex items-center mb-4">
+              <div className="flex w-full max-w-3xl rounded-lg overflow-hidden border border-border">
+                <button
+                  className={`flex-1 h-10 text-sm ${sourceTab === 'local' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
+                  onClick={() => setSourceTab('local')}
+                  aria-pressed={sourceTab === 'local'}
+                >
+                  Local models
+                </button>
+                <button
+                  className={`flex-1 h-10 text-sm ${sourceTab === 'cloud' ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-secondary/80'}`}
+                  onClick={() => setSourceTab('cloud')}
+                  aria-pressed={sourceTab === 'cloud'}
+                >
+                  Cloud models
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {sourceTab === 'local' && showModelTable && (
+          <LocalModelTable
+            filteredGroups={filteredGroups}
+            query={query}
+            onQueryChange={setQuery}
+            selected={selected}
+            downloadStates={downloadStates}
+            onSelect={selectLocal}
+            onDownloadRetry={downloadModel}
+            onRefresh={handleRefresh}
+            isRefreshing={isManuallyRefreshing}
+            isLoadingCachedModels={isLoadingCachedModels}
+          />
+        )}
+
+        {sourceTab === 'cloud' && showModelTable && (
           <div className="w-full rounded-lg border border-border p-4 md:p-6 flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label className="text-xs text-muted-foreground">
@@ -1061,7 +1739,11 @@ function AddEmbeddingStrategy() {
                   !isModelChosen ||
                   (provider !== 'Ollama (remote)' && apiKey.trim().length === 0)
                 }
-                onClick={selectCloud}
+                onClick={() => {
+                  selectCloud()
+                  // Close the model selection area when a new model is selected
+                  setShowModelTable(false)
+                }}
               >
                 {selected?.runtime === 'Cloud' &&
                 selected?.modelId ===
@@ -1079,9 +1761,23 @@ function AddEmbeddingStrategy() {
         )}
 
         {/* Confirm selection modal with Make default */}
-        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <Dialog 
+          open={confirmOpen} 
+          onOpenChange={(open) => {
+            setConfirmOpen(open)
+            if (!open) {
+              // Clear error when modal closes
+              setError(null)
+            }
+          }}
+        >
           <DialogContent>
             <DialogTitle>Save this embedding strategy?</DialogTitle>
+            {error && (
+              <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-2 rounded-md text-sm mt-2">
+                {error}
+              </div>
+            )}
             <DialogDescription>
               {selected && (
                 <div className="mt-2 text-sm">
@@ -1127,7 +1823,7 @@ function AddEmbeddingStrategy() {
               <Button
                 onClick={async () => {
                   if (!selected) return
-                  
+
                   let encryptedKey: string | undefined = undefined
                   try {
                     if (selected.runtime === 'Cloud' && apiKey.trim()) {
@@ -1143,18 +1839,23 @@ function AddEmbeddingStrategy() {
                     })
                     return
                   }
-                  
+
                   const success = await saveStrategyToConfig(
                     selected.runtime,
                     summaryProvider || 'Provider',
                     selected.modelId,
                     encryptedKey
                   )
-                  
+
                   if (!success) {
+                    // Validation failed - keep modal open, error is already set
                     return
                   }
-                  
+
+                  // Clear unsaved changes flags BEFORE closing modal/navigating
+                  setHasUnsavedChanges(false)
+                  unsavedChangesContext.setIsDirty(false)
+
                   setConfirmOpen(false)
                   if (makeDefault) {
                     setReembedOpen(true)
@@ -1162,17 +1863,227 @@ function AddEmbeddingStrategy() {
                     finalizeAndRedirect()
                   }
                 }}
-                disabled={isSaving}
+                disabled={
+                  isSaving || 
+                  !!validateStrategyName(name) || 
+                  !!duplicateNameError
+                }
               >
-                {isSaving 
+                {isSaving
                   ? 'Saving...'
-                  : selected?.runtime === 'Local'
-                    ? 'Download and save strategy'
+                  : selected?.runtime === 'Local' &&
+                      selected?.modelId &&
+                      !isModelOnDisk(selected.modelId)
+                    ? 'Save strategy (model will be downloaded)'
                     : 'Save strategy'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Download confirmation modal */}
+        <Dialog
+          open={downloadConfirmOpen}
+          onOpenChange={open => {
+            setDownloadConfirmOpen(open)
+            if (!open) {
+              setPendingDownloadVariant(null)
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogTitle>Download this embedding model?</DialogTitle>
+            <DialogDescription>
+              {pendingDownloadVariant && (
+                <div className="mt-2 flex flex-col gap-3">
+                  <p className="text-sm">
+                    You are about to download
+                    <span className="mx-1 font-medium text-foreground">
+                      {pendingDownloadVariant.label}
+                    </span>
+                    for use in this embedding strategy.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="text-muted-foreground">Model</div>
+                    <div className="truncate font-mono">
+                      {pendingDownloadVariant.modelIdentifier ||
+                        pendingDownloadVariant.label}
+                    </div>
+                    <div className="text-muted-foreground">Size</div>
+                    <div>{pendingDownloadVariant.download}</div>
+                    <div className="text-muted-foreground">Dimension</div>
+                    <div>{pendingDownloadVariant.dim}</div>
+                    <div className="text-muted-foreground">Quality</div>
+                    <div>{pendingDownloadVariant.quality}</div>
+                  </div>
+
+                  {downloadStates[pendingDownloadVariant.id]?.state ===
+                    'downloading' && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          Downloading...{' '}
+                          {downloadStates[pendingDownloadVariant.id]
+                            ?.downloadedBytes > 0 &&
+                            formatBytes(
+                              downloadStates[pendingDownloadVariant.id]
+                                .downloadedBytes
+                            )}{' '}
+                          /{' '}
+                          {downloadStates[pendingDownloadVariant.id]
+                            ?.totalBytes > 0 &&
+                            formatBytes(
+                              downloadStates[pendingDownloadVariant.id]
+                                .totalBytes
+                            )}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {downloadStates[pendingDownloadVariant.id]?.progress}%
+                          {estimatedTimeRemaining &&
+                            ` • ${estimatedTimeRemaining} left`}
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{
+                            width: `${downloadStates[pendingDownloadVariant.id]?.progress || 0}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {downloadStates[pendingDownloadVariant.id]?.state ===
+                    'error' && (
+                    <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
+                      <p className="text-sm text-destructive">
+                        {downloadStates[pendingDownloadVariant.id]?.error ||
+                          'Download failed'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+            <DialogFooter>
+              {downloadStates[pendingDownloadVariant?.id || '']?.state ===
+              'downloading' ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (pendingDownloadVariant) {
+                      setShowBackgroundDownload(true)
+                      setBackgroundDownloadName(pendingDownloadVariant.label)
+                      setDownloadConfirmOpen(false)
+                    }
+                  }}
+                >
+                  Continue in background
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() => setDownloadConfirmOpen(false)}
+                >
+                  Cancel
+                </Button>
+              )}
+              <Button
+                disabled={
+                  downloadStates[pendingDownloadVariant?.id || '']?.state ===
+                  'downloading'
+                }
+                onClick={async () => {
+                  if (!pendingDownloadVariant) return
+                  const meta = embeddingMeta[pendingDownloadVariant.id]
+                  if (meta?.dim)
+                    setDimension(
+                      Number(String(meta.dim).replace(/[^0-9]/g, ''))
+                    )
+                  if (!baseUrl.trim()) setBaseUrl('http://localhost:11434')
+                  await downloadModel(pendingDownloadVariant, false)
+                }}
+              >
+                {downloadStates[pendingDownloadVariant?.id || '']?.state ===
+                'downloading'
+                  ? 'Downloading...'
+                  : 'Download and use'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Background download indicator */}
+        {showBackgroundDownload &&
+          downloadStates[pendingDownloadVariant?.id || '']?.state ===
+            'downloading' && (
+            <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card shadow-lg p-4 flex flex-col gap-2">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="text-sm font-medium">
+                    Downloading {backgroundDownloadName}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {downloadStates[pendingDownloadVariant?.id || '']
+                      ?.downloadedBytes > 0 &&
+                      formatBytes(
+                        downloadStates[pendingDownloadVariant?.id || '']
+                          .downloadedBytes
+                      )}{' '}
+                    /{' '}
+                    {downloadStates[pendingDownloadVariant?.id || '']
+                      ?.totalBytes > 0 &&
+                      formatBytes(
+                        downloadStates[pendingDownloadVariant?.id || '']
+                          .totalBytes
+                      )}{' '}
+                    {estimatedTimeRemaining &&
+                      `• ${estimatedTimeRemaining} left`}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowBackgroundDownload(false)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <FontIcon type="close" className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="text-muted-foreground">
+                    {downloadStates[pendingDownloadVariant?.id || '']
+                      ?.progress || 0}
+                    %
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{
+                      width: `${
+                        downloadStates[pendingDownloadVariant?.id || '']
+                          ?.progress || 0
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setDownloadConfirmOpen(true)
+                  setShowBackgroundDownload(false)
+                }}
+                className="w-full"
+              >
+                Show details
+              </Button>
+            </div>
+          )}
 
         {/* Re-embed confirmation modal */}
         <Dialog open={reembedOpen} onOpenChange={setReembedOpen}>
@@ -1195,6 +2106,64 @@ function AddEmbeddingStrategy() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Unsaved changes modal */}
+        <UnsavedChangesModal
+          isOpen={unsavedChangesContext.showModal}
+          onSave={async () => {
+            if (!selected) {
+              setModalErrorMessage('Please select a model before saving')
+              return
+            }
+
+            try {
+              setIsSaving(true)
+              setModalErrorMessage(null)
+
+              // Encrypt API key if needed
+              let encryptedKey: string | undefined
+              if (selected.runtime === 'Cloud' && apiKey.trim()) {
+                const secret = await getClientSideSecret()
+                encryptedKey = await encryptAPIKey(apiKey, secret)
+              }
+
+              const success = await saveStrategyToConfig(
+                selected.runtime,
+                summaryProvider || 'Provider',
+                selected.modelId,
+                encryptedKey
+              )
+
+              if (!success) {
+                setModalErrorMessage(error || 'Failed to save strategy')
+                setIsSaving(false)
+                return
+              }
+
+              // Save succeeded - clear error and confirm navigation
+              setModalErrorMessage(null)
+              setHasUnsavedChanges(false)
+              setIsSaving(false)
+              unsavedChangesContext.confirmNavigation()
+            } catch (e: any) {
+              setModalErrorMessage(e?.message || 'Failed to save strategy')
+              setIsSaving(false)
+            }
+          }}
+          onDiscard={() => {
+            // Clear unsaved changes flag and confirm navigation
+            setHasUnsavedChanges(false)
+            setModalErrorMessage(null)
+            unsavedChangesContext.confirmNavigation()
+          }}
+          onCancel={() => {
+            setModalErrorMessage(null)
+            unsavedChangesContext.cancelNavigation()
+          }}
+          isSaving={isSaving}
+          errorMessage={modalErrorMessage}
+          isError={!!modalErrorMessage}
+        />
       </div>
     </div>
   )

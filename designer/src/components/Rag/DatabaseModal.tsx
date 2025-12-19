@@ -52,8 +52,14 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
       setName(initialDatabase?.name || '')
       setType(initialDatabase?.type || 'ChromaStore')
       setCopyFromDb('none')
-      setDefaultEmbedding(initialDatabase?.default_embedding_strategy || '')
-      setDefaultRetrieval(initialDatabase?.default_retrieval_strategy || '')
+      if (mode === 'create') {
+        // Set default values for new databases
+        setDefaultEmbedding('semantic_embeddings')
+        setDefaultRetrieval('comprehensive_search')
+      } else {
+        setDefaultEmbedding(initialDatabase?.default_embedding_strategy || '')
+        setDefaultRetrieval(initialDatabase?.default_retrieval_strategy || '')
+      }
       setConfirmingDelete(false)
       const otherDbs = existingDatabases.filter(
         db => db.name !== initialDatabase?.name
@@ -126,6 +132,84 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
             ? existingDatabases.find(db => db.name === copyFromDb)
             : undefined
 
+        // Create default strategies if not copying from another database
+        let embeddingStrategies: Database['embedding_strategies'] = []
+        let retrievalStrategies: Database['retrieval_strategies'] = []
+        let finalDefaultEmbedding = defaultEmbedding
+        let finalDefaultRetrieval = defaultRetrieval
+
+        if (sourceDb) {
+          // Copy strategies from source database
+          embeddingStrategies = JSON.parse(
+            JSON.stringify(sourceDb.embedding_strategies || [])
+          )
+          retrievalStrategies = JSON.parse(
+            JSON.stringify(sourceDb.retrieval_strategies || [])
+          )
+          finalDefaultEmbedding =
+            defaultEmbedding || sourceDb.default_embedding_strategy || ''
+          finalDefaultRetrieval =
+            defaultRetrieval || sourceDb.default_retrieval_strategy || ''
+        } else {
+          // Not copying from a database - create or copy strategies based on selection
+          // Find selected strategies from other databases if they exist
+          const selectedEmbeddingStrategy = existingDatabases
+            .flatMap(db => db.embedding_strategies || [])
+            .find(emb => emb.name === defaultEmbedding)
+
+          const selectedRetrievalStrategy = existingDatabases
+            .flatMap(db => db.retrieval_strategies || [])
+            .find(ret => ret.name === defaultRetrieval)
+
+          // Handle embedding strategy
+          if (defaultEmbedding && defaultEmbedding !== '') {
+            if (defaultEmbedding === 'semantic_embeddings') {
+              // Create the default embedding strategy
+              embeddingStrategies.push({
+                name: 'semantic_embeddings',
+                type: 'UniversalEmbedder',
+                priority: 0,
+                config: {
+                  model: 'sentence-transformers/all-MiniLM-L6-v2',
+                  dimension: 384,
+                  batch_size: 16,
+                  timeout: 60,
+                },
+              })
+            } else if (selectedEmbeddingStrategy) {
+              // Copy the selected strategy from another database
+              embeddingStrategies.push(
+                JSON.parse(JSON.stringify(selectedEmbeddingStrategy))
+              )
+            }
+          }
+
+          // Handle retrieval strategy
+          if (defaultRetrieval && defaultRetrieval !== '') {
+            if (defaultRetrieval === 'comprehensive_search') {
+              // Create the default retrieval strategy
+              retrievalStrategies.push({
+                name: 'comprehensive_search',
+                type: 'BasicSimilarityStrategy',
+                default: true,
+                config: {
+                  distance_metric: 'cosine',
+                  top_k: 10,
+                },
+              })
+            } else if (selectedRetrievalStrategy) {
+              // Copy the selected strategy from another database
+              retrievalStrategies.push(
+                JSON.parse(JSON.stringify(selectedRetrievalStrategy))
+              )
+            }
+          }
+
+          // Set defaults (empty string if "None" was selected)
+          finalDefaultEmbedding = defaultEmbedding || ''
+          finalDefaultRetrieval = defaultRetrieval || ''
+        }
+
         const newDatabase: Database = {
           name: snakeCaseName,
           type,
@@ -134,16 +218,10 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
             distance_function: 'cosine',
             collection_name: snakeCaseName,
           },
-          default_embedding_strategy:
-            defaultEmbedding || sourceDb?.default_embedding_strategy || '',
-          default_retrieval_strategy:
-            defaultRetrieval || sourceDb?.default_retrieval_strategy || '',
-          embedding_strategies: sourceDb
-            ? JSON.parse(JSON.stringify(sourceDb.embedding_strategies || []))
-            : [],
-          retrieval_strategies: sourceDb
-            ? JSON.parse(JSON.stringify(sourceDb.retrieval_strategies || []))
-            : [],
+          default_embedding_strategy: finalDefaultEmbedding,
+          default_retrieval_strategy: finalDefaultRetrieval,
+          embedding_strategies: embeddingStrategies,
+          retrieval_strategies: retrievalStrategies,
         }
 
         await onCreate(newDatabase)
@@ -169,6 +247,16 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
       : undefined
   const availableEmbeddings = copySourceDb?.embedding_strategies || []
   const availableRetrievals = copySourceDb?.retrieval_strategies || []
+
+  // When not copying, collect strategies from all existing databases
+  const allEmbeddingStrategies =
+    copyFromDb === 'none'
+      ? existingDatabases.flatMap(db => db.embedding_strategies || [])
+      : []
+  const allRetrievalStrategies =
+    copyFromDb === 'none'
+      ? existingDatabases.flatMap(db => db.retrieval_strategies || [])
+      : []
 
   const selectStyle = {
     backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -246,10 +334,36 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
                     style={selectStyle}
                     value={copyFromDb}
                     onChange={e => {
-                      setCopyFromDb(e.target.value)
-                      if (e.target.value === 'none') {
-                        setDefaultEmbedding('')
-                        setDefaultRetrieval('')
+                      const newCopyFromDb = e.target.value
+                      setCopyFromDb(newCopyFromDb)
+
+                      // If switching to a database and current selections are "None",
+                      // auto-select the default strategies from that database
+                      if (newCopyFromDb !== 'none') {
+                        const selectedDb = existingDatabases.find(
+                          db => db.name === newCopyFromDb
+                        )
+                        if (selectedDb) {
+                          // Only reset if current selection is "None" (empty string)
+                          if (!defaultEmbedding || defaultEmbedding === '') {
+                            setDefaultEmbedding(
+                              selectedDb.default_embedding_strategy || ''
+                            )
+                          }
+                          if (!defaultRetrieval || defaultRetrieval === '') {
+                            setDefaultRetrieval(
+                              selectedDb.default_retrieval_strategy || ''
+                            )
+                          }
+                        }
+                      } else {
+                        // Switching back to "none" - reset to defaults if they were empty
+                        if (!defaultEmbedding || defaultEmbedding === '') {
+                          setDefaultEmbedding('semantic_embeddings')
+                        }
+                        if (!defaultRetrieval || defaultRetrieval === '') {
+                          setDefaultRetrieval('comprehensive_search')
+                        }
                       }
                     }}
                     disabled={isLoading}
@@ -261,57 +375,84 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
                       </option>
                     ))}
                   </select>
-                  {copyFromDb !== 'none' && (
+                  {copyFromDb !== 'none' ? (
                     <p className="text-xs text-muted-foreground mt-1">
                       This will copy all embedding and retrieval strategies from{' '}
                       {copyFromDb}
                     </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Default strategies will be created automatically if
+                      selected
+                    </p>
                   )}
                 </div>
 
-                {copyFromDb !== 'none' && availableEmbeddings.length > 0 && (
-                  <div>
-                    <label className="text-xs text-muted-foreground">
-                      Default embedding strategy
-                    </label>
-                    <select
-                      className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
-                      style={selectStyle}
-                      value={defaultEmbedding}
-                      onChange={e => setDefaultEmbedding(e.target.value)}
-                      disabled={isLoading}
-                    >
-                      <option value="">Select a strategy</option>
-                      {availableEmbeddings.map(emb => (
+                <div>
+                  <label className="text-xs text-muted-foreground">
+                    Default embedding strategy
+                  </label>
+                  <select
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
+                    style={selectStyle}
+                    value={defaultEmbedding}
+                    onChange={e => setDefaultEmbedding(e.target.value)}
+                    disabled={isLoading}
+                  >
+                    <option value="">None</option>
+                    {copyFromDb === 'none' ? (
+                      <>
+                        <option value="semantic_embeddings">
+                          semantic_embeddings
+                        </option>
+                        {allEmbeddingStrategies.map(emb => (
+                          <option key={emb.name} value={emb.name}>
+                            {emb.name}
+                          </option>
+                        ))}
+                      </>
+                    ) : (
+                      availableEmbeddings.map(emb => (
                         <option key={emb.name} value={emb.name}>
                           {emb.name}
                         </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                      ))
+                    )}
+                  </select>
+                </div>
 
-                {copyFromDb !== 'none' && availableRetrievals.length > 0 && (
-                  <div>
-                    <label className="text-xs text-muted-foreground">
-                      Default retrieval strategy
-                    </label>
-                    <select
-                      className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
-                      style={selectStyle}
-                      value={defaultRetrieval}
-                      onChange={e => setDefaultRetrieval(e.target.value)}
-                      disabled={isLoading}
-                    >
-                      <option value="">Select a strategy</option>
-                      {availableRetrievals.map(ret => (
+                <div>
+                  <label className="text-xs text-muted-foreground">
+                    Default retrieval strategy
+                  </label>
+                  <select
+                    className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
+                    style={selectStyle}
+                    value={defaultRetrieval}
+                    onChange={e => setDefaultRetrieval(e.target.value)}
+                    disabled={isLoading}
+                  >
+                    <option value="">None</option>
+                    {copyFromDb === 'none' ? (
+                      <>
+                        <option value="comprehensive_search">
+                          comprehensive_search
+                        </option>
+                        {allRetrievalStrategies.map(ret => (
+                          <option key={ret.name} value={ret.name}>
+                            {ret.name}
+                          </option>
+                        ))}
+                      </>
+                    ) : (
+                      availableRetrievals.map(ret => (
                         <option key={ret.name} value={ret.name}>
                           {ret.name}
                         </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                      ))
+                    )}
+                  </select>
+                </div>
               </>
             )}
           </div>

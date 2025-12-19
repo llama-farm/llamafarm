@@ -5,6 +5,7 @@ import {
   UpdateProjectRequest,
 } from '../types/project'
 import { datasetKeys } from './useDatasets'
+import { modelKeys } from './useProjectModels'
 
 /**
  * Query keys for project-related queries
@@ -108,6 +109,11 @@ export const useUpdateProject = () => {
       // Invalidate datasets list since datasets are part of the project config
       queryClient.invalidateQueries({
         queryKey: datasetKeys.list(variables.namespace, variables.projectId),
+      })
+
+      // Invalidate models list since models are part of the project config
+      queryClient.invalidateQueries({
+        queryKey: modelKeys.list(variables.namespace, variables.projectId),
       })
     },
     onError: (error) => {
