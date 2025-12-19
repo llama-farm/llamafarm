@@ -5,18 +5,17 @@ Provides access to:
 - OCR (text extraction from images/PDFs)
 - Document Extraction (structured data from forms/invoices)
 
-Supports two input methods:
-1. Base64-encoded images in JSON body (for /ocr and /documents/extract)
-2. File upload via multipart form (for /ocr/upload and /documents/extract/upload)
+All endpoints accept multipart form data with either:
+- file: Upload a PDF or image file directly
+- images: Base64-encoded image data URIs (comma-separated or JSON array)
 """
 
+import json
 import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from server.services.universal_runtime_service import UniversalRuntimeService
-
-from .types import DocumentExtractRequest, OCRRequest
 
 logger = logging.getLogger(__name__)
 
@@ -36,18 +35,110 @@ SUPPORTED_EXTENSIONS = {
     ".tif",
 }
 
-# Type aliases for file upload parameters (avoids B008 linting error)
-FileUpload = Annotated[UploadFile, File(description="PDF or image file to process")]
+# Type alias for optional file upload (avoids B008 linting error)
+OptionalFileUpload = Annotated[
+    UploadFile | None, File(description="PDF or image file to process")
+]
+
+
+async def _get_images_from_input(
+    file: UploadFile | None,
+    images: str | None,
+) -> list[str]:
+    """Extract base64 images from either file upload or images parameter.
+
+    Args:
+        file: Optional uploaded file (PDF or image)
+        images: Optional base64 images (JSON array or comma-separated)
+
+    Returns:
+        List of base64 data URIs
+
+    Raises:
+        HTTPException: If neither file nor images provided, or file type unsupported
+    """
+    from pathlib import Path
+
+    from core.image_utils import (
+        IMAGE_MIME_TYPES,
+        image_bytes_to_base64,
+        pdf_bytes_to_base64_images,
+    )
+
+    # Case 1: File upload provided
+    if file is not None and file.filename:
+        filename = file.filename
+        ext = Path(filename).suffix.lower()
+
+        if ext not in SUPPORTED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {ext}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
+            )
+
+        content = await file.read()
+
+        if ext == ".pdf":
+            return pdf_bytes_to_base64_images(content)
+        else:
+            mime_type = IMAGE_MIME_TYPES.get(ext, "image/png")
+            return [image_bytes_to_base64(content, mime_type)]
+
+    # Case 2: Base64 images provided
+    if images:
+        # Try to parse as JSON array first
+        try:
+            parsed = json.loads(images)
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        # Fall back to comma-separated (but be careful with base64 which contains commas in data)
+        # If it starts with "data:", treat as single image or split on "],["
+        if images.startswith("data:"):
+            # Single base64 image
+            return [images]
+        else:
+            # Try splitting - but this is tricky with base64
+            # Best to require JSON array format for multiple images
+            return [images]
+
+    # Neither provided
+    raise HTTPException(
+        status_code=400,
+        detail="Either 'file' (upload) or 'images' (base64) must be provided",
+    )
 
 
 # =============================================================================
-# OCR Endpoints
+# OCR Endpoint
 # =============================================================================
 
 
 @router.post("/ocr")
-async def extract_text(request: OCRRequest) -> dict[str, Any]:
+async def extract_text(
+    file: OptionalFileUpload = None,
+    images: str | None = Form(
+        default=None,
+        description='Base64-encoded images as JSON array (e.g., ["data:image/png;base64,..."])',
+    ),
+    model: str = Form(
+        default="surya",
+        description="OCR backend: surya, easyocr, paddleocr, tesseract",
+    ),
+    languages: str = Form(
+        default="en",
+        description="Comma-separated language codes (e.g., 'en,fr')",
+    ),
+    return_boxes: bool = Form(
+        default=False,
+        description="Return bounding boxes for detected text",
+    ),
+) -> dict[str, Any]:
     """OCR endpoint for text extraction from images.
+
+    Accepts either a file upload OR base64-encoded images.
 
     Supports multiple OCR backends:
     - surya: Best accuracy, transformer-based, layout-aware (recommended)
@@ -55,15 +146,20 @@ async def extract_text(request: OCRRequest) -> dict[str, Any]:
     - paddleocr: Fast, optimized for production, excellent for Asian languages
     - tesseract: Classic OCR engine, CPU-only, widely deployed
 
-    Provide images as base64-encoded strings in the `images` field.
+    Example with file upload (curl):
+    ```bash
+    curl -X POST http://localhost:8000/v1/vision/ocr \\
+      -F "file=@document.pdf" \\
+      -F "model=easyocr" \\
+      -F "languages=en"
+    ```
 
-    Example request:
-    ```json
-    {
-        "model": "surya",
-        "images": ["data:image/png;base64,iVBORw0KGgo..."],
-        "languages": ["en"]
-    }
+    Example with base64 images (curl):
+    ```bash
+    curl -X POST http://localhost:8000/v1/vision/ocr \\
+      -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \\
+      -F "model=surya" \\
+      -F "languages=en"
     ```
 
     Response:
@@ -74,30 +170,56 @@ async def extract_text(request: OCRRequest) -> dict[str, Any]:
             {
                 "index": 0,
                 "text": "Extracted text from image...",
-                "boxes": []
+                "confidence": 0.95
             }
         ],
         "model": "surya",
-        "total_count": 1
+        "usage": {"images_processed": 1}
     }
     ```
     """
+    # Get images from file or base64 input
+    image_list = await _get_images_from_input(file, images)
+
+    # Parse languages
+    lang_list = [lang.strip() for lang in languages.split(",") if lang.strip()]
+
     return await UniversalRuntimeService.ocr(
-        model=request.model,
-        images=request.images,
-        languages=request.languages,
-        return_boxes=request.return_boxes,
+        model=model,
+        images=image_list,
+        languages=lang_list if lang_list else None,
+        return_boxes=return_boxes,
     )
 
 
 # =============================================================================
-# Document Extraction Endpoints
+# Document Extraction Endpoint
 # =============================================================================
 
 
 @router.post("/documents/extract")
-async def extract_from_documents(request: DocumentExtractRequest) -> dict[str, Any]:
+async def extract_from_documents(
+    file: OptionalFileUpload = None,
+    images: str | None = Form(
+        default=None,
+        description='Base64-encoded images as JSON array (e.g., ["data:image/png;base64,..."])',
+    ),
+    model: str = Form(
+        ...,
+        description="HuggingFace model ID (e.g., naver-clova-ix/donut-base-finetuned-docvqa)",
+    ),
+    prompts: str = Form(
+        default="",
+        description="Comma-separated prompts for VQA task",
+    ),
+    task: str = Form(
+        default="extraction",
+        description="Task: extraction, vqa, or classification",
+    ),
+) -> dict[str, Any]:
     """Document understanding endpoint.
+
+    Accepts either a file upload OR base64-encoded images.
 
     Extract structured information from documents using vision-language models.
     Supports forms, invoices, receipts, and other document types.
@@ -111,23 +233,21 @@ async def extract_from_documents(request: DocumentExtractRequest) -> dict[str, A
     - vqa: Answer questions about document content
     - classification: Classify document types
 
-    Example for extraction:
-    ```json
-    {
-        "model": "naver-clova-ix/donut-base-finetuned-cord-v2",
-        "images": ["data:image/png;base64,iVBORw0KGgo..."],
-        "task": "extraction"
-    }
+    Example with file upload (curl):
+    ```bash
+    curl -X POST http://localhost:8000/v1/vision/documents/extract \\
+      -F "file=@receipt.pdf" \\
+      -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \\
+      -F "prompts=What is the total amount?" \\
+      -F "task=vqa"
     ```
 
-    Example for VQA (Visual Question Answering):
-    ```json
-    {
-        "model": "naver-clova-ix/donut-base-finetuned-docvqa",
-        "images": ["data:image/png;base64,iVBORw0KGgo..."],
-        "prompts": ["What is the total amount?", "What is the date?"],
-        "task": "vqa"
-    }
+    Example with base64 images (curl):
+    ```bash
+    curl -X POST http://localhost:8000/v1/vision/documents/extract \\
+      -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \\
+      -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \\
+      -F "task=extraction"
     ```
 
     Response:
@@ -146,129 +266,6 @@ async def extract_from_documents(request: DocumentExtractRequest) -> dict[str, A
     }
     ```
     """
-    return await UniversalRuntimeService.extract_documents(
-        model=request.model,
-        images=request.images,
-        prompts=request.prompts,
-        task=request.task,
-    )
-
-
-# =============================================================================
-# File Upload Endpoints
-# =============================================================================
-
-
-async def _validate_and_convert_file(file: UploadFile) -> list[str]:
-    """Validate uploaded file and convert to base64 images.
-
-    Args:
-        file: Uploaded file (PDF or image)
-
-    Returns:
-        List of base64 data URIs
-
-    Raises:
-        HTTPException: If file type is not supported
-    """
-    from pathlib import Path
-
-    from core.image_utils import (
-        IMAGE_MIME_TYPES,
-        image_bytes_to_base64,
-        pdf_bytes_to_base64_images,
-    )
-
-    # Get file extension
-    filename = file.filename or ""
-    ext = Path(filename).suffix.lower()
-
-    if ext not in SUPPORTED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: {ext}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
-        )
-
-    # Read file content
-    content = await file.read()
-
-    # Convert based on file type
-    if ext == ".pdf":
-        return pdf_bytes_to_base64_images(content)
-    else:
-        # Image file - get MIME type and convert
-        mime_type = IMAGE_MIME_TYPES.get(ext, "image/png")
-        return [image_bytes_to_base64(content, mime_type)]
-
-
-@router.post("/ocr/upload")
-async def extract_text_upload(
-    file: FileUpload,
-    model: str = Form(
-        default="surya", description="OCR backend: surya, easyocr, paddleocr, tesseract"
-    ),
-    languages: str = Form(
-        default="en", description="Comma-separated language codes (e.g., 'en,fr')"
-    ),
-    return_boxes: bool = Form(
-        default=False, description="Return bounding boxes for detected text"
-    ),
-) -> dict[str, Any]:
-    """OCR endpoint with file upload.
-
-    Upload a PDF or image file directly. PDFs are converted to images automatically.
-
-    Supported formats: PDF, PNG, JPEG, GIF, WebP, BMP, TIFF
-
-    Example using curl:
-    ```bash
-    curl -X POST http://localhost:8000/v1/vision/ocr/upload \\
-      -F "file=@document.pdf" \\
-      -F "model=surya" \\
-      -F "languages=en"
-    ```
-    """
-    # Convert file to base64 images
-    images = await _validate_and_convert_file(file)
-
-    # Parse languages
-    lang_list = [lang.strip() for lang in languages.split(",") if lang.strip()]
-
-    return await UniversalRuntimeService.ocr(
-        model=model,
-        images=images,
-        languages=lang_list if lang_list else None,
-        return_boxes=return_boxes,
-    )
-
-
-@router.post("/documents/extract/upload")
-async def extract_from_documents_upload(
-    file: FileUpload,
-    model: str = Form(
-        ...,
-        description="HuggingFace model ID (e.g., naver-clova-ix/donut-base-finetuned-docvqa)",
-    ),
-    prompts: str = Form(default="", description="Comma-separated prompts for VQA task"),
-    task: str = Form(
-        default="extraction", description="Task: extraction, vqa, or classification"
-    ),
-) -> dict[str, Any]:
-    """Document extraction endpoint with file upload.
-
-    Upload a PDF or image file directly. PDFs are converted to images automatically.
-
-    Supported formats: PDF, PNG, JPEG, GIF, WebP, BMP, TIFF
-
-    Example using curl:
-    ```bash
-    curl -X POST http://localhost:8000/v1/vision/documents/extract/upload \\
-      -F "file=@receipt.pdf" \\
-      -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \\
-      -F "prompts=What is the total amount?,What is the date?" \\
-      -F "task=vqa"
-    ```
-    """
     # Validate task
     valid_tasks = {"extraction", "vqa", "classification"}
     if task not in valid_tasks:
@@ -277,8 +274,8 @@ async def extract_from_documents_upload(
             detail=f"Invalid task: {task}. Must be one of: {', '.join(valid_tasks)}",
         )
 
-    # Convert file to base64 images
-    images = await _validate_and_convert_file(file)
+    # Get images from file or base64 input
+    image_list = await _get_images_from_input(file, images)
 
     # Parse prompts
     prompt_list = (
@@ -287,7 +284,7 @@ async def extract_from_documents_upload(
 
     return await UniversalRuntimeService.extract_documents(
         model=model,
-        images=images,
+        images=image_list,
         prompts=prompt_list,
         task=task,  # type: ignore
     )

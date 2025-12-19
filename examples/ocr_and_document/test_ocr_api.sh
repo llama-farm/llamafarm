@@ -2,7 +2,7 @@
 # Test OCR endpoint via LlamaFarm API (proxied to Universal Runtime)
 #
 # This script demonstrates running OCR by uploading files directly
-# to the /v1/vision/ocr/upload endpoint.
+# to the /v1/vision/ocr endpoint.
 #
 # Usage: ./test_ocr_api.sh [PORT] [IMAGE_FILE]
 #   PORT defaults to 8000 (LlamaFarm API)
@@ -61,7 +61,7 @@ echo "   (EasyOCR is widely available and doesn't require GPU)"
 echo ""
 
 # Run OCR with file upload
-OCR_RESPONSE=$(curl -s -X POST "${BASE_URL}/ocr/upload" \
+OCR_RESPONSE=$(curl -s -X POST "${BASE_URL}/ocr" \
     -F "file=@${IMAGE_FILE}" \
     -F "model=easyocr" \
     -F "languages=en" \

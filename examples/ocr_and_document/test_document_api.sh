@@ -2,7 +2,7 @@
 # Test Document Understanding endpoint via LlamaFarm API
 #
 # This script demonstrates running document VQA by uploading files directly
-# to the /v1/vision/documents/extract/upload endpoint.
+# to the /v1/vision/documents/extract endpoint.
 #
 # Usage: ./test_document_api.sh [PORT] [IMAGE_FILE]
 #   PORT defaults to 8000 (LlamaFarm API)
@@ -73,7 +73,7 @@ echo "  - What items were purchased?"
 echo "  - What is the date?"
 echo ""
 
-DOC_RESPONSE=$(curl -s -X POST "${BASE_URL}/documents/extract/upload" \
+DOC_RESPONSE=$(curl -s -X POST "${BASE_URL}/documents/extract" \
     -F "file=@${IMAGE_FILE}" \
     -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
     -F "prompts=${QUESTIONS}" \

@@ -164,6 +164,11 @@ Common HTTP status codes:
 - `POST /v1/models/download` - Download/cache a model
 - `DELETE /v1/models/{model_name}` - Delete cached model
 
+### Vision (OCR & Document Extraction)
+
+- `POST /v1/vision/ocr` - OCR text extraction (accepts file upload or base64)
+- `POST /v1/vision/documents/extract` - Document extraction/VQA (accepts file upload or base64)
+
 ### Health
 
 - `GET /health` - Overall health check
@@ -2353,11 +2358,151 @@ console.log(result.choices[0].message.content);
 
 ---
 
+## Vision API (OCR & Document Extraction)
+
+The Vision API provides OCR and document extraction capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime, handling file uploads and base64 image conversion automatically.
+
+**Base URL:** `http://localhost:8000/v1/vision`
+
+### OCR Endpoint
+
+Extract text from images and PDFs using multiple OCR backends.
+
+**Endpoint:** `POST /v1/vision/ocr`
+
+**Content-Type:** `multipart/form-data`
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `file` | file | No* | - | PDF or image file to process |
+| `images` | string | No* | - | Base64-encoded images as JSON array |
+| `model` | string | No | `surya` | OCR backend: `surya`, `easyocr`, `paddleocr`, `tesseract` |
+| `languages` | string | No | `en` | Comma-separated language codes (e.g., `en,fr`) |
+| `return_boxes` | boolean | No | `false` | Return bounding boxes for detected text |
+
+*Either `file` or `images` must be provided.
+
+**Supported File Types:** PDF, PNG, JPG, JPEG, GIF, WebP, BMP, TIFF
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "index": 0,
+      "text": "Extracted text from the document...",
+      "confidence": 0.95
+    }
+  ],
+  "model": "surya",
+  "usage": {"images_processed": 1}
+}
+```
+
+**Example (File Upload):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/ocr \
+  -F "file=@document.pdf" \
+  -F "model=easyocr" \
+  -F "languages=en"
+```
+
+**Example (Base64 Images):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/ocr \
+  -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
+  -F "model=surya" \
+  -F "languages=en"
+```
+
+### Document Extraction Endpoint
+
+Extract structured data from documents using vision-language models.
+
+**Endpoint:** `POST /v1/vision/documents/extract`
+
+**Content-Type:** `multipart/form-data`
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `file` | file | No* | - | PDF or image file to process |
+| `images` | string | No* | - | Base64-encoded images as JSON array |
+| `model` | string | Yes | - | HuggingFace model ID (e.g., `naver-clova-ix/donut-base-finetuned-docvqa`) |
+| `prompts` | string | No | - | Comma-separated prompts for VQA task |
+| `task` | string | No | `extraction` | Task type: `extraction`, `vqa`, `classification` |
+
+*Either `file` or `images` must be provided.
+
+**Supported Models:**
+
+| Model | Description |
+|-------|-------------|
+| `naver-clova-ix/donut-base-finetuned-cord-v2` | Receipt/invoice extraction |
+| `naver-clova-ix/donut-base-finetuned-docvqa` | Document Q&A |
+| `microsoft/layoutlmv3-base-finetuned-docvqa` | Document Q&A with layout |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "index": 0,
+      "confidence": 0.9,
+      "text": "<s_docvqa><s_question>What is the total?</s_question><s_answer>$15.99</s_answer>",
+      "fields": [
+        {"key": "question", "value": "What is the total?", "confidence": 0.9},
+        {"key": "answer", "value": "$15.99", "confidence": 0.9}
+      ]
+    }
+  ],
+  "model": "naver-clova-ix/donut-base-finetuned-docvqa",
+  "task": "vqa",
+  "usage": {"documents_processed": 1}
+}
+```
+
+**Example (Document VQA with File Upload):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/documents/extract \
+  -F "file=@receipt.pdf" \
+  -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
+  -F "prompts=What is the store name?,What is the total amount?" \
+  -F "task=vqa"
+```
+
+**Example (Extraction with Base64):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/documents/extract \
+  -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
+  -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
+  -F "task=extraction"
+```
+
+---
+
 ## Universal Runtime API
 
 The Universal Runtime is a separate service (port 11540) that provides specialized ML endpoints for document processing, text analysis, embeddings, and anomaly detection.
 
 **Base URL:** `http://localhost:11540`
+
+:::tip Using Vision APIs
+For OCR and document extraction, you can use either:
+- **LlamaFarm API** (`/v1/vision/*`) - Accepts file uploads directly, converts PDFs to images automatically
+- **Universal Runtime** (`/v1/ocr`, `/v1/documents/extract`) - Accepts base64 images or file IDs
+:::
 
 ### Starting the Universal Runtime
 
@@ -2378,8 +2523,8 @@ nx start universal-runtime
 | **Files** | `GET /v1/files/{id}` | Get file metadata |
 | **Files** | `GET /v1/files/{id}/images` | Get file as base64 images |
 | **Files** | `DELETE /v1/files/{id}` | Delete uploaded file |
-| **OCR** | `POST /v1/ocr` | Extract text from images/PDFs |
-| **Documents** | `POST /v1/documents/extract` | Extract structured data from documents |
+| **OCR** | `POST /v1/ocr` | Extract text from images (base64) |
+| **Documents** | `POST /v1/documents/extract` | Extract structured data (base64) |
 | **Classification** | `POST /v1/classify` | Classify text using pre-trained models (sentiment, etc.) |
 | **Custom Classifier** | `POST /v1/classifier/fit` | Train custom classifier (SetFit few-shot) |
 | **Custom Classifier** | `POST /v1/classifier/predict` | Classify with trained custom model |
