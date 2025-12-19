@@ -38,6 +38,20 @@ from .client import (
 
 logger = FastAPIStructLogger(__name__)
 
+
+def _is_valid_message_value(v: Any) -> bool:
+    """Check if a message field value is valid for the OpenAI API.
+
+    OpenAI rejects:
+    - empty strings for 'name': "Expected a string with minimum length 1"
+    - empty arrays for 'tool_calls': "Expected an array with minimum length 1"
+    """
+    if v is None:
+        return False
+    if v == "":
+        return False
+    return not (isinstance(v, list) and len(v) == 0)
+
 TOOLS_SYSTEM_MESSAGE_PREFIX = """
 
 You may call one or more tools to assist with the user query.
@@ -114,20 +128,10 @@ class LFAgentClientOpenAI(LFAgentClient):
         stream_param: Literal[False] = False
 
         # Filter out None, empty strings, and empty arrays from messages to avoid OpenAI validation errors
-        # OpenAI rejects:
-        # - empty strings for 'name': "Expected a string with minimum length 1"
-        # - empty arrays for 'tool_calls': "Expected an array with minimum length 1"
-        def _is_valid_value(v: Any) -> bool:
-            if v is None:
-                return False
-            if v == "":
-                return False
-            return not (isinstance(v, list) and len(v) == 0)
-
         cleaned_messages = [
             cast(
                 LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if _is_valid_value(v)},
+                {k: v for k, v in msg.items() if _is_valid_message_value(v)},
             )
             for msg in messages
         ]
@@ -200,20 +204,10 @@ class LFAgentClientOpenAI(LFAgentClient):
         stream_param: Literal[True] = True
 
         # Filter out None, empty strings, and empty arrays from messages to avoid OpenAI validation errors
-        # OpenAI rejects:
-        # - empty strings for 'name': "Expected a string with minimum length 1"
-        # - empty arrays for 'tool_calls': "Expected an array with minimum length 1"
-        def _is_valid_value(v: Any) -> bool:
-            if v is None:
-                return False
-            if v == "":
-                return False
-            return not (isinstance(v, list) and len(v) == 0)
-
         cleaned_messages = [
             cast(
                 LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if _is_valid_value(v)},
+                {k: v for k, v in msg.items() if _is_valid_message_value(v)},
             )
             for msg in messages
         ]
