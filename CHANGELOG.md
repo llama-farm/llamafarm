@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.0.21](https://github.com/llama-farm/llamafarm/compare/v0.0.20...v0.0.21) (2025-12-19)
+
+
+### Features
+
+* **api:** add vision router and model versioning for ML endpoints ([#608](https://github.com/llama-farm/llamafarm/issues/608)) ([41b93fa](https://github.com/llama-farm/llamafarm/commit/41b93fa842fc93b79392e68f5580aec8f01b7566))
+* **designer:** add Santa's Holiday Helper demo ([#618](https://github.com/llama-farm/llamafarm/issues/618)) ([0df6f1e](https://github.com/llama-farm/llamafarm/commit/0df6f1e7f5d6091111438d2cca03261e96570237))
+* **designer:** data enhancements ([#591](https://github.com/llama-farm/llamafarm/issues/591)) ([42b49e5](https://github.com/llama-farm/llamafarm/commit/42b49e5b4517730607855cbc488a20675ac9b9e3))
+* **designer:** enhance RAG UX ([a43e798](https://github.com/llama-farm/llamafarm/commit/a43e7981e4fe8f7388e62035f864765478fd334d))
+* **designer:** retrieval strat setting to test chat ([#597](https://github.com/llama-farm/llamafarm/issues/597)) ([f6bd7a0](https://github.com/llama-farm/llamafarm/commit/f6bd7a097cef47823ff2a4fe0ec0eda17a502ca7))
+* **designer:** test chat fixes/enhancements ([#609](https://github.com/llama-farm/llamafarm/issues/609)) ([47a25af](https://github.com/llama-farm/llamafarm/commit/47a25af7076c355155d2a3dce2502df3588edfc6))
+* global project listing command ([#604](https://github.com/llama-farm/llamafarm/issues/604)) ([30a9185](https://github.com/llama-farm/llamafarm/commit/30a9185688bd6b0042e756820f82f81888eb120d))
+* **runtime:** include native llama-cpp bindings for all platforms ([#603](https://github.com/llama-farm/llamafarm/issues/603)) ([df70282](https://github.com/llama-farm/llamafarm/commit/df70282ba7a3c5e70ba9bcaa2a55fe08add6f725))
+* **universal:** add specialized ML models - OCR, document extraction, anomaly detection ([#532](https://github.com/llama-farm/llamafarm/issues/532)) ([838eafd](https://github.com/llama-farm/llamafarm/commit/838eafde07b2bab1d628770823b9241c5284f6c9))
+
+
+### Bug Fixes
+
+* **app:** ensure lf binary has .exe on windows ([#596](https://github.com/llama-farm/llamafarm/issues/596)) ([e9914c9](https://github.com/llama-farm/llamafarm/commit/e9914c91d60d7050ce51dd8791d9b5f80a149845))
+* **app:** ensure multi-arch linux builds ([#586](https://github.com/llama-farm/llamafarm/issues/586)) ([1931098](https://github.com/llama-farm/llamafarm/commit/19310986f406302989188db0b8e2c4c889f8c520))
+* **cli:** upgrade fails on linux due to invalid copy op ([#585](https://github.com/llama-farm/llamafarm/issues/585)) ([fcd3877](https://github.com/llama-farm/llamafarm/commit/fcd3877ab0d8f9f4fb7a576bf6fafc26c2cb3a6b))
+* **designer:** add repo stars tag to home + fix toasts ([#601](https://github.com/llama-farm/llamafarm/issues/601)) ([a13bc4a](https://github.com/llama-farm/llamafarm/commit/a13bc4a70f79856c6b6f3b352fac3ea30ed8a1e7))
+* **designer:** remove console logs ([28d8291](https://github.com/llama-farm/llamafarm/commit/28d8291b80979e2299db770e2788182472ee8e7f))
+* model unload cleanup and OpenAI message validation ([#612](https://github.com/llama-farm/llamafarm/issues/612)) ([39d7ea5](https://github.com/llama-farm/llamafarm/commit/39d7ea555ab4196a8f4d9d45abed40bae5b1959e))
+* remove dual trigger race condition in e2e workflow ([#592](https://github.com/llama-farm/llamafarm/issues/592)) ([d220b61](https://github.com/llama-farm/llamafarm/commit/d220b616421a40b91810e0abed08d5e3d297b3a2))
+* **universal:** convert numpy.bool to native bool in anomaly detection ([#620](https://github.com/llama-farm/llamafarm/issues/620)) ([1b34175](https://github.com/llama-farm/llamafarm/commit/1b341757f56eb884330bdbc59052f3c87f058e46)), closes [#619](https://github.com/llama-farm/llamafarm/issues/619)
+
+
+### Miscellaneous Chores
+
+* release 0.0.21 ([d8c8d31](https://github.com/llama-farm/llamafarm/commit/d8c8d31c9dd908d6251d1110d3acaf5b34fb89be))
+
 ## [0.0.20](https://github.com/llama-farm/llamafarm/compare/v0.0.19...v0.0.20) (2025-12-10)
 
 
