@@ -1,8 +1,8 @@
 #!/bin/bash
 # Test OCR endpoint via LlamaFarm API (proxied to Universal Runtime)
 #
-# This script demonstrates running OCR by passing base64-encoded images
-# directly to the /v1/vision/ocr endpoint.
+# This script demonstrates running OCR by uploading files directly
+# to the /v1/vision/ocr/upload endpoint.
 #
 # Usage: ./test_ocr_api.sh [PORT] [IMAGE_FILE]
 #   PORT defaults to 8000 (LlamaFarm API)
@@ -52,33 +52,20 @@ if [ ! -f "$IMAGE_FILE" ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}1. Encoding image to base64...${NC}"
+echo -e "${YELLOW}1. Uploading file for OCR...${NC}"
 echo "   File: $(basename "$IMAGE_FILE")"
-echo ""
-
-# Encode image to base64
-BASE64_IMAGE=$(base64 < "$IMAGE_FILE" | tr -d '\n')
-MIME_TYPE="image/png"
-if [[ "$IMAGE_FILE" == *.jpg ]] || [[ "$IMAGE_FILE" == *.jpeg ]]; then
-    MIME_TYPE="image/jpeg"
-fi
-
-echo -e "${GREEN}✓ Image encoded (${#BASE64_IMAGE} chars)${NC}"
 echo ""
 
 echo -e "${YELLOW}2. Running OCR with EasyOCR backend...${NC}"
 echo "   (EasyOCR is widely available and doesn't require GPU)"
 echo ""
 
-# Run OCR with base64 image
-OCR_RESPONSE=$(curl -s -X POST "${BASE_URL}/ocr" \
-    -H "Content-Type: application/json" \
-    -d "{
-        \"model\": \"easyocr\",
-        \"images\": [\"data:${MIME_TYPE};base64,${BASE64_IMAGE}\"],
-        \"languages\": [\"en\"],
-        \"return_boxes\": false
-    }")
+# Run OCR with file upload
+OCR_RESPONSE=$(curl -s -X POST "${BASE_URL}/ocr/upload" \
+    -F "file=@${IMAGE_FILE}" \
+    -F "model=easyocr" \
+    -F "languages=en" \
+    -F "return_boxes=false")
 
 echo "OCR Response:"
 echo "$OCR_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$OCR_RESPONSE"

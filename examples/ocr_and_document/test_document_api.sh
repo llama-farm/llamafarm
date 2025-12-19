@@ -1,8 +1,8 @@
 #!/bin/bash
 # Test Document Understanding endpoint via LlamaFarm API
 #
-# This script demonstrates running document VQA by passing base64-encoded images
-# directly to the /v1/vision/documents/extract endpoint.
+# This script demonstrates running document VQA by uploading files directly
+# to the /v1/vision/documents/extract/upload endpoint.
 #
 # Usage: ./test_document_api.sh [PORT] [IMAGE_FILE]
 #   PORT defaults to 8000 (LlamaFarm API)
@@ -52,18 +52,8 @@ if [ ! -f "$IMAGE_FILE" ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}1. Encoding image to base64...${NC}"
+echo -e "${YELLOW}1. Uploading file for Document VQA...${NC}"
 echo "   File: $(basename "$IMAGE_FILE")"
-echo ""
-
-# Encode image to base64
-BASE64_IMAGE=$(base64 < "$IMAGE_FILE" | tr -d '\n')
-MIME_TYPE="image/png"
-if [[ "$IMAGE_FILE" == *.jpg ]] || [[ "$IMAGE_FILE" == *.jpeg ]]; then
-    MIME_TYPE="image/jpeg"
-fi
-
-echo -e "${GREEN}✓ Image encoded (${#BASE64_IMAGE} chars)${NC}"
 echo ""
 
 echo -e "${YELLOW}2. Running Document VQA with Donut DocVQA...${NC}"
@@ -73,29 +63,31 @@ echo ""
 echo -e "${YELLOW}   Note: First run downloads the model (~1GB)...${NC}"
 echo ""
 
-# Questions to ask about the receipt
-QUESTIONS=(
-    "What is the store name?"
-    "What is the total amount?"
-    "What items were purchased?"
-    "What is the date?"
-)
+# Questions to ask about the receipt (comma-separated for the API)
+QUESTIONS="What is the store name?,What is the total amount?,What items were purchased?,What is the date?"
 
-for QUESTION in "${QUESTIONS[@]}"; do
-    echo -e "${BLUE}Question: ${QUESTION}${NC}"
+echo -e "${BLUE}Questions: ${NC}"
+echo "  - What is the store name?"
+echo "  - What is the total amount?"
+echo "  - What items were purchased?"
+echo "  - What is the date?"
+echo ""
 
-    DOC_RESPONSE=$(curl -s -X POST "${BASE_URL}/documents/extract" \
-        -H "Content-Type: application/json" \
-        --max-time 300 \
-        -d "{
-            \"model\": \"naver-clova-ix/donut-base-finetuned-docvqa\",
-            \"images\": [\"data:${MIME_TYPE};base64,${BASE64_IMAGE}\"],
-            \"prompts\": [\"${QUESTION}\"],
-            \"task\": \"vqa\"
-        }")
+DOC_RESPONSE=$(curl -s -X POST "${BASE_URL}/documents/extract/upload" \
+    -F "file=@${IMAGE_FILE}" \
+    -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
+    -F "prompts=${QUESTIONS}" \
+    -F "task=vqa" \
+    --max-time 300)
 
-    # Extract answer
-    ANSWER=$(echo "$DOC_RESPONSE" | python3 -c "
+echo -e "${BLUE}Response:${NC}"
+echo "$DOC_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DOC_RESPONSE"
+echo ""
+
+# Extract answers
+echo -e "${BLUE}Extracted Answers:${NC}"
+echo "---"
+echo "$DOC_RESPONSE" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -116,11 +108,9 @@ try:
             print(f'  Answer: {item[\"answer\"]}')
 except Exception as e:
     print(f'  Error: {e}')
-" 2>/dev/null || echo "  (parsing error)")
-
-    echo "$ANSWER"
-    echo ""
-done
+" 2>/dev/null || echo "  (parsing error)"
+echo "---"
+echo ""
 
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}  Test Complete!${NC}"
