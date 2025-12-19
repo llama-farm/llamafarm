@@ -65,6 +65,8 @@ function ClassifierModel() {
     { id: '1', name: '', examples: [] },
     { id: '2', name: '', examples: [] },
   ])
+  const [activeClassId, setActiveClassId] = useState<string>('1')
+  const [trainingDataInput, setTrainingDataInput] = useState('')
 
   // Settings state - disabled for now, using default SetFit model
   const [baseModel] = useState(DEFAULT_BASE_MODEL)
@@ -170,6 +172,14 @@ function ClassifierModel() {
     setModelName(baseModelName)
   }, [isNewModel, baseModelName])
 
+  // Update training data input when active class changes
+  useEffect(() => {
+    const activeClass = classLabels.find(c => c.id === activeClassId)
+    if (activeClass) {
+      setTrainingDataInput(activeClass.examples.join('\n'))
+    }
+  }, [activeClassId, classLabels])
+
   const hasVersions = versions.length > 0
   const canTest = hasVersions || trainingState === 'success'
 
@@ -182,14 +192,20 @@ function ClassifierModel() {
   const handleAddClass = useCallback(() => {
     const newId = String(Date.now())
     setClassLabels(prev => [...prev, { id: newId, name: '', examples: [] }])
+    setActiveClassId(newId)
+    setTrainingDataInput('')
   }, [])
 
   const handleRemoveClass = useCallback(
     (classId: string) => {
       if (classLabels.length <= 2) return
       setClassLabels(prev => prev.filter(c => c.id !== classId))
+      if (activeClassId === classId) {
+        const remaining = classLabels.filter(c => c.id !== classId)
+        setActiveClassId(remaining[0]?.id || '')
+      }
     },
-    [classLabels]
+    [classLabels, activeClassId]
   )
 
   const handleClassNameChange = useCallback((classId: string, name: string) => {
@@ -197,6 +213,21 @@ function ClassifierModel() {
       prev.map(c => (c.id === classId ? { ...c, name } : c))
     )
   }, [])
+
+  const handleTrainingDataChange = useCallback(
+    (value: string) => {
+      setTrainingDataInput(value)
+      // Parse and update examples for active class
+      const examples = value
+        .split(/[\n,]/)
+        .map(s => s.trim())
+        .filter(Boolean)
+      setClassLabels(prev =>
+        prev.map(c => (c.id === activeClassId ? { ...c, examples } : c))
+      )
+    },
+    [activeClassId]
+  )
 
   const handleTrain = useCallback(async () => {
     if (!canTrain) return
@@ -328,6 +359,8 @@ function ClassifierModel() {
     ? 'New classifier model'
     : modelName || 'Classifier model'
 
+  const activeClass = classLabels.find(c => c.id === activeClassId)
+
   if (isLoadingModels && !isNewModel) {
     return (
       <div className="flex-1 min-h-0 overflow-auto pb-20">
@@ -425,78 +458,90 @@ function ClassifierModel() {
           ) : (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left: Class Labels as Pairs */}
+                {/* Left: Training Data with Class Labels */}
                 <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-sm font-medium">
-                      Class labels{' '}
-                      {isNewModel && <span className="text-destructive">*</span>}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Define at least 2 classes with example texts for each.
-                    </p>
-                  </div>
-
-                  {/* Class pairs */}
-                  <div className="flex flex-col gap-4">
-                    {classLabels.map((classLabel, index) => (
-                      <div
-                        key={classLabel.id}
-                        className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-muted/30"
+                  {/* Class labels section */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">
+                        Class labels{' '}
+                        {isNewModel && <span className="text-destructive">*</span>}
+                      </Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleAddClass}
+                        className="text-xs gap-1"
                       >
-                        <div className="flex items-center gap-2">
+                        <FontIcon type="add" className="w-3.5 h-3.5" />
+                        Add class
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Define at least 2 classes. Click a class to add training examples.
+                    </p>
+
+                    {/* Class pills */}
+                    <div className="flex flex-wrap gap-2">
+                      {classLabels.map(classLabel => (
+                        <div
+                          key={classLabel.id}
+                          className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
+                            activeClassId === classLabel.id
+                              ? 'border-primary bg-primary/10'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                          onClick={() => setActiveClassId(classLabel.id)}
+                        >
                           <Input
                             value={classLabel.name}
-                            onChange={e => handleClassNameChange(classLabel.id, e.target.value)}
-                            placeholder={`Class ${index + 1} name`}
-                            className="flex-1 font-medium"
+                            onChange={e => {
+                              e.stopPropagation()
+                              handleClassNameChange(classLabel.id, e.target.value)
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            placeholder="Label name"
+                            className="border-0 bg-transparent p-0 h-auto w-24 text-sm focus-visible:ring-0"
                           />
+                          {classLabel.examples.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              ({classLabel.examples.length})
+                            </span>
+                          )}
                           {classLabels.length > 2 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveClass(classLabel.id)}
-                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleRemoveClass(classLabel.id)
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
                             >
-                              <FontIcon type="close" className="w-4 h-4" />
-                            </Button>
+                              <FontIcon type="close" className="w-3 h-3" />
+                            </button>
                           )}
                         </div>
-                        <Textarea
-                          placeholder="Enter examples for this class (one per line or comma-separated)"
-                          value={classLabel.examples.join('\n')}
-                          onChange={e => {
-                            const examples = e.target.value
-                              .split(/[\n,]/)
-                              .map(s => s.trim())
-                              .filter(Boolean)
-                            setClassLabels(prev =>
-                              prev.map(c =>
-                                c.id === classLabel.id ? { ...c, examples } : c
-                              )
-                            )
-                          }}
-                          rows={2}
-                          className="font-mono text-sm"
-                        />
-                        {classLabel.examples.length > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            {classLabel.examples.length} example{classLabel.examples.length !== 1 ? 's' : ''}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Add class button */}
-                  <Button
-                    variant="outline"
-                    onClick={handleAddClass}
-                    className="gap-2 w-full"
-                  >
-                    <FontIcon type="add" className="w-4 h-4" />
-                    Add class
-                  </Button>
+                  {/* Training data for selected class */}
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="training-data" className="text-sm font-medium">
+                      Examples for "{activeClass?.name || 'selected class'}"
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Add example texts that belong to this class. Separate entries by
+                      new lines or commas.
+                    </p>
+                    <Textarea
+                      id="training-data"
+                      placeholder="Paste or type examples for this class, separated by new lines or commas"
+                      value={trainingDataInput}
+                      onChange={e => handleTrainingDataChange(e.target.value)}
+                      rows={6}
+                      className="font-mono text-sm"
+                    />
+                  </div>
                 </div>
 
                 {/* Right: Settings */}
