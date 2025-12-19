@@ -238,13 +238,15 @@ func (sm *ServiceManager) EnsureService(serviceName string) error {
 	for _, svcName := range resolvedOrder {
 		serviceDef := ServiceGraph[svcName]
 		if err := sm.ensureSingleService(svcName); err != nil {
-			if serviceDef.Optional {
+			// Only treat as optional if it's a dependency, not the explicitly requested service
+			isExplicitlyRequested := svcName == serviceName
+			if serviceDef.Optional && !isExplicitlyRequested {
 				// Log warning but continue with other services
-				fmt.Fprintf(os.Stderr, "⚠ Optional service %s failed to start: %v\n", svcName, err)
+				fmt.Fprintf(os.Stderr, "⚠ Optional dependency %s failed to start: %v\n", svcName, err)
 				fmt.Fprintf(os.Stderr, "  Some features may be unavailable. Check logs for details.\n")
 				continue
 			}
-			return fmt.Errorf("failed to ensure dependency %s: %w", svcName, err)
+			return fmt.Errorf("failed to ensure service %s: %w", svcName, err)
 		}
 	}
 
@@ -259,6 +261,12 @@ func (sm *ServiceManager) EnsureService(serviceName string) error {
 func (sm *ServiceManager) EnsureServices(serviceNames ...string) error {
 	if len(serviceNames) == 0 {
 		return nil
+	}
+
+	// Track explicitly requested services (these must succeed even if marked Optional)
+	explicitlyRequested := make(map[string]bool)
+	for _, name := range serviceNames {
+		explicitlyRequested[name] = true
 	}
 
 	// Collect all services and their dependencies in proper order
@@ -292,9 +300,11 @@ func (sm *ServiceManager) EnsureServices(serviceNames ...string) error {
 	for _, svcName := range orderedServices {
 		serviceDef := ServiceGraph[svcName]
 		if err := sm.ensureSingleService(svcName); err != nil {
-			if serviceDef.Optional {
+			// Only treat as optional if it's a dependency, not an explicitly requested service
+			isExplicitlyRequested := explicitlyRequested[svcName]
+			if serviceDef.Optional && !isExplicitlyRequested {
 				// Log warning but continue with other services
-				fmt.Fprintf(os.Stderr, "⚠ Optional service %s failed to start: %v\n", svcName, err)
+				fmt.Fprintf(os.Stderr, "⚠ Optional dependency %s failed to start: %v\n", svcName, err)
 				fmt.Fprintf(os.Stderr, "  Some features may be unavailable. Check logs for details.\n")
 				optionalFailures = append(optionalFailures, svcName)
 				continue
@@ -305,7 +315,7 @@ func (sm *ServiceManager) EnsureServices(serviceNames ...string) error {
 
 	// Report summary if any optional services failed
 	if len(optionalFailures) > 0 {
-		fmt.Fprintf(os.Stderr, "\n⚠ Started with degraded functionality. Failed optional services: %s\n", strings.Join(optionalFailures, ", "))
+		fmt.Fprintf(os.Stderr, "\n⚠ Started with degraded functionality. Failed optional dependencies: %s\n", strings.Join(optionalFailures, ", "))
 	}
 
 	return nil
