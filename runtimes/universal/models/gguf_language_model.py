@@ -260,11 +260,9 @@ class GGUFLanguageModel(BaseModel):
                 if thinking_budget is not None:
                     from utils.thinking import ThinkingBudgetProcessor
 
-                    logits_processor = [
-                        ThinkingBudgetProcessor(
-                            self.llama, max_thinking_tokens=thinking_budget
-                        )
-                    ]
+                    logits_processor = ThinkingBudgetProcessor(
+                        self.llama, max_thinking_tokens=thinking_budget
+                    )
 
                 # Use create_chat_completion which applies the model's chat template
                 return self.llama.create_chat_completion(
@@ -340,11 +338,9 @@ class GGUFLanguageModel(BaseModel):
                 if thinking_budget is not None:
                     from utils.thinking import ThinkingBudgetProcessor
 
-                    logits_processor = [
-                        ThinkingBudgetProcessor(
-                            self.llama, max_thinking_tokens=thinking_budget
-                        )
-                    ]
+                    logits_processor = ThinkingBudgetProcessor(
+                        self.llama, max_thinking_tokens=thinking_budget
+                    )
 
                 for chunk in self.llama.create_chat_completion(
                     messages=messages,
