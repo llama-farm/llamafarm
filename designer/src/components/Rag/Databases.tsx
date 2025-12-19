@@ -31,10 +31,15 @@ import {
   useDatabaseManager,
   type Database as DatabaseType,
 } from '../../hooks/useDatabaseManager'
-import { Settings, Star, Trash2 } from 'lucide-react'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { sanitizeConfigValue, extractSafeHostname } from '../../utils/security'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu'
 
 type Database = {
   name: string
@@ -331,10 +336,27 @@ function Databases() {
 
   const getEmbeddingSummary = (strategyName: string): string => {
     const strategy = getEmbeddingStrategy(strategyName)
-    if (!strategy?.config) return 'Not configured'
-    // Extract model name from config and sanitize it
-    const model = strategy.config.model || strategy.config.modelId || strategy.config.model_name
-    return sanitizeConfigValue(model)
+    
+    // Get model from API response config
+    let model = strategy?.config?.model || strategy?.config?.modelId || strategy?.config?.model_name
+    
+    // If not found in API response, try project config as fallback
+    if (!model && strategy) {
+      const projectConfig = (projectResp as any)?.project?.config
+      const configDb = projectConfig?.rag?.databases?.find(
+        (d: any) => d.name === activeDatabase
+      )
+      const fullStrategy = configDb?.embedding_strategies?.find(
+        (s: any) => s.name === strategyName
+      )
+      if (fullStrategy?.config) {
+        model = fullStrategy.config.model || fullStrategy.config.modelId || fullStrategy.config.model_name
+      }
+    }
+    
+    if (!model) return 'Not configured'
+    const sanitized = sanitizeConfigValue(model)
+    return sanitized || 'Not configured'
   }
 
   const getEmbeddingProvider = (strategyName: string): string | null => {
@@ -345,7 +367,8 @@ function Databases() {
       'OllamaEmbedder': 'Ollama',
       'OpenAIEmbedder': 'OpenAI',
       'HuggingFaceEmbedder': 'HuggingFace',
-      'SentenceTransformerEmbedder': 'Sentence Transformers'
+      'SentenceTransformerEmbedder': 'Sentence Transformers',
+      'UniversalEmbedder': 'Universal'
     }
     return typeToProvider[strategy.type] || strategy.type
   }
@@ -386,12 +409,7 @@ function Databases() {
     return null
   }
 
-  const getEmbeddingRuntime = (strategyName: string): 'Local' | 'Cloud' | null => {
-    const strategy = getEmbeddingStrategy(strategyName)
-    if (!strategy) return null
-    // Ollama is local, others are typically cloud
-    return strategy.type === 'OllamaEmbedder' ? 'Local' : 'Cloud'
-  }
+  // getEmbeddingRuntime removed - unused function
   // Get retrieval strategy details from server data or project config
   const getRetrievalStrategy = (strategyName: string) => {
     // First try to get from API response
@@ -1073,7 +1091,7 @@ function Databases() {
             </div>
 
             {/* Embedding and Retrieval strategies - title outside card */}
-            <div className="text-sm font-medium mb-1">
+            <div className="text-sm font-medium mb-4">
               Project Embedding and retrieval strategies
             </div>
             {/* Embeddings card */}
@@ -1117,7 +1135,16 @@ function Databases() {
                 {sortedEmbeddings.map(ei => (
                   <div
                     key={ei.id}
-                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 transition-colors ${ei.enabled ? '' : 'opacity-70'} ${embeddingCount === 1 ? 'md:col-span-2' : ''}`}
+                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 transition-colors cursor-pointer ${ei.enabled ? '' : 'opacity-70'} ${embeddingCount === 1 ? 'md:col-span-2' : ''}`}
+                    onClick={() => handleEditEmbedding(ei)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleEditEmbedding(ei)
+                      }
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
@@ -1127,9 +1154,6 @@ function Databases() {
                         <div className="text-sm text-muted-foreground">
                           {getEmbeddingProvider(ei.name) || 'Provider'}
                         </div>
-                        <div className="text-xs font-mono text-foreground mt-1">
-                          {getEmbeddingSummary(ei.name)}
-                        </div>
                         <div className="text-xs text-muted-foreground w-full truncate mt-0.5">
                           {(() => {
                             const loc = getEmbeddingLocation(ei.name)
@@ -1137,83 +1161,73 @@ function Databases() {
                           })()}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => handleEditEmbedding(ei)}
-                                title="Edit configuration"
+                      <div
+                        className="flex items-center"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                              onClick={e => e.stopPropagation()}
+                              aria-label="Strategy actions"
+                            >
+                              <FontIcon type="overflow" className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-[10rem] w-[10rem]">
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleEditEmbedding(ei)
+                              }}
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                            {!ei.isDefault && (
+                              <DropdownMenuItem
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  handleSetDefaultEmbedding(ei.name)
+                                }}
                               >
-                                <Settings className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Edit configuration</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        {!ei.isDefault && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => handleSetDefaultEmbedding(ei.name)}
-                                  title="Set as default"
-                                >
-                                  <Star className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Set as default</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteEmbedding(
+                                Make default
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleDeleteEmbedding(
                                   ei.name,
                                   ei.isDefault,
                                   sortedEmbeddings.length
-                                )}
-                                disabled={ei.isDefault || sortedEmbeddings.length === 1}
-                                title={
-                                  sortedEmbeddings.length === 1
-                                    ? 'At least one embedding strategy is required'
-                                    : ei.isDefault
-                                      ? 'Cannot delete default strategy'
-                                      : 'Delete strategy'
-                                }
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>
-                                {sortedEmbeddings.length === 1
-                                  ? 'At least one embedding strategy is required'
-                                  : ei.isDefault
-                                    ? 'Cannot delete default strategy'
-                                    : 'Delete strategy'}
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                                )
+                              }}
+                              disabled={ei.isDefault || sortedEmbeddings.length === 1}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap pt-2">
+                      {(() => {
+                        const modelSummary = getEmbeddingSummary(ei.name)
+                        // Show model name (or "No model selected") instead of Local badge
+                        return (
+                          <Badge
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-xl font-mono"
+                          >
+                            {modelSummary && modelSummary !== 'Not configured'
+                              ? modelSummary
+                              : 'No model selected'}
+                          </Badge>
+                        )
+                      })()}
                       {(() => {
                         const dim = getEmbeddingDimension(ei.name)
                         return dim ? (
@@ -1223,18 +1237,6 @@ function Databases() {
                             className="rounded-xl"
                           >
                             {dim}-d
-                          </Badge>
-                        ) : null
-                      })()}
-                      {(() => {
-                        const runtime = getEmbeddingRuntime(ei.name)
-                        return runtime ? (
-                          <Badge
-                            variant="secondary"
-                            size="sm"
-                            className="rounded-xl"
-                          >
-                            {runtime}
                           </Badge>
                         ) : null
                       })()}
@@ -1289,12 +1291,28 @@ function Databases() {
                 {sortedRetrievals.map(ri => (
                   <div
                     key={ri.id}
-                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-2 p-4 relative hover:bg-accent/20 transition-colors ${ri.enabled ? '' : 'opacity-70'} ${retrievalCount === 1 ? 'md:col-span-2' : ''}`}
+                    className={`w-full bg-card rounded-lg border border-border flex flex-col gap-1.5 p-3 relative hover:bg-accent/20 transition-colors cursor-pointer ${ri.enabled ? '' : 'opacity-70'} ${retrievalCount === 1 ? 'md:col-span-2' : ''}`}
+                    onClick={() => handleEditRetrieval(ri)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleEditRetrieval(ri)
+                      }
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="text-base font-semibold truncate">
-                          {ri.name}
+                        <div className="flex items-center gap-2">
+                          <div className="text-base font-semibold truncate">
+                            {ri.name}
+                          </div>
+                          {ri.isDefault && (
+                            <Badge variant="default" size="sm" className="rounded-xl">
+                              Default
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {getRetrievalDescription(ri.name)}
@@ -1306,88 +1324,56 @@ function Databases() {
                           {getRetrievalMeta(ri.name)}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => handleEditRetrieval(ri)}
-                                title="Edit configuration"
+                      <div
+                        className="flex items-center"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30"
+                              onClick={e => e.stopPropagation()}
+                              aria-label="Strategy actions"
+                            >
+                              <FontIcon type="overflow" className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-[10rem] w-[10rem]">
+                            <DropdownMenuItem
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleEditRetrieval(ri)
+                              }}
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                            {!ri.isDefault && (
+                              <DropdownMenuItem
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  handleSetDefaultRetrieval(ri.name)
+                                }}
                               >
-                                <Settings className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Edit configuration</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        {!ri.isDefault && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => handleSetDefaultRetrieval(ri.name)}
-                                  title="Set as default"
-                                >
-                                  <Star className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Set as default</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteRetrieval(
+                                Make default
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleDeleteRetrieval(
                                   ri.name,
                                   ri.isDefault,
                                   sortedRetrievals.length
-                                )}
-                                disabled={ri.isDefault || sortedRetrievals.length === 1}
-                                title={
-                                  sortedRetrievals.length === 1
-                                    ? 'At least one retrieval strategy is required'
-                                    : ri.isDefault
-                                      ? 'Cannot delete default strategy'
-                                      : 'Delete strategy'
-                                }
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>
-                                {sortedRetrievals.length === 1
-                                  ? 'At least one retrieval strategy is required'
-                                  : ri.isDefault
-                                    ? 'Cannot delete default strategy'
-                                    : 'Delete strategy'}
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                                )
+                              }}
+                              disabled={ri.isDefault || sortedRetrievals.length === 1}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap pt-2">
-                      {ri.isDefault && (
-                        <Badge variant="default" size="sm" className="rounded-xl">
-                          Default
-                        </Badge>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -1395,7 +1381,7 @@ function Databases() {
             </div>
 
             {/* Connected datasets section */}
-            <div className="text-sm font-medium mb-1 mt-6">
+            <div className="text-sm font-medium mb-4 mt-6">
               Connected datasets
             </div>
             <div className="rounded-lg border border-border bg-card p-4">

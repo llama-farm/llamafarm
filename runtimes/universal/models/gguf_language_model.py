@@ -5,17 +5,22 @@ Provides the same interface as LanguageModel but uses llama-cpp-python for
 GGUF quantized models, enabling faster inference and lower memory usage.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+import sys
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
-
-from llama_cpp import Llama
+from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
 from utils.model_format import get_gguf_file_path
 
 from .base import BaseModel
+
+if TYPE_CHECKING:
+    from llamafarm_llama import Llama
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +93,12 @@ class GGUFLanguageModel(BaseModel):
             self.token,
             preferred_quantization=self.preferred_quantization,
         )
+
+        # On Windows, convert backslashes to forward slashes for llama.cpp compatibility
+        # The underlying C library can have issues with Windows-style paths
+        if sys.platform == "win32":
+            gguf_path = gguf_path.replace("\\", "/")
+
         logger.info(f"GGUF file located at: {gguf_path}")
 
         # Compute optimal context size
@@ -121,14 +132,48 @@ class GGUFLanguageModel(BaseModel):
         loop = asyncio.get_running_loop()
 
         def _load_model():
-            return Llama(
-                model_path=gguf_path,
-                n_ctx=self.actual_n_ctx,  # Use computed context size
-                n_gpu_layers=n_gpu_layers,
-                n_threads=None,  # Auto-detect optimal threads
-                verbose=False,  # Disable verbose logging
-                seed=-1,  # Random seed (-1 = random)
-            )
+            import os
+
+            try:
+                from llamafarm_llama import Llama
+            except ImportError as e:
+                raise ImportError(
+                    "llamafarm-llama is required for GGUF models but is not installed. "
+                    "Install it with: pip install llamafarm-llama"
+                ) from e
+
+            # Verify file exists and is readable before attempting to load
+            if not os.path.exists(gguf_path):
+                raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
+            if not os.access(gguf_path, os.R_OK):
+                raise PermissionError(f"GGUF file not readable: {gguf_path}")
+
+            file_size_mb = os.path.getsize(gguf_path) / (1024 * 1024)
+            logger.info(f"Loading GGUF file ({file_size_mb:.1f} MB): {gguf_path}")
+
+            try:
+                return Llama(
+                    model_path=gguf_path,
+                    n_ctx=self.actual_n_ctx,  # Use computed context size
+                    n_gpu_layers=n_gpu_layers,
+                    n_threads=None,  # Auto-detect optimal threads
+                    verbose=False,  # Disable verbose logging (managed by ggml_logging)
+                    seed=-1,  # Random seed (-1 = random)
+                )
+            except ValueError as e:
+                # Provide more helpful error message for common issues
+                error_msg = str(e)
+                if "Failed to load model from file" in error_msg:
+                    logger.error(
+                        f"llama.cpp failed to load model. This can be caused by:\n"
+                        f"  1. Corrupted GGUF file - try deleting and re-downloading\n"
+                        f"  2. Incompatible llama-cpp-python wheel - try reinstalling\n"
+                        f"  3. Unsupported GGUF format version\n"
+                        f"  File: {gguf_path}\n"
+                        f"  Size: {file_size_mb:.1f} MB\n"
+                        f"  Context: {self.actual_n_ctx}"
+                    )
+                raise
 
         self.llama = await loop.run_in_executor(self._executor, _load_model)
 
@@ -259,9 +304,8 @@ class GGUFLanguageModel(BaseModel):
         Uses llama-cpp's create_chat_completion() with streaming, which applies
         the chat template embedded in the GGUF metadata.
 
-        Note: For streaming, thinking_budget is advisory only - we track tokens
-        but cannot force </think> mid-stream. Use non-streaming for strict
-        budget enforcement.
+        Thinking budget is enforced via logits processor, which forces the model
+        to generate </think> when the budget is reached.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys
@@ -269,7 +313,7 @@ class GGUFLanguageModel(BaseModel):
             temperature: Sampling temperature (0.0 = greedy, higher = more random)
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
-            thinking_budget: Maximum tokens for thinking (advisory for streaming)
+            thinking_budget: Maximum tokens for thinking before forcing </think>
 
         Yields:
             Generated text tokens as strings
@@ -291,6 +335,17 @@ class GGUFLanguageModel(BaseModel):
                 thinking_ended = False
                 accumulated_text = ""
 
+                # Set up logits processor for thinking budget enforcement
+                logits_processor = None
+                if thinking_budget is not None:
+                    from utils.thinking import ThinkingBudgetProcessor
+
+                    logits_processor = [
+                        ThinkingBudgetProcessor(
+                            self.llama, max_thinking_tokens=thinking_budget
+                        )
+                    ]
+
                 for chunk in self.llama.create_chat_completion(
                     messages=messages,
                     max_tokens=max_tokens,
@@ -298,6 +353,7 @@ class GGUFLanguageModel(BaseModel):
                     top_p=top_p,
                     stop=stop or [],
                     stream=True,
+                    logits_processor=logits_processor,
                 ):
                     delta = chunk["choices"][0].get("delta", {})
                     content = delta.get("content", "")
@@ -319,18 +375,6 @@ class GGUFLanguageModel(BaseModel):
                             queue.put(content), loop
                         )
                         future.result()
-
-                        # Log warning once if budget exceeded
-                        if (
-                            thinking_budget
-                            and thinking_tokens == thinking_budget
-                            and in_thinking
-                            and not thinking_ended
-                        ):
-                            logger.warning(
-                                f"Thinking budget ({thinking_budget}) exceeded in streaming mode. "
-                                "Consider using non-streaming for strict budget enforcement."
-                            )
             except Exception as e:
                 logger.error(f"Error in GGUF chat stream: {e}", exc_info=True)
                 future = asyncio.run_coroutine_threadsafe(queue.put(e), loop)

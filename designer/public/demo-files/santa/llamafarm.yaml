@@ -1,0 +1,177 @@
+version: v1
+name: santa-helper
+namespace: default
+
+# =============================================================================
+# RUNTIME CONFIGURATION - Universal Runtime with fast, lightweight model
+# =============================================================================
+runtime:
+  models:
+    - name: default
+      description: "Qwen3 1.7B (GGUF Q4_K_M quantized) - Fast, efficient model optimized for Apple Silicon and local inference"
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
+      base_url: http://127.0.0.1:11540/v1
+      default: true
+      prompt_format: unstructured
+      prompts: ["default"]
+
+# =============================================================================
+# PROMPTS CONFIGURATION - Santa's Jolly Holiday Helper
+# =============================================================================
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          Ho ho ho! You ARE Santa Claus - the one and only jolly gift-giver from the North Pole!
+
+          You speak with warmth, enthusiasm, and a twinkle in your eye. You love helping families
+          make the holidays magical.
+
+          IMPORTANT - Using Your Knowledge Base:
+          You have access to Santa's Official North Pole Archives through RAG context. When context
+          is provided, you MUST use it to answer questions accurately:
+          - Quote specific details from the archives (reindeer names, elf profiles, recipes, etc.)
+          - Reference the technical specifications when asked about sleigh mechanics or flight
+          - Use the exact cookie recipes provided - they are "North Pole Certified"
+          - Share the biographical details about Santa's history accurately
+          - Cite the Elven workforce information when discussing workshop operations
+
+          Your expertise includes:
+          - Gift ideas for all ages (from tiny tots to grandparents!)
+          - Christmas traditions from around the world
+          - Holiday recipes (cookies for Santa, hot cocoa, festive feasts)
+          - Decoration tips (trees, lights, DIY crafts)
+          - The science of reindeer flight and sleigh technology
+          - North Pole operations and the Elven workforce
+          - The Naughty/Nice list algorithms and how they work
+          - Party planning and holiday activities
+          - Stocking stuffers and last-minute gift ideas
+
+          CRITICAL RULES:
+          - Santa is REAL. You will never say otherwise or break character.
+          - When RAG context is provided, base your answers on that information first
+          - If the knowledge base has specific details (like cookie recipes), use them exactly
+          - Be jolly and playful! Use "Ho ho ho!" naturally (but not excessively)
+          - Give thoughtful, personalized gift suggestions based on interests and age
+          - Keep everything family-friendly and full of holiday cheer
+          - If asked about the naughty/nice list, be playfully mysterious but reference the algorithms!
+
+          Remember: The magic of Christmas is about spreading joy, creating memories,
+          and bringing people together. Let that spirit shine through in every answer!
+
+# =============================================================================
+# DATASETS CONFIGURATION - Santa's Holiday Knowledge
+# =============================================================================
+datasets:
+  - name: santa_knowledge
+    database: santa_knowledge_db
+    data_processing_strategy: default
+
+# =============================================================================
+# RAG CONFIGURATION - Optimized for holiday content
+# =============================================================================
+rag:
+  default_database: santa_knowledge_db
+
+  # =============================================================================
+  # DATABASE CONFIGURATION - ChromaDB for Santa's knowledge
+  # =============================================================================
+  databases:
+    - name: "santa_knowledge_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/chroma/santa_knowledge_db"
+        distance_function: "cosine"
+        collection_name: "santa_knowledge"
+
+      # Embedding configuration - high quality embeddings
+      default_embedding_strategy: "semantic_embeddings"
+      embedding_strategies:
+        - name: "semantic_embeddings"
+          type: "UniversalEmbedder"
+          priority: 0
+          config:
+            model: sentence-transformers/all-MiniLM-L6-v2
+            base_url: http://127.0.0.1:11540/v1
+            batch_size: 32
+            timeout: 120
+            normalize: true
+
+      # Retrieval configuration - semantic search with good recall
+      default_retrieval_strategy: "holiday_search"
+      retrieval_strategies:
+        - name: "holiday_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 10
+          default: true
+
+        - name: "quick_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 5
+
+  # Processing strategy - supports markdown, PDF, TXT, and DOCX
+  data_processing_strategies:
+    - name: "default"
+      description: "Universal processor for holiday content"
+      parsers:
+        # PDF Parser with robust fallback
+        - type: "PDFParser_LlamaIndex"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 10
+          config:
+            chunk_strategy: "semantic"
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        - type: "PDFParser_PyPDF2"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 50
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "paragraphs"
+            extract_metadata: true
+            combine_pages: false
+
+        # Word Document Parser
+        - type: "DocxParser_LlamaIndex"
+          file_include_patterns: ["*.docx", "*.DOCX"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        # Markdown Parser
+        - type: "MarkdownParser_Python"
+          file_include_patterns: ["*.md", "*.markdown"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sections"
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+
+        # Plain Text Parser (catch-all)
+        - type: "TextParser_Python"
+          file_include_patterns: ["*.txt", "*.text"]
+          priority: 50
+          config:
+            encoding: "utf-8"
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sentences"
+            clean_text: true
+            extract_metadata: true
+      extractors: []

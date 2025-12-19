@@ -1,31 +1,15 @@
 /**
  * Project constants and shared data structures
- * Centralized location for default projects and common project utilities
+ * Centralized location for project utilities
  */
 
 import type { Project } from '../types/project'
 import { getModelDisplayName } from './projectHelpers'
 
-export const DEFAULT_PROJECT_NAMES = [
-  'aircraft-mx-flow',
-  'customer-support',
-  'financial-analysis',
-  'equipment-monitoring',
-  'data-pipeline',
-]
-
-export const DEFAULT_PROJECTS = DEFAULT_PROJECT_NAMES.map((name, index) => ({
-  id: index + 1,
-  name,
-  model: 'TinyLama',
-  lastEdited: '8/15/2025',
-  description: `Default ${name} project`,
-}))
-
 /**
- * Extract project names from API response with fallback to defaults
+ * Extract project names from API response
  * @param apiResponse - The API response containing projects
- * @returns Array of project names
+ * @returns Array of project names (empty if no projects)
  */
 export const getProjectsList = (apiResponse?: {
   projects?: Project[]
@@ -36,45 +20,45 @@ export const getProjectsList = (apiResponse?: {
     const raw = localStorage.getItem('lf_custom_projects')
     if (raw) custom = JSON.parse(raw)
   } catch {}
-  const merged = [...new Set([...api, ...custom])]
-  return merged.length > 0 ? merged : DEFAULT_PROJECT_NAMES
+  return [...new Set([...api, ...custom])]
 }
 
 
 /**
  * Convert API projects to UI ProjectItem format
  * @param apiResponse - The API response containing projects
- * @returns Array of ProjectItem objects for UI display
+ * @returns Array of ProjectItem objects for UI display (empty if no projects)
  */
-export const getProjectsForUI = (apiResponse?: { projects?: Project[] }) => {
+export const getProjectsForUI = (
+  apiResponse?: { projects?: Project[] }
+) => {
   const api = apiResponse?.projects || []
   let custom: string[] = []
   try {
     const raw = localStorage.getItem('lf_custom_projects')
     if (raw) custom = JSON.parse(raw)
   } catch {}
-  if (api.length > 0 || custom.length > 0) {
-    const itemsFromApi = api.map((project, idx) => ({
-      id: idx + 1,
-      name: project.name,
-      model: getModelDisplayName(project.config),
+  
+  const itemsFromApi = api.map((project, idx) => ({
+    id: idx + 1,
+    name: project.name,
+    model: getModelDisplayName(project.config),
+    lastEdited: 'N/A',
+    description: project.config?.description || '',
+    validationError: project.validation_error,
+  }))
+  const startIndex = itemsFromApi.length
+  const itemsFromCustom = custom
+    .filter(name => !api.some(p => p.name === name))
+    .map((name, idx) => ({
+      id: startIndex + idx + 1,
+      name,
+      model: 'Unknown',
       lastEdited: 'N/A',
-      description: project.config?.description || '',
-      validationError: project.validation_error,
+      description: '',
     }))
-    const startIndex = itemsFromApi.length
-    const itemsFromCustom = custom
-      .filter(name => !api.some(p => p.name === name))
-      .map((name, idx) => ({
-        id: startIndex + idx + 1,
-        name,
-        model: 'Unknown',
-        lastEdited: 'N/A',
-        description: '',
-      }))
-    return [...itemsFromApi, ...itemsFromCustom]
-  }
-  return DEFAULT_PROJECTS
+  
+  return [...itemsFromApi, ...itemsFromCustom]
 }
 
 /**

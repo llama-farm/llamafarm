@@ -6,6 +6,7 @@
 # - common/ (shared Python utilities)
 # - config/ (configuration schema and types)
 # - runtimes/universal/ (universal runtime)
+# - packages/llamafarm-llama/ (llama.cpp Python bindings)
 # - designer/dist/ (built designer static files)
 # - ruff.toml (code formatting configuration)
 
@@ -30,7 +31,7 @@ ARCHIVE_PATH="${OUTPUT_DIR}/${ARCHIVE_NAME}"
 echo "Packaging LlamaFarm source code (version: $VERSION)..."
 
 # Verify required directories exist
-REQUIRED_DIRS=("server" "rag" "common" "config" "observability" "runtimes/universal" "designer/dist")
+REQUIRED_DIRS=("server" "rag" "common" "config" "observability" "runtimes/universal" "packages/llamafarm-llama" "designer/dist")
 for dir in "${REQUIRED_DIRS[@]}"; do
     if [ ! -d "$dir" ]; then
         echo "Error: Required directory not found: $dir" >&2
@@ -90,6 +91,10 @@ rsync -a "${RSYNC_EXCLUDE[@]}" observability/ "$SOURCE_DIR/observability/"
 echo "Copying runtimes/universal/..."
 mkdir -p "$SOURCE_DIR/runtimes"
 rsync -a "${RSYNC_EXCLUDE[@]}" runtimes/universal/ "$SOURCE_DIR/runtimes/universal/"
+
+echo "Copying packages/llamafarm-llama/..."
+mkdir -p "$SOURCE_DIR/packages"
+rsync -a "${RSYNC_EXCLUDE[@]}" packages/llamafarm-llama/ "$SOURCE_DIR/packages/llamafarm-llama/"
 
 echo "Copying designer/dist/..."
 mkdir -p "$SOURCE_DIR/designer"

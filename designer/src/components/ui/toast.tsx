@@ -102,7 +102,7 @@ function ToastItem({
     <div
       role="status"
       className={cn(
-        'min-w-[320px] max-w-[420px] rounded-lg border shadow-lg ring-1 ring-black/5 bg-card text-card-foreground px-4 py-3.5 flex items-center gap-3',
+        'min-w-[260px] max-w-[360px] rounded-lg border shadow-lg ring-1 ring-black/5 bg-card text-card-foreground px-3 py-2 flex items-center gap-2.5',
         toast.variant === 'destructive'
           ? 'border-destructive/50'
           : 'border-teal-600/40'
@@ -110,7 +110,7 @@ function ToastItem({
     >
       <div
         className={cn(
-          'w-7 h-7 flex-shrink-0 rounded-full grid place-items-center',
+          'w-5 h-5 flex-shrink-0 rounded-full grid place-items-center',
           toast.variant === 'destructive'
             ? 'bg-destructive text-destructive-foreground'
             : toast.icon === 'alert-triangle'
@@ -123,18 +123,18 @@ function ToastItem({
             toast.icon ||
             (toast.variant === 'destructive' ? 'close' : 'checkmark-filled')
           }
-          className="w-4 h-4"
+          className="w-3 h-3"
         />
       </div>
-      <div className="text-sm md:text-base leading-5 flex-1 break-words">
+      <div className="text-xs md:text-sm leading-4 flex-1 break-words">
         {toast.message}
       </div>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="flex-shrink-0 w-5 h-5 rounded-sm hover:opacity-80 hover:bg-muted/50 flex items-center justify-center transition-colors"
+        className="flex-shrink-0 w-7 h-7 rounded-sm hover:opacity-80 hover:bg-muted/50 flex items-center justify-center transition-colors -mr-1"
         aria-label="Dismiss"
       >
-        <FontIcon type="close" className="w-3.5 h-3.5" />
+        <FontIcon type="close" className="w-4 h-4" />
       </button>
     </div>
   )
@@ -159,20 +159,18 @@ function ToastGroup({
       <div
         role="status"
         className={cn(
-          'min-w-[320px] max-w-[420px] rounded-lg border shadow-lg ring-1 ring-black/5 bg-card text-card-foreground',
+          'min-w-[260px] max-w-[360px] rounded-lg border shadow-lg ring-1 ring-black/5 bg-card text-card-foreground',
           group.variant === 'destructive'
             ? 'border-destructive/50'
             : 'border-teal-600/40'
         )}
       >
-        <div className="px-4 py-3.5 flex items-center gap-3">
+        <div className="px-3 py-2 flex items-center gap-2.5">
           <CollapsibleTrigger asChild>
-            <button
-              className="flex-1 flex items-center gap-3 hover:bg-muted/30 transition-colors rounded-lg -ml-3 -mr-3 pl-3 pr-3"
-            >
+            <button className="flex-1 flex items-center gap-2.5 hover:bg-muted/30 transition-colors rounded-lg -ml-2 -mr-2 pl-2 pr-2">
               <div
                 className={cn(
-                  'w-7 h-7 flex-shrink-0 rounded-full grid place-items-center',
+                  'w-5 h-5 flex-shrink-0 rounded-full grid place-items-center',
                   group.variant === 'destructive'
                     ? 'bg-destructive text-destructive-foreground'
                     : group.icon === 'alert-triangle'
@@ -183,34 +181,36 @@ function ToastGroup({
                 <FontIcon
                   type={
                     group.icon ||
-                    (group.variant === 'destructive' ? 'close' : 'checkmark-filled')
+                    (group.variant === 'destructive'
+                      ? 'close'
+                      : 'checkmark-filled')
                   }
-                  className="w-4 h-4"
+                  className="w-3 h-3"
                 />
               </div>
-              <div className="text-sm md:text-base leading-5 flex-1 break-words text-left">
+              <div className="text-xs md:text-sm leading-4 flex-1 break-words text-left">
                 {getGroupMessage(group)}
               </div>
               <FontIcon
                 type={isOpen ? 'chevron-up' : 'chevron-down'}
-                className="w-4 h-4 flex-shrink-0"
+                className="w-3 h-3 flex-shrink-0"
               />
             </button>
           </CollapsibleTrigger>
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 w-5 h-5 rounded-sm hover:opacity-80 hover:bg-muted/50 flex items-center justify-center transition-colors"
+            className="flex-shrink-0 w-7 h-7 rounded-sm hover:opacity-80 hover:bg-muted/50 flex items-center justify-center transition-colors -mr-1"
             aria-label="Dismiss"
           >
-            <FontIcon type="close" className="w-3.5 h-3.5" />
+            <FontIcon type="close" className="w-4 h-4" />
           </button>
         </div>
         <CollapsibleContent>
-          <div className="px-4 pb-3.5 pt-2 space-y-2 border-t border-border/50">
+          <div className="px-3 pb-2 pt-1.5 space-y-1.5 border-t border-border/50">
             {group.toasts.map(toast => (
               <div
                 key={toast.id}
-                className="text-sm md:text-base leading-5 text-muted-foreground pl-11 break-words"
+                className="text-xs md:text-sm leading-4 text-muted-foreground pl-9 break-words"
               >
                 {toast.message}
               </div>
@@ -269,7 +269,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
       const timeoutId = window.setTimeout(() => {
         dismiss(toast.id)
-      }, 8000)
+      }, 6000)
 
       timeoutRefs.current.set(toast.id, timeoutId)
     })
@@ -290,13 +290,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast, dismiss }}>
       {children}
-      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3">
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2">
         {groups.map(group => (
-          <ToastGroup
-            key={group.key}
-            group={group}
-            onDismiss={dismissGroup}
-          />
+          <ToastGroup key={group.key} group={group} onDismiss={dismissGroup} />
         ))}
         {individuals.map(t => (
           <ToastItem key={t.id} toast={t} onDismiss={dismiss} />

@@ -31,7 +31,20 @@ function Header({ currentVersion }: HeaderProps) {
   const [isBuilding, setIsBuilding] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const isSelected = location.pathname.split('/')[2]
+
+  // Determine active tab - check for RAG-related routes first
+  const pathname = location.pathname
+  const isRAGRoute =
+    pathname.startsWith('/chat/databases') ||
+    pathname.includes('/add-embedding-strategy') ||
+    pathname.includes('/add-retrieval-strategy') ||
+    pathname.includes('/add-retrieval') ||
+    pathname.includes('/edit-retrieval-strategy') ||
+    pathname.includes('/change-embedding-model') ||
+    pathname.includes('/change-embedding') ||
+    (pathname.includes('/retrieval') && pathname.startsWith('/chat/'))
+
+  const isSelected = isRAGRoute ? 'databases' : pathname.split('/')[2]
   const { theme, setTheme } = useTheme()
   const { triggerReset } = useModeReset()
   const [versionDialogOpen, setVersionDialogOpen] = useState(false)
@@ -40,8 +53,8 @@ function Header({ currentVersion }: HeaderProps) {
 
   // Project dropdown state
   const [isProjectOpen, setIsProjectOpen] = useState(false)
-  const [activeProject, setActiveProject] = useState<string>(() =>
-    getActiveProject()
+  const [activeProject, setActiveProject] = useState<string>(
+    () => getActiveProject() || ''
   )
   const namespace = getCurrentNamespace()
 
@@ -338,7 +351,9 @@ function Header({ currentVersion }: HeaderProps) {
               onClick={() => setVersionDialogOpen(true)}
               title="Version details"
             >
-              <span className="font-mono">{currentVersion ? `v${currentVersion}` : '—'}</span>
+              <span className="font-mono">
+                {currentVersion ? `v${currentVersion}` : '—'}
+              </span>
             </button>
           ) : null}
           <div className="flex rounded-lg overflow-hidden border border-border">

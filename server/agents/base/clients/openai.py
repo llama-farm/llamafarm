@@ -2,7 +2,7 @@ import json
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Literal, cast
+from typing import Literal
 
 from config.datamodel import ToolCallStrategy
 from openai import NOT_GIVEN, AsyncOpenAI
@@ -37,6 +37,7 @@ from .client import (
 )
 
 logger = FastAPIStructLogger(__name__)
+
 
 TOOLS_SYSTEM_MESSAGE_PREFIX = """
 
@@ -94,6 +95,19 @@ class LFAgentClientOpenAI(LFAgentClient):
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
+        # Extract standard OpenAI parameters from extra_body into api_params
+        # These are first-class OpenAI API parameters, not provider-specific extensions
+        # Only use per-request value if project config doesn't already define it
+        extra_body_copy = dict(extra_body or {})
+        if "max_tokens" in extra_body_copy:
+            if "max_tokens" not in api_params:
+                api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            else:
+                # Project config takes precedence, discard per-request value
+                extra_body_copy.pop("max_tokens")
+        # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
+        # The universal runtime extracts them from extra_body
+
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
         if self._model_config.extra_body:
@@ -106,22 +120,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Project-level config takes precedence over per-request params
         # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
-            **(extra_body or {}),
+            **extra_body_copy,
             **config_extra_body,
         }
 
         # Create non-streaming request
         stream_param: Literal[False] = False
-        # Filter out None values from messages to avoid OpenAI validation errors
-        cleaned_messages = [
-            cast(
-                LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if v is not None},
-            )
-            for msg in messages
-        ]
+
         completion = await client.chat.completions.create(
-            messages=cleaned_messages,
+            messages=messages,
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,
@@ -170,6 +177,19 @@ class LFAgentClientOpenAI(LFAgentClient):
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
 
+        # Extract standard OpenAI parameters from extra_body into api_params
+        # These are first-class OpenAI API parameters, not provider-specific extensions
+        # Only use per-request value if project config doesn't already define it
+        extra_body_copy = dict(extra_body or {})
+        if "max_tokens" in extra_body_copy:
+            if "max_tokens" not in api_params:
+                api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            else:
+                # Project config takes precedence, discard per-request value
+                extra_body_copy.pop("max_tokens")
+        # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
+        # The universal runtime extracts them from extra_body
+
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
         if self._model_config.extra_body:
@@ -182,21 +202,14 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Project-level config takes precedence over per-request params
         # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
-            **(extra_body or {}),
+            **extra_body_copy,
             **config_extra_body,
         }
 
         stream_param: Literal[True] = True
-        # Filter out None values from messages to avoid OpenAI validation errors
-        cleaned_messages = [
-            cast(
-                LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if v is not None},
-            )
-            for msg in messages
-        ]
+
         response_stream = await client.chat.completions.create(
-            messages=cleaned_messages,
+            messages=messages,
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,

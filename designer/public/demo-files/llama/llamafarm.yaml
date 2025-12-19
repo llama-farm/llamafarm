@@ -99,14 +99,63 @@ rag:
             distance_metric: "cosine"
             top_k: 5
 
-  # Minimal processing strategy - simplest possible config
+  # Processing strategy - supports markdown, PDF, TXT, and DOCX
   data_processing_strategies:
     - name: "default"
-      description: "Default text processing"
+      description: "Universal processor for encyclopedic content"
       parsers:
-        - type: "TextParser_Python"
+        # PDF Parser with robust fallback
+        - type: "PDFParser_LlamaIndex"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 10
+          config:
+            chunk_strategy: "semantic"
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        - type: "PDFParser_PyPDF2"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 50
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "paragraphs"
+            extract_metadata: true
+            combine_pages: false
+
+        # Word Document Parser
+        - type: "DocxParser_LlamaIndex"
+          file_include_patterns: ["*.docx", "*.DOCX"]
           priority: 10
           config:
             chunk_size: 1000
             chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        # Markdown Parser
+        - type: "MarkdownParser_Python"
+          file_include_patterns: ["*.md", "*.markdown"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sections"
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+
+        # Plain Text Parser (catch-all)
+        - type: "TextParser_Python"
+          file_include_patterns: ["*.txt", "*.text"]
+          priority: 50
+          config:
+            encoding: "utf-8"
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sentences"
+            clean_text: true
+            extract_metadata: true
       extractors: []
