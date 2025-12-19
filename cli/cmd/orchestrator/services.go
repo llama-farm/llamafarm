@@ -71,6 +71,7 @@ type ServiceDefinition struct {
 	Dependencies    []string
 	CanStartLocally bool
 	DefaultTimeout  time.Duration
+	Optional        bool // If true, failures won't block other services from starting
 
 	// Declarative start configuration
 	WorkDir         string            // Working directory for the process
@@ -126,6 +127,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		Name:            "universal-runtime",
 		Dependencies:    []string{"server"},
 		CanStartLocally: true,
+		Optional:        true, // Don't block other services if this fails (e.g., on hardware without GPU support)
 		DefaultTimeout:  180 * time.Second, // Longer timeout for first-time dependency installation
 		WorkDir:         "runtimes/universal",
 		Command:         "uv",
@@ -174,8 +176,9 @@ var ServiceGraph = map[string]*ServiceDefinition{
 	},
 	"rag": {
 		Name:            "rag",
-		Dependencies:    []string{"server", "universal-runtime"}, // Depends on both
+		Dependencies:    []string{"server"}, // Only depends on server; universal-runtime is optional
 		CanStartLocally: true,
+		Optional:        true, // Don't block if RAG fails to start
 		DefaultTimeout:  180 * time.Second,
 		WorkDir:         "rag",
 		Command:         "uv",
@@ -233,7 +236,14 @@ func (sm *ServiceManager) EnsureService(serviceName string) error {
 
 	// Ensure each service in dependency order (dependencies before dependents)
 	for _, svcName := range resolvedOrder {
+		serviceDef := ServiceGraph[svcName]
 		if err := sm.ensureSingleService(svcName); err != nil {
+			if serviceDef.Optional {
+				// Log warning but continue with other services
+				fmt.Fprintf(os.Stderr, "⚠ Optional service %s failed to start: %v\n", svcName, err)
+				fmt.Fprintf(os.Stderr, "  Some features may be unavailable. Check logs for details.\n")
+				continue
+			}
 			return fmt.Errorf("failed to ensure dependency %s: %w", svcName, err)
 		}
 	}
@@ -276,10 +286,26 @@ func (sm *ServiceManager) EnsureServices(serviceNames ...string) error {
 	}
 
 	// Start services in dependency order (server will always be first)
+	// Track failed optional services to report at the end
+	var optionalFailures []string
+
 	for _, svcName := range orderedServices {
+		serviceDef := ServiceGraph[svcName]
 		if err := sm.ensureSingleService(svcName); err != nil {
+			if serviceDef.Optional {
+				// Log warning but continue with other services
+				fmt.Fprintf(os.Stderr, "⚠ Optional service %s failed to start: %v\n", svcName, err)
+				fmt.Fprintf(os.Stderr, "  Some features may be unavailable. Check logs for details.\n")
+				optionalFailures = append(optionalFailures, svcName)
+				continue
+			}
 			return fmt.Errorf("failed to ensure service %s: %w", svcName, err)
 		}
+	}
+
+	// Report summary if any optional services failed
+	if len(optionalFailures) > 0 {
+		fmt.Fprintf(os.Stderr, "\n⚠ Started with degraded functionality. Failed optional services: %s\n", strings.Join(optionalFailures, ", "))
 	}
 
 	return nil
