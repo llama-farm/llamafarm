@@ -26,6 +26,7 @@ import {
   validateFeatureConsistency,
   parseVersionedModelName,
   formatModelTimestamp,
+  generateUniqueModelName,
   type AnomalyBackend,
   type AnomalyModelInfo,
 } from '../../types/ml'
@@ -55,11 +56,12 @@ function AnomalyModel() {
   const { id } = useParams<{ id: string }>()
   const isNewModel = !id || id === 'new'
 
-  // Form state
-  const [modelName, setModelName] = useState(isNewModel ? 'new-anomaly-model' : '')
+  // Form state - modelName will be set after loading existing models
+  const [modelName, setModelName] = useState('')
   const [description, setDescription] = useState('')
   const [trainingData, setTrainingData] = useState('')
   const [trainingDataError, setTrainingDataError] = useState<string | null>(null)
+  const [nameExistsWarning, setNameExistsWarning] = useState(false)
 
   // Settings state
   const [backend, setBackend] = useState<AnomalyBackend>('isolation_forest')
@@ -94,6 +96,35 @@ function AnomalyModel() {
     const parsed = parseVersionedModelName(id)
     return parsed.baseName
   }, [id, isNewModel])
+
+  // Extract all existing base names from models for uniqueness check
+  const existingBaseNames = useMemo(() => {
+    const names = new Set<string>()
+    if (modelsData?.models) {
+      for (const model of modelsData.models) {
+        const parsed = parseVersionedModelName(model.name)
+        names.add(parsed.baseName)
+      }
+    }
+    return names
+  }, [modelsData])
+
+  // Set unique default model name for new models once data is loaded
+  useEffect(() => {
+    if (isNewModel && !modelName && !isLoadingModels) {
+      const uniqueName = generateUniqueModelName('new-anomaly-model', existingBaseNames)
+      setModelName(uniqueName)
+    }
+  }, [isNewModel, modelName, isLoadingModels, existingBaseNames])
+
+  // Check if model name already exists (for warning display)
+  useEffect(() => {
+    if (isNewModel && modelName) {
+      setNameExistsWarning(existingBaseNames.has(modelName))
+    } else {
+      setNameExistsWarning(false)
+    }
+  }, [isNewModel, modelName, existingBaseNames])
 
   // Build versions list from API models
   useEffect(() => {
@@ -180,9 +211,14 @@ function AnomalyModel() {
     setTrainingState('training')
     setTrainingError('')
 
+    // Use unique name if the current name already exists
+    const finalModelName = isNewModel
+      ? generateUniqueModelName(modelName, existingBaseNames)
+      : modelName
+
     try {
       const result = await trainAndSaveMutation.mutateAsync({
-        model: modelName,
+        model: finalModelName,
         backend,
         data: parsedData,
         contamination,
@@ -198,7 +234,7 @@ function AnomalyModel() {
 
       // If new model, redirect to edit page with the base name
       if (isNewModel) {
-        navigate(`/chat/models/train/anomaly/${modelName}`)
+        navigate(`/chat/models/train/anomaly/${finalModelName}`)
       }
     } catch (error) {
       setTrainingState('error')
@@ -215,6 +251,7 @@ function AnomalyModel() {
     trainAndSaveMutation,
     isNewModel,
     navigate,
+    existingBaseNames,
   ])
 
   const handleTest = useCallback(async () => {
@@ -387,10 +424,17 @@ function AnomalyModel() {
                 setModelName(sanitized)
               }}
               disabled={!isNewModel}
+              className={nameExistsWarning ? 'border-amber-500' : ''}
             />
-            <p className="text-xs text-muted-foreground">
-              Lowercase letters, numbers, and hyphens only
-            </p>
+            {nameExistsWarning ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                A model with this name exists. Will be saved as "{generateUniqueModelName(modelName, existingBaseNames)}".
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Lowercase letters, numbers, and hyphens only
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="description" className="text-sm font-medium">

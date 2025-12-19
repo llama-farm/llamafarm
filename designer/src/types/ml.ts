@@ -324,3 +324,40 @@ export function validateFeatureConsistency(data: number[][]): {
 
   return { valid: true, featureCount, error: null }
 }
+
+/**
+ * Generate a unique model name by appending a number suffix if the name already exists.
+ * e.g., if "new-anomaly-model" exists, returns "new-anomaly-model-2"
+ * if "new-anomaly-model-2" also exists, returns "new-anomaly-model-3", etc.
+ */
+export function generateUniqueModelName(
+  baseName: string,
+  existingBaseNames: Set<string>
+): string {
+  if (!existingBaseNames.has(baseName)) {
+    return baseName
+  }
+
+  // Check if baseName already ends with a number suffix (e.g., "model-2")
+  const suffixMatch = baseName.match(/^(.+)-(\d+)$/)
+  let nameRoot: string
+  let startNum: number
+
+  if (suffixMatch) {
+    // Name already has a suffix, increment from there
+    nameRoot = suffixMatch[1]
+    startNum = parseInt(suffixMatch[2], 10) + 1
+  } else {
+    // No suffix, start at 2
+    nameRoot = baseName
+    startNum = 2
+  }
+
+  // Find the next available number
+  let num = startNum
+  while (existingBaseNames.has(`${nameRoot}-${num}`)) {
+    num++
+  }
+
+  return `${nameRoot}-${num}`
+}
