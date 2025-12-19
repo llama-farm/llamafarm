@@ -165,7 +165,10 @@ async def _cleanup_idle_models() -> None:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
             # Cleanup expired models from both caches
-            for cache, cache_name in [(_models, "models"), (_classifiers, "classifiers")]:
+            for cache, cache_name in [
+                (_models, "models"),
+                (_classifiers, "classifiers"),
+            ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
                     logger.info(f"Unloading {len(expired_items)} idle {cache_name}")
@@ -1219,6 +1222,7 @@ async def load_anomaly(
     backend: str = "isolation_forest",
     contamination: float = 0.1,
     threshold: float | None = None,
+    normalization: str = "standardization",
 ):
     """Load an anomaly detection model.
 
@@ -1227,6 +1231,7 @@ async def load_anomaly(
         backend: Anomaly detection backend
         contamination: Expected proportion of anomalies
         threshold: Custom anomaly threshold
+        normalization: Score normalization method (standardization, zscore, raw)
 
     Returns:
         Loaded AnomalyModel instance
@@ -1245,6 +1250,7 @@ async def load_anomaly(
                     backend=backend,
                     contamination=contamination,
                     threshold=threshold,
+                    normalization=normalization,
                 )
 
                 await model.load()
@@ -1316,6 +1322,11 @@ class AnomalyScoreRequest(PydanticBaseModel):
     1. Numeric arrays: data = [[1.0, 2.0], [3.0, 4.0]]
     2. Dict-based with schema: data = [{"time_ms": 100, "user_agent": "curl"}]
        with schema = {"time_ms": "numeric", "user_agent": "hash"}
+
+    Normalization methods:
+    - standardization (default): Sigmoid 0-1 range, threshold ~0.5
+    - zscore: Standard deviations from mean, threshold ~2.0-3.0
+    - raw: Backend-native scores (varies by backend)
     """
 
     model: str = "default"  # Model identifier
@@ -1325,6 +1336,7 @@ class AnomalyScoreRequest(PydanticBaseModel):
         None  # Feature encoding schema (required for dict data)
     )
     threshold: float | None = None  # Override default threshold
+    normalization: str = "standardization"  # standardization, zscore, or raw
 
 
 class AnomalyFitRequest(PydanticBaseModel):
@@ -1342,6 +1354,11 @@ class AnomalyFitRequest(PydanticBaseModel):
     - onehot: One-hot encoding (for low-cardinality categoricals)
     - binary: Boolean-like values (yes/no, true/false → 0/1)
     - frequency: Encode as occurrence frequency from training data
+
+    Normalization methods:
+    - standardization (default): Sigmoid 0-1 range, threshold ~0.5
+    - zscore: Standard deviations from mean, threshold ~2.0-3.0
+    - raw: Backend-native scores (varies by backend)
     """
 
     model: str = "default"  # Model identifier (for caching)
@@ -1353,6 +1370,7 @@ class AnomalyFitRequest(PydanticBaseModel):
     contamination: float = 0.1  # Expected proportion of anomalies
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
+    normalization: str = "standardization"  # standardization, zscore, or raw
 
 
 @app.post("/v1/anomaly/score")
@@ -1389,6 +1407,7 @@ async def score_anomalies(request: AnomalyScoreRequest):
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
+            normalization=request.normalization,
         )
 
         if not model.is_fitted:
@@ -1487,6 +1506,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             model_id=request.model,
             backend=request.backend,
             contamination=request.contamination,
+            normalization=request.normalization,
         )
 
         # Fit model
@@ -1556,6 +1576,7 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
+            normalization=request.normalization,
         )
 
         if not model.is_fitted:

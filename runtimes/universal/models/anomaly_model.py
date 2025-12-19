@@ -13,6 +13,42 @@ Designed for:
 - Fraud detection
 - Manufacturing quality control
 
+Score Normalization Methods:
+---------------------------
+The `normalization` parameter controls how raw anomaly scores are transformed:
+
+1. "standardization" (default):
+   - Applies sigmoid transformation using median and IQR from training data
+   - Produces scores in 0-1 range (0.5 = normal, approaching 1.0 = anomalous)
+   - Robust to outliers in training data
+   - Default threshold: 0.5
+   - Best for: General use, when you want bounded interpretable scores
+
+2. "zscore":
+   - Z-score normalization: (score - mean) / std
+   - Scores represent standard deviations from the training mean
+   - Interpretable: 2.0 = 2 std devs (unusual), 3.0 = rare, 4.0+ = extreme
+   - Default threshold: 2.0
+   - Best for: When you want scores that map to statistical significance
+
+3. "raw":
+   - No normalization, returns backend-native scores
+   - Ranges vary by backend:
+     * isolation_forest: ~-0.5 to 0.5 (higher = more anomalous)
+     * one_class_svm: unbounded real numbers (higher = more anomalous)
+     * local_outlier_factor: ~1 to 10+ (higher = more anomalous)
+   - Default threshold: 0.0 (you should set your own based on the backend)
+   - Best for: Debugging, or when you understand the backend's native scale
+
+Example usage:
+    # Z-score: flag anything > 3 standard deviations
+    model = AnomalyModel("my_model", "cpu", normalization="zscore", threshold=3.0)
+
+    # Raw scores for debugging
+    model = AnomalyModel("my_model", "cpu", normalization="raw")
+    scores = await model.score(data)
+    print([s.raw_score for s in scores])  # Examine native backend scores
+
 Security Notes:
 - Model loading is restricted to a designated safe directory (ANOMALY_MODELS_DIR)
 - Path traversal attacks are prevented by validating paths are within the safe directory
@@ -75,6 +111,28 @@ AnomalyBackend = Literal[
     "autoencoder", "isolation_forest", "one_class_svm", "local_outlier_factor"
 ]
 
+NormalizationMethod = Literal["standardization", "zscore", "raw"]
+"""Score normalization methods for anomaly detection.
+
+- "standardization" (default): Sigmoid normalization using median and IQR.
+    Produces scores in 0-1 range where 0.5 is "normal" and values approaching
+    1.0 are increasingly anomalous. Robust to outliers in training data.
+    Recommended threshold: 0.5-0.7
+
+- "zscore": Z-score normalization using mean and standard deviation.
+    Scores represent standard deviations from the mean of training scores.
+    A score of 2.0 means "2 standard deviations above normal."
+    Recommended threshold: 2.0 (unusual), 3.0 (rare), 4.0 (extreme)
+
+- "raw": No normalization, returns backend-specific raw scores.
+    Useful for debugging or when you understand the backend's native scale.
+    Note: Raw score ranges vary by backend:
+      - isolation_forest: ~-0.5 to 0.5 (higher = more anomalous)
+      - one_class_svm: unbounded (higher = more anomalous)
+      - local_outlier_factor: ~1 to 10+ (higher = more anomalous)
+    Threshold must be set based on backend-specific knowledge.
+"""
+
 
 @dataclass
 class AnomalyScore:
@@ -119,6 +177,7 @@ class AnomalyModel(BaseModel):
         backend: AnomalyBackend = "isolation_forest",
         contamination: float = 0.1,
         threshold: float | None = None,
+        normalization: NormalizationMethod = "standardization",
     ):
         """Initialize anomaly detection model.
 
@@ -127,12 +186,21 @@ class AnomalyModel(BaseModel):
             device: Target device (cpu recommended for sklearn models)
             backend: Anomaly detection backend
             contamination: Expected proportion of anomalies (0.0 to 0.5)
-            threshold: Custom anomaly threshold (auto-determined if None)
+            threshold: Custom anomaly threshold (auto-determined if None).
+                Default thresholds by normalization method:
+                - standardization: 0.5 (scores 0-1, higher = anomaly)
+                - zscore: 2.0 (standard deviations from mean)
+                - raw: None (must be set based on backend)
+            normalization: Score normalization method. See NormalizationMethod docs.
+                - "standardization": Sigmoid 0-1 range (default)
+                - "zscore": Standard deviations from mean
+                - "raw": No normalization, backend-native scores
         """
         super().__init__(model_id, device)
         self.backend = backend
         self.contamination = contamination
         self._threshold = threshold
+        self.normalization = normalization
         self.model_type = f"anomaly_{backend}"
         self.supports_streaming = False
 
@@ -145,10 +213,26 @@ class AnomalyModel(BaseModel):
         self._encoder = None
         self._decoder = None
 
+        # Normalization statistics (computed during fit, used during score)
+        # For standardization (sigmoid)
+        self._norm_median = None
+        self._norm_iqr = None
+        # For zscore
+        self._norm_mean = None
+        self._norm_std = None
+
     @property
     def threshold(self) -> float:
-        """Get anomaly threshold."""
-        return self._threshold or 0.5
+        """Get anomaly threshold based on normalization method."""
+        if self._threshold is not None:
+            return self._threshold
+        # Default thresholds by normalization method
+        if self.normalization == "zscore":
+            return 2.0  # 2 standard deviations
+        elif self.normalization == "raw":
+            return 0.0  # No sensible default for raw, user should set explicitly
+        else:  # standardization
+            return 0.5
 
     @property
     def is_fitted(self) -> bool:
@@ -199,6 +283,11 @@ class AnomalyModel(BaseModel):
             self._decoder = checkpoint.get("decoder")
             self._threshold = checkpoint.get("threshold", 0.5)
             self._scaler = checkpoint.get("scaler")
+            self._norm_median = checkpoint.get("norm_median")
+            self._norm_iqr = checkpoint.get("norm_iqr")
+            self._norm_mean = checkpoint.get("norm_mean")
+            self._norm_std = checkpoint.get("norm_std")
+            self.normalization = checkpoint.get("normalization", "standardization")
             self._is_fitted = True
         else:
             # Sklearn model (pickle or joblib)
@@ -215,6 +304,11 @@ class AnomalyModel(BaseModel):
             self._detector = data.get("detector")
             self._scaler = data.get("scaler")
             self._threshold = data.get("threshold", 0.5)
+            self._norm_median = data.get("norm_median")
+            self._norm_iqr = data.get("norm_iqr")
+            self._norm_mean = data.get("norm_mean")
+            self._norm_std = data.get("norm_std")
+            self.normalization = data.get("normalization", "standardization")
             self._is_fitted = True
 
     async def _initialize_backend(self) -> None:
@@ -297,10 +391,28 @@ class AnomalyModel(BaseModel):
 
         self._is_fitted = True
 
+        # Compute and store normalization statistics from training data
+        # These are used during scoring to ensure consistent normalization
+        raw_scores = await self._compute_raw_scores(X_scaled)
+
+        # Statistics for standardization (sigmoid) method
+        self._norm_median = float(np.median(raw_scores))
+        self._norm_iqr = float(
+            np.percentile(raw_scores, 75) - np.percentile(raw_scores, 25)
+        )
+        if self._norm_iqr == 0:
+            # Fallback to std if IQR is 0
+            self._norm_iqr = float(np.std(raw_scores)) or 1.0
+
+        # Statistics for zscore method
+        self._norm_mean = float(np.mean(raw_scores))
+        self._norm_std = float(np.std(raw_scores))
+        if self._norm_std == 0:
+            self._norm_std = 1.0  # Prevent division by zero
+
         # Auto-determine threshold if not set
-        # Threshold is computed on normalized scores (0-1 range) for consistency
+        # Threshold is computed based on normalization method
         if self._threshold is None:
-            raw_scores = await self._compute_raw_scores(X_scaled)
             normalized_scores = self._normalize_scores(raw_scores)
             # Set threshold at (1 - contamination) percentile of normalized scores
             self._threshold = float(
@@ -473,20 +585,55 @@ class AnomalyModel(BaseModel):
         return reconstruction_error.cpu().numpy()
 
     def _normalize_scores(self, scores: np.ndarray) -> np.ndarray:
-        """Normalize scores to 0-1 range."""
-        # Use sigmoid-like normalization
-        # Center around median and scale by IQR
-        median = np.median(scores)
-        iqr = np.percentile(scores, 75) - np.percentile(scores, 25)
+        """Normalize scores based on the configured normalization method.
 
-        normalized = (scores - median) / (2 * iqr) if iqr > 0 else scores - median
+        Methods:
+        - "standardization": Sigmoid normalization to 0-1 range using median/IQR.
+          Scores near 0.5 are normal, approaching 1.0 are anomalous.
+        - "zscore": Z-score normalization using mean/std.
+          Scores represent standard deviations from normal (2.0 = unusual, 3.0 = rare).
+        - "raw": No normalization, returns backend-native scores.
 
-        # Clip to prevent numerical overflow in np.exp
-        # np.exp(-x) overflows for x < -709, so we clip to safe range
-        normalized = np.clip(normalized, -700, 700)
+        Uses stored normalization statistics from training data if available,
+        ensuring consistent normalization between training and inference.
+        """
+        if self.normalization == "raw":
+            # No normalization - return raw scores as-is
+            return scores
 
-        # Apply sigmoid to get 0-1 range
-        return 1 / (1 + np.exp(-normalized))
+        elif self.normalization == "zscore":
+            # Z-score normalization: (score - mean) / std
+            if self._norm_mean is not None and self._norm_std is not None:
+                mean = self._norm_mean
+                std = self._norm_std
+            else:
+                # Fallback to computing from current data (during fit)
+                mean = np.mean(scores)
+                std = np.std(scores)
+                if std == 0:
+                    std = 1.0
+            return (scores - mean) / std
+
+        else:  # standardization (default)
+            # Sigmoid normalization using median/IQR
+            if self._norm_median is not None and self._norm_iqr is not None:
+                median = self._norm_median
+                iqr = self._norm_iqr
+            else:
+                # Fallback to computing from current data (during fit)
+                median = np.median(scores)
+                iqr = np.percentile(scores, 75) - np.percentile(scores, 25)
+                if iqr == 0:
+                    iqr = np.std(scores) or 1.0
+
+            normalized = (scores - median) / (2 * iqr) if iqr > 0 else scores - median
+
+            # Clip to prevent numerical overflow in np.exp
+            # np.exp(-x) overflows for x < -709, so we clip to safe range
+            normalized = np.clip(normalized, -700, 700)
+
+            # Apply sigmoid to get 0-1 range
+            return 1 / (1 + np.exp(-normalized))
 
     async def detect(
         self,
@@ -507,6 +654,19 @@ class AnomalyModel(BaseModel):
 
         model_path = Path(path)
 
+        # Common fields for all backends
+        common_fields = {
+            "threshold": self._threshold,
+            "scaler": self._scaler,
+            "normalization": self.normalization,
+            # Standardization stats
+            "norm_median": self._norm_median,
+            "norm_iqr": self._norm_iqr,
+            # Z-score stats
+            "norm_mean": self._norm_mean,
+            "norm_std": self._norm_std,
+        }
+
         if self.backend == "autoencoder":
             import torch
 
@@ -514,8 +674,7 @@ class AnomalyModel(BaseModel):
                 {
                     "encoder": self._encoder,
                     "decoder": self._decoder,
-                    "threshold": self._threshold,
-                    "scaler": self._scaler,
+                    **common_fields,
                 },
                 model_path.with_suffix(".pt"),
             )
@@ -524,21 +683,13 @@ class AnomalyModel(BaseModel):
                 import joblib
 
                 joblib.dump(
-                    {
-                        "detector": self._detector,
-                        "scaler": self._scaler,
-                        "threshold": self._threshold,
-                    },
+                    {"detector": self._detector, **common_fields},
                     model_path.with_suffix(".joblib"),
                 )
             except ImportError:
                 with open(model_path.with_suffix(".pkl"), "wb") as f:
                     pickle.dump(
-                        {
-                            "detector": self._detector,
-                            "scaler": self._scaler,
-                            "threshold": self._threshold,
-                        },
+                        {"detector": self._detector, **common_fields},
                         f,
                     )
 
@@ -550,6 +701,10 @@ class AnomalyModel(BaseModel):
         self._scaler = None
         self._encoder = None
         self._decoder = None
+        self._norm_median = None
+        self._norm_iqr = None
+        self._norm_mean = None
+        self._norm_std = None
         self._is_fitted = False
         await super().unload()
 
@@ -561,6 +716,7 @@ class AnomalyModel(BaseModel):
                 "backend": self.backend,
                 "contamination": self.contamination,
                 "threshold": self._threshold,
+                "normalization": self.normalization,
                 "is_fitted": self._is_fitted,
             }
         )
