@@ -6,6 +6,7 @@ to free up VRAM/RAM.
 """
 
 import asyncio
+import contextlib
 import os
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -314,12 +315,9 @@ async def test_cleanup_handles_unload_errors(reset_server_globals):
     server._models._ttl = original_ttl
 
     # Simulate cleanup task unloading expired models
-    for key, model in expired:
-        try:
+    for _key, model in expired:
+        with contextlib.suppress(Exception):
             await model.unload()
-        except Exception:
-            # Log error but continue (matches real cleanup behavior)
-            pass
 
     # Verify both unloads were attempted
     mock_model1.unload.assert_called_once()
