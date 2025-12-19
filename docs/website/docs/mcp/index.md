@@ -1,13 +1,33 @@
 ---
-title: MCP (Model Context Protocol)
+title: Tool Calling
 sidebar_position: 6
 ---
 
-# MCP (Model Context Protocol)
+# Tool Calling
+
+LlamaFarm supports two methods for giving AI models access to tools:
+
+1. **MCP (Model Context Protocol)** - Connect to external tool servers using the standardized MCP protocol
+2. **Inline Tools** - Define tools directly in your `llamafarm.yaml` configuration
+
+Both methods allow models to execute functions, query databases, access file systems, and interact with external services.
+
+## Two Approaches
+
+| Approach | Best For | Configuration |
+|----------|----------|---------------|
+| **MCP Servers** | External tools, shared services, complex integrations | `mcp.servers[]` + `mcp_servers` on model |
+| **Inline Tools** | Simple functions, CLI commands, project-specific tools | `tools[]` on model |
+
+You can use both approaches together—they are merged at runtime.
+
+---
+
+## MCP (Model Context Protocol)
 
 MCP is a standardized protocol that gives AI models access to external tools, APIs, and data sources. LlamaFarm supports MCP both as a **client** (connecting to external MCP servers) and as a **server** (exposing its own API as MCP tools).
 
-## Why MCP?
+### Why MCP?
 
 Instead of limiting your AI to text generation, MCP lets you connect models to:
 
@@ -16,9 +36,9 @@ Instead of limiting your AI to text generation, MCP lets you connect models to:
 - **APIs** - Interact with external services (weather, CRM, calendars)
 - **Custom tools** - Expose your own business logic
 
-## Quick Start
+### Quick Start
 
-### 1. Add an MCP Server to Your Project
+#### 1. Add an MCP Server to Your Project
 
 In your `llamafarm.yaml`:
 
@@ -34,7 +54,7 @@ mcp:
         - '/path/to/allowed/directory'
 ```
 
-### 2. Assign It to a Model
+#### 2. Assign It to a Model
 
 ```yaml
 runtime:
@@ -46,7 +66,7 @@ runtime:
         - filesystem
 ```
 
-### 3. Chat with Tool Access
+#### 3. Chat with Tool Access
 
 ```bash
 lf chat "What files are in my documents folder?"
