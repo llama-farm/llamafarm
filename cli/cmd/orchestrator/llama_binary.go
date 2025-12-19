@@ -135,10 +135,9 @@ func EnsureLlamaBinary() (string, error) {
 		return "", err
 	}
 	versionDir := filepath.Join(cacheDir, LlamaCppVersion)
-	libPath := filepath.Join(versionDir, GetLlamaLibName())
 
 	// Check if already installed
-	if _, err := os.Stat(libPath); err == nil {
+	if IsLlamaBinaryInstalled() {
 		utils.LogDebug(fmt.Sprintf("llama.cpp binaries already installed at %s", versionDir))
 		return versionDir, nil
 	}
@@ -264,18 +263,15 @@ func extractDependencies(archivePath, destDir string) error {
 	defer r.Close()
 
 	// Determine which file patterns to look for based on platform
-	var mainLib string
+	mainLib := GetLlamaLibName()
 	var patterns []string
 	switch runtime.GOOS {
 	case "windows":
-		mainLib = "llama.dll"
 		patterns = []string{".dll"}
 	case "darwin":
-		mainLib = "libllama.dylib"
 		// macOS: version before extension (libggml.0.0.0.dylib)
 		patterns = []string{".dylib", ".metal"}
 	default: // Linux
-		mainLib = "libllama.so"
 		// Linux: versioned (libggml.so.0.0.0) and unversioned (libggml.so, ggml-cpu.so)
 		patterns = []string{".so.", ".so"}
 	}
