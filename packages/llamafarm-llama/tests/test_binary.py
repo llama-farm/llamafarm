@@ -159,3 +159,30 @@ class TestBinaryManifest:
         for key, value in BINARY_MANIFEST.items():
             assert "artifact" in value, f"Missing artifact for {key}"
             assert "lib" in value, f"Missing lib for {key}"
+
+
+class TestSourceBuild:
+    """Test source build fallback behavior."""
+
+    def test_download_binary_builds_from_source_on_linux_arm64(self, tmp_path, monkeypatch):
+        """Linux arm64 should build from source when no binary exists."""
+        from llamafarm_llama import _binary
+
+        lib_name = _binary._get_lib_name()
+        expected_path = tmp_path / lib_name
+        called = {}
+
+        def fake_build(dest_dir, version, backend):
+            called["dest_dir"] = dest_dir
+            called["version"] = version
+            called["backend"] = backend
+            return expected_path
+
+        monkeypatch.setattr(_binary, "_build_from_source", fake_build)
+
+        result = _binary.download_binary(tmp_path, platform_key=("linux", "arm64", "cpu"))
+
+        assert result == expected_path
+        assert called["dest_dir"] == tmp_path
+        assert called["version"] == _binary.LLAMA_CPP_VERSION
+        assert called["backend"] == "cpu"

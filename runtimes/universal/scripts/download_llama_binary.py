@@ -26,6 +26,7 @@ def main():
     spec.loader.exec_module(_binary)
 
     BINARY_MANIFEST = _binary.BINARY_MANIFEST
+    _should_build_from_source = _binary._should_build_from_source
     LLAMA_CPP_VERSION = _binary.LLAMA_CPP_VERSION
     _get_cache_dir = _binary._get_cache_dir
     download_binary = _binary.download_binary
@@ -35,8 +36,8 @@ def main():
     print(f"Platform: {platform_key}")
     print(f"llama.cpp version: {LLAMA_CPP_VERSION}")
 
-    # Check if binary is available for this platform
-    if platform_key not in BINARY_MANIFEST:
+    # Check if binary is available for this platform or can be built
+    if platform_key not in BINARY_MANIFEST and not _should_build_from_source(platform_key):
         # Check CPU fallback
         system, machine, _ = platform_key
         cpu_key = (system, machine, "cpu")

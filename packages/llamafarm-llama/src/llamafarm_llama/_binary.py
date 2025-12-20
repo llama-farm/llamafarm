@@ -8,7 +8,9 @@ import hashlib
 import logging
 import os
 import platform
+import shlex
 import shutil
+import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
@@ -73,6 +75,90 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
         "sha256": None,
     },
 }
+
+
+def _should_build_from_source(platform_key: tuple[str, str, str]) -> bool:
+    """Return True when llama.cpp should be built from source."""
+    system, machine, _ = platform_key
+    return system == "linux" and machine == "arm64"
+
+
+def _build_from_source(dest_dir: Path, version: str, backend: str) -> Path:
+    """Build llama.cpp from source and install it into dest_dir."""
+    source_url = f"https://github.com/{LLAMA_CPP_REPO}/archive/refs/tags/{version}.zip"
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        archive_path = tmpdir_path / f"llama.cpp-{version}.zip"
+
+        logger.info(f"Downloading llama.cpp source {version} for source build...")
+        req = Request(source_url, headers={"User-Agent": "llamafarm-llama"})
+        try:
+            with urlopen(req, timeout=300) as response:
+                archive_path.write_bytes(response.read())
+        except (URLError, HTTPError) as e:
+            raise RuntimeError(f"Failed to download source archive {source_url}: {e}") from e
+
+        extract_dir = tmpdir_path / "source"
+        extract_dir.mkdir()
+        _safe_extract_zip(archive_path, extract_dir)
+
+        source_root = next(
+            (p for p in extract_dir.iterdir() if p.is_dir()),
+            None,
+        )
+        if source_root is None:
+            raise RuntimeError("Failed to locate llama.cpp source directory after extraction")
+
+        build_dir = source_root / "build"
+        cmake_args = [
+            "cmake",
+            "-S",
+            str(source_root),
+            "-B",
+            str(build_dir),
+            "-DBUILD_SHARED_LIBS=ON",
+            "-DLLAMA_BUILD_TESTS=OFF",
+            "-DLLAMA_BUILD_EXAMPLES=OFF",
+        ]
+
+        if backend.startswith("cuda"):
+            cmake_args.append("-DGGML_CUDA=ON")
+        elif backend == "vulkan":
+            cmake_args.append("-DGGML_VULKAN=ON")
+
+        extra_args = os.environ.get("LLAMAFARM_LLAMA_CMAKE_ARGS")
+        if extra_args:
+            cmake_args.extend(shlex.split(extra_args))
+
+        logger.info(f"Configuring llama.cpp build (backend={backend})...")
+        subprocess.run(cmake_args, check=True)
+
+        build_cmd = ["cmake", "--build", str(build_dir), "--config", "Release"]
+        jobs = os.environ.get("LLAMAFARM_LLAMA_BUILD_JOBS")
+        if jobs:
+            build_cmd.extend(["--parallel", jobs])
+        else:
+            build_cmd.append("--parallel")
+
+        logger.info("Building llama.cpp from source...")
+        subprocess.run(build_cmd, check=True)
+
+        lib_name = _get_lib_name()
+        candidates = list(build_dir.rglob(lib_name))
+        if not candidates:
+            raise RuntimeError(f"Could not find {lib_name} in build output")
+
+        lib_src = next((c for c in candidates if c.parent.name == "bin"), candidates[0])
+        lib_dest = dest_dir / lib_name
+
+        _extract_with_symlinks(lib_src, lib_dest)
+        _copy_dependencies(build_dir, dest_dir)
+
+        logger.info(f"Installed llama.cpp from source to: {lib_dest}")
+        return lib_dest
 
 
 def get_platform_key(backend_override: Optional[str] = None) -> tuple[str, str, str]:
@@ -318,7 +404,14 @@ def download_binary(
     if platform_key is None:
         platform_key = get_platform_key()
 
+    version = os.environ.get("LLAMAFARM_LLAMA_VERSION", LLAMA_CPP_VERSION)
+
     if platform_key not in BINARY_MANIFEST:
+        if _should_build_from_source(platform_key):
+            logger.warning(
+                f"No pre-built binary for {platform_key}; building from source instead."
+            )
+            return _build_from_source(dest_dir, version, platform_key[2])
         # Try falling back to CPU
         system, machine, _ = platform_key
         cpu_key = (system, machine, "cpu")
@@ -329,7 +422,6 @@ def download_binary(
             raise RuntimeError(f"No pre-built binary available for {platform_key}")
 
     manifest = BINARY_MANIFEST[platform_key]
-    version = os.environ.get("LLAMAFARM_LLAMA_VERSION", LLAMA_CPP_VERSION)
     artifact = manifest["artifact"].format(version=version)
     url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
 

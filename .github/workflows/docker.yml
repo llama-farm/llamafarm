@@ -119,7 +119,6 @@ jobs:
           retention-days: 1
 
   # Build ARM64 images on native ARM64 runners for efficiency
-  # Note: runtime is excluded because llama.cpp doesn't publish Linux ARM64 binaries
   build-arm64:
     name: Build ARM64 Docker Images
     runs-on: ${{ matrix.service == 'runner' && 'lf-large-arm64' || 'ubuntu-24.04-arm' }}
@@ -128,8 +127,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        # Note: runtime excluded - llama.cpp doesn't publish Linux ARM64 binaries
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime]
         include:
           - service: designer
             context: ./designer
@@ -143,6 +141,10 @@ jobs:
             context: ./
             dockerfile: ./rag/Dockerfile
             description: "LlamaFarm RAG - Celery worker for RAG processing"
+          - service: runtime
+            context: ./
+            dockerfile: ./runtimes/universal/Dockerfile
+            description: "LlamaFarm Universal Runtime - model serving for GGUF and Transformers"
 
     steps:
       - name: Checkout repository

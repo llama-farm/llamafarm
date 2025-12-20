@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -72,6 +74,8 @@ var WindowsBinarySpec = map[HardwareCapability]BinaryInfo{
 		LibName: "llama.dll",
 	},
 }
+
+var buildFromSource = buildLlamaFromSource
 
 // GetLlamaCacheDir returns the cache directory for llama.cpp binaries.
 // This matches the paths used by the Python llamafarm-llama package.
@@ -179,6 +183,14 @@ func InstallLlamaBinary(destDir string) error {
 	hardware := DetectHardware()
 	utils.LogDebug(fmt.Sprintf("Detected hardware: %s", hardware))
 
+	if shouldBuildFromSource() {
+		utils.LogDebug("Building llama.cpp from source for this platform...")
+		if err := buildFromSource(destDir, hardware); err != nil {
+			return fmt.Errorf("failed to build llama.cpp from source: %w", err)
+		}
+		return nil
+	}
+
 	info, err := GetBinaryInfo(hardware)
 	if err != nil {
 		return err
@@ -250,6 +262,312 @@ func InstallLlamaBinary(destDir string) error {
 	}
 
 	utils.LogDebug(fmt.Sprintf("Installed llama.cpp to %s", destPath))
+	return nil
+}
+
+func shouldBuildFromSource() bool {
+	if override := os.Getenv("LLAMAFARM_LLAMA_SOURCE_BUILD"); override != "" {
+		return override != "0"
+	}
+	return runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
+}
+
+func buildLlamaFromSource(destDir string, hardware HardwareCapability) error {
+	sourceURL := fmt.Sprintf(
+		"https://github.com/ggml-org/llama.cpp/archive/refs/tags/%s.zip",
+		LlamaCppVersion,
+	)
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "llama-source-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	archivePath := filepath.Join(tmpDir, fmt.Sprintf("llama.cpp-%s.zip", LlamaCppVersion))
+	resp, err := http.Get(sourceURL)
+	if err != nil {
+		return fmt.Errorf("failed to download %s: %w", sourceURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+
+	archiveFile, err := os.Create(archivePath)
+	if err != nil {
+		return fmt.Errorf("failed to create archive file: %w", err)
+	}
+	if _, err := io.Copy(archiveFile, resp.Body); err != nil {
+		archiveFile.Close()
+		return fmt.Errorf("failed to download source archive: %w", err)
+	}
+	if err := archiveFile.Close(); err != nil {
+		return fmt.Errorf("failed to close archive file: %w", err)
+	}
+
+	extractDir := filepath.Join(tmpDir, "source")
+	if err := extractZipAll(archivePath, extractDir); err != nil {
+		return fmt.Errorf("failed to extract source archive: %w", err)
+	}
+
+	sourceRoot, err := findFirstDir(extractDir)
+	if err != nil {
+		return err
+	}
+
+	buildDir := filepath.Join(sourceRoot, "build")
+	cmakeArgs := []string{
+		"-S",
+		sourceRoot,
+		"-B",
+		buildDir,
+		"-DBUILD_SHARED_LIBS=ON",
+		"-DLLAMA_BUILD_TESTS=OFF",
+		"-DLLAMA_BUILD_EXAMPLES=OFF",
+	}
+
+	if hardware == HardwareCUDA {
+		cmakeArgs = append(cmakeArgs, "-DGGML_CUDA=ON")
+	}
+
+	if extraArgs := os.Getenv("LLAMAFARM_LLAMA_CMAKE_ARGS"); extraArgs != "" {
+		cmakeArgs = append(cmakeArgs, strings.Fields(extraArgs)...)
+	}
+
+	configureCmd := exec.Command("cmake", cmakeArgs...)
+	configureCmd.Stdout = os.Stdout
+	configureCmd.Stderr = os.Stderr
+	if err := configureCmd.Run(); err != nil {
+		return fmt.Errorf("cmake configure failed: %w", err)
+	}
+
+	buildCmd := exec.Command("cmake", "--build", buildDir, "--config", "Release", "--parallel")
+	if jobs := os.Getenv("LLAMAFARM_LLAMA_BUILD_JOBS"); jobs != "" {
+		buildCmd.Args = append(buildCmd.Args, jobs)
+	}
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stderr
+	if err := buildCmd.Run(); err != nil {
+		return fmt.Errorf("cmake build failed: %w", err)
+	}
+
+	libName := GetLlamaLibName()
+	libPath := filepath.Join(buildDir, "bin", libName)
+	if _, err := os.Stat(libPath); err != nil {
+		found, findErr := findFile(buildDir, libName)
+		if findErr != nil {
+			return fmt.Errorf("could not locate %s in build output: %w", libName, err)
+		}
+		libPath = found
+	}
+
+	destPath := filepath.Join(destDir, libName)
+	if err := copyFile(libPath, destPath); err != nil {
+		return fmt.Errorf("failed to copy %s: %w", libName, err)
+	}
+
+	if err := copyDependenciesFromBuild(buildDir, destDir); err != nil {
+		utils.LogDebug(fmt.Sprintf("Warning: failed to copy some dependencies: %v", err))
+	}
+
+	utils.LogDebug(fmt.Sprintf("Installed llama.cpp from source to %s", destPath))
+	return nil
+}
+
+func extractZipAll(archivePath, destDir string) error {
+	r, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	for _, f := range r.File {
+		destPath := filepath.Join(destDir, f.Name)
+		cleanDest := filepath.Clean(destPath)
+		if !strings.HasPrefix(cleanDest+string(os.PathSeparator), filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid path in archive: %s", f.Name)
+		}
+
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(cleanDest, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(cleanDest), 0755); err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.Create(cleanDest)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		if _, err := io.Copy(out, rc); err != nil {
+			rc.Close()
+			out.Close()
+			return err
+		}
+		rc.Close()
+		if err := out.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func findFirstDir(parent string) (string, error) {
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return filepath.Join(parent, entry.Name()), nil
+		}
+	}
+	return "", fmt.Errorf("no directory found in %s", parent)
+}
+
+func findFile(root string, filename string) (string, error) {
+	var found string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Name() == filename {
+			found = path
+			return io.EOF
+		}
+		return nil
+	})
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	if found == "" {
+		return "", fmt.Errorf("%s not found", filename)
+	}
+	return found, nil
+}
+
+func copyFile(srcPath, destPath string) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dest, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	if _, err := io.Copy(dest, src); err != nil {
+		return err
+	}
+
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(destPath, 0755); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func copyDependenciesFromBuild(buildDir, destDir string) error {
+	mainLib := GetLlamaLibName()
+	var patterns []string
+	switch runtime.GOOS {
+	case "windows":
+		patterns = []string{".dll"}
+	case "darwin":
+		patterns = []string{".dylib", ".metal"}
+	default:
+		patterns = []string{".so.", ".so"}
+	}
+
+	err := filepath.WalkDir(buildDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		name := d.Name()
+		nameLower := strings.ToLower(name)
+
+		shouldCopy := false
+		for _, pattern := range patterns {
+			if strings.Contains(nameLower, pattern) {
+				if nameLower == strings.ToLower(mainLib) {
+					return nil
+				}
+				if strings.HasPrefix(nameLower, "libllama.") || strings.HasPrefix(nameLower, "llama.") {
+					return nil
+				}
+				shouldCopy = true
+				break
+			}
+		}
+
+		if !shouldCopy {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.Size() < 100 {
+			return nil
+		}
+
+		destPath := filepath.Join(destDir, name)
+		if _, err := os.Stat(destPath); err == nil {
+			return nil
+		}
+
+		if err := copyFile(path, destPath); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if runtime.GOOS != "windows" {
+		if err := createDependencySymlinks(destDir); err != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: could not create dependency symlinks: %v", err))
+		}
+	}
+
 	return nil
 }
 
