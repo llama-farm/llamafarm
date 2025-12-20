@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.23](https://github.com/llama-farm/llamafarm/compare/v0.0.22...v0.0.23) (2025-12-20)
+
+
+### Bug Fixes
+
+* **runtime:** broken pipe due to bad logging ([02969d0](https://github.com/llama-farm/llamafarm/commit/02969d0103cbdb8c7a30c0abd0ac7881a5ea33b9))
+
 ## [0.0.22](https://github.com/llama-farm/llamafarm/compare/v0.0.21...v0.0.22) (2025-12-19)
 
 
