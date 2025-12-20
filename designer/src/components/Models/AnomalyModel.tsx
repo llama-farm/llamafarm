@@ -57,6 +57,7 @@ interface ModelVersion {
   id: string
   versionNumber: number
   versionedName: string
+  filename: string
   createdAt: string
   trainingSamples: number
   isActive: boolean
@@ -810,6 +811,7 @@ function AnomalyModel() {
       id: m.name,
       versionNumber: sortedModels.length - index,
       versionedName: m.name,
+      filename: m.filename,
       createdAt: m.created || new Date().toISOString(),
       trainingSamples: 0,
       isActive: m.name === activeVersionName,
@@ -1144,9 +1146,18 @@ function AnomalyModel() {
       const version = versions.find(v => v.versionedName === versionName)
       if (!version) return
 
+      const versionLabel = `Version ${version.versionNumber}`
+      const confirmMessage = `Delete ${versionLabel}? This cannot be undone.`
+      if (!window.confirm(confirmMessage)) return
+
       try {
-        const filename = `${versionName}_${version.backend}.joblib`
-        await deleteMutation.mutateAsync(filename)
+        // Pass the model name - backend will handle finding the file
+        await deleteMutation.mutateAsync(versionName)
+
+        toast({
+          message: `Successfully deleted ${versionLabel}.`,
+          icon: 'checkmark-filled',
+        })
 
         if (versionName === activeVersionName) {
           const remaining = versions.filter(v => v.versionedName !== versionName)
@@ -1158,10 +1169,42 @@ function AnomalyModel() {
         }
       } catch (error) {
         console.error('Failed to delete model version:', error)
+        toast({
+          message: 'Failed to delete version. Please try again.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
       }
     },
-    [versions, activeVersionName, deleteMutation]
+    [versions, activeVersionName, deleteMutation, toast]
   )
+
+  const handleDeleteModel = useCallback(async () => {
+    if (!baseModelName || isNewModel) return
+
+    const confirmMessage = `Delete "${baseModelName}" and all ${versions.length} version${versions.length !== 1 ? 's' : ''}? This cannot be undone.`
+    if (!window.confirm(confirmMessage)) return
+
+    try {
+      // Delete all versions
+      await Promise.all(versions.map(v => deleteMutation.mutateAsync(v.versionedName)))
+
+      toast({
+        message: `Successfully deleted ${baseModelName} and all its versions.`,
+        icon: 'checkmark-filled',
+      })
+
+      // Navigate back to models list
+      navigate('/chat/models?tab=training')
+    } catch (error) {
+      console.error('Failed to delete model:', error)
+      toast({
+        message: 'Failed to delete some model versions. Please try again.',
+        variant: 'destructive',
+        icon: 'alert-triangle',
+      })
+    }
+  }, [baseModelName, isNewModel, versions, deleteMutation, toast, navigate])
 
   const handleColumnTypeChange = useCallback(
     (colName: string, newType: FeatureEncodingType) => {
@@ -1555,12 +1598,23 @@ function AnomalyModel() {
             <span className="text-muted-foreground px-1">/</span>
             <span className="text-foreground">{pageTitle}</span>
           </nav>
-          <Button
-            variant="outline"
-            onClick={() => navigate('/chat/models?tab=training')}
-          >
-            Done
-          </Button>
+          <div className="flex items-center gap-2">
+            {!isNewModel && versions.length > 0 && (
+              <Button
+                variant="ghost"
+                onClick={handleDeleteModel}
+                className="text-sm text-destructive/70 hover:text-destructive hover:bg-destructive/5"
+              >
+                Delete
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => navigate('/chat/models?tab=training')}
+            >
+              Done
+            </Button>
+          </div>
         </div>
 
         {/* Page title */}
@@ -2173,7 +2227,7 @@ MX`}
                   return (
                     <div
                       key={result.id}
-                      className={`flex items-center gap-2 px-2 py-1 rounded text-sm ${bgClass}`}
+                      className={`flex items-start gap-2 px-2 py-1 rounded text-sm ${bgClass}`}
                     >
                       <FontIcon type={iconType} className={iconClass} />
                       <span className={`font-medium w-16 shrink-0 ${labelClass}`}>
@@ -2182,10 +2236,7 @@ MX`}
                       <span className="text-muted-foreground w-10 shrink-0">
                         {isError ? '—' : result.score.toFixed(2)}
                       </span>
-                      <span
-                        className="text-muted-foreground truncate font-mono text-xs"
-                        title={result.input}
-                      >
+                      <span className="text-muted-foreground break-words font-mono text-xs flex-1 min-w-0">
                         {result.input}
                       </span>
                     </div>

@@ -165,7 +165,10 @@ async def _cleanup_idle_models() -> None:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
             # Cleanup expired models from both caches
-            for cache, cache_name in [(_models, "models"), (_classifiers, "classifiers")]:
+            for cache, cache_name in [
+                (_models, "models"),
+                (_classifiers, "classifiers"),
+            ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
                     logger.info(f"Unloading {len(expired_items)} idle {cache_name}")
@@ -1619,6 +1622,14 @@ async def detect_anomalies(request: AnomalyScoreRequest):
 _LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
 ANOMALY_MODELS_DIR = _LF_DATA_DIR / "models" / "anomaly"
 
+# Supported anomaly detection backends
+ANOMALY_BACKENDS = [
+    "isolation_forest",
+    "one_class_svm",
+    "local_outlier_factor",
+    "autoencoder",
+]
+
 
 class AnomalySaveRequest(PydanticBaseModel):
     """Request to save a fitted anomaly model."""
@@ -1947,51 +1958,99 @@ async def list_anomaly_models():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.delete("/v1/anomaly/models/{filename}")
-async def delete_anomaly_model(filename: str):
+@app.delete("/v1/anomaly/models/{model_name}")
+async def delete_anomaly_model(model_name: str):
     """
     Delete a saved anomaly model.
 
     Removes the model file from disk. Does not affect cached models.
+    Takes the model name (without backend suffix) and finds all matching files.
     """
     try:
-        # Sanitize filename to prevent path traversal attacks
-        safe_filename = _sanitize_model_name(filename)
-        if not safe_filename:
+        # Strip any file extension first (frontend might send filename with extension)
+        model_name_clean = model_name
+        for ext in [".joblib", ".pkl", ".pt"]:
+            if model_name_clean.endswith(ext):
+                model_name_clean = model_name_clean[: -len(ext)]
+                break
+
+        # Sanitize model name to prevent path traversal attacks
+        safe_name = _sanitize_model_name(model_name_clean)
+        if not safe_name:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid filename",
+                detail="Invalid model name",
             )
 
         # Also reject any path separators that might have survived
-        if "/" in filename or "\\" in filename or ".." in filename:
+        if (
+            "/" in model_name_clean
+            or "\\" in model_name_clean
+            or ".." in model_name_clean
+        ):
             raise HTTPException(
                 status_code=400,
-                detail="Invalid filename: path separators not allowed",
+                detail="Invalid model name: path separators not allowed",
             )
 
-        model_path = ANOMALY_MODELS_DIR / safe_filename
+        logger.info(
+            f"Delete anomaly model - original: {model_name}, cleaned: {model_name_clean}, sanitized: {safe_name}"
+        )
 
-        # Validate the resolved path is still within the safe directory
-        try:
-            resolved_path = _validate_path_within_directory(
-                model_path, ANOMALY_MODELS_DIR
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+        # Handle both formats:
+        # 1. Just model name: "model_20251220_120000" - search for all backend variants
+        # 2. Model with backend: "model_20251220_120000_isolation_forest" - search for that specific file
+        deleted_files = []
 
-        if not resolved_path.exists():
+        # First, try to find files matching exactly (in case backend suffix is included)
+        for ext in [".joblib", ".pkl", ".pt"]:
+            filename = f"{safe_name}{ext}"
+            file_path = ANOMALY_MODELS_DIR / filename
+            if file_path.exists():
+                logger.info(f"Delete anomaly model - found exact match: {file_path}")
+                deleted_files.append(file_path)
+
+        # If no exact match, try adding backend suffixes
+        if not deleted_files:
+            for backend in ANOMALY_BACKENDS:
+                for ext in [".joblib", ".pkl", ".pt"]:
+                    filename = f"{safe_name}_{backend}{ext}"
+                    file_path = ANOMALY_MODELS_DIR / filename
+                    if file_path.exists():
+                        logger.info(
+                            f"Delete anomaly model - found file with backend suffix: {file_path}"
+                        )
+                        deleted_files.append(file_path)
+
+        if not deleted_files:
             raise HTTPException(
                 status_code=404,
-                detail=f"Model file not found: {safe_filename}",
+                detail=f"Model file not found: {model_name}",
             )
 
-        resolved_path.unlink()
+        # Validate and delete all found files
+        for file_path in deleted_files:
+            try:
+                resolved_path = _validate_path_within_directory(
+                    file_path, ANOMALY_MODELS_DIR
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
+            resolved_path.unlink()
+            logger.info(f"Deleted anomaly model file: {resolved_path}")
+
+            # Also delete encoder file if it exists
+            encoder_path = file_path.parent / f"{file_path.stem}_encoder.json"
+            if encoder_path.exists():
+                encoder_path.unlink()
+                logger.info(f"Deleted encoder file: {encoder_path}")
 
         return {
             "object": "delete_result",
-            "filename": safe_filename,
+            "model": model_name,
             "deleted": True,
+            "files_deleted": len(deleted_files),
         }
 
     except HTTPException:

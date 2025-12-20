@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
+import { useToast } from '../ui/toast'
 import FontIcon from '../../common/FontIcon'
 import type { TrainedModel, TrainedModelType } from './types'
 import {
@@ -65,6 +66,7 @@ function groupModelsByBaseName<T extends { name: string }>(
 
 function TrainedModels() {
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   // Fetch models from API
   const {
@@ -122,31 +124,41 @@ function TrainedModels() {
   }, [anomalyData, classifierData])
 
   const handleDeleteModel = async (model: TrainedModel) => {
-    // Delete all versions of this model
-    if (model.type === 'anomaly_detection' && anomalyData?.models) {
-      const versions = anomalyData.models.filter((m: AnomalyModelInfo) => {
-        const parsed = parseVersionedModelName(m.name)
-        return parsed.baseName === model.id
-      })
-      for (const version of versions) {
-        try {
-          await deleteAnomalyMutation.mutateAsync(version.filename)
-        } catch (error) {
-          console.error('Failed to delete anomaly model:', error)
-        }
+    // Confirm deletion
+    const confirmMessage = `Delete "${model.name}" and all ${model.versionCount} version${model.versionCount !== 1 ? 's' : ''}? This cannot be undone.`
+    if (!window.confirm(confirmMessage)) return
+
+    try {
+      // Delete all versions of this model
+      if (model.type === 'anomaly_detection' && anomalyData?.models) {
+        const versions = anomalyData.models.filter((m: AnomalyModelInfo) => {
+          const parsed = parseVersionedModelName(m.name)
+          return parsed.baseName === model.id
+        })
+        await Promise.all(
+          versions.map(version => deleteAnomalyMutation.mutateAsync(version.filename))
+        )
+      } else if (model.type === 'classifier' && classifierData?.models) {
+        const versions = classifierData.models.filter((m: ClassifierModelInfo) => {
+          const parsed = parseVersionedModelName(m.name)
+          return parsed.baseName === model.id
+        })
+        await Promise.all(
+          versions.map(version => deleteClassifierMutation.mutateAsync(version.name))
+        )
       }
-    } else if (model.type === 'classifier' && classifierData?.models) {
-      const versions = classifierData.models.filter((m: ClassifierModelInfo) => {
-        const parsed = parseVersionedModelName(m.name)
-        return parsed.baseName === model.id
+
+      toast({
+        message: `Successfully deleted ${model.name} and all its versions.`,
+        icon: 'checkmark-filled',
       })
-      for (const version of versions) {
-        try {
-          await deleteClassifierMutation.mutateAsync(version.name)
-        } catch (error) {
-          console.error('Failed to delete classifier model:', error)
-        }
-      }
+    } catch (error) {
+      console.error('Failed to delete model:', error)
+      toast({
+        message: 'Failed to delete some model versions. Please try again.',
+        variant: 'destructive',
+        icon: 'alert-triangle',
+      })
     }
   }
 
