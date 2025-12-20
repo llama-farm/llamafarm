@@ -16,14 +16,20 @@ LlamaFarm helps you ship retrieval-augmented and agentic AI apps from your lapto
 Get started instantly with our desktop application — no command line required.
 
 <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', marginTop: '16px'}}>
-  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19-arm64-mac.zip" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-arm64.dmg" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
     ⬇️ Mac (M1+)
   </a>
-  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm.Setup.0.0.19.exe" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Mac (Intel)
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
     ⬇️ Windows
   </a>
-  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
-    ⬇️ Linux
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Linux (x86_64)
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Linux (ARM64)
   </a>
 </div>
 

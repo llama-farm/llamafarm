@@ -21,13 +21,15 @@ Get the CLI installed, ingest a dataset, and run your first RAG-powered chat in 
 curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 ```
 
-**Windows/Linux Desktop App:**
+**Desktop App:**
 
 | Platform | Download |
 |----------|----------|
-| **Windows** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm.Setup.0.0.20.exe) |
-| **Linux** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20.AppImage) |
-| **Mac (M1+)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20-arm64-mac.zip) |
+| **Mac (M1+)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-arm64.dmg) |
+| **Mac (Intel)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg) |
+| **Windows** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe) |
+| **Linux (x86_64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
+| **Linux (ARM64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage) |
 
 Or download the CLI only: grab `lf.exe` (Windows) or `lf` binary from the [releases page](https://github.com/llama-farm/llamafarm/releases/latest) and add it to your PATH.
 
