@@ -22,6 +22,7 @@ import {
 } from '../ui/dropdown-menu'
 import { useToast } from '../ui/toast'
 import FontIcon from '../../common/FontIcon'
+import TrainingLoadingOverlay from './TrainingLoadingOverlay'
 import type { AnomalyTestResult } from './types'
 import {
   useListAnomalyModels,
@@ -1611,7 +1612,8 @@ function AnomalyModel() {
         </div>
 
         {/* Training Data & Settings Card */}
-        <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-4">
+        <div className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 relative transition-all duration-300 ${trainingState === 'training' ? 'h-[400px] overflow-hidden' : ''}`}>
+          {trainingState === 'training' && <TrainingLoadingOverlay message="Training your anomaly detector..." />}
           {/* Collapsed view */}
           {hasVersions && !isTrainingExpanded ? (
             <div className="flex items-center justify-between">
