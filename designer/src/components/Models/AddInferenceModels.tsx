@@ -109,41 +109,47 @@ function AddInferenceModels() {
         return [...prev, m]
       })
 
-      // Add to config
-      const currentConfig = projectResponse.project.config
-      const runtimeModels = currentConfig.runtime?.models || []
+      try {
+        // Add to config
+        const currentConfig = projectResponse.project.config
+        const runtimeModels = currentConfig.runtime?.models || []
 
-      const modelId = m.modelIdentifier || m.name
-      const provider = modelId.includes('/') ? 'universal' : 'ollama'
-      const baseUrl =
-        provider === 'universal' ? undefined : 'http://localhost:11434'
+        const modelId = m.modelIdentifier || m.name
+        const provider = modelId.includes('/') ? 'universal' : 'ollama'
+        const baseUrl =
+          provider === 'universal' ? undefined : 'http://localhost:11434'
 
-      const newModel = {
-        name: m.name,
-        description: m.meta === 'Downloading…' ? '' : m.meta,
-        provider,
-        model: modelId,
-        ...(baseUrl && { base_url: baseUrl }),
-        prompt_format: 'unstructured',
-        provider_config: {},
-        prompts: promptSets && promptSets.length > 0 ? promptSets : ['default'],
+        const newModel = {
+          name: m.name,
+          description: m.meta === 'Downloading…' ? '' : m.meta,
+          provider,
+          model: modelId,
+          ...(baseUrl && { base_url: baseUrl }),
+          prompt_format: 'unstructured',
+          provider_config: {},
+          prompts: promptSets && promptSets.length > 0 ? promptSets : ['default'],
+        }
+
+        const updatedModels = [...runtimeModels, newModel]
+
+        const nextConfig = {
+          ...currentConfig,
+          runtime: {
+            ...currentConfig.runtime,
+            models: updatedModels,
+          },
+        }
+
+        await updateProject.mutateAsync({
+          namespace: activeProject.namespace,
+          projectId: activeProject.project,
+          request: { config: nextConfig },
+        })
+      } catch (error) {
+        // Rollback optimistic update on error
+        setProjectModels(prev => prev.filter(x => x.id !== m.id))
+        throw error
       }
-
-      const updatedModels = [...runtimeModels, newModel]
-
-      const nextConfig = {
-        ...currentConfig,
-        runtime: {
-          ...currentConfig.runtime,
-          models: updatedModels,
-        },
-      }
-
-      await updateProject.mutateAsync({
-        namespace: activeProject.namespace,
-        projectId: activeProject.project,
-        request: { config: nextConfig },
-      })
     },
     [activeProject, projectResponse, updateProject]
   )

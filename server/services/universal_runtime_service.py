@@ -137,6 +137,11 @@ class UniversalRuntimeService:
 
                 return response.json()
 
+        except httpx.TimeoutException as e:
+            raise HTTPException(
+                status_code=504,
+                detail="Universal Runtime request timed out after 60s",
+            ) from e
         except httpx.ConnectError as e:
             raise HTTPException(
                 status_code=503,

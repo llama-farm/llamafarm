@@ -1439,11 +1439,15 @@ async def score_anomalies(request: AnomalyScoreRequest):
                 "total_points": len(data),
                 "anomaly_count": anomaly_count,
                 "anomaly_rate": float(anomaly_count / len(data)) if data else 0.0,
-                "threshold": float(request.threshold or model.threshold),
+                "threshold": float(
+                    request.threshold
+                    if request.threshold is not None
+                    else model.threshold
+                ),
             },
             "results": data,  # Alias for compatibility with frontend
             "threshold": float(
-                request.threshold or model.threshold
+                request.threshold if request.threshold is not None else model.threshold
             ),  # Top-level for frontend
         }
 
@@ -2043,8 +2047,16 @@ async def delete_anomaly_model(model_name: str):
             # Also delete encoder file if it exists
             encoder_path = file_path.parent / f"{file_path.stem}_encoder.json"
             if encoder_path.exists():
-                encoder_path.unlink()
-                logger.info(f"Deleted encoder file: {encoder_path}")
+                # Validate encoder path too
+                try:
+                    validated_encoder = _validate_path_within_directory(
+                        encoder_path, ANOMALY_MODELS_DIR
+                    )
+                    validated_encoder.unlink()
+                    logger.info(f"Deleted encoder file: {validated_encoder}")
+                except ValueError:
+                    # Skip if encoder path is invalid
+                    logger.warning(f"Skipped invalid encoder path: {encoder_path}")
 
         return {
             "object": "delete_result",

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 const Select = React.forwardRef<
   HTMLSelectElement,
   React.ComponentProps<'select'>
->(({ className, children, ...props }, ref) => {
+>(({ className, children, style, ...props }, ref) => {
   const isInteractive = !props.disabled
   const focusRingClass = isInteractive
     ? 'focus-visible:ring-1 focus-visible:ring-white'
@@ -24,6 +24,7 @@ const Select = React.forwardRef<
         backgroundSize: '1rem',
         backgroundPosition: 'right 0.75rem center',
         backgroundRepeat: 'no-repeat',
+        ...style,
       }}
       ref={ref}
       {...props}
