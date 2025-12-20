@@ -382,6 +382,123 @@ class DatasetService:
         return result
 
     @classmethod
+    async def delete_file_chunks(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file_hash: str,
+    ) -> dict:
+        """
+        Delete chunks for a file from the vector store WITHOUT deleting the source file.
+        Used for reprocessing files.
+
+        Returns:
+            Dictionary with deletion results including deleted_count from vector store.
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        existing_datasets = project_config.datasets or []
+        dataset_obj = next(
+            (ds for ds in existing_datasets if ds.name == dataset),
+            None,
+        )
+        if dataset_obj is None:
+            raise DatasetNotFoundError(dataset)
+
+        project_dir = ProjectService.get_project_dir(namespace, project)
+        result = await delete_file_from_rag(
+            project_dir=project_dir,
+            database_name=dataset_obj.database,
+            file_hash=file_hash,
+        )
+
+        if result.get("status") == "error":
+            raise Exception(result.get("error"))
+
+        logger.info(
+            "Deleted chunks from vector store (keeping source file)",
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hash=file_hash[:16] + "...",
+            deleted_chunks=result.get("deleted_count", 0),
+        )
+
+        return result
+
+    @classmethod
+    async def delete_dataset_chunks(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+    ) -> dict:
+        """
+        Delete chunks for ALL files from the vector store WITHOUT deleting the source files.
+        Used for reprocessing entire dataset.
+
+        Returns:
+            Dictionary with total_deleted_chunks, total_files_cleared, and total_files_failed counts.
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        existing_datasets = project_config.datasets or []
+        dataset_obj = next(
+            (ds for ds in existing_datasets if ds.name == dataset),
+            None,
+        )
+        if dataset_obj is None:
+            raise DatasetNotFoundError(dataset)
+
+        # Get all files in the dataset
+        files = cls.list_dataset_files(namespace, project, dataset)
+
+        total_deleted = 0
+        files_cleared = 0
+        files_failed = 0
+        project_dir = ProjectService.get_project_dir(namespace, project)
+
+        for file_info in files:
+            file_hash = file_info.hash
+            if not file_hash:
+                continue
+
+            result = await delete_file_from_rag(
+                project_dir=project_dir,
+                database_name=dataset_obj.database,
+                file_hash=file_hash,
+            )
+
+            if result.get("status") == "error":
+                files_failed += 1
+                logger.warning(
+                    "Failed to delete chunks for file",
+                    namespace=namespace,
+                    project=project,
+                    dataset=dataset,
+                    file_hash=file_hash[:16] + "...",
+                    error=result.get("error"),
+                )
+            else:
+                total_deleted += result.get("deleted_count", 0)
+                files_cleared += 1
+
+        logger.info(
+            "Deleted all chunks from vector store (keeping source files)",
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            total_deleted=total_deleted,
+            files_cleared=files_cleared,
+            files_failed=files_failed,
+        )
+
+        return {
+            "total_deleted_chunks": total_deleted,
+            "total_files_cleared": files_cleared,
+            "total_files_failed": files_failed,
+        }
+
+    @classmethod
     def start_dataset_ingestion(
         cls, namespace: str, project: str, dataset: str
     ) -> DatasetIngestLaunchResult:

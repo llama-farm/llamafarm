@@ -27,7 +27,9 @@ export class CLIInstaller {
   constructor() {
     // Store CLI in app's userData directory for portable installation
     const userDataPath = app.getPath('userData')
-    this.cliPath = path.join(userDataPath, 'bin', this.BINARY_NAME)
+    // On Windows, executables need .exe extension
+    const binaryName = process.platform === 'win32' ? `${this.BINARY_NAME}.exe` : this.BINARY_NAME
+    this.cliPath = path.join(userDataPath, 'bin', binaryName)
   }
 
   /**

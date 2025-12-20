@@ -552,6 +552,7 @@ async def chat(
                 rag_queries=request.rag_queries,
                 think=request.think,
                 thinking_budget=request.thinking_budget,
+                max_tokens=request.max_tokens,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -573,6 +574,7 @@ async def chat(
             rag_queries=request.rag_queries,
             think=request.think,
             thinking_budget=request.thinking_budget,
+            max_tokens=request.max_tokens,
         )
     except Exception as e:
         raise HTTPException(

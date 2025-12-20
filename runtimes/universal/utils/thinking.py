@@ -136,6 +136,7 @@ class ThinkingBudgetProcessor:
     to generate </think> and proceed to the answer.
 
     This is used with llama-cpp-python's logits_processor parameter.
+    Uses numpy arrays (required by llama-cpp-python since PR #499).
     """
 
     def __init__(
@@ -153,9 +154,10 @@ class ThinkingBudgetProcessor:
         """
         self.llama = llama
         self.max_thinking_tokens = max_thinking_tokens
-        self.tokens_generated = 0
+        self.thinking_tokens = 0  # Only counts tokens INSIDE <think>
         self.in_thinking = False
         self.thinking_ended = False
+        self.forcing_end = False  # True while forcing </think> sequence
 
         # Try to get the token IDs for </think>
         if think_end_tokens is None:
@@ -172,25 +174,34 @@ class ThinkingBudgetProcessor:
 
         self._force_token_idx = 0
 
-    def __call__(self, input_ids: list[int], scores: list[float]) -> list[float]:
+    def __call__(self, input_ids, scores):
         """Process logits to enforce thinking budget.
 
         Args:
-            input_ids: Current token IDs generated so far
-            scores: Logits for next token prediction
+            input_ids: numpy array of token IDs generated so far
+            scores: numpy array of logits for next token (modified in-place)
 
         Returns:
-            Modified logits
+            Modified scores array (numpy)
         """
-        import math
+        import numpy as np
 
-        self.tokens_generated += 1
+        # Convert to numpy if needed (for compatibility)
+        if not isinstance(scores, np.ndarray):
+            scores = np.array(scores)
 
-        # Check if we're in thinking mode by looking at generated text
-        if not self.thinking_ended:
+        # Check current state by looking at generated text
+        if not self.thinking_ended and not self.forcing_end:
             try:
-                text = self.llama.detokenize(input_ids).decode("utf-8", errors="ignore")
-                if "<think>" in text.lower():
+                # Convert input_ids to list if numpy array
+                ids = (
+                    input_ids.tolist()
+                    if hasattr(input_ids, "tolist")
+                    else list(input_ids)
+                )
+                text = self.llama.detokenize(ids).decode("utf-8", errors="ignore")
+
+                if "<think>" in text.lower() and not self.in_thinking:
                     self.in_thinking = True
                 if "</think>" in text.lower():
                     self.thinking_ended = True
@@ -198,21 +209,32 @@ class ThinkingBudgetProcessor:
             except Exception:
                 pass
 
-        # If we're in thinking and over budget, force </think>
+        # Count tokens only while in thinking mode
+        if self.in_thinking and not self.thinking_ended:
+            self.thinking_tokens += 1
+
+        # If in thinking, over budget, and have end tokens - start forcing </think>
         if (
             self.in_thinking
             and not self.thinking_ended
-            and self.tokens_generated >= self.max_thinking_tokens
+            and self.thinking_tokens >= self.max_thinking_tokens
             and self.think_end_tokens
-            and self._force_token_idx < len(self.think_end_tokens)
+            and not self.forcing_end
         ):
-            # Force the next token in </think> sequence
+            self.forcing_end = True
+
+        # If we are actively forcing the end token sequence
+        if self.forcing_end and self._force_token_idx < len(self.think_end_tokens):
             target_token = self.think_end_tokens[self._force_token_idx]
             self._force_token_idx += 1
 
-            # Set all logits to -inf except the target
-            scores = [-math.inf] * len(scores)
+            # Set all logits to -inf except the target token
+            scores[:] = -np.inf
             if target_token < len(scores):
                 scores[target_token] = 0.0
+        elif self.forcing_end and self._force_token_idx >= len(self.think_end_tokens):
+            # Finalize state when forcing completes
+            self.thinking_ended = True
+            self.in_thinking = False
 
         return scores

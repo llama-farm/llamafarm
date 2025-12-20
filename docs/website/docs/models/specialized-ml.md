@@ -46,7 +46,32 @@ Extract text from images and PDF documents using multiple OCR backends.
 | `paddleocr` | Fast, production-optimized | Asian languages, speed |
 | `tesseract` | Classic OCR, CPU-only | Simple documents, CPU-only environments |
 
-### Basic Usage
+### Using the LlamaFarm API (Recommended)
+
+The easiest way to use OCR is through the LlamaFarm API, which handles file uploads and PDF-to-image conversion automatically:
+
+```bash
+# Upload a PDF or image directly
+curl -X POST http://localhost:8000/v1/vision/ocr \
+  -F "file=@document.pdf" \
+  -F "model=easyocr" \
+  -F "languages=en"
+```
+
+Or with base64-encoded images:
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/ocr \
+  -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
+  -F "model=surya" \
+  -F "languages=en"
+```
+
+**Supported file types:** PDF, PNG, JPG, JPEG, GIF, WebP, BMP, TIFF
+
+### Using the Universal Runtime Directly
+
+For more control, you can use the Universal Runtime directly with base64 images:
 
 ```bash
 # OCR with base64 image
@@ -59,9 +84,9 @@ curl -X POST http://localhost:11540/v1/ocr \
   }'
 ```
 
-### PDF Processing Workflow
+### PDF Processing Workflow (Universal Runtime)
 
-For multi-page documents, use the file upload workflow:
+For multi-page documents using the Universal Runtime directly:
 
 ```bash
 # 1. Upload PDF (auto-converts to images)
@@ -117,7 +142,23 @@ Extract structured key-value pairs from forms, invoices, and receipts using visi
 | `naver-clova-ix/donut-base-finetuned-docvqa` | Document Q&A |
 | `microsoft/layoutlmv3-base-finetuned-docvqa` | Document Q&A with layout understanding |
 
-### Extract from Receipt
+### Using the LlamaFarm API (Recommended)
+
+The easiest way to extract data from documents is through the LlamaFarm API:
+
+```bash
+# Extract from a receipt (file upload)
+curl -X POST http://localhost:8000/v1/vision/documents/extract \
+  -F "file=@receipt.pdf" \
+  -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
+  -F "task=extraction"
+```
+
+**Supported file types:** PDF, PNG, JPG, JPEG, GIF, WebP, BMP, TIFF
+
+### Extract from Receipt (Universal Runtime)
+
+Using the Universal Runtime directly with a file ID:
 
 ```bash
 curl -X POST http://localhost:11540/v1/documents/extract \
@@ -150,7 +191,18 @@ curl -X POST http://localhost:11540/v1/documents/extract \
 
 ### Document Q&A
 
-Ask questions about document content:
+Ask questions about document content using the LlamaFarm API:
+
+```bash
+# Document VQA with file upload (LlamaFarm API)
+curl -X POST http://localhost:8000/v1/vision/documents/extract \
+  -F "file=@invoice.pdf" \
+  -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
+  -F "prompts=What is the total amount?,What is the invoice date?" \
+  -F "task=vqa"
+```
+
+Or using the Universal Runtime directly:
 
 ```bash
 curl -X POST http://localhost:11540/v1/documents/extract \

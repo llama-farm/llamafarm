@@ -14,14 +14,20 @@ The LlamaFarm Desktop App provides a complete local AI environment with visual p
 ## Downloads
 
 <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px', marginTop: '16px'}}>
-  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19-arm64-mac.zip" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-arm64.dmg" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
     ⬇️ Mac (M1+)
   </a>
-  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm.Setup.0.0.19.exe" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Mac (Intel)
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
     ⬇️ Windows
   </a>
-  <a href="https://github.com/llama-farm/llamafarm/releases/download/v0.0.19/LlamaFarm-0.0.19.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
-    ⬇️ Linux
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Linux (x86_64)
+  </a>
+  <a href="https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage" style={{display: 'inline-flex', alignItems: 'center', padding: '12px 24px', backgroundColor: '#2563eb', color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '16px'}}>
+    ⬇️ Linux (ARM64)
   </a>
 </div>
 
@@ -101,8 +107,8 @@ Windows Defender may scan the app on first launch. This is normal and should com
 
 ```bash
 # Make executable and run
-chmod +x LlamaFarm-0.0.19.AppImage
-./LlamaFarm-0.0.19.AppImage
+chmod +x LlamaFarm-desktop-app-linux-x86_64.AppImage
+./LlamaFarm-desktop-app-linux-x86_64.AppImage
 
 # If FUSE is not installed:
 sudo apt install fuse libfuse2
