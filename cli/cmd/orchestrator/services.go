@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -309,11 +310,24 @@ func EnsureServicesOrExit(serverURL string, serviceNames ...string) {
 
 // EnsureServicesWithConfig ensures services are running, respecting AutoStart flag
 func (sm *ServiceManager) EnsureServicesWithConfig(config *ServiceOrchestrationConfig, serviceNames ...string) error {
+	if config == nil {
+		return fmt.Errorf("service configuration is required")
+	}
+
+	targetServices, err := sm.resolveServiceTargets(config, serviceNames...)
+	if err != nil {
+		return err
+	}
+
 	// If auto-start is disabled, check health but don't start services
 	if !config.AutoStart {
 		var unhealthyServices []string
 
-		for _, serviceName := range serviceNames {
+		for _, serviceName := range targetServices {
+			if sm.serviceRequirement(config, serviceName) != ServiceRequired {
+				continue
+			}
+
 			serviceDef, exists := ServiceGraph[serviceName]
 			if !exists {
 				return fmt.Errorf("unknown service: %s", serviceName)
@@ -334,8 +348,8 @@ func (sm *ServiceManager) EnsureServicesWithConfig(config *ServiceOrchestrationC
 		return nil
 	}
 
-	// Auto-start is enabled, use existing logic
-	return sm.EnsureServices(serviceNames...)
+	// Auto-start is enabled, use configured requirements
+	return sm.ensureServicesWithRequirements(config, targetServices)
 }
 
 // EnsureServicesOrExitWithConfig wraps EnsureServicesWithConfig with exit behavior
@@ -350,6 +364,100 @@ func EnsureServicesOrExitWithConfig(config *ServiceOrchestrationConfig, serviceN
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func (sm *ServiceManager) resolveServiceTargets(config *ServiceOrchestrationConfig, serviceNames ...string) ([]string, error) {
+	if len(serviceNames) == 0 && len(config.ServiceNeeds) > 0 {
+		serviceNames = make([]string, 0, len(config.ServiceNeeds))
+		for name := range config.ServiceNeeds {
+			serviceNames = append(serviceNames, name)
+		}
+		sort.Strings(serviceNames)
+	}
+
+	for _, serviceName := range serviceNames {
+		if _, exists := ServiceGraph[serviceName]; !exists {
+			return nil, fmt.Errorf("unknown service: %s", serviceName)
+		}
+	}
+
+	return serviceNames, nil
+}
+
+func (sm *ServiceManager) serviceRequirement(config *ServiceOrchestrationConfig, serviceName string) ServiceRequirement {
+	if config == nil || config.ServiceNeeds == nil {
+		return ServiceRequired
+	}
+	if requirement, ok := config.ServiceNeeds[serviceName]; ok {
+		return requirement
+	}
+	return ServiceRequired
+}
+
+func (sm *ServiceManager) ensureServicesWithRequirements(
+	config *ServiceOrchestrationConfig,
+	serviceNames []string,
+) error {
+	var required []string
+	var optional []string
+
+	for _, serviceName := range serviceNames {
+		switch sm.serviceRequirement(config, serviceName) {
+		case ServiceIgnored:
+			continue
+		case ServiceOptional:
+			optional = append(optional, serviceName)
+		default:
+			required = append(required, serviceName)
+		}
+	}
+
+	for _, serviceName := range required {
+		if err := sm.EnsureService(serviceName); err != nil {
+			return err
+		}
+	}
+
+	for _, serviceName := range optional {
+		if err := sm.ensureServiceOptional(serviceName, config); err != nil {
+			utils.OutputWarning(
+				"Warning: Failed to start optional service %s: %v\n",
+				serviceName,
+				err,
+			)
+		}
+	}
+
+	return nil
+}
+
+func (sm *ServiceManager) ensureServiceOptional(serviceName string, config *ServiceOrchestrationConfig) error {
+	resolvedOrder, err := sm.resolveDependencies(serviceName)
+	if err != nil {
+		return err
+	}
+
+	for _, svcName := range resolvedOrder {
+		switch sm.serviceRequirement(config, svcName) {
+		case ServiceIgnored:
+			continue
+		case ServiceRequired:
+			if err := sm.ensureSingleService(svcName); err != nil {
+				return err
+			}
+			continue
+		}
+
+		serviceDef := ServiceGraph[svcName]
+		if sm.isServiceHealthy(serviceDef) {
+			continue
+		}
+		if err := sm.startService(serviceDef); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ensureSingleService ensures a single service is running without checking dependencies.

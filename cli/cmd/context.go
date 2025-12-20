@@ -58,11 +58,12 @@ func (f *ServiceConfigFactory) StartCommand(serverURL string) *orchestrator.Serv
 		ServerURL:   serverURL,
 		PrintStatus: true,
 		ServiceNeeds: map[string]orchestrator.ServiceRequirement{
-			"server": orchestrator.ServiceRequired,
-			"rag":    orchestrator.ServiceOptional,
+			"server":            orchestrator.ServiceRequired,
+			"rag":               orchestrator.ServiceOptional,
+			"universal-runtime": orchestrator.ServiceOptional,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		AutoStart:       f.ctx.AutoStart,
+		AutoStart:      f.ctx.AutoStart,
 	}
 }
 
@@ -76,7 +77,7 @@ func (f *ServiceConfigFactory) RAGCommand(serverURL string) *orchestrator.Servic
 			"rag":    orchestrator.ServiceRequired,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		AutoStart:       f.ctx.AutoStart,
+		AutoStart:      f.ctx.AutoStart,
 	}
 }
 
@@ -89,7 +90,7 @@ func (f *ServiceConfigFactory) ChatNoRAG(serverURL string) *orchestrator.Service
 			"server": orchestrator.ServiceRequired,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		AutoStart:       f.ctx.AutoStart,
+		AutoStart:      f.ctx.AutoStart,
 	}
 }
 
@@ -103,7 +104,7 @@ func (f *ServiceConfigFactory) ServerOnly(serverURL string) *orchestrator.Servic
 			"rag":    orchestrator.ServiceOptional,
 		},
 		DefaultTimeout: f.ctx.ServerStartTimeout,
-		AutoStart:       f.ctx.AutoStart,
+		AutoStart:      f.ctx.AutoStart,
 	}
 }
 

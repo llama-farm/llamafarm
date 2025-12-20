@@ -305,6 +305,7 @@ func TestEnsureServicesWithConfig_AutoStartDisabled(t *testing.T) {
 		name         string
 		autoStart    bool
 		serviceNames []string
+		serviceNeeds map[string]ServiceRequirement
 		wantErr      bool
 		errContains  string
 		// Note: We can't easily mock isServiceHealthy without refactoring,
@@ -323,14 +324,22 @@ func TestEnsureServicesWithConfig_AutoStartDisabled(t *testing.T) {
 			serviceNames: []string{},
 			wantErr:      false,
 		},
+		{
+			name:         "optional service without auto-start does not error",
+			autoStart:    false,
+			serviceNames: []string{},
+			serviceNeeds: map[string]ServiceRequirement{"server": ServiceOptional},
+			wantErr:      false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &ServiceOrchestrationConfig{
-				ServerURL:   "http://localhost:8000",
-				PrintStatus: false,
-				AutoStart:   tt.autoStart,
+				ServerURL:    "http://localhost:8000",
+				PrintStatus:  false,
+				AutoStart:    tt.autoStart,
+				ServiceNeeds: tt.serviceNeeds,
 			}
 
 			err := sm.EnsureServicesWithConfig(config, tt.serviceNames...)
