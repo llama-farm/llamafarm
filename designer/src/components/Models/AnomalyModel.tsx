@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { SAMPLE_DATASETS, type SampleDataset } from './sampleData'
+import { SAMPLE_DATASETS } from './sampleData'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -1275,7 +1275,10 @@ function AnomalyModel() {
                     max={0.5}
                     step={0.01}
                     value={contamination}
-                    onChange={e => setContamination(parseFloat(e.target.value))}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value)
+                      setContamination(isNaN(val) ? 0.1 : val)
+                    }}
                     className="w-24"
                   />
                 </div>
@@ -1290,7 +1293,10 @@ function AnomalyModel() {
                     max={1}
                     step={0.1}
                     value={threshold}
-                    onChange={e => setThreshold(parseFloat(e.target.value))}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value)
+                      setThreshold(isNaN(val) ? 0.5 : val)
+                    }}
                     className="w-24"
                   />
                 </div>

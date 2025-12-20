@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
@@ -83,6 +83,9 @@ function TrainedModels() {
   const deleteAnomalyMutation = useDeleteAnomalyModel()
   const deleteClassifierMutation = useDeleteClassifierModel()
 
+  // Track which model is being deleted
+  const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
+
   // Combine and normalize models
   const trainedModels = useMemo(() => {
     const models: TrainedModel[] = []
@@ -128,6 +131,7 @@ function TrainedModels() {
     const confirmMessage = `Delete "${model.name}" and all ${model.versionCount} version${model.versionCount !== 1 ? 's' : ''}? This cannot be undone.`
     if (!window.confirm(confirmMessage)) return
 
+    setDeletingModelId(model.id)
     try {
       // Delete all versions of this model
       if (model.type === 'anomaly_detection' && anomalyData?.models) {
@@ -159,6 +163,8 @@ function TrainedModels() {
         variant: 'destructive',
         icon: 'alert-triangle',
       })
+    } finally {
+      setDeletingModelId(null)
     }
   }
 
@@ -253,10 +259,7 @@ function TrainedModels() {
                 key={`${model.type}-${model.id}`}
                 model={model}
                 onDelete={() => handleDeleteModel(model)}
-                isDeleting={
-                  deleteAnomalyMutation.isPending ||
-                  deleteClassifierMutation.isPending
-                }
+                isDeleting={deletingModelId === model.id}
               />
             ))}
           </div>

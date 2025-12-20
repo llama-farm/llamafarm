@@ -959,7 +959,7 @@ function ClassifierModel() {
         error instanceof Error ? error.message : 'Training failed. Please try again.'
       )
     }
-  }, [canTrain, validClasses, modelName, baseModel, trainAndSaveMutation, isNewModel, navigate, existingBaseNames])
+  }, [canTrain, validClasses, modelName, baseModel, description, trainAndSaveMutation, isNewModel, navigate, existingBaseNames])
 
   const handleTest = useCallback(async () => {
     if (!testInput.trim() || !activeVersionName) return
