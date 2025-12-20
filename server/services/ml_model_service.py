@@ -343,6 +343,7 @@ class MLModelService:
             path = cls._validate_path(model_dir, name)
             if path.is_dir():
                 shutil.rmtree(path)
+                cls.delete_metadata(model_type, name)
                 logger.info(f"Deleted classifier model: {name}")
                 return True
         else:
@@ -350,6 +351,7 @@ class MLModelService:
             path = cls._validate_path(model_dir, name)
             if path.is_file():
                 path.unlink()
+                cls.delete_metadata(model_type, name)
                 logger.info(f"Deleted anomaly model: {name}")
                 return True
 
@@ -357,6 +359,9 @@ class MLModelService:
             path = cls._validate_path(model_dir, f"{name}.joblib")
             if path.is_file():
                 path.unlink()
+                # For .joblib files, metadata uses name without extension
+                # Use the original name (not name.joblib) for metadata lookup
+                cls.delete_metadata(model_type, name)
                 logger.info(f"Deleted anomaly model: {name}.joblib")
                 return True
 
