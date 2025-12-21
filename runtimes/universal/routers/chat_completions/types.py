@@ -46,12 +46,29 @@ class ChatCompletionRequest(BaseModel):
     # When reached, model is nudged to close </think> and provide answer
     thinking_budget: int | None = None
 
+    # Context management parameters
+    # Whether to automatically truncate messages if context is exceeded
+    auto_truncate: bool | None = True
+    # Truncation strategy: "sliding_window", "keep_system", "middle_out", "summarize"
+    truncation_strategy: str | None = None
+
 
 class ThinkingContent(BaseModel):
     """Thinking/reasoning content from a thinking model."""
 
     content: str  # The raw thinking content (without <think> tags)
     tokens: int | None = None  # Number of tokens used for thinking
+
+
+class ContextUsageInfo(BaseModel):
+    """Context window usage information."""
+
+    total_context: int  # Total context window size in tokens
+    prompt_tokens: int  # Tokens used by the prompt (input)
+    available_for_completion: int  # Remaining tokens for output
+    truncated: bool = False  # Whether truncation was applied
+    truncated_messages: int = 0  # Number of messages removed
+    strategy_used: str | None = None  # Truncation strategy used (if any)
 
 
 class ChatCompletionResponse(BaseModel):
@@ -65,3 +82,5 @@ class ChatCompletionResponse(BaseModel):
     usage: dict
     # Ollama-compatible: separate thinking from content
     thinking: ThinkingContent | None = None
+    # Context usage information (extension field)
+    x_context_usage: ContextUsageInfo | None = None

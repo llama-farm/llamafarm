@@ -15,7 +15,9 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
+from utils.context_manager import ContextBudget, ContextManager, ContextUsage
 from utils.model_format import get_gguf_file_path
+from utils.token_counter import TokenCounter
 
 from .base import BaseModel
 
@@ -68,6 +70,10 @@ class GGUFLanguageModel(BaseModel):
         self.actual_n_ctx: int | None = None  # Will be computed during load()
         self.preferred_quantization = preferred_quantization
         self._executor = ThreadPoolExecutor(max_workers=1)
+
+        # Context management (initialized during load())
+        self._token_counter: TokenCounter | None = None
+        self._context_manager: ContextManager | None = None
 
     async def load(self) -> None:
         """Load the GGUF model using llama-cpp-python.
@@ -180,6 +186,11 @@ class GGUFLanguageModel(BaseModel):
 
         self.llama = await loop.run_in_executor(self._executor, _load_model)
 
+        # Initialize context management
+        self._token_counter = TokenCounter(self.llama)
+        budget = ContextBudget.from_context_size(self.actual_n_ctx)
+        self._context_manager = ContextManager(self._token_counter, budget)
+
         logger.info(
             f"GGUF model loaded successfully on {self.device} "
             f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
@@ -221,6 +232,48 @@ class GGUFLanguageModel(BaseModel):
         # Add final prompt for assistant response
         prompt_parts.append("Assistant:")
         return "\n".join(prompt_parts)
+
+    @property
+    def token_counter(self) -> TokenCounter | None:
+        """Get the token counter for this model."""
+        return self._token_counter
+
+    @property
+    def context_manager(self) -> ContextManager | None:
+        """Get the context manager for this model."""
+        return self._context_manager
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens in text using the model's tokenizer.
+
+        Args:
+            text: Text to count tokens for.
+
+        Returns:
+            Number of tokens.
+
+        Raises:
+            RuntimeError: If model not loaded.
+        """
+        if self._token_counter is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+        return self._token_counter.count_tokens(text)
+
+    def validate_context(self, messages: list[dict]) -> ContextUsage:
+        """Validate messages fit within context and return usage info.
+
+        Args:
+            messages: List of chat messages to validate.
+
+        Returns:
+            ContextUsage with token counts and overflow status.
+
+        Raises:
+            RuntimeError: If model not loaded.
+        """
+        if self._context_manager is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+        return self._context_manager.validate_messages(messages)
 
     def _prepare_messages_with_tools(
         self,

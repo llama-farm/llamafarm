@@ -17,10 +17,13 @@ from openai.types.chat.chat_completion_chunk import (
 )
 
 from models import GGUFLanguageModel
+from utils.context_manager import TruncationStrategy
+from utils.context_summarizer import ContextSummarizer
+from utils.history_compressor import HistoryCompressor
 from utils.thinking import inject_thinking_control, parse_thinking_response
 from utils.tool_calling import detect_probable_tool_call, detect_tool_call_in_content
 
-from .types import ChatCompletionRequest, ThinkingContent
+from .types import ChatCompletionRequest, ContextUsageInfo, ThinkingContent
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +121,146 @@ class ChatCompletionsService:
             tools_dict = None
             if chat_request.tools:
                 tools_dict = [dict(tool) for tool in chat_request.tools]
+
+            # Context management for GGUF models
+            context_usage_info = None
+            if is_gguf and model.context_manager:
+                # Apply history compression to reduce token usage
+                compressor = HistoryCompressor(model.token_counter)
+                messages_dict = compressor.compress(messages_dict)
+
+                # Validate context and truncate if needed
+                usage = model.context_manager.validate_messages(messages_dict)
+
+                if model.context_manager.needs_truncation(messages_dict):
+                    auto_truncate = chat_request.auto_truncate
+                    if auto_truncate is None:
+                        auto_truncate = True  # Default to auto-truncate
+
+                    if not auto_truncate:
+                        # Return error instead of truncating
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "context_length_exceeded",
+                                "message": (
+                                    f"Prompt ({usage.prompt_tokens} tokens) exceeds "
+                                    f"context limit ({usage.total_context} tokens). "
+                                    "Set auto_truncate=true to automatically truncate."
+                                ),
+                                "context_usage": {
+                                    "total_context": usage.total_context,
+                                    "prompt_tokens": usage.prompt_tokens,
+                                    "available_for_completion": usage.available_for_completion,
+                                },
+                            },
+                        )
+
+                    # Determine truncation strategy
+                    strategy = None
+                    if chat_request.truncation_strategy:
+                        try:
+                            strategy = TruncationStrategy(chat_request.truncation_strategy)
+                        except ValueError:
+                            logger.warning(
+                                f"Unknown truncation strategy: {chat_request.truncation_strategy}, "
+                                "using default (summarize)"
+                            )
+                            strategy = TruncationStrategy.SUMMARIZE
+                    else:
+                        strategy = TruncationStrategy.SUMMARIZE  # Default
+
+                    # Handle summarization strategy (async, needs special handling)
+                    if strategy == TruncationStrategy.SUMMARIZE:
+                        try:
+                            # Pass the server's load_language for proper caching
+                            summarizer = ContextSummarizer(load_language=self.load_language)
+                            messages_dict = await summarizer.summarize_messages(messages_dict)
+                            # Re-validate after summarization
+                            usage = model.context_manager.validate_messages(messages_dict)
+
+                            # Check if we STILL need truncation after summarization
+                            # (e.g., if recent messages are still too large)
+                            if model.context_manager.needs_truncation(messages_dict):
+                                logger.warning(
+                                    f"Still over budget after summarization "
+                                    f"({usage.prompt_tokens} tokens), applying fallback truncation"
+                                )
+                                messages_dict, usage = model.context_manager.truncate_if_needed(
+                                    messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                                )
+                                usage = type(usage)(
+                                    total_context=usage.total_context,
+                                    prompt_tokens=usage.prompt_tokens,
+                                    available_for_completion=usage.available_for_completion,
+                                    truncated=True,
+                                    truncated_messages=usage.truncated_messages,
+                                    strategy_used="summarize+keep_system",
+                                )
+                            else:
+                                usage = type(usage)(
+                                    total_context=usage.total_context,
+                                    prompt_tokens=usage.prompt_tokens,
+                                    available_for_completion=usage.available_for_completion,
+                                    truncated=True,
+                                    truncated_messages=0,  # Summarized, not removed
+                                    strategy_used="summarize",
+                                )
+                            logger.info(
+                                f"Context summarized: {usage.prompt_tokens} tokens after summarization"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Summarization failed: {e}, falling back to keep_system"
+                            )
+                            messages_dict, usage = model.context_manager.truncate_if_needed(
+                                messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                            )
+                    else:
+                        # Use regular truncation strategy
+                        messages_dict, usage = model.context_manager.truncate_if_needed(
+                            messages_dict, strategy
+                        )
+                        logger.info(
+                            f"Context truncated: {usage.truncated_messages} messages removed, "
+                            f"strategy={usage.strategy_used}"
+                        )
+
+                # Store context usage for response
+                context_usage_info = ContextUsageInfo(
+                    total_context=usage.total_context,
+                    prompt_tokens=usage.prompt_tokens,
+                    available_for_completion=usage.available_for_completion,
+                    truncated=usage.truncated,
+                    truncated_messages=usage.truncated_messages,
+                    strategy_used=usage.strategy_used,
+                )
+
+                # Final safety check: ensure we're actually under budget
+                if model.context_manager.needs_truncation(messages_dict):
+                    final_usage = model.context_manager.validate_messages(messages_dict)
+                    logger.error(
+                        f"CRITICAL: Still over context budget after all truncation: "
+                        f"{final_usage.prompt_tokens} tokens > "
+                        f"{model.context_manager.budget.max_prompt_tokens} max"
+                    )
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "error": "context_truncation_failed",
+                            "message": (
+                                f"Failed to reduce context to fit within budget. "
+                                f"Current: {final_usage.prompt_tokens} tokens, "
+                                f"Max: {model.context_manager.budget.max_prompt_tokens} tokens. "
+                                "Try sending fewer or shorter messages."
+                            ),
+                            "context_usage": {
+                                "total_context": final_usage.total_context,
+                                "prompt_tokens": final_usage.prompt_tokens,
+                                "available_for_completion": final_usage.available_for_completion,
+                            },
+                        },
+                    )
 
             # Handle streaming if requested
             if chat_request.stream:
@@ -322,6 +465,9 @@ class ChatCompletionsService:
 
             if tool_calls:
                 # Build response with tool calls
+                prompt_tokens = (
+                    context_usage_info.prompt_tokens if context_usage_info else 0
+                )
                 response = {
                     "id": f"chatcmpl-{os.urandom(16).hex()}",
                     "object": "chat.completion",
@@ -349,14 +495,20 @@ class ChatCompletionsService:
                         }
                     ],
                     "usage": {
-                        "prompt_tokens": 0,  # TODO: Implement token counting
-                        "completion_tokens": 0,
-                        "total_tokens": 0,
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": 0,  # TODO: count completion tokens
+                        "total_tokens": prompt_tokens,
                     },
                 }
+                # Add context usage info if available
+                if context_usage_info:
+                    response["x_context_usage"] = context_usage_info.model_dump()
                 return response
 
             # Build response with optional thinking field (Ollama-compatible)
+            prompt_tokens = (
+                context_usage_info.prompt_tokens if context_usage_info else 0
+            )
             response = {
                 "id": f"chatcmpl-{os.urandom(16).hex()}",
                 "object": "chat.completion",
@@ -370,9 +522,9 @@ class ChatCompletionsService:
                     }
                 ],
                 "usage": {
-                    "prompt_tokens": 0,  # TODO: Implement token counting
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": 0,  # TODO: count completion tokens
+                    "total_tokens": prompt_tokens,
                 },
             }
 
@@ -382,6 +534,10 @@ class ChatCompletionsService:
                     content=parsed.thinking,
                     tokens=None,  # TODO: count thinking tokens
                 ).model_dump()
+
+            # Add context usage info if available
+            if context_usage_info:
+                response["x_context_usage"] = context_usage_info.model_dump()
 
             return response
 
