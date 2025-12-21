@@ -28,6 +28,7 @@ dependencies = [
   "protobuf>=6.33.1",
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",  # TTL-based model caching
+  "jinja2>=3.0.0",  # For tool-aware chat template rendering
 ]
 
 [dependency-groups]

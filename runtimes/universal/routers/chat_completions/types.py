@@ -1,7 +1,22 @@
 from typing import Literal
 
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from pydantic import BaseModel
+
+
+class FunctionCall(BaseModel):
+    """Function call details within a tool call."""
+
+    name: str
+    arguments: str  # JSON string of arguments
+
+
+class ToolCall(BaseModel):
+    """A tool call made by the assistant."""
+
+    id: str
+    type: Literal["function"] = "function"
+    function: FunctionCall
 
 
 class ChatCompletionRequest(BaseModel):
@@ -19,6 +34,10 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = None
     n_ctx: int | None = None  # Context window size for GGUF models
     extra_body: dict | None = None
+
+    # Tool/function calling parameters
+    tools: list[ChatCompletionToolParam] | None = None
+    tool_choice: str | dict | None = None  # "auto", "none", "required", or specific tool
 
     # Thinking/reasoning model parameters (Ollama-compatible)
     # Controls whether thinking models show their reasoning process

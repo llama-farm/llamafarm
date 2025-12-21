@@ -101,6 +101,9 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(f"GGUF file located at: {gguf_path}")
 
+        # Store path for later use (e.g., Jinja2 template extraction)
+        self._gguf_path = gguf_path
+
         # Compute optimal context size
         self.actual_n_ctx, warnings = get_default_context_size(
             model_id=self.model_id,
@@ -219,6 +222,53 @@ class GGUFLanguageModel(BaseModel):
         prompt_parts.append("Assistant:")
         return "\n".join(prompt_parts)
 
+    def _prepare_messages_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+    ) -> list[dict]:
+        """Prepare messages with tool definitions if provided.
+
+        Tries Jinja2 template rendering first for models with native tool support,
+        falls back to prompt-based injection.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            tools: Optional list of tool definitions in OpenAI format
+
+        Returns:
+            Messages with tools injected (if tools provided)
+        """
+        if not tools:
+            return messages
+
+        # Try Jinja2 rendering for models with tool-aware templates
+        try:
+            from utils.jinja_tools import (
+                get_chat_template_from_gguf,
+                supports_native_tools,
+            )
+
+            gguf_path = getattr(self, "_gguf_path", None)
+            if gguf_path:
+                template = get_chat_template_from_gguf(gguf_path)
+                if template and supports_native_tools(template):
+                    # Render with Jinja2 - this returns a prompt string
+                    # We need to convert back to messages format for create_chat_completion
+                    # For now, we'll use prompt-based fallback since create_chat_completion
+                    # expects messages, not a raw prompt
+                    logger.debug("Model has tool-aware template, using Jinja2 rendering")
+                    # TODO: Consider using raw prompt generation instead of create_chat_completion
+                    # For now, fall through to prompt-based approach
+        except Exception as e:
+            logger.debug(f"Jinja2 tool rendering not available: {e}")
+
+        # Fallback: inject tools into messages using prompt-based approach
+        from utils.tool_calling import inject_tools_into_messages
+
+        logger.debug("Using prompt-based tool injection")
+        return inject_tools_into_messages(messages, tools)
+
     async def generate(
         self,
         messages: list[dict],
@@ -227,6 +277,8 @@ class GGUFLanguageModel(BaseModel):
         top_p: float = 1.0,
         stop: list[str] | None = None,
         thinking_budget: int | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> str:
         """Generate chat completion (non-streaming).
 
@@ -241,6 +293,8 @@ class GGUFLanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
             thinking_budget: Maximum tokens for thinking before forcing </think>
+            tools: Optional list of tool definitions in OpenAI format
+            tool_choice: Optional tool choice strategy ("auto", "none", "required")
 
         Returns:
             Generated text as a string
@@ -252,6 +306,9 @@ class GGUFLanguageModel(BaseModel):
 
         max_tokens = max_tokens or 512
         loop = asyncio.get_running_loop()
+
+        # Prepare messages with tools if provided
+        prepared_messages = self._prepare_messages_with_tools(messages, tools)
 
         def _generate():
             try:
@@ -266,7 +323,7 @@ class GGUFLanguageModel(BaseModel):
 
                 # Use create_chat_completion which applies the model's chat template
                 return self.llama.create_chat_completion(
-                    messages=messages,
+                    messages=prepared_messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=top_p,
@@ -296,6 +353,8 @@ class GGUFLanguageModel(BaseModel):
         top_p: float = 1.0,
         stop: list[str] | None = None,
         thinking_budget: int | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> AsyncGenerator[str, None]:
         """Generate chat completion with streaming (async generator).
 
@@ -312,6 +371,8 @@ class GGUFLanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
             thinking_budget: Maximum tokens for thinking before forcing </think>
+            tools: Optional list of tool definitions in OpenAI format
+            tool_choice: Optional tool choice strategy ("auto", "none", "required")
 
         Yields:
             Generated text tokens as strings
@@ -324,6 +385,9 @@ class GGUFLanguageModel(BaseModel):
         max_tokens = max_tokens or 512
         queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
         loop = asyncio.get_running_loop()
+
+        # Prepare messages with tools if provided
+        prepared_messages = self._prepare_messages_with_tools(messages, tools)
 
         def _generate_stream():
             """Run chat completion in separate thread."""
@@ -343,7 +407,7 @@ class GGUFLanguageModel(BaseModel):
                     )
 
                 for chunk in self.llama.create_chat_completion(
-                    messages=messages,
+                    messages=prepared_messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=top_p,

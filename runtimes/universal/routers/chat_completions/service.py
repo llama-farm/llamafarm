@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import uuid
 from datetime import datetime
 
 from fastapi import HTTPException
@@ -8,6 +9,8 @@ from fastapi.responses import StreamingResponse
 from openai.types.chat.chat_completion_chunk import (
     ChatCompletionChunk,
     ChoiceDelta,
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
 )
 from openai.types.chat.chat_completion_chunk import (
     Choice as ChoiceChunk,
@@ -15,6 +18,7 @@ from openai.types.chat.chat_completion_chunk import (
 
 from models import GGUFLanguageModel
 from utils.thinking import inject_thinking_control, parse_thinking_response
+from utils.tool_calling import detect_probable_tool_call, detect_tool_call_in_content
 
 from .types import ChatCompletionRequest, ThinkingContent
 
@@ -110,6 +114,11 @@ class ChatCompletionsService:
                 total_max_tokens = answer_tokens
                 thinking_tokens = 0
 
+            # Convert tools to dict format if provided (for streaming)
+            tools_dict = None
+            if chat_request.tools:
+                tools_dict = [dict(tool) for tool in chat_request.tools]
+
             # Handle streaming if requested
             if chat_request.stream:
                 logger.info(
@@ -147,9 +156,82 @@ class ChatCompletionsService:
                         top_p=chat_request.top_p,
                         stop=chat_request.stop,
                         thinking_budget=thinking_tokens if is_gguf else None,
+                        tools=tools_dict,
+                        tool_choice=chat_request.tool_choice,
                     )
 
+                    # Track state for tool call detection
+                    accumulated_content = ""
+                    probable_tool_call = False
+                    buffered_tokens = []
+
                     async for token in token_stream:
+                        accumulated_content += token
+
+                        # Check if we might be in a tool call
+                        if tools_dict and detect_probable_tool_call(accumulated_content):
+                            probable_tool_call = True
+                            buffered_tokens.append(token)
+                            continue
+
+                        if probable_tool_call:
+                            buffered_tokens.append(token)
+                            # Check if tool call is complete
+                            tool_calls = detect_tool_call_in_content(accumulated_content)
+                            if tool_calls:
+                                # Emit tool call chunks
+                                for idx, (name, args) in enumerate(tool_calls):
+                                    tool_call_id = f"call_{uuid.uuid4()}"
+                                    tool_chunk = ChatCompletionChunk(
+                                        id=completion_id,
+                                        object="chat.completion.chunk",
+                                        created=created_time,
+                                        model=chat_request.model,
+                                        choices=[
+                                            ChoiceChunk(
+                                                index=0,
+                                                delta=ChoiceDelta(
+                                                    tool_calls=[
+                                                        ChoiceDeltaToolCall(
+                                                            index=idx,
+                                                            id=tool_call_id,
+                                                            type="function",
+                                                            function=ChoiceDeltaToolCallFunction(
+                                                                name=name,
+                                                                arguments=args,
+                                                            ),
+                                                        )
+                                                    ]
+                                                ),
+                                                finish_reason=None,
+                                            )
+                                        ],
+                                    )
+                                    yield f"data: {tool_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                                    await asyncio.sleep(0)
+
+                                # Send final chunk with tool_calls finish reason
+                                final_chunk = ChatCompletionChunk(
+                                    id=completion_id,
+                                    object="chat.completion.chunk",
+                                    created=created_time,
+                                    model=chat_request.model,
+                                    choices=[
+                                        ChoiceChunk(
+                                            index=0,
+                                            delta=ChoiceDelta(),
+                                            finish_reason="tool_calls",
+                                        )
+                                    ],
+                                )
+                                yield f"data: {final_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                                await asyncio.sleep(0)
+                                yield b"data: [DONE]\n\n"
+                                return
+                            # Still accumulating, don't yield yet
+                            continue
+
+                        # Normal content streaming
                         chunk = ChatCompletionChunk(
                             id=completion_id,
                             object="chat.completion.chunk",
@@ -169,6 +251,25 @@ class ChatCompletionsService:
                         # Without this, tokens would buffer and arrive in large chunks.
                         # See test_streaming_server.py for verification tests.
                         await asyncio.sleep(0)
+
+                    # If we buffered tokens but no complete tool call, emit them as content
+                    if buffered_tokens and not detect_tool_call_in_content(accumulated_content):
+                        for buffered_token in buffered_tokens:
+                            chunk = ChatCompletionChunk(
+                                id=completion_id,
+                                object="chat.completion.chunk",
+                                created=created_time,
+                                model=chat_request.model,
+                                choices=[
+                                    ChoiceChunk(
+                                        index=0,
+                                        delta=ChoiceDelta(content=buffered_token),
+                                        finish_reason=None,
+                                    )
+                                ],
+                            )
+                            yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                            await asyncio.sleep(0)
 
                     # Send final chunk
                     final_chunk = ChatCompletionChunk(
@@ -208,11 +309,52 @@ class ChatCompletionsService:
                 top_p=chat_request.top_p,
                 stop=chat_request.stop,
                 thinking_budget=thinking_tokens if is_gguf else None,
+                tools=tools_dict,
+                tool_choice=chat_request.tool_choice,
             )
 
             # Parse thinking content from response (like Ollama does)
             # This separates <think>...</think> into a separate field
             parsed = parse_thinking_response(response_text)
+
+            # Check for tool calls in response
+            tool_calls = detect_tool_call_in_content(parsed.content)
+
+            if tool_calls:
+                # Build response with tool calls
+                response = {
+                    "id": f"chatcmpl-{os.urandom(16).hex()}",
+                    "object": "chat.completion",
+                    "created": int(datetime.now().timestamp()),
+                    "model": chat_request.model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {
+                                        "id": f"call_{uuid.uuid4()}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": name,
+                                            "arguments": args,
+                                        },
+                                    }
+                                    for name, args in tool_calls
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 0,  # TODO: Implement token counting
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                    },
+                }
+                return response
 
             # Build response with optional thinking field (Ollama-compatible)
             response = {

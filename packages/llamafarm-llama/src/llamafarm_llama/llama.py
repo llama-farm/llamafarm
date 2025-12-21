@@ -443,7 +443,8 @@ class Llama:
 
         for i, msg in enumerate(messages):
             role = msg.get("role", "user").encode("utf-8")
-            content = msg.get("content", "").encode("utf-8")
+            # Handle None content (e.g., tool call messages may have content: null)
+            content = (msg.get("content") or "").encode("utf-8")
             role_refs.append(ffi.new("char[]", role))
             content_refs.append(ffi.new("char[]", content))
             chat_array[i].role = role_refs[-1]
