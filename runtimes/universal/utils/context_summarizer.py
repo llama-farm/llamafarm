@@ -7,7 +7,8 @@ semantic meaning while dramatically reducing token count.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from models.gguf_language_model import GGUFLanguageModel
@@ -66,7 +67,8 @@ class ContextSummarizer:
         """
         self._model_id = model_id or self.DEFAULT_MODEL
         self._quantization = quantization or self.DEFAULT_QUANTIZATION
-        self._keep_recent = keep_recent or self.DEFAULT_KEEP_RECENT
+        # Use explicit None check to allow keep_recent=0
+        self._keep_recent = keep_recent if keep_recent is not None else self.DEFAULT_KEEP_RECENT
         self._load_language = load_language
         self._model: GGUFLanguageModel | None = None
 
@@ -125,7 +127,9 @@ class ContextSummarizer:
         Returns:
             Messages with older content summarized into a single message.
         """
-        keep_recent = keep_recent or self._keep_recent
+        # Use explicit None check to allow keep_recent=0
+        if keep_recent is None:
+            keep_recent = self._keep_recent
 
         # Separate system messages from conversation
         system_msgs = [m for m in messages if m.get("role") == "system"]

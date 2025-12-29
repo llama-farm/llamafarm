@@ -76,8 +76,10 @@ def inject_tools_into_messages(
             content = msg.get("content", "")
             if isinstance(content, str):
                 msg["content"] = content + tools_section
-            system_found = True
-            break
+                system_found = True
+                break
+            # Non-string content (e.g., multimodal) - can't inject tools here
+            # Continue searching for a string-content system message
 
     # If no system message, create one
     if not system_found:

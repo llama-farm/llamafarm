@@ -460,8 +460,11 @@ class ChatCompletionsService:
             # This separates <think>...</think> into a separate field
             parsed = parse_thinking_response(response_text)
 
-            # Check for tool calls in response
-            tool_calls = detect_tool_call_in_content(parsed.content)
+            # Check for tool calls in response (only if tools were provided)
+            # This is consistent with streaming path which only checks when tools_dict is set
+            tool_calls = None
+            if tools_dict:
+                tool_calls = detect_tool_call_in_content(parsed.content)
 
             if tool_calls:
                 # Build response with tool calls

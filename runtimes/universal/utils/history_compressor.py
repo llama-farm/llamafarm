@@ -67,7 +67,9 @@ class HistoryCompressor:
         if not messages:
             return messages
 
-        preserve_recent = preserve_recent or self.PRESERVE_RECENT
+        # Use explicit None check to allow preserve_recent=0
+        if preserve_recent is None:
+            preserve_recent = self.PRESERVE_RECENT
 
         # Deep copy to avoid modifying original
         # Use JSON for Pydantic-safe deep copy

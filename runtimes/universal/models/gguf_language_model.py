@@ -279,6 +279,7 @@ class GGUFLanguageModel(BaseModel):
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> list[dict]:
         """Prepare messages with tool definitions if provided.
 
@@ -288,12 +289,20 @@ class GGUFLanguageModel(BaseModel):
         Args:
             messages: List of message dicts with 'role' and 'content' keys
             tools: Optional list of tool definitions in OpenAI format
+            tool_choice: Tool choice strategy (not yet implemented, accepted for API compatibility)
 
         Returns:
             Messages with tools injected (if tools provided)
         """
         if not tools:
             return messages
+
+        # Log warning if tool_choice is specified (not yet implemented)
+        if tool_choice is not None:
+            logger.warning(
+                f"tool_choice='{tool_choice}' was specified but is not yet implemented. "
+                "The model will decide whether to use tools based on the prompt."
+            )
 
         # Try Jinja2 rendering for models with tool-aware templates
         try:
@@ -363,7 +372,7 @@ class GGUFLanguageModel(BaseModel):
         loop = asyncio.get_running_loop()
 
         # Prepare messages with tools if provided
-        prepared_messages = self._prepare_messages_with_tools(messages, tools)
+        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
 
         def _generate():
             try:
@@ -442,7 +451,7 @@ class GGUFLanguageModel(BaseModel):
         loop = asyncio.get_running_loop()
 
         # Prepare messages with tools if provided
-        prepared_messages = self._prepare_messages_with_tools(messages, tools)
+        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
 
         def _generate_stream():
             """Run chat completion in separate thread."""

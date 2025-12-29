@@ -176,10 +176,12 @@ class ContextManager:
 
         if prompt_tokens <= self._budget.max_prompt_tokens:
             # No truncation needed
+            # Calculate available tokens consistently with validate_messages (subtract safety_margin)
+            available = self._budget.total_context - prompt_tokens
             return messages, ContextUsage(
                 total_context=self._budget.total_context,
                 prompt_tokens=prompt_tokens,
-                available_for_completion=self._budget.total_context - prompt_tokens,
+                available_for_completion=max(0, available - self._budget.safety_margin),
                 truncated=False,
                 truncated_messages=0,
                 strategy_used=None,
@@ -217,10 +219,12 @@ class ContextManager:
             f"({prompt_tokens} -> {new_tokens} tokens), strategy={strategy.value}"
         )
 
+        # Calculate available tokens consistently with validate_messages (subtract safety_margin)
+        available = self._budget.total_context - new_tokens
         return truncated, ContextUsage(
             total_context=self._budget.total_context,
             prompt_tokens=new_tokens,
-            available_for_completion=self._budget.total_context - new_tokens,
+            available_for_completion=max(0, available - self._budget.safety_margin),
             truncated=True,
             truncated_messages=messages_removed,
             strategy_used=strategy.value,
