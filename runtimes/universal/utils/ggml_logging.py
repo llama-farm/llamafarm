@@ -2,7 +2,7 @@
 GGML logging management utilities.
 
 Routes llama.cpp/GGML logs through Python's logging system using llama_log_set.
-This replaces the default llama-cpp-python behavior of printing directly to stderr.
+This replaces the default llama-cpp behavior of printing directly to stderr.
 """
 
 import ctypes
@@ -56,7 +56,7 @@ def get_ggml_log_mode() -> Literal["suppress", "passthrough", "capture"]:
         One of:
         - "capture" (default): Route GGML logs through Python's logging system
         - "suppress": Silence all GGML output
-        - "passthrough": Let GGML output flow to stderr normally (llama-cpp-python default)
+        - "passthrough": Let GGML output flow to stderr normally (llama-cpp default)
     """
     mode = os.environ.get(GGML_LOG_MODE_ENV, "capture").lower()
     if mode in ("suppress", "passthrough", "capture"):
@@ -137,7 +137,7 @@ def setup_ggml_logging():
     - "capture" (default): Routes logs through Python's logging system
       with proper log levels. Messages appear as structured logs.
     - "suppress": Silences all GGML output completely.
-    - "passthrough": Uses llama-cpp-python's default behavior (prints to stderr).
+    - "passthrough": Uses llama-cpp's default behavior (prints to stderr).
 
     Example:
         # In your server startup:
@@ -152,14 +152,14 @@ def setup_ggml_logging():
     mode = get_ggml_log_mode()
 
     if mode == "passthrough":
-        # Don't change anything - use llama-cpp-python's default
-        logger.debug("GGML logging: passthrough mode (using llama-cpp-python default)")
+        # Don't change anything - use llama-cpp's default
+        logger.debug("GGML logging: passthrough mode (using llama-cpp default)")
         return
 
     try:
         from llama_cpp import llama_log_set
     except ImportError:
-        logger.warning("llama-cpp-python not available, GGML logging not configured")
+        logger.warning("llama-cpp not available, GGML logging not configured")
         return
 
     if mode == "suppress":

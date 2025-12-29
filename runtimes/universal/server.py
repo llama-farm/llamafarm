@@ -165,7 +165,10 @@ async def _cleanup_idle_models() -> None:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
             # Cleanup expired models from both caches
-            for cache, cache_name in [(_models, "models"), (_classifiers, "classifiers")]:
+            for cache, cache_name in [
+                (_models, "models"),
+                (_classifiers, "classifiers"),
+            ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
                     logger.info(f"Unloading {len(expired_items)} idle {cache_name}")
@@ -220,7 +223,7 @@ async def load_language(
     """Load a causal language model (GGUF or transformers format).
 
     Automatically detects whether the model is in GGUF or transformers format
-    and loads it with the appropriate backend. GGUF models use llama-cpp-python
+    and loads it with the appropriate backend. GGUF models use llama-cpp
     for optimized inference, while transformers models use the standard HuggingFace
     transformers library.
 
@@ -306,7 +309,7 @@ async def load_encoder(
     """Load an encoder model for embeddings, classification, reranking, or NER.
 
     Automatically detects whether the model is in GGUF or transformers format
-    and loads it with the appropriate backend. GGUF models use llama-cpp-python
+    and loads it with the appropriate backend. GGUF models use llama-cpp
     for optimized inference, while transformers models use the standard HuggingFace
     transformers library.
 

@@ -1,7 +1,7 @@
 """
-GGUF language model wrapper using llama-cpp-python.
+GGUF language model wrapper using llama-cpp.
 
-Provides the same interface as LanguageModel but uses llama-cpp-python for
+Provides the same interface as LanguageModel but uses llama-cpp for
 GGUF quantized models, enabling faster inference and lower memory usage.
 """
 
@@ -28,10 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 class GGUFLanguageModel(BaseModel):
-    """Wrapper for GGUF models using llama-cpp-python.
+    """Wrapper for GGUF models using llama-cpp.
 
     This class provides an interface compatible with LanguageModel but uses
-    llama-cpp-python for inference with GGUF quantized models. GGUF models
+    llama-cpp for inference with GGUF quantized models. GGUF models
     offer:
     - 50-75% smaller file sizes (4-bit/8-bit quantization)
     - 2-3x faster inference on Apple Silicon (Metal)
@@ -76,13 +76,13 @@ class GGUFLanguageModel(BaseModel):
         self._context_manager: ContextManager | None = None
 
     async def load(self) -> None:
-        """Load the GGUF model using llama-cpp-python.
+        """Load the GGUF model using llama-cpp.
 
         This method:
         1. Locates the .gguf file in the HuggingFace cache
         2. Computes optimal context size based on memory and configuration
         3. Configures GPU layers based on the target device
-        4. Initializes the llama-cpp-python Llama instance
+        4. Initializes the llama-cpp Llama instance
         5. Runs initialization in a thread pool (blocking operation)
 
         Raises:
@@ -125,7 +125,7 @@ class GGUFLanguageModel(BaseModel):
         logger.info(f"Using context size: {self.actual_n_ctx}")
 
         # Configure GPU layers based on device
-        # Note: llama-cpp-python automatically uses whatever backend it was compiled with
+        # Note: llama-cpp automatically uses whatever backend it was compiled with
         # (CUDA, ROCm, Metal, Vulkan, etc.). We just tell it whether to use GPU or CPU.
         if self.device != "cpu":
             n_gpu_layers = -1  # Use all layers on GPU (any backend)
@@ -136,7 +136,7 @@ class GGUFLanguageModel(BaseModel):
             n_gpu_layers = 0  # CPU only
             logger.info("Configuring for CPU-only inference")
 
-        # Load model using llama-cpp-python
+        # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking
         loop = asyncio.get_running_loop()
 
@@ -176,7 +176,7 @@ class GGUFLanguageModel(BaseModel):
                     logger.error(
                         f"llama.cpp failed to load model. This can be caused by:\n"
                         f"  1. Corrupted GGUF file - try deleting and re-downloading\n"
-                        f"  2. Incompatible llama-cpp-python wheel - try reinstalling\n"
+                        f"  2. Incompatible llama-cpp binary - try reinstalling\n"
                         f"  3. Unsupported GGUF format version\n"
                         f"  File: {gguf_path}\n"
                         f"  Size: {file_size_mb:.1f} MB\n"
@@ -310,7 +310,9 @@ class GGUFLanguageModel(BaseModel):
                     # We need to convert back to messages format for create_chat_completion
                     # For now, we'll use prompt-based fallback since create_chat_completion
                     # expects messages, not a raw prompt
-                    logger.debug("Model has tool-aware template, using Jinja2 rendering")
+                    logger.debug(
+                        "Model has tool-aware template, using Jinja2 rendering"
+                    )
                     # TODO: Consider using raw prompt generation instead of create_chat_completion
                     # For now, fall through to prompt-based approach
         except Exception as e:
@@ -385,7 +387,7 @@ class GGUFLanguageModel(BaseModel):
                 )
             except Exception as e:
                 logger.error(
-                    f"Error during llama-cpp-python chat completion: {e}",
+                    f"Error during llama-cpp chat completion: {e}",
                     exc_info=True,
                 )
                 raise RuntimeError(f"Chat completion failed: {e}") from e
@@ -512,7 +514,7 @@ class GGUFLanguageModel(BaseModel):
         """Unload GGUF model and free resources."""
         logger.info(f"Unloading GGUF language model: {self.model_id}")
 
-        # Clear llama-cpp-python instance
+        # Clear llama-cpp instance
         self.llama = None
 
         # Shutdown thread pool executor
