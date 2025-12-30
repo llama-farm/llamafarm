@@ -1,17 +1,33 @@
 import httpx
 import asyncio
-from typing import Any, Callable, Optional, Dict, List
+from typing import Any, Callable, Optional, Dict, List, Union
 from functools import wraps
 
-# Global registry of tools
+# Global registry of tools (optional, mainly for internal discovery if needed)
 _TOOLS_REGISTRY = {}
 
-def tool(name: Optional[str] = None):
-    """Decorator to mark a function as a LlamaFarm tool."""
+def tool(name_or_func: Union[str, Callable, None] = None, *, name: Optional[str] = None, description: Optional[str] = None):
+    """
+    Decorator to mark a function as a LlamaFarm tool.
+    
+    Usage:
+    @tool
+    def my_tool(): ...
+    
+    @tool(name="custom_name")
+    def my_tool(): ...
+    
+    @tool(description="Custom description")
+    def my_tool(): ...
+    """
     def decorator(func: Callable):
-        tool_name = name or func.__name__
+        nonlocal name
+        tool_name = name or (name_or_func if isinstance(name_or_func, str) else None) or func.__name__
+        tool_description = description or func.__doc__ or "No description provided"
+        
         func._is_tool = True
         func._tool_name = tool_name
+        func._tool_description = tool_description
         _TOOLS_REGISTRY[tool_name] = func
         
         @wraps(func)
@@ -21,13 +37,15 @@ def tool(name: Optional[str] = None):
         # Copy custom attributes to wrapper
         wrapper._is_tool = True
         wrapper._tool_name = tool_name
+        wrapper._tool_description = tool_description
         
         return wrapper
         
-    if callable(name):
-        func = name
-        name = None
-        return decorator(func)
+    # Handle @tool usage (no parens)
+    if callable(name_or_func):
+        return decorator(name_or_func)
+    
+    # Handle @tool(name="...") or @tool() usage
     return decorator
 
 class LlamaFarmClient:

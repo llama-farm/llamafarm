@@ -54,9 +54,10 @@ def import_source_file(file_path: str, mcp: FastMCP):
             for name, obj in vars(module).items():
                 if callable(obj) and getattr(obj, "_is_tool", False):
                     tool_name = getattr(obj, "_tool_name", name)
+                    tool_description = getattr(obj, "_tool_description", None)
                     print(f"Registering tool: {tool_name}", file=sys.stderr)
                     # Register directly with FastMCP which handles wrapping
-                    mcp.add_tool(obj)
+                    mcp.add_tool(obj, name=tool_name, description=tool_description)
             
             # Scan for Agents
             for name, obj in inspect.getmembers(module):
