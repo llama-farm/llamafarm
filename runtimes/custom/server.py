@@ -59,8 +59,8 @@ def import_source_file(file_path: str):
                 
                 # Register tool with MCP Server
                 @app.tool(name=tool_name, description=getattr(obj, "_tool_description", None))
-                def wrapper(*args, **kwargs):
-                    return obj(*args, **kwargs)
+                def wrapper(*args, _func=obj, **kwargs):
+                    return _func(*args, **kwargs)
                 
                 REGISTERED_TOOLS[tool_name] = obj
                 print(f"Registered tool: {tool_name}", file=sys.stderr)

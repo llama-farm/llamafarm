@@ -17,6 +17,11 @@ def tool(name: Optional[str] = None):
         @wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
+            
+        # Copy custom attributes to wrapper
+        wrapper._is_tool = True
+        wrapper._tool_name = tool_name
+        
         return wrapper
         
     if callable(name):

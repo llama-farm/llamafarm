@@ -35,10 +35,28 @@ def fetch_recent_logs(service_name: str, lines: int = 5) -> str:
         return f"Service '{service_name}' not found."
     
     status = SYSTEM_STATE["services"][service_name]
+    lines_to_return = []
     if status == "degraded":
-        return f"[ERROR] {service_name}: Connection timeout\n[ERROR] {service_name}: Retrying transaction\n[WARN] High latency detected"
+        all_logs = [
+            f"[ERROR] {service_name}: Connection timeout",
+            f"[ERROR] {service_name}: Retrying transaction",
+            f"[WARN] High latency detected",
+            f"[ERROR] {service_name}: Connection reset",
+            f"[WARN] Garbage collection pause",
+            f"[ERROR] {service_name}: 503 Service Unavailable"
+        ]
+        lines_to_return = all_logs[:lines]
+    else:
+        all_logs = [
+            f"[INFO] {service_name}: Health check passed",
+            f"[INFO] {service_name}: Request processed in 20ms",
+            f"[INFO] {service_name}: Cache hit",
+            f"[INFO] {service_name}: Transaction committed",
+            f"[INFO] {service_name}: Worker pool healthy"
+        ]
+        lines_to_return = all_logs[:lines]
     
-    return f"[INFO] {service_name}: Health check passed\n[INFO] {service_name}: Request processed in 20ms"
+    return "\n".join(lines_to_return)
 
 @tool(description="Restart a service to attempt recovery.")
 def restart_service(service_name: str) -> str:

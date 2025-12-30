@@ -21,7 +21,7 @@ def run_scenario(name, document_text):
     
     try:
         start = time.time()
-        response = requests.post(API_URL, headers=HEADERS, json=payload)
+        response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=30)
         duration = time.time() - start
         
         if response.status_code == 200:

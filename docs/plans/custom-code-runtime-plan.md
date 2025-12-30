@@ -31,6 +31,7 @@ custom_code:
 ```python
 # agents/anomaly_responder.py
 from llamafarm.custom import CustomAgent, AnomalyEvent
+import asyncio
 
 class AnomalyResponderAgent(CustomAgent):
     """Triggered when anomaly detector flags suspicious API traffic."""
@@ -244,6 +245,7 @@ custom_code:
 # agents/daily_reports.py
 from llamafarm.custom import CustomAgent
 import pandas as pd
+from datetime import date
 
 class DailyReportGenerator(CustomAgent):
     """Generate daily business reports from multiple data sources."""
@@ -624,6 +626,9 @@ class CodeValidator:
                     for alias in node.names:
                         if alias.name in self.FORBIDDEN_IMPORTS:
                             return ValidationResult(valid=False, error=f"Forbidden import: {alias.name}")
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module in self.FORBIDDEN_IMPORTS:
+                        return ValidationResult(valid=False, error=f"Forbidden import from: {node.module}")
         except SyntaxError as e:
             return ValidationResult(valid=False, error=f"Syntax error: {e}")
 

@@ -83,6 +83,7 @@ Available services:
   - server: The main FastAPI server
   - rag: The RAG/Celery worker
   - universal-runtime: The universal runtime server
+  - custom-runtime: The custom code runtime server
 
 The orchestration mode is determined by the LF_ORCHESTRATION_MODE environment variable:
   - "native" (default): Stop native processes

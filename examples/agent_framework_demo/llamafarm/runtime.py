@@ -97,11 +97,18 @@ def main():
             # Stop all agents
             print("Stopping agents...", file=sys.stderr)
             for agent in agents:
-                await agent.stop()
+                try:
+                    await agent.stop()
+                except Exception as e:
+                    print(f"Error stopping agent {agent.name}: {e}", file=sys.stderr)
                 
             # Cancel tasks
             for task in tasks:
                 task.cancel()
+            
+            # Wait for tasks to finish cancelling
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
             
             # Close client
             await client.close()

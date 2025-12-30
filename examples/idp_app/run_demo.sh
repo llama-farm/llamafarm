@@ -19,8 +19,8 @@ Date: 2025-02-14
 Vendor: Nvidia Corp
 Bill To: LlamaFarm Inc.
 Items:
-- H100 GPU Cluster (x8) ... $250,000.00
-Total: $250,000.00
+- H100 GPU Cluster (x8) ... \$250,000.00
+Total: \$250,000.00
 "
 echo "Document: Invoice from Nvidia"
 lf chat --cwd "$DIR" "Process this document: $DOC_INVOICE"
