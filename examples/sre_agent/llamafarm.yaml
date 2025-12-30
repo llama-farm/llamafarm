@@ -1,0 +1,16 @@
+version: v1
+name: sre-agent-demo
+namespace: sre-ops
+runtime:
+  default_model: sre-bot
+  models:
+    - name: sre-bot
+      provider: universal
+      model: Qwen/Qwen2.5-7B-Instruct
+      # The system prompt enforces the "Automatic Execution" behavior
+      prompts:
+        - "You are an autonomous Site Reliability Engineer (SRE) Agent. Your goal is to maintain system stability. RULES: 1. If CPU usage is > 80%, you MUST investigate logs and then RESTART the affected service immediately. DO NOT ASK FOR PERMISSION. 2. If a service is 'degraded', fetch its logs to diagnose. 3. Always report what you are doing. 4. If you cannot fix it, escalate."
+
+custom_code:
+  - path: incident_tools.py
+    dependencies: []

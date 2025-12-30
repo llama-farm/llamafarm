@@ -1,0 +1,20 @@
+version: v1
+name: custom-runtime-demo
+namespace: examples
+runtime:
+  default_model: test-model
+  models:
+    # A model that uses the custom tools
+    - name: test-model
+      provider: universal
+      model: Qwen/Qwen2.5-7B-Instruct
+      # No need to list mcp_servers if 'custom_code' is present, 
+      # the prompt logic or orchestrator should pick it up.
+      # But wait, mcp_servers list controls access.
+      # The auto-discovery adds a server named 'custom-runtime'.
+      mcp_servers:
+        - custom-runtime
+
+custom_code:
+  - path: data_tools.py
+    dependencies: [] # Standard lib only for this simple example

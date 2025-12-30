@@ -85,16 +85,11 @@ class MCPToolFactory:
         """
         try:
             # Get server configuration
-            servers = {
-                s.name: s
-                for s in (self._mcp_service._config.mcp.servers or [])
-                if self._mcp_service._config.mcp
-            }
-            if server_name not in servers:
+            server_config = self._mcp_service.get_server(server_name)
+            if server_config is None:
                 logger.warning("Server not found", server_name=server_name)
                 return []
 
-            server_config = servers[server_name]
             transport_type = self._get_transport_type(server_config)
             mcp_endpoint = self._get_mcp_endpoint(server_config)
 

@@ -1,0 +1,15 @@
+version: v1
+name: idp-app-demo
+namespace: finance-legal
+runtime:
+  default_model: idp-agent
+  models:
+    - name: idp-agent
+      provider: universal
+      model: Qwen/Qwen2.5-0.5B-Instruct
+      prompts:
+        - "You are an Intelligent Document Processing (IDP) Agent. Your goal is to process incoming document text.\n\nRULES:\n1. ANALYZE the text to determine the document type.\n2. IF 'Invoice': Extract Vendor, Amount, Invoice Number and Call `pay_invoice`.\n3. IF 'NDA' or 'Agreement': Extract Parties and Expiry (guess based on context if missing) and Call `archive_document`.\n4. IF content is gibberish, unclear, or fraudulent: Call `flag_anomaly`.\n5. Output the result of the action clearly."
+
+custom_code:
+  - path: idp_actions.py
+    dependencies: []

@@ -1,0 +1,8 @@
+version: v1
+name: test-project
+namespace: test
+runtime:
+  default_model: test
+  models: []
+custom_code:
+  - path: test_tool.py

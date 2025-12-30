@@ -9,6 +9,27 @@ required:
   - namespace
   - runtime
 properties:
+  custom_code:
+    type: array
+    description: List of custom code files to load into the runtime
+    items:
+      type: object
+      required:
+        - path
+      properties:
+        path:
+          type: string
+          description: Relative path to the code file (e.g. "tools/my_tool.py")
+        type:
+          type: string
+          enum: [python, typescript]
+          description: Language of the file (auto-detected if omitted)
+        dependencies:
+          type: array
+          description: List of dependencies required by this file
+          items:
+            type: string
+    default: []
   version:
     type: string
     enum: [v1]

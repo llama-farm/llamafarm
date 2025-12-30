@@ -1,0 +1,31 @@
+[project]
+name = "custom-runtime"
+version = "0.1.0"
+description = "LlamaFarm Custom Runtime Engine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.116.0",
+    "uvicorn>=0.35.0",
+    "pydantic>=2.0.0",
+    "structlog>=24.0.0",
+    "fastapi-mcp>=0.4.0",
+    "llamafarm-config",
+    "llamafarm-common",
+    "python-multipart>=0.0.7",
+    # Common dependencies users might expect out of the box
+    "requests>=2.0.0",
+    "numpy>=1.20.0",
+    "pandas>=2.0.0",
+]
+
+[tool.uv.sources]
+llamafarm-config = { path = "../../config", editable = true }
+llamafarm-common = { path = "../../common", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

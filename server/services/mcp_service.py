@@ -56,20 +56,60 @@ class MCPService:
         """Resolve the list of MCP servers to use for the model."""
         servers_to_use: list[Server] = []
 
-        # If no MCP config exists, return empty list
-        if self._config.mcp is None:
-            return servers_to_use
+        # If no MCP config exists, initialize empty list but don't return yet
+        # user might have custom_code
+        mcp_servers = []
+        if self._config.mcp is not None:
+            mcp_servers = self._config.mcp.servers
 
         if self._model_config.mcp_servers is not None:
             servers_to_use.extend(
-                [
-                    s
-                    for s in self._config.mcp.servers
-                    if s.name in self._model_config.mcp_servers
-                ]
+                [s for s in mcp_servers if s.name in self._model_config.mcp_servers]
             )
         else:
-            servers_to_use.extend(self._config.mcp.servers)
+            servers_to_use.extend(mcp_servers)
+
+        # Auto-discover custom runtime if configured
+        if self._config.custom_code:
+            logger.info("Custom code config detected, adding custom-runtime MCP server")
+
+            # Resolve path to runtimes/custom/server.py
+            # Since we are in server/services/mcp_service.py, we need to go up to root
+            # or rely on a known location.
+            # Assuming typical project structure:
+            # llamafarm/
+            #   server/
+            #   runtimes/
+            #     custom/
+            #       server.py
+
+            # We can use the location of the installed 'llamafarm' package or assume relative path execution.
+            # Ideally, we find the file relative to this file.
+            import os
+
+            current_dir = os.path.dirname(os.path.abspath(__file__))  # server/services
+            project_root = os.path.dirname(
+                os.path.dirname(current_dir)
+            )  # llamafarm root
+            script_path = os.path.join(project_root, "runtimes", "custom", "server.py")
+
+            # Pass LF_CONFIG_PATH to the subprocess if available, or assume default
+            env = os.environ.copy()
+            # If we are in a project, pass that context?
+            # Actually, configuring stdio server with 'uv' needs it to be in the right cwd?
+            # Or we instruct it where the config is.
+            # The server.py logic looks for LF_CONFIG_PATH.
+
+            servers_to_use.append(
+                Server(
+                    name="custom-runtime",
+                    transport=Transport.stdio,
+                    command="uv",
+                    args=["run", "--managed-python", "python", script_path],
+                    env=env,
+                )
+            )
+
         return servers_to_use
 
     def list_servers(self) -> list[str]:
