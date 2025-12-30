@@ -3,23 +3,20 @@ import importlib.util
 import os
 import subprocess
 import sys
+import inspect
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Any, AsyncIterator
+from contextlib import asynccontextmanager
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
-from pydantic import BaseModel
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server import Server # Fallback if needed, but we used FastMCP in demo
 
-# Import config loading
-from config import load_config
-
-# Initialize MCP Server
-app = Server("custom-runtime")
+# Import local SDK from same directory
+import sdk
 
 # Global state
 LOADED_FILES = []
-REGISTERED_TOOLS = {}
+REGISTERED_AGENTS: List[sdk.Agent] = []
 
 def install_dependencies(deps: List[str]):
     """Install dependencies using uv"""
@@ -37,8 +34,8 @@ def install_dependencies(deps: List[str]):
     except subprocess.CalledProcessError as e:
         print(f"Failed to install dependencies: {e}", file=sys.stderr)
 
-def import_source_file(file_path: str):
-    """Dynamically import a source file"""
+def import_source_file(file_path: str, mcp: FastMCP):
+    """Dynamically import a source file and register tools/agents"""
     path = Path(file_path)
     if not path.exists():
         print(f"File not found: {file_path}", file=sys.stderr)
@@ -49,78 +46,129 @@ def import_source_file(file_path: str):
     if spec and spec.loader:
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        LOADED_FILES.append(file_path)
-        
-        # Scan for tools
-        for name, obj in vars(module).items():
-            if callable(obj) and getattr(obj, "_is_tool", False):
-                tool_name = getattr(obj, "_tool_name", name)
-                
-                # Register tool with MCP Server
-                @app.tool(name=tool_name, description=getattr(obj, "_tool_description", None))
-                def wrapper(*args, _func=obj, **kwargs):
-                    return _func(*args, **kwargs)
-                
-                REGISTERED_TOOLS[tool_name] = obj
-                print(f"Registered tool: {tool_name}", file=sys.stderr)
+        try:
+            spec.loader.exec_module(module)
+            LOADED_FILES.append(file_path)
+            
+            # Scan for tools
+            for name, obj in vars(module).items():
+                if callable(obj) and getattr(obj, "_is_tool", False):
+                    tool_name = getattr(obj, "_tool_name", name)
+                    print(f"Registering tool: {tool_name}", file=sys.stderr)
+                    # Register directly with FastMCP which handles wrapping
+                    mcp.add_tool(obj)
+            
+            # Scan for Agents
+            for name, obj in inspect.getmembers(module):
+                if (inspect.isclass(obj) and 
+                    issubclass(obj, sdk.Agent) and 
+                    obj is not sdk.Agent):
+                    print(f"Found Agent: {name}", file=sys.stderr)
+                    try:
+                        agent = obj()
+                        REGISTERED_AGENTS.append(agent)
+                    except Exception as e:
+                        print(f"Error instantiating {name}: {e}", file=sys.stderr)
 
-async def main():
+        except Exception as e:
+            print(f"Error loading module {module_name}: {e}", file=sys.stderr)
+
+@asynccontextmanager
+async def agent_lifespan(server: FastMCP) -> AsyncIterator[Any]:
+    """Lifespan manager for running background agents."""
+    
+    # Initialize Client (Universal Runtime usually on 11540)
+    # TODO: Get URL from config/env
+    client = sdk.LlamaFarmClient("http://127.0.0.1:11540")
+    
+    if REGISTERED_AGENTS:
+        print(f"Starting {len(REGISTERED_AGENTS)} agents...", file=sys.stderr)
+    
+    tasks = []
+    for agent in REGISTERED_AGENTS:
+        print(f"Starting agent: {agent.name}", file=sys.stderr)
+        agent.set_client(client)
+        task = asyncio.create_task(agent.start())
+        tasks.append(task)
+        
+    try:
+        yield 
+    finally:
+        # Stop all agents
+        if REGISTERED_AGENTS:
+            print("Stopping agents...", file=sys.stderr)
+        
+        for agent in REGISTERED_AGENTS:
+            try:
+                await agent.stop()
+            except Exception as e:
+                print(f"Error stopping agent {agent.name}: {e}", file=sys.stderr)
+            
+        # Cancel tasks
+        for task in tasks:
+            task.cancel()
+        
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        
+        await client.close()
+
+def main():
     print("Starting Custom Runtime (Stdio)...", file=sys.stderr)
     
-    # Load config
-    config_path = os.environ.get("LF_CONFIG_PATH", "llamafarm.yaml")
+    # Initialize FastMCP Server
+    # We pass dependencies/tools later
+    mcp = FastMCP("custom-runtime", lifespan=agent_lifespan)
     
-    # Find config path logic
-    if not os.path.exists(config_path):
-        # Scan up directories
-        curr = Path.cwd()
-        for _ in range(5): # Max depth
-            p = curr / "llamafarm.yaml"
-            if p.exists():
-                config_path = str(p)
-                break
-            curr = curr.parent
-
-    if os.path.exists(config_path):
-        try:
-            print(f"Loading config from {config_path}", file=sys.stderr)
-            config = load_config(config_path=config_path)
-                 
-            if config.custom_code:
-                project_root = Path(config_path).parent
-                for code_item in config.custom_code:
-                    path = code_item.path
-                    if code_item.dependencies:
-                        install_dependencies(code_item.dependencies)
-                    
-                    # Convert relative path to absolute
-                    abs_path = project_root / path
-                    
-                    # Add directory to sys.path to support local imports
-                    sys.path.insert(0, str(abs_path.parent))
-                    
-                    import_source_file(str(abs_path))
-                    
-        except Exception as e:
-             print(f"Failed to load custom code: {e}", file=sys.stderr)
-
-    # Run the stdio server
-    from mcp.server import InitializationOptions, NotificationOptions
+    # Import config loading
+    try:
+        from config import load_config
+        has_config_lib = True
+    except ImportError:
+        # Fallback if running outside of monorepo context without paths set?
+        # But we expect to be run via 'uv run' in the right env
+        has_config_lib = False
+        print("Warning: Could not import 'config' library.", file=sys.stderr)
     
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream, 
-            write_stream, 
-            InitializationOptions(
-                server_name="custom-runtime",
-                server_version="0.1.0",
-                capabilities=app.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                )
-            )
-        )
+    if has_config_lib:
+        # Load config logic
+        config_path = os.environ.get("LF_CONFIG_PATH", "llamafarm.yaml")
+        
+        # Find config path logic
+        if not os.path.exists(config_path):
+            curr = Path.cwd()
+            for _ in range(5): 
+                p = curr / "llamafarm.yaml"
+                if p.exists():
+                    config_path = str(p)
+                    break
+                curr = curr.parent
+
+        if os.path.exists(config_path):
+            try:
+                print(f"Loading config from {config_path}", file=sys.stderr)
+                config = load_config(config_path=config_path)
+                     
+                if config.custom_code:
+                    project_root = Path(config_path).parent
+                    for code_item in config.custom_code:
+                        path = code_item.path
+                        if code_item.dependencies:
+                            install_dependencies(code_item.dependencies)
+                        
+                        abs_path = project_root / path
+                        
+                        # Add directory to sys.path
+                        if str(abs_path.parent) not in sys.path:
+                            sys.path.insert(0, str(abs_path.parent))
+                        
+                        import_source_file(str(abs_path), mcp)
+                        
+            except Exception as e:
+                 print(f"Failed to load custom code: {e}", file=sys.stderr)
+
+    # Run server
+    mcp.run()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

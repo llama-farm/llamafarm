@@ -12,7 +12,20 @@ import random
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 
-from llamafarm.sdk import Agent, tool
+import sys
+from pathlib import Path
+
+# Add Custom Runtime path to find 'sdk' module
+# ../../../runtimes/custom relative to examples/agent_framework_demo/src/needle_real.py
+runtime_path = Path(__file__).parents[3] / "runtimes" / "custom"
+if str(runtime_path) not in sys.path:
+    sys.path.append(str(runtime_path))
+
+try:
+    from sdk import tool, Agent, LlamaFarmClient
+except ImportError:
+    # Fallback for when running in different contexts
+    from llamafarm.sdk import tool, Agent, LlamaFarmClient
 
 # --- State Management ---
 

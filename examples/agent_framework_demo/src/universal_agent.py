@@ -6,7 +6,15 @@ generic, autonomous background tasks that run alongside your tools.
 
 import asyncio
 import random
-from llamafarm.sdk import Agent, tool
+import sys
+from pathlib import Path
+
+# Add Custom Runtime path
+runtime_path = Path(__file__).parents[3] / "runtimes" / "custom"
+if str(runtime_path) not in sys.path:
+    sys.path.append(str(runtime_path))
+
+from sdk import Agent, tool
 
 # Inline Tools can coexist with Agents
 @tool

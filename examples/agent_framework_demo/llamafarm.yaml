@@ -1,0 +1,14 @@
+version: v1
+name: agent-framework-demo
+namespace: local
+
+runtime:
+  default_model: mock
+  models:
+    - name: mock
+      provider: universal
+      model: mock
+      base_url: http://127.0.0.1:11540
+
+custom_code:
+  - path: src/needle_real.py
