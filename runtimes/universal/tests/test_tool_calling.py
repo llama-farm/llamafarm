@@ -4,11 +4,7 @@ Tests for tool calling utilities.
 
 import json
 
-import pytest
-
 from utils.tool_calling import (
-    TOOLS_SYSTEM_MESSAGE_PREFIX,
-    TOOLS_SYSTEM_MESSAGE_SUFFIX,
     detect_probable_tool_call,
     detect_tool_call_in_content,
     inject_tools_into_messages,

@@ -402,7 +402,7 @@ class ContextManager:
 
         # Truncate largest messages first
         tokens_cut = 0
-        for idx, msg_tokens, is_last_user in messages_with_size:
+        for idx, msg_tokens, _is_last_user in messages_with_size:
             if tokens_cut >= tokens_to_cut:
                 break
 

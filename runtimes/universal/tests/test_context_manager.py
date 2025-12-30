@@ -1,6 +1,5 @@
 """Tests for context management utilities."""
 
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -265,7 +264,7 @@ class TestHistoryCompressor:
         content = "Hello\n\n\n\nWorld"
         normalized = compressor._normalize_whitespace(content)
         assert "\n\n\n" not in normalized
-        assert "Hello\n\nWorld" == normalized
+        assert normalized == "Hello\n\nWorld"
 
     def test_compress_tool_results_with_counter(self):
         """Test tool result compression with token counter."""
