@@ -143,8 +143,13 @@ class ContextSummarizer:
             return messages
 
         # Split into old (to summarize) and recent (to keep)
-        to_summarize = other_msgs[:-min_messages]
-        to_keep = other_msgs[-min_messages:]
+        # Handle min_messages=0 specially since [:-0] returns [] and [-0:] returns all
+        if min_messages == 0:
+            to_summarize = other_msgs
+            to_keep = []
+        else:
+            to_summarize = other_msgs[:-min_messages]
+            to_keep = other_msgs[-min_messages:]
 
         logger.info(
             f"Summarizing {len(to_summarize)} messages, keeping {len(to_keep)} recent"
