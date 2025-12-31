@@ -22,6 +22,7 @@ properties:
           description: Relative path to the code file (e.g. "tools/my_tool.py")
         type:
           type: string
+          title: CustomCodeLanguage
           enum: [python, typescript]
           description: Language of the file (auto-detected if omitted)
         dependencies:
