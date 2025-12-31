@@ -2,51 +2,59 @@ import httpx
 import asyncio
 from typing import Any, Callable, Optional, Dict, List, Union
 from functools import wraps
+import inspect
 
-# Global registry of tools (optional, mainly for internal discovery if needed)
+# Global registry of tools
 _TOOLS_REGISTRY = {}
 
-def tool(name_or_func: Union[str, Callable, None] = None, *, name: Optional[str] = None, description: Optional[str] = None):
+def tool(name_or_func: Union[str, Callable, None] = None, *, name: Optional[str] = None):
     """
     Decorator to mark a function as a LlamaFarm tool.
     
+    The description is ALWAYS taken from the function's docstring.
+    
     Usage:
     @tool
-    def my_tool(): ...
+    def my_func(): 
+        '''This is the description.'''
+        ...
     
     @tool(name="custom_name")
-    def my_tool(): ...
-    
-    @tool(description="Custom description")
-    def my_tool(): ...
+    def my_func(): ...
     """
-    def decorator(func: Callable):
-        nonlocal name
-        tool_name = name or (name_or_func if isinstance(name_or_func, str) else None) or func.__name__
-        tool_description = description or func.__doc__ or "No description provided"
-        
-        func._is_tool = True
-        func._tool_name = tool_name
-        func._tool_description = tool_description
-        _TOOLS_REGISTRY[tool_name] = func
-        
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-            
-        # Copy custom attributes to wrapper
-        wrapper._is_tool = True
-        wrapper._tool_name = tool_name
-        wrapper._tool_description = tool_description
-        
-        return wrapper
-        
-    # Handle @tool usage (no parens)
-    if callable(name_or_func):
-        return decorator(name_or_func)
     
-    # Handle @tool(name="...") or @tool() usage
+    # CASE 1: Used as @tool (no parens)
+    if callable(name_or_func):
+        func = name_or_func
+        return _create_tool_wrapper(func, name=None)
+
+    # CASE 2: Used as @tool(...) with arguments
+    actual_name = name or (name_or_func if isinstance(name_or_func, str) else None)
+    
+    def decorator(func: Callable):
+        return _create_tool_wrapper(func, name=actual_name)
+        
     return decorator
+
+def _create_tool_wrapper(func: Callable, name: Optional[str]):
+    tool_name = name or func.__name__
+    # Enforce using docstring for description
+    tool_description = func.__doc__.strip() if func.__doc__ else "No description provided"
+    
+    func._is_tool = True
+    func._tool_name = tool_name
+    func._tool_description = tool_description
+    _TOOLS_REGISTRY[tool_name] = func
+    
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+        
+    # Copy attributes
+    wrapper._is_tool = True
+    wrapper._tool_name = tool_name
+    wrapper._tool_description = tool_description
+    return wrapper
 
 class LlamaFarmClient:
     """Simple client for LlamaFarm Universal Runtime."""

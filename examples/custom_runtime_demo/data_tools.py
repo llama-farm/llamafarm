@@ -1,22 +1,18 @@
 from sdk import tool
 import json
 
-@tool(description="Process data by reversing strings")
+@tool
 def process_data(data: str) -> str:
-    """
-    Takes a string input, reverses it, and returns a JSON summary.
-    """
+    """Process data by reversing strings."""
     return json.dumps({
         "original": data,
         "reversed": data[::-1],
         "length": len(data)
     })
 
-@tool(description="Calculate factorial")
+@tool
 def factorial(n: int) -> int:
-    """
-    Calculates the factorial of a number containing logic.
-    """
+    """Calculate factorial."""
     if n < 0:
         raise ValueError("Factorial is not defined for negative numbers")
     if n == 0:

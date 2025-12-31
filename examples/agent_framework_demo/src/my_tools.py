@@ -4,7 +4,7 @@ This file demonstrates how a user can define tools using the
 new LlamaFarm @tool decorator. No server code is required.
 """
 
-from llamafarm.sdk import tool
+from sdk import tool
 
 @tool
 def calculate_tax(amount: float, rate: float = 0.2) -> float:

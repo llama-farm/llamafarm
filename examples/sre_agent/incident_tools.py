@@ -14,11 +14,9 @@ SYSTEM_STATE = {
     }
 }
 
-@tool(description="Get current system metrics including CPU and Memory usage.")
+@tool
 def get_system_metrics() -> str:
-    """
-    Returns the current health metrics of the system.
-    """
+    """Get current system metrics including CPU and Memory usage."""
     return json.dumps({
         "timestamp": time.time(),
         "cpu": SYSTEM_STATE["cpu_usage"],
@@ -26,11 +24,9 @@ def get_system_metrics() -> str:
         "disk": 60.0
     })
 
-@tool(description="Fetch recent logs for a specific service.")
+@tool
 def fetch_recent_logs(service_name: str, lines: int = 5) -> str:
-    """
-    Retrieves the last N lines of logs for a service.
-    """
+    """Fetch recent logs for a specific service."""
     if service_name not in SYSTEM_STATE["services"]:
         return f"Service '{service_name}' not found."
     
@@ -58,11 +54,9 @@ def fetch_recent_logs(service_name: str, lines: int = 5) -> str:
     
     return "\n".join(lines_to_return)
 
-@tool(description="Restart a service to attempt recovery.")
+@tool
 def restart_service(service_name: str) -> str:
-    """
-    Restarts the specified service. Use this if a service is degraded or failing.
-    """
+    """Restart a service to attempt recovery."""
     if service_name not in SYSTEM_STATE["services"]:
         return f"Service '{service_name}' not found."
     
@@ -72,9 +66,7 @@ def restart_service(service_name: str) -> str:
     
     return f"Service '{service_name}' successfully restarted. New status: healthy."
 
-@tool(description="Escalate the incident to the on-call engineer.")
+@tool
 def escalate_incident(reason: str) -> str:
-    """
-    Escalates the issue if it cannot be resolved automatically.
-    """
+    """Escalate the incident to the on-call engineer."""
     return f"INCIDENT ESCALATED: {reason}. Page sent to on-call."

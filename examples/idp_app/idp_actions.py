@@ -2,11 +2,9 @@ from sdk import tool
 import json
 import time
 
-@tool(description="Process an invoice payment.")
+@tool
 def pay_invoice(vendor: str, amount: str, invoice_number: str) -> str:
-    """
-    Executes a payment transaction for a verified invoice.
-    """
+    """Process an invoice payment."""
     print(f"\n[ACTION] Processing Payment...")
     print(f"  > Vendor: {vendor}")
     print(f"  > Amount: {amount}")
@@ -18,11 +16,9 @@ def pay_invoice(vendor: str, amount: str, invoice_number: str) -> str:
         "message": f"Payment of {amount} to {vendor} initiated."
     })
 
-@tool(description="Archive a legal document securely.")
+@tool
 def archive_document(doc_type: str, parties: str, expiry_date: str) -> str:
-    """
-    Encrypts and archives a legal document like an NDA or Contract.
-    """
+    """Archive a legal document securely."""
     print(f"\n[ACTION] Archiving Document...")
     print(f"  > Type:    {doc_type}")
     print(f"  > Parties: {parties}")
@@ -34,11 +30,9 @@ def archive_document(doc_type: str, parties: str, expiry_date: str) -> str:
         "retention_policy": "7_YEARS"
     })
 
-@tool(description="Flag an anomaly or unknown document for human review.")
+@tool
 def flag_anomaly(reason: str, confidence_score: float) -> str:
-    """
-    Flags content that cannot be automatically processed or looks suspicious.
-    """
+    """Flag an anomaly or unknown document for human review."""
     print(f"\n[ACTION] flagging Anomaly...")
     print(f"  > Reason: {reason}")
     print(f"  > Score:  {confidence_score}")
