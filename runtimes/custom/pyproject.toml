@@ -13,10 +13,13 @@ dependencies = [
     "llamafarm-config",
     "llamafarm-common",
     "python-multipart>=0.0.7",
+    "mcp>=1.0.0",
     # Common dependencies users might expect out of the box
     "requests>=2.0.0",
     "numpy>=1.20.0",
     "pandas>=2.0.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [tool.uv.sources]

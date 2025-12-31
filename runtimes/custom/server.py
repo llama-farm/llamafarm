@@ -51,28 +51,43 @@ def import_source_file(file_path: str, mcp: FastMCP):
             LOADED_FILES.append(file_path)
             
             # Scan for tools
-            for name, obj in vars(module).items():
-                if callable(obj) and getattr(obj, "_is_tool", False):
-                    tool_name = getattr(obj, "_tool_name", name)
-                    tool_description = getattr(obj, "_tool_description", None)
-                    print(f"Registering tool: {tool_name}", file=sys.stderr)
-                    # Register directly with FastMCP which handles wrapping
-                    mcp.add_tool(obj, name=tool_name, description=tool_description)
+            tools = discover_tools(module)
+            for tool_name, tool_func in tools.items():
+                tool_description = getattr(tool_func, "_tool_description", None)
+                print(f"Registering tool: {tool_name}", file=sys.stderr)
+                mcp.add_tool(tool_func, name=tool_name, description=tool_description)
             
             # Scan for Agents
-            for name, obj in inspect.getmembers(module):
-                if (inspect.isclass(obj) and 
-                    issubclass(obj, sdk.Agent) and 
-                    obj is not sdk.Agent):
-                    print(f"Found Agent: {name}", file=sys.stderr)
-                    try:
-                        agent = obj()
-                        REGISTERED_AGENTS.append(agent)
-                    except Exception as e:
-                        print(f"Error instantiating {name}: {e}", file=sys.stderr)
+            agents = discover_agents(module)
+            for agent_cls in agents:
+                print(f"Found Agent: {agent_cls.__name__}", file=sys.stderr)
+                try:
+                    agent = agent_cls()
+                    REGISTERED_AGENTS.append(agent)
+                except Exception as e:
+                    print(f"Error instantiating {agent_cls.__name__}: {e}", file=sys.stderr)
 
         except Exception as e:
             print(f"Error loading module {module_name}: {e}", file=sys.stderr)
+
+def discover_tools(module: Any) -> dict:
+    """Find all @tool decorated functions in a module."""
+    tools = {}
+    for name, obj in vars(module).items():
+        if callable(obj) and getattr(obj, "_is_tool", False):
+            tool_name = getattr(obj, "_tool_name", name)
+            tools[tool_name] = obj
+    return tools
+
+def discover_agents(module: Any) -> list:
+    """Find all Agent subclasses in a module."""
+    agents = []
+    for name, obj in inspect.getmembers(module):
+        if (inspect.isclass(obj) and 
+            issubclass(obj, sdk.Agent) and 
+            obj is not sdk.Agent):
+            agents.append(obj)
+    return agents
 
 @asynccontextmanager
 async def agent_lifespan(server: FastMCP) -> AsyncIterator[Any]:
