@@ -2564,15 +2564,17 @@ Train a new text classifier.
 ```json
 {
   "object": "fit_result",
-  "model": "intent-classifier_20251215_155054",
+  "model": "intent-classifier-test_20260102_202450",
   "base_model": "sentence-transformers/all-MiniLM-L6-v2",
-  "samples_fitted": 6,
-  "num_classes": 3,
-  "labels": ["booking", "cancellation", "inquiry"],
-  "training_time_ms": 1234.56,
+  "samples_fitted": 40,
+  "num_classes": 4,
+  "labels": ["booking", "cancellation", "complaint", "inquiry"],
+  "training_time_ms": 6751.66,
   "status": "fitted",
-  "base_name": "intent-classifier",
-  "versioned_name": "intent-classifier_20251215_155054",
+  "auto_saved": true,
+  "saved_path": "~/.llamafarm/models/classifier/intent-classifier-test_20260102_202450",
+  "base_name": "intent-classifier-test",
+  "versioned_name": "intent-classifier-test_20260102_202450",
   "overwrite": false
 }
 ```
@@ -2585,9 +2587,16 @@ curl -X POST http://localhost:8000/v1/ml/classifier/fit \
   -d '{
     "model": "intent-classifier",
     "training_data": [
-      {"text": "Book a flight", "label": "booking"},
-      {"text": "Cancel my order", "label": "cancellation"}
-    ]
+      {"text": "I need to book a flight to NYC", "label": "booking"},
+      {"text": "Reserve a hotel room for me", "label": "booking"},
+      {"text": "Cancel my reservation please", "label": "cancellation"},
+      {"text": "I want to cancel my booking", "label": "cancellation"},
+      {"text": "What time does the flight leave?", "label": "inquiry"},
+      {"text": "How much does it cost?", "label": "inquiry"},
+      {"text": "I am very unhappy with the service", "label": "complaint"},
+      {"text": "This is unacceptable quality", "label": "complaint"}
+    ],
+    "num_iterations": 20
   }'
 ```
 
@@ -2616,11 +2625,33 @@ Classify texts using a trained model.
 {
   "object": "list",
   "data": [
-    {"text": "I want to book a car for tomorrow", "label": "booking", "score": 0.94, "all_scores": {"booking": 0.94, "cancellation": 0.03, "inquiry": 0.03}},
-    {"text": "Please cancel everything", "label": "cancellation", "score": 0.91, "all_scores": {"booking": 0.04, "cancellation": 0.91, "inquiry": 0.05}},
-    {"text": "What are the check-in times?", "label": "inquiry", "score": 0.87, "all_scores": {"booking": 0.06, "cancellation": 0.07, "inquiry": 0.87}}
+    {
+      "text": "Book me a flight to Paris tomorrow",
+      "label": "booking",
+      "score": 0.66,
+      "all_scores": {"booking": 0.66, "cancellation": 0.11, "complaint": 0.11, "inquiry": 0.13}
+    },
+    {
+      "text": "Cancel my upcoming trip",
+      "label": "cancellation",
+      "score": 0.79,
+      "all_scores": {"booking": 0.09, "cancellation": 0.79, "complaint": 0.07, "inquiry": 0.05}
+    },
+    {
+      "text": "What are the check-in times?",
+      "label": "inquiry",
+      "score": 0.68,
+      "all_scores": {"booking": 0.15, "cancellation": 0.06, "complaint": 0.11, "inquiry": 0.68}
+    },
+    {
+      "text": "This is absolutely terrible service",
+      "label": "complaint",
+      "score": 0.77,
+      "all_scores": {"booking": 0.06, "cancellation": 0.08, "complaint": 0.77, "inquiry": 0.10}
+    }
   ],
-  "model": "intent-classifier_20251215_155054"
+  "total_count": 4,
+  "model": "intent-classifier-test_20260102_202450"
 }
 ```
 
@@ -2631,7 +2662,12 @@ curl -X POST http://localhost:8000/v1/ml/classifier/predict \
   -H "Content-Type: application/json" \
   -d '{
     "model": "intent-classifier-latest",
-    "texts": ["I need to reserve a room", "Cancel my trip"]
+    "texts": [
+      "Book me a flight to Paris tomorrow",
+      "Cancel my upcoming trip",
+      "What are the check-in times?",
+      "This is absolutely terrible service"
+    ]
   }'
 ```
 
@@ -2766,26 +2802,38 @@ Train an anomaly detection model.
 ```json
 {
   "object": "fit_result",
-  "model": "sensor-detector_20251215_160000",
+  "model": "sensor_anomaly_detector_20260102_202438",
   "backend": "isolation_forest",
-  "samples_fitted": 6,
-  "training_time_ms": 45.2,
+  "samples_fitted": 30,
+  "training_time_ms": 85.77,
+  "model_params": {
+    "backend": "isolation_forest",
+    "contamination": 0.05,
+    "threshold": 0.894,
+    "input_dim": 1
+  },
   "status": "fitted",
-  "base_name": "sensor-detector",
-  "versioned_name": "sensor-detector_20251215_160000",
+  "base_name": "sensor_anomaly_detector",
+  "versioned_name": "sensor_anomaly_detector_20260102_202438",
   "overwrite": false
 }
 ```
 
-**Example:**
+**Example (Temperature Sensor Data):**
 
 ```bash
+# Train on normal temperature readings (20-25°C range)
 curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "sensor-detector",
+    "model": "sensor_anomaly_detector",
     "backend": "isolation_forest",
-    "data": [[22.1], [23.5], [21.8], [24.2], [22.7]],
+    "data": [
+      [22.1], [23.5], [21.8], [24.2], [22.7],
+      [23.1], [21.5], [24.8], [22.3], [23.9],
+      [21.2], [24.5], [22.8], [23.2], [21.9],
+      [24.1], [22.5], [23.7], [21.6], [24.3]
+    ],
     "contamination": 0.05
   }'
 ```
@@ -2836,34 +2884,46 @@ Detect anomalies (returns only anomalous points).
 
 Same request format as `/score`, but response only includes anomalous points.
 
+**Example (Detecting Temperature Anomalies):**
+
+```bash
+# Test with mix of normal and anomalous readings
+curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sensor_anomaly_detector-latest",
+    "backend": "isolation_forest",
+    "data": [[22.0], [23.5], [0.0], [21.5], [100.0], [24.0], [-10.0], [22.8], [35.0], [23.2]],
+    "threshold": 0.5
+  }'
+```
+
 **Response:**
 
 ```json
 {
   "object": "list",
   "data": [
-    {"index": 2, "score": 0.89, "raw_score": -0.45},
-    {"index": 3, "score": 0.95, "raw_score": -0.52}
+    {"index": 2, "score": 0.61, "raw_score": 0.65},
+    {"index": 4, "score": 0.60, "raw_score": 0.64},
+    {"index": 6, "score": 0.61, "raw_score": 0.65},
+    {"index": 8, "score": 0.60, "raw_score": 0.64}
   ],
+  "total_count": 4,
+  "model": "sensor_anomaly_detector_20260102_202438",
+  "backend": "isolation_forest",
   "summary": {
-    "anomalies_detected": 2,
+    "anomalies_detected": 4,
     "threshold": 0.5
   }
 }
 ```
 
-**Example:**
-
-```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "sensor-detector-latest",
-    "backend": "isolation_forest",
-    "data": [[22.0], [100.0], [23.5]],
-    "threshold": 0.5
-  }'
-```
+The anomalies detected are:
+- Index 2: 0.0°C (freezing - way below normal)
+- Index 4: 100.0°C (boiling - way above normal)
+- Index 6: -10.0°C (sub-freezing)
+- Index 8: 35.0°C (elevated temperature)
 
 #### Save Anomaly Model
 
