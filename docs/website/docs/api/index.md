@@ -169,6 +169,22 @@ Common HTTP status codes:
 - `POST /v1/vision/ocr` - OCR text extraction (accepts file upload or base64)
 - `POST /v1/vision/documents/extract` - Document extraction/VQA (accepts file upload or base64)
 
+### ML (Custom Classifiers & Anomaly Detection)
+
+- `POST /v1/ml/classifier/fit` - Train custom text classifier (SetFit few-shot)
+- `POST /v1/ml/classifier/predict` - Classify texts using trained model
+- `POST /v1/ml/classifier/save` - Save trained classifier to disk
+- `POST /v1/ml/classifier/load` - Load classifier from disk
+- `GET /v1/ml/classifier/models` - List saved classifiers
+- `DELETE /v1/ml/classifier/models/{name}` - Delete saved classifier
+- `POST /v1/ml/anomaly/fit` - Train anomaly detector
+- `POST /v1/ml/anomaly/score` - Score data points for anomalies
+- `POST /v1/ml/anomaly/detect` - Detect anomalies (returns only anomalous points)
+- `POST /v1/ml/anomaly/save` - Save trained anomaly model
+- `POST /v1/ml/anomaly/load` - Load anomaly model from disk
+- `GET /v1/ml/anomaly/models` - List saved anomaly models
+- `DELETE /v1/ml/anomaly/models/{filename}` - Delete saved anomaly model
+
 ### Health
 
 - `GET /health` - Overall health check
@@ -2489,6 +2505,399 @@ curl -X POST http://localhost:8000/v1/vision/documents/extract \
   -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
   -F "task=extraction"
 ```
+
+---
+
+## ML API (Custom Classifiers & Anomaly Detection)
+
+The ML API provides custom text classification and anomaly detection capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime with automatic model versioning support.
+
+**Base URL:** `http://localhost:8000/v1/ml`
+
+:::tip Model Versioning
+When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
+:::
+
+### Custom Text Classification (SetFit)
+
+Train custom classifiers with as few as 8-16 examples per class using SetFit (Sentence Transformer Fine-tuning).
+
+#### Fit Classifier
+
+Train a new text classifier.
+
+**Endpoint:** `POST /v1/ml/classifier/fit`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier",
+  "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "training_data": [
+    {"text": "I need to book a flight to NYC", "label": "booking"},
+    {"text": "Reserve a hotel room for me", "label": "booking"},
+    {"text": "Cancel my reservation please", "label": "cancellation"},
+    {"text": "I want to cancel my booking", "label": "cancellation"},
+    {"text": "What time does the flight leave?", "label": "inquiry"},
+    {"text": "How much does it cost?", "label": "inquiry"}
+  ],
+  "num_iterations": 20,
+  "batch_size": 16,
+  "overwrite": false
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `model` | string | Yes | - | Base name for the classifier |
+| `base_model` | string | No | `all-MiniLM-L6-v2` | Sentence transformer to fine-tune |
+| `training_data` | array | Yes | - | List of `{"text", "label"}` objects |
+| `num_iterations` | int | No | 20 | Contrastive learning iterations |
+| `batch_size` | int | No | 16 | Training batch size |
+| `overwrite` | bool | No | false | If false, version with timestamp |
+
+**Response:**
+
+```json
+{
+  "object": "fit_result",
+  "model": "intent-classifier_20251215_155054",
+  "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "samples_fitted": 6,
+  "num_classes": 3,
+  "labels": ["booking", "cancellation", "inquiry"],
+  "training_time_ms": 1234.56,
+  "status": "fitted",
+  "base_name": "intent-classifier",
+  "versioned_name": "intent-classifier_20251215_155054",
+  "overwrite": false
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/ml/classifier/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier",
+    "training_data": [
+      {"text": "Book a flight", "label": "booking"},
+      {"text": "Cancel my order", "label": "cancellation"}
+    ]
+  }'
+```
+
+#### Predict with Classifier
+
+Classify texts using a trained model.
+
+**Endpoint:** `POST /v1/ml/classifier/predict`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier-latest",
+  "texts": [
+    "I want to book a car for tomorrow",
+    "Please cancel everything",
+    "What are the check-in times?"
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"text": "I want to book a car for tomorrow", "label": "booking", "score": 0.94, "all_scores": {"booking": 0.94, "cancellation": 0.03, "inquiry": 0.03}},
+    {"text": "Please cancel everything", "label": "cancellation", "score": 0.91, "all_scores": {"booking": 0.04, "cancellation": 0.91, "inquiry": 0.05}},
+    {"text": "What are the check-in times?", "label": "inquiry", "score": 0.87, "all_scores": {"booking": 0.06, "cancellation": 0.07, "inquiry": 0.87}}
+  ],
+  "model": "intent-classifier_20251215_155054"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/ml/classifier/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier-latest",
+    "texts": ["I need to reserve a room", "Cancel my trip"]
+  }'
+```
+
+#### Save Classifier
+
+Save a trained classifier to disk for production use.
+
+**Endpoint:** `POST /v1/ml/classifier/save`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier_20251215_155054"
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "save_result",
+  "model": "intent-classifier_20251215_155054",
+  "path": "~/.llamafarm/models/classifier/intent-classifier_20251215_155054",
+  "status": "saved"
+}
+```
+
+#### Load Classifier
+
+Load a previously saved classifier.
+
+**Endpoint:** `POST /v1/ml/classifier/load`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier-latest"
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "load_result",
+  "model": "intent-classifier_20251215_155054",
+  "status": "loaded"
+}
+```
+
+#### List Classifier Models
+
+**Endpoint:** `GET /v1/ml/classifier/models`
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"name": "intent-classifier_20251215_155054", "labels": ["booking", "cancellation", "inquiry"]}
+  ]
+}
+```
+
+#### Delete Classifier Model
+
+**Endpoint:** `DELETE /v1/ml/classifier/models/{model_name}`
+
+---
+
+### Anomaly Detection
+
+Train anomaly detectors on normal data and detect outliers in new data.
+
+#### Fit Anomaly Detector
+
+Train an anomaly detection model.
+
+**Endpoint:** `POST /v1/ml/anomaly/fit`
+
+**Request Body (Numeric Data):**
+
+```json
+{
+  "model": "sensor-detector",
+  "backend": "isolation_forest",
+  "data": [
+    [22.1, 1024], [23.5, 1100], [21.8, 980],
+    [24.2, 1050], [22.7, 1080], [23.1, 990]
+  ],
+  "contamination": 0.1,
+  "overwrite": false
+}
+```
+
+**Request Body (Mixed Data with Schema):**
+
+```json
+{
+  "model": "api-monitor",
+  "backend": "isolation_forest",
+  "data": [
+    {"response_time_ms": 100, "bytes": 1024, "method": "GET", "user_agent": "Mozilla/5.0"},
+    {"response_time_ms": 105, "bytes": 1100, "method": "POST", "user_agent": "Chrome/90.0"}
+  ],
+  "schema": {
+    "response_time_ms": "numeric",
+    "bytes": "numeric",
+    "method": "label",
+    "user_agent": "hash"
+  },
+  "contamination": 0.1
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `model` | string | No | "default" | Model identifier |
+| `backend` | string | No | "isolation_forest" | Algorithm: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder` |
+| `data` | array | Yes | - | Training data (numeric arrays or dicts) |
+| `schema` | object | No | - | Feature encoding schema (required for dict data) |
+| `contamination` | float | No | 0.1 | Expected proportion of anomalies (0-0.5) |
+| `overwrite` | bool | No | false | If false, version with timestamp |
+
+**Response:**
+
+```json
+{
+  "object": "fit_result",
+  "model": "sensor-detector_20251215_160000",
+  "backend": "isolation_forest",
+  "samples_fitted": 6,
+  "training_time_ms": 45.2,
+  "status": "fitted",
+  "base_name": "sensor-detector",
+  "versioned_name": "sensor-detector_20251215_160000",
+  "overwrite": false
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sensor-detector",
+    "backend": "isolation_forest",
+    "data": [[22.1], [23.5], [21.8], [24.2], [22.7]],
+    "contamination": 0.05
+  }'
+```
+
+#### Score Anomalies
+
+Score all data points for anomalies.
+
+**Endpoint:** `POST /v1/ml/anomaly/score`
+
+**Request Body:**
+
+```json
+{
+  "model": "sensor-detector-latest",
+  "backend": "isolation_forest",
+  "data": [[22.0], [23.5], [0.0], [100.0], [21.5]],
+  "threshold": 0.5
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"index": 0, "score": 0.23, "is_anomaly": false, "raw_score": 0.12},
+    {"index": 1, "score": 0.21, "is_anomaly": false, "raw_score": 0.10},
+    {"index": 2, "score": 0.89, "is_anomaly": true, "raw_score": -0.45},
+    {"index": 3, "score": 0.95, "is_anomaly": true, "raw_score": -0.52},
+    {"index": 4, "score": 0.22, "is_anomaly": false, "raw_score": 0.11}
+  ],
+  "summary": {
+    "total_points": 5,
+    "anomaly_count": 2,
+    "anomaly_rate": 0.4,
+    "threshold": 0.5
+  }
+}
+```
+
+#### Detect Anomalies
+
+Detect anomalies (returns only anomalous points).
+
+**Endpoint:** `POST /v1/ml/anomaly/detect`
+
+Same request format as `/score`, but response only includes anomalous points.
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"index": 2, "score": 0.89, "raw_score": -0.45},
+    {"index": 3, "score": 0.95, "raw_score": -0.52}
+  ],
+  "summary": {
+    "anomalies_detected": 2,
+    "threshold": 0.5
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sensor-detector-latest",
+    "backend": "isolation_forest",
+    "data": [[22.0], [100.0], [23.5]],
+    "threshold": 0.5
+  }'
+```
+
+#### Save Anomaly Model
+
+**Endpoint:** `POST /v1/ml/anomaly/save`
+
+**Request Body:**
+
+```json
+{
+  "model": "sensor-detector_20251215_160000",
+  "backend": "isolation_forest"
+}
+```
+
+#### Load Anomaly Model
+
+**Endpoint:** `POST /v1/ml/anomaly/load`
+
+**Request Body:**
+
+```json
+{
+  "model": "sensor-detector-latest",
+  "backend": "isolation_forest"
+}
+```
+
+#### List Anomaly Models
+
+**Endpoint:** `GET /v1/ml/anomaly/models`
+
+#### Delete Anomaly Model
+
+**Endpoint:** `DELETE /v1/ml/anomaly/models/{filename}`
 
 ---
 
