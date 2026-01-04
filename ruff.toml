@@ -22,7 +22,12 @@ exclude = [
 [lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
-ignore = ["E501", "UP040"]
+ignore = [
+  "E501",   # Line too long - handled by formatter
+  "UP040",  # Type parameter syntax - Python 3.11 compatibility
+  "B905",   # zip() without strict= - strict param is optional
+  "SIM105", # contextlib.suppress - try/except/pass is clearer
+]
 
 # Per-file ignores
 [lint.per-file-ignores]

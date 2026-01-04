@@ -83,6 +83,8 @@ dependencies = [
   "llama-index-readers-file>=0.1.0",
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
+  # DuckDB for Embedded Trinity Memory System
+  "duckdb>=1.4.3",
 ]
 
 [dependency-groups]

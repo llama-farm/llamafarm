@@ -2,6 +2,7 @@ from .datasets import router as datasets_router
 from .event_logs import router as event_logs_router
 from .examples import router as examples_router
 from .health import router as health_router
+from .memory.project_memory_router import router as project_memory_router
 from .ml import router as ml_router
 from .models import router as models_router
 from .projects import router as projects_router
@@ -21,4 +22,5 @@ __all__ = [
     "models_router",
     "ml_router",
     "vision_router",
+    "project_memory_router",
 ]

@@ -1,0 +1,159 @@
+# LlamaFarm End-to-End Demo Configuration
+# Embedded Trinity Memory System + ML + RAG
+#
+# This configuration demonstrates the full power of LlamaFarm:
+# - ChromaDB for semantic search (Vector Memory)
+# - DuckDB for time-series/spatial queries (Episodic Memory)
+# - DuckDB for knowledge graphs (Associative Memory)
+# - Working Memory with TTL
+# - ML classifiers and anomaly detection
+# - Consolidation (the "hippocampus" process)
+
+version: v1
+name: e2e_scenarios
+namespace: demos
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RAG Configuration - ChromaDB Vector Store
+# ═══════════════════════════════════════════════════════════════════════════
+rag:
+  default_database: semantic_memory
+  databases:
+    - name: semantic_memory
+      type: ChromaStore
+      config:
+        persist_directory: ./data/chroma_db
+        distance_function: cosine
+        collection_name: semantic_documents
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: sentence-transformers/all-MiniLM-L6-v2
+            dimension: 384
+            batch_size: 16
+            timeout: 60
+            auto_pull: true
+          priority: 0
+      retrieval_strategies:
+        - name: basic_search
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 10
+          default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: basic_search
+
+  data_processing_strategies:
+    - name: document_processor
+      description: Process documents for semantic search
+      parsers:
+        - type: TextParser_Python
+          config:
+            encoding: utf-8
+            chunk_size: 500
+            chunk_overlap: 100
+            chunk_strategy: sentences
+            clean_text: true
+            extract_metadata: true
+          file_include_patterns:
+            - "*.txt"
+            - "*.md"
+          priority: 10
+        - type: MarkdownParser_Python
+          config:
+            chunk_size: 400
+            chunk_strategy: sections
+            extract_metadata: true
+          file_include_patterns:
+            - "*.md"
+          priority: 5
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Memory System Configuration - Per-Project Memory Stores
+# ═══════════════════════════════════════════════════════════════════════════
+memory:
+  # Default store to use when not specified
+  default_store: trinity_memory
+
+  # Named memory stores (data stored in {project_dir}/lf_data/memory/{store_name}/)
+  stores:
+    - name: trinity_memory
+      # Working Memory (short-term buffer with TTL)
+      working_memory:
+        ttl_seconds: 3600  # 1 hour default TTL
+        max_records: 10000
+
+      # Time-Series Store (DuckDB)
+      timeseries:
+        retention_days: 30
+
+      # Graph Store (DuckDB)
+      graph:
+        max_path_depth: 10
+
+      # Consolidation settings (the "hippocampus")
+      consolidation:
+        min_records: 10  # Minimum records before consolidation
+        batch_size: 100
+        prune_after_consolidate: true
+
+    # Additional memory store for scenario-specific data
+    - name: scenario_memory
+      working_memory:
+        ttl_seconds: 1800  # 30 minutes TTL for scenario data
+        max_records: 5000
+      graph:
+        max_path_depth: 5
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ML Configuration
+# ═══════════════════════════════════════════════════════════════════════════
+ml:
+  models_dir: ./data/ml_models
+
+  # Pre-configured classifier for the demos
+  classifiers:
+    - name: distress_classifier
+      base_model: sentence-transformers/all-MiniLM-L6-v2
+      description: Classify distress signals in radio communications
+
+    - name: medical_triage
+      base_model: sentence-transformers/all-MiniLM-L6-v2
+      description: Classify patient urgency levels
+
+  # Pre-configured anomaly detectors
+  anomaly_detectors:
+    - name: vital_signs_anomaly
+      backend: one_class_svm
+      description: Detect abnormal vital signs patterns
+
+    - name: patient_metrics_anomaly
+      backend: isolation_forest
+      description: Detect patient metric anomalies
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Runtime Configuration
+# ═══════════════════════════════════════════════════════════════════════════
+runtime:
+  default_model: default
+  models:
+    - name: default
+      description: Default model for demos
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Demo Datasets Configuration
+# ═══════════════════════════════════════════════════════════════════════════
+datasets:
+  - name: military_protocols
+    data_processing_strategy: document_processor
+    database: semantic_memory
+    description: Military rescue protocols and procedures
+
+  - name: medical_protocols
+    data_processing_strategy: document_processor
+    database: semantic_memory
+    description: Medical treatment protocols and guidelines

@@ -30,6 +30,14 @@ class DatabaseNotFoundError(NotFoundError):
         super().__init__(f"Database '{database}' not found")
 
 
+class MemoryStoreNotFoundError(NotFoundError):
+    """Raised when a memory store is not found or not configured."""
+
+    def __init__(self, store_name: str):
+        self.store_name = store_name
+        super().__init__(f"Memory store '{store_name}' not found or not configured")
+
+
 class ProjectNotFoundError(NotFoundError):
     """Raised when a project doesn't exist."""
 
