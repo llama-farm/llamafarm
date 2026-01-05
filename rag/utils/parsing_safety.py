@@ -90,7 +90,6 @@ BINARY_EXTENSIONS = {
     ".tif",
     ".webp",
     ".ico",
-    ".svg",  # SVG is text-based but often binary-encoded
     ".heic",
     ".heif",
     # Audio
