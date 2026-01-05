@@ -595,12 +595,13 @@ function AnomalyModel() {
   const handleTest = useCallback(async () => {
     if (!testInput.trim() || !activeVersionName) return
 
-    // Parse test input - try table format, then numeric
+    // Parse test input - try table format, then single row with existing schema, then numeric
     const tableResult = parseTableData(testInput)
     let testData: number[][] | Record<string, unknown>[]
     let schema: Record<string, FeatureEncodingType> | undefined
 
     if (tableResult && tableResult.columns.length > 0) {
+      // Full table with headers
       schema = {}
       tableResult.columns.forEach(col => {
         schema![col.name] = col.type
@@ -617,6 +618,46 @@ function AnomalyModel() {
         })
         return rowData
       })
+    } else if (columns.length > 0) {
+      // Try to parse as a single row using existing column schema
+      const delimiter = testInput.includes('\t') ? '\t' : ','
+      const values = testInput.trim().split(delimiter).map(v => v.trim())
+
+      if (values.length === columns.length) {
+        // Values match column count - use existing schema
+        schema = {}
+        columns.forEach(col => {
+          schema![col.name] = col.type
+        })
+        const rowData: Record<string, unknown> = {}
+        columns.forEach((col, idx) => {
+          const value = values[idx]
+          if (col.type === 'numeric') {
+            rowData[col.name] = parseFloat(value) || 0
+          } else {
+            rowData[col.name] = value
+          }
+        })
+        testData = [rowData]
+      } else {
+        // Fall back to numeric parsing
+        const numericData = parseNumericTrainingData(testInput)
+        if (!numericData || numericData.length === 0) {
+          const errorResult: AnomalyTestResult = {
+            id: String(Date.now()),
+            input: `Error: Expected ${columns.length} values (${columns.map(c => c.name).join(', ')}), got ${values.length}`,
+            isAnomaly: false,
+            score: 0,
+            threshold,
+            timestamp: new Date().toISOString(),
+            status: 'error',
+          }
+          setTestHistory(prev => [errorResult, ...prev])
+          setTestInput('')
+          return
+        }
+        testData = numericData
+      }
     } else {
       const numericData = parseNumericTrainingData(testInput)
       if (!numericData || numericData.length === 0) {
@@ -677,7 +718,7 @@ function AnomalyModel() {
       setTestHistory(prev => [errorResult, ...prev])
     }
     setTestInput('')
-  }, [testInput, activeVersionName, backend, threshold, loadMutation, scoreMutation])
+  }, [testInput, activeVersionName, backend, threshold, loadMutation, scoreMutation, columns])
 
   const handleSetActiveVersion = useCallback(
     async (versionName: string) => {
@@ -1197,7 +1238,6 @@ function AnomalyModel() {
                   .replace(/-+/g, '-')
                 setModelName(sanitized)
               }}
-              disabled={!isNewModel}
               className={nameExistsWarning ? 'border-amber-500' : ''}
             />
             {nameExistsWarning ? (

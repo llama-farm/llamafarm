@@ -62,7 +62,8 @@ export function useListClassifierModels(options?: {
     queryKey: mlModelKeys.classifierList(),
     queryFn: () => mlService.listClassifierModels(),
     enabled: options?.enabled !== false,
-    staleTime: options?.staleTime ?? 60_000, // 1 minute default
+    staleTime: options?.staleTime ?? 5_000, // 5 seconds - short to catch new models quickly
+    refetchOnMount: 'always', // Always refetch when component mounts
   })
 }
 
@@ -157,7 +158,8 @@ export function useListAnomalyModels(options?: {
     queryKey: mlModelKeys.anomalyList(),
     queryFn: () => mlService.listAnomalyModels(),
     enabled: options?.enabled !== false,
-    staleTime: options?.staleTime ?? 60_000, // 1 minute default
+    staleTime: options?.staleTime ?? 5_000, // 5 seconds - short to catch new models quickly
+    refetchOnMount: 'always', // Always refetch when component mounts
   })
 }
 
@@ -256,8 +258,10 @@ export function useTrainAndSaveClassifier() {
       return { fitResult, saveResult }
     },
     onSuccess: () => {
+      // Invalidate and force refetch to ensure models list is up to date
       queryClient.invalidateQueries({
         queryKey: mlModelKeys.classifierList(),
+        refetchType: 'all',
       })
     },
   })
@@ -283,8 +287,10 @@ export function useTrainAndSaveAnomaly() {
       return { fitResult, saveResult }
     },
     onSuccess: () => {
+      // Invalidate and force refetch to ensure models list is up to date
       queryClient.invalidateQueries({
         queryKey: mlModelKeys.anomalyList(),
+        refetchType: 'all',
       })
     },
   })

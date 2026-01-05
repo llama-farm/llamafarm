@@ -1363,7 +1363,6 @@ function ClassifierModel() {
                   .replace(/-+/g, '-')
                 setModelName(sanitized)
               }}
-              disabled={!isNewModel}
               className={nameExistsWarning ? 'border-amber-500' : ''}
             />
             {nameExistsWarning ? (
