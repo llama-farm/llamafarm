@@ -278,8 +278,23 @@ class BlobProcessor:
 
         Returns:
             List of processed Document objects
+
+        Raises:
+            UnsupportedFileTypeError: If no appropriate parser is configured for this file type
+                and fail_fast is enabled (default: True)
+            ParserFailedError: If all matching parsers fail and fail_fast is enabled
         """
+        from utils.parsing_safety import (
+            ParserFailedError,
+            UnsupportedFileTypeError,
+            get_file_extension,
+            is_binary_extension,
+        )
+
         filename = metadata.get("filename", "unknown")
+        extension = get_file_extension(filename)
+        fail_fast = getattr(self.strategy_config, "fail_fast", True)
+
         logger.info(f"Processing blob: {filename}")
         logger.debug(f"Blob metadata: {metadata}")
         logger.debug(
@@ -289,30 +304,76 @@ class BlobProcessor:
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
         logger.debug(
-            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type or None for p in matching_parsers]}"
+            f"Found {len(matching_parsers)} matching parsers for {filename}: "
+            f"{[p[0].type or None for p in matching_parsers]}"
         )
 
+        # CRITICAL FIX: Do NOT fall back to text parser for binary files
         if not matching_parsers:
-            logger.warning(f"No parser found for file: {filename}")
-            # Try with the lowest priority text parser as ultimate fallback
+            # Check if this is a binary file type
+            if is_binary_extension(filename):
+                error_msg = (
+                    f"No parser configured for binary file: {filename} "
+                    f"(extension: {extension}). "
+                    f"Configure an appropriate parser in your data_processing_strategy."
+                )
+                logger.error(error_msg)
+
+                if fail_fast:
+                    raise UnsupportedFileTypeError(
+                        filename=filename,
+                        extension=extension,
+                        available_parsers=[
+                            p[0].type for p in self.parsers if p[0].type
+                        ],
+                    )
+                else:
+                    # Legacy mode: return empty list instead of garbage
+                    logger.warning(
+                        f"Skipping binary file {filename} - no parser configured "
+                        f"(fail_fast=False)"
+                    )
+                    return []
+
+            # For non-binary files, text parser fallback is acceptable
             for config, parser in self.parsers:
                 if config.type and config.type == "TextParser_Python":
+                    logger.info(
+                        f"Using text parser fallback for non-binary file: {filename}"
+                    )
                     matching_parsers = [(config, parser)]
                     break
 
+            if not matching_parsers:
+                logger.warning(f"No parser found for file: {filename}")
+                if fail_fast:
+                    raise UnsupportedFileTypeError(
+                        filename=filename,
+                        extension=extension,
+                        available_parsers=[],
+                    )
+                return []
+
         # Try parsers in priority order until one succeeds
-        documents = []
+        documents: list[Document] = []
+        tried_parsers: list[str] = []
+        parser_errors: list[str] = []
+
         for config, parser in matching_parsers:
             if not config.type:
                 logger.warning(
-                    f"Parser config missing 'type': {config}. This may indicate a misconfiguration."
+                    f"Parser config missing 'type': {config}. "
+                    f"This may indicate a misconfiguration."
                 )
                 continue
 
             parser_type = config.type
+            tried_parsers.append(parser_type)
+
             try:
                 logger.debug(
-                    f"Attempting to parse {filename} with {parser_type} (priority: {config.priority})"
+                    f"Attempting to parse {filename} with {parser_type} "
+                    f"(priority: {config.priority})"
                 )
                 documents = parser.parse_blob(blob_data, metadata)
                 logger.debug(
@@ -327,7 +388,8 @@ class BlobProcessor:
                     )
 
                     logger.info(
-                        f"Successfully parsed {filename} with {parser_type} - got {len(documents)} chunks"
+                        f"Successfully parsed {filename} with {parser_type} "
+                        f"- got {len(documents)} chunks"
                     )
                     # Use debug level for detailed parser output
                     logger.debug(f"\n📄 Parser Output: {parser_type}")
@@ -339,26 +401,32 @@ class BlobProcessor:
 
                     # Apply extractors to the documents
                     documents = self._apply_extractors(documents, filename)
-                    break
+                    return documents
 
             except Exception as e:
+                error_msg = f"{parser_type} failed: {e}"
+                parser_errors.append(error_msg)
                 logger.warning(f"{parser_type} FAILED for {filename}: {e}")
                 import traceback
 
-                logger.warning(f"Traceback: {traceback.format_exc()}")
+                logger.debug(f"Traceback: {traceback.format_exc()}")
                 continue
 
-        if not documents:
+        # All parsers failed - do NOT fall back to raw text decode
+        if fail_fast:
             logger.error(f"All parsers failed for file: {filename}")
-            # Create a basic document with raw text as fallback
-            documents = [
-                Document(
-                    content=blob_data.decode("utf-8", errors="ignore"),
-                    metadata={**metadata, "parser": "fallback_raw"},
-                )
-            ]
-
-        return documents
+            raise ParserFailedError(
+                filename=filename,
+                tried_parsers=tried_parsers,
+                errors=parser_errors,
+            )
+        else:
+            # Legacy mode: return empty list instead of garbage
+            logger.error(
+                f"All parsers failed for file: {filename}. "
+                f"Returning empty result (fail_fast=False)."
+            )
+            return []
 
     def _find_matching_parsers(self, filename: str) -> list[tuple[Parser, BaseParser]]:
         """

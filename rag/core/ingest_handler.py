@@ -23,6 +23,11 @@ from utils.embedding_safety import (
     EmbedderUnavailableError,
     is_valid_embedding,
 )
+from utils.parsing_safety import (
+    ParserFailedError,
+    ParsingError,
+    UnsupportedFileTypeError,
+)
 
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
@@ -249,7 +254,62 @@ class IngestHandler:
 
         try:
             # Process the blob with the blob processor
-            documents = self.blob_processor.process_blob(file_data, metadata)
+            try:
+                documents = self.blob_processor.process_blob(file_data, metadata)
+            except UnsupportedFileTypeError as e:
+                # No appropriate parser configured for this file type
+                error_msg = str(e)
+                logger.error(f"Unsupported file type: {error_msg}")
+                event_logger.log_event(
+                    "file_skipped",
+                    {
+                        "filename": filename,
+                        "reason": "unsupported_file_type",
+                        "extension": e.extension,
+                        "available_parsers": e.available_parsers,
+                    },
+                )
+                event_logger.fail_event(error_msg)
+                return {
+                    "status": "skipped",
+                    "reason": "unsupported_file_type",
+                    "message": error_msg,
+                    "filename": filename,
+                    "document_count": 0,
+                }
+            except ParserFailedError as e:
+                # All configured parsers failed to process the file
+                error_msg = str(e)
+                logger.error(f"All parsers failed: {error_msg}")
+                event_logger.log_event(
+                    "parsing_failed",
+                    {
+                        "filename": filename,
+                        "reason": "all_parsers_failed",
+                        "tried_parsers": e.tried_parsers,
+                        "errors": e.errors[:5],  # Limit error details
+                    },
+                )
+                event_logger.fail_event(error_msg)
+                return {
+                    "status": "error",
+                    "reason": "parser_failed",
+                    "message": error_msg,
+                    "filename": filename,
+                    "document_count": 0,
+                }
+            except ParsingError as e:
+                # Generic parsing error (base class)
+                error_msg = str(e)
+                logger.error(f"Parsing error: {error_msg}")
+                event_logger.fail_event(error_msg)
+                return {
+                    "status": "error",
+                    "reason": "parsing_error",
+                    "message": error_msg,
+                    "filename": filename,
+                    "document_count": 0,
+                }
 
             if not documents:
                 event_logger.fail_event(f"No documents extracted from {filename}")

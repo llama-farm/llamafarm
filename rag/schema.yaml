@@ -2097,6 +2097,15 @@ definitions:
         minLength: 10
         maxLength: 500
         description: Strategy description
+      fail_fast:
+        type: boolean
+        default: true
+        description: |
+          When true, raise an error if no appropriate parser is found or all parsers fail.
+          When false (legacy mode), skip files that cannot be parsed and return empty results.
+          Default is true to prevent garbage data from being stored in the vector database.
+          Binary files (PDF, DOCX, images, etc.) will never be processed with text parsers
+          regardless of this setting - they will be skipped or raise an error.
       parsers:
         type: array
         description: Document parsers in processing order
