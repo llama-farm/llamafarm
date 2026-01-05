@@ -144,9 +144,7 @@ class OllamaEmbedder(Embedder):
             result = response.json()
             return result.get("embedding", [])
         else:
-            raise Exception(
-                f"Ollama API error {response.status_code}: {response.text}"
-            )
+            raise Exception(f"Ollama API error {response.status_code}: {response.text}")
 
     def _check_model_availability(self) -> bool:
         """Check if the model is available."""

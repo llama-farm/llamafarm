@@ -212,7 +212,9 @@ class TestCircuitBreaker:
 
     def test_half_open_closes_on_success(self):
         """Half-open circuit should close on success."""
-        cb = CircuitBreaker(failure_threshold=2, reset_timeout=0.1, half_open_max_calls=1)
+        cb = CircuitBreaker(
+            failure_threshold=2, reset_timeout=0.1, half_open_max_calls=1
+        )
 
         # Open the circuit
         cb.record_failure(Exception("Error 1"))
@@ -245,7 +247,9 @@ class TestCircuitBreaker:
 
     def test_half_open_limits_calls(self):
         """Half-open state should limit number of calls."""
-        cb = CircuitBreaker(failure_threshold=2, reset_timeout=0.1, half_open_max_calls=2)
+        cb = CircuitBreaker(
+            failure_threshold=2, reset_timeout=0.1, half_open_max_calls=2
+        )
 
         # Open the circuit
         cb.record_failure(Exception("Error 1"))

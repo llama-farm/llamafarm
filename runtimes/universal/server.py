@@ -2017,43 +2017,54 @@ async def delete_anomaly_model(model_name: str):
 
         # First, try to find files matching exactly (in case backend suffix is included)
         for ext in [".joblib", ".pkl", ".pt"]:
-            filename = f"{safe_name}{ext}"
-            candidate_path = ANOMALY_MODELS_DIR / filename
+            expected_name = f"{safe_name}{ext}"
+            # Iterate directory entries instead of building a path from user input
             try:
-                validated_path = _validate_path_within_directory(
-                    candidate_path, ANOMALY_MODELS_DIR
-                )
-            except ValueError:
-                logger.warning(f"Skipped invalid anomaly model path: {candidate_path}")
-                continue
-
-            if validated_path.exists():
-                logger.info(
-                    f"Delete anomaly model - found exact match: {validated_path}"
-                )
-                deleted_files.append(validated_path)
+                for entry in ANOMALY_MODELS_DIR.iterdir():
+                    if entry.name == expected_name:
+                        try:
+                            validated_entry = _validate_path_within_directory(
+                                entry, ANOMALY_MODELS_DIR
+                            )
+                        except ValueError:
+                            logger.warning(
+                                f"Skipped invalid anomaly model path: {entry}"
+                            )
+                            continue
+                        logger.info(
+                            f"Delete anomaly model - found exact match: {validated_entry}"
+                        )
+                        deleted_files.append(validated_entry)
+                        break
+            except FileNotFoundError:
+                # Models directory missing - continue to backend search
+                break
 
         # If no exact match, try adding backend suffixes
         if not deleted_files:
             for backend in ANOMALY_BACKENDS:
                 for ext in [".joblib", ".pkl", ".pt"]:
-                    filename = f"{safe_name}_{backend}{ext}"
-                    candidate_path = ANOMALY_MODELS_DIR / filename
+                    expected_name = f"{safe_name}_{backend}{ext}"
                     try:
-                        validated_path = _validate_path_within_directory(
-                            candidate_path, ANOMALY_MODELS_DIR
-                        )
-                    except ValueError:
-                        logger.warning(
-                            f"Skipped invalid anomaly model path: {candidate_path}"
-                        )
-                        continue
-
-                    if validated_path.exists():
-                        logger.info(
-                            f"Delete anomaly model - found file with backend suffix: {validated_path}"
-                        )
-                        deleted_files.append(validated_path)
+                        for entry in ANOMALY_MODELS_DIR.iterdir():
+                            if entry.name == expected_name:
+                                try:
+                                    validated_entry = _validate_path_within_directory(
+                                        entry, ANOMALY_MODELS_DIR
+                                    )
+                                except ValueError:
+                                    logger.warning(
+                                        f"Skipped invalid anomaly model path: {entry}"
+                                    )
+                                    continue
+                                logger.info(
+                                    f"Delete anomaly model - found file with backend suffix: {validated_entry}"
+                                )
+                                deleted_files.append(validated_entry)
+                                break
+                    except FileNotFoundError:
+                        # Models directory missing - nothing to search
+                        break
 
         if not deleted_files:
             raise HTTPException(
