@@ -2009,22 +2009,42 @@ async def delete_anomaly_model(model_name: str):
         # First, try to find files matching exactly (in case backend suffix is included)
         for ext in [".joblib", ".pkl", ".pt"]:
             filename = f"{safe_name}{ext}"
-            file_path = ANOMALY_MODELS_DIR / filename
-            if file_path.exists():
-                logger.info(f"Delete anomaly model - found exact match: {file_path}")
-                deleted_files.append(file_path)
+            candidate_path = ANOMALY_MODELS_DIR / filename
+            try:
+                validated_path = _validate_path_within_directory(
+                    candidate_path, ANOMALY_MODELS_DIR
+                )
+            except ValueError:
+                logger.warning(f"Skipped invalid anomaly model path: {candidate_path}")
+                continue
+
+            if validated_path.exists():
+                logger.info(
+                    f"Delete anomaly model - found exact match: {validated_path}"
+                )
+                deleted_files.append(validated_path)
 
         # If no exact match, try adding backend suffixes
         if not deleted_files:
             for backend in ANOMALY_BACKENDS:
                 for ext in [".joblib", ".pkl", ".pt"]:
                     filename = f"{safe_name}_{backend}{ext}"
-                    file_path = ANOMALY_MODELS_DIR / filename
-                    if file_path.exists():
-                        logger.info(
-                            f"Delete anomaly model - found file with backend suffix: {file_path}"
+                    candidate_path = ANOMALY_MODELS_DIR / filename
+                    try:
+                        validated_path = _validate_path_within_directory(
+                            candidate_path, ANOMALY_MODELS_DIR
                         )
-                        deleted_files.append(file_path)
+                    except ValueError:
+                        logger.warning(
+                            f"Skipped invalid anomaly model path: {candidate_path}"
+                        )
+                        continue
+
+                    if validated_path.exists():
+                        logger.info(
+                            f"Delete anomaly model - found file with backend suffix: {validated_path}"
+                        )
+                        deleted_files.append(validated_path)
 
         if not deleted_files:
             raise HTTPException(
