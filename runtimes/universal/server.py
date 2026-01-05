@@ -2064,19 +2064,20 @@ async def delete_anomaly_model(model_name: str):
             resolved_path.unlink()
             logger.info(f"Deleted anomaly model file: {resolved_path}")
 
-            # Also delete encoder file if it exists
-            encoder_path = file_path.parent / f"{file_path.stem}_encoder.json"
-            if encoder_path.exists():
-                # Validate encoder path too
-                try:
-                    validated_encoder = _validate_path_within_directory(
-                        encoder_path, ANOMALY_MODELS_DIR
-                    )
+            # Also delete encoder file if it exists (derive from validated path)
+            encoder_candidate = (
+                resolved_path.parent / f"{resolved_path.stem}_encoder.json"
+            )
+            try:
+                validated_encoder = _validate_path_within_directory(
+                    encoder_candidate, ANOMALY_MODELS_DIR
+                )
+            except ValueError:
+                logger.warning(f"Skipped invalid encoder path: {encoder_candidate}")
+            else:
+                if validated_encoder.exists():
                     validated_encoder.unlink()
                     logger.info(f"Deleted encoder file: {validated_encoder}")
-                except ValueError:
-                    # Skip if encoder path is invalid
-                    logger.warning(f"Skipped invalid encoder path: {encoder_path}")
 
         return {
             "object": "delete_result",
