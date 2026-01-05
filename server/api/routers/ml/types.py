@@ -27,7 +27,6 @@ class ClassifierFitRequest(BaseModel):
     overwrite: bool = (
         False  # If False, version with timestamp; if True, overwrite existing
     )
-    description: str | None = None  # Optional model description
 
 
 class ClassifierPredictRequest(BaseModel):
@@ -78,7 +77,6 @@ class AnomalyFitRequest(BaseModel):
     overwrite: bool = (
         False  # If False, version with timestamp; if True, overwrite existing
     )
-    description: str | None = None  # Optional model description
 
 
 class AnomalyScoreRequest(BaseModel):

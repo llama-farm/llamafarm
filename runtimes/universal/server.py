@@ -1415,13 +1415,12 @@ async def score_anomalies(request: AnomalyScoreRequest):
         )
 
         # Format response
-        # Note: Convert numpy types to Python native types for JSON serialization
         data = [
             {
-                "index": int(r.index),
-                "score": float(r.score),
-                "is_anomaly": bool(r.is_anomaly),
-                "raw_score": float(r.raw_score),
+                "index": r.index,
+                "score": r.score,
+                "is_anomaly": r.is_anomaly,
+                "raw_score": r.raw_score,
             }
             for r in results
         ]
@@ -1438,17 +1437,9 @@ async def score_anomalies(request: AnomalyScoreRequest):
             "summary": {
                 "total_points": len(data),
                 "anomaly_count": anomaly_count,
-                "anomaly_rate": float(anomaly_count / len(data)) if data else 0.0,
-                "threshold": float(
-                    request.threshold
-                    if request.threshold is not None
-                    else model.threshold
-                ),
+                "anomaly_rate": anomaly_count / len(data) if data else 0,
+                "threshold": request.threshold or model.threshold,
             },
-            "results": data,  # Alias for compatibility with frontend
-            "threshold": float(
-                request.threshold if request.threshold is not None else model.threshold
-            ),  # Top-level for frontend
         }
 
     except HTTPException:
@@ -1591,12 +1582,11 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         )
 
         # Format response
-        # Note: Convert numpy types to Python native types for JSON serialization
         data = [
             {
-                "index": int(r.index),
-                "score": float(r.score),
-                "raw_score": float(r.raw_score),
+                "index": r.index,
+                "score": r.score,
+                "raw_score": r.raw_score,
             }
             for r in results
         ]
@@ -1609,7 +1599,7 @@ async def detect_anomalies(request: AnomalyScoreRequest):
             "backend": request.backend,
             "summary": {
                 "anomalies_detected": len(data),
-                "threshold": float(request.threshold or model.threshold),
+                "threshold": request.threshold or model.threshold,
             },
         }
 
@@ -1625,14 +1615,6 @@ async def detect_anomalies(request: AnomalyScoreRequest):
 # This is a controlled directory - users cannot specify arbitrary paths
 _LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
 ANOMALY_MODELS_DIR = _LF_DATA_DIR / "models" / "anomaly"
-
-# Supported anomaly detection backends
-ANOMALY_BACKENDS = [
-    "isolation_forest",
-    "one_class_svm",
-    "local_outlier_factor",
-    "autoencoder",
-]
 
 
 class AnomalySaveRequest(PydanticBaseModel):
@@ -1657,16 +1639,7 @@ def _sanitize_model_name(name: str) -> str:
     Only allows alphanumeric characters, hyphens, and underscores.
     This prevents path traversal and ensures consistent naming.
     """
-    # Keep only allowed characters: letters, numbers, hyphen, underscore
-    sanitized = "".join(c for c in name if c.isalnum() or c in "-_")
-
-    # Enforce a reasonable maximum length to avoid excessively long filenames
-    # that could be used for abuse or confuse static analysis.
-    max_length = 128
-    if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length]
-
-    return sanitized
+    return "".join(c for c in name if c.isalnum() or c in "-_")
 
 
 def _validate_path_within_directory(path: Path, safe_dir: Path) -> Path:
@@ -1971,139 +1944,51 @@ async def list_anomaly_models():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.delete("/v1/anomaly/models/{model_name}")
-async def delete_anomaly_model(model_name: str):
+@app.delete("/v1/anomaly/models/{filename}")
+async def delete_anomaly_model(filename: str):
     """
     Delete a saved anomaly model.
 
     Removes the model file from disk. Does not affect cached models.
-    Takes the model name (without backend suffix) and finds all matching files.
     """
     try:
-        # Strip any file extension first (frontend might send filename with extension)
-        model_name_clean = model_name
-        for ext in [".joblib", ".pkl", ".pt"]:
-            if model_name_clean.endswith(ext):
-                model_name_clean = model_name_clean[: -len(ext)]
-                break
-
-        # Sanitize model name to prevent path traversal attacks
-        safe_name = _sanitize_model_name(model_name_clean)
-        if not safe_name:
+        # Sanitize filename to prevent path traversal attacks
+        safe_filename = _sanitize_model_name(filename)
+        if not safe_filename:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid model name",
+                detail="Invalid filename",
             )
 
         # Also reject any path separators that might have survived
-        if (
-            "/" in model_name_clean
-            or "\\" in model_name_clean
-            or ".." in model_name_clean
-        ):
+        if "/" in filename or "\\" in filename or ".." in filename:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid model name: path separators not allowed",
+                detail="Invalid filename: path separators not allowed",
             )
 
-        logger.info(
-            f"Delete anomaly model - original: {model_name}, cleaned: {model_name_clean}, sanitized: {safe_name}"
-        )
+        model_path = ANOMALY_MODELS_DIR / safe_filename
 
-        # Handle both formats:
-        # 1. Just model name: "model_20251220_120000" - search for all backend variants
-        # 2. Model with backend: "model_20251220_120000_isolation_forest" - search for that specific file
-        deleted_files = []
+        # Validate the resolved path is still within the safe directory
+        try:
+            resolved_path = _validate_path_within_directory(
+                model_path, ANOMALY_MODELS_DIR
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
-        # First, try to find files matching exactly (in case backend suffix is included)
-        for ext in [".joblib", ".pkl", ".pt"]:
-            expected_name = f"{safe_name}{ext}"
-            # Iterate directory entries instead of building a path from user input
-            try:
-                for entry in ANOMALY_MODELS_DIR.iterdir():
-                    if entry.name == expected_name:
-                        try:
-                            validated_entry = _validate_path_within_directory(
-                                entry, ANOMALY_MODELS_DIR
-                            )
-                        except ValueError:
-                            logger.warning(
-                                f"Skipped invalid anomaly model path: {entry}"
-                            )
-                            continue
-                        logger.info(
-                            f"Delete anomaly model - found exact match: {validated_entry}"
-                        )
-                        deleted_files.append(validated_entry)
-                        break
-            except FileNotFoundError:
-                # Models directory missing - continue to backend search
-                break
-
-        # If no exact match, try adding backend suffixes
-        if not deleted_files:
-            for backend in ANOMALY_BACKENDS:
-                for ext in [".joblib", ".pkl", ".pt"]:
-                    expected_name = f"{safe_name}_{backend}{ext}"
-                    try:
-                        for entry in ANOMALY_MODELS_DIR.iterdir():
-                            if entry.name == expected_name:
-                                try:
-                                    validated_entry = _validate_path_within_directory(
-                                        entry, ANOMALY_MODELS_DIR
-                                    )
-                                except ValueError:
-                                    logger.warning(
-                                        f"Skipped invalid anomaly model path: {entry}"
-                                    )
-                                    continue
-                                logger.info(
-                                    f"Delete anomaly model - found file with backend suffix: {validated_entry}"
-                                )
-                                deleted_files.append(validated_entry)
-                                break
-                    except FileNotFoundError:
-                        # Models directory missing - nothing to search
-                        break
-
-        if not deleted_files:
+        if not resolved_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Model file not found: {model_name}",
+                detail=f"Model file not found: {safe_filename}",
             )
 
-        # Validate and delete all found files
-        for file_path in deleted_files:
-            try:
-                resolved_path = _validate_path_within_directory(
-                    file_path, ANOMALY_MODELS_DIR
-                )
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e)) from e
-
-            resolved_path.unlink()
-            logger.info(f"Deleted anomaly model file: {resolved_path}")
-
-            # Also delete encoder file if it exists (derive from validated path)
-            encoder_candidate = (
-                resolved_path.parent / f"{resolved_path.stem}_encoder.json"
-            )
-            try:
-                validated_encoder = _validate_path_within_directory(
-                    encoder_candidate, ANOMALY_MODELS_DIR
-                )
-            except ValueError:
-                logger.warning(f"Skipped invalid encoder path: {encoder_candidate}")
-            else:
-                if validated_encoder.exists():
-                    validated_encoder.unlink()
-                    logger.info(f"Deleted encoder file: {validated_encoder}")
+        resolved_path.unlink()
 
         return {
             "object": "delete_result",
-            "model": model_name,
+            "filename": safe_filename,
             "deleted": True,
-            "files_deleted": len(deleted_files),
         }
 
     except HTTPException:

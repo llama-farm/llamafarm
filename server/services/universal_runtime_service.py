@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 import httpx
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 
 from core.settings import settings
 
@@ -94,92 +94,6 @@ class UniversalRuntimeService:
                 detail=f"Error calling Universal Runtime: {str(e)}",
             ) from e
 
-    @classmethod
-    async def upload_file(
-        cls,
-        file: UploadFile,
-        convert_pdf: bool = True,
-        pdf_dpi: int = 150,
-    ) -> dict[str, Any]:
-        """Upload a file to the Universal Runtime.
-
-        Args:
-            file: File to upload
-            convert_pdf: Whether to convert PDF to images
-            pdf_dpi: DPI for PDF conversion
-
-        Returns:
-            File metadata including ID
-        """
-        url = f"{cls.get_base_url()}/v1/files"
-
-        try:
-            content = await file.read()
-            await file.seek(0)  # Reset file pointer
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                files = {"file": (file.filename, content, file.content_type)}
-                data = {
-                    "convert_pdf": str(convert_pdf).lower(),
-                    "pdf_dpi": str(pdf_dpi),
-                }
-                response = await client.post(url, files=files, data=data)
-
-                if response.status_code >= 400:
-                    try:
-                        error_detail = response.json().get("detail", response.text)
-                    except Exception:
-                        error_detail = response.text
-                    raise HTTPException(
-                        status_code=response.status_code,
-                        detail=error_detail,
-                    )
-
-                return response.json()
-
-        except httpx.TimeoutException as e:
-            raise HTTPException(
-                status_code=504,
-                detail="Universal Runtime request timed out after 60s",
-            ) from e
-        except httpx.ConnectError as e:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Universal Runtime not available at {cls.get_base_url()}",
-            ) from e
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error uploading file: {e}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error uploading file: {str(e)}",
-            ) from e
-
-    # =========================================================================
-    # File Management
-    # =========================================================================
-
-    @classmethod
-    async def list_files(cls) -> dict[str, Any]:
-        """List all uploaded files."""
-        return await cls._make_request("GET", "/v1/files")
-
-    @classmethod
-    async def get_file(cls, file_id: str) -> dict[str, Any]:
-        """Get file metadata."""
-        return await cls._make_request("GET", f"/v1/files/{file_id}")
-
-    @classmethod
-    async def get_file_images(cls, file_id: str) -> dict[str, Any]:
-        """Get file as images."""
-        return await cls._make_request("GET", f"/v1/files/{file_id}/images")
-
-    @classmethod
-    async def delete_file(cls, file_id: str) -> dict[str, Any]:
-        """Delete an uploaded file."""
-        return await cls._make_request("DELETE", f"/v1/files/{file_id}")
-
     # =========================================================================
     # OCR
     # =========================================================================
@@ -189,7 +103,6 @@ class UniversalRuntimeService:
         cls,
         model: str = "surya",
         images: list[str] | None = None,
-        file_id: str | None = None,
         languages: list[str] | None = None,
         return_boxes: bool = False,
     ) -> dict[str, Any]:
@@ -198,7 +111,6 @@ class UniversalRuntimeService:
         Args:
             model: OCR backend (surya, easyocr, paddleocr, tesseract)
             images: Base64-encoded images
-            file_id: File ID from upload
             languages: Language codes
             return_boxes: Whether to return bounding boxes
         """
@@ -208,8 +120,6 @@ class UniversalRuntimeService:
         }
         if images:
             payload["images"] = images
-        if file_id:
-            payload["file_id"] = file_id
         if languages:
             payload["languages"] = languages
 
@@ -224,7 +134,6 @@ class UniversalRuntimeService:
         cls,
         model: str,
         images: list[str] | None = None,
-        file_id: str | None = None,
         prompts: list[str] | None = None,
         task: str = "extraction",
     ) -> dict[str, Any]:
@@ -233,7 +142,6 @@ class UniversalRuntimeService:
         Args:
             model: HuggingFace model ID
             images: Base64-encoded images
-            file_id: File ID from upload
             prompts: Prompts for VQA task
             task: Task type (extraction, vqa, classification)
         """
@@ -243,8 +151,6 @@ class UniversalRuntimeService:
         }
         if images:
             payload["images"] = images
-        if file_id:
-            payload["file_id"] = file_id
         if prompts:
             payload["prompts"] = prompts
 
