@@ -1657,7 +1657,16 @@ def _sanitize_model_name(name: str) -> str:
     Only allows alphanumeric characters, hyphens, and underscores.
     This prevents path traversal and ensures consistent naming.
     """
-    return "".join(c for c in name if c.isalnum() or c in "-_")
+    # Keep only allowed characters: letters, numbers, hyphen, underscore
+    sanitized = "".join(c for c in name if c.isalnum() or c in "-_")
+
+    # Enforce a reasonable maximum length to avoid excessively long filenames
+    # that could be used for abuse or confuse static analysis.
+    max_length = 128
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
+
+    return sanitized
 
 
 def _validate_path_within_directory(path: Path, safe_dir: Path) -> Path:
