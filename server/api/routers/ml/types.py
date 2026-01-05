@@ -7,7 +7,7 @@ to provide a consistent API experience.
 Note: OCR and Document extraction types have moved to vision/types.py
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -77,7 +77,7 @@ class AnomalyFitRequest(BaseModel):
         le=0.5,
         description="Expected proportion of anomalies (0-0.5]",
     )
-    normalization: str = "standardization"  # standardization, zscore, or raw
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
     overwrite: bool = (
@@ -98,7 +98,7 @@ class AnomalyScoreRequest(BaseModel):
     backend: str = "isolation_forest"  # Backend
     data: list[list[float]] | list[dict[str, Any]]  # Data points
     schema: dict[str, str] | None = None  # Feature encoding schema
-    normalization: str = "standardization"  # standardization, zscore, or raw
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
     threshold: float | None = None  # Override default threshold
 
 
@@ -107,9 +107,7 @@ class AnomalySaveRequest(BaseModel):
 
     model: str  # Model identifier (must be fitted)
     backend: str = "isolation_forest"
-    normalization: str = (
-        "standardization"  # Must match the normalization used during fit
-    )
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
 
 
 class AnomalyLoadRequest(BaseModel):
