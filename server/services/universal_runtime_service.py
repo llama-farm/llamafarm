@@ -241,6 +241,7 @@ class UniversalRuntimeService:
         backend: str = "isolation_forest",
         schema: dict[str, str] | None = None,
         contamination: float = 0.1,
+        normalization: str = "standardization",
         epochs: int = 100,
         batch_size: int = 32,
     ) -> dict[str, Any]:
@@ -252,6 +253,7 @@ class UniversalRuntimeService:
             backend: Algorithm backend
             schema: Feature encoding schema (for dict data)
             contamination: Expected proportion of anomalies
+            normalization: Score normalization method (standardization, zscore, raw)
             epochs: Training epochs (autoencoder only)
             batch_size: Batch size (autoencoder only)
         """
@@ -260,6 +262,7 @@ class UniversalRuntimeService:
             "backend": backend,
             "data": data,
             "contamination": contamination,
+            "normalization": normalization,
             "epochs": epochs,
             "batch_size": batch_size,
         }
@@ -275,6 +278,7 @@ class UniversalRuntimeService:
         data: list[list[float]] | list[dict],
         backend: str = "isolation_forest",
         schema: dict[str, str] | None = None,
+        normalization: str = "standardization",
         threshold: float | None = None,
     ) -> dict[str, Any]:
         """Score data points for anomalies.
@@ -284,12 +288,14 @@ class UniversalRuntimeService:
             data: Data to score
             backend: Algorithm backend
             schema: Feature encoding schema (for dict data)
+            normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
         """
         payload = {
             "model": model,
             "backend": backend,
             "data": data,
+            "normalization": normalization,
         }
         if schema:
             payload["schema"] = schema
@@ -305,6 +311,7 @@ class UniversalRuntimeService:
         data: list[list[float]] | list[dict],
         backend: str = "isolation_forest",
         schema: dict[str, str] | None = None,
+        normalization: str = "standardization",
         threshold: float | None = None,
     ) -> dict[str, Any]:
         """Detect anomalies (returns only anomalous points).
@@ -314,12 +321,14 @@ class UniversalRuntimeService:
             data: Data to check
             backend: Algorithm backend
             schema: Feature encoding schema (for dict data)
+            normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
         """
         payload = {
             "model": model,
             "backend": backend,
             "data": data,
+            "normalization": normalization,
         }
         if schema:
             payload["schema"] = schema
@@ -333,12 +342,13 @@ class UniversalRuntimeService:
         cls,
         model: str,
         backend: str = "isolation_forest",
+        normalization: str = "standardization",
     ) -> dict[str, Any]:
         """Save a trained anomaly model."""
         return await cls._make_request(
             "POST",
             "/v1/anomaly/save",
-            json={"model": model, "backend": backend},
+            json={"model": model, "backend": backend, "normalization": normalization},
         )
 
     @classmethod

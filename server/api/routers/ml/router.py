@@ -238,6 +238,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         backend=request.backend,
         schema=request.schema,
         contamination=request.contamination,
+        normalization=request.normalization,
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
@@ -282,6 +283,7 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         data=request.data,
         backend=request.backend,
         schema=request.schema,
+        normalization=request.normalization,
         threshold=request.threshold,
     )
 
@@ -313,6 +315,7 @@ async def detect_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         data=request.data,
         backend=request.backend,
         schema=request.schema,
+        normalization=request.normalization,
         threshold=request.threshold,
     )
 
@@ -330,6 +333,7 @@ async def save_anomaly_model(request: AnomalySaveRequest) -> dict[str, Any]:
     return await UniversalRuntimeService.anomaly_save(
         model=request.model,
         backend=request.backend,
+        normalization=request.normalization,
     )
 
 

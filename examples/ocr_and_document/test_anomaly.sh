@@ -499,7 +499,8 @@ SAVE_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/save" \
     --max-time 60 \
     -d '{
         "model": "temp_zscore",
-        "backend": "isolation_forest"
+        "backend": "isolation_forest",
+        "normalization": "zscore"
     }')
 
 echo "$SAVE_RESPONSE" | python3 -c "

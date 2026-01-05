@@ -111,7 +111,8 @@ SAVE_RESPONSE=$(curl -s -X POST "${BASE_URL}/anomaly/save" \
     --max-time 60 \
     -d '{
         "model": "'"$VERSIONED_MODEL"'",
-        "backend": "isolation_forest"
+        "backend": "isolation_forest",
+        "normalization": "standardization"
     }')
 
 echo "Save Response:"
