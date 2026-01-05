@@ -265,7 +265,7 @@ Learns a boundary (hyperplane) around normal data in a high-dimensional feature 
 - May not handle multiple clusters of normal data well
 
 **Best for:**
-- Small to medium datasets (<10,000 samples)
+- Small to medium datasets (&lt;10,000 samples)
 - When normal data forms tight clusters
 - High-precision requirements (few false positives)
 
