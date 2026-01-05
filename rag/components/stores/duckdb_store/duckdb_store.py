@@ -10,11 +10,19 @@ This store handles:
 - Spatial/geo queries using the spatial extension
 - Fast aggregations and window functions
 - Integration with the unified MemoryStore
+
+Phase 26: Performance & Polish
+- Added connection pooling for concurrent access
+- Added batch insert optimizations
 """
 
 import json
 import logging
+import queue
+import threading
 import uuid
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +32,109 @@ import duckdb
 logger = logging.getLogger(__name__)
 
 
+class ConnectionPool:
+    """Simple connection pool for DuckDB connections.
+
+    Manages a pool of reusable database connections for concurrent access.
+    Thread-safe with connection checkout/return semantics.
+    """
+
+    def __init__(
+        self,
+        db_path: str,
+        pool_size: int = 5,
+        timeout_seconds: float = 30.0,
+    ):
+        """Initialize connection pool.
+
+        Args:
+            db_path: Path to DuckDB database file
+            pool_size: Maximum number of pooled connections
+            timeout_seconds: Timeout for acquiring a connection
+        """
+        self.db_path = db_path
+        self.pool_size = pool_size
+        self.timeout_seconds = timeout_seconds
+        self._pool: queue.Queue[duckdb.DuckDBPyConnection] = queue.Queue(
+            maxsize=pool_size
+        )
+        self._created_count = 0
+        self._lock = threading.Lock()
+        self._closed = False
+
+        # Pre-create connections
+        for _ in range(min(2, pool_size)):
+            self._add_connection()
+
+    def _add_connection(self) -> None:
+        """Add a new connection to the pool."""
+        with self._lock:
+            if self._created_count < self.pool_size and not self._closed:
+                conn = duckdb.connect(self.db_path)
+                self._pool.put(conn)
+                self._created_count += 1
+                logger.debug(
+                    f"Created connection #{self._created_count} for {self.db_path}"
+                )
+
+    @contextmanager
+    def get_connection(self) -> Generator[duckdb.DuckDBPyConnection, None, None]:
+        """Get a connection from the pool.
+
+        Yields:
+            DuckDB connection
+
+        Raises:
+            RuntimeError: If pool is closed or timeout occurs
+        """
+        if self._closed:
+            raise RuntimeError("Connection pool is closed")
+
+        conn = None
+        try:
+            # Try to get from pool
+            try:
+                conn = self._pool.get(timeout=self.timeout_seconds)
+            except queue.Empty as err:
+                # Pool empty, try to create new connection
+                with self._lock:
+                    if self._created_count < self.pool_size:
+                        conn = duckdb.connect(self.db_path)
+                        self._created_count += 1
+                    else:
+                        raise RuntimeError("Connection pool exhausted") from err
+
+            yield conn
+
+        finally:
+            # Return connection to pool
+            if conn and not self._closed:
+                try:
+                    self._pool.put_nowait(conn)
+                except queue.Full:
+                    conn.close()
+
+    def close(self) -> None:
+        """Close all pooled connections."""
+        self._closed = True
+        while True:
+            try:
+                conn = self._pool.get_nowait()
+                conn.close()
+            except queue.Empty:
+                break
+        logger.debug(f"Closed connection pool for {self.db_path}")
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get pool statistics."""
+        return {
+            "pool_size": self.pool_size,
+            "created_count": self._created_count,
+            "available": self._pool.qsize(),
+            "closed": self._closed,
+        }
+
+
 class DuckDBStore:
     """DuckDB-based store for time-series and spatial data.
 
@@ -31,14 +142,17 @@ class DuckDBStore:
     - Time-series data storage with efficient querying
     - Spatial queries using DuckDB spatial extension
     - Rolling aggregations with window functions
-    - Batch insert performance
-    - Connection pooling for concurrent access
+    - Batch insert performance with configurable batch sizes
+    - Optional connection pooling for concurrent access
 
     Configuration options:
         path: Path to the DuckDB database file
         table_name: Name of the time-series table (default: "telemetry")
         extensions: List of extensions to load (e.g., ["spatial", "vss"])
         enable_spatial: Whether to enable spatial columns and queries
+        use_pool: Whether to use connection pooling (default: False)
+        pool_size: Size of connection pool (default: 5)
+        batch_size: Batch size for bulk inserts (default: 1000)
     """
 
     def __init__(self, config: dict[str, Any] | None = None):
@@ -50,14 +164,21 @@ class DuckDBStore:
                 - table_name: Table name (default: "telemetry")
                 - extensions: Extensions to load (default: [])
                 - enable_spatial: Enable spatial features (default: False)
+                - use_pool: Enable connection pooling (default: False)
+                - pool_size: Connection pool size (default: 5)
+                - batch_size: Batch size for inserts (default: 1000)
         """
         config = config or {}
         self.db_path = config.get("path", ":memory:")
         self.table_name = config.get("table_name", "telemetry")
         self.extensions = config.get("extensions", [])
         self.enable_spatial = config.get("enable_spatial", False)
+        self.use_pool = config.get("use_pool", False)
+        self.pool_size = config.get("pool_size", 5)
+        self.batch_size = config.get("batch_size", 1000)
 
         self._conn: duckdb.DuckDBPyConnection | None = None
+        self._pool: ConnectionPool | None = None
         self._closed = False
 
         # Ensure directory exists for file-based databases
@@ -79,12 +200,39 @@ class DuckDBStore:
     def _connect(self) -> None:
         """Establish database connection."""
         try:
-            self._conn = duckdb.connect(self.db_path)
+            if self.use_pool and self.db_path != ":memory:":
+                self._pool = ConnectionPool(
+                    db_path=self.db_path,
+                    pool_size=self.pool_size,
+                )
+                # Get a connection for initialization
+                with self._pool.get_connection() as conn:
+                    self._conn = conn
+                logger.info(
+                    f"Connected to DuckDB at {self.db_path} (pooled, size={self.pool_size})"
+                )
+            else:
+                self._conn = duckdb.connect(self.db_path)
+                logger.info(f"Connected to DuckDB at {self.db_path}")
             self._closed = False
-            logger.info(f"Connected to DuckDB at {self.db_path}")
         except Exception as e:
             logger.error(f"Failed to connect to DuckDB: {e}")
             raise
+
+    @contextmanager
+    def _get_conn(self) -> Generator[duckdb.DuckDBPyConnection, None, None]:
+        """Get a connection (from pool or direct).
+
+        Yields:
+            DuckDB connection
+        """
+        if self._pool:
+            with self._pool.get_connection() as conn:
+                yield conn
+        elif self._conn:
+            yield self._conn
+        else:
+            raise RuntimeError("No database connection available")
 
     def _load_extensions(self) -> None:
         """Load requested DuckDB extensions."""
@@ -166,6 +314,8 @@ class DuckDBStore:
     def add_records(self, records: list[dict[str, Any]]) -> int:
         """Add time-series records to the store.
 
+        Uses batch inserts for better performance when inserting many records.
+
         Args:
             records: List of record dictionaries with:
                 - source: Source identifier (required)
@@ -183,55 +333,133 @@ class DuckDBStore:
         if not self.is_connected():
             raise RuntimeError("Database connection is closed")
 
+        # Use batch insert for large record sets
+        if len(records) > self.batch_size:
+            return self._batch_insert(records)
+
         inserted = 0
         spatial_enabled = self.enable_spatial and "spatial" in self.extensions
 
-        for record in records:
-            try:
+        with self._get_conn() as conn:
+            for record in records:
+                try:
+                    record_id = str(uuid.uuid4())
+                    source = record.get("source", "unknown")
+                    ts = record.get("ts", datetime.now())
+                    data = json.dumps(record.get("data", {}))
+                    metadata = json.dumps(record.get("metadata", {}))
+
+                    if spatial_enabled and "location" in record:
+                        loc = record["location"]
+                        lat = loc.get("lat", 0)
+                        lon = loc.get("lon", 0)
+
+                        conn.execute(
+                            f"""
+                            INSERT INTO {self.table_name} (id, ts, source, data, metadata, location)
+                            VALUES (?, ?, ?, ?, ?, ST_Point(?, ?))
+                            """,
+                            [record_id, ts, source, data, metadata, lon, lat],
+                        )
+                    else:
+                        if spatial_enabled:
+                            conn.execute(
+                                f"""
+                                INSERT INTO {self.table_name} (id, ts, source, data, metadata, location)
+                                VALUES (?, ?, ?, ?, ?, NULL)
+                                """,
+                                [record_id, ts, source, data, metadata],
+                            )
+                        else:
+                            conn.execute(
+                                f"""
+                                INSERT INTO {self.table_name} (id, ts, source, data, metadata)
+                                VALUES (?, ?, ?, ?, ?)
+                                """,
+                                [record_id, ts, source, data, metadata],
+                            )
+
+                    inserted += 1
+
+                except Exception as e:
+                    logger.warning(f"Failed to insert record: {e}")
+                    continue
+
+        logger.debug(f"Inserted {inserted} records")
+        return inserted
+
+    def _batch_insert(self, records: list[dict[str, Any]]) -> int:
+        """Batch insert records for better performance.
+
+        Args:
+            records: List of records to insert
+
+        Returns:
+            Number of records inserted
+        """
+        spatial_enabled = self.enable_spatial and "spatial" in self.extensions
+        total_inserted = 0
+
+        # Process in batches
+        for i in range(0, len(records), self.batch_size):
+            batch = records[i : i + self.batch_size]
+
+            # Prepare batch data
+            batch_data = []
+            for record in batch:
                 record_id = str(uuid.uuid4())
                 source = record.get("source", "unknown")
                 ts = record.get("ts", datetime.now())
                 data = json.dumps(record.get("data", {}))
                 metadata = json.dumps(record.get("metadata", {}))
 
-                if spatial_enabled and "location" in record:
-                    loc = record["location"]
-                    lat = loc.get("lat", 0)
-                    lon = loc.get("lon", 0)
-
-                    self._conn.execute(
-                        f"""
-                        INSERT INTO {self.table_name} (id, ts, source, data, metadata, location)
-                        VALUES (?, ?, ?, ?, ?, ST_Point(?, ?))
-                        """,
-                        [record_id, ts, source, data, metadata, lon, lat],
-                    )
+                if spatial_enabled:
+                    loc = record.get("location", {})
+                    lat = loc.get("lat") if loc else None
+                    lon = loc.get("lon") if loc else None
+                    batch_data.append((record_id, ts, source, data, metadata, lon, lat))
                 else:
+                    batch_data.append((record_id, ts, source, data, metadata))
+
+            try:
+                with self._get_conn() as conn:
                     if spatial_enabled:
-                        self._conn.execute(
+                        # Use COPY for batch insert (faster)
+                        conn.executemany(
                             f"""
                             INSERT INTO {self.table_name} (id, ts, source, data, metadata, location)
-                            VALUES (?, ?, ?, ?, ?, NULL)
+                            VALUES (?, ?, ?, ?, ?, CASE WHEN ? IS NOT NULL AND ? IS NOT NULL
+                                THEN ST_Point(?, ?) ELSE NULL END)
                             """,
-                            [record_id, ts, source, data, metadata],
+                            [
+                                (r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[5], r[6])
+                                for r in batch_data
+                            ],
                         )
                     else:
-                        self._conn.execute(
+                        conn.executemany(
                             f"""
                             INSERT INTO {self.table_name} (id, ts, source, data, metadata)
                             VALUES (?, ?, ?, ?, ?)
                             """,
-                            [record_id, ts, source, data, metadata],
+                            batch_data,
                         )
-
-                inserted += 1
+                    total_inserted += len(batch_data)
 
             except Exception as e:
-                logger.warning(f"Failed to insert record: {e}")
-                continue
+                logger.warning(
+                    f"Batch insert failed: {e}, falling back to individual inserts"
+                )
+                # Fall back to individual inserts
+                for record in batch:
+                    try:
+                        self.add_records([record])
+                        total_inserted += 1
+                    except Exception:
+                        continue
 
-        logger.debug(f"Inserted {inserted} records")
-        return inserted
+        logger.debug(f"Batch inserted {total_inserted} records")
+        return total_inserted
 
     def query_time_range(
         self,
@@ -537,13 +765,20 @@ class DuckDBStore:
 
     def close(self) -> None:
         """Close the database connection."""
-        if self._conn and not self._closed:
-            try:
+        if self._closed:
+            return
+
+        try:
+            if self._pool:
+                self._pool.close()
+                self._pool = None
+            elif self._conn:
                 self._conn.close()
-                self._closed = True
-                logger.info("DuckDB connection closed")
-            except Exception as e:
-                logger.warning(f"Error closing connection: {e}")
+
+            self._closed = True
+            logger.info("DuckDB connection closed")
+        except Exception as e:
+            logger.warning(f"Error closing connection: {e}")
 
     def __enter__(self):
         """Context manager entry."""

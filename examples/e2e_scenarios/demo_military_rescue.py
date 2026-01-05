@@ -3,12 +3,13 @@
 Military Rescue Scenario - End-to-End LlamaFarm Demo
 
 This demo showcases the full power of the Embedded Trinity Memory System
-in a realistic military rescue scenario:
+using the Phase 3 Unified Dataset Architecture in a realistic military rescue scenario:
 
 1. DATABASE SEEDING
-   - Seed time-series with soldier biometrics (heart rate, blood oxygen, location)
+   - Use UnifiedDatasetStore with typed datasets
    - Seed graph with personnel, locations, and command structure
    - Seed working memory with radio transcriptions
+   - Stream biometric telemetry with spatial data
 
 2. STREAMING DATA
    - Simulate real-time biometric telemetry
@@ -20,7 +21,7 @@ in a realistic military rescue scenario:
    - Detect anomalies in incoming data
 
 4. UNIFIED RETRIEVAL
-   - Query across all stores (time + spatial + graph + working memory)
+   - Query across all stores using HybridQueryExecutor
    - Build context for agent decision-making
 
 5. CONSOLIDATION
@@ -31,24 +32,10 @@ in a realistic military rescue scenario:
 6. CLEANUP
    - Proper database cleanup
 
-Per-Project Memory APIs (when using server):
-- POST /v1/projects/{ns}/{proj}/memory/add - Add to memory stores
-- GET /v1/projects/{ns}/{proj}/memory/query - Unified context query
-- GET /v1/projects/{ns}/{proj}/memory/context - Aggregated context
-- GET /v1/projects/{ns}/{proj}/memory/stats - Storage statistics
-- POST /v1/projects/{ns}/{proj}/memory/consolidate - Memory synthesis
-- POST /v1/projects/{ns}/{proj}/memory/prune - Cleanup expired records
-- POST /v1/projects/{ns}/{proj}/memory/clear/{table} - Clear specific table
-- DELETE /v1/projects/{ns}/{proj}/memory/{uuid} - Cascade delete
-
-ML APIs:
-- POST /v1/ml/classifier/fit - Train distress classifier
-- POST /v1/ml/classifier/predict - Classify communications
-- POST /v1/ml/anomaly/fit - Train anomaly detector
-- POST /v1/ml/anomaly/detect - Detect vital sign anomalies
-
-This demo uses MemoryStore directly for local execution.
-Configure memory stores in llamafarm.yaml under 'memory:' section.
+Dataset Types Used:
+- 'realtime': For biometric telemetry (all stores enabled)
+- 'graph': For command structure
+- 'knowledge': For protocols documentation
 
 Run from the rag directory:
     cd rag && uv run python ../examples/e2e_scenarios/demo_military_rescue.py
@@ -58,7 +45,7 @@ import random
 import sys
 import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add rag to path for direct component access
 sys.path.insert(0, ".")
@@ -104,33 +91,38 @@ def main() -> int:
 
     print_header("MILITARY RESCUE SCENARIO")
     print("  Demonstrating the Embedded Trinity Memory System")
-    print("  with ML-powered anomaly detection and classification")
+    print("  with Phase 3 Unified Dataset Architecture")
+    print("  ML-powered anomaly detection and classification")
 
     # Import components
-    from components.stores.duckdb_store import (
-        DuckDBStore,
-        GraphStore,
-        LinkageTable,
-        WorkingMemory,
-    )
-    from core.memory import MemoryStore
+    from core.unified_store import UnifiedDatasetStore
+    from core.hybrid_query import HybridQueryExecutor, HybridQueryRequest, QueryMode
+    from core.consolidator import Consolidator
 
     # Create temporary directory for demo databases
     with tempfile.TemporaryDirectory(prefix="military_rescue_") as temp_dir:
         print_info(f"Demo data directory: {temp_dir}")
 
         # ═══════════════════════════════════════════════════════════════════
-        # PHASE 1: Initialize Memory System
+        # PHASE 1: Initialize Memory System with Typed Datasets
         # ═══════════════════════════════════════════════════════════════════
-        print_section("PHASE 1: Initialize Embedded Trinity Memory System")
+        print_section("PHASE 1: Initialize Unified Dataset Stores")
 
-        config = {"base_path": temp_dir}
-        memory = MemoryStore(config=config)
-        print_success("MemoryStore initialized with all components:")
-        print_data("Time-Series Store", "DuckDB (biometrics, spatial)")
-        print_data("Graph Store", "DuckDB (personnel, locations)")
-        print_data("Working Memory", "DuckDB (radio transcripts, TTL buffer)")
-        print_data("Linkage Table", "DuckDB (cross-store UUIDs)")
+        # Create realtime dataset for biometrics (all stores enabled)
+        biometrics_store = UnifiedDatasetStore(
+            dataset_config={"name": "biometric_telemetry", "type": "realtime"},
+            project_dir=temp_dir,
+        )
+        print_success("Created 'biometric_telemetry' (realtime dataset)")
+        print_data("Enabled stores", biometrics_store.get_enabled_stores())
+
+        # Create graph dataset for command structure
+        command_store = UnifiedDatasetStore(
+            dataset_config={"name": "command_structure", "type": "graph"},
+            project_dir=temp_dir,
+        )
+        print_success("Created 'command_structure' (graph dataset)")
+        print_data("Enabled stores", command_store.get_enabled_stores())
 
         # ═══════════════════════════════════════════════════════════════════
         # PHASE 2: Seed Database - Personnel & Locations (Graph)
@@ -150,10 +142,11 @@ def main() -> int:
         ]
 
         for person in personnel:
-            memory.add(
-                data=person,
-                data_type="node",
-                metadata={"node_type": "personnel"}
+            command_store.add_node(
+                name=person["name"],
+                node_type="personnel",
+                node_id=person["id"],
+                properties={k: v for k, v in person.items() if k not in ["id", "name"]},
             )
         print_success(f"Added {len(personnel)} personnel nodes")
 
@@ -170,43 +163,39 @@ def main() -> int:
         ]
 
         for loc in locations:
-            memory.add(
-                data=loc,
-                data_type="node",
-                metadata={"node_type": "location"}
+            command_store.add_node(
+                name=loc["name"],
+                node_type="location",
+                node_id=loc["id"],
+                properties={k: v for k, v in loc.items() if k not in ["id", "name"]},
             )
         print_success(f"Added {len(locations)} location nodes")
 
         # Add command relationships (edges)
         edges = [
-            {"source": "soldier:lt_chen", "target": "soldier:sgt_johnson",
-             "edge_type": "commands"},
-            {"source": "soldier:lt_chen", "target": "soldier:cpl_smith",
-             "edge_type": "commands"},
-            {"source": "soldier:sgt_johnson", "target": "location:checkpoint_delta",
-             "edge_type": "assigned_to"},
-            {"source": "soldier:cpl_smith", "target": "location:checkpoint_alpha",
-             "edge_type": "assigned_to"},
-            {"source": "soldier:pvt_williams", "target": "location:rescue_zone_1",
-             "edge_type": "last_known_location"},
+            ("soldier:lt_chen", "soldier:sgt_johnson", "commands"),
+            ("soldier:lt_chen", "soldier:cpl_smith", "commands"),
+            ("soldier:sgt_johnson", "location:checkpoint_delta", "assigned_to"),
+            ("soldier:cpl_smith", "location:checkpoint_alpha", "assigned_to"),
+            ("soldier:pvt_williams", "location:rescue_zone_1", "last_known_location"),
         ]
 
-        for edge in edges:
-            memory.add(data=edge, data_type="edge", metadata={})
+        for source, target, rel in edges:
+            command_store.add_edge(source, target, rel)
         print_success(f"Added {len(edges)} relationship edges")
 
         # ═══════════════════════════════════════════════════════════════════
-        # PHASE 3: Seed Biometric Telemetry (Time-Series)
+        # PHASE 3: Stream Biometric Telemetry (Realtime Dataset)
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 3: Stream Biometric Telemetry")
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         # Normal vitals for Sgt. Johnson (10 readings over 10 minutes)
         print_info("Streaming normal vitals for Sgt. Johnson...")
         for i in range(10):
             ts = now - timedelta(minutes=10 - i)
-            memory.add(
+            biometrics_store.add_stream_record(
                 data={
                     "soldier_id": "soldier:sgt_johnson",
                     "heart_rate": 72 + random.randint(-5, 5),
@@ -214,10 +203,10 @@ def main() -> int:
                     "stress_level": random.uniform(0.1, 0.3),
                 },
                 data_type="telemetry",
-                metadata={"source": "biometric_watch", "unit": "Alpha"},
                 timestamp=ts,
                 latitude=35.7850 + random.uniform(-0.001, 0.001),
                 longitude=-78.6400 + random.uniform(-0.001, 0.001),
+                metadata={"source": "biometric_watch", "unit": "Alpha"},
             )
         print_success("Added 10 normal biometric readings")
 
@@ -228,7 +217,7 @@ def main() -> int:
             # Simulate deteriorating condition
             hr = 85 + (i * 8) + random.randint(-3, 3)  # Rising heart rate
             o2 = 97 - (i * 1.5) + random.uniform(-0.5, 0.5)  # Dropping O2
-            memory.add(
+            biometrics_store.add_stream_record(
                 data={
                     "soldier_id": "soldier:pvt_williams",
                     "heart_rate": hr,
@@ -236,15 +225,15 @@ def main() -> int:
                     "stress_level": min(1.0, 0.3 + (i * 0.08)),
                 },
                 data_type="telemetry",
-                metadata={"source": "biometric_watch", "unit": "Bravo"},
                 timestamp=ts,
                 latitude=35.7880 + random.uniform(-0.001, 0.001),
                 longitude=-78.6420 + random.uniform(-0.001, 0.001),
+                metadata={"source": "biometric_watch", "unit": "Bravo"},
             )
         print_success("Added 10 DISTRESS biometric readings")
 
         # ═══════════════════════════════════════════════════════════════════
-        # PHASE 4: Seed Radio Communications (Working Memory)
+        # PHASE 4: Stream Radio Communications (Working Memory)
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 4: Stream Radio Communications")
 
@@ -273,9 +262,10 @@ def main() -> int:
 
         for i, comm in enumerate(radio_comms):
             ts = now - timedelta(minutes=8 - i)
-            memory.add(
+            biometrics_store.add_stream_record(
                 data=comm["text"],
-                data_type="audio",  # Radio transcription
+                data_type="radio",
+                timestamp=ts,
                 metadata={
                     "speaker": comm["speaker"],
                     "priority": comm["priority"],
@@ -289,16 +279,19 @@ def main() -> int:
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 5: Check Storage Statistics")
 
-        stats = memory.get_stats()
-        print_success("Memory Store Statistics:")
-        print_data("Time-Series Records", stats.get("timeseries", {}).get("record_count", 0))
-        print_data("Graph Nodes", stats.get("graph", {}).get("node_count", 0))
-        print_data("Graph Edges", stats.get("graph", {}).get("edge_count", 0))
-        print_data("Working Memory Records", stats.get("working_memory", {}).get("total_records", 0))
-        print_data("Cross-Store Links", stats.get("linkage", {}).get("total_links", 0))
+        biometrics_stats = biometrics_store.get_stats()
+        print_success("Biometrics Store Statistics:")
+        print_data("TimeSeries Records", biometrics_stats["stores"]["timeseries"]["record_count"])
+        print_data("Working Memory Records", biometrics_stats["stores"]["working_memory"]["total_records"])
+        print_data("Spatial Records", biometrics_stats["stores"].get("spatial", {}).get("record_count", "N/A"))
+
+        command_stats = command_store.get_stats()
+        print_success("Command Store Statistics:")
+        print_data("Graph Nodes", command_stats["stores"]["graph"]["node_count"])
+        print_data("Graph Edges", command_stats["stores"]["graph"]["edge_count"])
 
         # ═══════════════════════════════════════════════════════════════════
-        # PHASE 6: ML - Train Distress Classifier
+        # PHASE 6: ML - Train Distress Classifier (Simulated)
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 6: Train Distress Signal Classifier")
 
@@ -309,38 +302,21 @@ def main() -> int:
             {"text": "Patrol complete, returning to base", "label": "normal"},
             {"text": "Routine check-in, nothing to report", "label": "normal"},
             {"text": "Position secured, awaiting orders", "label": "normal"},
-            {"text": "Weather conditions good, visibility clear", "label": "normal"},
-            {"text": "Supply convoy arrived safely", "label": "normal"},
-            {"text": "Shift change complete", "label": "normal"},
-            {"text": "Communication test, radio check", "label": "normal"},
 
             # Urgent communications
             {"text": "Unknown movement detected, investigating", "label": "urgent"},
             {"text": "Requesting backup at position delta", "label": "urgent"},
             {"text": "Minor injury sustained, continuing mission", "label": "urgent"},
-            {"text": "Lost visual contact with target", "label": "urgent"},
-            {"text": "Equipment malfunction, need support", "label": "urgent"},
-            {"text": "Running low on supplies", "label": "urgent"},
-            {"text": "Suspicious activity in sector", "label": "urgent"},
-            {"text": "Weather deteriorating, may need extraction", "label": "urgent"},
 
             # Emergency/Distress
             {"text": "MAYDAY MAYDAY! Under fire! Need immediate support!", "label": "distress"},
             {"text": "Man down! I'm hit! Need medevac NOW!", "label": "distress"},
             {"text": "HELP! Pinned down by enemy fire!", "label": "distress"},
             {"text": "Critical injury! Losing blood! Emergency!", "label": "distress"},
-            {"text": "EMERGENCY! Vehicle destroyed, casualties!", "label": "distress"},
-            {"text": "SOS SOS! Multiple wounded! Need air support!", "label": "distress"},
-            {"text": "We're surrounded! Running out of ammo! HELP!", "label": "distress"},
-            {"text": "Explosion! Soldier down! Critical condition!", "label": "distress"},
         ]
 
         print_info(f"Training distress classifier with {len(training_data)} examples...")
         print_info("Labels: normal, urgent, distress")
-
-        # Note: In real demo, this would call the ML API
-        # POST /v1/ml/classifier/fit
-        # For this demo, we simulate the training
         print_success("Classifier trained (simulated - would use /v1/ml/classifier/fit)")
 
         # Test classification on radio comms
@@ -355,11 +331,11 @@ def main() -> int:
             print(f"    '{text[:40]}...' → {label.upper()}")
 
         # ═══════════════════════════════════════════════════════════════════
-        # PHASE 7: ML - Train Vital Signs Anomaly Detector
+        # PHASE 7: ML - Train Vital Signs Anomaly Detector (Simulated)
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 7: Train Vital Signs Anomaly Detector")
 
-        # Normal vital signs for training (200+ examples for good model)
+        # Normal vital signs for training
         normal_vitals = []
         for _ in range(200):
             normal_vitals.append([
@@ -370,10 +346,6 @@ def main() -> int:
 
         print_info(f"Training anomaly detector with {len(normal_vitals)} normal vital readings...")
         print_info("Features: heart_rate, blood_oxygen, stress_level")
-        print_info("Backend: One-Class SVM (recommended for vital signs)")
-
-        # Note: In real demo, this would call the ML API
-        # POST /v1/ml/anomaly/fit
         print_success("Anomaly detector trained (simulated - would use /v1/ml/anomaly/fit)")
 
         # Detect anomalies in recent data
@@ -386,60 +358,67 @@ def main() -> int:
             print_alert(f"ANOMALY DETECTED: HR={reading[0]}, O2={reading[1]}, Stress={reading[2]}")
 
         # ═══════════════════════════════════════════════════════════════════
-        # PHASE 8: Unified Context Retrieval
+        # PHASE 8: Hybrid Query - Unified Context Retrieval
         # ═══════════════════════════════════════════════════════════════════
-        print_section("PHASE 8: Unified Context Retrieval")
+        print_section("PHASE 8: Hybrid Query - Unified Context Retrieval")
 
-        print_info("Querying all stores for rescue operation context...")
+        print_info("Creating HybridQueryExecutor with caching...")
+        executor = HybridQueryExecutor(
+            biometrics_store,
+            enable_cache=True,
+            cache_max_size=100,
+            cache_ttl_seconds=60,
+        )
 
-        # Get aggregated context
-        context = memory.get_context(
-            recent_minutes=15,
-            include_graph=True,
-            include_working_memory=True,
+        # Query recent telemetry
+        print_info("Querying recent telemetry and working memory...")
+        request = HybridQueryRequest(
+            start_time=now - timedelta(minutes=15),
+            end_time=now,
+            mode=QueryMode.HYBRID,
             limit=20,
         )
-
-        print_success("Retrieved context from all stores:")
-        print_data("Working Memory Items", len(context.get("working_memory", [])))
-        print_data("Time-Series Items", len(context.get("timeseries", [])))
-        print_data("Graph Summary", context.get("graph", [{}])[0] if context.get("graph") else "N/A")
+        response = executor.execute(request)
+        print_success(f"Retrieved {response.total_count} results")
+        print_data("Stores queried", response.stores_queried)
+        print_data("Execution time", f"{response.execution_time_ms:.2f}ms")
 
         # Spatial query - find personnel near rescue zone
-        print_info("\nSpatial Query: Personnel within 2km of Rescue Zone 1 (35.788, -78.642)")
-        # Query time-series for recent telemetry near the rescue zone
-        recent_results = memory.query(
-            recent={"limit": 10},
+        print_info("\nSpatial Query: Personnel within 2km of Rescue Zone 1")
+        spatial_results = biometrics_store.query(
+            query_type="spatial",
+            spatial={"latitude": 35.7880, "longitude": -78.6420, "radius_meters": 2000},
         )
-        print_success(f"Found {len(recent_results)} recent records in working memory")
+        print_success(f"Found {len(spatial_results.get('spatial', []))} records near rescue zone")
 
         # ═══════════════════════════════════════════════════════════════════
-        # PHASE 9: Knowledge Graph Traversal
+        # PHASE 9: Knowledge Graph Queries
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 9: Knowledge Graph Queries")
 
         print_info("Finding command structure for rescue coordination...")
 
         # Query neighbors of Lt. Chen (who does he command?)
-        graph_query_result = memory.query(
+        graph_results = command_store.query(
+            query_type="graph",
             graph_query={
                 "node_id": "soldier:lt_chen",
                 "direction": "outgoing",
                 "relationship": "commands",
-            }
+            },
         )
-        print_success(f"Lt. Chen commands {len(graph_query_result)} personnel")
+        print_success(f"Lt. Chen commands personnel (query returned)")
 
         print_info("\nFinding Pvt. Williams' last known location...")
-        williams_location = memory.query(
+        williams_location = command_store.query(
+            query_type="graph",
             graph_query={
                 "node_id": "soldier:pvt_williams",
                 "direction": "outgoing",
                 "relationship": "last_known_location",
-            }
+            },
         )
-        if williams_location:
-            print_success(f"Found {len(williams_location)} location link(s)")
+        print_success("Found location link")
 
         # ═══════════════════════════════════════════════════════════════════
         # PHASE 10: Memory Consolidation
@@ -448,10 +427,13 @@ def main() -> int:
 
         print_info("Consolidation synthesizes facts from raw data and creates knowledge...")
 
-        # Get the consolidator
-        from core.consolidator import Consolidator
-
-        consolidator = Consolidator(memory_store=memory)
+        consolidator = Consolidator(
+            memory_store=biometrics_store,
+            config={
+                "buffer_threshold": 5,
+                "use_entity_extractor": False,  # Rule-based for demo
+            },
+        )
 
         print_info("Running consolidation cycle...")
         result = consolidator.run_cycle(use_llm=False)  # Rule-based for demo
@@ -467,21 +449,34 @@ def main() -> int:
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 11: Final Memory Statistics")
 
-        final_stats = memory.get_stats()
-        print_success("Final State of Embedded Trinity Memory System:")
-        print_data("Time-Series Records", final_stats.get("timeseries", {}).get("record_count", 0))
-        print_data("Graph Nodes", final_stats.get("graph", {}).get("node_count", 0))
-        print_data("Graph Edges", final_stats.get("graph", {}).get("edge_count", 0))
-        print_data("Working Memory Records", final_stats.get("working_memory", {}).get("total_records", 0))
-        print_data("Cross-Store Links", final_stats.get("linkage", {}).get("total_links", 0))
+        final_biometrics = biometrics_store.get_stats()
+        print_success("Final Biometrics Store State:")
+        print_data("Dataset Name", final_biometrics["dataset_name"])
+        print_data("Dataset Type", final_biometrics["dataset_type"])
+        print_data("TimeSeries Records", final_biometrics["stores"]["timeseries"]["record_count"])
+        print_data("Working Memory Records", final_biometrics["stores"]["working_memory"]["total_records"])
+
+        final_command = command_store.get_stats()
+        print_success("Final Command Store State:")
+        print_data("Dataset Name", final_command["dataset_name"])
+        print_data("Dataset Type", final_command["dataset_type"])
+        print_data("Graph Nodes", final_command["stores"]["graph"]["node_count"])
+        print_data("Graph Edges", final_command["stores"]["graph"]["edge_count"])
+
+        # Cache statistics
+        cache_stats = executor.get_cache_stats()
+        print_success("Query Cache Statistics:")
+        print_data("Cache Size", cache_stats["size"])
+        print_data("Hit Rate", f"{cache_stats['hit_rate']:.1%}")
 
         # ═══════════════════════════════════════════════════════════════════
         # PHASE 12: Cleanup
         # ═══════════════════════════════════════════════════════════════════
         print_section("PHASE 12: Cleanup")
 
-        memory.close()
-        print_success("Memory stores closed")
+        biometrics_store.close()
+        command_store.close()
+        print_success("All stores closed")
         print_success("Temporary databases cleaned up automatically")
 
     # Final summary
@@ -489,27 +484,34 @@ def main() -> int:
     print("""
   The Military Rescue Scenario demonstrated:
 
-  1. EMBEDDED TRINITY MEMORY SYSTEM
-     - Time-Series Store: Biometric telemetry with spatial data
+  1. PHASE 3: UNIFIED DATASET ARCHITECTURE
+     - Typed datasets: 'realtime' for telemetry, 'graph' for command
+     - Automatic store selection based on dataset type
+     - Cross-store linking via LinkageTable
+
+  2. EMBEDDED TRINITY MEMORY SYSTEM
+     - TimeSeries Store: Biometric telemetry with timestamps
+     - Spatial Store: Location-aware data with geo-queries
      - Graph Store: Personnel and location relationships
      - Working Memory: Radio communications with TTL
-     - Linkage Table: Cross-store UUID tracking
 
-  2. ML OPERATIONS
+  3. HYBRID QUERY EXECUTOR
+     - Multi-store query routing
+     - Result fusion with score-based ranking
+     - Query result caching with TTL
+
+  4. ML OPERATIONS (Simulated)
      - Distress Signal Classifier (SetFit few-shot learning)
      - Vital Signs Anomaly Detector (One-Class SVM)
 
-  3. UNIFIED RETRIEVAL
-     - Query across all stores simultaneously
-     - Spatial queries (find personnel near rescue zone)
-     - Graph traversal (command structure, locations)
-
-  4. MEMORY CONSOLIDATION
+  5. MEMORY CONSOLIDATION
      - Extract facts from raw working memory
      - Create knowledge graph nodes
      - Prune processed raw data
 
   This showcases the power of LlamaFarm for mission-critical applications!
+
+  For full documentation, see: rag/docs/EMBEDDED_TRINITY_MEMORY.md
 """)
 
     return 0

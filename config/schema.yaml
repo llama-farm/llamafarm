@@ -61,26 +61,30 @@ properties:
   rag:
     $ref: "../rag/schema.yaml"
 
+  # Memory Store Configuration (Phase 2)
+  memory:
+    title: MemoryConfig
+    type: object
+    description: Memory store configurations for the project
+    additionalProperties: false
+    properties:
+      stores:
+        type: array
+        description: List of memory store configurations
+        default: []
+        items:
+          $ref: "#/definitions/MemoryStoreConfig"
+      default_store:
+        type: string
+        description: Name of the default memory store
+
+  # Dataset Configuration (Phase 3 - Unified Architecture)
   datasets:
     type: array
     description: List of dataset configurations
-    items:
-      type: object
-      required:
-        - name
-        - data_processing_strategy
-        - database
-      properties:
-        name:
-          type: string
-          description: Dataset name
-        data_processing_strategy:
-          type: string
-          description: RAG data processing strategy to use for the dataset
-        database:
-          type: string
-          description: RAG database to use for the dataset
     default: []
+    items:
+      $ref: "#/definitions/Dataset"
 
   runtime:
     type: object
@@ -270,3 +274,350 @@ definitions:
         type: object
         description: Parameters of the tool
         additionalProperties: true
+
+  # ============================================
+  # Memory Store Configurations (Phase 2)
+  # ============================================
+
+  WorkingMemoryConfig:
+    type: object
+    description: Configuration for working memory (short-term buffer with TTL)
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether working memory is enabled
+      ttl_seconds:
+        type: integer
+        default: 3600
+        description: Time-to-live for records in seconds
+      max_records:
+        type: integer
+        default: 10000
+        description: Maximum records before auto-prune
+
+  TimeSeriesConfig:
+    type: object
+    description: Configuration for time-series store
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether time-series store is enabled
+      retention_days:
+        type: integer
+        default: 30
+        description: Days to retain time-series data
+
+  SpatialConfig:
+    type: object
+    description: Configuration for geo-spatial store (top-level, separate from time-series)
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether spatial store is enabled
+      retention_days:
+        type: integer
+        default: 30
+        description: Days to retain spatial data
+      index_type:
+        type: string
+        default: rtree
+        description: Spatial index type (rtree, geohash)
+
+  GraphConfig:
+    type: object
+    description: Configuration for graph store
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether graph store is enabled
+      max_path_depth:
+        type: integer
+        default: 10
+        description: Maximum depth for path finding
+      entity_extraction:
+        type: boolean
+        default: true
+        description: Extract entities from documents using NER
+      relationship_extraction:
+        type: boolean
+        default: false
+        description: Extract relationships via LLM
+
+  ConsolidationConfig:
+    type: object
+    description: Configuration for memory consolidation
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether consolidation is enabled
+      interval_seconds:
+        type: integer
+        default: 300
+        description: Consolidation interval in seconds
+      min_records:
+        type: integer
+        default: 10
+        description: Minimum records before consolidation
+      batch_size:
+        type: integer
+        default: 100
+        description: Batch size for consolidation
+      prune_after_consolidate:
+        type: boolean
+        default: true
+        description: Prune after consolidation
+      extract_summaries:
+        type: boolean
+        default: false
+        description: Create embeddings from consolidated data
+
+  MemoryStoreConfig:
+    type: object
+    description: Configuration for a named memory store
+    required:
+      - name
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        minLength: 1
+        maxLength: 50
+        description: Unique memory store identifier
+      working_memory:
+        $ref: "#/definitions/WorkingMemoryConfig"
+      timeseries:
+        $ref: "#/definitions/TimeSeriesConfig"
+      spatial:
+        $ref: "#/definitions/SpatialConfig"
+      graph:
+        $ref: "#/definitions/GraphConfig"
+      consolidation:
+        $ref: "#/definitions/ConsolidationConfig"
+
+  # ============================================
+  # Dataset Type System (Phase 3 - Unified Architecture)
+  # ============================================
+
+  DatasetType:
+    type: string
+    description: Dataset types determine which storage backends are enabled
+    enum:
+      - knowledge    # Vector + Graph (document RAG with entity extraction)
+      - realtime     # All stores (streaming telemetry, chat, live data)
+      - graph        # Graph only (pure knowledge graph)
+      - timeseries   # TimeSeries + WorkingMemory (IoT, metrics)
+      - spatial      # Spatial + WorkingMemory (geo-tracking only)
+      - hybrid       # All capabilities enabled
+    default: knowledge
+
+  VectorConfig:
+    type: object
+    description: Configuration for vector/semantic store in datasets
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether vector store is enabled
+      store:
+        type: string
+        default: ChromaStore
+        description: Vector store type
+      collection:
+        type: string
+        description: Collection name (auto-generated if not specified)
+      embedding_strategy:
+        type: string
+        description: Embedding strategy name
+      retrieval_strategy:
+        type: string
+        description: Retrieval strategy name
+
+  DatasetGraphConfig:
+    type: object
+    description: Configuration for graph store in datasets (uses RAG pipeline for entity extraction)
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether graph store is enabled
+      entity_extraction:
+        type: boolean
+        default: true
+        description: Extract entities from documents using NER
+      relationship_extraction:
+        type: boolean
+        default: false
+        description: Extract relationships via LLM
+      max_path_depth:
+        type: integer
+        default: 10
+        description: Maximum depth for path finding
+
+  DatasetTimeSeriesConfig:
+    type: object
+    description: Configuration for time-series store in datasets
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether time-series store is enabled
+      retention_days:
+        type: integer
+        default: 30
+        description: Days to retain time-series data
+
+  DatasetSpatialConfig:
+    type: object
+    description: Configuration for geo-spatial store in datasets (top-level, separate from time-series)
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether spatial store is enabled
+      retention_days:
+        type: integer
+        default: 30
+        description: Days to retain spatial data
+      index_type:
+        type: string
+        default: rtree
+        description: Spatial index type (rtree, geohash)
+
+  DatasetWorkingMemoryConfig:
+    type: object
+    description: Configuration for working memory in datasets
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether working memory is enabled
+      ttl_seconds:
+        type: integer
+        default: 3600
+        description: Time-to-live for records in seconds
+      max_records:
+        type: integer
+        default: 10000
+        description: Maximum records before auto-prune
+
+  StreamingConfig:
+    type: object
+    description: Configuration for streaming data ingestion
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: false
+        description: Whether streaming endpoint is enabled
+      batch_size:
+        type: integer
+        default: 100
+        description: Batch size for streaming inserts
+      flush_interval_ms:
+        type: integer
+        default: 1000
+        description: Flush interval in milliseconds
+
+  DatasetConsolidationConfig:
+    type: object
+    description: Configuration for consolidation in datasets
+    additionalProperties: false
+    properties:
+      enabled:
+        type: boolean
+        default: true
+        description: Whether consolidation is enabled
+      interval_seconds:
+        type: integer
+        default: 300
+        description: Consolidation interval in seconds
+      min_records:
+        type: integer
+        default: 10
+        description: Minimum records before consolidation
+      extract_summaries:
+        type: boolean
+        default: false
+        description: Create embeddings from consolidated data
+      prune_after:
+        type: boolean
+        default: true
+        description: Prune after consolidation
+
+  ProcessingConfig:
+    type: object
+    description: Configuration for data processing in datasets
+    additionalProperties: false
+    required:
+      - strategy
+    properties:
+      strategy:
+        type: string
+        description: Data processing strategy name
+      chunking_size:
+        type: integer
+        description: Chunk size override
+      chunking_overlap:
+        type: integer
+        description: Chunk overlap override
+
+  Dataset:
+    type: object
+    description: Dataset configuration - unified container for all storage backends
+    required:
+      - name
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: Dataset name
+      type:
+        $ref: "#/definitions/DatasetType"
+      description:
+        type: string
+        description: Human-readable description
+
+      # New unified configuration (Phase 3)
+      vector:
+        $ref: "#/definitions/VectorConfig"
+      graph:
+        $ref: "#/definitions/DatasetGraphConfig"
+      timeseries:
+        $ref: "#/definitions/DatasetTimeSeriesConfig"
+      spatial:
+        $ref: "#/definitions/DatasetSpatialConfig"
+      working_memory:
+        $ref: "#/definitions/DatasetWorkingMemoryConfig"
+      streaming:
+        $ref: "#/definitions/StreamingConfig"
+      consolidation:
+        $ref: "#/definitions/DatasetConsolidationConfig"
+      processing:
+        $ref: "#/definitions/ProcessingConfig"
+
+      # Deprecated but supported for backward compatibility
+      data_processing_strategy:
+        type: string
+        description: "[DEPRECATED] Use processing.strategy instead"
+      database:
+        type: string
+        description: "[DEPRECATED] Use vector.store and vector.collection instead"
+      memory:
+        type: string
+        description: "[DEPRECATED] Use working_memory, timeseries, graph configs instead"

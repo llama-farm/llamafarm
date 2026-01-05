@@ -8,6 +8,8 @@
 # - Working Memory with TTL
 # - ML classifiers and anomaly detection
 # - Consolidation (the "hippocampus" process)
+#
+# Phase 3: Unified Dataset Architecture - Uses typed datasets
 
 version: v1
 name: e2e_scenarios
@@ -47,7 +49,7 @@ rag:
 
   data_processing_strategies:
     - name: document_processor
-      description: Process documents for semantic search
+      description: Process documents for semantic search with entity extraction
       parsers:
         - type: TextParser_Python
           config:
@@ -69,9 +71,94 @@ rag:
           file_include_patterns:
             - "*.md"
           priority: 5
+      extractors:
+        - type: EntityExtractor
+          config:
+            entity_types:
+              - PERSON
+              - ORG
+              - GPE
+              - DATE
+              - TIME
+              - LOCATION
+            use_fallback: true
+            min_entity_length: 2
+          file_include_patterns:
+            - "*"
+          priority: 10
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Memory System Configuration - Per-Project Memory Stores
+# Typed Datasets Configuration (Phase 3: Unified Dataset Architecture)
+# ═══════════════════════════════════════════════════════════════════════════
+datasets:
+  # Knowledge dataset for document RAG with entity extraction
+  - name: military_protocols
+    type: knowledge
+    data_processing_strategy: document_processor
+    database: semantic_memory
+    description: Military rescue protocols and procedures
+    graph:
+      entity_extraction: true
+      max_path_depth: 10
+
+  # Knowledge dataset for medical documentation
+  - name: medical_protocols
+    type: knowledge
+    data_processing_strategy: document_processor
+    database: semantic_memory
+    description: Medical treatment protocols and guidelines
+    graph:
+      entity_extraction: true
+      max_path_depth: 10
+
+  # Realtime dataset for biometric telemetry (all stores enabled)
+  - name: biometric_telemetry
+    type: realtime
+    description: Real-time soldier biometrics, location, and vital signs
+    timeseries:
+      retention_days: 7
+    spatial:
+      index_type: rtree
+    working_memory:
+      ttl_seconds: 3600  # 1 hour
+      max_records: 50000
+    graph:
+      max_path_depth: 5
+    consolidation:
+      min_records: 20
+      batch_size: 100
+      prune_after_consolidate: true
+
+  # Realtime dataset for radio communications
+  - name: radio_communications
+    type: realtime
+    description: Radio transcripts and communications
+    working_memory:
+      ttl_seconds: 7200  # 2 hours
+      max_records: 10000
+    graph:
+      entity_extraction: true
+      max_path_depth: 5
+
+  # Graph-only dataset for command structure
+  - name: command_structure
+    type: graph
+    description: Personnel and command relationships
+    graph:
+      max_path_depth: 15
+
+  # Spatial dataset for location tracking
+  - name: location_tracking
+    type: spatial
+    description: Vehicle and personnel location data
+    spatial:
+      index_type: rtree
+    working_memory:
+      ttl_seconds: 1800  # 30 minutes
+      max_records: 20000
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Memory System Configuration (Legacy - Still Supported)
 # ═══════════════════════════════════════════════════════════════════════════
 memory:
   # Default store to use when not specified
@@ -143,17 +230,3 @@ runtime:
       description: Default model for demos
       provider: universal
       model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Demo Datasets Configuration
-# ═══════════════════════════════════════════════════════════════════════════
-datasets:
-  - name: military_protocols
-    data_processing_strategy: document_processor
-    database: semantic_memory
-    description: Military rescue protocols and procedures
-
-  - name: medical_protocols
-    data_processing_strategy: document_processor
-    database: semantic_memory
-    description: Medical treatment protocols and guidelines

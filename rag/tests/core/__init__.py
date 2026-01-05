@@ -1,1 +1,1 @@
-"""Core module tests."""
+# Core tests package

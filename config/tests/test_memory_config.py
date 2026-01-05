@@ -16,14 +16,26 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import load_config_dict
 from datamodel import (
-    ConsolidationConfig,
+    # Memory store configs - use the inline types for MemoryConfig.stores
+    Consolidation as ConsolidationConfig,
+)
+from datamodel import (
+    # Dataset type
     Dataset,
-    GraphConfig,
     LlamaFarmConfig,
     MemoryConfig,
-    MemoryStoreConfig,
-    TimeSeriesConfig,
-    WorkingMemoryConfig,
+)
+from datamodel import (
+    Graph as GraphConfig,
+)
+from datamodel import (
+    Store as MemoryStoreConfig,
+)
+from datamodel import (
+    Timeseries as TimeSeriesConfig,
+)
+from datamodel import (
+    WorkingMemory as WorkingMemoryConfig,
 )
 
 

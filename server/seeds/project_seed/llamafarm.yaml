@@ -275,10 +275,55 @@ rag:
             - "*.html"
             - "*.htm"
           priority: 10
+# ═══════════════════════════════════════════════════════════════════════════
+# Typed Datasets Configuration (Phase 3: Unified Dataset Architecture)
+# ═══════════════════════════════════════════════════════════════════════════
 datasets:
+  # Default knowledge dataset for document RAG
   - name: default
+    type: knowledge
     data_processing_strategy: universal_processor
     database: main_database
+    description: Default knowledge dataset with vector search and entity graphs
+    graph:
+      entity_extraction: true
+      max_path_depth: 10
+
+  # Realtime dataset for streaming data
+  - name: realtime
+    type: realtime
+    description: Streaming data with time-series, spatial, and working memory
+    timeseries:
+      retention_days: 30
+    spatial:
+      index_type: rtree
+    working_memory:
+      ttl_seconds: 3600
+      max_records: 10000
+    consolidation:
+      min_records: 10
+      batch_size: 100
+      prune_after_consolidate: true
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Memory System Configuration (Legacy - Still Supported)
+# ═══════════════════════════════════════════════════════════════════════════
+memory:
+  default_store: default_memory
+  stores:
+    - name: default_memory
+      working_memory:
+        ttl_seconds: 3600
+        max_records: 10000
+      timeseries:
+        retention_days: 30
+      graph:
+        max_path_depth: 10
+      consolidation:
+        min_records: 10
+        batch_size: 100
+        prune_after_consolidate: true
+
 runtime:
   default_model: default
   models:

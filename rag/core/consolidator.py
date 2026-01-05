@@ -8,15 +8,35 @@ The Consolidator is the "hippocampus" of the memory system. It:
 5. Prunes raw data after consolidation
 
 This enables long-term memory formation from short-term buffers.
+
+Supports both MemoryStore and UnifiedDatasetStore for flexible deployment.
 """
 
 import json
 import logging
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class MemoryStoreProtocol(Protocol):
+    """Protocol for memory stores that the Consolidator can work with."""
+
+    working_memory: Any
+    graph_store: Any
+    linkage_table: Any
+
+    def add(
+        self,
+        data: Any,
+        data_type: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]: ...
+
+    def prune_working_memory(self) -> int: ...
 
 
 class Consolidator:
@@ -25,14 +45,18 @@ class Consolidator:
     Features:
     - Read pending records from WorkingMemory
     - Extract facts using LLM or rule-based patterns
+    - Extract entities using EntityExtractor pipeline (when available)
     - Create graph nodes/edges from facts
     - Prune processed raw data
     - Configurable thresholds and retention policies
+
+    Supports both MemoryStore and UnifiedDatasetStore.
 
     Configuration:
         buffer_threshold: Minimum records before consolidation runs
         consolidation_interval: Seconds between consolidation cycles
         retention_days: Days to retain raw data before pruning
+        use_entity_extractor: Whether to use EntityExtractor for NER
     """
 
     def __init__(
@@ -44,7 +68,7 @@ class Consolidator:
         """Initialize the Consolidator.
 
         Args:
-            memory_store: MemoryStore instance to consolidate
+            memory_store: MemoryStore or UnifiedDatasetStore instance to consolidate
             config: Configuration dictionary
             llm_client: Optional LLM client for synthesis
         """
@@ -55,13 +79,37 @@ class Consolidator:
         self.buffer_threshold = config.get("buffer_threshold", 10)
         self.consolidation_interval = config.get("consolidation_interval", 300)  # 5 min
         self.retention_days = config.get("retention_days", 7)
+        self.use_entity_extractor = config.get("use_entity_extractor", True)
 
         self._last_consolidation = None
+        self._entity_extractor = None
+
+        # Initialize entity extractor if configured
+        if self.use_entity_extractor:
+            self._init_entity_extractor()
+
+        # Detect store type
+        self._is_unified_store = hasattr(memory_store, "add_node")
 
         logger.info(
             f"Consolidator initialized: threshold={self.buffer_threshold}, "
-            f"interval={self.consolidation_interval}s, retention={self.retention_days}d"
+            f"interval={self.consolidation_interval}s, retention={self.retention_days}d, "
+            f"store_type={'unified' if self._is_unified_store else 'memory'}"
         )
+
+    def _init_entity_extractor(self) -> None:
+        """Initialize the entity extractor for NER."""
+        try:
+            from components.extractors.entity_extractor import EntityExtractor
+
+            self._entity_extractor = EntityExtractor(
+                name="ConsolidatorEntityExtractor",
+                config={"use_fallback": True},
+            )
+            logger.info("EntityExtractor initialized for consolidator")
+        except ImportError:
+            logger.warning("EntityExtractor not available, using rule-based extraction")
+            self._entity_extractor = None
 
     # ─────────────────────────────────────────────────────────────────────
     # Read Operations
@@ -89,16 +137,29 @@ class Consolidator:
     ) -> dict[str, Any]:
         """Synthesize facts from records.
 
+        Uses the following priority:
+        1. EntityExtractor (if available) for NER-based extraction
+        2. LLM (if available and use_llm=True)
+        3. Rule-based extraction (fallback)
+
         Args:
             records: List of records to synthesize
             use_llm: Whether to use LLM (falls back to rule-based if unavailable)
 
         Returns:
-            Dictionary with 'facts' and 'summary'
+            Dictionary with 'facts', 'summary', and 'entities'
         """
         if not records:
-            return {"facts": [], "summary": ""}
+            return {"facts": [], "summary": "", "entities": []}
 
+        # Try EntityExtractor first (best quality NER)
+        if self._entity_extractor:
+            try:
+                return self._synthesize_with_entity_extractor(records)
+            except Exception as e:
+                logger.warning(f"EntityExtractor failed, falling back: {e}")
+
+        # Try LLM next
         if use_llm and self.llm_client:
             try:
                 return self._synthesize_with_llm(records)
@@ -107,6 +168,60 @@ class Consolidator:
                 return self._synthesize_rule_based(records)
         else:
             return self._synthesize_rule_based(records)
+
+    def _synthesize_with_entity_extractor(
+        self, records: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Synthesize using EntityExtractor for NER."""
+        from core.base import Document
+
+        facts = []
+        all_entities = []
+        entity_names = set()
+
+        for record in records:
+            content = record.get("content", "")
+            if not content:
+                continue
+
+            # Create a document for entity extraction
+            doc = Document(
+                id=record.get("id", "consolidator_record"),
+                content=content,
+                metadata=record.get("metadata", {}),
+            )
+
+            # Extract entities
+            entities = self._entity_extractor.extract_entities(doc)
+
+            for entity in entities:
+                # Create fact for each entity
+                facts.append(
+                    {
+                        "subject": entity.name,
+                        "predicate": "is_a",
+                        "object": entity.entity_type.lower(),
+                        "confidence": entity.confidence,
+                        "method": entity.method,
+                    }
+                )
+                entity_names.add(entity.name)
+                all_entities.append(
+                    {
+                        "name": entity.name,
+                        "type": entity.entity_type,
+                        "entity_id": entity.entity_id,
+                    }
+                )
+
+        # Generate summary
+        summary = self._generate_summary(records, entity_names)
+
+        return {
+            "facts": facts,
+            "summary": summary,
+            "entities": all_entities,
+        }
 
     def _synthesize_with_llm(self, records: list[dict[str, Any]]) -> dict[str, Any]:
         """Synthesize using LLM."""
@@ -297,6 +412,8 @@ Return as JSON:
     def create_graph_nodes(self, facts: list[dict[str, Any]]) -> int:
         """Create graph nodes and edges from extracted facts.
 
+        Supports both MemoryStore and UnifiedDatasetStore.
+
         Args:
             facts: List of fact dictionaries with subject/predicate/object
 
@@ -306,6 +423,76 @@ Return as JSON:
         if not facts:
             return 0
 
+        # Route to appropriate method based on store type
+        if self._is_unified_store:
+            return self._create_graph_nodes_unified(facts)
+        else:
+            return self._create_graph_nodes_memory(facts)
+
+    def _create_graph_nodes_unified(self, facts: list[dict[str, Any]]) -> int:
+        """Create graph nodes using UnifiedDatasetStore's add_node/add_edge methods."""
+        created = 0
+        seen_nodes = set()
+
+        for fact in facts:
+            subject = fact.get("subject")
+            predicate = fact.get("predicate")
+            obj = fact.get("object")
+
+            if not subject or not predicate:
+                continue
+
+            # Create subject node if not seen
+            subject_id = f"entity:{subject.lower().replace(' ', '_')}"
+            if subject_id not in seen_nodes:
+                try:
+                    node_id = self.memory_store.add_node(
+                        name=subject,
+                        node_type="entity",
+                        node_id=subject_id,
+                        properties={"source": "consolidator"},
+                    )
+                    if node_id:
+                        seen_nodes.add(subject_id)
+                        created += 1
+                except Exception as e:
+                    logger.warning(f"Failed to create node for {subject}: {e}")
+
+            # Create object node and edge if object exists
+            if obj and isinstance(obj, str) and len(obj) < 100:
+                object_id = f"entity:{obj.lower().replace(' ', '_')[:50]}"
+                if object_id not in seen_nodes:
+                    try:
+                        node_id = self.memory_store.add_node(
+                            name=obj[:50],
+                            node_type="entity",
+                            node_id=object_id,
+                            properties={"source": "consolidator"},
+                        )
+                        if node_id:
+                            seen_nodes.add(object_id)
+                            created += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to create node for {obj}: {e}")
+
+                # Create edge
+                try:
+                    edge_id = self.memory_store.add_edge(
+                        source_id=subject_id,
+                        target_id=object_id,
+                        relationship=predicate,
+                        properties={"source": "consolidator"},
+                    )
+                    if edge_id:
+                        created += 1
+                except Exception as e:
+                    logger.warning(f"Failed to create edge: {e}")
+
+        logger.info(f"Created {created} graph nodes/edges from facts (unified store)")
+        return created
+
+    def _create_graph_nodes_memory(self, facts: list[dict[str, Any]]) -> int:
+        """Create graph nodes using MemoryStore's add method."""
         created = 0
         seen_nodes = set()
 
@@ -370,10 +557,21 @@ Return as JSON:
     def prune(self) -> int:
         """Prune expired records from working memory.
 
+        Supports both MemoryStore and UnifiedDatasetStore.
+
         Returns:
             Number of records pruned
         """
-        return self.memory_store.prune_working_memory()
+        if self._is_unified_store:
+            # UnifiedDatasetStore may have working_memory with prune method
+            if (
+                hasattr(self.memory_store, "working_memory")
+                and self.memory_store.working_memory
+            ):
+                return self.memory_store.working_memory.prune()
+            return 0
+        else:
+            return self.memory_store.prune_working_memory()
 
     # ─────────────────────────────────────────────────────────────────────
     # Consolidation Cycle

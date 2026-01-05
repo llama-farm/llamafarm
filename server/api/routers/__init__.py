@@ -7,6 +7,7 @@ from .ml import router as ml_router
 from .models import router as models_router
 from .projects import router as projects_router
 from .rag import router as rag_router
+from .streaming import router as streaming_router
 from .system import disk_router, upgrades_router
 from .vision import vision_router
 
@@ -23,4 +24,5 @@ __all__ = [
     "ml_router",
     "vision_router",
     "project_memory_router",
+    "streaming_router",
 ]
