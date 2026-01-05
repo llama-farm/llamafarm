@@ -19,7 +19,7 @@ http://localhost:8000/v1
 LlamaFarm organizes your work into **namespaces** (organizational containers) and **projects** (individual configurations):
 
 - **Namespace**: A top-level organizational unit (e.g., your username, team name, or organization)
-- **Project Name**: The unique identifier for a specific LlamaFarm project within a namespace
+- **Project Name**: The unique identifier for a specific LlamaFarm project within a namespace.
 
 ### From Your llamafarm.yaml
 
