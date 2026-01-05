@@ -1503,7 +1503,10 @@ function ClassifierModel() {
                             e.stopPropagation()
                             handleClassNameChange(classLabel.id, e.target.value)
                           }}
-                          onClick={e => e.stopPropagation()}
+                          onClick={e => {
+                            e.stopPropagation()
+                            setActiveClassId(classLabel.id)
+                          }}
                           placeholder="Class name"
                           className={`border-0 bg-transparent p-0 h-auto w-28 text-sm font-medium focus-visible:ring-0 ${
                             isActive ? 'text-primary' : ''
