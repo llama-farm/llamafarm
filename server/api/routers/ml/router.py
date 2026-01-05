@@ -31,20 +31,6 @@ router = APIRouter(prefix="/ml", tags=["ml"])
 
 
 # =============================================================================
-# Health Check
-# =============================================================================
-
-
-@router.get("/health")
-async def health_check() -> dict[str, Any]:
-    """Check Universal Runtime health.
-
-    Returns the health status of the Universal Runtime service.
-    """
-    return await UniversalRuntimeService.health_check()
-
-
-# =============================================================================
 # SetFit Classifier Endpoints
 # =============================================================================
 
