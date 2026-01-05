@@ -82,7 +82,10 @@ export interface ClassifierModelInfo {
 }
 
 export interface ClassifierListModelsResponse {
-  models: ClassifierModelInfo[]
+  object: string
+  data: ClassifierModelInfo[]  // API returns 'data', not 'models'
+  models_dir: string
+  total: number
 }
 
 // =============================================================================
@@ -109,6 +112,64 @@ export const ANOMALY_BACKEND_DISPLAY: Record<AnomalyBackend, string> = {
   'one_class_svm': 'One-Class SVM',
   'local_outlier_factor': 'Local Outlier Factor',
   'autoencoder': 'Autoencoder',
+}
+
+// =============================================================================
+// Score Normalization Types
+// =============================================================================
+
+/**
+ * Score normalization methods for anomaly detection.
+ *
+ * - "standardization" (default): Sigmoid transformation to 0-1 range using median/IQR.
+ *   Scores approach 0.5 for normal data, approach 1.0 for anomalies.
+ *   Default threshold: 0.5
+ *
+ * - "zscore": Z-score normalization using mean and standard deviation.
+ *   Scores represent standard deviations from the training mean.
+ *   2.0 = unusual, 3.0 = rare, 4.0+ = extreme anomaly.
+ *   Default threshold: 2.0
+ *
+ * - "raw": No normalization, returns backend-native scores.
+ *   Ranges vary by backend. Best for debugging or advanced users.
+ *   Default threshold: 0.0 (user should set their own)
+ */
+export type NormalizationMethod = 'standardization' | 'zscore' | 'raw'
+
+export interface NormalizationOption {
+  value: NormalizationMethod
+  label: string
+  description: string
+  defaultThreshold: number
+}
+
+export const NORMALIZATION_OPTIONS: NormalizationOption[] = [
+  {
+    value: 'standardization',
+    label: 'Standardized (0-1)',
+    description: 'Scores 0-1, threshold ~0.6. Best for general use.',
+    defaultThreshold: 0.6,
+  },
+  {
+    value: 'zscore',
+    label: 'Z-Score',
+    description: 'Standard deviations from mean. 2+ is unusual, 3+ is rare.',
+    defaultThreshold: 2.0,
+  },
+  {
+    value: 'raw',
+    label: 'Raw',
+    description: 'Backend-native scores. For debugging/advanced use.',
+    defaultThreshold: 0.0,
+  },
+]
+
+/**
+ * Get the default threshold for a normalization method.
+ */
+export function getDefaultThreshold(normalization: NormalizationMethod): number {
+  const option = NORMALIZATION_OPTIONS.find(o => o.value === normalization)
+  return option?.defaultThreshold ?? 0.5
 }
 
 // Schema encoding types for mixed data
@@ -155,6 +216,7 @@ export interface AnomalyFitRequest {
   data: number[][] | Record<string, unknown>[] // numeric arrays OR dict-based with schema
   schema?: Record<string, FeatureEncodingType> // required for dict-based data
   contamination?: number // 0-0.5, default: 0.1
+  normalization?: NormalizationMethod // default: "standardization"
   epochs?: number // for autoencoder, default: 100
   batch_size?: number // for autoencoder, default: 32
   overwrite?: boolean // default: false - creates versioned model
@@ -177,6 +239,7 @@ export interface AnomalyScoreRequest {
   data: number[][] | Record<string, unknown>[]
   schema?: Record<string, FeatureEncodingType>
   threshold?: number
+  normalization?: NormalizationMethod // default: "standardization"
 }
 
 export interface AnomalyScoreResult {
@@ -187,13 +250,20 @@ export interface AnomalyScoreResult {
   raw_score?: number
 }
 
+export interface AnomalyScoreSummary {
+  total_points: number
+  anomaly_count: number
+  anomaly_rate: number
+  threshold: number
+}
+
 export interface AnomalyScoreResponse {
+  object: string
   model: string
   backend: AnomalyBackend
-  results: AnomalyScoreResult[]
-  threshold: number
-  anomaly_count: number
+  data: AnomalyScoreResult[]  // API returns 'data', not 'results'
   total_count: number
+  summary: AnomalyScoreSummary
 }
 
 export interface AnomalySaveRequest {
@@ -232,7 +302,10 @@ export interface AnomalyModelInfo {
 }
 
 export interface AnomalyListModelsResponse {
-  models: AnomalyModelInfo[]
+  object: string
+  data: AnomalyModelInfo[]  // API returns 'data', not 'models'
+  models_dir: string
+  total: number
 }
 
 // =============================================================================

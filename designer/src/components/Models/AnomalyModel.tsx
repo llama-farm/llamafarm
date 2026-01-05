@@ -37,10 +37,13 @@ import {
   formatModelTimestamp,
   generateUniqueModelName,
   ENCODING_TYPE_OPTIONS,
+  NORMALIZATION_OPTIONS,
+  getDefaultThreshold,
   type AnomalyBackend,
   type AnomalyModelInfo,
   type FeatureColumn,
   type FeatureEncodingType,
+  type NormalizationMethod,
 } from '../../types/ml'
 
 type TrainingState = 'idle' | 'training' | 'success' | 'error'
@@ -288,7 +291,8 @@ function AnomalyModel() {
 
   // Settings state
   const [backend, setBackend] = useState<AnomalyBackend>('isolation_forest')
-  const [threshold, setThreshold] = useState(0.5)
+  const [normalization, setNormalization] = useState<NormalizationMethod>('standardization')
+  const [threshold, setThreshold] = useState(0.6)
   const [contamination, setContamination] = useState(0.1)
 
   // Training state
@@ -305,7 +309,7 @@ function AnomalyModel() {
   const [activeVersionName, setActiveVersionName] = useState<string | null>(null)
 
   // API hooks
-  const { data: modelsData, isLoading: isLoadingModels } = useListAnomalyModels()
+  const { data: modelsData, isLoading: isLoadingModels, refetch: refetchModels } = useListAnomalyModels()
   const trainAndSaveMutation = useTrainAndSaveAnomaly()
   const scoreMutation = useScoreAnomaly()
   const loadMutation = useLoadAnomaly()
@@ -319,13 +323,12 @@ function AnomalyModel() {
     return parsed.baseName
   }, [id, isNewModel])
 
-  // Extract all existing base names
+  // Extract all existing base names (use API's base_name field)
   const existingBaseNames = useMemo(() => {
     const names = new Set<string>()
-    if (modelsData?.models) {
-      for (const model of modelsData.models) {
-        const parsed = parseVersionedModelName(model.name)
-        names.add(parsed.baseName)
+    if (modelsData?.data) {
+      for (const model of modelsData.data) {
+        names.add(model.base_name)
       }
     }
     return names
@@ -350,14 +353,14 @@ function AnomalyModel() {
 
   // Build versions list from API models
   useEffect(() => {
-    if (!modelsData?.models || !baseModelName) {
+    if (!modelsData?.data || !baseModelName) {
       setVersions([])
       return
     }
 
-    const matchingModels = modelsData.models.filter((m: AnomalyModelInfo) => {
-      const parsed = parseVersionedModelName(m.name)
-      return parsed.baseName === baseModelName
+    // Use the API's base_name field directly instead of re-parsing
+    const matchingModels = modelsData.data.filter((m: AnomalyModelInfo) => {
+      return m.base_name === baseModelName
     })
 
     const sortedModels = [...matchingModels].sort((a, b) => {
@@ -561,6 +564,7 @@ function AnomalyModel() {
         data: prepared.data,
         schema: prepared.schema,
         contamination,
+        normalization,
         overwrite: false,
         description: description.trim() || undefined,
       })
@@ -569,6 +573,9 @@ function AnomalyModel() {
       setActiveVersionName(newVersionName)
       setTrainingState('success')
       setIsTrainingExpanded(false)
+
+      // Refetch models list to show the new model
+      await refetchModels()
 
       if (isNewModel) {
         navigate(`/chat/models/train/anomaly/${finalModelName}`)
@@ -585,11 +592,13 @@ function AnomalyModel() {
     modelName,
     backend,
     contamination,
+    normalization,
     trainAndSaveMutation,
     isNewModel,
     navigate,
     existingBaseNames,
     description,
+    refetchModels,
   ])
 
   const handleTest = useCallback(async () => {
@@ -689,16 +698,17 @@ function AnomalyModel() {
         data: testData,
         schema,
         threshold,
+        normalization,
       })
 
-      const newResults: AnomalyTestResult[] = result.results.map((r, idx) => ({
+      const newResults: AnomalyTestResult[] = result.data.map((r, idx) => ({
         id: `${Date.now()}-${idx}`,
         input: Array.isArray(testData[idx])
           ? (testData[idx] as number[]).join(', ')
           : JSON.stringify(testData[idx]),
         isAnomaly: r.is_anomaly,
         score: r.score,
-        threshold: result.threshold,
+        threshold: result.summary.threshold,
         timestamp: new Date().toISOString(),
         status: 'success',
       }))
@@ -718,7 +728,7 @@ function AnomalyModel() {
       setTestHistory(prev => [errorResult, ...prev])
     }
     setTestInput('')
-  }, [testInput, activeVersionName, backend, threshold, loadMutation, scoreMutation, columns])
+  }, [testInput, activeVersionName, backend, threshold, normalization, loadMutation, scoreMutation, columns])
 
   const handleSetActiveVersion = useCallback(
     async (versionName: string) => {
@@ -1323,19 +1333,41 @@ function AnomalyModel() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
+                  <Label htmlFor="normalization" className="text-xs text-muted-foreground">
+                    Score normalization
+                  </Label>
+                  <Select
+                    id="normalization"
+                    value={normalization}
+                    onChange={e => {
+                      const newNorm = e.target.value as NormalizationMethod
+                      setNormalization(newNorm)
+                      // Update threshold to the default for this normalization method
+                      setThreshold(getDefaultThreshold(newNorm))
+                    }}
+                    className="w-44"
+                  >
+                    {NORMALIZATION_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value} title={opt.description}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
                   <Label htmlFor="threshold" className="text-xs text-muted-foreground">
                     Threshold
                   </Label>
                   <Input
                     id="threshold"
                     type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
+                    min={normalization === 'zscore' ? 0 : 0}
+                    max={normalization === 'standardization' ? 1 : 10}
+                    step={normalization === 'standardization' ? 0.1 : 0.5}
                     value={threshold}
                     onChange={e => {
                       const val = parseFloat(e.target.value)
-                      setThreshold(isNaN(val) ? 0.5 : val)
+                      setThreshold(isNaN(val) ? getDefaultThreshold(normalization) : val)
                     }}
                     className="w-24"
                   />

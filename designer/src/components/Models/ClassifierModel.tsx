@@ -591,8 +591,8 @@ function ClassifierModel() {
   // Extract all existing base names from models for uniqueness check
   const existingBaseNames = useMemo(() => {
     const names = new Set<string>()
-    if (modelsData?.models) {
-      for (const model of modelsData.models) {
+    if (modelsData?.data) {
+      for (const model of modelsData.data) {
         const parsed = parseVersionedModelName(model.name)
         names.add(parsed.baseName)
       }
@@ -619,13 +619,13 @@ function ClassifierModel() {
 
   // Build versions list from API models
   useEffect(() => {
-    if (!modelsData?.models || !baseModelName) {
+    if (!modelsData?.data || !baseModelName) {
       setVersions([])
       return
     }
 
     // Filter models that match our base name
-    const matchingModels = modelsData.models.filter((m: ClassifierModelInfo) => {
+    const matchingModels = modelsData.data.filter((m: ClassifierModelInfo) => {
       const parsed = parseVersionedModelName(m.name)
       return parsed.baseName === baseModelName
     })
