@@ -22,6 +22,15 @@ func GetLFDataDir() (string, error) {
 	}
 }
 
+// GetProjectsRoot returns the root directory where local project configs are stored.
+func GetProjectsRoot() (string, error) {
+	lfDir, err := GetLFDataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(lfDir, "projects"), nil
+}
+
 // MoveFile moves a file from src to dst, handling cross-filesystem moves.
 // It first attempts os.Rename (fast path for same filesystem), then falls back
 // to copy + delete when a cross-device link error is detected.

@@ -249,6 +249,7 @@ class ProjectChatService:
         rag_queries: list[str] | None = None,
         think: bool | None = None,
         thinking_budget: int | None = None,
+        max_tokens: int | None = None,
     ) -> LFChatCompletion:
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
@@ -303,6 +304,8 @@ class ProjectChatService:
                 extra_body["think"] = think
             if thinking_budget is not None:
                 extra_body["thinking_budget"] = thinking_budget
+            if max_tokens is not None:
+                extra_body["max_tokens"] = max_tokens
 
             response = await chat_agent.run_async(
                 messages=messages,
@@ -366,6 +369,7 @@ class ProjectChatService:
         rag_queries: list[str] | None = None,
         think: bool | None = None,
         thinking_budget: int | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         # Create event logger (gracefully handles test mocks)
@@ -430,6 +434,8 @@ class ProjectChatService:
                 extra_body["think"] = think
             if thinking_budget is not None:
                 extra_body["thinking_budget"] = thinking_budget
+            if max_tokens is not None:
+                extra_body["max_tokens"] = max_tokens
 
             async for chunk in chat_agent.run_async_stream(
                 messages=messages,

@@ -203,6 +203,51 @@ class TestGGUFLanguageModel:
                 "Simulated llama-cpp-python error" in r.message for r in caplog.records
             )
 
+    @pytest.mark.asyncio
+    async def test_logits_processor_is_callable_not_list(self):
+        """Test that logits_processor is passed as callable, not wrapped in a list.
+
+        Regression test for issue #627: TypeError 'list' object is not callable.
+        The llamafarm_llama library expects logits_processor to be a callable,
+        not a list of processors.
+        """
+        model = GGUFLanguageModel("test/model", "cpu")
+
+        # Mock the llama instance
+        mock_llama = Mock()
+        model.llama = mock_llama
+
+        # Make create_chat_completion return an empty iterator
+        mock_llama.create_chat_completion.return_value = iter([])
+
+        # Call generate_stream with thinking_budget to trigger logits_processor setup
+        gen = model.generate_stream(
+            [{"role": "user", "content": "Hi"}],
+            max_tokens=10,
+            thinking_budget=100,
+        )
+
+        # Exhaust the generator
+        async for _ in gen:
+            pass
+
+        # Verify create_chat_completion was called
+        mock_llama.create_chat_completion.assert_called_once()
+
+        # Get the logits_processor argument
+        call_kwargs = mock_llama.create_chat_completion.call_args[1]
+        logits_processor = call_kwargs.get("logits_processor")
+
+        # Assert it's not a list (the bug was wrapping it in a list)
+        assert logits_processor is not None, (
+            "logits_processor should be set when thinking_budget is provided"
+        )
+        assert not isinstance(logits_processor, list), (
+            "logits_processor must be a callable, not a list. "
+            "See issue #627: TypeError 'list' object is not callable"
+        )
+        assert callable(logits_processor), "logits_processor must be callable"
+
 
 @pytest.mark.integration
 class TestGGUFIntegration:

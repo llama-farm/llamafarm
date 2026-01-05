@@ -1,12 +1,15 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/llamafarm/cli/cmd/config"
 	"github.com/llamafarm/cli/cmd/orchestrator"
@@ -42,68 +45,33 @@ Available commands:
 var projectsListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
-	Short:   "List projects in a namespace",
-	Long:    "List projects available in the specified namespace on the LlamaFarm server.",
+	Short:   "List local LlamaFarm projects",
+	Long:    "List local LlamaFarm projects discovered in ~/.llamafarm/projects, marking the current project when inside one.",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Resolve server URL and namespace (project is not required for list)
-		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
+		projectsRoot, err := utils.GetProjectsRoot()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error resolving projects directory: %v\n", err)
 			os.Exit(1)
 		}
-		serverURL = serverCfg.URL
-		ns := strings.TrimSpace(serverCfg.Namespace)
+		projectsRoot = filepath.Clean(projectsRoot)
 
-		if ns == "" {
-			fmt.Fprintln(os.Stderr, "Error: namespace is required. Provide --namespace or set it in llamafarm.yaml")
-			os.Exit(1)
-		}
-
-		// Ensure server is up (auto-start locally if needed)
-		factory := GetServiceConfigFactory()
-		config := factory.ServerOnly(serverURL)
-		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
-
-		// Build request
-		url := buildServerURL(serverURL, fmt.Sprintf("/v1/projects/%s", ns))
-		req, err := http.NewRequest(http.MethodGet, url, nil)
+		projects, warnings, err := discoverProjects(projectsRoot)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating request: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error listing projects: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Execute
-		resp, err := utils.GetHTTPClient().Do(req)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error requesting server: %v\n", err)
-			os.Exit(1)
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode != http.StatusOK {
-			fmt.Fprintf(os.Stderr, "Server returned error %d: %s\n", resp.StatusCode, string(body))
-			os.Exit(1)
-		}
+		sortProjectsByModTime(projects)
 
-		var listResp struct {
-			Total    int `json:"total"`
-			Projects []struct {
-				Namespace string `json:"namespace"`
-				Name      string `json:"name"`
-			} `json:"projects"`
-		}
-		if err := json.Unmarshal(body, &listResp); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse server response: %v\n", err)
-			os.Exit(1)
-		}
-
-		if listResp.Total == 0 || len(listResp.Projects) == 0 {
-			fmt.Printf("No projects found in namespace %s\n", ns)
+		if len(projects) == 0 {
+			fmt.Printf("No projects found in %s\n", projectsRoot)
 			return
 		}
 
-		for _, p := range listResp.Projects {
-			fmt.Printf("%s/%s\n", p.Namespace, p.Name)
+		printProjectsTable(projects)
+
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 		}
 	},
 }
@@ -181,6 +149,160 @@ This operation is irreversible and will delete all project data.`,
 
 		fmt.Printf("✅ Successfully deleted project '%s/%s'\n", ns, projectToDelete)
 	},
+}
+
+type projectRow struct {
+	Namespace string
+	Name      string
+	ModTime   time.Time
+	Path      string
+	IsCurrent bool
+}
+
+func findConfigFileInDir(dir string) string {
+	for _, name := range config.SupportedLlamaFarmConfigFiles {
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func discoverProjects(projectsRoot string) ([]projectRow, []string, error) {
+	currentInfo, currentPath := findCurrentProject(utils.GetEffectiveCWD())
+	var rows []projectRow
+	var warnings []string
+
+	info, err := os.Stat(projectsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return rows, warnings, nil
+		}
+		return nil, warnings, fmt.Errorf("failed to read projects directory %s: %w", projectsRoot, err)
+	}
+	if !info.IsDir() {
+		return rows, warnings, nil
+	}
+
+	namespaceEntries, err := os.ReadDir(projectsRoot)
+	if err != nil {
+		return nil, warnings, fmt.Errorf("failed to read projects directory %s: %w", projectsRoot, err)
+	}
+
+	for _, nsEntry := range namespaceEntries {
+		if !nsEntry.IsDir() {
+			continue
+		}
+		nsPath := filepath.Join(projectsRoot, nsEntry.Name())
+		projectEntries, err := os.ReadDir(nsPath)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to read namespace %s: %v", nsEntry.Name(), err))
+			continue
+		}
+
+		for _, projEntry := range projectEntries {
+			if !projEntry.IsDir() {
+				continue
+			}
+			projPath := filepath.Join(nsPath, projEntry.Name())
+			cfgPath := findConfigFileInDir(projPath)
+			if cfgPath == "" {
+				warnings = append(warnings, fmt.Sprintf("skipping %s/%s: no llamafarm config found", nsEntry.Name(), projEntry.Name()))
+				continue
+			}
+
+			cfg, err := config.LoadConfigFile(cfgPath)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("skipping %s/%s: %v", nsEntry.Name(), projEntry.Name(), err))
+				continue
+			}
+
+			projectInfo, err := cfg.GetProjectInfo()
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("skipping %s/%s: %v", nsEntry.Name(), projEntry.Name(), err))
+				continue
+			}
+
+			stat, err := os.Stat(cfgPath)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("skipping %s/%s: %v", nsEntry.Name(), projEntry.Name(), err))
+				continue
+			}
+
+			absProjPath, err := filepath.Abs(projPath)
+			if err != nil {
+				absProjPath = projPath
+			}
+
+			isCurrent := currentInfo != nil &&
+				projectsEqual(projectInfo, currentInfo)
+			if isCurrent && currentPath != "" {
+				absProjPath = currentPath
+			}
+
+			rows = append(rows, projectRow{
+				Namespace: projectInfo.Namespace,
+				Name:      projectInfo.Project,
+				ModTime:   stat.ModTime(),
+				Path:      absProjPath,
+				IsCurrent: isCurrent,
+			})
+		}
+	}
+
+	return rows, warnings, nil
+}
+
+func findCurrentProject(startDir string) (*config.ProjectInfo, string) {
+	dir := filepath.Clean(startDir)
+	for {
+		cfgPath, err := config.FindConfigFile(dir)
+		if err == nil && cfgPath != "" {
+			cfg, loadErr := config.LoadConfigFile(cfgPath)
+			if loadErr == nil {
+				if info, infoErr := cfg.GetProjectInfo(); infoErr == nil {
+					return info, dir
+				}
+			}
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return nil, ""
+}
+
+func projectsEqual(a *config.ProjectInfo, b *config.ProjectInfo) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return strings.TrimSpace(a.Namespace) == strings.TrimSpace(b.Namespace) &&
+		strings.TrimSpace(a.Project) == strings.TrimSpace(b.Project)
+}
+
+func sortProjectsByModTime(projects []projectRow) {
+	sort.SliceStable(projects, func(i, j int) bool {
+		return projects[i].ModTime.After(projects[j].ModTime)
+	})
+}
+
+func printProjectsTable(projects []projectRow) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "PROJECT NAME\tNAMESPACE\tLAST MODIFIED\tPATH")
+	fmt.Fprintln(w, "------------\t---------\t-------------\t----")
+	for _, p := range projects {
+		marker := " "
+		if p.IsCurrent {
+			marker = "*"
+		}
+		name := fmt.Sprintf("%s %s", marker, p.Name)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", name, p.Namespace, p.ModTime.Local().Format("2006-01-02 15:04"), p.Path)
+	}
+	w.Flush()
 }
 
 func init() {

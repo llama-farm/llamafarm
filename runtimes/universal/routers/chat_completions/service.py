@@ -55,6 +55,21 @@ class ChatCompletionsService:
             # ChatCompletionMessageParam is already dict-compatible
             messages_dict = [dict(msg) for msg in chat_request.messages]
 
+            # Extract thinking params from extra_body if not set at top level
+            # (OpenAI SDK sends custom params via extra_body)
+            think_param = chat_request.think
+            thinking_budget_param = chat_request.thinking_budget
+            if chat_request.extra_body:
+                if think_param is None and "think" in chat_request.extra_body:
+                    think_param = chat_request.extra_body.get("think")
+                if (
+                    thinking_budget_param is None
+                    and "thinking_budget" in chat_request.extra_body
+                ):
+                    thinking_budget_param = chat_request.extra_body.get(
+                        "thinking_budget"
+                    )
+
             # Check if this is a GGUF model - use native chat completion for proper template
             # GGUF models have create_chat_completion() which uses the embedded chat template
             # This is essential for models like Qwen that use special tokens (<|im_start|>, etc.)
@@ -65,7 +80,7 @@ class ChatCompletionsService:
             # Default is OFF - inject /no_think unless explicitly enabled with think=true
             if is_gguf:
                 # think=True -> enable, think=False or None -> disable
-                enable_thinking = chat_request.think is True
+                enable_thinking = think_param is True
                 messages_dict = inject_thinking_control(
                     messages_dict, enable_thinking=enable_thinking
                 )
@@ -81,11 +96,11 @@ class ChatCompletionsService:
 
             # Determine if thinking is enabled (default: OFF for predictable behavior)
             # User must explicitly set think=true to enable thinking mode
-            thinking_enabled = chat_request.think is True
+            thinking_enabled = think_param is True
 
             if thinking_enabled and is_gguf:
                 # Use provided thinking_budget or default to 1024
-                thinking_tokens = chat_request.thinking_budget or 1024
+                thinking_tokens = thinking_budget_param or 1024
                 total_max_tokens = thinking_tokens + answer_tokens
                 logger.info(
                     f"Token allocation: {thinking_tokens} for thinking + {answer_tokens} for answer = {total_max_tokens} total"

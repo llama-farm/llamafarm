@@ -12,7 +12,7 @@ import { ChatStreamChunk } from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
-import { useProject, useUpdateProject } from '../../hooks/useProjects'
+import { useProject } from '../../hooks/useProjects'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -153,26 +153,35 @@ export default function TestChat({
 
   // Validate selected model and set default if needed
   useEffect(() => {
+    // Don't validate until models are loaded - this prevents resetting
+    // a valid localStorage selection before we know what models are available
+    if (unifiedModels.length === 0) {
+      return
+    }
+
     // Build list of valid model names from current config
     const validModelNames = unifiedModels.map(m => m.name)
 
-    if (!selectedModel || !validModelNames.includes(selectedModel)) {
-      // Selected model is invalid or doesn't exist - fall back to default
-      const apiDefaultName = (defaultModel as any)?.name
-      if (apiDefaultName && validModelNames.includes(apiDefaultName)) {
-        setSelectedModel(apiDefaultName)
-      } else if (
-        fallbackDefaultName &&
-        validModelNames.includes(fallbackDefaultName)
-      ) {
-        setSelectedModel(fallbackDefaultName)
-      } else if (validModelNames.length > 0) {
-        // Use first available model as last resort
-        setSelectedModel(validModelNames[0])
-      } else {
-        // No valid models available, clear selection
-        setSelectedModel(undefined)
-      }
+    // If user has a selected model and it's valid, keep it
+    if (selectedModel && validModelNames.includes(selectedModel)) {
+      return
+    }
+
+    // Selected model is invalid or doesn't exist - fall back to default
+    const apiDefaultName = (defaultModel as any)?.name
+    if (apiDefaultName && validModelNames.includes(apiDefaultName)) {
+      setSelectedModel(apiDefaultName)
+    } else if (
+      fallbackDefaultName &&
+      validModelNames.includes(fallbackDefaultName)
+    ) {
+      setSelectedModel(fallbackDefaultName)
+    } else if (validModelNames.length > 0) {
+      // Use first available model as last resort
+      setSelectedModel(validModelNames[0])
+    } else {
+      // No valid models available, clear selection
+      setSelectedModel(undefined)
     }
   }, [
     (defaultModel as any)?.name,
@@ -192,10 +201,7 @@ export default function TestChat({
     }
   }, [selectedModel, unifiedModels])
 
-  // Database selection management
-  const updateProjectMutation = useUpdateProject()
-
-  // Get current default database from config - using ref to avoid re-render issues
+  // Get current default database from config
   const getCurrentDatabase = useCallback(() => {
     try {
       const ragConfig = (projectDetail as any)?.project?.config?.rag
@@ -229,39 +235,36 @@ export default function TestChat({
     }
   }, [projectDetail])
 
-  // Handler to update default database in config
-  const handleDatabaseChange = useCallback(
-    async (newDatabase: string) => {
-      if (!chatParams?.namespace || !chatParams?.projectId || !newDatabase) {
-        return
-      }
+  // Selected database state - persisted to localStorage for UI preference
+  const [selectedDatabase, setSelectedDatabase] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('lf_testchat_selected_database')
+  })
 
-      try {
-        const currentConfig = (projectDetail as any)?.project?.config
-        if (!currentConfig) return
+  // Get the current database value for rendering - prefer UI selection, fall back to config default
+  const currentDatabase = selectedDatabase && availableDatabases.includes(selectedDatabase)
+    ? selectedDatabase
+    : getCurrentDatabase()
 
-        const updatedConfig = {
-          ...currentConfig,
-          rag: {
-            ...currentConfig.rag,
-            default_database: newDatabase,
-          },
-        }
+  // Validate and persist database selection
+  useEffect(() => {
+    // Don't validate until databases are loaded
+    if (availableDatabases.length === 0) {
+      return
+    }
 
-        await updateProjectMutation.mutateAsync({
-          namespace: chatParams.namespace,
-          projectId: chatParams.projectId,
-          request: { config: updatedConfig },
-        })
-      } catch (error) {
-        console.error('Failed to update default database:', error)
-      }
-    },
-    [chatParams, projectDetail, updateProjectMutation]
-  )
+    // If user has a selected database and it's valid, keep it
+    if (selectedDatabase && availableDatabases.includes(selectedDatabase)) {
+      localStorage.setItem('lf_testchat_selected_database', selectedDatabase)
+      return
+    }
 
-  // Get the current database value for rendering
-  const currentDatabase = getCurrentDatabase()
+    // Selected database is invalid - clear it and fall back to config default
+    if (selectedDatabase) {
+      setSelectedDatabase(null)
+      localStorage.removeItem('lf_testchat_selected_database')
+    }
+  }, [selectedDatabase, availableDatabases])
 
   // Get retrieval strategies for the current database
   const { availableStrategies, defaultStrategy } = useMemo(() => {
@@ -306,22 +309,39 @@ export default function TestChat({
     }
   }, [projectDetail, currentDatabase])
 
-  // Selected retrieval strategy state
-  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
+  // Selected retrieval strategy state - persisted to localStorage
+  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('lf_testchat_selected_strategy')
+  })
 
-  // Reset selected strategy to default when database changes or when strategies become available
+  // Validate and persist strategy selection
   useEffect(() => {
-    // Check if the current selection is still valid
-    const isValidSelection = availableStrategies.some(
-      (s: any) => s.name === selectedStrategy
-    )
-
-    // If the selection is not valid, reset it to the new default.
-    // This handles switching databases or config changes.
-    if (!isValidSelection) {
-      setSelectedStrategy(defaultStrategy)
+    // Don't validate until strategies are loaded
+    if (availableStrategies.length === 0) {
+      return
     }
-  }, [currentDatabase, defaultStrategy, availableStrategies])
+
+    const validStrategyNames = availableStrategies.map((s: any) => s.name)
+
+    // If user has a selected strategy and it's valid for current database, keep it
+    if (selectedStrategy && validStrategyNames.includes(selectedStrategy)) {
+      localStorage.setItem('lf_testchat_selected_strategy', selectedStrategy)
+      return
+    }
+
+    // Selected strategy is invalid or doesn't exist for this database - fall back to default
+    if (defaultStrategy) {
+      setSelectedStrategy(defaultStrategy)
+      localStorage.setItem('lf_testchat_selected_strategy', defaultStrategy)
+    } else if (validStrategyNames.length > 0) {
+      setSelectedStrategy(validStrategyNames[0])
+      localStorage.setItem('lf_testchat_selected_strategy', validStrategyNames[0])
+    } else {
+      setSelectedStrategy(null)
+      localStorage.removeItem('lf_testchat_selected_strategy')
+    }
+  }, [currentDatabase, defaultStrategy, availableStrategies, selectedStrategy])
 
   // Project session management for Project Chat (with persistence)
   const projectSession = useProjectSession({
@@ -469,6 +489,50 @@ export default function TestChat({
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const lastUserInputRef = useRef<string>('')
+  const rafRef = useRef<number | null>(null)
+
+  // Sticky scroll state (matching Chatbox pattern)
+  const BOTTOM_THRESHOLD = 24 // pixels from bottom to consider "at bottom"
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
+  const [wantsAutoScroll, setWantsAutoScroll] = useState(true)
+
+  // Check if user is at bottom of scroll container
+  const checkIfAtBottom = useCallback(() => {
+    if (!listRef.current) return false
+    const { scrollTop, scrollHeight, clientHeight } = listRef.current
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+    return distanceFromBottom <= BOTTOM_THRESHOLD
+  }, [])
+
+  // Handle scroll events with RAF debouncing
+  const handleScroll = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+    }
+
+    rafRef.current = requestAnimationFrame(() => {
+      const atBottom = checkIfAtBottom()
+      setIsUserAtBottom(atBottom)
+
+      if (atBottom) {
+        setWantsAutoScroll(true)
+      } else {
+        setWantsAutoScroll(false)
+      }
+    })
+  }, [checkIfAtBottom])
+
+  // Jump to latest handler
+  const handleJumpToLatest = useCallback(() => {
+    if (listRef.current) {
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
+      setWantsAutoScroll(true)
+      setIsUserAtBottom(true)
+    }
+  }, [])
 
   // Auto-grow textarea up to a comfortable max height before scrolling
   const resizeTextarea = useCallback(() => {
@@ -481,13 +545,44 @@ export default function TestChat({
     el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
   }, [])
 
+  // RAF cleanup on unmount
   useEffect(() => {
-    if (endRef.current) {
-      endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    } else if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+      }
     }
-  }, [messages])
+  }, [])
+
+  // Handle window resize - recompute scroll position (matching Chatbox)
+  useEffect(() => {
+    const handleResize = () => {
+      // Recompute if we're at bottom after resize
+      const atBottom = checkIfAtBottom()
+      setIsUserAtBottom(atBottom)
+
+      // If we were wanting to auto-scroll and we're now at bottom, maintain that
+      if (wantsAutoScroll && atBottom && listRef.current) {
+        listRef.current.scrollTo({
+          top: listRef.current.scrollHeight,
+          behavior: 'auto',
+        })
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [checkIfAtBottom, wantsAutoScroll])
+
+  // Auto-scroll when messages change (only if user wants it)
+  useEffect(() => {
+    if (wantsAutoScroll && listRef.current) {
+      listRef.current.scrollTo({
+        top: listRef.current.scrollHeight,
+        behavior: 'auto', // 'auto' prevents jank during streaming
+      })
+    }
+  }, [messages, wantsAutoScroll])
 
   // Resize textarea on mount and input changes
   useEffect(() => {
@@ -525,6 +620,10 @@ export default function TestChat({
     if (combinedIsSending) {
       return
     }
+
+    // Re-enable auto-scroll when sending a message
+    setWantsAutoScroll(true)
+    setIsUserAtBottom(true)
 
     if (MOCK_MODE) {
       // Local-only optimistic flow without backend
@@ -841,6 +940,10 @@ export default function TestChat({
         return
       }
 
+      // Re-enable auto-scroll when running a test
+      setWantsAutoScroll(true)
+      setIsUserAtBottom(true)
+
       try {
         // Add test input message to project session
         const userMessage = input || '(no input provided)'
@@ -1060,14 +1163,14 @@ export default function TestChat({
                   value={currentDatabase || ''}
                   onChange={e => {
                     const value = e.target.value
-                    if (value) handleDatabaseChange(value)
+                    if (value) setSelectedDatabase(value)
                   }}
                   className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
                 >
                   {availableDatabases.map((dbName: string) => (
                     <option key={dbName} value={dbName}>
-                      {dbName} {currentDatabase === dbName ? '(default)' : ''}
+                      {dbName} {dbName === getCurrentDatabase() ? '(default)' : ''}
                     </option>
                   ))}
                 </select>
@@ -1116,20 +1219,18 @@ export default function TestChat({
         </div>
       )}
 
-      {/* Messages */}
-      <div
-        ref={listRef}
-        className={
-          !hasMessages
-            ? 'flex-1 overflow-hidden p-3 md:p-4 relative'
-            : 'flex-1 overflow-y-auto p-3 md:p-4 relative'
-        }
-      >
-        {!hasMessages ? (
-          <EmptyState />
-        ) : (
-          <div className="flex flex-col gap-4 min-h-full pb-80">
-            {messages.map((m: ChatboxMessage) => (
+      {/* Messages - wrapper with relative positioning for button (matching Chatbox) */}
+      <div className="relative flex-1 min-h-0">
+        {/* Scrollable message container - always overflow-y-auto like Chatbox */}
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          className="absolute inset-0 overflow-y-auto flex flex-col gap-4 p-3 md:p-4"
+        >
+          {!hasMessages ? (
+            <EmptyState />
+          ) : (
+            messages.map((m: ChatboxMessage) => (
               <TestChatMessage
                 key={m.id}
                 message={m}
@@ -1140,9 +1241,31 @@ export default function TestChat({
                 lastUserInput={lastUserInputRef.current}
                 showGenSettings={showGenSettings}
               />
-            ))}
-            <div ref={endRef} />
-          </div>
+            ))
+          )}
+          <div ref={endRef} />
+        </div>
+        {/* Jump to latest button - positioned outside scroll container */}
+        {!isUserAtBottom && hasMessages && (
+          <button
+            onClick={handleJumpToLatest}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-2 rounded-full bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg transition-all hover:shadow-xl"
+            aria-label="Jump to latest message"
+          >
+            <span className="text-sm font-medium">Jump to latest</span>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="7 13 12 18 17 13" />
+              <polyline points="7 6 12 11 17 6" />
+            </svg>
+          </button>
         )}
       </div>
 
@@ -1197,7 +1320,7 @@ export function TestChatMessage({
   showReferences,
   allowRanking,
   showPrompts,
-  showThinking,
+  // showThinking - no longer used here; thinking is always shown if present in message
   lastUserInput,
   showGenSettings,
 }: TestChatMessageProps) {
@@ -1206,12 +1329,14 @@ export function TestChatMessage({
   const [thumb, setThumb] = useState<null | 'up' | 'down'>(null)
   const [showExpected, setShowExpected] = useState<boolean>(false)
   const [openPrompts, setOpenPrompts] = useState<boolean>(true)
-  const [openThinking, setOpenThinking] = useState<boolean>(true)
+  // Thinking UI state - collapsed by default, user can expand
+  const [userExpandedThinking, setUserExpandedThinking] = useState<boolean>(false)
 
   // Extract optional <think> ... </think> section from assistant content
   // If there is no closing tag, assume thinking continues to end of content
   let thinkingFromTags = ''
   let contentWithoutThinking = message.content
+  let isThinkingInProgress = false
   if (
     isAssistant &&
     typeof message.content === 'string' &&
@@ -1226,6 +1351,8 @@ export function TestChatMessage({
         message.content.slice(end + 8)
       ).trim()
     } else {
+      // No closing tag yet - thinking is in progress
+      isThinkingInProgress = true
       thinkingFromTags = message.content.slice(start).trim()
       contentWithoutThinking = message.content
         .slice(0, message.content.indexOf('<think>'))
@@ -1233,7 +1360,17 @@ export function TestChatMessage({
     }
   }
 
-  // Remove raw <tool_call> XML tags from display (handled as separate messages)
+  // Ref for auto-scrolling thinking box
+  const thinkingBoxRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll thinking box to bottom as content streams in
+  useEffect(() => {
+    if (isThinkingInProgress && thinkingBoxRef.current) {
+      thinkingBoxRef.current.scrollTop = thinkingBoxRef.current.scrollHeight
+    }
+  }, [thinkingFromTags, isThinkingInProgress])
+
+  // Remove raw XML tags from display
   if (isAssistant && typeof contentWithoutThinking === 'string') {
     // Remove complete tool_call blocks
     contentWithoutThinking = contentWithoutThinking.replace(
@@ -1250,6 +1387,12 @@ export function TestChatMessage({
       /<\/tool_call>/g,
       ''
     )
+    // Remove any remaining think tags (opening and closing)
+    contentWithoutThinking = contentWithoutThinking.replace(
+      /<think>[\s\S]*?<\/think>/g,
+      ''
+    )
+    contentWithoutThinking = contentWithoutThinking.replace(/<\/?think>/g, '')
     contentWithoutThinking = contentWithoutThinking.trim()
   }
 
@@ -1262,6 +1405,11 @@ export function TestChatMessage({
       if (saved === 'up' || saved === 'down') setThumb(saved)
     } catch {}
   }, [message.id])
+
+  // Handle user toggle of thinking section
+  const handleThinkingToggle = useCallback(() => {
+    setUserExpandedThinking(prev => !prev)
+  }, [])
 
   const onThumb = useCallback(
     (kind: 'up' | 'down') => {
@@ -1305,49 +1453,53 @@ export function TestChatMessage({
           </div>
         ) : (
           <>
-            {/* Model thinking card - assistant final responses only */}
-            {showThinking && isAssistant && !message.isLoading && (
-              <div className="mb-2 rounded-md border border-border bg-card/40">
+            {/* Thinking card - always show if message has thinking content (toggle only affects new messages) */}
+            {isAssistant && thinkingFromTags && (
+              <div className={`mb-2 rounded-md border border-border bg-card/40 overflow-hidden ${isThinkingInProgress ? 'animate-pulse' : ''}`}>
                 <button
                   type="button"
-                  onClick={() => setOpenThinking(o => !o)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground rounded-t-md hover:bg-accent/40"
-                  aria-expanded={openThinking}
+                  onClick={isThinkingInProgress ? undefined : handleThinkingToggle}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground ${isThinkingInProgress ? '' : 'hover:bg-accent/40 cursor-pointer'}`}
+                  aria-expanded={isThinkingInProgress || userExpandedThinking}
+                  disabled={isThinkingInProgress}
                 >
                   <span className="font-medium flex items-center gap-2">
                     <span className="text-purple-400">💭</span>
-                    Model thinking process
+                    {isThinkingInProgress ? 'Thinking...' : 'Thinking steps'}
                   </span>
-                  <span className="text-[11px]">
-                    {openThinking ? 'Hide' : 'Show'}
-                  </span>
+                  {!isThinkingInProgress && (
+                    <span className="text-[11px]">
+                      {userExpandedThinking ? 'Hide' : 'Show'}
+                    </span>
+                  )}
                 </button>
-                {openThinking && (
-                  <div className="px-3 py-2 text-sm border-t border-border text-muted-foreground/70">
-                    {thinkingFromTags ? (
-                      <div className="prose prose-sm max-w-none leading-normal prose-p:my-4 prose-li:my-0.5 prose-ul:my-3 prose-ol:my-3 prose-headings:my-4 prose-pre:my-3 [&_*]:text-muted-foreground/70">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {thinkingFromTags.replace(/\n{3,}/g, '\n\n')}
-                        </ReactMarkdown>
-                      </div>
-                    ) : Array.isArray((message as any)?.metadata?.thinking) &&
-                      (message as any).metadata.thinking.length > 0 ? (
-                      <ul className="list-disc pl-5 text-sm">
-                        {(message as any).metadata.thinking.map(
-                          (t: string, i: number) => (
-                            <li key={i} className="my-1">
-                              {t}
-                            </li>
-                          )
-                        )}
-                      </ul>
-                    ) : (
-                      <div className="text-xs text-muted-foreground/50">
-                        No thinking steps
-                      </div>
-                    )}
+                {/* Content area - fixed height during streaming, collapsible when done */}
+                <div
+                  ref={thinkingBoxRef}
+                  className={`border-t border-border overflow-hidden transition-all duration-300 ease-in-out ${
+                    isThinkingInProgress
+                      ? 'h-[150px] overflow-y-scroll scrollbar-none'
+                      : ''
+                  }`}
+                  style={
+                    isThinkingInProgress
+                      ? { pointerEvents: 'none' }
+                      : {
+                          maxHeight: userExpandedThinking ? '2000px' : '0px',
+                          opacity: userExpandedThinking ? 1 : 0,
+                        }
+                  }
+                >
+                  <div className="px-3 py-3 text-sm text-muted-foreground/70">
+                    <div className="prose prose-sm max-w-none leading-relaxed prose-p:my-3 prose-li:my-1 prose-ul:my-2 prose-ol:my-2 prose-headings:my-3 prose-headings:font-medium prose-pre:my-2 [&_*]:text-muted-foreground/70 space-y-3">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {thinkingFromTags
+                          .replace(/\n{3,}/g, '\n\n')
+                          .replace(/([.!?])\n(?=[A-Z])/g, '$1\n\n')}
+                      </ReactMarkdown>
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -1365,9 +1517,9 @@ export function TestChatMessage({
         )}
       </div>
 
-      {/* Assistant footer actions */}
-      {isAssistant && (
-        <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+      {/* Assistant footer actions - hidden during streaming */}
+      {isAssistant && !message.isStreaming && !message.isLoading && (
+        <div className="mt-2 flex items-center gap-3 text-muted-foreground">
           {allowRanking && (
             <>
               <ThumbButton
@@ -1389,11 +1541,8 @@ export function TestChatMessage({
                   }
                 }}
               />
-              <span className="mx-1 opacity-40">•</span>
             </>
           )}
-          {/* Copy button removed */}
-          <span className="opacity-40">•</span>
           <ActionLink
             label="Diagnose"
             className={
@@ -1415,7 +1564,6 @@ export function TestChatMessage({
               )
             }}
           />
-          <span className="opacity-40">/</span>
           <ActionLink
             label="Retry"
             onClick={() =>
@@ -1424,7 +1572,6 @@ export function TestChatMessage({
               )
             }
           />
-          <span className="opacity-40">/</span>
           <ActionLink
             label="Use as prompt"
             onClick={() =>
@@ -1573,30 +1720,39 @@ export function TestChatMessage({
           </div>
         )}
 
+      {/* Metadata thinking - always show if exists (toggle only affects new messages) */}
       {isAssistant &&
-        showThinking &&
         Array.isArray(message.metadata?.thinking) && (
-          <div className="mt-2 rounded-md border border-border bg-card/40">
+          <div className="mt-2 rounded-md border border-border bg-card/40 overflow-hidden">
             <button
               type="button"
-              onClick={() => setOpenThinking(o => !o)}
+              onClick={handleThinkingToggle}
               className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground rounded-t-md hover:bg-accent/40"
-              aria-expanded={openThinking}
+              aria-expanded={userExpandedThinking}
             >
-              <span className="font-medium">Thinking steps</span>
+              <span className="font-medium flex items-center gap-2">
+                <span className="text-purple-400">💭</span>
+                Thinking steps
+              </span>
               <span className="text-[11px]">
-                {openThinking ? 'Hide' : 'Show'}
+                {userExpandedThinking ? 'Hide' : 'Show'}
               </span>
             </button>
-            {openThinking && (
-              <ol className="px-5 py-2 text-sm list-decimal marker:text-muted-foreground/70">
+            <div
+              className="transition-all duration-300 ease-in-out overflow-hidden"
+              style={{
+                maxHeight: userExpandedThinking ? '2000px' : '0px',
+                opacity: userExpandedThinking ? 1 : 0,
+              }}
+            >
+              <ol className="px-5 py-3 text-sm list-decimal marker:text-muted-foreground/70 space-y-2">
                 {message.metadata.thinking.map((step: string, i: number) => (
-                  <li key={i} className="py-1">
+                  <li key={i} className="leading-relaxed">
                     {step}
                   </li>
                 ))}
               </ol>
-            )}
+            </div>
           </div>
         )}
     </div>

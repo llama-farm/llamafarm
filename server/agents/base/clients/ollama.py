@@ -132,6 +132,7 @@ class LFAgentClientOllama(LFAgentClient):
         *,
         messages: list[LFChatCompletionMessageParam],
         tools: list[ToolDefinition] | None = None,
+        extra_body: dict | None = None,
         **_,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
         """Stream chat, converting Ollama chunks to OpenAI format."""
@@ -148,12 +149,18 @@ class LFAgentClientOllama(LFAgentClient):
             [self._tool_to_ollama_format(t) for t in tools] if tools else None
         )
 
+        # Build Ollama options from extra_body
+        options = {}
+        if extra_body and "max_tokens" in extra_body:
+            options["num_predict"] = extra_body["max_tokens"]
+
         stream_param: Literal[True] = True
         response_stream = await client.chat(
             model=self._model_config.model,
             messages=[self._message_to_ollama_message(m) for m in messages],
             stream=stream_param,
             tools=ollama_tools,
+            options=options if options else None,
         )
 
         finish_reason_set_to_tool_calls_once = False

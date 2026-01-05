@@ -378,6 +378,7 @@ const Prompts = () => {
         </p>
         <div className="flex gap-2 w-full sm:w-auto">
           <Button
+            variant="outline"
             onClick={() => setIsCreateSetOpen(true)}
             className="whitespace-nowrap w-full sm:w-auto"
           >
@@ -390,10 +391,10 @@ const Prompts = () => {
       {promptSets.map((set, sIdx) => (
         <div
           key={sIdx}
-          className="w-full border border-white dark:border-blue-600 rounded-md mb-4"
+          className="w-full rounded-lg border border-border bg-card mb-4"
         >
-          <div className="flex items-center justify-between px-3 py-2 bg-white dark:bg-blue-600">
-            <div className="text-sm font-medium">{set.name}</div>
+          <div className="flex items-center justify-between px-3 py-3 border-b border-border/60 bg-muted/50">
+            <div className="text-lg font-medium">{set.name}</div>
             <div className="flex items-center gap-3">
               <FontIcon
                 type="edit"
@@ -403,7 +404,6 @@ const Prompts = () => {
               />
               <Button
                 size="sm"
-                variant="secondary"
                 onClick={() => {
                   setMode('create')
                   setInitialText('')
@@ -418,87 +418,63 @@ const Prompts = () => {
             </div>
           </div>
 
-          <table className="w-full">
-            <thead className="font-normal">
-              <tr className="border-b border-solid border-white dark:border-blue-600">
-                <th className="text-left w-[15%] py-2 px-3 font-normal text-muted-foreground">
-                  Role
-                </th>
-                <th className="text-left py-2 px-3 font-normal text-muted-foreground">
-                  Preview
-                </th>
-                <th className="text-right w-[1%] py-2 px-3 font-normal text-muted-foreground">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {set.items.map((prompt, index) => (
-                <tr
-                  key={index}
-                  className={`border-b border-solid border-white dark:border-blue-600 text-sm font-mono leading-4 tracking-[0.32px]${
-                    index === set.items.length - 1 ? 'border-b-0' : 'border-b'
-                  }`}
-                >
-                  <td className="align-top p-3">{prompt.role || '—'}</td>
-                  <td className="align-top p-3">
-                    <div className="whitespace-pre-line break-words line-clamp-6">
-                      {prompt.content}
-                    </div>
-                  </td>
-                  <td className="align-top p-3 text-right whitespace-nowrap">
-                    <FontIcon
-                      type="edit"
-                      isButton
-                      className="w-4 h-4 text-muted-foreground inline-block mr-3"
-                      handleOnClick={() => openEditPrompt(index, sIdx)}
-                    />
-                    <FontIcon
-                      type="trashcan"
-                      isButton
-                      className="w-4 h-4 text-muted-foreground inline-block"
-                      handleOnClick={() => openDeletePrompt(index, sIdx)}
-                    />
-                  </td>
-                </tr>
-              ))}
-              {set.items.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="p-0">
-                    <div className="flex items-center justify-center py-12">
-                      <div className="text-center px-6">
-                        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
-                          <FontIcon
-                            type="prompt"
-                            className="w-5 h-5 text-primary"
-                          />
-                        </div>
-                        <div className="text-base font-medium text-foreground mb-2">
-                          No prompts yet
-                        </div>
-                        <div className="text-sm text-muted-foreground mb-4">
-                          Add your first prompt to this set
-                        </div>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setMode('create')
-                            setInitialText('')
-                            setInitialRole('system')
-                            setEditIndex(null)
-                            setCurrentSetIndex(sIdx)
-                            setIsOpen(true)
-                          }}
-                        >
-                          Add prompt
-                        </Button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <ul className="w-full">
+            {set.items.map((prompt, index) => (
+              <li
+                key={index}
+                className="flex items-center justify-between px-3 py-3 text-sm font-mono leading-4 tracking-[0.32px] border-b border-border last:border-b-0"
+              >
+                <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
+                  <span>{prompt.role || '—'}</span>
+                  <div className="whitespace-pre-line break-words line-clamp-6 text-foreground">
+                    {prompt.content}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <FontIcon
+                    type="edit"
+                    isButton
+                    className="w-4 h-4 text-muted-foreground"
+                    handleOnClick={() => openEditPrompt(index, sIdx)}
+                  />
+                  <FontIcon
+                    type="trashcan"
+                    isButton
+                    className="w-4 h-4 text-muted-foreground"
+                    handleOnClick={() => openDeletePrompt(index, sIdx)}
+                  />
+                </div>
+              </li>
+            ))}
+            {set.items.length === 0 && (
+              <li className="flex items-center justify-center py-12">
+                <div className="text-center px-6">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+                    <FontIcon type="prompt" className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="text-base font-medium text-foreground mb-2">
+                    No prompts yet
+                  </div>
+                  <div className="text-sm text-muted-foreground mb-4">
+                    Add your first prompt to this set
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setMode('create')
+                      setInitialText('')
+                      setInitialRole('system')
+                      setEditIndex(null)
+                      setCurrentSetIndex(sIdx)
+                      setIsOpen(true)
+                    }}
+                  >
+                    Add prompt
+                  </Button>
+                </div>
+              </li>
+            )}
+          </ul>
         </div>
       ))}
       <PromptModal
