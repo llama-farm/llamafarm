@@ -37,6 +37,7 @@ import {
   type ClassifierModelInfo,
   type ClassifierTrainingData,
 } from '../../types/ml'
+import { getModelDescription, setModelDescription } from '../../utils/storage'
 
 type TrainingState = 'idle' | 'training' | 'success' | 'error'
 
@@ -532,6 +533,7 @@ function ClassifierModel() {
   const [isDraggingTrainingArea, setIsDraggingTrainingArea] = useState(false)
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const trainingAreaRef = useRef<HTMLDivElement>(null)
+  const testInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   // Sample data modal state
@@ -659,6 +661,11 @@ function ClassifierModel() {
   useEffect(() => {
     if (isNewModel || !baseModelName) return
     setModelName(baseModelName)
+    // Load description from localStorage
+    const savedDescription = getModelDescription(baseModelName)
+    if (savedDescription) {
+      setDescription(savedDescription)
+    }
   }, [isNewModel, baseModelName])
 
   // Track the previous active class ID to detect actual class switches
@@ -964,7 +971,6 @@ function ClassifierModel() {
         newVersion,
       ])
 
-      // If new model, redirect to edit page with the base name
       if (isNewModel) {
         navigate(`/chat/models/train/classifier/${finalModelName}`)
       }
@@ -1013,6 +1019,8 @@ function ClassifierModel() {
       ])
     }
     setTestInput('')
+    // Keep focus on input for rapid testing
+    setTimeout(() => testInputRef.current?.focus(), 0)
   }, [testInput, activeVersionName, loadMutation, predictMutation])
 
   const handleSetActiveVersion = useCallback(
@@ -1329,7 +1337,7 @@ function ClassifierModel() {
 
   return (
     <div className="flex-1 min-h-0 overflow-auto pb-20">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 px-0.5">
         {/* Breadcrumb + Done button */}
         <div className="flex items-center justify-between">
           <nav className="text-sm md:text-base flex items-center gap-1.5">
@@ -1372,17 +1380,23 @@ function ClassifierModel() {
               placeholder="e.g., sentiment-classifier"
               value={modelName}
               onChange={e => {
+                if (!isNewModel) return
                 const sanitized = e.target.value
                   .toLowerCase()
                   .replace(/[^a-z0-9-]/g, '-')
                   .replace(/-+/g, '-')
                 setModelName(sanitized)
               }}
+              readOnly={!isNewModel}
               className={nameExistsWarning ? 'border-amber-500' : ''}
             />
             {nameExistsWarning ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
                 A model with this name exists. Will be saved as "{generateUniqueModelName(modelName, existingBaseNames)}".
+              </p>
+            ) : !isNewModel ? (
+              <p className="text-xs text-muted-foreground">
+                Model names cannot be changed. Create a new model if you need a different name.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -1398,7 +1412,14 @@ function ClassifierModel() {
               id="description"
               placeholder="e.g., Classifies customer feedback sentiment"
               value={description}
-              onChange={e => setDescription(e.target.value)}
+              onChange={e => {
+                setDescription(e.target.value)
+                // Save to localStorage using the current model name
+                const nameToUse = baseModelName || modelName
+                if (nameToUse) {
+                  setModelDescription(nameToUse, e.target.value)
+                }
+              }}
             />
           </div>
         </div>
@@ -1654,6 +1675,7 @@ function ClassifierModel() {
                   <>
                     <p className="text-xs text-muted-foreground">
                       Add example texts that belong to this class. One example per line, or paste from a spreadsheet.
+                      Minimum 8 examples per class; 50+ per class recommended for best accuracy.
                     </p>
                     <Textarea
                       id="training-data"
@@ -1701,6 +1723,7 @@ function ClassifierModel() {
                   <>
                     <p className="text-xs text-muted-foreground">
                       View and edit all training data. Paste from a spreadsheet or drag & drop a CSV with two columns: Example (text), Class (label).
+                      Minimum 8 examples per class; 50+ per class recommended for best accuracy.
                     </p>
                     <div
                       className="border border-border rounded-md overflow-auto max-h-[50vh] min-h-[200px]"
@@ -1856,6 +1879,7 @@ function ClassifierModel() {
 
           <div className="flex gap-2">
             <Input
+              ref={testInputRef}
               placeholder="Enter text to classify"
               value={testInput}
               onChange={e => setTestInput(e.target.value)}
