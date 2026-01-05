@@ -219,18 +219,12 @@ def is_valid_embedding(
         )
 
     if not allow_zero and is_zero_vector(embedding):
-        return (
-            False,
-            "Embedding is a zero vector (likely from failed embedding generation)",
-        )
+        return False, "Embedding is a zero vector (likely from failed embedding generation)"
 
     # Check for NaN or Inf values
     for i, v in enumerate(embedding):
         if not isinstance(v, (int, float)):
-            return (
-                False,
-                f"Embedding contains non-numeric value at index {i}: {type(v)}",
-            )
+            return False, f"Embedding contains non-numeric value at index {i}: {type(v)}"
         if v != v:  # NaN check
             return False, f"Embedding contains NaN at index {i}"
         if abs(v) == float("inf"):

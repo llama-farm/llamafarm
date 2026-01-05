@@ -295,23 +295,21 @@ class IngestHandler:
             )
 
             # Health check: Verify embedder is available before processing batch
-            if (
-                hasattr(self.embedder, "validate_config")
-                and not self.embedder.validate_config()
-            ):
-                error_msg = (
-                    f"Embedder {self.embedder.__class__.__name__} is not available. "
-                    "Please ensure the embedding service is running."
-                )
-                logger.error(error_msg)
-                event_logger.fail_event(error_msg)
-                return {
-                    "status": "error",
-                    "message": error_msg,
-                    "filename": filename,
-                    "document_count": 0,
-                    "reason": "embedder_unavailable",
-                }
+            if hasattr(self.embedder, "validate_config"):
+                if not self.embedder.validate_config():
+                    error_msg = (
+                        f"Embedder {self.embedder.__class__.__name__} is not available. "
+                        "Please ensure the embedding service is running."
+                    )
+                    logger.error(error_msg)
+                    event_logger.fail_event(error_msg)
+                    return {
+                        "status": "error",
+                        "message": error_msg,
+                        "filename": filename,
+                        "document_count": 0,
+                        "reason": "embedder_unavailable",
+                    }
 
             # Generate embeddings for each document
             embedded_documents = []
@@ -330,9 +328,7 @@ class IngestHandler:
 
                 try:
                     # Generate embedding
-                    embedding = self.embedder.embed(
-                        [doc.content]
-                    )  # embed expects a list
+                    embedding = self.embedder.embed([doc.content])  # embed expects a list
 
                     # Validate embedding before accepting it
                     if embedding and len(embedding) > 0:
@@ -362,7 +358,9 @@ class IngestHandler:
 
                 except (EmbedderUnavailableError, CircuitBreakerOpenError) as e:
                     # Embedder service failure - stop processing immediately
-                    error_msg = f"Embedder failed after processing {i}/{len(documents)} chunks: {e}"
+                    error_msg = (
+                        f"Embedder failed after processing {i}/{len(documents)} chunks: {e}"
+                    )
                     logger.error(error_msg)
                     event_logger.fail_event(error_msg)
 

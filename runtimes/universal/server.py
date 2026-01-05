@@ -165,10 +165,7 @@ async def _cleanup_idle_models() -> None:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
             # Cleanup expired models from both caches
-            for cache, cache_name in [
-                (_models, "models"),
-                (_classifiers, "classifiers"),
-            ]:
+            for cache, cache_name in [(_models, "models"), (_classifiers, "classifiers")]:
                 expired_items = cache.pop_expired()
                 if expired_items:
                     logger.info(f"Unloading {len(expired_items)} idle {cache_name}")

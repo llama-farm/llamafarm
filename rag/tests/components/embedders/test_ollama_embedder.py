@@ -58,13 +58,7 @@ class TestOllamaEmbedder:
         # Mock the actual embedding call (now returns list[float] directly)
         with patch.object(embedder, "_call_embedding_api") as mock_api:
             # Return fake embeddings directly
-            mock_api.return_value = [
-                0.1,
-                0.2,
-                0.3,
-                0.4,
-                0.5,
-            ] * 100  # 500-dim fake embedding
+            mock_api.return_value = [0.1, 0.2, 0.3, 0.4, 0.5] * 100  # 500-dim fake embedding
             yield embedder, mock_api
 
     def test_embedder_initialization(self):

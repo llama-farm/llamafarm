@@ -68,11 +68,7 @@ class DatasetCleanupService:
 
             # Find dataset config to get database name
             dataset_config = next(
-                (
-                    ds
-                    for ds in (project_obj.config.datasets or [])
-                    if ds.name == dataset
-                ),
+                (ds for ds in (project_obj.config.datasets or []) if ds.name == dataset),
                 None,
             )
 
@@ -135,9 +131,7 @@ class DatasetCleanupService:
             return {
                 "files_reverted": files_reverted,
                 "files_failed_to_revert": files_failed,
-                "errors": errors
-                if errors
-                else [{"file_hash": "unknown", "error": str(e)}],
+                "errors": errors if errors else [{"file_hash": "unknown", "error": str(e)}],
             }
 
     def _get_successful_files(self, task_id: str) -> list[str]:
@@ -163,11 +157,7 @@ class DatasetCleanupService:
             # Get stored metadata
             result_meta = None
             try:
-                if (
-                    group_result.state == "PENDING"
-                    and isinstance(group_result.result, dict)
-                    and group_result.result.get("type") == "group"
-                ):
+                if group_result.state == "PENDING" and isinstance(group_result.result, dict) and group_result.result.get("type") == "group":
                     result_meta = group_result.result
             except Exception:
                 pass
@@ -175,10 +165,7 @@ class DatasetCleanupService:
             if not result_meta:
                 try:
                     result_value = group_result.result
-                    if (
-                        isinstance(result_value, dict)
-                        and result_value.get("type") == "group"
-                    ):
+                    if isinstance(result_value, dict) and result_value.get("type") == "group":
                         result_meta = result_value
                 except Exception:
                     pass
@@ -218,9 +205,7 @@ class DatasetCleanupService:
                                     if status != "skipped":
                                         successful_files.append(file_hash)
                         except Exception as e:
-                            logger.debug(
-                                f"Error getting result for child {child_id}: {e}"
-                            )
+                            logger.debug(f"Error getting result for child {child_id}: {e}")
                             # Fallback: use file_hash from list if available
                             if i < len(file_hashes):
                                 successful_files.append(file_hashes[i])
