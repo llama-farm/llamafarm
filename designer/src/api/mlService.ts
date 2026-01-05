@@ -102,9 +102,12 @@ export async function loadClassifier(
  * List all saved classifier models
  */
 export async function listClassifierModels(): Promise<ClassifierListModelsResponse> {
-  const response =
-    await apiClient.get<ClassifierListModelsResponse>('/ml/classifier/models')
-  return response.data
+  const response = await apiClient.get('/ml/classifier/models')
+  // API returns { data: [...] } but frontend expects { models: [...] }
+  const data = response.data?.data || response.data?.models || []
+  return {
+    models: data,
+  }
 }
 
 /**
@@ -192,9 +195,29 @@ export async function loadAnomaly(
  * List all saved anomaly models
  */
 export async function listAnomalyModels(): Promise<AnomalyListModelsResponse> {
-  const response =
-    await apiClient.get<AnomalyListModelsResponse>('/ml/anomaly/models')
-  return response.data
+  const response = await apiClient.get('/ml/anomaly/models')
+  // API returns { data: [...] } but frontend expects { models: [...] }
+  const data = response.data?.data || response.data?.models || []
+  return {
+    models: data.map((m: any) => {
+      // Extract actual backend from filename (e.g., "model_isolation_forest.joblib" -> "isolation_forest")
+      let backend = m.backend
+      if (backend === 'sklearn' && m.filename) {
+        if (m.filename.includes('_isolation_forest')) {
+          backend = 'isolation_forest'
+        } else if (m.filename.includes('_autoencoder')) {
+          backend = 'autoencoder'
+        }
+      }
+      // Create clean name by stripping backend suffix from filename
+      const name = m.name || m.filename?.replace(/_isolation_forest\.joblib$|_autoencoder\.joblib$/, '') || m.filename
+      return {
+        ...m,
+        name,
+        backend,
+      }
+    }),
+  }
 }
 
 /**

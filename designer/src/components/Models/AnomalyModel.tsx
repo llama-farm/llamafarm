@@ -570,6 +570,22 @@ function AnomalyModel() {
       setTrainingState('success')
       setIsTrainingExpanded(false)
 
+      // Add the new version to the versions list so hasVersions becomes true
+      const newVersion: ModelVersion = {
+        id: newVersionName,
+        versionedName: newVersionName,
+        versionNumber: versions.length + 1,
+        filename: `${newVersionName}.joblib`,
+        createdAt: new Date().toISOString(),
+        trainingSamples: prepareTrainingData()?.data.length ?? 0,
+        isActive: true,
+        backend,
+      }
+      setVersions(prev => [
+        ...prev.map(v => ({ ...v, isActive: false })),
+        newVersion,
+      ])
+
       if (isNewModel) {
         navigate(`/chat/models/train/anomaly/${finalModelName}`)
       }
@@ -590,6 +606,7 @@ function AnomalyModel() {
     navigate,
     existingBaseNames,
     description,
+    versions,
   ])
 
   const handleTest = useCallback(async () => {
@@ -640,9 +657,12 @@ function AnomalyModel() {
         })
         testData = [rowData]
       } else {
-        // Fall back to numeric parsing
+        // Value count doesn't match columns - try as pure numeric array
         const numericData = parseNumericTrainingData(testInput)
-        if (!numericData || numericData.length === 0) {
+        if (numericData && numericData.length > 0) {
+          // Pure numeric data - send as array without schema
+          testData = numericData
+        } else {
           const errorResult: AnomalyTestResult = {
             id: String(Date.now()),
             input: `Error: Expected ${columns.length} values (${columns.map(c => c.name).join(', ')}), got ${values.length}`,
@@ -656,7 +676,6 @@ function AnomalyModel() {
           setTestInput('')
           return
         }
-        testData = numericData
       }
     } else {
       const numericData = parseNumericTrainingData(testInput)
@@ -683,22 +702,37 @@ function AnomalyModel() {
         backend,
       })
 
-      const result = await scoreMutation.mutateAsync({
+      const scoreRequest = {
         model: activeVersionName,
         backend,
         data: testData,
         schema,
         threshold,
-      })
+      }
 
-      const newResults: AnomalyTestResult[] = result.results.map((r, idx) => ({
+      const result = await scoreMutation.mutateAsync(scoreRequest)
+
+      // Handle both 'results' and 'data' response formats (API returns 'data')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resultsArray = result?.results ?? (result as any)?.data
+      if (!resultsArray || !Array.isArray(resultsArray)) {
+        console.error('Invalid anomaly score response:', result)
+        console.error('Request was:', scoreRequest)
+        throw new Error(`Invalid response from anomaly scoring API: ${JSON.stringify(result)}`)
+      }
+
+      // Get threshold from result or summary
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resultThreshold = result?.threshold ?? (result as any)?.summary?.threshold ?? threshold
+
+      const newResults: AnomalyTestResult[] = resultsArray.map((r, idx) => ({
         id: `${Date.now()}-${idx}`,
         input: Array.isArray(testData[idx])
           ? (testData[idx] as number[]).join(', ')
           : JSON.stringify(testData[idx]),
         isAnomaly: r.is_anomaly,
         score: r.score,
-        threshold: result.threshold,
+        threshold: resultThreshold,
         timestamp: new Date().toISOString(),
         status: 'success',
       }))
@@ -1267,8 +1301,8 @@ function AnomalyModel() {
         {/* Training Data & Settings Card */}
         <div className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 relative transition-all duration-300 ${trainingState === 'training' ? 'h-[400px] overflow-hidden' : ''}`}>
           {trainingState === 'training' && <TrainingLoadingOverlay message="Training your anomaly detector..." />}
-          {/* Collapsed view */}
-          {hasVersions && !isTrainingExpanded ? (
+          {/* Collapsed view - show when not a new model and not expanded */}
+          {!isNewModel && !isTrainingExpanded ? (
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1">
                 <h3 className="text-sm font-medium">Training data</h3>

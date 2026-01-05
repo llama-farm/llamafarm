@@ -949,6 +949,21 @@ function ClassifierModel() {
       setTrainingState('success')
       setIsTrainingExpanded(false)
 
+      // Add the new version to the versions list so hasVersions becomes true
+      const newVersion: ModelVersion = {
+        id: newVersionName,
+        versionedName: newVersionName,
+        versionNumber: versions.length + 1,
+        createdAt: new Date().toISOString(),
+        trainingSamples: validClasses.reduce((sum, c) => sum + c.examples.length, 0),
+        isActive: true,
+        labels: validClasses.map(c => c.name),
+      }
+      setVersions(prev => [
+        ...prev.map(v => ({ ...v, isActive: false })),
+        newVersion,
+      ])
+
       // If new model, redirect to edit page with the base name
       if (isNewModel) {
         navigate(`/chat/models/train/classifier/${finalModelName}`)
@@ -959,7 +974,7 @@ function ClassifierModel() {
         error instanceof Error ? error.message : 'Training failed. Please try again.'
       )
     }
-  }, [canTrain, validClasses, modelName, baseModel, description, trainAndSaveMutation, isNewModel, navigate, existingBaseNames])
+  }, [canTrain, validClasses, modelName, baseModel, description, trainAndSaveMutation, isNewModel, navigate, existingBaseNames, versions])
 
   const handleTest = useCallback(async () => {
     if (!testInput.trim() || !activeVersionName) return
@@ -1391,8 +1406,8 @@ function ClassifierModel() {
         {/* Training Data Card - Full Width */}
         <div className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 relative transition-all duration-300 ${trainingState === 'training' ? 'h-[400px] overflow-hidden' : ''}`}>
           {trainingState === 'training' && <TrainingLoadingOverlay message="Training your classifier..." />}
-          {/* Collapsed view - show when has versions and not expanded */}
-          {hasVersions && !isTrainingExpanded ? (
+          {/* Collapsed view - show when not a new model and not expanded */}
+          {!isNewModel && !isTrainingExpanded ? (
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1">
                 <h3 className="text-sm font-medium">Training data</h3>
@@ -1878,9 +1893,9 @@ function ClassifierModel() {
                 {testHistory.map(result => (
                   <div
                     key={result.id}
-                    className="flex items-start gap-2 px-2 py-1 rounded text-sm bg-muted/50"
+                    className="flex items-center gap-2 px-2 py-1 rounded text-sm bg-muted/50"
                   >
-                    <FontIcon type="checkmark-filled" className="w-3 h-3 text-primary shrink-0" />
+                    <FontIcon type="checkmark-filled" className="w-4 h-4 text-primary shrink-0" />
                     <span className="font-medium text-primary w-20 shrink-0 break-words">
                       {result.label}
                     </span>
