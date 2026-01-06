@@ -5,45 +5,74 @@ sidebar_position: 1
 
 # Quickstart
 
-Get the CLI installed, ingest a dataset, and run your first RAG-powered chat in minutes.
+Get LlamaFarm installed, ingest a dataset, and run your first RAG-powered chat in minutes.
 
 ## 1. Prerequisites
 
-- [Docker](https://www.docker.com/get-started/)
-- [Ollama](https://ollama.com/download) _(local runtime today; additional providers coming soon)_
+- [Ollama](https://ollama.com/download) — Local model runtime (or any OpenAI-compatible provider)
 
-> Docker is used to run the API and RAG worker automatically when you invoke `lf start`.
+## 2. Install LlamaFarm
 
-## 2. Install the CLI
+### Option A: Desktop App (Easiest)
 
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
-```
-
-**Windows/Linux Desktop App:**
+Download the all-in-one desktop application:
 
 | Platform | Download |
 |----------|----------|
-| **Windows** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm.Setup.0.0.20.exe) |
-| **Linux** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20.AppImage) |
-| **Mac (M1+)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/download/v0.0.20/LlamaFarm-0.0.20-arm64-mac.zip) |
+| **Mac (M1+)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest) |
+| **Windows** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest) |
+| **Linux** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest) |
 
-Or download the CLI only: grab `lf.exe` (Windows) or `lf` binary from the [releases page](https://github.com/llama-farm/llamafarm/releases/latest) and add it to your PATH.
+The desktop app bundles everything you need—no additional installation required.
 
-Confirm everything is wired up:
+### Option B: CLI Installation
 
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | iex
+```
+
+**Manual Download:**
+
+Download the `lf` binary directly from the [releases page](https://github.com/llama-farm/llamafarm/releases/latest):
+
+| Platform | Binary |
+|----------|--------|
+| macOS (Apple Silicon) | `lf-darwin-arm64` |
+| macOS (Intel) | `lf-darwin-amd64` |
+| Linux (x64) | `lf-linux-amd64` |
+| Linux (ARM64) | `lf-linux-arm64` |
+| Windows | `lf-windows-amd64.exe` |
+
+After downloading, make it executable and add to your PATH:
+```bash
+chmod +x lf-darwin-arm64
+sudo mv lf-darwin-arm64 /usr/local/bin/lf
+```
+
+Verify installation:
 ```bash
 lf --help
 ```
 
-## 3. Tune Your Runtime (Ollama)
+## 3. Configure Your Runtime (Ollama)
 
-For best RAG results with longer documents, increase the Ollama context window to match production expectations (e.g., 100K tokens):
+For best RAG results with longer documents, increase the Ollama context window:
 
-1. Open the Ollama app.
-2. Navigate to **Settings → Advanced**.
-3. Adjust the context window to your desired size.
+1. Open the Ollama app
+2. Navigate to **Settings → Advanced**
+3. Adjust the context window size (recommended: 32K+ for documents)
+
+Pull a model if you haven't already:
+```bash
+ollama pull llama3.2
+ollama pull nomic-embed-text  # For embeddings
+```
 
 ## 4. Create a Project
 
@@ -52,30 +81,30 @@ lf init my-project
 cd my-project
 ```
 
-This reaches the server (auto-started if needed) and writes `llamafarm.yaml` with default runtime, prompts, and RAG configuration.
+This creates `llamafarm.yaml` with default runtime, prompts, and RAG configuration.
 
-## 5. Start the Local Stack
+## 5. Start LlamaFarm
 
 ```bash
 lf start
 ```
 
-- Spins up the FastAPI server and RAG worker via Docker.
-- Starts a config watcher and opens the interactive dev chat TUI.
-- Shows health diagnostics for Ollama, Celery, and the rag-service.
-- Launches the Designer web UI at `http://localhost:8000` for visual project management.
+This command:
+- Starts the API server and Universal Runtime natively
+- Opens the interactive chat TUI
+- Launches the Designer web UI at `http://localhost:8000`
 
 Hit `Ctrl+C` to exit the chat UI when you're done.
 
 :::tip Use the Designer Web UI
-Prefer a visual interface? Open `http://localhost:8000` in your browser to access the Designer, where you can manage projects, upload datasets, configure models, and test prompts—all without touching the command line.
+Prefer a visual interface? Open `http://localhost:8000` in your browser to access the Designer—manage projects, upload datasets, configure models, and test prompts without touching the command line.
 
 See the [Designer documentation](../designer/index.md) for details.
 :::
 
-### Running Services Manually (no Docker auto-start)
+### Running Services Manually
 
-If you want to control each service yourself (useful when hacking on code), launch them with Nx from the repository root:
+For development, you can run services individually:
 
 ```bash
 git clone https://github.com/llama-farm/llamafarm.git
@@ -84,43 +113,38 @@ cd llamafarm
 npm install -g nx
 nx init --useDotNxInstallation --interactive=false
 
-# Option A: start both services together
+# Start both services
 nx dev
 
-# Option B: start in separate terminals
-nx start rag    # Terminal 1
-nx start server # Terminal 2
+# Or in separate terminals:
+nx start server           # Terminal 1
+nx start universal-runtime # Terminal 2
 ```
-
-Open another terminal to run `lf` commands against the locally running stack.
 
 ## 6. Chat with Your Project
 
 ```bash
-# Interactive chat (opens TUI using project from llamafarm.yaml)
+# Interactive chat (opens TUI)
 lf chat
 
 # One-off message
 lf chat "What can you do?"
 ```
 
-Options you'll likely use:
-
-- `--no-rag` – bypass retrieval and hit the runtime directly.
-- `--database`, `--retrieval-strategy` – override RAG behaviour.
-- `--curl` – print the sanitized `curl` command instead of executing.
+Useful options:
+- `--no-rag` — Bypass retrieval, hit the model directly
+- `--database`, `--retrieval-strategy` — Override RAG behavior
+- `--curl` — Print the equivalent curl command
 
 ## 7. Create and Populate a Dataset
 
 ```bash
-# Create dataset with configured strategy/database
+# Create a dataset
 lf datasets create -s pdf_ingest -b main_db research-notes
 
 # Upload documents (supports globs/directories)
 lf datasets upload research-notes ./examples/fda_rag/files/*.pdf
 ```
-
-The CLI validates strategy and database names against your `rag` configuration and reports upload successes/failures.
 
 ## 8. Process Documents
 
@@ -128,28 +152,29 @@ The CLI validates strategy and database names against your `rag` configuration a
 lf datasets process research-notes
 ```
 
-- Sends an ingestion job to Celery.
-- Shows heartbeat dots (TTY only) so long-running jobs feel alive.
-- For large PDFs, the worker may need extra time—rerun the command if you see a timeout message.
+This sends documents through the RAG pipeline—parsing, chunking, embedding, and indexing.
+
+For large PDFs, processing may take a few minutes. The CLI shows progress indicators.
 
 ## 9. Query with RAG
 
 ```bash
-lf rag query --database main_db "Which FDA letters mention clinical trial data?"
+lf rag query --database main_db "What are the key findings?"
 ```
 
-Useful flags: `--top-k 10`, `--filter "file_type:pdf"`, `--include-metadata`, `--include-score`.
+Useful flags:
+- `--top-k 10` — Number of results
+- `--filter "file_type:pdf"` — Metadata filtering
+- `--include-metadata` — Show document sources
+- `--include-score` — Show relevance scores
 
-## 10. Reset Sessions (Optional)
+## 10. Next Steps
 
-For stateless testing, clear dev history by removing `.llamafarm/projects/<namespace>/<project>/dev/context`, or start a new namespace/project.
-
-## 11. Next Steps
-
-- [Designer Web UI](../designer/index.md) — visual interface for managing projects.
-- [Configuration Guide](../configuration/index.md) — deep dive into `llamafarm.yaml`.
-- [RAG Guide](../rag/index.md) — strategies, parsers, and retrieval.
-- [Extending LlamaFarm](../extending/index.md) — add new providers, stores, or parsers.
-- [Examples](../examples/index.md) — run the FDA and Raleigh demos end-to-end.
+- [Designer Web UI](../designer/index.md) — Visual interface for managing projects
+- [Configuration Guide](../configuration/index.md) — Deep dive into `llamafarm.yaml`
+- [RAG Guide](../rag/index.md) — Strategies, parsers, and retrieval
+- [ML Models](../models/specialized-ml.md) — Classifiers, OCR, anomaly detection
+- [API Reference](../api/index.md) — Full REST API documentation
+- [Examples](../examples/index.md) — Run the FDA and Raleigh demos end-to-end
 
 Need help? Chat with us on [Discord](https://discord.gg/RrAUXTCVNF) or open a [discussion](https://github.com/llama-farm/llamafarm/discussions).

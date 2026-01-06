@@ -86,7 +86,7 @@ runtime:
 | Field                  | Type                                  | Required                                                                   | Description                                                                                                            |
 | ---------------------- | ------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `name`                 | string                                | ✅                                                                         | Unique identifier for this model                                                                                       |
-| `provider`             | enum (`openai`, `ollama`, `lemonade`) | ✅                                                                         | `openai` for OpenAI-compatible APIs, `ollama` for local Ollama, `lemonade` for local GGUF models with NPU/GPU support |
+| `provider`             | enum (`openai`, `ollama`, `lemonade`, `universal`) | ✅                                                                         | `openai` for OpenAI-compatible APIs, `ollama` for local Ollama, `lemonade` for local GGUF models with NPU/GPU support, `universal` for the Universal Runtime |
 | `model`                | string                                | ✅                                                                         | Model identifier understood by the provider                                                                            |
 | `description`          | string                                | Optional                                                                   | Human-readable description of the model                                                                                |
 | `default`              | boolean                               | Optional                                                                   | Set to `true` to make this the default model (alternative to `default_model`)                                         |
@@ -96,6 +96,24 @@ runtime:
 | `prompt_format`        | string                                | Optional                                                                   | `unstructured` or other format                                                                                         |
 | `model_api_parameters` | object                                | Optional                                                                   | Passthrough parameters (temperature, top_p, etc.)                                                                      |
 | `lemonade`             | object                                | ⚠️ Required for `provider: lemonade`                                      | Lemonade-specific configuration (see below)                                                                            |
+| `extra_body`           | object                                | Optional                                                                   | Provider-specific parameters (see `n_ctx` below)                                                                       |
+| `encoder_config`       | object                                | Optional                                                                   | Configuration for BERT-style encoder models (Universal runtime only)                                                   |
+| `tool_call_strategy`   | enum                                  | `native_api`                                                               | `native_api` or `prompt_based` for tool calling strategy                                                               |
+| `mcp_servers`          | array                                 | Optional                                                                   | List of MCP server names to use (omit for all, empty for none)                                                         |
+
+**extra_body fields (Universal runtime):**
+
+| Field   | Type    | Default | Description                                              |
+| ------- | ------- | ------- | -------------------------------------------------------- |
+| `n_ctx` | integer | auto    | Context window size for GGUF models. Auto-detected if not specified. |
+
+**encoder_config fields (Universal runtime):**
+
+| Field                | Type    | Default     | Description                                              |
+| -------------------- | ------- | ----------- | -------------------------------------------------------- |
+| `max_length`         | integer | auto        | Maximum sequence length (ModernBERT: 8192, classic: 512) |
+| `use_flash_attention`| boolean | `true`      | Enable Flash Attention 2 for faster inference            |
+| `task`               | enum    | `embedding` | `embedding`, `classification`, `reranking`, `ner`        |
 
 **Lemonade-specific fields:**
 
@@ -164,6 +182,92 @@ Key points:
 - `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
 - `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
 - For a complete field reference, see the [RAG Guide](../rag/index.md).
+
+### Memory Configuration
+
+The `memory` section configures optional memory stores for working memory, time-series data, spatial data, and graph relationships.
+
+```yaml
+memory:
+  default_store: main_memory
+  stores:
+    - name: main_memory
+      working_memory:
+        enabled: true
+        ttl_seconds: 3600
+        max_records: 10000
+      timeseries:
+        enabled: true
+        retention_days: 30
+      spatial:
+        enabled: false
+      graph:
+        enabled: true
+        max_path_depth: 10
+        entity_extraction: true
+        relationship_extraction: false
+      consolidation:
+        enabled: true
+        interval_seconds: 300
+        min_records: 10
+        batch_size: 100
+```
+
+#### Memory Store Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Unique identifier for this memory store |
+| `working_memory` | object | Short-term memory buffer configuration |
+| `timeseries` | object | Time-series store configuration |
+| `spatial` | object | Geo-spatial store configuration |
+| `graph` | object | Graph store configuration |
+| `consolidation` | object | Memory consolidation settings |
+
+#### Working Memory
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable working memory |
+| `ttl_seconds` | integer | `3600` | Time-to-live for records |
+| `max_records` | integer | `10000` | Maximum records before auto-prune |
+
+#### Time-series
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable time-series store |
+| `retention_days` | integer | `30` | Days to retain data |
+
+#### Spatial
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable spatial store |
+| `retention_days` | integer | `30` | Days to retain data |
+| `index_type` | string | `rtree` | `rtree` or `geohash` |
+
+#### Graph
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable graph store |
+| `max_path_depth` | integer | `10` | Maximum depth for path finding |
+| `entity_extraction` | boolean | `true` | Extract entities using NER |
+| `relationship_extraction` | boolean | `false` | Extract relationships via LLM |
+
+#### Consolidation
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable consolidation |
+| `interval_seconds` | integer | `300` | Consolidation interval |
+| `min_records` | integer | `10` | Minimum records before consolidation |
+| `batch_size` | integer | `100` | Batch size for consolidation |
+| `prune_after_consolidate` | boolean | `true` | Prune after consolidation |
+| `extract_summaries` | boolean | `false` | Create embeddings from consolidated data |
+
+---
 
 ### Datasets
 
