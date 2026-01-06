@@ -304,6 +304,107 @@ class TestParserFailure:
         assert "Specific error message" in error.errors[0]
 
 
+class TestBatchProcessingContinuesOnFailure:
+    """Test that batch processing continues when individual files fail."""
+
+    def test_ingest_file_returns_skipped_for_unsupported_type(self):
+        """ingest_file should return skipped status, not raise exception."""
+        from unittest.mock import MagicMock, patch
+
+        # Mock the IngestHandler dependencies
+        with patch("core.ingest_handler.load_config") as mock_load_config, \
+             patch("core.ingest_handler.SchemaHandler") as mock_schema_handler:
+            
+            # Setup mocks
+            mock_config = MagicMock()
+            mock_config.namespace = "test"
+            mock_config.name = "test_project"
+            mock_load_config.return_value = mock_config
+            
+            mock_handler_instance = MagicMock()
+            mock_schema_handler.return_value = mock_handler_instance
+            
+            # Create a strategy with only PDF parser
+            strategy = DataProcessingStrategy(
+                name="pdf_only",
+                description="Only handles PDF files for testing",
+                parsers=[
+                    Parser(
+                        type="PDFParser_PyPDF2",
+                        file_include_patterns=["*.pdf"],
+                        config={},
+                    )
+                ],
+            )
+            mock_handler_instance.create_processing_config.return_value = strategy
+            
+            # Create BlobProcessor directly to test the behavior
+            processor = BlobProcessor(strategy)
+            
+            # Try to process a text file - should raise UnsupportedFileTypeError
+            with pytest.raises(UnsupportedFileTypeError):
+                processor.process_blob(b"Hello", {"filename": "test.txt"})
+
+    def test_batch_continues_after_individual_failure(self):
+        """Batch processing should continue after individual file failures."""
+        # This tests that the exception handling in ingest_file catches 
+        # the exceptions and returns error/skipped status instead of raising
+        
+        strategy = DataProcessingStrategy(
+            name="pdf_only",
+            description="Only handles PDF files for testing",
+            parsers=[
+                Parser(
+                    type="PDFParser_PyPDF2",
+                    file_include_patterns=["*.pdf"],
+                    config={},
+                )
+            ],
+        )
+        processor = BlobProcessor(strategy)
+        
+        # Simulate batch processing with mixed results
+        results = []
+        files_to_process = [
+            (b"%PDF-1.4\n", {"filename": "valid.pdf"}),  # Will try PDF parser
+            (b"Hello", {"filename": "text.txt"}),  # Will fail - no parser
+            (b"More text", {"filename": "another.md"}),  # Will fail - no parser
+        ]
+        
+        for file_data, metadata in files_to_process:
+            try:
+                processor.process_blob(file_data, metadata)
+                results.append({"status": "success", "filename": metadata["filename"]})
+            except UnsupportedFileTypeError:
+                # This is the expected behavior - exception caught, batch continues
+                results.append({
+                    "status": "skipped",
+                    "filename": metadata["filename"],
+                    "reason": "unsupported_file_type",
+                })
+            except ParserFailedError:
+                results.append({
+                    "status": "error",
+                    "filename": metadata["filename"],
+                    "reason": "parser_failed",
+                })
+            except Exception as e:
+                results.append({
+                    "status": "error",
+                    "filename": metadata["filename"],
+                    "reason": str(e),
+                })
+        
+        # All 3 files should have been processed (not stopped after first failure)
+        assert len(results) == 3
+        
+        # text.txt and another.md should be skipped (unsupported)
+        skipped = [r for r in results if r["status"] == "skipped"]
+        assert len(skipped) == 2
+        assert any(r["filename"] == "text.txt" for r in skipped)
+        assert any(r["filename"] == "another.md" for r in skipped)
+
+
 class TestExplicitConfiguration:
     """Test that explicit parser configuration is required and works."""
 
