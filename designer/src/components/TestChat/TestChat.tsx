@@ -14,13 +14,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
-import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly } from '../../hooks/useMLModels'
+import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier } from '../../hooks/useMLModels'
 import { Selector } from '../ui/selector'
 
 export interface TestChatProps {
   // Mode selection
-  modelType: 'inference' | 'anomaly'
-  onModelTypeChange: (type: 'inference' | 'anomaly') => void
+  modelType: 'inference' | 'anomaly' | 'classifier'
+  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier') => void
   // Existing props
   showReferences: boolean
   allowRanking: boolean
@@ -125,6 +125,271 @@ function AnomalyEmptyState({
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
           Tip: Paste a table row or comma-separated values
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Classifier Empty States
+function ClassifierEmptyState({
+  hasModels,
+  onCreateModel,
+}: {
+  hasModels: boolean
+  onCreateModel: () => void
+}) {
+  if (!hasModels) {
+    // No Models Empty State
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/20 border border-purple-500/30">
+            <FontIcon type="prompt" className="w-5 h-5 text-purple-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">
+            No classifier models yet
+          </div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            Create a classifier model to start testing
+          </div>
+          <button
+            onClick={onCreateModel}
+            className="mt-4 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+          >
+            Create Classifier Model
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Has Models Empty State
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/20 border border-purple-500/30">
+          <FontIcon type="prompt" className="w-5 h-5 text-purple-400" />
+        </div>
+        <div className="text-lg font-medium text-foreground">
+          Start testing your classifier
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          Enter text to see predicted labels and confidence scores
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          Tip: Press Enter to classify
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Classifier Result Display
+function ClassifierResultDisplay({
+  result,
+  error,
+  isLoading,
+  inputText,
+}: {
+  result: {
+    predictions: Array<{
+      label: string
+      score: number
+    }>
+    isMultiLabel: boolean
+    threshold: number
+  } | null
+  error: string | null
+  isLoading: boolean
+  inputText: string
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Classifying...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10 rounded-xl border border-destructive/30 bg-destructive/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/20 border border-destructive/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-destructive" />
+          </div>
+          <div className="text-lg font-medium text-foreground">
+            Classification Error
+          </div>
+          <div className="mt-2 text-sm text-destructive">
+            {error}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result || result.predictions.length === 0) {
+    return null
+  }
+
+  const topPrediction = result.predictions[0]
+  const otherPredictions = result.predictions.slice(1)
+  const isLowConfidence = topPrediction.score < 0.5
+
+  // For multi-label: show labels above threshold
+  const aboveThreshold = result.predictions.filter(p => p.score >= result.threshold)
+  const belowThreshold = result.predictions.filter(p => p.score < result.threshold)
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full w-full p-4">
+      <div className="w-full max-w-md">
+        {result.isMultiLabel ? (
+          // Multi-label display
+          <>
+            {/* Applied Labels */}
+            {aboveThreshold.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs text-muted-foreground mb-2">Applied Labels</div>
+                <div className="flex flex-wrap gap-2">
+                  {aboveThreshold.map((pred, idx) => (
+                    <Badge
+                      key={idx}
+                      className="bg-primary/20 text-primary border border-primary/30 px-3 py-1"
+                    >
+                      {pred.label}
+                      <span className="ml-2 text-xs opacity-70">
+                        {(pred.score * 100).toFixed(1)}%
+                      </span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Below threshold */}
+            {belowThreshold.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs text-muted-foreground mb-2">Below threshold</div>
+                <div className="space-y-2">
+                  {belowThreshold.map((pred, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{pred.label}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-muted-foreground/40 rounded-full"
+                            style={{ width: `${pred.score * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground w-12 text-right">
+                          {(pred.score * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          // Single-label display
+          <>
+            {/* Primary Prediction */}
+            <div className="flex flex-col items-center gap-3 py-6">
+              <Badge
+                className={`text-lg px-4 py-2 ${
+                  isLowConfidence
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    : 'bg-primary/20 text-primary border border-primary/30'
+                }`}
+              >
+                {topPrediction.label}
+              </Badge>
+
+              {/* Confidence Score */}
+              <div className="w-full max-w-xs">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-muted-foreground">Confidence</span>
+                  <span className="text-sm font-medium">
+                    {(topPrediction.score * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      isLowConfidence ? 'bg-amber-500' : 'bg-primary'
+                    }`}
+                    style={{ width: `${topPrediction.score * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Low confidence indicator */}
+              {isLowConfidence && (
+                <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs">
+                  Low confidence
+                </Badge>
+              )}
+            </div>
+
+            {/* Other possibilities */}
+            {otherPredictions.length > 0 && (
+              <div className="mt-4 border-t border-border pt-4">
+                <div className="text-xs text-muted-foreground mb-3">Other possibilities</div>
+                <div className="space-y-2">
+                  {otherPredictions.map((pred, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{pred.label}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-muted-foreground/40 rounded-full"
+                            style={{ width: `${pred.score * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground w-12 text-right">
+                          {(pred.score * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Collapsible Details */}
+        <div className="rounded-md border border-border mt-4">
+          <button
+            onClick={() => setDetailsOpen(!detailsOpen)}
+            className="w-full flex items-center justify-between px-3 py-2 text-sm text-muted-foreground hover:bg-accent/40"
+          >
+            <span>Details</span>
+            <FontIcon
+              type={detailsOpen ? 'chevron-up' : 'chevron-down'}
+              className="w-4 h-4"
+            />
+          </button>
+          {detailsOpen && (
+            <div className="px-3 py-2 border-t border-border">
+              <div className="text-xs text-muted-foreground mb-1">
+                Input text:
+              </div>
+              <div className="text-sm break-words">
+                {inputText}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -326,6 +591,74 @@ export default function TestChat({
     parsedInput: string[]
   } | null>(null)
   const [anomalyError, setAnomalyError] = useState<string | null>(null)
+
+  // ============================================================================
+  // Classifier State & Hooks
+  // ============================================================================
+
+  // Fetch classifier models (only when in classifier mode)
+  const { data: classifierModelsData, isLoading: isLoadingClassifierModels } =
+    useListClassifierModels({ enabled: modelType === 'classifier' })
+  const predictClassifierMutation = usePredictClassifier()
+  const loadClassifierMutation = useLoadClassifier()
+
+  // Get sorted classifier models (most recent first by 'created' field)
+  const sortedClassifierModels = useMemo(() => {
+    if (!classifierModelsData?.data) return []
+    return [...classifierModelsData.data].sort((a, b) => {
+      const dateA = a.created ? new Date(a.created).getTime() : 0
+      const dateB = b.created ? new Date(b.created).getTime() : 0
+      return dateB - dateA
+    })
+  }, [classifierModelsData])
+
+  // Selected classifier model
+  const [selectedClassifierModel, setSelectedClassifierModel] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('lf_test_classifierModel')
+  })
+
+  // Validate and auto-select classifier model
+  useEffect(() => {
+    if (sortedClassifierModels.length === 0) {
+      return
+    }
+
+    const validModelNames = sortedClassifierModels.map(m => m.name)
+
+    if (selectedClassifierModel && validModelNames.includes(selectedClassifierModel)) {
+      return
+    }
+
+    if (validModelNames.length > 0) {
+      setSelectedClassifierModel(validModelNames[0])
+    } else {
+      setSelectedClassifierModel(null)
+    }
+  }, [selectedClassifierModel, sortedClassifierModels])
+
+  // Persist valid classifier model selection to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && selectedClassifierModel) {
+      const validModelNames = sortedClassifierModels.map(m => m.name)
+      if (validModelNames.includes(selectedClassifierModel)) {
+        localStorage.setItem('lf_test_classifierModel', selectedClassifierModel)
+      }
+    }
+  }, [selectedClassifierModel, sortedClassifierModels])
+
+  // Classifier input and result state
+  const [classifierInput, setClassifierInput] = useState('')
+  const [classifierResult, setClassifierResult] = useState<{
+    predictions: Array<{
+      label: string
+      score: number
+    }>
+    isMultiLabel: boolean
+    threshold: number
+  } | null>(null)
+  const [classifierError, setClassifierError] = useState<string | null>(null)
+  const [lastClassifierInput, setLastClassifierInput] = useState('')
 
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
@@ -1407,6 +1740,72 @@ export default function TestChat({
     setAnomalyInput('')
   }, [])
 
+  // ============================================================================
+  // Classifier Handlers
+  // ============================================================================
+
+  // Handle classification
+  const handleClassify = useCallback(async () => {
+    if (!selectedClassifierModel || !classifierInput.trim()) {
+      if (!classifierInput.trim()) {
+        setClassifierError('Enter some text to classify')
+      }
+      return
+    }
+
+    setClassifierError(null)
+    setLastClassifierInput(classifierInput.trim())
+
+    try {
+      // Load model first
+      await loadClassifierMutation.mutateAsync({
+        model: selectedClassifierModel,
+      })
+
+      // Run prediction
+      const result = await predictClassifierMutation.mutateAsync({
+        model: selectedClassifierModel,
+        texts: [classifierInput.trim()],
+      })
+
+      if (result.data && result.data.length > 0) {
+        const prediction = result.data[0]
+        // Build sorted predictions from all_scores if available
+        const predictions: Array<{ label: string; score: number }> = []
+
+        if (prediction.all_scores) {
+          // Sort by score descending
+          const sortedLabels = Object.entries(prediction.all_scores)
+            .sort(([, a], [, b]) => b - a)
+            .map(([label, score]) => ({ label, score }))
+          predictions.push(...sortedLabels)
+        } else {
+          // Just use the top prediction
+          predictions.push({
+            label: prediction.label,
+            score: prediction.score,
+          })
+        }
+
+        setClassifierResult({
+          predictions,
+          isMultiLabel: false, // TODO: check if model is multi-label from model info
+          threshold: 0.5, // Default threshold for multi-label
+        })
+      }
+    } catch (err) {
+      setClassifierError(err instanceof Error ? err.message : 'Classification failed')
+    }
+  }, [selectedClassifierModel, classifierInput, loadClassifierMutation, predictClassifierMutation])
+
+  // Clear classifier results (not the mode or model selection)
+  const clearClassifierResults = useCallback(() => {
+    setClassifierResult(null)
+    setClassifierError(null)
+    setClassifierInput('')
+    setLastClassifierInput('')
+  }, [])
+
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
@@ -1440,12 +1839,21 @@ export default function TestChat({
                 // Reset sending state to ensure input isn't stuck disabled
                 setIsProjectSending(false)
                 setStreamingMessage(null)
-              } else {
+              } else if (modelType === 'anomaly') {
                 // Anomaly mode: only clear results, NOT mode selection or model dropdown
                 clearAnomalyResults()
+              } else if (modelType === 'classifier') {
+                // Classifier mode: only clear results, NOT mode selection or model dropdown
+                clearClassifierResults()
               }
             }}
-            disabled={modelType === 'inference' ? (isClearing || !hasMessages) : (!anomalyResult && !anomalyError)}
+            disabled={
+              modelType === 'inference'
+                ? (isClearing || !hasMessages)
+                : modelType === 'anomaly'
+                  ? (!anomalyResult && !anomalyError)
+                  : (!classifierResult && !classifierError)
+            }
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isClearing ? 'Clearing…' : 'Clear'}
@@ -1459,8 +1867,9 @@ export default function TestChat({
             options={[
               { value: 'inference', label: 'Inference' },
               { value: 'anomaly', label: 'Anomaly Detection' },
+              { value: 'classifier', label: 'Classifier' },
             ]}
-            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly')}
+            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier')}
             label="Model Type"
             className="min-w-[140px] max-w-[180px]"
           />
@@ -1528,6 +1937,24 @@ export default function TestChat({
               placeholder="Select anomaly model"
               emptyMessage="No anomaly models"
               label="Anomaly Model"
+              className="min-w-[180px]"
+            />
+          )}
+
+          {/* Classifier-specific selectors */}
+          {modelType === 'classifier' && (
+            <Selector
+              value={selectedClassifierModel || ''}
+              options={sortedClassifierModels.map(m => ({
+                value: m.name,
+                label: m.name,
+                description: m.description,
+              }))}
+              onChange={setSelectedClassifierModel}
+              loading={isLoadingClassifierModels}
+              placeholder="Select classifier model"
+              emptyMessage="No classifier models"
+              label="Classifier Model"
               className="min-w-[180px]"
             />
           )}
@@ -1600,7 +2027,7 @@ export default function TestChat({
               </button>
             )}
           </>
-        ) : (
+        ) : modelType === 'anomaly' ? (
           /* Anomaly: Result display or empty state */
           <div className="absolute inset-0 overflow-y-auto p-3 md:p-4">
             {sortedAnomalyModels.length === 0 && !isLoadingAnomalyModels ? (
@@ -1618,6 +2045,28 @@ export default function TestChat({
               <AnomalyEmptyState
                 hasModels={true}
                 onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
+              />
+            )}
+          </div>
+        ) : (
+          /* Classifier: Result display or empty state */
+          <div className="absolute inset-0 overflow-y-auto p-3 md:p-4">
+            {sortedClassifierModels.length === 0 && !isLoadingClassifierModels ? (
+              <ClassifierEmptyState
+                hasModels={false}
+                onCreateModel={() => navigate('/chat/models/train/classifier/new')}
+              />
+            ) : classifierResult || classifierError || predictClassifierMutation.isPending ? (
+              <ClassifierResultDisplay
+                result={classifierResult}
+                error={classifierError}
+                isLoading={predictClassifierMutation.isPending || loadClassifierMutation.isPending}
+                inputText={lastClassifierInput}
+              />
+            ) : (
+              <ClassifierEmptyState
+                hasModels={true}
+                onCreateModel={() => navigate('/chat/models/train/classifier/new')}
               />
             )}
           </div>
@@ -1659,7 +2108,7 @@ export default function TestChat({
               />
             </div>
           </>
-        ) : (
+        ) : modelType === 'anomaly' ? (
           /* Anomaly: Data input */
           <>
             {anomalyError && (
@@ -1696,6 +2145,46 @@ export default function TestChat({
                 type="arrow-filled"
                 className={`w-8 h-8 self-end ${!selectedAnomalyModel || !anomalyInput.trim() || sortedAnomalyModels.length === 0 || scoreAnomalyMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
                 handleOnClick={handleAnomalyDetect}
+              />
+            </div>
+          </>
+        ) : (
+          /* Classifier: Text input */
+          <>
+            {classifierError && (
+              <div className="text-xs text-destructive mb-2">{classifierError}</div>
+            )}
+            <textarea
+              value={classifierInput}
+              onChange={e => setClassifierInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleClassify()
+                }
+              }}
+              disabled={!selectedClassifierModel || sortedClassifierModels.length === 0 || predictClassifierMutation.isPending || loadClassifierMutation.isPending}
+              placeholder={
+                sortedClassifierModels.length === 0
+                  ? 'Create a classifier model to start testing...'
+                  : predictClassifierMutation.isPending || loadClassifierMutation.isPending
+                    ? 'Classifying...'
+                    : 'Enter text to classify...'
+              }
+              className={textareaClasses}
+              aria-label="Classifier text input"
+            />
+            <div className="flex items-center justify-between">
+              {(predictClassifierMutation.isPending || loadClassifierMutation.isPending) && (
+                <span className="text-xs text-muted-foreground">
+                  Classifying...
+                </span>
+              )}
+              <FontIcon
+                isButton
+                type="arrow-filled"
+                className={`w-8 h-8 self-end ${!selectedClassifierModel || !classifierInput.trim() || sortedClassifierModels.length === 0 || predictClassifierMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+                handleOnClick={handleClassify}
               />
             </div>
           </>

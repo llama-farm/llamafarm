@@ -19,11 +19,12 @@ const Test = () => {
   const location = useLocation()
   const { openPackageModal } = usePackageModal()
 
-  // Model type for Test page: 'inference' (default) or 'anomaly'
-  const [modelType, setModelType] = useState<'inference' | 'anomaly'>(() => {
+  // Model type for Test page: 'inference' (default), 'anomaly', or 'classifier'
+  const [modelType, setModelType] = useState<'inference' | 'anomaly' | 'classifier'>(() => {
     if (typeof window === 'undefined') return 'inference'
     const stored = localStorage.getItem('lf_test_modelType')
-    return stored === 'anomaly' ? 'anomaly' : 'inference'
+    if (stored === 'anomaly' || stored === 'classifier') return stored
+    return 'inference'
   })
 
   // Persist modelType to localStorage
@@ -266,7 +267,7 @@ const Test = () => {
               </div>
             </div>
           </div>
-          {/* Generation settings - only show for inference mode */}
+          {/* Generation settings - only show for inference mode (hide for anomaly and classifier) */}
           {modelType === 'inference' && (
             <div className="w-full xl:basis-[320px] xl:flex-none">
               <div className="flex-1 relative" ref={settingsRef}>
