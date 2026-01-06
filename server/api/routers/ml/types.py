@@ -7,7 +7,7 @@ to provide a consistent API experience.
 Note: OCR and Document extraction types have moved to vision/types.py
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -60,6 +60,11 @@ class AnomalyFitRequest(BaseModel):
     1. Numeric arrays: data = [[1.0, 2.0], [3.0, 4.0]]
     2. Dict-based with schema: data = [{"time_ms": 100, "user_agent": "curl"}]
        with schema = {"time_ms": "numeric", "user_agent": "hash"}
+
+    Normalization methods:
+    - standardization (default): Sigmoid 0-1 range, threshold ~0.5
+    - zscore: Standard deviations from mean, threshold ~2.0-3.0
+    - raw: Backend-native scores (varies by backend)
     """
 
     model: str = "default"  # Model identifier (for caching)
@@ -72,6 +77,7 @@ class AnomalyFitRequest(BaseModel):
         le=0.5,
         description="Expected proportion of anomalies (0-0.5]",
     )
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
     overwrite: bool = (
@@ -80,12 +86,19 @@ class AnomalyFitRequest(BaseModel):
 
 
 class AnomalyScoreRequest(BaseModel):
-    """Anomaly scoring request."""
+    """Anomaly scoring request.
+
+    Normalization methods:
+    - standardization (default): Sigmoid 0-1 range, threshold ~0.5
+    - zscore: Standard deviations from mean, threshold ~2.0-3.0
+    - raw: Backend-native scores (varies by backend)
+    """
 
     model: str = "default"  # Model identifier
     backend: str = "isolation_forest"  # Backend
     data: list[list[float]] | list[dict[str, Any]]  # Data points
     schema: dict[str, str] | None = None  # Feature encoding schema
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
     threshold: float | None = None  # Override default threshold
 
 
@@ -94,6 +107,7 @@ class AnomalySaveRequest(BaseModel):
 
     model: str  # Model identifier (must be fitted)
     backend: str = "isolation_forest"
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
 
 
 class AnomalyLoadRequest(BaseModel):

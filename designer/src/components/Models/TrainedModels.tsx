@@ -30,10 +30,11 @@ function toTrainedModel(
   type: TrainedModelType,
   versionCount: number
 ): TrainedModel {
-  const parsed = parseVersionedModelName(model.name)
+  // Use API's base_name field directly
+  const baseName = model.base_name || parseVersionedModelName(model.name).baseName
   return {
-    id: parsed.baseName, // Use base name as ID for navigation
-    name: parsed.baseName,
+    id: baseName, // Use base name as ID for navigation
+    name: baseName,
     type,
     status: 'ready',
     versionCount,
@@ -91,8 +92,8 @@ function TrainedModels() {
     const models: TrainedModel[] = []
 
     // Process anomaly models
-    if (anomalyData?.models) {
-      const grouped = groupModelsByBaseName(anomalyData.models)
+    if (anomalyData?.data) {
+      const grouped = groupModelsByBaseName(anomalyData.data)
       for (const [, versions] of grouped) {
         // Get the most recent version for metadata
         const sortedVersions = [...versions].sort((a, b) => {
@@ -106,8 +107,8 @@ function TrainedModels() {
     }
 
     // Process classifier models
-    if (classifierData?.models) {
-      const grouped = groupModelsByBaseName(classifierData.models)
+    if (classifierData?.data) {
+      const grouped = groupModelsByBaseName(classifierData.data)
       for (const [, versions] of grouped) {
         const sortedVersions = [...versions].sort((a, b) => {
           const parsedA = parseVersionedModelName(a.name)
@@ -134,16 +135,16 @@ function TrainedModels() {
     setDeletingModelId(model.id)
     try {
       // Delete all versions of this model
-      if (model.type === 'anomaly_detection' && anomalyData?.models) {
-        const versions = anomalyData.models.filter((m: AnomalyModelInfo) => {
+      if (model.type === 'anomaly_detection' && anomalyData?.data) {
+        const versions = anomalyData.data.filter((m: AnomalyModelInfo) => {
           const parsed = parseVersionedModelName(m.name)
           return parsed.baseName === model.id
         })
         await Promise.all(
           versions.map(version => deleteAnomalyMutation.mutateAsync(version.filename))
         )
-      } else if (model.type === 'classifier' && classifierData?.models) {
-        const versions = classifierData.models.filter((m: ClassifierModelInfo) => {
+      } else if (model.type === 'classifier' && classifierData?.data) {
+        const versions = classifierData.data.filter((m: ClassifierModelInfo) => {
           const parsed = parseVersionedModelName(m.name)
           return parsed.baseName === model.id
         })

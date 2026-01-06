@@ -9,6 +9,7 @@ Note: OCR and Document extraction have moved to /v1/vision/*
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
@@ -164,14 +165,31 @@ async def load_classifier(request: ClassifierLoadRequest) -> dict[str, Any]:
 async def list_classifier_models() -> dict[str, Any]:
     """List all saved classifier models available for loading.
 
-    Returns models saved in the classifier models directory.
+    Returns models saved in the classifier models directory with rich metadata.
 
     Response includes:
-    - name: Name of the saved model
+    - name: Model name (directory name)
+    - base_name: Base model name (without version suffix)
     - path: Full path to the model directory
-    - labels: Class labels (if labels.txt exists)
+    - created: ISO timestamp of creation/modification
+    - is_versioned: Whether this is a versioned model
+    - labels: Class labels (loaded from labels.txt if present)
     """
-    return await UniversalRuntimeService.classifier_list_models()
+    models = MLModelService.list_all_models("classifier")
+
+    # Also try to load labels for each model
+    for model in models:
+        labels_path = Path(model["path"]) / "labels.txt"
+        if labels_path.exists():
+            model["labels"] = labels_path.read_text().strip().split("\n")
+        else:
+            model["labels"] = []
+
+    return {
+        "object": "list",
+        "data": models,
+        "total": len(models),
+    }
 
 
 @router.delete("/classifier/models/{model_name}")
@@ -238,6 +256,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         backend=request.backend,
         schema=request.schema,
         contamination=request.contamination,
+        normalization=request.normalization,
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
@@ -282,6 +301,7 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         data=request.data,
         backend=request.backend,
         schema=request.schema,
+        normalization=request.normalization,
         threshold=request.threshold,
     )
 
@@ -313,6 +333,7 @@ async def detect_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         data=request.data,
         backend=request.backend,
         schema=request.schema,
+        normalization=request.normalization,
         threshold=request.threshold,
     )
 
@@ -330,6 +351,7 @@ async def save_anomaly_model(request: AnomalySaveRequest) -> dict[str, Any]:
     return await UniversalRuntimeService.anomaly_save(
         model=request.model,
         backend=request.backend,
+        normalization=request.normalization,
     )
 
 
@@ -369,15 +391,24 @@ async def load_anomaly_model(request: AnomalyLoadRequest) -> dict[str, Any]:
 async def list_anomaly_models() -> dict[str, Any]:
     """List all saved anomaly models available for loading.
 
-    Returns models saved in the anomaly models directory.
+    Returns models saved in the anomaly models directory with rich metadata.
 
     Response includes:
-    - filename: Name of the saved model file
+    - name: Model name (without extension)
+    - filename: Full filename on disk
+    - base_name: Base model name (without version suffix)
+    - backend: Detected backend type
+    - path: Full path to model file
     - size_bytes: File size
-    - modified: Last modification timestamp
-    - backend: Detected backend type (from file extension)
+    - created: ISO timestamp of creation/modification
+    - is_versioned: Whether this is a versioned model
     """
-    return await UniversalRuntimeService.anomaly_list_models()
+    models = MLModelService.list_all_models("anomaly")
+    return {
+        "object": "list",
+        "data": models,
+        "total": len(models),
+    }
 
 
 @router.delete("/anomaly/models/{filename}")

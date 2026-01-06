@@ -221,7 +221,7 @@ class MLModelService:
                     )
         else:
             for item in model_dir.iterdir():
-                if item.is_file() and item.suffix == ".joblib":
+                if item.is_file() and item.suffix in (".joblib", ".pkl", ".pt"):
                     name_without_ext = item.stem
 
                     # Parse backend from name using known backends
@@ -338,11 +338,15 @@ class MLModelService:
                 logger.info(f"Deleted anomaly model: {name}")
                 return True
 
-            # Try with .joblib extension
-            path = cls._validate_path(model_dir, f"{name}.joblib")
-            if path.is_file():
-                path.unlink()
-                logger.info(f"Deleted anomaly model: {name}.joblib")
-                return True
+            # Try with various extensions used by anomaly models
+            for ext in (".joblib", ".pkl", ".pt"):
+                try:
+                    path = cls._validate_path(model_dir, f"{name}{ext}")
+                    if path.is_file():
+                        path.unlink()
+                        logger.info(f"Deleted anomaly model: {name}{ext}")
+                        return True
+                except ValueError:
+                    continue
 
         return False

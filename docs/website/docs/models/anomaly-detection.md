@@ -12,6 +12,7 @@ The Universal Runtime provides production-ready anomaly detection for monitoring
 Anomaly detection learns what "normal" looks like from training data and then identifies deviations in new data. LlamaFarm supports:
 
 - **Multiple algorithms**: Isolation Forest, One-Class SVM, Local Outlier Factor, Autoencoder
+- **Three normalization methods**: Standardization (0-1), Z-Score (std devs), Raw scores
 - **Mixed data types**: Numeric values, categorical features, and combinations
 - **Production workflow**: Train, save, load, and score with persistence
 - **Feature encoding**: Automatic encoding of categorical data (hash, label, one-hot, etc.)
@@ -26,12 +27,10 @@ curl -X POST http://localhost:11540/v1/anomaly/fit \
   -d '{
     "model": "sensor-monitor",
     "backend": "isolation_forest",
+    "normalization": "zscore",
     "data": [
-      [100, 1024, 10],
-      [105, 1100, 12],
-      [98, 980, 9],
-      [102, 1050, 11],
-      [103, 1080, 10]
+      [22.1], [23.5], [21.8], [24.2], [22.7],
+      [23.1], [21.5], [24.8], [22.3], [23.9]
     ],
     "contamination": 0.1
   }'
@@ -44,11 +43,9 @@ curl -X POST http://localhost:11540/v1/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor-monitor",
-    "data": [
-      [100, 1024, 10],
-      [9999, 50000, 1000],
-      [103, 1080, 11]
-    ]
+    "normalization": "zscore",
+    "data": [[22.0], [5.0], [50.0], [-10.0]],
+    "threshold": 2.0
   }'
 ```
 
@@ -57,18 +54,154 @@ Response:
 {
   "object": "list",
   "data": [
-    {"index": 1, "score": 0.92, "raw_score": -0.45}
+    {"index": 1, "score": 3.25, "raw_score": 0.65},
+    {"index": 2, "score": 2.91, "raw_score": 0.64},
+    {"index": 3, "score": 3.25, "raw_score": 0.65}
   ],
   "summary": {
-    "anomalies_detected": 1,
-    "threshold": 0.5
+    "anomalies_detected": 3,
+    "threshold": 2.0
   }
 }
 ```
 
+With z-score normalization, scores represent standard deviations from normal. The readings at 5°C, 50°C, and -10°C are all flagged as anomalies (>2 std devs from the training mean of ~22°C).
+
 ---
 
-## Algorithms
+## Score Normalization Methods
+
+The `normalization` parameter controls how raw anomaly scores are transformed. This is crucial for interpreting results and setting thresholds.
+
+### Comparison Table
+
+| Method | Score Range | Default Threshold | Best For |
+|--------|-------------|-------------------|----------|
+| `standardization` | 0-1 | 0.5 | General use, bounded scores |
+| `zscore` | Unbounded (std devs) | 2.0 | Statistical interpretation |
+| `raw` | Backend-specific | 0.0 (set your own) | Debugging, advanced users |
+
+### 1. Standardization (Default)
+
+Sigmoid transformation to a 0-1 range using median and IQR from training data.
+
+```json
+{
+  "normalization": "standardization",
+  "threshold": 0.5
+}
+```
+
+**How it works:**
+- Scores near 0.5 are "normal"
+- Scores approaching 1.0 are increasingly anomalous
+- Uses median and interquartile range (IQR) for robustness to outliers
+
+**When to use:**
+- General-purpose anomaly detection
+- When you want bounded, easy-to-interpret scores
+- When comparing across different datasets
+
+**Threshold guidance:**
+- 0.5: Default, catches moderate anomalies
+- 0.6-0.7: More conservative, fewer false positives
+- 0.8-0.9: Very conservative, only extreme anomalies
+
+**Example output:**
+```
+Normal reading (22°C):  score = 0.51
+Cold anomaly (5°C):     score = 0.96
+Hot anomaly (50°C):     score = 0.95
+```
+
+### 2. Z-Score (Standard Deviations)
+
+Scores represent how many standard deviations a point is from the training mean.
+
+```json
+{
+  "normalization": "zscore",
+  "threshold": 2.0
+}
+```
+
+**How it works:**
+- Score of 0 = exactly at the training mean
+- Score of 2.0 = 2 standard deviations above normal
+- Score of 3.0 = 3 standard deviations (statistically rare)
+
+**When to use:**
+- When you want statistically meaningful scores
+- When domain experts understand standard deviations
+- For scientific/engineering applications
+- When you need to explain "how anomalous" something is
+
+**Threshold guidance:**
+- 2.0: Unusual (~5% of normal distribution)
+- 3.0: Rare (~0.3% of normal distribution)
+- 4.0+: Extreme (very rare)
+
+**Example output:**
+```
+Normal reading (22°C):    score = -0.22 std devs (normal)
+Cold anomaly (5°C):       score = 3.25 std devs (rare)
+Hot anomaly (50°C):       score = 2.91 std devs (unusual)
+Freezing anomaly (-10°C): score = 3.25 std devs (rare)
+```
+
+**Key insight:** With z-score, you can immediately see that -10°C and 5°C are equally anomalous (both 3.25 std devs), while 50°C is slightly less extreme (2.91 std devs).
+
+### 3. Raw (Backend Native)
+
+No normalization - returns the backend's native anomaly scores.
+
+```json
+{
+  "normalization": "raw",
+  "threshold": 0.1
+}
+```
+
+**How it works:**
+- Scores are passed through unchanged from the underlying algorithm
+- Range and meaning vary by backend (see table below)
+
+**Raw score ranges by backend:**
+
+| Backend | Typical Range | Normal Value | Anomaly Indicator |
+|---------|--------------|--------------|-------------------|
+| `isolation_forest` | -0.5 to 0.5 | ~0 or negative | Higher = more anomalous |
+| `one_class_svm` | Unbounded | ~0 or negative | Higher = more anomalous |
+| `local_outlier_factor` | 1 to 10+ | ~1 | Higher = more anomalous |
+
+**When to use:**
+- Debugging anomaly detection behavior
+- When you understand the specific backend's scoring
+- When you need maximum control over thresholding
+- For research or algorithm comparison
+
+**Example output (Isolation Forest):**
+```
+Normal reading (22°C):  raw_score = 0.49
+Cold anomaly (5°C):     raw_score = 0.65
+Hot anomaly (50°C):     raw_score = 0.64
+```
+
+### Choosing a Normalization Method
+
+| Scenario | Recommended Method | Why |
+|----------|-------------------|-----|
+| First time using anomaly detection | `standardization` | Easy to understand 0-1 scores |
+| Production monitoring dashboards | `standardization` | Consistent scale across models |
+| Scientific/engineering analysis | `zscore` | Statistically meaningful |
+| Explaining to domain experts | `zscore` | "3 std devs from normal" is clear |
+| Comparing different backends | `zscore` | Normalizes different score scales |
+| Debugging detection issues | `raw` | See actual algorithm output |
+| Replicating research papers | `raw` | Match paper's methodology |
+
+---
+
+## Algorithms (Backends)
 
 ### Isolation Forest (Recommended)
 
@@ -81,10 +214,31 @@ Best general-purpose algorithm. Fast, works well out of the box.
 }
 ```
 
-- **How it works**: Isolates anomalies by randomly partitioning data. Anomalies require fewer splits to isolate.
-- **Best for**: General purpose, large datasets, unknown anomaly patterns
-- **Strengths**: Fast training, handles high dimensions well
-- **Contamination**: Expected proportion of anomalies (0.01-0.5)
+**How it works:**
+Isolates anomalies by randomly partitioning data using decision trees. Anomalies require fewer splits to isolate because they are "few and different."
+
+**Strengths:**
+- Fast training and inference
+- Handles high-dimensional data well
+- No assumptions about data distribution
+- Works with small to large datasets
+
+**Limitations:**
+- May struggle with local anomalies in dense regions
+- Less effective when anomalies are clustered together
+
+**Best for:**
+- General-purpose anomaly detection
+- Large datasets (scales linearly)
+- Unknown anomaly patterns
+- First choice when unsure which algorithm to use
+
+**Training data requirements:**
+- Minimum: 50-100 samples
+- Recommended: 500+ samples for robust models
+- Should be mostly normal with some contamination
+
+**Raw score range:** ~-0.5 to 0.5 (higher = more anomalous after negation)
 
 ### One-Class SVM
 
@@ -92,29 +246,71 @@ Support vector machine for outlier detection.
 
 ```json
 {
-  "backend": "one_class_svm"
+  "backend": "one_class_svm",
+  "contamination": 0.1
 }
 ```
 
-- **How it works**: Learns a boundary around normal data in high-dimensional space
-- **Best for**: Small to medium datasets, well-defined normal regions
-- **Strengths**: Works well when normal data is tightly clustered
-- **Limitations**: Slower on large datasets
+**How it works:**
+Learns a boundary (hyperplane) around normal data in a high-dimensional feature space. Points outside the boundary are anomalies.
 
-### Local Outlier Factor
+**Strengths:**
+- Effective when normal data is well-clustered
+- Works well with clear separation between normal and anomalous
+- Good for small to medium datasets
+
+**Limitations:**
+- Slower training on large datasets (O(n²) to O(n³))
+- Sensitive to kernel and hyperparameter choices
+- May not handle multiple clusters of normal data well
+
+**Best for:**
+- Small to medium datasets (&lt;10,000 samples)
+- When normal data forms tight clusters
+- High-precision requirements (few false positives)
+
+**Training data requirements:**
+- Minimum: 50-100 samples
+- Recommended: 200-1000 samples
+- Works best with clean, well-defined normal data
+
+**Raw score range:** Unbounded real numbers (higher = more anomalous after negation)
+
+### Local Outlier Factor (LOF)
 
 Density-based anomaly detection.
 
 ```json
 {
-  "backend": "local_outlier_factor"
+  "backend": "local_outlier_factor",
+  "contamination": 0.1
 }
 ```
 
-- **How it works**: Compares local density of points to their neighbors
-- **Best for**: Data with varying densities, clustered anomalies
-- **Strengths**: Detects anomalies relative to local context
-- **Limitations**: Requires setting number of neighbors
+**How it works:**
+Compares the local density of each point to the density of its neighbors. Points with substantially lower density than their neighbors are anomalies.
+
+**Strengths:**
+- Detects local anomalies (outliers relative to their neighborhood)
+- Handles data with varying densities
+- Good for clustered data with different cluster sizes
+
+**Limitations:**
+- Requires setting number of neighbors (k)
+- Computationally expensive for large datasets
+- May produce extreme scores for very isolated points
+
+**Best for:**
+- Data with multiple clusters of different densities
+- When anomalies are "locally unusual" but not globally extreme
+- Spatial data, network data, clustered distributions
+
+**Training data requirements:**
+- Minimum: 100+ samples (needs enough neighbors)
+- Recommended: 500+ samples
+- Benefits from representative sampling of all normal regions
+
+**Raw score range:** ~1 to 10+ (higher = more anomalous; can be very large for extreme outliers)
 
 ### Autoencoder (Neural Network)
 
@@ -128,10 +324,45 @@ Deep learning approach for complex patterns.
 }
 ```
 
-- **How it works**: Neural network learns to compress and reconstruct normal data. Anomalies have high reconstruction error.
-- **Best for**: Complex patterns, large datasets, time-series
-- **Strengths**: Captures non-linear relationships
-- **Requirements**: More training data, GPU recommended
+**How it works:**
+Neural network learns to compress (encode) and reconstruct (decode) normal data. Anomalies have high reconstruction error because the network hasn't learned to represent them.
+
+**Strengths:**
+- Captures complex, non-linear patterns
+- Excellent for high-dimensional data
+- Can learn hierarchical features
+- Scales well with GPU acceleration
+
+**Limitations:**
+- Requires more training data
+- Needs hyperparameter tuning (architecture, epochs)
+- Training is slower than sklearn methods
+- May overfit on small datasets
+
+**Best for:**
+- Complex patterns (images, time series, multi-modal data)
+- Large datasets (10,000+ samples)
+- When simpler methods underperform
+- GPU-accelerated environments
+
+**Training data requirements:**
+- Minimum: 1000+ samples
+- Recommended: 10,000+ samples
+- More data generally improves performance
+
+**Raw score range:** 0 to unbounded (reconstruction error; higher = more anomalous)
+
+### Algorithm Comparison
+
+| Feature | Isolation Forest | One-Class SVM | LOF | Autoencoder |
+|---------|-----------------|---------------|-----|-------------|
+| Speed (training) | Fast | Slow | Medium | Slow |
+| Speed (inference) | Fast | Fast | Medium | Fast |
+| Min samples | 50 | 50 | 100 | 1000 |
+| High dimensions | Good | Good | Poor | Excellent |
+| Local anomalies | Poor | Poor | Excellent | Good |
+| Complex patterns | Medium | Medium | Medium | Excellent |
+| GPU support | No | No | No | Yes |
 
 ---
 
@@ -176,7 +407,7 @@ Training data: [normal, normal, normal, anomaly, normal, ...]
 ### Per-Algorithm Behavior
 
 | Algorithm | How Contamination is Used |
-|-----------|--------------------------|
+|-----------|-----------------------------|
 | **Isolation Forest** | Sets the `contamination` parameter directly, which determines the threshold on the anomaly score distribution |
 | **One-Class SVM** | Maps to the `nu` parameter (upper bound on training error fraction) |
 | **Local Outlier Factor** | Sets the contamination parameter for decision threshold |
@@ -231,6 +462,7 @@ curl -X POST http://localhost:11540/v1/anomaly/fit \
   -d '{
     "model": "api-log-detector",
     "backend": "isolation_forest",
+    "normalization": "zscore",
     "data": [
       {"response_time_ms": 100, "bytes": 1024, "method": "GET", "user_agent": "Mozilla/5.0"},
       {"response_time_ms": 105, "bytes": 1100, "method": "POST", "user_agent": "Chrome/90.0"},
@@ -253,9 +485,11 @@ curl -X POST http://localhost:11540/v1/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
+    "normalization": "zscore",
+    "threshold": 2.0,
     "data": [
       {"response_time_ms": 100, "bytes": 1024, "method": "GET", "user_agent": "Mozilla/5.0"},
-      {"response_time_ms": 9000, "bytes": 500000, "method": "POST", "user_agent": "sqlmap/1.0"}
+      {"response_time_ms": 9000, "bytes": 500000, "method": "DELETE", "user_agent": "sqlmap/1.0"}
     ]
   }'
 ```
@@ -292,7 +526,7 @@ Response:
 }
 ```
 
-Models are saved to `~/.llamafarm/models/anomaly/` with auto-generated filenames based on the model name and backend.
+Models are saved to `~/.llamafarm/models/anomaly/` with auto-generated filenames based on the model name and backend. The normalization method and statistics are persisted with the model.
 
 ### Load Saved Model
 
@@ -307,7 +541,7 @@ curl -X POST http://localhost:11540/v1/anomaly/load \
   }'
 ```
 
-The model is loaded from the standard location based on its name. The encoder is automatically loaded if it exists.
+The model is loaded from the standard location based on its name. The encoder and normalization settings are automatically restored.
 
 ### List Saved Models
 
@@ -350,6 +584,7 @@ Train an anomaly detector on data assumed to be mostly normal.
   "data": [[...]] | [{...}],   // Training data (numeric arrays or dicts)
   "schema": {...},             // Feature encoding schema (required for dict data)
   "contamination": 0.1,        // Expected proportion of anomalies
+  "normalization": "zscore",   // standardization | zscore | raw
   "epochs": 100,               // Training epochs (autoencoder only)
   "batch_size": 32             // Batch size (autoencoder only)
 }
@@ -363,7 +598,12 @@ Train an anomaly detector on data assumed to be mostly normal.
   "backend": "isolation_forest",
   "samples_fitted": 1000,
   "training_time_ms": 123.45,
-  "model_params": {...},
+  "model_params": {
+    "backend": "isolation_forest",
+    "contamination": 0.1,
+    "threshold": 2.23,
+    "input_dim": 4
+  },
   "encoder": {"schema": {...}, "features": [...]},
   "status": "fitted"
 }
@@ -380,7 +620,8 @@ Score data points for anomalies. Returns all points with scores.
   "backend": "string",
   "data": [[...]] | [{...}],
   "schema": {...},             // Optional (uses cached encoder if available)
-  "threshold": 0.5             // Override default threshold
+  "normalization": "zscore",   // Must match training normalization
+  "threshold": 2.0             // Override default threshold
 }
 ```
 
@@ -389,14 +630,14 @@ Score data points for anomalies. Returns all points with scores.
 {
   "object": "list",
   "data": [
-    {"index": 0, "score": 0.23, "is_anomaly": false, "raw_score": 0.12},
-    {"index": 1, "score": 0.89, "is_anomaly": true, "raw_score": -0.45}
+    {"index": 0, "score": -0.22, "is_anomaly": false, "raw_score": 0.49},
+    {"index": 1, "score": 3.25, "is_anomaly": true, "raw_score": 0.65}
   ],
   "summary": {
     "total_points": 2,
     "anomaly_count": 1,
     "anomaly_rate": 0.5,
-    "threshold": 0.5
+    "threshold": 2.0
   }
 }
 ```
@@ -413,12 +654,12 @@ The response does not include an `is_anomaly` field since all returned points ar
 {
   "object": "list",
   "data": [
-    {"index": 1, "score": 0.89, "raw_score": -0.45}
+    {"index": 1, "score": 3.25, "raw_score": 0.65}
   ],
   "total_count": 1,
   "summary": {
     "anomalies_detected": 1,
-    "threshold": 0.5
+    "threshold": 2.0
   }
 }
 ```
@@ -465,6 +706,8 @@ Detect suspicious API requests (attacks, abuse, anomalies):
 
 ```json
 {
+  "backend": "isolation_forest",
+  "normalization": "zscore",
   "data": [
     {"response_time_ms": 100, "bytes": 1024, "status": 200, "method": "GET", "endpoint": "/api/users", "user_agent": "Mozilla/5.0"},
     ...
@@ -486,12 +729,19 @@ Detect suspicious API requests (attacks, abuse, anomalies):
 - DoS attempts (many requests, unusual patterns)
 - Scanning (unusual endpoints, methods)
 
-### Sensor Monitoring
+**Recommended settings:**
+- Backend: `isolation_forest` (fast, handles mixed data well)
+- Normalization: `zscore` (easy to explain: "this request is 5 std devs from normal")
+- Threshold: 2.0-3.0 depending on false positive tolerance
+
+### Sensor Monitoring (IoT)
 
 Detect faulty sensors or unusual conditions:
 
 ```json
 {
+  "backend": "isolation_forest",
+  "normalization": "zscore",
   "data": [[temperature, pressure, humidity, vibration], ...],
   "contamination": 0.05
 }
@@ -502,12 +752,19 @@ Detect faulty sensors or unusual conditions:
 - Equipment issues (correlated anomalies)
 - Environmental anomalies
 
+**Recommended settings:**
+- Backend: `isolation_forest` or `local_outlier_factor` (for local anomalies)
+- Normalization: `zscore` (engineers understand std deviations)
+- Threshold: 3.0 (industrial settings often use 3-sigma)
+
 ### Financial Transactions
 
 Detect fraudulent transactions:
 
 ```json
 {
+  "backend": "one_class_svm",
+  "normalization": "standardization",
   "data": [
     {"amount": 50.00, "merchant_category": "grocery", "hour": 14, "country": "US"},
     ...
@@ -525,6 +782,44 @@ Detect fraudulent transactions:
 - Unusual amounts for category
 - Unusual times
 - Geographic anomalies
+
+**Recommended settings:**
+- Backend: `one_class_svm` (tight boundaries around normal behavior)
+- Normalization: `standardization` (0-1 scores for risk scoring)
+- Contamination: 0.01-0.05 (fraud is rare)
+
+### Network Intrusion Detection
+
+Detect malicious network activity:
+
+```json
+{
+  "backend": "local_outlier_factor",
+  "normalization": "zscore",
+  "data": [
+    {"bytes_in": 1024, "bytes_out": 512, "packets": 10, "duration_ms": 100, "protocol": "TCP", "port": 443},
+    ...
+  ],
+  "schema": {
+    "bytes_in": "numeric",
+    "bytes_out": "numeric",
+    "packets": "numeric",
+    "duration_ms": "numeric",
+    "protocol": "label",
+    "port": "label"
+  }
+}
+```
+
+**Detects:**
+- Port scanning (unusual port patterns)
+- Data exfiltration (high outbound bytes)
+- C2 communication (unusual timing patterns)
+
+**Recommended settings:**
+- Backend: `local_outlier_factor` (detects local anomalies in network clusters)
+- Normalization: `zscore` (clear severity indication)
+- Threshold: 2.0-3.0
 
 ---
 
@@ -546,10 +841,12 @@ Detect fraudulent transactions:
 ### Threshold Tuning
 
 1. **Use the learned threshold**: The runtime automatically computes a threshold during training based on the `contamination` parameter (percentile of normalized scores). This learned threshold is returned in the fit response and used by default.
-2. **Override when needed**: You can pass a custom `threshold` parameter (0-1 range) to `/v1/anomaly/score` or `/v1/anomaly/detect` endpoints.
-3. **Lower threshold**: More sensitive (more false positives)
-4. **Higher threshold**: Less sensitive (may miss anomalies)
-5. **Test with known anomalies**: Tune based on your false positive tolerance
+2. **Override when needed**: You can pass a custom `threshold` parameter to `/v1/anomaly/score` or `/v1/anomaly/detect` endpoints.
+3. **Match normalization to threshold**:
+   - `standardization`: threshold 0.5-0.9
+   - `zscore`: threshold 2.0-4.0
+   - `raw`: threshold depends on backend
+4. **Test with known anomalies**: Tune based on your false positive tolerance
 
 ### Production Deployment
 
@@ -557,6 +854,51 @@ Detect fraudulent transactions:
 2. **Version models**: Use descriptive filenames like `api_detector_v2_2024_01`
 3. **Monitor performance**: Track false positive/negative rates
 4. **Retrain periodically**: Normal patterns may drift over time
+5. **Log raw scores**: Even if using normalized scores, log `raw_score` for debugging
+
+---
+
+## Troubleshooting
+
+### Scores are all around 0.5 (standardization)
+
+**Cause:** Training data has low variance, or test data is very similar to training.
+
+**Solutions:**
+- Switch to `zscore` normalization for more spread
+- Check that training data covers the full range of normal behavior
+- Verify test data actually contains anomalies
+
+### Z-scores are extremely large (100+)
+
+**Cause:** Test point is far outside the training distribution.
+
+**Solutions:**
+- This is actually correct behavior - the point is genuinely extreme
+- Consider capping scores for display purposes
+- Use `standardization` if you need bounded scores
+
+### Different backends give different scores
+
+**Cause:** Each backend has different native score ranges.
+
+**Solutions:**
+- Use `zscore` normalization to make scores comparable
+- Don't compare raw scores across backends
+- Choose one backend and stick with it for consistency
+
+### Model not detecting obvious anomalies
+
+**Causes:**
+1. Contamination too high (model thinks anomalies are normal)
+2. Training data already contains similar anomalies
+3. Threshold too high
+
+**Solutions:**
+- Lower contamination (e.g., 0.01-0.05)
+- Curate cleaner training data
+- Lower threshold
+- Try `local_outlier_factor` for local anomalies
 
 ---
 

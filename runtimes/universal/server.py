@@ -165,7 +165,10 @@ async def _cleanup_idle_models() -> None:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
             # Cleanup expired models from both caches
-            for cache, cache_name in [(_models, "models"), (_classifiers, "classifiers")]:
+            for cache, cache_name in [
+                (_models, "models"),
+                (_classifiers, "classifiers"),
+            ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
                     logger.info(f"Unloading {len(expired_items)} idle {cache_name}")
@@ -1209,8 +1212,23 @@ async def extract_text_from_images(request: OCRRequest):
 # ============================================================================
 
 
-def _make_anomaly_cache_key(model_id: str, backend: str) -> str:
-    """Generate a cache key for an anomaly model."""
+def _make_anomaly_cache_key(
+    model_id: str, backend: str, normalization: str | None = None
+) -> str:
+    """Generate a cache key for an anomaly model.
+
+    Args:
+        model_id: Model identifier or path
+        backend: Anomaly detection backend
+        normalization: Score normalization method. If provided, it becomes part of
+            the cache key to ensure models with different normalization methods
+            are cached separately.
+
+    Returns:
+        Cache key string
+    """
+    if normalization:
+        return f"anomaly:{backend}:{normalization}:{model_id}"
     return f"anomaly:{backend}:{model_id}"
 
 
@@ -1219,6 +1237,7 @@ async def load_anomaly(
     backend: str = "isolation_forest",
     contamination: float = 0.1,
     threshold: float | None = None,
+    normalization: str = "standardization",
 ):
     """Load an anomaly detection model.
 
@@ -1227,11 +1246,12 @@ async def load_anomaly(
         backend: Anomaly detection backend
         contamination: Expected proportion of anomalies
         threshold: Custom anomaly threshold
+        normalization: Score normalization method (standardization, zscore, raw)
 
     Returns:
         Loaded AnomalyModel instance
     """
-    cache_key = _make_anomaly_cache_key(model_id, backend)
+    cache_key = _make_anomaly_cache_key(model_id, backend, normalization)
 
     if cache_key not in _models:
         async with _model_load_lock:
@@ -1245,6 +1265,7 @@ async def load_anomaly(
                     backend=backend,
                     contamination=contamination,
                     threshold=threshold,
+                    normalization=normalization,
                 )
 
                 await model.load()
@@ -1316,6 +1337,11 @@ class AnomalyScoreRequest(PydanticBaseModel):
     1. Numeric arrays: data = [[1.0, 2.0], [3.0, 4.0]]
     2. Dict-based with schema: data = [{"time_ms": 100, "user_agent": "curl"}]
        with schema = {"time_ms": "numeric", "user_agent": "hash"}
+
+    Normalization methods:
+    - standardization (default): Sigmoid 0-1 range, threshold ~0.5
+    - zscore: Standard deviations from mean, threshold ~2.0-3.0
+    - raw: Backend-native scores (varies by backend)
     """
 
     model: str = "default"  # Model identifier
@@ -1325,6 +1351,7 @@ class AnomalyScoreRequest(PydanticBaseModel):
         None  # Feature encoding schema (required for dict data)
     )
     threshold: float | None = None  # Override default threshold
+    normalization: str = "standardization"  # standardization, zscore, or raw
 
 
 class AnomalyFitRequest(PydanticBaseModel):
@@ -1342,6 +1369,11 @@ class AnomalyFitRequest(PydanticBaseModel):
     - onehot: One-hot encoding (for low-cardinality categoricals)
     - binary: Boolean-like values (yes/no, true/false → 0/1)
     - frequency: Encode as occurrence frequency from training data
+
+    Normalization methods:
+    - standardization (default): Sigmoid 0-1 range, threshold ~0.5
+    - zscore: Standard deviations from mean, threshold ~2.0-3.0
+    - raw: Backend-native scores (varies by backend)
     """
 
     model: str = "default"  # Model identifier (for caching)
@@ -1353,6 +1385,7 @@ class AnomalyFitRequest(PydanticBaseModel):
     contamination: float = 0.1  # Expected proportion of anomalies
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
+    normalization: str = "standardization"  # standardization, zscore, or raw
 
 
 @app.post("/v1/anomaly/score")
@@ -1384,11 +1417,14 @@ async def score_anomalies(request: AnomalyScoreRequest):
     - raw_score: Backend-specific raw score
     """
     try:
-        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+        cache_key = _make_anomaly_cache_key(
+            request.model, request.backend, request.normalization
+        )
 
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
+            normalization=request.normalization,
         )
 
         if not model.is_fitted:
@@ -1473,7 +1509,9 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
     After fitting, use /v1/anomaly/score to detect anomalies in new data.
     """
     try:
-        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+        cache_key = _make_anomaly_cache_key(
+            request.model, request.backend, request.normalization
+        )
 
         # Prepare data (encode if dict-based, and fit the encoder)
         prepared_data = _prepare_anomaly_data(
@@ -1487,6 +1525,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             model_id=request.model,
             backend=request.backend,
             contamination=request.contamination,
+            normalization=request.normalization,
         )
 
         # Fit model
@@ -1551,11 +1590,14 @@ async def detect_anomalies(request: AnomalyScoreRequest):
     ```
     """
     try:
-        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+        cache_key = _make_anomaly_cache_key(
+            request.model, request.backend, request.normalization
+        )
 
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
+            normalization=request.normalization,
         )
 
         if not model.is_fitted:
@@ -1619,6 +1661,9 @@ class AnomalySaveRequest(PydanticBaseModel):
 
     model: str  # Model identifier (must be fitted)
     backend: str = "isolation_forest"
+    normalization: str = (
+        "standardization"  # Must match the normalization used during fit
+    )
     # Note: filename is auto-generated from model name, no user control over paths
 
 
@@ -1740,12 +1785,15 @@ async def save_anomaly_model(request: AnomalySaveRequest):
     filenames based on the model name and backend.
     """
     try:
-        cache_key = _make_anomaly_cache_key(request.model, request.backend)
+        cache_key = _make_anomaly_cache_key(
+            request.model, request.backend, request.normalization
+        )
 
         if cache_key not in _models:
             raise HTTPException(
                 status_code=404,
-                detail=f"Model '{request.model}' with backend '{request.backend}' not found in cache. "
+                detail=f"Model '{request.model}' with backend '{request.backend}' and "
+                f"normalization '{request.normalization}' not found in cache. "
                 "Fit the model first with /v1/anomaly/fit",
             )
 
@@ -1842,13 +1890,6 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
                 f"Available models: {available}",
             )
 
-        cache_key = _make_anomaly_cache_key(request.model, request.backend)
-
-        # Remove existing model from cache if present
-        if cache_key in _models:
-            await _models[cache_key].unload()
-            del _models[cache_key]
-
         async with _model_load_lock:
             logger.info(f"Loading pre-trained anomaly model: {model_path}")
             device = get_device()
@@ -1860,6 +1901,17 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
             )
 
             await model.load()
+
+            # Use the model's actual normalization (loaded from file) for the cache key
+            cache_key = _make_anomaly_cache_key(
+                request.model, request.backend, model.normalization
+            )
+
+            # Remove existing model from cache if present
+            if cache_key in _models:
+                await _models[cache_key].unload()
+                del _models[cache_key]
+
             _models[cache_key] = model
 
         # Try to load encoder if one exists
@@ -1878,6 +1930,7 @@ async def load_anomaly_model(request: AnomalyLoadRequest):
             "object": "load_result",
             "model": request.model,
             "backend": request.backend,
+            "normalization": model.normalization,
             "filename": model_path.name,
             "is_fitted": model.is_fitted,
             "threshold": model.threshold,

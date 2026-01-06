@@ -37,10 +37,13 @@ import {
   formatModelTimestamp,
   generateUniqueModelName,
   ENCODING_TYPE_OPTIONS,
+  NORMALIZATION_OPTIONS,
+  getDefaultThreshold,
   type AnomalyBackend,
   type AnomalyModelInfo,
   type FeatureColumn,
   type FeatureEncodingType,
+  type NormalizationMethod,
 } from '../../types/ml'
 import { getModelDescription, setModelDescription } from '../../utils/storage'
 
@@ -290,7 +293,8 @@ function AnomalyModel() {
 
   // Settings state
   const [backend, setBackend] = useState<AnomalyBackend>('isolation_forest')
-  const [threshold, setThreshold] = useState(0.5)
+  const [normalization, setNormalization] = useState<NormalizationMethod>('standardization')
+  const [threshold, setThreshold] = useState(0.6)
   const [contamination, setContamination] = useState(0.1)
 
   // Training state
@@ -307,7 +311,7 @@ function AnomalyModel() {
   const [activeVersionName, setActiveVersionName] = useState<string | null>(null)
 
   // API hooks
-  const { data: modelsData, isLoading: isLoadingModels } = useListAnomalyModels()
+  const { data: modelsData, isLoading: isLoadingModels, refetch: refetchModels } = useListAnomalyModels()
   const trainAndSaveMutation = useTrainAndSaveAnomaly()
   const scoreMutation = useScoreAnomaly()
   const loadMutation = useLoadAnomaly()
@@ -321,13 +325,12 @@ function AnomalyModel() {
     return parsed.baseName
   }, [id, isNewModel])
 
-  // Extract all existing base names
+  // Extract all existing base names (use API's base_name field)
   const existingBaseNames = useMemo(() => {
     const names = new Set<string>()
-    if (modelsData?.models) {
-      for (const model of modelsData.models) {
-        const parsed = parseVersionedModelName(model.name)
-        names.add(parsed.baseName)
+    if (modelsData?.data) {
+      for (const model of modelsData.data) {
+        names.add(model.base_name)
       }
     }
     return names
@@ -352,14 +355,14 @@ function AnomalyModel() {
 
   // Build versions list from API models
   useEffect(() => {
-    if (!modelsData?.models || !baseModelName) {
+    if (!modelsData?.data || !baseModelName) {
       setVersions([])
       return
     }
 
-    const matchingModels = modelsData.models.filter((m: AnomalyModelInfo) => {
-      const parsed = parseVersionedModelName(m.name)
-      return parsed.baseName === baseModelName
+    // Use the API's base_name field directly instead of re-parsing
+    const matchingModels = modelsData.data.filter((m: AnomalyModelInfo) => {
+      return m.base_name === baseModelName
     })
 
     const sortedModels = [...matchingModels].sort((a, b) => {
@@ -568,6 +571,7 @@ function AnomalyModel() {
         data: prepared.data,
         schema: prepared.schema,
         contamination,
+        normalization,
         overwrite: false,
         description: description.trim() || undefined,
       })
@@ -577,21 +581,8 @@ function AnomalyModel() {
       setTrainingState('success')
       setIsTrainingExpanded(false)
 
-      // Add the new version to the versions list so hasVersions becomes true
-      const newVersion: ModelVersion = {
-        id: newVersionName,
-        versionedName: newVersionName,
-        versionNumber: versions.length + 1,
-        filename: `${newVersionName}.joblib`,
-        createdAt: new Date().toISOString(),
-        trainingSamples: prepareTrainingData()?.data.length ?? 0,
-        isActive: true,
-        backend,
-      }
-      setVersions(prev => [
-        ...prev.map(v => ({ ...v, isActive: false })),
-        newVersion,
-      ])
+      // Refetch models list to show the new model
+      await refetchModels()
 
       if (isNewModel) {
         navigate(`/chat/models/train/anomaly/${finalModelName}`)
@@ -608,12 +599,13 @@ function AnomalyModel() {
     modelName,
     backend,
     contamination,
+    normalization,
     trainAndSaveMutation,
     isNewModel,
     navigate,
     existingBaseNames,
     description,
-    versions,
+    refetchModels,
   ])
 
   const handleTest = useCallback(async () => {
@@ -709,37 +701,23 @@ function AnomalyModel() {
         backend,
       })
 
-      const scoreRequest = {
+      const result = await scoreMutation.mutateAsync({
         model: activeVersionName,
         backend,
         data: testData,
         schema,
         threshold,
-      }
+        normalization,
+      })
 
-      const result = await scoreMutation.mutateAsync(scoreRequest)
-
-      // Handle both 'results' and 'data' response formats (API returns 'data')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resultsArray = result?.results ?? (result as any)?.data
-      if (!resultsArray || !Array.isArray(resultsArray)) {
-        console.error('Invalid anomaly score response:', result)
-        console.error('Request was:', scoreRequest)
-        throw new Error(`Invalid response from anomaly scoring API: ${JSON.stringify(result)}`)
-      }
-
-      // Get threshold from result or summary
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resultThreshold = result?.threshold ?? (result as any)?.summary?.threshold ?? threshold
-
-      const newResults: AnomalyTestResult[] = resultsArray.map((r, idx) => ({
+      const newResults: AnomalyTestResult[] = result.data.map((r, idx) => ({
         id: `${Date.now()}-${idx}`,
         input: Array.isArray(testData[idx])
           ? (testData[idx] as number[]).join(', ')
           : JSON.stringify(testData[idx]),
         isAnomaly: r.is_anomaly,
         score: r.score,
-        threshold: resultThreshold,
+        threshold: result.summary.threshold,
         timestamp: new Date().toISOString(),
         status: 'success',
       }))
@@ -761,7 +739,7 @@ function AnomalyModel() {
     setTestInput('')
     // Keep focus on input for rapid testing
     setTimeout(() => testInputRef.current?.focus(), 0)
-  }, [testInput, activeVersionName, backend, threshold, loadMutation, scoreMutation, columns])
+  }, [testInput, activeVersionName, backend, threshold, normalization, loadMutation, scoreMutation, columns])
 
   const handleSetActiveVersion = useCallback(
     async (versionName: string) => {
@@ -1379,19 +1357,41 @@ function AnomalyModel() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
+                  <Label htmlFor="normalization" className="text-xs text-muted-foreground">
+                    Score normalization
+                  </Label>
+                  <Select
+                    id="normalization"
+                    value={normalization}
+                    onChange={e => {
+                      const newNorm = e.target.value as NormalizationMethod
+                      setNormalization(newNorm)
+                      // Update threshold to the default for this normalization method
+                      setThreshold(getDefaultThreshold(newNorm))
+                    }}
+                    className="w-44"
+                  >
+                    {NORMALIZATION_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value} title={opt.description}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
                   <Label htmlFor="threshold" className="text-xs text-muted-foreground">
                     Threshold
                   </Label>
                   <Input
                     id="threshold"
                     type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
+                    min={normalization === 'zscore' ? 0 : 0}
+                    max={normalization === 'standardization' ? 1 : 10}
+                    step={normalization === 'standardization' ? 0.1 : 0.5}
                     value={threshold}
                     onChange={e => {
                       const val = parseFloat(e.target.value)
-                      setThreshold(isNaN(val) ? 0.5 : val)
+                      setThreshold(isNaN(val) ? getDefaultThreshold(normalization) : val)
                     }}
                     className="w-24"
                   />
