@@ -53,6 +53,7 @@ export interface ClassifierPredictResponse {
 
 export interface ClassifierSaveRequest {
   model: string
+  description?: string
 }
 
 export interface ClassifierSaveResponse {
@@ -269,6 +270,7 @@ export interface AnomalyScoreResponse {
 export interface AnomalySaveRequest {
   model: string
   backend?: AnomalyBackend
+  description?: string
 }
 
 export interface AnomalySaveResponse {

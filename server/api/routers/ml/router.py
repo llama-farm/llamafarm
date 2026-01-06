@@ -51,7 +51,6 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
         model: Base name for the model
         overwrite: If False (default), creates versioned model {model}_{timestamp}
                    If True, overwrites existing model with same name
-        description: Optional description for the model
 
     Example request:
     ```json
@@ -64,12 +63,12 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
             {"text": "What's the weather?", "label": "weather"}
         ],
         "num_iterations": 20,
-        "overwrite": false,
-        "description": "Classifies user intents for travel assistant"
+        "overwrite": false
     }
     ```
 
-    After fitting, use /v1/ml/classifier/predict to classify new texts.
+    After fitting, use /v1/ml/classifier/save to persist the model (with optional description).
+    Use /v1/ml/classifier/predict to classify new texts.
     Use "{model}-latest" in predict/load to get the most recent version.
     """
     # Get versioned model name
@@ -83,12 +82,6 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
         num_iterations=request.num_iterations,
         batch_size=request.batch_size,
     )
-
-    # Save description metadata if provided
-    if request.description:
-        MLModelService.save_description(
-            "classifier", versioned_name, request.description
-        )
 
     # Add versioning info to response
     result["base_name"] = request.model
@@ -138,8 +131,20 @@ async def save_classifier(request: ClassifierSaveRequest) -> dict[str, Any]:
 
     Models are saved to ~/.llamafarm/models/classifier/ with auto-generated
     directory names based on the model name.
+
+    Args:
+        model: Model identifier to save
+        description: Optional description for the model
     """
-    return await UniversalRuntimeService.classifier_save(model=request.model)
+    result = await UniversalRuntimeService.classifier_save(model=request.model)
+
+    # Save description metadata if provided (after model is saved to disk)
+    if request.description:
+        MLModelService.save_description(
+            "classifier", request.model, request.description
+        )
+
+    return result
 
 
 @router.post("/classifier/load")
@@ -239,7 +244,6 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         model: Base name for the model
         overwrite: If False (default), creates versioned model {model}_{timestamp}
                    If True, overwrites existing model with same name
-        description: Optional description for the model
 
     Backends:
     - isolation_forest: Fast, works well out of the box (recommended)
@@ -254,12 +258,12 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         "backend": "isolation_forest",
         "data": [[1.0, 2.0], [1.1, 2.1], [0.9, 1.9]],
         "contamination": 0.1,
-        "overwrite": false,
-        "description": "Detects anomalous sensor readings"
+        "overwrite": false
     }
     ```
 
-    After fitting, use /v1/ml/anomaly/score or /v1/ml/anomaly/detect.
+    After fitting, use /v1/ml/anomaly/save to persist the model (with optional description).
+    Use /v1/ml/anomaly/score or /v1/ml/anomaly/detect for inference.
     Use "{model}-latest" in score/detect/load to get the most recent version.
     """
     # Get versioned model name
@@ -276,10 +280,6 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
-
-    # Save description metadata if provided
-    if request.description:
-        MLModelService.save_description("anomaly", versioned_name, request.description)
 
     # Add versioning info to response
     result["base_name"] = request.model
@@ -367,12 +367,23 @@ async def save_anomaly_model(request: AnomalySaveRequest) -> dict[str, Any]:
 
     Models are saved to ~/.llamafarm/models/anomaly/ with auto-generated
     filenames based on the model name and backend.
+
+    Args:
+        model: Model identifier to save
+        backend: Backend type used for training
+        description: Optional description for the model
     """
-    return await UniversalRuntimeService.anomaly_save(
+    result = await UniversalRuntimeService.anomaly_save(
         model=request.model,
         backend=request.backend,
         normalization=request.normalization,
     )
+
+    # Save description metadata if provided (after model is saved to disk)
+    if request.description:
+        MLModelService.save_description("anomaly", request.model, request.description)
+
+    return result
 
 
 @router.post("/anomaly/load")
