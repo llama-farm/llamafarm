@@ -67,7 +67,8 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
     }
     ```
 
-    After fitting, use /v1/ml/classifier/predict to classify new texts.
+    After fitting, use /v1/ml/classifier/save to persist the model (with optional description).
+    Use /v1/ml/classifier/predict to classify new texts.
     Use "{model}-latest" in predict/load to get the most recent version.
     """
     # Get versioned model name
@@ -130,8 +131,20 @@ async def save_classifier(request: ClassifierSaveRequest) -> dict[str, Any]:
 
     Models are saved to ~/.llamafarm/models/classifier/ with auto-generated
     directory names based on the model name.
+
+    Args:
+        model: Model identifier to save
+        description: Optional description for the model
     """
-    return await UniversalRuntimeService.classifier_save(model=request.model)
+    result = await UniversalRuntimeService.classifier_save(model=request.model)
+
+    # Save description metadata if provided (after model is saved to disk)
+    if request.description:
+        MLModelService.save_description(
+            "classifier", request.model, request.description
+        )
+
+    return result
 
 
 @router.post("/classifier/load")
@@ -174,16 +187,22 @@ async def list_classifier_models() -> dict[str, Any]:
     - created: ISO timestamp of creation/modification
     - is_versioned: Whether this is a versioned model
     - labels: Class labels (loaded from labels.txt if present)
+    - description: Model description (if set)
     """
     models = MLModelService.list_all_models("classifier")
 
-    # Also try to load labels for each model
+    # Also try to load labels and description for each model
     for model in models:
         labels_path = Path(model["path"]) / "labels.txt"
         if labels_path.exists():
             model["labels"] = labels_path.read_text().strip().split("\n")
         else:
             model["labels"] = []
+
+        # Load description from metadata
+        description = MLModelService.get_description("classifier", model["name"])
+        if description:
+            model["description"] = description
 
     return {
         "object": "list",
@@ -243,7 +262,8 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
     }
     ```
 
-    After fitting, use /v1/ml/anomaly/score or /v1/ml/anomaly/detect.
+    After fitting, use /v1/ml/anomaly/save to persist the model (with optional description).
+    Use /v1/ml/anomaly/score or /v1/ml/anomaly/detect for inference.
     Use "{model}-latest" in score/detect/load to get the most recent version.
     """
     # Get versioned model name
@@ -347,12 +367,23 @@ async def save_anomaly_model(request: AnomalySaveRequest) -> dict[str, Any]:
 
     Models are saved to ~/.llamafarm/models/anomaly/ with auto-generated
     filenames based on the model name and backend.
+
+    Args:
+        model: Model identifier to save
+        backend: Backend type used for training
+        description: Optional description for the model
     """
-    return await UniversalRuntimeService.anomaly_save(
+    result = await UniversalRuntimeService.anomaly_save(
         model=request.model,
         backend=request.backend,
         normalization=request.normalization,
     )
+
+    # Save description metadata if provided (after model is saved to disk)
+    if request.description:
+        MLModelService.save_description("anomaly", request.model, request.description)
+
+    return result
 
 
 @router.post("/anomaly/load")
@@ -402,8 +433,16 @@ async def list_anomaly_models() -> dict[str, Any]:
     - size_bytes: File size
     - created: ISO timestamp of creation/modification
     - is_versioned: Whether this is a versioned model
+    - description: Model description (if set)
     """
     models = MLModelService.list_all_models("anomaly")
+
+    # Load description for each model
+    for model in models:
+        description = MLModelService.get_description("anomaly", model["name"])
+        if description:
+            model["description"] = description
+
     return {
         "object": "list",
         "data": models,

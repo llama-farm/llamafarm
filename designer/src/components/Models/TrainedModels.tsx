@@ -266,6 +266,9 @@ function TrainedModels() {
           </div>
         )}
       </div>
+
+      {/* Bottom spacer */}
+      <div className="h-16" />
     </div>
   )
 }

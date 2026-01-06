@@ -102,8 +102,7 @@ export async function loadClassifier(
  * List all saved classifier models
  */
 export async function listClassifierModels(): Promise<ClassifierListModelsResponse> {
-  const response =
-    await apiClient.get<ClassifierListModelsResponse>('/ml/classifier/models')
+  const response = await apiClient.get<ClassifierListModelsResponse>('/ml/classifier/models')
   return response.data
 }
 
@@ -192,8 +191,7 @@ export async function loadAnomaly(
  * List all saved anomaly models
  */
 export async function listAnomalyModels(): Promise<AnomalyListModelsResponse> {
-  const response =
-    await apiClient.get<AnomalyListModelsResponse>('/ml/anomaly/models')
+  const response = await apiClient.get<AnomalyListModelsResponse>('/ml/anomaly/models')
   return response.data
 }
 

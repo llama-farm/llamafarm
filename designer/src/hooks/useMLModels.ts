@@ -250,9 +250,10 @@ export function useTrainAndSaveClassifier() {
       // First fit the model
       const fitResult = await mlService.fitClassifier(request)
 
-      // Then save it to disk
+      // Then save it to disk (pass description to save endpoint)
       const saveResult = await mlService.saveClassifier({
         model: fitResult.versioned_name,
+        description: request.description,
       })
 
       return { fitResult, saveResult }
@@ -278,10 +279,11 @@ export function useTrainAndSaveAnomaly() {
       // First fit the model
       const fitResult = await mlService.fitAnomaly(request)
 
-      // Then save it to disk
+      // Then save it to disk (pass description to save endpoint)
       const saveResult = await mlService.saveAnomaly({
         model: fitResult.versioned_name,
         backend: request.backend || 'isolation_forest',
+        description: request.description,
       })
 
       return { fitResult, saveResult }

@@ -5,8 +5,10 @@ Provides:
 - Versioned model storage in ~/.llamafarm/models/
 - {base-name}_{timestamp} versioning when overwrite=False
 - {base-name}-latest resolution to find most recent version
+- Description metadata storage in metadata.json files
 """
 
+import json
 import logging
 import re
 from datetime import datetime
@@ -334,6 +336,8 @@ class MLModelService:
             # For anomaly, name might be just the model name or the full filename
             path = cls._validate_path(model_dir, name)
             if path.is_file():
+                # Also delete associated metadata
+                cls._delete_metadata(model_type, name)
                 path.unlink()
                 logger.info(f"Deleted anomaly model: {name}")
                 return True
@@ -343,6 +347,7 @@ class MLModelService:
                 try:
                     path = cls._validate_path(model_dir, f"{name}{ext}")
                     if path.is_file():
+                        cls._delete_metadata(model_type, name)
                         path.unlink()
                         logger.info(f"Deleted anomaly model: {name}{ext}")
                         return True
@@ -350,3 +355,94 @@ class MLModelService:
                     continue
 
         return False
+
+    # =========================================================================
+    # Metadata Management (descriptions, etc.)
+    # =========================================================================
+
+    @classmethod
+    def _get_metadata_path(cls, model_type: str, model_name: str) -> Path:
+        """Get the path to a model's metadata file.
+
+        For classifiers: ~/.llamafarm/models/classifier/{model_name}/metadata.json
+        For anomaly: ~/.llamafarm/models/anomaly/{model_name}.metadata.json
+
+        Raises:
+            ValueError: If the model name is invalid (e.g., path traversal)
+        """
+        model_dir = cls.get_model_dir(model_type)
+
+        # Validate model name to prevent path traversal
+        cls._validate_path(model_dir, model_name)
+
+        if model_type == "classifier":
+            return model_dir / model_name / "metadata.json"
+        else:
+            # For anomaly models, store metadata alongside the model file
+            return model_dir / f"{model_name}.metadata.json"
+
+    @classmethod
+    def save_description(
+        cls, model_type: str, model_name: str, description: str | None
+    ) -> None:
+        """Save a description for a model.
+
+        Args:
+            model_type: 'classifier' or 'anomaly'
+            model_name: The model name (without file extension for anomaly)
+            description: The description text, or None to skip
+        """
+        if not description:
+            return
+
+        metadata_path = cls._get_metadata_path(model_type, model_name)
+
+        # Load existing metadata or create new
+        metadata = cls._load_metadata(metadata_path)
+        metadata["description"] = description
+
+        # Ensure parent directory exists
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save metadata
+        try:
+            metadata_path.write_text(json.dumps(metadata, indent=2))
+            logger.info(f"Saved description for {model_type} model: {model_name}")
+        except Exception as e:
+            logger.warning(f"Failed to save metadata for {model_name}: {e}")
+
+    @classmethod
+    def get_description(cls, model_type: str, model_name: str) -> str | None:
+        """Get the description for a model.
+
+        Args:
+            model_type: 'classifier' or 'anomaly'
+            model_name: The model name
+
+        Returns:
+            The description string, or None if not set
+        """
+        metadata_path = cls._get_metadata_path(model_type, model_name)
+        metadata = cls._load_metadata(metadata_path)
+        return metadata.get("description")
+
+    @classmethod
+    def _load_metadata(cls, metadata_path: Path) -> dict:
+        """Load metadata from a file, returning empty dict if not found."""
+        if metadata_path.exists():
+            try:
+                return json.loads(metadata_path.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Failed to load metadata from {metadata_path}: {e}")
+        return {}
+
+    @classmethod
+    def _delete_metadata(cls, model_type: str, model_name: str) -> None:
+        """Delete metadata file for a model if it exists."""
+        metadata_path = cls._get_metadata_path(model_type, model_name)
+        if metadata_path.exists():
+            try:
+                metadata_path.unlink()
+                logger.info(f"Deleted metadata for {model_name}")
+            except OSError as e:
+                logger.warning(f"Failed to delete metadata for {model_name}: {e}")

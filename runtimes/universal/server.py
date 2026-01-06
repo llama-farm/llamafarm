@@ -1684,6 +1684,15 @@ def _sanitize_model_name(name: str) -> str:
     return "".join(c for c in name if c.isalnum() or c in "-_")
 
 
+def _sanitize_filename(name: str) -> str:
+    """Sanitize a filename, preserving extension dots.
+
+    Only allows alphanumeric characters, hyphens, underscores, and dots.
+    This prevents path traversal while allowing file extensions like .joblib
+    """
+    return "".join(c for c in name if c.isalnum() or c in "-_.")
+
+
 def _validate_path_within_directory(path: Path, safe_dir: Path) -> Path:
     """Validate that a path is within the allowed directory.
 
@@ -2003,15 +2012,21 @@ async def delete_anomaly_model(filename: str):
     """
     try:
         # Sanitize filename to prevent path traversal attacks
-        safe_filename = _sanitize_model_name(filename)
+        # Use _sanitize_filename to preserve extension dots (.joblib)
+        safe_filename = _sanitize_filename(filename)
         if not safe_filename:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid filename",
             )
 
-        # Also reject any path separators that might have survived
-        if "/" in filename or "\\" in filename or ".." in filename:
+        # Also reject any path separators or special directory names
+        if (
+            "/" in filename
+            or "\\" in filename
+            or ".." in filename
+            or safe_filename == "."
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid filename: path separators not allowed",

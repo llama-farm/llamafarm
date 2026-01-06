@@ -532,6 +532,7 @@ function ClassifierModel() {
   const [isDraggingTrainingArea, setIsDraggingTrainingArea] = useState(false)
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const trainingAreaRef = useRef<HTMLDivElement>(null)
+  const testInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   // Sample data modal state
@@ -624,11 +625,10 @@ function ClassifierModel() {
       return
     }
 
-    // Filter models that match our base name
-    const matchingModels = modelsData.data.filter((m: ClassifierModelInfo) => {
-      const parsed = parseVersionedModelName(m.name)
-      return parsed.baseName === baseModelName
-    })
+    // Filter models that match our base name (use API's base_name field)
+    const matchingModels = modelsData.data.filter(
+      (m: ClassifierModelInfo) => m.base_name === baseModelName
+    )
 
     // Sort by timestamp (newest first) and build version list
     const sortedModels = [...matchingModels].sort((a, b) => {
@@ -659,7 +659,20 @@ function ClassifierModel() {
   useEffect(() => {
     if (isNewModel || !baseModelName) return
     setModelName(baseModelName)
-  }, [isNewModel, baseModelName])
+    // Load description from API model data (from newest version)
+    if (modelsData?.data) {
+      const matchingModels = modelsData.data
+        .filter((m: ClassifierModelInfo) => m.base_name === baseModelName)
+        .sort((a: ClassifierModelInfo, b: ClassifierModelInfo) => {
+          const parsedA = parseVersionedModelName(a.name)
+          const parsedB = parseVersionedModelName(b.name)
+          return (parsedB.timestamp || '').localeCompare(parsedA.timestamp || '')
+        })
+      if (matchingModels.length > 0 && matchingModels[0].description) {
+        setDescription(matchingModels[0].description)
+      }
+    }
+  }, [isNewModel, baseModelName, modelsData])
 
   // Track the previous active class ID to detect actual class switches
   const prevActiveClassIdRef = useRef<string | null>(null)
@@ -949,7 +962,22 @@ function ClassifierModel() {
       setTrainingState('success')
       setIsTrainingExpanded(false)
 
-      // If new model, redirect to edit page with the base name
+      // Add the new version to the versions list so hasVersions becomes true
+      const trainingSamples = validClasses.reduce((sum, c) => sum + c.examples.length, 0)
+      const labels = validClasses.map(c => c.name)
+      setVersions(prev => {
+        const newVersion: ModelVersion = {
+          id: newVersionName,
+          versionedName: newVersionName,
+          versionNumber: prev.length + 1,
+          createdAt: new Date().toISOString(),
+          trainingSamples,
+          isActive: true,
+          labels,
+        }
+        return [...prev.map(v => ({ ...v, isActive: false })), newVersion]
+      })
+
       if (isNewModel) {
         navigate(`/chat/models/train/classifier/${finalModelName}`)
       }
@@ -998,6 +1026,8 @@ function ClassifierModel() {
       ])
     }
     setTestInput('')
+    // Keep focus on input for rapid testing
+    setTimeout(() => testInputRef.current?.focus(), 0)
   }, [testInput, activeVersionName, loadMutation, predictMutation])
 
   const handleSetActiveVersion = useCallback(
@@ -1314,7 +1344,7 @@ function ClassifierModel() {
 
   return (
     <div className="flex-1 min-h-0 overflow-auto pb-20">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 px-0.5">
         {/* Breadcrumb + Done button */}
         <div className="flex items-center justify-between">
           <nav className="text-sm md:text-base flex items-center gap-1.5">
@@ -1357,17 +1387,23 @@ function ClassifierModel() {
               placeholder="e.g., sentiment-classifier"
               value={modelName}
               onChange={e => {
+                if (!isNewModel) return
                 const sanitized = e.target.value
                   .toLowerCase()
                   .replace(/[^a-z0-9-]/g, '-')
                   .replace(/-+/g, '-')
                 setModelName(sanitized)
               }}
+              readOnly={!isNewModel}
               className={nameExistsWarning ? 'border-amber-500' : ''}
             />
             {nameExistsWarning ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
                 A model with this name exists. Will be saved as "{generateUniqueModelName(modelName, existingBaseNames)}".
+              </p>
+            ) : !isNewModel ? (
+              <p className="text-xs text-muted-foreground">
+                Model names cannot be changed. Create a new model if you need a different name.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -1391,8 +1427,8 @@ function ClassifierModel() {
         {/* Training Data Card - Full Width */}
         <div className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 relative transition-all duration-300 ${trainingState === 'training' ? 'h-[400px] overflow-hidden' : ''}`}>
           {trainingState === 'training' && <TrainingLoadingOverlay message="Training your classifier..." />}
-          {/* Collapsed view - show when has versions and not expanded */}
-          {hasVersions && !isTrainingExpanded ? (
+          {/* Collapsed view - show when not a new model and not expanded */}
+          {!isNewModel && !isTrainingExpanded ? (
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1">
                 <h3 className="text-sm font-medium">Training data</h3>
@@ -1639,6 +1675,7 @@ function ClassifierModel() {
                   <>
                     <p className="text-xs text-muted-foreground">
                       Add example texts that belong to this class. One example per line, or paste from a spreadsheet.
+                      Minimum 8 examples per class; 50+ per class recommended for best accuracy.
                     </p>
                     <Textarea
                       id="training-data"
@@ -1686,6 +1723,7 @@ function ClassifierModel() {
                   <>
                     <p className="text-xs text-muted-foreground">
                       View and edit all training data. Paste from a spreadsheet or drag & drop a CSV with two columns: Example (text), Class (label).
+                      Minimum 8 examples per class; 50+ per class recommended for best accuracy.
                     </p>
                     <div
                       className="border border-border rounded-md overflow-auto max-h-[50vh] min-h-[200px]"
@@ -1841,6 +1879,7 @@ function ClassifierModel() {
 
           <div className="flex gap-2">
             <Input
+              ref={testInputRef}
               placeholder="Enter text to classify"
               value={testInput}
               onChange={e => setTestInput(e.target.value)}
@@ -1878,9 +1917,9 @@ function ClassifierModel() {
                 {testHistory.map(result => (
                   <div
                     key={result.id}
-                    className="flex items-start gap-2 px-2 py-1 rounded text-sm bg-muted/50"
+                    className="flex items-center gap-2 px-2 py-1 rounded text-sm bg-muted/50"
                   >
-                    <FontIcon type="checkmark-filled" className="w-3 h-3 text-primary shrink-0" />
+                    <FontIcon type="checkmark-filled" className="w-4 h-4 text-primary shrink-0" />
                     <span className="font-medium text-primary w-20 shrink-0 break-words">
                       {result.label}
                     </span>

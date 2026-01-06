@@ -16,6 +16,25 @@ Anomaly detection learns what "normal" looks like from training data and then id
 - **Mixed data types**: Numeric values, categorical features, and combinations
 - **Production workflow**: Train, save, load, and score with persistence
 - **Feature encoding**: Automatic encoding of categorical data (hash, label, one-hot, etc.)
+- **Model versioning**: Automatic timestamped versions with `-latest` resolution
+
+:::tip Using the LlamaFarm API (Recommended)
+The LlamaFarm API (`/v1/ml/anomaly/*`) provides the same functionality as the Universal Runtime with added features:
+- **Model Versioning**: When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_160000`
+- **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
+
+```bash
+# Via LlamaFarm API (port 8000) - with versioning
+curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+  -H "Content-Type: application/json" \
+  -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...], "overwrite": false}'
+
+# Use -latest suffix to auto-resolve
+curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{"model": "sensor-monitor-latest", "backend": "isolation_forest", "data": [...]}'
+```
+:::
 
 ## Quick Start
 

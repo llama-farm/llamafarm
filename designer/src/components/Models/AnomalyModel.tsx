@@ -279,6 +279,7 @@ function AnomalyModel() {
   const [isDraggingTrainingArea, setIsDraggingTrainingArea] = useState(false)
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const trainingAreaRef = useRef<HTMLDivElement>(null)
+  const testInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   // Sample data modal state
@@ -391,10 +392,23 @@ function AnomalyModel() {
   useEffect(() => {
     if (isNewModel || !baseModelName) return
     setModelName(baseModelName)
+    // Load description from API model data (from newest version)
+    if (modelsData?.data) {
+      const matchingModels = modelsData.data
+        .filter((m: AnomalyModelInfo) => m.base_name === baseModelName)
+        .sort((a: AnomalyModelInfo, b: AnomalyModelInfo) => {
+          const parsedA = parseVersionedModelName(a.name)
+          const parsedB = parseVersionedModelName(b.name)
+          return (parsedB.timestamp || '').localeCompare(parsedA.timestamp || '')
+        })
+      if (matchingModels.length > 0 && matchingModels[0].description) {
+        setDescription(matchingModels[0].description)
+      }
+    }
     if (versions.length > 0) {
       setBackend(versions[0].backend)
     }
-  }, [isNewModel, baseModelName, versions])
+  }, [isNewModel, baseModelName, versions, modelsData])
 
   // Validate training data on change (text mode only)
   useEffect(() => {
@@ -649,9 +663,12 @@ function AnomalyModel() {
         })
         testData = [rowData]
       } else {
-        // Fall back to numeric parsing
+        // Value count doesn't match columns - try as pure numeric array
         const numericData = parseNumericTrainingData(testInput)
-        if (!numericData || numericData.length === 0) {
+        if (numericData && numericData.length > 0) {
+          // Pure numeric data - send as array without schema
+          testData = numericData
+        } else {
           const errorResult: AnomalyTestResult = {
             id: String(Date.now()),
             input: `Error: Expected ${columns.length} values (${columns.map(c => c.name).join(', ')}), got ${values.length}`,
@@ -665,7 +682,6 @@ function AnomalyModel() {
           setTestInput('')
           return
         }
-        testData = numericData
       }
     } else {
       const numericData = parseNumericTrainingData(testInput)
@@ -728,6 +744,8 @@ function AnomalyModel() {
       setTestHistory(prev => [errorResult, ...prev])
     }
     setTestInput('')
+    // Keep focus on input for rapid testing
+    setTimeout(() => testInputRef.current?.focus(), 0)
   }, [testInput, activeVersionName, backend, threshold, normalization, loadMutation, scoreMutation, columns])
 
   const handleSetActiveVersion = useCallback(
@@ -761,8 +779,8 @@ function AnomalyModel() {
       if (!window.confirm(confirmMessage)) return
 
       try {
-        // Pass the model name - backend will handle finding the file
-        await deleteMutation.mutateAsync(versionName)
+        // Pass the filename (with backend suffix and extension) to the delete endpoint
+        await deleteMutation.mutateAsync(version.filename)
 
         toast({
           message: `Successfully deleted ${versionLabel}.`,
@@ -796,8 +814,8 @@ function AnomalyModel() {
     if (!window.confirm(confirmMessage)) return
 
     try {
-      // Delete all versions
-      await Promise.all(versions.map(v => deleteMutation.mutateAsync(v.versionedName)))
+      // Delete all versions using their filenames
+      await Promise.all(versions.map(v => deleteMutation.mutateAsync(v.filename)))
 
       toast({
         message: `Successfully deleted ${baseModelName} and all its versions.`,
@@ -1195,7 +1213,7 @@ function AnomalyModel() {
 
   return (
     <div className="flex-1 min-h-0 overflow-auto pb-20">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 px-0.5">
         {/* Breadcrumb + Done button */}
         <div className="flex items-center justify-between">
           <nav className="text-sm md:text-base flex items-center gap-1.5">
@@ -1242,18 +1260,24 @@ function AnomalyModel() {
               placeholder="e.g., fraud-detector"
               value={modelName}
               onChange={e => {
+                if (!isNewModel) return
                 const sanitized = e.target.value
                   .toLowerCase()
                   .replace(/[^a-z0-9-]/g, '-')
                   .replace(/-+/g, '-')
                 setModelName(sanitized)
               }}
+              readOnly={!isNewModel}
               className={nameExistsWarning ? 'border-amber-500' : ''}
             />
             {nameExistsWarning ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
                 A model with this name exists. Will be saved as "
                 {generateUniqueModelName(modelName, existingBaseNames)}".
+              </p>
+            ) : !isNewModel ? (
+              <p className="text-xs text-muted-foreground">
+                Model names cannot be changed. Create a new model if you need a different name.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -1277,8 +1301,8 @@ function AnomalyModel() {
         {/* Training Data & Settings Card */}
         <div className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 relative transition-all duration-300 ${trainingState === 'training' ? 'h-[400px] overflow-hidden' : ''}`}>
           {trainingState === 'training' && <TrainingLoadingOverlay message="Training your anomaly detector..." />}
-          {/* Collapsed view */}
-          {hasVersions && !isTrainingExpanded ? (
+          {/* Collapsed view - show when not a new model and not expanded */}
+          {!isNewModel && !isTrainingExpanded ? (
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1">
                 <h3 className="text-sm font-medium">Training data</h3>
@@ -1408,7 +1432,7 @@ function AnomalyModel() {
                     <p className="text-xs text-muted-foreground">
                       Provide examples of NORMAL data—the model learns this pattern and flags anything that deviates.
                       Paste from a spreadsheet, drop a CSV file, or type values directly. Each line is one entry.
-                      We recommend at least 50 entries for reliable results.
+                      Minimum 50 entries required; 200+ recommended for best accuracy.
                     </p>
                   </div>
                   <div className="flex items-center gap-2 ml-6 shrink-0">
@@ -1773,6 +1797,7 @@ MX`}
 
           <div className="flex gap-2">
             <Input
+              ref={testInputRef}
               placeholder="e.g., 25.0 or paste table row"
               value={testInput}
               onChange={e => setTestInput(e.target.value)}

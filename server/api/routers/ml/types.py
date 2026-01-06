@@ -27,6 +27,7 @@ class ClassifierFitRequest(BaseModel):
     overwrite: bool = (
         False  # If False, version with timestamp; if True, overwrite existing
     )
+    description: str | None = None  # Optional model description
 
 
 class ClassifierPredictRequest(BaseModel):
@@ -40,6 +41,7 @@ class ClassifierSaveRequest(BaseModel):
     """Request to save a fitted classifier."""
 
     model: str  # Model identifier (must be fitted)
+    description: str | None = None  # Optional model description
 
 
 class ClassifierLoadRequest(BaseModel):
@@ -83,6 +85,7 @@ class AnomalyFitRequest(BaseModel):
     overwrite: bool = (
         False  # If False, version with timestamp; if True, overwrite existing
     )
+    description: str | None = None  # Optional model description
 
 
 class AnomalyScoreRequest(BaseModel):
@@ -108,6 +111,7 @@ class AnomalySaveRequest(BaseModel):
     model: str  # Model identifier (must be fitted)
     backend: str = "isolation_forest"
     normalization: Literal["standardization", "zscore", "raw"] = "standardization"
+    description: str | None = None  # Optional model description
 
 
 class AnomalyLoadRequest(BaseModel):
