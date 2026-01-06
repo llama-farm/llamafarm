@@ -1462,7 +1462,7 @@ export default function TestChat({
             ]}
             onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly')}
             label="Model Type"
-            className="min-w-[160px]"
+            className="min-w-[140px] max-w-[180px]"
           />
 
           {/* Inference-specific selectors */}
@@ -1480,7 +1480,7 @@ export default function TestChat({
                 placeholder="Select model"
                 emptyMessage="No models"
                 label="Model"
-                className="min-w-[180px]"
+                className="min-w-[140px] max-w-[220px]"
               />
 
               {/* Database selector */}
@@ -1493,7 +1493,7 @@ export default function TestChat({
                   }))}
                   onChange={(v) => setSelectedDatabase(v)}
                   label="Database"
-                  className="min-w-[140px]"
+                  className="min-w-[120px] max-w-[180px]"
                 />
               )}
 
@@ -1509,7 +1509,7 @@ export default function TestChat({
                 placeholder="No strategies"
                 emptyMessage="No strategies found"
                 label="Strategy"
-                className="min-w-[140px]"
+                className="min-w-[120px] max-w-[180px]"
               />
             </>
           )}
