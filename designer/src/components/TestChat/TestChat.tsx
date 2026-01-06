@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
@@ -13,8 +14,14 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
+import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly } from '../../hooks/useMLModels'
+import { Selector } from '../ui/selector'
 
 export interface TestChatProps {
+  // Mode selection
+  modelType: 'inference' | 'anomaly'
+  onModelTypeChange: (type: 'inference' | 'anomaly') => void
+  // Existing props
   showReferences: boolean
   allowRanking: boolean
   useTestData?: boolean
@@ -70,7 +77,169 @@ function EmptyState() {
   )
 }
 
+// Anomaly Detection Empty States
+function AnomalyEmptyState({
+  hasModels,
+  onCreateModel,
+}: {
+  hasModels: boolean
+  onCreateModel: () => void
+}) {
+  if (!hasModels) {
+    // No Models Empty State
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">
+            No anomaly models yet
+          </div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            Create an anomaly detection model to start testing
+          </div>
+          <button
+            onClick={onCreateModel}
+            className="mt-4 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+          >
+            Create Anomaly Model
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Has Models Empty State
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-teal-500/20 border border-teal-500/30">
+          <FontIcon type="test" className="w-5 h-5 text-teal-400" />
+        </div>
+        <div className="text-lg font-medium text-foreground">
+          Start testing anomaly detection
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          Paste or enter data to check for anomalies
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          Tip: Paste a table row or comma-separated values
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Anomaly Result Display
+function AnomalyResultDisplay({
+  result,
+  error,
+  isLoading,
+}: {
+  result: {
+    score: number
+    isAnomaly: boolean
+    threshold: number
+    parsedInput: string[]
+  } | null
+  error: string | null
+  isLoading: boolean
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Analyzing data...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10 rounded-xl border border-destructive/30 bg-destructive/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/20 border border-destructive/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-destructive" />
+          </div>
+          <div className="text-lg font-medium text-foreground">
+            Detection Error
+          </div>
+          <div className="mt-2 text-sm text-destructive">
+            {error}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full w-full p-4">
+      <div className="w-full max-w-md">
+        {/* Score Display - Large & Prominent */}
+        <div className="flex flex-col items-center gap-3 py-6">
+          <div className="text-5xl font-bold tabular-nums">
+            {result.score.toFixed(3)}
+          </div>
+
+          {/* Status Badge */}
+          <Badge
+            className={
+              result.isAnomaly
+                ? 'bg-destructive/20 text-destructive border border-destructive/30'
+                : 'bg-primary/20 text-primary border border-primary/30'
+            }
+          >
+            {result.isAnomaly ? 'Anomaly Detected' : 'Normal'}
+          </Badge>
+
+          {/* Threshold Reference */}
+          <div className="text-xs text-muted-foreground">
+            Threshold: {result.threshold.toFixed(2)}
+          </div>
+        </div>
+
+        {/* Collapsible Details */}
+        <div className="rounded-md border border-border mt-4">
+          <button
+            onClick={() => setDetailsOpen(!detailsOpen)}
+            className="w-full flex items-center justify-between px-3 py-2 text-sm text-muted-foreground hover:bg-accent/40"
+          >
+            <span>Details</span>
+            <FontIcon
+              type={detailsOpen ? 'chevron-up' : 'chevron-down'}
+              className="w-4 h-4"
+            />
+          </button>
+          {detailsOpen && (
+            <div className="px-3 py-2 border-t border-border">
+              <div className="text-xs text-muted-foreground mb-1">
+                Parsed input values:
+              </div>
+              <div className="font-mono text-sm break-all">
+                {result.parsedInput.join(', ')}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TestChat({
+  modelType,
+  onModelTypeChange,
   showReferences,
   allowRanking,
   useTestData,
@@ -83,11 +252,61 @@ export default function TestChat({
   ragScoreThreshold = 0.7,
   focusInput = false,
 }: TestChatProps) {
+  const navigate = useNavigate()
+
   // Determine mock mode as early as possible
   const MOCK_MODE = Boolean(useTestData)
   // Get active project for project chat API
   const activeProject = useActiveProject()
   const chatParams = useProjectChatParams(activeProject)
+
+  // ============================================================================
+  // Anomaly Detection State & Hooks
+  // ============================================================================
+
+  // Fetch anomaly models (only when in anomaly mode)
+  const { data: anomalyModelsData, isLoading: isLoadingAnomalyModels } =
+    useListAnomalyModels({ enabled: modelType === 'anomaly' })
+  const scoreAnomalyMutation = useScoreAnomaly()
+  const loadAnomalyMutation = useLoadAnomaly()
+
+  // Get sorted anomaly models (most recent first by 'created' field)
+  const sortedAnomalyModels = useMemo(() => {
+    if (!anomalyModelsData?.data) return []
+    return [...anomalyModelsData.data].sort((a, b) =>
+      new Date(b.created).getTime() - new Date(a.created).getTime()
+    )
+  }, [anomalyModelsData])
+
+  // Selected anomaly model
+  const [selectedAnomalyModel, setSelectedAnomalyModel] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('lf_test_anomalyModel')
+  })
+
+  // Auto-select most recent model if none selected
+  useEffect(() => {
+    if (modelType === 'anomaly' && !selectedAnomalyModel && sortedAnomalyModels.length > 0) {
+      setSelectedAnomalyModel(sortedAnomalyModels[0].name)
+    }
+  }, [modelType, selectedAnomalyModel, sortedAnomalyModels])
+
+  // Persist anomaly model selection
+  useEffect(() => {
+    if (typeof window !== 'undefined' && selectedAnomalyModel) {
+      localStorage.setItem('lf_test_anomalyModel', selectedAnomalyModel)
+    }
+  }, [selectedAnomalyModel])
+
+  // Anomaly input and result state
+  const [anomalyInput, setAnomalyInput] = useState('')
+  const [anomalyResult, setAnomalyResult] = useState<{
+    score: number
+    isAnomaly: boolean
+    threshold: number
+    parsedInput: string[]
+  } | null>(null)
+  const [anomalyError, setAnomalyError] = useState<string | null>(null)
 
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
@@ -1083,6 +1302,92 @@ export default function TestChat({
     projectChatStreamingSession.setSessionId,
   ])
 
+  // ============================================================================
+  // Anomaly Detection Handlers
+  // ============================================================================
+
+  // Parse anomaly input (supports comma and tab separated values)
+  const parseAnomalyInput = useCallback((input: string): {
+    values: string[]
+    error: string | null
+  } => {
+    if (!input.trim()) {
+      return { values: [], error: null }
+    }
+
+    // Convert tabs to commas (for spreadsheet paste support)
+    const normalized = input.replace(/\t/g, ',')
+
+    // Split by comma
+    const values = normalized.split(',').map(v => v.trim()).filter(Boolean)
+
+    if (values.length === 0) {
+      return { values: [], error: 'Unable to parse input values' }
+    }
+
+    return { values, error: null }
+  }, [])
+
+  // Handle anomaly detection
+  const handleAnomalyDetect = useCallback(async () => {
+    if (!selectedAnomalyModel || !anomalyInput.trim()) return
+
+    setAnomalyError(null)
+    const { values, error } = parseAnomalyInput(anomalyInput)
+
+    if (error) {
+      setAnomalyError(error)
+      return
+    }
+
+    // Try to parse as numbers for numeric data
+    const numericValues = values.map(v => parseFloat(v))
+    const isNumeric = numericValues.every(n => !isNaN(n))
+
+    try {
+      // Load model first
+      const selectedModelInfo = sortedAnomalyModels.find(m => m.name === selectedAnomalyModel)
+      await loadAnomalyMutation.mutateAsync({
+        model: selectedAnomalyModel,
+        backend: selectedModelInfo?.backend,
+      })
+
+      // Score the data
+      const result = await scoreAnomalyMutation.mutateAsync({
+        model: selectedAnomalyModel,
+        backend: selectedModelInfo?.backend,
+        data: isNumeric ? [numericValues] : [values.reduce((acc, v, i) => {
+          acc[`col_${i + 1}`] = v
+          return acc
+        }, {} as Record<string, unknown>)],
+        ...(isNumeric ? {} : {
+          schema: values.reduce((acc, _, i) => {
+            acc[`col_${i + 1}`] = 'label' as const
+            return acc
+          }, {} as Record<string, 'label'>)
+        }),
+      })
+
+      if (result.data && result.data.length > 0) {
+        setAnomalyResult({
+          score: result.data[0].score,
+          isAnomaly: result.data[0].is_anomaly,
+          threshold: result.summary.threshold,
+          parsedInput: values,
+        })
+      }
+    } catch (err) {
+      setAnomalyError(err instanceof Error ? err.message : 'Detection failed')
+    }
+  }, [selectedAnomalyModel, anomalyInput, parseAnomalyInput, sortedAnomalyModels, loadAnomalyMutation, scoreAnomalyMutation])
+
+  // Clear anomaly results (not the mode or model selection)
+  const clearAnomalyResults = useCallback(() => {
+    setAnomalyResult(null)
+    setAnomalyError(null)
+    setAnomalyInput('')
+  }, [])
+
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
@@ -1107,101 +1412,107 @@ export default function TestChat({
           <button
             type="button"
             onClick={() => {
-              clearChat()
-              if (!MOCK_MODE && chatParams) {
-                projectChatStreamingSession.clearSession()
+              if (modelType === 'inference') {
+                // Inference mode: clear chat
+                clearChat()
+                if (!MOCK_MODE && chatParams) {
+                  projectChatStreamingSession.clearSession()
+                }
+                // Reset sending state to ensure input isn't stuck disabled
+                setIsProjectSending(false)
+                setStreamingMessage(null)
+              } else {
+                // Anomaly mode: only clear results, NOT mode selection or model dropdown
+                clearAnomalyResults()
               }
-              // Reset sending state to ensure input isn't stuck disabled
-              setIsProjectSending(false)
-              setStreamingMessage(null)
             }}
-            disabled={isClearing || !hasMessages}
+            disabled={modelType === 'inference' ? (isClearing || !hasMessages) : (!anomalyResult && !anomalyError)}
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isClearing ? 'Clearing…' : 'Clear'}
           </button>
         </div>
-        {/* Second row: Model, Database, Strategy selectors */}
-        {USE_PROJECT_CHAT && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:gap-x-5">
-            {/* Model selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                Model
-              </span>
-              <select
-                value={
-                  selectedModel ||
-                  (defaultModel as any)?.name ||
-                  fallbackDefaultName ||
-                  ''
-                }
-                onChange={e => setSelectedModel(e.target.value)}
-                className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] max-w-[220px] truncate appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
-              >
-                {modelsLoading && <option value="">Loading…</option>}
-                {!modelsLoading && unifiedModels.length === 0 && (
-                  <option value="">No models</option>
-                )}
-                {!modelsLoading &&
-                  unifiedModels.map(m => (
-                    <option key={m.name} value={m.name}>
-                      {m.name} ({m.model}) {m.default ? '(default)' : ''}
-                    </option>
-                  ))}
-              </select>
-            </div>
+        {/* Second row: Model Type and mode-specific selectors */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:gap-x-5">
+          {/* Model Type selector - FIRST dropdown */}
+          <Selector
+            value={modelType}
+            options={[
+              { value: 'inference', label: 'Inference' },
+              { value: 'anomaly', label: 'Anomaly Detection' },
+            ]}
+            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly')}
+            label="Model Type"
+            className="min-w-[160px]"
+          />
 
-            {/* Database selector */}
-            {availableDatabases.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  Database
-                </span>
-                <select
+          {/* Inference-specific selectors */}
+          {modelType === 'inference' && USE_PROJECT_CHAT && (
+            <>
+              {/* Model selector */}
+              <Selector
+                value={selectedModel || (defaultModel as any)?.name || fallbackDefaultName || ''}
+                options={unifiedModels.map(m => ({
+                  value: m.name,
+                  label: `${m.name} (${m.model})${m.default ? ' (default)' : ''}`,
+                }))}
+                onChange={setSelectedModel}
+                loading={modelsLoading}
+                placeholder="Select model"
+                emptyMessage="No models"
+                label="Model"
+                className="min-w-[180px]"
+              />
+
+              {/* Database selector */}
+              {availableDatabases.length > 0 && (
+                <Selector
                   value={currentDatabase || ''}
-                  onChange={e => {
-                    const value = e.target.value
-                    if (value) setSelectedDatabase(value)
-                  }}
-                  className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
-                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
-                >
-                  {availableDatabases.map((dbName: string) => (
-                    <option key={dbName} value={dbName}>
-                      {dbName} {dbName === getCurrentDatabase() ? '(default)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+                  options={availableDatabases.map((dbName: string) => ({
+                    value: dbName,
+                    label: `${dbName}${dbName === getCurrentDatabase() ? ' (default)' : ''}`,
+                  }))}
+                  onChange={(v) => setSelectedDatabase(v)}
+                  label="Database"
+                  className="min-w-[140px]"
+                />
+              )}
 
-            {/* Retrieval Strategy selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                Strategy
-              </span>
-              <select
+              {/* Retrieval Strategy selector */}
+              <Selector
                 value={selectedStrategy || ''}
-                onChange={e => setSelectedStrategy(e.target.value || null)}
+                options={availableStrategies.map((s: { name: string; type: string; isDefault: boolean }) => ({
+                  value: s.name,
+                  label: `${s.name}${s.name === defaultStrategy ? ' (default)' : ''}`,
+                }))}
+                onChange={(v) => setSelectedStrategy(v || null)}
                 disabled={availableStrategies.length === 0}
-                className="text-xs pl-2 pr-6 py-1 rounded bg-card border border-input text-foreground min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed appearance-none bg-no-repeat bg-[length:12px_12px] bg-[right_0.5rem_center]"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")` }}
-              >
-                {availableStrategies.length === 0 ? (
-                  <option value="">No strategies found</option>
-                ) : (
-                  availableStrategies.map((strategy: { name: string; type: string; isDefault: boolean }) => (
-                    <option key={strategy.name} value={strategy.name}>
-                      {strategy.name} {strategy.name === defaultStrategy ? '(default)' : ''}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-          </div>
-        )}
+                placeholder="No strategies"
+                emptyMessage="No strategies found"
+                label="Strategy"
+                className="min-w-[140px]"
+              />
+            </>
+          )}
+
+          {/* Anomaly-specific selectors */}
+          {modelType === 'anomaly' && (
+            <Selector
+              value={selectedAnomalyModel || ''}
+              options={sortedAnomalyModels.map(m => ({
+                value: m.name,
+                label: m.name,
+                description: m.description,
+              }))}
+              onChange={setSelectedAnomalyModel}
+              loading={isLoadingAnomalyModels}
+              placeholder="Select anomaly model"
+              emptyMessage="No anomaly models"
+              label="Anomaly Model"
+              className="min-w-[180px]"
+            />
+          )}
+        </div>
       </div>
 
       {/* Error */}
@@ -1211,95 +1522,165 @@ export default function TestChat({
         </div>
       )}
 
-      {/* No active project warning */}
-      {!MOCK_MODE && !chatParams && (
+      {/* No active project warning - only for inference mode */}
+      {modelType === 'inference' && !MOCK_MODE && !chatParams && (
         <div className="mx-4 mt-3 p-2 bg-amber-100 border border-amber-400 text-amber-700 rounded text-xs">
           No active project selected. Please select a project to use the chat
           feature.
         </div>
       )}
 
-      {/* Messages - wrapper with relative positioning for button (matching Chatbox) */}
+      {/* Main Content Area - mode conditional */}
       <div className="relative flex-1 min-h-0">
-        {/* Scrollable message container - always overflow-y-auto like Chatbox */}
-        <div
-          ref={listRef}
-          onScroll={handleScroll}
-          className="absolute inset-0 overflow-y-auto flex flex-col gap-4 p-3 md:p-4"
-        >
-          {!hasMessages ? (
-            <EmptyState />
-          ) : (
-            messages.map((m: ChatboxMessage) => (
-              <TestChatMessage
-                key={m.id}
-                message={m}
-                showReferences={showReferences}
-                allowRanking={allowRanking}
-                showPrompts={showPrompts}
-                showThinking={showThinking}
-                lastUserInput={lastUserInputRef.current}
-                showGenSettings={showGenSettings}
-              />
-            ))
-          )}
-          <div ref={endRef} />
-        </div>
-        {/* Jump to latest button - positioned outside scroll container */}
-        {!isUserAtBottom && hasMessages && (
-          <button
-            onClick={handleJumpToLatest}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-2 rounded-full bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg transition-all hover:shadow-xl"
-            aria-label="Jump to latest message"
-          >
-            <span className="text-sm font-medium">Jump to latest</span>
-            <svg
-              viewBox="0 0 24 24"
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+        {modelType === 'inference' ? (
+          <>
+            {/* Inference: Messages - wrapper with relative positioning for button (matching Chatbox) */}
+            <div
+              ref={listRef}
+              onScroll={handleScroll}
+              className="absolute inset-0 overflow-y-auto flex flex-col gap-4 p-3 md:p-4"
             >
-              <polyline points="7 13 12 18 17 13" />
-              <polyline points="7 6 12 11 17 6" />
-            </svg>
-          </button>
+              {!hasMessages ? (
+                <EmptyState />
+              ) : (
+                messages.map((m: ChatboxMessage) => (
+                  <TestChatMessage
+                    key={m.id}
+                    message={m}
+                    showReferences={showReferences}
+                    allowRanking={allowRanking}
+                    showPrompts={showPrompts}
+                    showThinking={showThinking}
+                    lastUserInput={lastUserInputRef.current}
+                    showGenSettings={showGenSettings}
+                  />
+                ))
+              )}
+              <div ref={endRef} />
+            </div>
+            {/* Jump to latest button - positioned outside scroll container */}
+            {!isUserAtBottom && hasMessages && (
+              <button
+                onClick={handleJumpToLatest}
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-2 rounded-full bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg transition-all hover:shadow-xl"
+                aria-label="Jump to latest message"
+              >
+                <span className="text-sm font-medium">Jump to latest</span>
+                <svg
+                  viewBox="0 0 24 24"
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="7 13 12 18 17 13" />
+                  <polyline points="7 6 12 11 17 6" />
+                </svg>
+              </button>
+            )}
+          </>
+        ) : (
+          /* Anomaly: Result display or empty state */
+          <div className="absolute inset-0 overflow-y-auto p-3 md:p-4">
+            {sortedAnomalyModels.length === 0 && !isLoadingAnomalyModels ? (
+              <AnomalyEmptyState
+                hasModels={false}
+                onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
+              />
+            ) : anomalyResult || anomalyError || scoreAnomalyMutation.isPending ? (
+              <AnomalyResultDisplay
+                result={anomalyResult}
+                error={anomalyError}
+                isLoading={scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending}
+              />
+            ) : (
+              <AnomalyEmptyState
+                hasModels={true}
+                onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
+              />
+            )}
+          </div>
         )}
       </div>
 
-      {/* Input */}
+      {/* Input Area - mode conditional */}
       <div className={inputContainerClasses}>
-        <textarea
-          ref={inputRef}
-          value={inputValue}
-          onChange={e => updateInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={combinedIsSending || (!MOCK_MODE && !chatParams)}
-          placeholder={
-            combinedIsSending
-              ? 'Waiting for response…'
-              : !MOCK_MODE && !chatParams
-                ? 'Select a project to start chatting…'
-                : 'Type a message and press Enter'
-          }
-          className={textareaClasses}
-          aria-label="Message input"
-        />
-        <div className="flex items-center justify-between">
-          {combinedIsSending && (
-            <span className="text-xs text-muted-foreground">
-              {USE_PROJECT_CHAT ? 'Sending to project…' : 'Sending…'}
-            </span>
-          )}
-          <FontIcon
-            isButton
-            type="arrow-filled"
-            className={`w-8 h-8 self-end ${!combinedCanSend || (!MOCK_MODE && !chatParams) ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
-            handleOnClick={handleSend}
-          />
-        </div>
+        {modelType === 'inference' ? (
+          /* Inference: Chat input */
+          <>
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={e => updateInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={combinedIsSending || (!MOCK_MODE && !chatParams)}
+              placeholder={
+                combinedIsSending
+                  ? 'Waiting for response…'
+                  : !MOCK_MODE && !chatParams
+                    ? 'Select a project to start chatting…'
+                    : 'Type a message and press Enter'
+              }
+              className={textareaClasses}
+              aria-label="Message input"
+            />
+            <div className="flex items-center justify-between">
+              {combinedIsSending && (
+                <span className="text-xs text-muted-foreground">
+                  {USE_PROJECT_CHAT ? 'Sending to project…' : 'Sending…'}
+                </span>
+              )}
+              <FontIcon
+                isButton
+                type="arrow-filled"
+                className={`w-8 h-8 self-end ${!combinedCanSend || (!MOCK_MODE && !chatParams) ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+                handleOnClick={handleSend}
+              />
+            </div>
+          </>
+        ) : (
+          /* Anomaly: Data input */
+          <>
+            {anomalyError && (
+              <div className="text-xs text-destructive mb-2">{anomalyError}</div>
+            )}
+            <textarea
+              value={anomalyInput}
+              onChange={e => setAnomalyInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleAnomalyDetect()
+                }
+              }}
+              disabled={!selectedAnomalyModel || sortedAnomalyModels.length === 0 || scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending}
+              placeholder={
+                sortedAnomalyModels.length === 0
+                  ? 'Create an anomaly model to start testing...'
+                  : scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending
+                    ? 'Analyzing...'
+                    : 'Paste data row or enter comma-separated values...'
+              }
+              className={textareaClasses}
+              aria-label="Anomaly data input"
+            />
+            <div className="flex items-center justify-between">
+              {(scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending) && (
+                <span className="text-xs text-muted-foreground">
+                  Analyzing data...
+                </span>
+              )}
+              <FontIcon
+                isButton
+                type="arrow-filled"
+                className={`w-8 h-8 self-end ${!selectedAnomalyModel || !anomalyInput.trim() || sortedAnomalyModels.length === 0 || scoreAnomalyMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+                handleOnClick={handleAnomalyDetect}
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import FontIcon from '../common/FontIcon'
 import ModeToggle from './ModeToggle'
@@ -15,196 +15,22 @@ import { useProject } from '../hooks/useProjects'
 import { useActiveProject } from '../hooks/useActiveProject'
 import type { ProjectConfig } from '../types/config'
 
-interface TestCase {
-  id: number
-  name: string
-  source: string
-  score: number
-  environment: 'Local' | 'Production' | 'Staging'
-  lastRun: string
-  input?: string
-  expected?: string
-}
-
-const scorePillClasses = (score: number) => {
-  if (score >= 95) return 'bg-teal-300 text-black'
-  if (score >= 75) return 'bg-primary text-primary-foreground'
-  return 'bg-amber-300 text-black'
-}
-
 const Test = () => {
   const location = useLocation()
   const { openPackageModal } = usePackageModal()
-  const [running, setRunning] = useState<Record<number, boolean>>({})
 
-  // Load tests from localStorage per project (or empty array)
-  const [tests, setTests] = useState<TestCase[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const stored = localStorage.getItem('lf_test_cases')
-      return stored ? JSON.parse(stored) : []
-    } catch {
-      return []
-    }
+  // Model type for Test page: 'inference' (default) or 'anomaly'
+  const [modelType, setModelType] = useState<'inference' | 'anomaly'>(() => {
+    if (typeof window === 'undefined') return 'inference'
+    const stored = localStorage.getItem('lf_test_modelType')
+    return stored === 'anomaly' ? 'anomaly' : 'inference'
   })
 
-  // Persist tests to localStorage when they change
+  // Persist modelType to localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem('lf_test_cases', JSON.stringify(tests))
-    } catch {}
-  }, [tests])
-
-  // New tests are created via a button and edited in the existing modal
-
-  const [isEditOpen, setIsEditOpen] = useState<boolean>(false)
-  const [editId, setEditId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<{
-    name: string
-    input: string
-    expected: string
-  }>({
-    name: '',
-    input: '',
-    expected: '',
-  })
-
-  // Create modal state
-  const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false)
-  const [createForm, setCreateForm] = useState<{
-    name: string
-    input: string
-    expected: string
-  }>({ name: '', input: '', expected: '' })
-
-  // Environment controls removed from the panel UI
-
-  // No inline form; validation handled in edit modal
-
-  const nextId = useMemo(
-    () => tests.reduce((max, t) => (t.id > max ? t.id : max), 0) + 1,
-    [tests]
-  )
-
-  const handleRun = (id: number, override?: TestCase) => {
-    const row = override ?? tests.find(t => t.id === id)
-    // Fire event for the chat area to consume
-    if (row && typeof window !== 'undefined') {
-      try {
-        window.dispatchEvent(
-          new CustomEvent('lf-test-run', {
-            detail: {
-              id: row.id,
-              name: row.name,
-              input: row.input ?? '',
-              expected: row.expected ?? '',
-            },
-          })
-        )
-      } catch {}
-    }
-
-    // Briefly show Running… on the clicked button
-    setRunning(prev => ({ ...prev, [id]: true }))
-    setTimeout(() => {
-      setRunning(prev => ({ ...prev, [id]: false }))
-    }, 800)
-
-    // Collapse panels appropriately
-    setIsPanelOpen(false)
-
-    // Update list metadata immediately
-    setTests(prev =>
-      prev.map(t =>
-        t.id === id
-          ? {
-              ...t,
-              lastRun: 'just now',
-              // Tiny nudge to the score to simulate a run
-              score: Math.max(
-                0,
-                Math.min(
-                  100,
-                  Number((t.score + (Math.random() - 0.5) * 2).toFixed(1))
-                )
-              ),
-            }
-          : t
-      )
-    )
-  }
-
-  // Environment no longer selectable in the panel
-
-  const openCreateModal = () => {
-    setCreateForm({ name: '', input: '', expected: '' })
-    setIsCreateOpen(true)
-  }
-
-  const saveCreate = (runAfterSave: boolean) => {
-    const newRow: TestCase = {
-      id: nextId,
-      name: createForm.name.trim() || 'New test',
-      source: 'Custom',
-      score: 0,
-      environment: 'Local',
-      lastRun: '-',
-      input: createForm.input.trim(),
-      expected: createForm.expected.trim(),
-    }
-    setTests(prev => [newRow, ...prev])
-    setIsCreateOpen(false)
-    if (runAfterSave) {
-      // Defer so state updates apply before run feedback
-      setTimeout(() => handleRun(newRow.id, newRow), 0)
-    }
-  }
-
-  const deleteTest = (id: number) => {
-    setTests(prev => prev.filter(t => t.id !== id))
-  }
-
-  const openEdit = (id: number) => {
-    const row = tests.find(t => t.id === id)
-    if (!row) return
-    setEditId(id)
-    setEditForm({
-      name: row.name,
-      input: row.input ?? '',
-      expected: row.expected ?? '',
-    })
-    setIsEditOpen(true)
-  }
-
-  const saveEdit = (runAfterSave: boolean) => {
-    if (editId == null) return
-    setTests(prev =>
-      prev.map(t =>
-        t.id === editId
-          ? {
-              ...t,
-              name: editForm.name.trim(),
-              input: editForm.input.trim(),
-              expected: editForm.expected.trim(),
-            }
-          : t
-      )
-    )
-    if (runAfterSave) {
-      const edited = tests.find(t => t.id === editId)
-      const merged: TestCase | undefined = edited
-        ? {
-            ...edited,
-            name: editForm.name.trim(),
-            input: editForm.input.trim(),
-            expected: editForm.expected.trim(),
-          }
-        : undefined
-      setTimeout(() => handleRun(editId, merged), 0)
-    }
-    setIsEditOpen(false)
-  }
+    localStorage.setItem('lf_test_modelType', modelType)
+  }, [modelType])
 
   const [mode, setMode] = useModeWithReset('designer')
 
@@ -228,9 +54,7 @@ const Test = () => {
     getLocation: getRootLocation,
   })
 
-  const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false)
-  const testsRef = useRef<HTMLDivElement>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
   const [showReferences, setShowReferences] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
@@ -291,8 +115,6 @@ const Test = () => {
     }
   })
 
-  // Local diagnose loading for origin CTAs
-  const [diagnosing, setDiagnosing] = useState<Record<string, boolean>>({})
   // RAG UI state for drawer (persisted via localStorage)
   const [ragEnabledUI, setRagEnabledUI] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
@@ -334,23 +156,6 @@ const Test = () => {
     } catch {}
   }, [gen])
 
-  // Close tests panel when clicking outside
-  useEffect(() => {
-    if (!isPanelOpen) return
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        testsRef.current &&
-        !testsRef.current.contains(event.target as Node)
-      ) {
-        setIsPanelOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isPanelOpen])
-
   // Close generation settings when clicking outside
   useEffect(() => {
     if (!isSettingsOpen) return
@@ -382,10 +187,9 @@ const Test = () => {
     localStorage.setItem('lf_testchat_rag_threshold', String(ragThresholdUI))
   }, [ragThresholdUI])
 
-  // Hide settings UI and close any open panels when switching to config view
+  // Hide settings UI when switching to config view
   useEffect(() => {
     if (mode !== 'designer') {
-      setIsPanelOpen(false)
       setIsSettingsOpen(false)
     }
   }, [mode])
@@ -462,153 +266,10 @@ const Test = () => {
               </div>
             </div>
           </div>
-          <div className="w-full xl:basis-[640px] xl:flex-none flex flex-col sm:flex-row gap-2">
-            <div className="flex-1 relative" ref={testsRef}>
-              {isPanelOpen ? (
-                <button
-                  type="button"
-                  onClick={() => setIsPanelOpen(false)}
-                  aria-label="Collapse tests panel"
-                  className="rounded-t-xl bg-card border border-border border-b-0 h-11 px-4 w-full flex items-center justify-between text-left cursor-pointer hover:bg-accent/40 transition-colors"
-                >
-                  <span className="text-base">Tests</span>
-                  <FontIcon type="close" className="w-4 h-4" />
-                </button>
-              ) : (
-                <Button
-                  variant="outline"
-                  className="rounded-xl h-11 w-full text-base justify-between pl-4 pr-3"
-                  onClick={() => {
-                    setIsPanelOpen(true)
-                    setIsSettingsOpen(false)
-                  }}
-                  aria-label="Expand tests panel"
-                >
-                  <span>Tests</span>
-                  <FontIcon type="chevron-down" className="w-4 h-4 ml-2" />
-                </Button>
-              )}
-              {isPanelOpen && (
-                <div className="absolute left-0 right-0 top-full w-full rounded-b-xl bg-card border border-border border-t-0 p-4 shadow-xl z-50">
-                  <div className="w-full">
-                    <Button variant="outline" onClick={openCreateModal}>
-                      <span className="mr-2">New test</span>
-                      <FontIcon type="add" className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {tests.length === 0 ? (
-                    <div className="w-full rounded-md border border-border mt-3 p-4">
-                      <div className="text-center">
-                        <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
-                          <FontIcon type="test" className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="text-sm font-medium text-foreground mb-1">
-                          Better tests coming soon
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          We're working on an improved testing experience.
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="w-full rounded-md overflow-hidden border border-border mt-4">
-                      <div className="max-h-[60vh] overflow-auto">
-                        <div className="flex flex-col divide-y divide-border">
-                          {tests.map(test => (
-                            <div
-                              key={test.id}
-                              className="px-4 py-4 bg-card/60 hover:bg-accent/40 transition-colors"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <div className="text-sm truncate">
-                                      {test.name}
-                                    </div>
-                                    <FontIcon
-                                      type="edit"
-                                      isButton
-                                      handleOnClick={() => openEdit(test.id)}
-                                      className="w-4 h-4 text-primary"
-                                    />
-                                  </div>
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    Last run {test.lastRun}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRun(test.id)}
-                                    disabled={Boolean(running[test.id])}
-                                  >
-                                    {running[test.id] ? 'Running…' : 'Run'}
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="mt-3 flex items-center">
-                                <span
-                                  className={`px-2 py-0.5 rounded-2xl text-xs ${scorePillClasses(test.score)}`}
-                                >
-                                  {test.score}%
-                                </span>
-                                {test.score < 80 && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="ml-3 h-7 px-2 py-0 text-teal-700 border-teal-500/50 hover:bg-teal-500/10 dark:text-teal-300"
-                                    onClick={() => {
-                                      setDiagnosing(prev => ({
-                                        ...prev,
-                                        [String(test.id)]: true,
-                                      }))
-                                      try {
-                                        window.dispatchEvent(
-                                          new CustomEvent('lf-diagnose', {
-                                            detail: {
-                                              source: 'low_score',
-                                              testId: test.id,
-                                              testName: test.name,
-                                              input: test.input ?? '',
-                                              expected: test.expected ?? '',
-                                              matchScore: test.score,
-                                            },
-                                          })
-                                        )
-                                      } catch {}
-                                      setIsPanelOpen(false)
-                                      setTimeout(
-                                        () =>
-                                          setDiagnosing(prev => ({
-                                            ...prev,
-                                            [String(test.id)]: false,
-                                          })),
-                                        1000
-                                      )
-                                    }}
-                                  >
-                                    {diagnosing[String(test.id)] ? (
-                                      <span className="inline-flex items-center gap-2">
-                                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-                                        <span>Diagnosing…</span>
-                                      </span>
-                                    ) : (
-                                      'Diagnose'
-                                    )}
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex-1 relative" ref={settingsRef}>
+          {/* Generation settings - only show for inference mode */}
+          {modelType === 'inference' && (
+            <div className="w-full xl:basis-[320px] xl:flex-none">
+              <div className="flex-1 relative" ref={settingsRef}>
               {isSettingsOpen ? (
                 <button
                   type="button"
@@ -623,10 +284,7 @@ const Test = () => {
                 <Button
                   variant="outline"
                   className="rounded-xl h-11 w-full text-base justify-between pl-4 pr-3"
-                  onClick={() => {
-                    setIsSettingsOpen(true)
-                    setIsPanelOpen(false)
-                  }}
+                  onClick={() => setIsSettingsOpen(true)}
                   aria-label="Expand generation settings panel"
                 >
                   <span>Generation settings</span>
@@ -738,11 +396,16 @@ const Test = () => {
                         title="Max tokens for thinking process"
                       />
                     </div>
+                    {/* Helper text for inference mode */}
+                    <div className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
+                      These settings apply to inference model types only
+                    </div>
                   </div>
                 </div>
               )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -757,6 +420,8 @@ const Test = () => {
             <div className="h-full">
               <TestChat
                 {...({
+                  modelType,
+                  onModelTypeChange: setModelType,
                   showReferences,
                   allowRanking,
                   useTestData,
@@ -784,160 +449,6 @@ const Test = () => {
         )}
       </div>
 
-      {isEditOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70">
-          <div className="w-[860px] max-w-[95vw] rounded-xl overflow-hidden bg-card text-foreground shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div className="text-sm">Edit test case</div>
-              <FontIcon
-                type="close"
-                isButton
-                handleOnClick={() => setIsEditOpen(false)}
-                className="w-5 h-5 text-foreground"
-              />
-            </div>
-
-            <div className="p-5 flex flex-col gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Test name
-                </label>
-                <input
-                  type="text"
-                  value={editForm.name}
-                  onChange={e =>
-                    setEditForm({ ...editForm, name: e.target.value })
-                  }
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Input</label>
-                <textarea
-                  rows={3}
-                  value={editForm.input}
-                  onChange={e =>
-                    setEditForm({ ...editForm, input: e.target.value })
-                  }
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground code-like"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Expected output (baseline)
-                </label>
-                <textarea
-                  rows={3}
-                  value={editForm.expected}
-                  onChange={e =>
-                    setEditForm({ ...editForm, expected: e.target.value })
-                  }
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground code-like"
-                />
-              </div>
-            </div>
-
-            <div className="px-5 py-4 flex items-center justify-between bg-muted">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Match score</span>
-                <span
-                  className={`px-2 py-0.5 rounded-2xl text-xs ${scorePillClasses(tests.find(t => t.id === editId)?.score ?? 0)}`}
-                >
-                  {tests.find(t => t.id === editId)?.score ?? 0}%
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {editId != null && (
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      deleteTest(editId)
-                      setIsEditOpen(false)
-                    }}
-                  >
-                    Delete
-                  </Button>
-                )}
-                <Button variant="secondary" onClick={() => saveEdit(false)}>
-                  Save changes
-                </Button>
-                <Button onClick={() => saveEdit(true)}>Save and run</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isCreateOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/70">
-          <div className="w-[860px] max-w-[95vw] rounded-xl overflow-hidden bg-card text-foreground shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div className="text-sm">New test</div>
-              <FontIcon
-                type="close"
-                isButton
-                handleOnClick={() => setIsCreateOpen(false)}
-                className="w-5 h-5 text-foreground"
-              />
-            </div>
-
-            <div className="p-5 flex flex-col gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Test name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Test name here"
-                  value={createForm.name}
-                  onChange={e =>
-                    setCreateForm({ ...createForm, name: e.target.value })
-                  }
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Input</label>
-                <textarea
-                  rows={3}
-                  placeholder="Enter the input prompt to test"
-                  value={createForm.input}
-                  onChange={e =>
-                    setCreateForm({ ...createForm, input: e.target.value })
-                  }
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground code-like"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Expected output (baseline)
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Add expected baseline output"
-                  value={createForm.expected}
-                  onChange={e =>
-                    setCreateForm({ ...createForm, expected: e.target.value })
-                  }
-                  className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground code-like"
-                />
-              </div>
-            </div>
-
-            <div className="px-5 py-4 flex items-center justify-end bg-muted">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsCreateOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={() => saveCreate(true)}>Save and run</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
