@@ -392,13 +392,18 @@ function AnomalyModel() {
   useEffect(() => {
     if (isNewModel || !baseModelName) return
     setModelName(baseModelName)
-    // Load description from API model data
+    // Load description from API model data (from newest version)
     if (modelsData?.data) {
-      const matchingModels = modelsData.data.filter((m: AnomalyModelInfo) => {
-        const parsed = parseVersionedModelName(m.name)
-        return parsed.baseName === baseModelName
-      })
-      // Get description from the first (newest) matching model
+      const matchingModels = modelsData.data
+        .filter((m: AnomalyModelInfo) => {
+          const parsed = parseVersionedModelName(m.name)
+          return parsed.baseName === baseModelName
+        })
+        .sort((a: AnomalyModelInfo, b: AnomalyModelInfo) => {
+          const parsedA = parseVersionedModelName(a.name)
+          const parsedB = parseVersionedModelName(b.name)
+          return (parsedB.timestamp || '').localeCompare(parsedA.timestamp || '')
+        })
       if (matchingModels.length > 0 && matchingModels[0].description) {
         setDescription(matchingModels[0].description)
       }
