@@ -307,43 +307,30 @@ class TestParserFailure:
 class TestBatchProcessingContinuesOnFailure:
     """Test that batch processing continues when individual files fail."""
 
-    def test_ingest_file_returns_skipped_for_unsupported_type(self):
-        """ingest_file should return skipped status, not raise exception."""
-        from unittest.mock import MagicMock, patch
-
-        # Mock the IngestHandler dependencies
-        with patch("core.ingest_handler.load_config") as mock_load_config, \
-             patch("core.ingest_handler.SchemaHandler") as mock_schema_handler:
-            
-            # Setup mocks
-            mock_config = MagicMock()
-            mock_config.namespace = "test"
-            mock_config.name = "test_project"
-            mock_load_config.return_value = mock_config
-            
-            mock_handler_instance = MagicMock()
-            mock_schema_handler.return_value = mock_handler_instance
-            
-            # Create a strategy with only PDF parser
-            strategy = DataProcessingStrategy(
-                name="pdf_only",
-                description="Only handles PDF files for testing",
-                parsers=[
-                    Parser(
-                        type="PDFParser_PyPDF2",
-                        file_include_patterns=["*.pdf"],
-                        config={},
-                    )
-                ],
-            )
-            mock_handler_instance.create_processing_config.return_value = strategy
-            
-            # Create BlobProcessor directly to test the behavior
-            processor = BlobProcessor(strategy)
-            
-            # Try to process a text file - should raise UnsupportedFileTypeError
-            with pytest.raises(UnsupportedFileTypeError):
-                processor.process_blob(b"Hello", {"filename": "test.txt"})
+    def test_blob_processor_raises_unsupported_file_type_error(self):
+        """BlobProcessor raises UnsupportedFileTypeError for files with no matching parser.
+        
+        This exception is caught by IngestHandler.ingest_file() which returns
+        a skipped status instead of propagating the exception.
+        """
+        # Create a strategy with only PDF parser
+        strategy = DataProcessingStrategy(
+            name="pdf_only",
+            description="Only handles PDF files for testing",
+            parsers=[
+                Parser(
+                    type="PDFParser_PyPDF2",
+                    file_include_patterns=["*.pdf"],
+                    config={},
+                )
+            ],
+        )
+        
+        processor = BlobProcessor(strategy)
+        
+        # Try to process a text file - should raise UnsupportedFileTypeError
+        with pytest.raises(UnsupportedFileTypeError):
+            processor.process_blob(b"Hello", {"filename": "test.txt"})
 
     def test_batch_continues_after_individual_failure(self):
         """Batch processing should continue after individual file failures."""
