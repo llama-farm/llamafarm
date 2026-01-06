@@ -12,6 +12,11 @@ from components.extractors.base import BaseExtractor
 from components.parsers.base.base_parser import BaseParser
 from core.base import Document
 from core.logging import RAGStructLogger
+from utils.parsing_safety import (
+    ParserFailedError,
+    UnsupportedFileTypeError,
+    get_file_extension,
+)
 
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
@@ -289,12 +294,6 @@ class BlobProcessor:
             UnsupportedFileTypeError: If no parser is configured for this file type
             ParserFailedError: If all configured parsers fail to process the file
         """
-        from utils.parsing_safety import (
-            ParserFailedError,
-            UnsupportedFileTypeError,
-            get_file_extension,
-        )
-
         filename = metadata.get("filename", "unknown")
         extension = get_file_extension(filename)
 
