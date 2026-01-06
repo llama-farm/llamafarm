@@ -113,6 +113,10 @@ class LFAgent:
             )
 
         for message in self.history.history:
-            messages.append(message)
+            # Serialize messages to ensure proper JSON-compatible format
+            # This handles OpenAI SDK types (Pydantic models) that may not
+            # serialize correctly when passed through the API client
+            serialized = LFAgentHistory._serialize_message(message)
+            messages.append(serialized)
 
         return messages

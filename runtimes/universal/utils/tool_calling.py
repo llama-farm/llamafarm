@@ -154,3 +154,206 @@ def strip_tool_call_from_content(content: str) -> str:
     """
     pattern = r"<tool_call>.*?</tool_call>"
     return re.sub(pattern, "", content, flags=re.DOTALL).strip()
+
+
+# =============================================================================
+# Incremental streaming utilities
+# =============================================================================
+
+
+def extract_tool_name_from_partial(content: str) -> str | None:
+    """Extract tool name from incomplete tool call JSON.
+
+    Used during streaming to detect the tool name before the entire
+    tool call JSON is complete. This enables emitting the initial
+    tool call chunk early.
+
+    Looks for patterns like:
+    - <tool_call>{"name": "get_weather"
+    - <tool_call>{"name":"get_weather",
+
+    Args:
+        content: Accumulated content that may contain a partial tool call.
+
+    Returns:
+        Tool name if found and complete, None otherwise.
+    """
+    if not content or "<tool_call>" not in content:
+        return None
+
+    # Find the start of the tool call JSON
+    start_idx = content.find("<tool_call>")
+    if start_idx == -1:
+        return None
+
+    # Extract everything after <tool_call>
+    json_start = start_idx + len("<tool_call>")
+    partial_json = content[json_start:]
+
+    # Use regex to extract a complete "name" value
+    # Matches: "name": "value" or "name":"value"
+    # The name value must be complete (closing quote found)
+    pattern = r'"name"\s*:\s*"([^"]+)"'
+    match = re.search(pattern, partial_json)
+
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def extract_arguments_progress(content: str) -> tuple[int, str] | None:
+    """Extract the arguments JSON string progress from a partial tool call.
+
+    Used during streaming to extract how much of the "arguments" value
+    we have so far, enabling incremental streaming of arguments.
+
+    Args:
+        content: Accumulated content containing a partial tool call.
+
+    Returns:
+        Tuple of (start_position, arguments_so_far) where start_position
+        is the character index where arguments value begins in the content,
+        and arguments_so_far is the accumulated arguments string.
+        Returns None if arguments section not yet started.
+    """
+    if not content or "<tool_call>" not in content:
+        return None
+
+    # Find the start of the tool call JSON
+    tool_start = content.find("<tool_call>")
+    if tool_start == -1:
+        return None
+
+    json_start = tool_start + len("<tool_call>")
+    partial_json = content[json_start:]
+
+    # Find "arguments": or "arguments" :
+    args_pattern = r'"arguments"\s*:\s*'
+    match = re.search(args_pattern, partial_json)
+
+    if not match:
+        return None
+
+    # Position where the arguments value starts (after the colon and whitespace)
+    args_value_start = json_start + match.end()
+
+    # Extract everything from there
+    remaining = content[args_value_start:]
+
+    # Track brace depth to find the end of the arguments JSON value
+    # Arguments is a JSON object, so we need to find where it closes
+    args_content = _extract_json_value(remaining)
+
+    if not args_content:
+        return None
+
+    return (args_value_start, args_content)
+
+
+def _extract_json_value(content: str) -> str:
+    """Extract a JSON value (object or array) from the start of content.
+
+    Tracks brace/bracket depth to find where the JSON value ends.
+    Handles incomplete JSON by returning what we have so far.
+
+    Args:
+        content: String starting with a JSON value.
+
+    Returns:
+        The JSON value string (possibly incomplete).
+    """
+    if not content:
+        return ""
+
+    content = content.strip()
+    if not content:
+        return ""
+
+    # Determine the opening bracket type
+    if content[0] == "{":
+        open_char, close_char = "{", "}"
+    elif content[0] == "[":
+        open_char, close_char = "[", "]"
+    else:
+        # Not a JSON object/array, might be a primitive
+        # For tool calls, arguments should always be an object
+        return content
+
+    depth = 0
+    in_string = False
+    escape_next = False
+    end_pos = len(content)
+
+    for i, char in enumerate(content):
+        if escape_next:
+            escape_next = False
+            continue
+
+        if char == "\\":
+            escape_next = True
+            continue
+
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+            if depth == 0:
+                # Found the matching closing bracket
+                end_pos = i + 1
+                break
+
+    # Return the JSON value (complete or partial)
+    result = content[:end_pos]
+
+    # Clean up any trailing content after the closing bracket
+    # (like the closing brace of the outer object or </tool_call>)
+    return result
+
+
+def is_tool_call_complete(content: str) -> bool:
+    """Check if content contains a complete tool call with closing tag.
+
+    Args:
+        content: Accumulated content that may contain a tool call.
+
+    Returns:
+        True if a complete <tool_call>...</tool_call> is found.
+    """
+    if not content:
+        return False
+
+    return "</tool_call>" in content
+
+
+def get_tool_call_content_after_tag(content: str) -> str | None:
+    """Extract the content inside <tool_call>...</tool_call> tags.
+
+    Args:
+        content: Content containing tool call tags.
+
+    Returns:
+        The content between the tags, or None if not found.
+    """
+    if not content or "<tool_call>" not in content:
+        return None
+
+    start_idx = content.find("<tool_call>")
+    if start_idx == -1:
+        return None
+
+    json_start = start_idx + len("<tool_call>")
+    end_idx = content.find("</tool_call>", json_start)
+
+    if end_idx == -1:
+        # No closing tag yet, return everything after opening tag
+        return content[json_start:]
+
+    return content[json_start:end_idx]

@@ -3,6 +3,9 @@ Jinja2 template utilities for tool-aware chat template rendering.
 
 This module provides functions to extract chat templates from GGUF files
 and render them with tool definitions using Python's Jinja2.
+
+Uses the shared GGUF metadata cache to avoid redundant file reads when
+extracting chat templates and special tokens.
 """
 
 from __future__ import annotations
@@ -12,6 +15,9 @@ import logging
 from typing import Any
 
 from jinja2 import Environment, TemplateError, Undefined
+from jinja2.utils import Namespace
+
+from utils.gguf_metadata_cache import get_gguf_metadata_cached
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +49,11 @@ def _tojson(value: Any, indent: int | None = None) -> str:
     return json.dumps(value, indent=indent, ensure_ascii=False)
 
 
-def _namespace(**kwargs) -> dict:
-    """Template function to create a namespace (dict) for variable storage."""
-    return dict(**kwargs)
-
-
 def get_chat_template_from_gguf(model_path: str) -> str | None:
     """Extract chat_template from GGUF file metadata.
+
+    Uses the shared GGUF metadata cache to avoid redundant file reads.
+    The cache is populated once per file and reused by all modules.
 
     Args:
         model_path: Path to the GGUF model file.
@@ -58,34 +62,41 @@ def get_chat_template_from_gguf(model_path: str) -> str | None:
         The chat template string, or None if not found.
     """
     try:
-        from gguf import GGUFReader
-
-        reader = GGUFReader(model_path)
-
-        # Look for tokenizer.chat_template in metadata
-        for field in reader.fields.values():
-            if field.name == "tokenizer.chat_template":
-                # The value is stored as bytes, decode to string
-                if hasattr(field, "parts"):
-                    # New GGUF format
-                    template_bytes = b"".join(
-                        bytes(part) if isinstance(part, (list, tuple)) else part
-                        for part in field.parts
-                    )
-                    return template_bytes.decode("utf-8")
-                elif hasattr(field, "data"):
-                    # Older format
-                    return bytes(field.data).decode("utf-8")
-
-        logger.debug(f"No chat_template found in GGUF metadata for {model_path}")
-        return None
-
-    except ImportError:
-        logger.warning("gguf package not installed, cannot extract chat template")
+        cached = get_gguf_metadata_cached(model_path)
+        return cached.chat_template
+    except FileNotFoundError:
+        logger.warning(f"GGUF file not found: {model_path}")
         return None
     except Exception as e:
         logger.warning(f"Failed to extract chat template from {model_path}: {e}")
         return None
+
+
+def get_special_tokens_from_gguf(model_path: str) -> dict[str, str]:
+    """Extract BOS and EOS tokens from GGUF file metadata.
+
+    Uses the shared GGUF metadata cache to avoid redundant file reads.
+    The cache is populated once per file and reused by all modules.
+
+    Args:
+        model_path: Path to the GGUF model file.
+
+    Returns:
+        Dictionary with 'bos_token' and 'eos_token' keys.
+        Values default to empty strings if not found.
+    """
+    try:
+        cached = get_gguf_metadata_cached(model_path)
+        return {
+            "bos_token": cached.bos_token,
+            "eos_token": cached.eos_token,
+        }
+    except FileNotFoundError:
+        logger.debug(f"GGUF file not found: {model_path}")
+        return {"bos_token": "", "eos_token": ""}
+    except Exception as e:
+        logger.debug(f"Failed to extract special tokens from {model_path}: {e}")
+        return {"bos_token": "", "eos_token": ""}
 
 
 def supports_native_tools(template: str) -> bool:
@@ -121,7 +132,8 @@ def create_jinja_environment() -> Environment:
 
     # Add template functions used by various chat templates
     env.globals["raise_exception"] = _raise_exception
-    env.globals["namespace"] = _namespace
+    # Use Jinja2's built-in Namespace which properly handles attribute assignment
+    env.globals["namespace"] = Namespace
 
     # Add filters
     env.filters["tojson"] = _tojson
