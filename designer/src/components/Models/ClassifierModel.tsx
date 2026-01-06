@@ -625,11 +625,10 @@ function ClassifierModel() {
       return
     }
 
-    // Filter models that match our base name
-    const matchingModels = modelsData.data.filter((m: ClassifierModelInfo) => {
-      const parsed = parseVersionedModelName(m.name)
-      return parsed.baseName === baseModelName
-    })
+    // Filter models that match our base name (use API's base_name field)
+    const matchingModels = modelsData.data.filter(
+      (m: ClassifierModelInfo) => m.base_name === baseModelName
+    )
 
     // Sort by timestamp (newest first) and build version list
     const sortedModels = [...matchingModels].sort((a, b) => {
@@ -663,10 +662,7 @@ function ClassifierModel() {
     // Load description from API model data (from newest version)
     if (modelsData?.data) {
       const matchingModels = modelsData.data
-        .filter((m: ClassifierModelInfo) => {
-          const parsed = parseVersionedModelName(m.name)
-          return parsed.baseName === baseModelName
-        })
+        .filter((m: ClassifierModelInfo) => m.base_name === baseModelName)
         .sort((a: ClassifierModelInfo, b: ClassifierModelInfo) => {
           const parsedA = parseVersionedModelName(a.name)
           const parsedB = parseVersionedModelName(b.name)

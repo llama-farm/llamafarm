@@ -395,10 +395,7 @@ function AnomalyModel() {
     // Load description from API model data (from newest version)
     if (modelsData?.data) {
       const matchingModels = modelsData.data
-        .filter((m: AnomalyModelInfo) => {
-          const parsed = parseVersionedModelName(m.name)
-          return parsed.baseName === baseModelName
-        })
+        .filter((m: AnomalyModelInfo) => m.base_name === baseModelName)
         .sort((a: AnomalyModelInfo, b: AnomalyModelInfo) => {
           const parsedA = parseVersionedModelName(a.name)
           const parsedB = parseVersionedModelName(b.name)
