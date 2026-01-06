@@ -366,8 +366,14 @@ class MLModelService:
 
         For classifiers: ~/.llamafarm/models/classifier/{model_name}/metadata.json
         For anomaly: ~/.llamafarm/models/anomaly/{model_name}.metadata.json
+
+        Raises:
+            ValueError: If the model name is invalid (e.g., path traversal)
         """
         model_dir = cls.get_model_dir(model_type)
+
+        # Validate model name to prevent path traversal
+        cls._validate_path(model_dir, model_name)
 
         if model_type == "classifier":
             return model_dir / model_name / "metadata.json"

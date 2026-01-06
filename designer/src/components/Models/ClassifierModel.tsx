@@ -962,19 +962,20 @@ function ClassifierModel() {
       setIsTrainingExpanded(false)
 
       // Add the new version to the versions list so hasVersions becomes true
-      const newVersion: ModelVersion = {
-        id: newVersionName,
-        versionedName: newVersionName,
-        versionNumber: versions.length + 1,
-        createdAt: new Date().toISOString(),
-        trainingSamples: validClasses.reduce((sum, c) => sum + c.examples.length, 0),
-        isActive: true,
-        labels: validClasses.map(c => c.name),
-      }
-      setVersions(prev => [
-        ...prev.map(v => ({ ...v, isActive: false })),
-        newVersion,
-      ])
+      const trainingSamples = validClasses.reduce((sum, c) => sum + c.examples.length, 0)
+      const labels = validClasses.map(c => c.name)
+      setVersions(prev => {
+        const newVersion: ModelVersion = {
+          id: newVersionName,
+          versionedName: newVersionName,
+          versionNumber: prev.length + 1,
+          createdAt: new Date().toISOString(),
+          trainingSamples,
+          isActive: true,
+          labels,
+        }
+        return [...prev.map(v => ({ ...v, isActive: false })), newVersion]
+      })
 
       if (isNewModel) {
         navigate(`/chat/models/train/classifier/${finalModelName}`)
@@ -985,7 +986,7 @@ function ClassifierModel() {
         error instanceof Error ? error.message : 'Training failed. Please try again.'
       )
     }
-  }, [canTrain, validClasses, modelName, baseModel, description, trainAndSaveMutation, isNewModel, navigate, existingBaseNames, versions])
+  }, [canTrain, validClasses, modelName, baseModel, description, trainAndSaveMutation, isNewModel, navigate, existingBaseNames])
 
   const handleTest = useCallback(async () => {
     if (!testInput.trim() || !activeVersionName) return
