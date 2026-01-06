@@ -284,19 +284,38 @@ export default function TestChat({
     return localStorage.getItem('lf_test_anomalyModel')
   })
 
-  // Auto-select most recent model if none selected
+  // Validate and auto-select anomaly model (similar to inference model logic)
   useEffect(() => {
-    if (modelType === 'anomaly' && !selectedAnomalyModel && sortedAnomalyModels.length > 0) {
-      setSelectedAnomalyModel(sortedAnomalyModels[0].name)
+    // Don't validate until models are loaded
+    if (sortedAnomalyModels.length === 0) {
+      return
     }
-  }, [modelType, selectedAnomalyModel, sortedAnomalyModels])
 
-  // Persist anomaly model selection
+    // Build list of valid model names
+    const validModelNames = sortedAnomalyModels.map(m => m.name)
+
+    // If user has a selected model and it's valid, keep it
+    if (selectedAnomalyModel && validModelNames.includes(selectedAnomalyModel)) {
+      return
+    }
+
+    // Selected model is invalid or doesn't exist - fall back to first available
+    if (validModelNames.length > 0) {
+      setSelectedAnomalyModel(validModelNames[0])
+    } else {
+      setSelectedAnomalyModel(null)
+    }
+  }, [selectedAnomalyModel, sortedAnomalyModels])
+
+  // Persist valid anomaly model selection to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined' && selectedAnomalyModel) {
-      localStorage.setItem('lf_test_anomalyModel', selectedAnomalyModel)
+      const validModelNames = sortedAnomalyModels.map(m => m.name)
+      if (validModelNames.includes(selectedAnomalyModel)) {
+        localStorage.setItem('lf_test_anomalyModel', selectedAnomalyModel)
+      }
     }
-  }, [selectedAnomalyModel])
+  }, [selectedAnomalyModel, sortedAnomalyModels])
 
   // Anomaly input and result state
   const [anomalyInput, setAnomalyInput] = useState('')
