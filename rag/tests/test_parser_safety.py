@@ -436,29 +436,73 @@ class TestExplicitConfiguration:
 
         assert len(result) > 0
 
-    def test_multiple_parsers_tried_in_priority_order(self):
-        """Multiple matching parsers should be tried in priority order."""
-        # This test verifies the priority ordering works
+    @patch("core.blob_processor.BlobProcessor._get_parser_class")
+    def test_multiple_parsers_tried_in_priority_order(self, mock_get_parser_class):
+        """Multiple matching parsers should be tried in priority order.
+        
+        This test verifies that parsers are tried in priority order (lower number = higher priority).
+        We use mock parsers where the high-priority one fails and the low-priority one succeeds,
+        then verify both were tried in the correct order.
+        """
+        call_order = []
+        
+        class HighPriorityParser:
+            """Parser with priority=1 (high priority) that fails."""
+            def __init__(self, name=None, config=None):
+                self.name = name
+            
+            def parse_blob(self, data, metadata):
+                call_order.append("high_priority")
+                raise ValueError("High priority parser intentionally failed")
+        
+        class LowPriorityParser:
+            """Parser with priority=10 (low priority) that succeeds."""
+            def __init__(self, name=None, config=None):
+                self.name = name
+            
+            def parse_blob(self, data, metadata):
+                call_order.append("low_priority")
+                from core.base import Document
+                return [Document(content="Success from low priority parser", metadata={})]
+        
+        # Return different parser classes based on the parser type
+        def get_parser_class(parser_type):
+            if parser_type == "MockHighPriorityParser":
+                return HighPriorityParser
+            elif parser_type == "MockLowPriorityParser":
+                return LowPriorityParser
+            raise ValueError(f"Unknown parser type: {parser_type}")
+        
+        mock_get_parser_class.side_effect = get_parser_class
+        
         strategy = DataProcessingStrategy(
             name="multi_parser_strategy",
             description="Multiple parsers with different priorities",
             parsers=[
                 Parser(
-                    type="TextParser_Python",
+                    type="MockLowPriorityParser",
                     config={},
-                    priority=10,  # Lower priority
+                    priority=10,  # Lower priority (higher number)
                 ),
                 Parser(
-                    type="TextParser_Python",
+                    type="MockHighPriorityParser",
                     config={},
-                    priority=1,  # Higher priority (lower number = higher priority)
+                    priority=1,  # Higher priority (lower number = tried first)
                 ),
             ],
         )
         processor = BlobProcessor(strategy)
 
-        # Both parsers match, higher priority should be tried first
+        # Process file - high priority parser should fail, low priority should succeed
         txt_bytes = b"Test content"
         result = processor.process_blob(txt_bytes, {"filename": "test.txt"})
 
-        assert len(result) > 0
+        # Verify parsers were tried in priority order
+        assert call_order == ["high_priority", "low_priority"], (
+            f"Expected parsers tried in priority order ['high_priority', 'low_priority'], "
+            f"but got {call_order}"
+        )
+        
+        # Verify the low-priority parser's result was returned
+        assert len(result) == 1
+        assert "low priority parser" in result[0].content
