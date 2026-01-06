@@ -45,7 +45,6 @@ import {
   type FeatureEncodingType,
   type NormalizationMethod,
 } from '../../types/ml'
-import { getModelDescription, setModelDescription } from '../../utils/storage'
 
 type TrainingState = 'idle' | 'training' | 'success' | 'error'
 type InputMode = 'text' | 'table'
@@ -393,15 +392,21 @@ function AnomalyModel() {
   useEffect(() => {
     if (isNewModel || !baseModelName) return
     setModelName(baseModelName)
-    // Load description from localStorage
-    const savedDescription = getModelDescription(baseModelName)
-    if (savedDescription) {
-      setDescription(savedDescription)
+    // Load description from API model data
+    if (modelsData?.data) {
+      const matchingModels = modelsData.data.filter((m: AnomalyModelInfo) => {
+        const parsed = parseVersionedModelName(m.name)
+        return parsed.baseName === baseModelName
+      })
+      // Get description from the first (newest) matching model
+      if (matchingModels.length > 0 && matchingModels[0].description) {
+        setDescription(matchingModels[0].description)
+      }
     }
     if (versions.length > 0) {
       setBackend(versions[0].backend)
     }
-  }, [isNewModel, baseModelName, versions])
+  }, [isNewModel, baseModelName, versions, modelsData])
 
   // Validate training data on change (text mode only)
   useEffect(() => {
@@ -1286,14 +1291,7 @@ function AnomalyModel() {
               id="description"
               placeholder="e.g., Detects unusual transaction patterns"
               value={description}
-              onChange={e => {
-                setDescription(e.target.value)
-                // Save to localStorage using the current model name
-                const nameToUse = baseModelName || modelName
-                if (nameToUse) {
-                  setModelDescription(nameToUse, e.target.value)
-                }
-              }}
+              onChange={e => setDescription(e.target.value)}
             />
           </div>
         </div>

@@ -38,34 +38,3 @@ export function setStoredSet(key: string, set: Set<string>): void {
     localStorage.setItem(key, JSON.stringify(Array.from(set)))
   } catch {}
 }
-
-// Model description storage helpers
-const MODEL_DESCRIPTIONS_KEY = 'llamafarm:model-descriptions'
-
-interface ModelDescriptions {
-  [modelName: string]: string
-}
-
-export function getModelDescription(modelName: string): string {
-  try {
-    const raw = localStorage.getItem(MODEL_DESCRIPTIONS_KEY)
-    if (!raw) return ''
-    const descriptions: ModelDescriptions = JSON.parse(raw)
-    return descriptions[modelName] || ''
-  } catch {
-    return ''
-  }
-}
-
-export function setModelDescription(modelName: string, description: string): void {
-  try {
-    const raw = localStorage.getItem(MODEL_DESCRIPTIONS_KEY)
-    const descriptions: ModelDescriptions = raw ? JSON.parse(raw) : {}
-    if (description.trim()) {
-      descriptions[modelName] = description
-    } else {
-      delete descriptions[modelName]
-    }
-    localStorage.setItem(MODEL_DESCRIPTIONS_KEY, JSON.stringify(descriptions))
-  } catch {}
-}

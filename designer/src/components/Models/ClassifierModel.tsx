@@ -37,7 +37,6 @@ import {
   type ClassifierModelInfo,
   type ClassifierTrainingData,
 } from '../../types/ml'
-import { getModelDescription, setModelDescription } from '../../utils/storage'
 
 type TrainingState = 'idle' | 'training' | 'success' | 'error'
 
@@ -661,12 +660,18 @@ function ClassifierModel() {
   useEffect(() => {
     if (isNewModel || !baseModelName) return
     setModelName(baseModelName)
-    // Load description from localStorage
-    const savedDescription = getModelDescription(baseModelName)
-    if (savedDescription) {
-      setDescription(savedDescription)
+    // Load description from API model data
+    if (modelsData?.data) {
+      const matchingModels = modelsData.data.filter((m: ClassifierModelInfo) => {
+        const parsed = parseVersionedModelName(m.name)
+        return parsed.baseName === baseModelName
+      })
+      // Get description from the first (newest) matching model
+      if (matchingModels.length > 0 && matchingModels[0].description) {
+        setDescription(matchingModels[0].description)
+      }
     }
-  }, [isNewModel, baseModelName])
+  }, [isNewModel, baseModelName, modelsData])
 
   // Track the previous active class ID to detect actual class switches
   const prevActiveClassIdRef = useRef<string | null>(null)
@@ -1412,14 +1417,7 @@ function ClassifierModel() {
               id="description"
               placeholder="e.g., Classifies customer feedback sentiment"
               value={description}
-              onChange={e => {
-                setDescription(e.target.value)
-                // Save to localStorage using the current model name
-                const nameToUse = baseModelName || modelName
-                if (nameToUse) {
-                  setModelDescription(nameToUse, e.target.value)
-                }
-              }}
+              onChange={e => setDescription(e.target.value)}
             />
           </div>
         </div>

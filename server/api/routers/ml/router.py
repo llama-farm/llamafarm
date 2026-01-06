@@ -51,6 +51,7 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
         model: Base name for the model
         overwrite: If False (default), creates versioned model {model}_{timestamp}
                    If True, overwrites existing model with same name
+        description: Optional description for the model
 
     Example request:
     ```json
@@ -63,7 +64,8 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
             {"text": "What's the weather?", "label": "weather"}
         ],
         "num_iterations": 20,
-        "overwrite": false
+        "overwrite": false,
+        "description": "Classifies user intents for travel assistant"
     }
     ```
 
@@ -81,6 +83,12 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
         num_iterations=request.num_iterations,
         batch_size=request.batch_size,
     )
+
+    # Save description metadata if provided
+    if request.description:
+        MLModelService.save_description(
+            "classifier", versioned_name, request.description
+        )
 
     # Add versioning info to response
     result["base_name"] = request.model
@@ -174,16 +182,22 @@ async def list_classifier_models() -> dict[str, Any]:
     - created: ISO timestamp of creation/modification
     - is_versioned: Whether this is a versioned model
     - labels: Class labels (loaded from labels.txt if present)
+    - description: Model description (if set)
     """
     models = MLModelService.list_all_models("classifier")
 
-    # Also try to load labels for each model
+    # Also try to load labels and description for each model
     for model in models:
         labels_path = Path(model["path"]) / "labels.txt"
         if labels_path.exists():
             model["labels"] = labels_path.read_text().strip().split("\n")
         else:
             model["labels"] = []
+
+        # Load description from metadata
+        description = MLModelService.get_description("classifier", model["name"])
+        if description:
+            model["description"] = description
 
     return {
         "object": "list",
@@ -225,6 +239,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         model: Base name for the model
         overwrite: If False (default), creates versioned model {model}_{timestamp}
                    If True, overwrites existing model with same name
+        description: Optional description for the model
 
     Backends:
     - isolation_forest: Fast, works well out of the box (recommended)
@@ -239,7 +254,8 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         "backend": "isolation_forest",
         "data": [[1.0, 2.0], [1.1, 2.1], [0.9, 1.9]],
         "contamination": 0.1,
-        "overwrite": false
+        "overwrite": false,
+        "description": "Detects anomalous sensor readings"
     }
     ```
 
@@ -260,6 +276,10 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
+
+    # Save description metadata if provided
+    if request.description:
+        MLModelService.save_description("anomaly", versioned_name, request.description)
 
     # Add versioning info to response
     result["base_name"] = request.model
@@ -402,8 +422,16 @@ async def list_anomaly_models() -> dict[str, Any]:
     - size_bytes: File size
     - created: ISO timestamp of creation/modification
     - is_versioned: Whether this is a versioned model
+    - description: Model description (if set)
     """
     models = MLModelService.list_all_models("anomaly")
+
+    # Load description for each model
+    for model in models:
+        description = MLModelService.get_description("anomaly", model["name"])
+        if description:
+            model["description"] = description
+
     return {
         "object": "list",
         "data": models,
