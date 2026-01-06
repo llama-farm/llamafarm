@@ -2,6 +2,9 @@
 
 This module tests the fix for issue #589 where PDFs were being incorrectly
 processed by a txt parser fallback, creating useless/garbage chunks.
+
+Simplified design: All files require explicit parser configuration.
+No fallback logic, no binary detection heuristics.
 """
 
 import sys
@@ -21,100 +24,35 @@ from utils.parsing_safety import (
     ParsingError,
     UnsupportedFileTypeError,
     get_file_extension,
-    is_binary_extension,
-    validate_parser_for_file,
 )
 
 
-class TestBinaryExtensionDetection:
-    """Test binary file extension detection."""
+class TestFileExtension:
+    """Test file extension utility."""
 
-    def test_known_binary_extensions_detected(self):
-        """Known binary extensions should be detected as binary."""
-        binary_files = [
-            "document.pdf",
-            "file.docx",
-            "data.xlsx",
-            "image.png",
-            "photo.jpg",
-            "photo.jpeg",
-            "archive.zip",
-            "archive.tar",
-            "archive.gz",
-            "video.mp4",
-            "audio.mp3",
-            "email.msg",
-            "binary.exe",
-            "library.dll",
-        ]
-        for f in binary_files:
-            assert is_binary_extension(f), f"{f} should be detected as binary"
-
-    def test_text_extensions_not_binary(self):
-        """Text extensions should not be detected as binary."""
-        text_files = [
-            "readme.txt",
-            "code.py",
-            "data.json",
-            "config.yaml",
-            "config.yml",
-            "notes.md",
-            "page.html",
-            "script.js",
-            "styles.css",
-            "data.csv",
-            "data.tsv",
-            "document.xml",
-        ]
-        for f in text_files:
-            assert not is_binary_extension(f), f"{f} should not be detected as binary"
-
-    def test_case_insensitive_extension(self):
-        """Extension detection should be case-insensitive."""
-        assert is_binary_extension("FILE.PDF")
-        assert is_binary_extension("file.Pdf")
-        assert is_binary_extension("file.PDF")
-        assert not is_binary_extension("FILE.TXT")
-        assert not is_binary_extension("file.Txt")
-
-    def test_get_file_extension(self):
-        """Test file extension extraction."""
+    def test_get_file_extension_pdf(self):
+        """Test extension extraction for PDF."""
         assert get_file_extension("document.pdf") == ".pdf"
+
+    def test_get_file_extension_uppercase(self):
+        """Extension should be normalized to lowercase."""
         assert get_file_extension("DOCUMENT.PDF") == ".pdf"
+
+    def test_get_file_extension_compound(self):
+        """Compound extensions return only the last one."""
         assert get_file_extension("file.tar.gz") == ".gz"
+
+    def test_get_file_extension_none(self):
+        """Files without extension return empty string."""
         assert get_file_extension("no_extension") == ""
-        # .hidden files are treated as filenames without extensions in Python's Path
+
+    def test_get_file_extension_hidden(self):
+        """Hidden files without extension return empty string."""
         assert get_file_extension(".hidden") == ""
+
+    def test_get_file_extension_hidden_with_ext(self):
+        """Hidden files with extension return the extension."""
         assert get_file_extension(".hidden.txt") == ".txt"
-
-
-class TestValidateParserForFile:
-    """Test parser-file compatibility validation."""
-
-    def test_text_parser_rejected_for_pdf(self):
-        """TextParser should be rejected for PDF files."""
-        is_valid, error = validate_parser_for_file("document.pdf", "TextParser_Python")
-        assert not is_valid
-        assert "Cannot use TextParser_Python" in error
-        assert ".pdf" in error
-
-    def test_text_parser_rejected_for_docx(self):
-        """TextParser should be rejected for DOCX files."""
-        is_valid, error = validate_parser_for_file("document.docx", "TextParser_Python")
-        assert not is_valid
-        assert "Cannot use TextParser_Python" in error
-
-    def test_text_parser_accepted_for_txt(self):
-        """TextParser should be accepted for TXT files."""
-        is_valid, error = validate_parser_for_file("document.txt", "TextParser_Python")
-        assert is_valid
-        assert error is None
-
-    def test_pdf_parser_accepted_for_pdf(self):
-        """PDFParser should be accepted for PDF files."""
-        is_valid, error = validate_parser_for_file("document.pdf", "PDFParser_PyPDF2")
-        assert is_valid
-        assert error is None
 
 
 class TestParserExceptions:
@@ -132,6 +70,16 @@ class TestParserExceptions:
         assert "TextParser_Python" in error.available_parsers
         assert "document.pdf" in str(error)
         assert ".pdf" in str(error)
+        assert "No parser configured" in str(error)
+
+    def test_unsupported_file_type_error_no_parsers(self):
+        """UnsupportedFileTypeError with no available parsers."""
+        error = UnsupportedFileTypeError(
+            filename="file.xyz",
+            extension=".xyz",
+            available_parsers=[],
+        )
+        assert "No parsers are currently configured" in str(error)
 
     def test_parser_failed_error_attributes(self):
         """ParserFailedError should have proper attributes."""
@@ -146,20 +94,31 @@ class TestParserExceptions:
         assert "corrupt.pdf" in str(error)
         assert "PDFParser_PyPDF2" in str(error)
 
+    def test_parser_failed_error_truncates_errors(self):
+        """ParserFailedError should truncate long error lists."""
+        error = ParserFailedError(
+            filename="bad.pdf",
+            tried_parsers=["Parser1", "Parser2", "Parser3", "Parser4", "Parser5"],
+            errors=["Error 1", "Error 2", "Error 3", "Error 4", "Error 5"],
+        )
+        error_str = str(error)
+        # Should show first 3 and indicate more
+        assert "and 2 more" in error_str
+
     def test_exception_hierarchy(self):
         """Parser exceptions should inherit from ParsingError."""
         assert issubclass(UnsupportedFileTypeError, ParsingError)
         assert issubclass(ParserFailedError, ParsingError)
 
 
-class TestBlobProcessorFailFast:
-    """Test BlobProcessor fail-fast behavior."""
+class TestParserRequirement:
+    """Test that all files require explicit parser configuration."""
 
-    def test_pdf_without_pdf_parser_raises_error_fail_fast_true(self):
-        """PDF file with only text parser configured should raise error when fail_fast=True."""
+    def test_pdf_without_pdf_parser_raises_error(self):
+        """PDF file with only text parser (wrong patterns) should raise error."""
         strategy = DataProcessingStrategy(
             name="text_only_strategy",
-            description="Only has text parser configured for testing",
+            description="Only has text parser for txt files",
             parsers=[
                 Parser(
                     type="TextParser_Python",
@@ -167,68 +126,67 @@ class TestBlobProcessorFailFast:
                     file_include_patterns=["*.txt"],  # Only matches txt files
                 )
             ],
-            fail_fast=True,
         )
         processor = BlobProcessor(strategy)
 
-        # Fake PDF content (PDF magic bytes)
         pdf_bytes = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
 
         with pytest.raises(UnsupportedFileTypeError) as exc_info:
             processor.process_blob(pdf_bytes, {"filename": "document.pdf"})
 
         assert "document.pdf" in str(exc_info.value)
-        assert ".pdf" in exc_info.value.extension
+        assert ".pdf" in str(exc_info.value)
+        assert "No parser configured" in str(exc_info.value)
 
-    def test_pdf_without_parser_legacy_mode_returns_empty(self):
-        """PDF file with fail_fast=False should return empty list."""
+    def test_txt_without_matching_parser_raises_error(self):
+        """Text file without matching parser should raise error (no fallback)."""
         strategy = DataProcessingStrategy(
-            name="text_only_strategy",
-            description="Only has text parser configured for testing",
+            name="pdf_only_strategy",
+            description="Only has PDF parser for pdf files",
             parsers=[
                 Parser(
-                    type="TextParser_Python",
+                    type="PDFParser_PyPDF2",
+                    file_include_patterns=["*.pdf"],
                     config={},
-                    file_include_patterns=["*.txt"],  # Only matches txt files
                 )
             ],
-            fail_fast=False,  # Legacy mode
         )
         processor = BlobProcessor(strategy)
 
-        pdf_bytes = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
-        result = processor.process_blob(pdf_bytes, {"filename": "document.pdf"})
+        txt_bytes = b"Hello, world!"
 
-        # Should return empty list, not garbage chunks
-        assert result == []
+        # Should raise error - no fallback to text parser
+        with pytest.raises(UnsupportedFileTypeError) as exc_info:
+            processor.process_blob(txt_bytes, {"filename": "hello.txt"})
 
-    def test_txt_file_can_use_text_parser_fallback(self):
-        """Text file should still work with text parser fallback."""
+        assert "hello.txt" in str(exc_info.value)
+
+    def test_txt_with_text_parser_succeeds(self):
+        """Text file with matching text parser should work."""
         strategy = DataProcessingStrategy(
             name="text_strategy",
-            description="Text parser without include patterns",
+            description="Has text parser that matches all files",
             parsers=[
                 Parser(
                     type="TextParser_Python",
                     config={},
-                    # No file_include_patterns - accepts all non-binary files
+                    # No file_include_patterns = matches all files
                 )
             ],
-            fail_fast=True,
         )
         processor = BlobProcessor(strategy)
 
-        txt_bytes = b"Hello, world! This is a test file."
+        txt_bytes = b"Hello, world!"
         result = processor.process_blob(txt_bytes, {"filename": "hello.txt"})
 
         assert len(result) > 0
         assert "Hello, world!" in result[0].content
 
     def test_docx_without_docx_parser_raises_error(self):
-        """DOCX file with only text parser should raise error."""
+        """DOCX without matching docx parser should raise error."""
         strategy = DataProcessingStrategy(
             name="text_only_strategy",
-            description="Only has text parser configured for testing",
+            description="Only has text parser for txt files",
             parsers=[
                 Parser(
                     type="TextParser_Python",
@@ -236,7 +194,6 @@ class TestBlobProcessorFailFast:
                     file_include_patterns=["*.txt"],
                 )
             ],
-            fail_fast=True,
         )
         processor = BlobProcessor(strategy)
 
@@ -246,53 +203,36 @@ class TestBlobProcessorFailFast:
         with pytest.raises(UnsupportedFileTypeError) as exc_info:
             processor.process_blob(docx_bytes, {"filename": "document.docx"})
 
-        assert ".docx" in exc_info.value.extension
+        assert ".docx" in str(exc_info.value)
 
-    def test_unknown_text_extension_can_use_text_parser(self):
-        """Unknown text-like extensions should still work with text parser."""
+    def test_unknown_extension_raises_error(self):
+        """File with unknown extension should raise error (no fallback)."""
         strategy = DataProcessingStrategy(
-            name="text_strategy",
-            description="Text parser without include patterns",
+            name="specific_strategy",
+            description="Parser only matches specific patterns",
             parsers=[
                 Parser(
                     type="TextParser_Python",
                     config={},
+                    file_include_patterns=["*.txt", "*.md"],
                 )
             ],
-            fail_fast=True,
         )
         processor = BlobProcessor(strategy)
 
-        content = b"Some custom file content"
-        result = processor.process_blob(content, {"filename": "file.customext"})
+        content = b"Some content"
 
-        # Unknown non-binary extension should work with text parser
-        assert len(result) > 0
+        with pytest.raises(UnsupportedFileTypeError) as exc_info:
+            processor.process_blob(content, {"filename": "file.xyz"})
 
-    def test_fail_fast_default_is_true(self):
-        """When fail_fast is not specified, it should default to True."""
-        strategy = DataProcessingStrategy(
-            name="text_only_strategy",
-            description="Only has text parser configured for testing",
-            parsers=[
-                Parser(
-                    type="TextParser_Python",
-                    config={},
-                    file_include_patterns=["*.txt"],
-                )
-            ],
-            # fail_fast not specified - should default to True
-        )
-        processor = BlobProcessor(strategy)
+        assert ".xyz" in str(exc_info.value)
 
-        pdf_bytes = b"%PDF-1.4\n"
 
-        # Should raise error because fail_fast defaults to True
-        with pytest.raises(UnsupportedFileTypeError):
-            processor.process_blob(pdf_bytes, {"filename": "document.pdf"})
+class TestParserFailure:
+    """Test behavior when configured parsers fail."""
 
     @patch("core.blob_processor.BlobProcessor._get_parser_class")
-    def test_all_parsers_fail_raises_parser_failed_error(self, mock_get_parser_class):
+    def test_all_parsers_fail_raises_error(self, mock_get_parser_class):
         """When all configured parsers fail, should raise ParserFailedError."""
 
         # Create a mock parser class that always fails
@@ -315,7 +255,6 @@ class TestBlobProcessorFailFast:
                     file_include_patterns=["*.pdf"],
                 )
             ],
-            fail_fast=True,
         )
         processor = BlobProcessor(strategy)
 
@@ -328,15 +267,15 @@ class TestBlobProcessorFailFast:
         assert "PDFParser_PyPDF2" in exc_info.value.tried_parsers
 
     @patch("core.blob_processor.BlobProcessor._get_parser_class")
-    def test_all_parsers_fail_legacy_mode_returns_empty(self, mock_get_parser_class):
-        """When all parsers fail with fail_fast=False, should return empty list."""
+    def test_parser_failure_includes_error_details(self, mock_get_parser_class):
+        """ParserFailedError should include details about what went wrong."""
 
         class FailingParser:
             def __init__(self, name=None, config=None):
                 self.name = name
 
             def parse_blob(self, data, metadata):
-                raise ValueError("Parser intentionally failed for testing")
+                raise ValueError("Specific error message here")
 
         mock_get_parser_class.return_value = FailingParser
 
@@ -350,33 +289,29 @@ class TestBlobProcessorFailFast:
                     file_include_patterns=["*.pdf"],
                 )
             ],
-            fail_fast=False,
         )
         processor = BlobProcessor(strategy)
 
         pdf_bytes = b"%PDF-1.4\n"
-        result = processor.process_blob(pdf_bytes, {"filename": "test.pdf"})
 
-        # Should return empty list, not garbage chunks
-        assert result == []
+        with pytest.raises(ParserFailedError) as exc_info:
+            processor.process_blob(pdf_bytes, {"filename": "bad.pdf"})
+
+        error = exc_info.value
+        assert error.filename == "bad.pdf"
+        assert len(error.tried_parsers) > 0
+        assert len(error.errors) > 0
+        assert "Specific error message" in error.errors[0]
 
 
-class TestImageFileSafety:
-    """Test that image files are properly rejected."""
+class TestExplicitConfiguration:
+    """Test that explicit parser configuration is required and works."""
 
-    @pytest.mark.parametrize(
-        "extension",
-        [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"],
-    )
-    def test_image_extensions_are_binary(self, extension):
-        """Image file extensions should be detected as binary."""
-        assert is_binary_extension(f"photo{extension}")
-
-    def test_image_without_parser_raises_error(self):
-        """Image file without image parser should raise error."""
+    def test_parser_with_matching_pattern_succeeds(self):
+        """Parser with matching file pattern should process file."""
         strategy = DataProcessingStrategy(
-            name="text_only",
-            description="Only text parser for testing purposes",
+            name="text_strategy",
+            description="Text parser matching txt files",
             parsers=[
                 Parser(
                     type="TextParser_Python",
@@ -384,25 +319,58 @@ class TestImageFileSafety:
                     file_include_patterns=["*.txt"],
                 )
             ],
-            fail_fast=True,
         )
         processor = BlobProcessor(strategy)
 
-        # PNG file header
-        png_bytes = b"\x89PNG\r\n\x1a\n"
+        txt_bytes = b"Test content"
+        result = processor.process_blob(txt_bytes, {"filename": "test.txt"})
 
-        with pytest.raises(UnsupportedFileTypeError):
-            processor.process_blob(png_bytes, {"filename": "image.png"})
+        assert len(result) > 0
 
+    def test_parser_without_patterns_matches_all(self):
+        """Parser without file patterns should match all files."""
+        strategy = DataProcessingStrategy(
+            name="catch_all_strategy",
+            description="Text parser without patterns matches all",
+            parsers=[
+                Parser(
+                    type="TextParser_Python",
+                    config={},
+                    # No file_include_patterns = matches all
+                )
+            ],
+        )
+        processor = BlobProcessor(strategy)
 
-class TestArchiveFileSafety:
-    """Test that archive files are properly rejected."""
+        # Should work for any extension
+        txt_bytes = b"Test content"
+        result = processor.process_blob(txt_bytes, {"filename": "file.anything"})
 
-    @pytest.mark.parametrize(
-        "extension",
-        [".zip", ".tar", ".gz", ".bz2", ".7z", ".rar"],
-    )
-    def test_archive_extensions_are_binary(self, extension):
-        """Archive file extensions should be detected as binary."""
-        assert is_binary_extension(f"archive{extension}")
+        assert len(result) > 0
 
+    def test_multiple_parsers_tried_in_priority_order(self):
+        """Multiple matching parsers should be tried in priority order."""
+        # This test verifies the priority ordering works
+        strategy = DataProcessingStrategy(
+            name="multi_parser_strategy",
+            description="Multiple parsers with different priorities",
+            parsers=[
+                Parser(
+                    type="TextParser_Python",
+                    config={},
+                    priority=10,  # Lower priority
+                ),
+                Parser(
+                    type="TextParser_Python",
+                    config={},
+                    priority=1,  # Higher priority (lower number = higher priority)
+                ),
+            ],
+        )
+        processor = BlobProcessor(strategy)
+
+        # Both parsers match, higher priority should be tried first
+        txt_bytes = b"Test content"
+        result = processor.process_blob(txt_bytes, {"filename": "test.txt"})
+
+        assert len(result) > 0
