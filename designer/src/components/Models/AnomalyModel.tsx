@@ -777,8 +777,8 @@ function AnomalyModel() {
       if (!window.confirm(confirmMessage)) return
 
       try {
-        // Pass the model name - backend will handle finding the file
-        await deleteMutation.mutateAsync(versionName)
+        // Pass the filename (with backend suffix and extension) to the delete endpoint
+        await deleteMutation.mutateAsync(version.filename)
 
         toast({
           message: `Successfully deleted ${versionLabel}.`,
@@ -812,8 +812,8 @@ function AnomalyModel() {
     if (!window.confirm(confirmMessage)) return
 
     try {
-      // Delete all versions
-      await Promise.all(versions.map(v => deleteMutation.mutateAsync(v.versionedName)))
+      // Delete all versions using their filenames
+      await Promise.all(versions.map(v => deleteMutation.mutateAsync(v.filename)))
 
       toast({
         message: `Successfully deleted ${baseModelName} and all its versions.`,
