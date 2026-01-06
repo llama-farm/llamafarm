@@ -229,10 +229,14 @@ const Test = () => {
           <div className="flex-1 xl:min-w-[480px] rounded-xl bg-muted/30 border border-border px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 min-h-11 py-2 sm:py-0">
             {/* Toggles group - wrap on smaller screens */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs w-full">
-              <label className="inline-flex items-center gap-2 flex-shrink-0">
+              <label
+                className={`inline-flex items-center gap-2 flex-shrink-0 ${modelType !== 'inference' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={modelType !== 'inference' ? 'This setting applies to inference mode only' : undefined}
+              >
                 <Checkbox
                   id="show-processed"
                   checked={showReferences}
+                  disabled={modelType !== 'inference'}
                   onCheckedChange={(v: boolean | 'indeterminate') =>
                     setShowReferences(Boolean(v))
                   }
@@ -241,10 +245,14 @@ const Test = () => {
                   Show referenced chunks
                 </span>
               </label>
-              <label className="inline-flex items-center gap-2 flex-shrink-0">
+              <label
+                className={`inline-flex items-center gap-2 flex-shrink-0 ${modelType !== 'inference' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={modelType !== 'inference' ? 'This setting applies to inference mode only' : undefined}
+              >
                 <Checkbox
                   id="enable-thinking"
                   checked={gen.enableThinking}
+                  disabled={modelType !== 'inference'}
                   onCheckedChange={(v: boolean | 'indeterminate') =>
                     setGen({ ...gen, enableThinking: Boolean(v) })
                   }
@@ -252,12 +260,16 @@ const Test = () => {
                 <span className="whitespace-nowrap">Enable Thinking</span>
               </label>
               {/* Show generation settings toggle moved into the drawer */}
-              <div className="flex items-center gap-2 sm:ml-auto flex-shrink-0">
+              <div
+                className={`flex items-center gap-2 sm:ml-auto flex-shrink-0 ${modelType !== 'inference' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={modelType !== 'inference' ? 'This setting applies to inference mode only' : undefined}
+              >
                 <span className="text-muted-foreground whitespace-nowrap">
                   Allow ranking
                 </span>
                 <Switch
                   checked={allowRanking}
+                  disabled={modelType !== 'inference'}
                   onCheckedChange={(v: boolean) => setAllowRanking(Boolean(v))}
                   aria-label="Allow ranking"
                 />
@@ -267,11 +279,19 @@ const Test = () => {
               </div>
             </div>
           </div>
-          {/* Generation settings - only show for inference mode (hide for anomaly and classifier) */}
-          {modelType === 'inference' && (
-            <div className="w-full xl:basis-[320px] xl:flex-none">
-              <div className="flex-1 relative" ref={settingsRef}>
-              {isSettingsOpen ? (
+          {/* Generation settings - enabled for inference mode, disabled for anomaly and classifier */}
+          <div className="w-full xl:basis-[320px] xl:flex-none">
+            <div className="flex-1 relative" ref={settingsRef}>
+              {modelType !== 'inference' ? (
+                /* Disabled state for non-inference modes */
+                <div
+                  className="rounded-xl h-11 w-full flex items-center justify-between pl-4 pr-3 border border-border bg-muted/30 opacity-50 cursor-not-allowed"
+                  title="Generation settings apply to inference mode only"
+                >
+                  <span className="text-base text-muted-foreground">Generation settings</span>
+                  <span className="text-xs text-muted-foreground">Inference only</span>
+                </div>
+              ) : isSettingsOpen ? (
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(false)}
@@ -292,7 +312,7 @@ const Test = () => {
                   <FontIcon type="chevron-down" className="w-4 h-4 ml-2" />
                 </Button>
               )}
-              {isSettingsOpen && (
+              {isSettingsOpen && modelType === 'inference' && (
                 <div className="absolute left-0 right-0 top-full w-full rounded-b-xl bg-card border border-border border-t-0 p-4 shadow-xl z-50">
                   <div className="w-full">
                     {/* RAG master toggle */}
@@ -404,9 +424,8 @@ const Test = () => {
                   </div>
                 </div>
               )}
-              </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 

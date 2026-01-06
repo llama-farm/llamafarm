@@ -185,6 +185,35 @@ function ClassifierEmptyState({
   )
 }
 
+// Inference No Models Empty State
+function InferenceNoModelsState({
+  onAddModel,
+}: {
+  onAddModel: () => void
+}) {
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+          <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+        </div>
+        <div className="text-lg font-medium text-foreground">
+          No inference models configured
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          Add an inference model to your project to start chatting
+        </div>
+        <button
+          onClick={onAddModel}
+          className="mt-4 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
+        >
+          Add Inference Model
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Classifier Result Display
 function ClassifierResultDisplay({
   result,
@@ -1202,7 +1231,7 @@ export default function TestChat({
       lastUserInputRef.current = content
       const assistantId = addMessage({
         type: 'assistant',
-        content: 'Thinking…',
+        content: 'Loading model (may take a moment if downloading)…',
         timestamp: new Date(),
         isLoading: true,
       })
@@ -1871,7 +1900,7 @@ export default function TestChat({
             ]}
             onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier')}
             label="Model Type"
-            className="min-w-[140px] max-w-[180px]"
+            className="w-[200px]"
           />
 
           {/* Inference-specific selectors */}
@@ -1986,7 +2015,11 @@ export default function TestChat({
               onScroll={handleScroll}
               className="absolute inset-0 overflow-y-auto flex flex-col gap-4 p-3 md:p-4"
             >
-              {!hasMessages ? (
+              {unifiedModels.length === 0 && !modelsLoading ? (
+                <InferenceNoModelsState
+                  onAddModel={() => navigate('/chat/models/add')}
+                />
+              ) : !hasMessages ? (
                 <EmptyState />
               ) : (
                 messages.map((m: ChatboxMessage) => (
@@ -2083,13 +2116,15 @@ export default function TestChat({
               value={inputValue}
               onChange={e => updateInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={combinedIsSending || (!MOCK_MODE && !chatParams)}
+              disabled={combinedIsSending || (!MOCK_MODE && !chatParams) || unifiedModels.length === 0}
               placeholder={
-                combinedIsSending
-                  ? 'Waiting for response…'
-                  : !MOCK_MODE && !chatParams
-                    ? 'Select a project to start chatting…'
-                    : 'Type a message and press Enter'
+                unifiedModels.length === 0
+                  ? 'Add an inference model to start chatting...'
+                  : combinedIsSending
+                    ? 'Waiting for response…'
+                    : !MOCK_MODE && !chatParams
+                      ? 'Select a project to start chatting…'
+                      : 'Type a message and press Enter'
               }
               className={textareaClasses}
               aria-label="Message input"
@@ -2103,8 +2138,8 @@ export default function TestChat({
               <FontIcon
                 isButton
                 type="arrow-filled"
-                className={`w-8 h-8 self-end ${!combinedCanSend || (!MOCK_MODE && !chatParams) ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
-                handleOnClick={handleSend}
+                className={`w-8 h-8 self-end ${!combinedCanSend || (!MOCK_MODE && !chatParams) || unifiedModels.length === 0 ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+                handleOnClick={unifiedModels.length === 0 ? undefined : handleSend}
               />
             </div>
           </>
@@ -2330,7 +2365,7 @@ export function TestChatMessage({
         }
       >
         {message.isLoading && isAssistant ? (
-          <TypingDots label="Thinking" />
+          <TypingDots label="Loading model (may take a moment if downloading)" />
         ) : message.metadata?.isTest && isUser ? (
           <div className="whitespace-pre-wrap">
             <div className="mb-2">
@@ -2741,7 +2776,7 @@ function References({ sources }: { sources: any[] }) {
   )
 }
 
-function TypingDots({ label = 'Thinking' }: { label?: string }) {
+function TypingDots({ label = 'Loading model' }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-1 opacity-80">
       <span>{label}</span>
