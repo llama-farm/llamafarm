@@ -2612,9 +2612,10 @@ Classify texts using a trained model.
 {
   "model": "intent-classifier-latest",
   "texts": [
-    "I want to book a car for tomorrow",
-    "Please cancel everything",
-    "What are the check-in times?"
+    "Book me a flight to Paris tomorrow",
+    "Cancel my upcoming trip",
+    "What are the check-in times?",
+    "This is absolutely terrible service"
   ]
 }
 ```
