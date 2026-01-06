@@ -2020,8 +2020,13 @@ async def delete_anomaly_model(filename: str):
                 detail="Invalid filename",
             )
 
-        # Also reject any path separators that might have survived
-        if "/" in filename or "\\" in filename or ".." in filename:
+        # Also reject any path separators or special directory names
+        if (
+            "/" in filename
+            or "\\" in filename
+            or ".." in filename
+            or safe_filename == "."
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid filename: path separators not allowed",
