@@ -8,10 +8,6 @@ configured for a file type, it's a configuration error.
 
 from pathlib import Path
 
-from core.logging import RAGStructLogger
-
-logger = RAGStructLogger("rag.utils.parsing_safety")
-
 
 class ParsingError(Exception):
     """Base exception for parsing errors."""
