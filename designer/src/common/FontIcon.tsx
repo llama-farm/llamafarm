@@ -38,6 +38,7 @@ const Eye = lazy(() => import('../assets/icons/Eye'))
 const EyeOff = lazy(() => import('../assets/icons/EyeOff'))
 const Rag = lazy(() => import('../assets/icons/Rag'))
 const Folder = lazy(() => import('../assets/icons/Folder'))
+const Numeric = lazy(() => import('../assets/icons/Numeric'))
 
 type FontIconTypes =
   | 'add'
@@ -82,6 +83,7 @@ type FontIconTypes =
   | 'eye-off'
   | 'rag'
   | 'folder'
+  | 'numeric'
 
 export interface FontIconProps {
   className?: string
@@ -188,6 +190,8 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Rag />
       case 'folder':
         return <Folder />
+      case 'numeric':
+        return <Numeric />
     }
   }, [type])
 

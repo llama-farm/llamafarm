@@ -9,6 +9,7 @@ Note: OCR and Document extraction have moved to /v1/vision/*
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
@@ -66,7 +67,8 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
     }
     ```
 
-    After fitting, use /v1/ml/classifier/predict to classify new texts.
+    After fitting, use /v1/ml/classifier/save to persist the model (with optional description).
+    Use /v1/ml/classifier/predict to classify new texts.
     Use "{model}-latest" in predict/load to get the most recent version.
     """
     # Get versioned model name
@@ -129,8 +131,20 @@ async def save_classifier(request: ClassifierSaveRequest) -> dict[str, Any]:
 
     Models are saved to ~/.llamafarm/models/classifier/ with auto-generated
     directory names based on the model name.
+
+    Args:
+        model: Model identifier to save
+        description: Optional description for the model
     """
-    return await UniversalRuntimeService.classifier_save(model=request.model)
+    result = await UniversalRuntimeService.classifier_save(model=request.model)
+
+    # Save description metadata if provided (after model is saved to disk)
+    if request.description:
+        MLModelService.save_description(
+            "classifier", request.model, request.description
+        )
+
+    return result
 
 
 @router.post("/classifier/load")
@@ -164,14 +178,37 @@ async def load_classifier(request: ClassifierLoadRequest) -> dict[str, Any]:
 async def list_classifier_models() -> dict[str, Any]:
     """List all saved classifier models available for loading.
 
-    Returns models saved in the classifier models directory.
+    Returns models saved in the classifier models directory with rich metadata.
 
     Response includes:
-    - name: Name of the saved model
+    - name: Model name (directory name)
+    - base_name: Base model name (without version suffix)
     - path: Full path to the model directory
-    - labels: Class labels (if labels.txt exists)
+    - created: ISO timestamp of creation/modification
+    - is_versioned: Whether this is a versioned model
+    - labels: Class labels (loaded from labels.txt if present)
+    - description: Model description (if set)
     """
-    return await UniversalRuntimeService.classifier_list_models()
+    models = MLModelService.list_all_models("classifier")
+
+    # Also try to load labels and description for each model
+    for model in models:
+        labels_path = Path(model["path"]) / "labels.txt"
+        if labels_path.exists():
+            model["labels"] = labels_path.read_text().strip().split("\n")
+        else:
+            model["labels"] = []
+
+        # Load description from metadata
+        description = MLModelService.get_description("classifier", model["name"])
+        if description:
+            model["description"] = description
+
+    return {
+        "object": "list",
+        "data": models,
+        "total": len(models),
+    }
 
 
 @router.delete("/classifier/models/{model_name}")
@@ -225,7 +262,8 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
     }
     ```
 
-    After fitting, use /v1/ml/anomaly/score or /v1/ml/anomaly/detect.
+    After fitting, use /v1/ml/anomaly/save to persist the model (with optional description).
+    Use /v1/ml/anomaly/score or /v1/ml/anomaly/detect for inference.
     Use "{model}-latest" in score/detect/load to get the most recent version.
     """
     # Get versioned model name
@@ -238,6 +276,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         backend=request.backend,
         schema=request.schema,
         contamination=request.contamination,
+        normalization=request.normalization,
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
@@ -282,6 +321,7 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         data=request.data,
         backend=request.backend,
         schema=request.schema,
+        normalization=request.normalization,
         threshold=request.threshold,
     )
 
@@ -313,6 +353,7 @@ async def detect_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         data=request.data,
         backend=request.backend,
         schema=request.schema,
+        normalization=request.normalization,
         threshold=request.threshold,
     )
 
@@ -326,11 +367,23 @@ async def save_anomaly_model(request: AnomalySaveRequest) -> dict[str, Any]:
 
     Models are saved to ~/.llamafarm/models/anomaly/ with auto-generated
     filenames based on the model name and backend.
+
+    Args:
+        model: Model identifier to save
+        backend: Backend type used for training
+        description: Optional description for the model
     """
-    return await UniversalRuntimeService.anomaly_save(
+    result = await UniversalRuntimeService.anomaly_save(
         model=request.model,
         backend=request.backend,
+        normalization=request.normalization,
     )
+
+    # Save description metadata if provided (after model is saved to disk)
+    if request.description:
+        MLModelService.save_description("anomaly", request.model, request.description)
+
+    return result
 
 
 @router.post("/anomaly/load")
@@ -369,15 +422,32 @@ async def load_anomaly_model(request: AnomalyLoadRequest) -> dict[str, Any]:
 async def list_anomaly_models() -> dict[str, Any]:
     """List all saved anomaly models available for loading.
 
-    Returns models saved in the anomaly models directory.
+    Returns models saved in the anomaly models directory with rich metadata.
 
     Response includes:
-    - filename: Name of the saved model file
+    - name: Model name (without extension)
+    - filename: Full filename on disk
+    - base_name: Base model name (without version suffix)
+    - backend: Detected backend type
+    - path: Full path to model file
     - size_bytes: File size
-    - modified: Last modification timestamp
-    - backend: Detected backend type (from file extension)
+    - created: ISO timestamp of creation/modification
+    - is_versioned: Whether this is a versioned model
+    - description: Model description (if set)
     """
-    return await UniversalRuntimeService.anomaly_list_models()
+    models = MLModelService.list_all_models("anomaly")
+
+    # Load description for each model
+    for model in models:
+        description = MLModelService.get_description("anomaly", model["name"])
+        if description:
+            model["description"] = description
+
+    return {
+        "object": "list",
+        "data": models,
+        "total": len(models),
+    }
 
 
 @router.delete("/anomaly/models/{filename}")

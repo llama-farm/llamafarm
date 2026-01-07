@@ -1,7 +1,7 @@
 """
-GGUF language model wrapper using llama-cpp-python.
+GGUF language model wrapper using llama-cpp.
 
-Provides the same interface as LanguageModel but uses llama-cpp-python for
+Provides the same interface as LanguageModel but uses llama-cpp for
 GGUF quantized models, enabling faster inference and lower memory usage.
 """
 
@@ -15,7 +15,9 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
+from utils.context_manager import ContextBudget, ContextManager, ContextUsage
 from utils.model_format import get_gguf_file_path
+from utils.token_counter import TokenCounter
 
 from .base import BaseModel
 
@@ -26,10 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 class GGUFLanguageModel(BaseModel):
-    """Wrapper for GGUF models using llama-cpp-python.
+    """Wrapper for GGUF models using llama-cpp.
 
     This class provides an interface compatible with LanguageModel but uses
-    llama-cpp-python for inference with GGUF quantized models. GGUF models
+    llama-cpp for inference with GGUF quantized models. GGUF models
     offer:
     - 50-75% smaller file sizes (4-bit/8-bit quantization)
     - 2-3x faster inference on Apple Silicon (Metal)
@@ -69,14 +71,22 @@ class GGUFLanguageModel(BaseModel):
         self.preferred_quantization = preferred_quantization
         self._executor = ThreadPoolExecutor(max_workers=1)
 
+        # Context management (initialized during load())
+        self._token_counter: TokenCounter | None = None
+        self._context_manager: ContextManager | None = None
+
+        # Cached GGUF metadata (extracted once during load())
+        self._chat_template: str | None = None
+        self._special_tokens: dict[str, str] | None = None
+
     async def load(self) -> None:
-        """Load the GGUF model using llama-cpp-python.
+        """Load the GGUF model using llama-cpp.
 
         This method:
         1. Locates the .gguf file in the HuggingFace cache
         2. Computes optimal context size based on memory and configuration
         3. Configures GPU layers based on the target device
-        4. Initializes the llama-cpp-python Llama instance
+        4. Initializes the llama-cpp Llama instance
         5. Runs initialization in a thread pool (blocking operation)
 
         Raises:
@@ -101,6 +111,9 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(f"GGUF file located at: {gguf_path}")
 
+        # Store path for later use (e.g., Jinja2 template extraction)
+        self._gguf_path = gguf_path
+
         # Compute optimal context size
         self.actual_n_ctx, warnings = get_default_context_size(
             model_id=self.model_id,
@@ -116,7 +129,7 @@ class GGUFLanguageModel(BaseModel):
         logger.info(f"Using context size: {self.actual_n_ctx}")
 
         # Configure GPU layers based on device
-        # Note: llama-cpp-python automatically uses whatever backend it was compiled with
+        # Note: llama-cpp automatically uses whatever backend it was compiled with
         # (CUDA, ROCm, Metal, Vulkan, etc.). We just tell it whether to use GPU or CPU.
         if self.device != "cpu":
             n_gpu_layers = -1  # Use all layers on GPU (any backend)
@@ -127,7 +140,7 @@ class GGUFLanguageModel(BaseModel):
             n_gpu_layers = 0  # CPU only
             logger.info("Configuring for CPU-only inference")
 
-        # Load model using llama-cpp-python
+        # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking
         loop = asyncio.get_running_loop()
 
@@ -167,7 +180,7 @@ class GGUFLanguageModel(BaseModel):
                     logger.error(
                         f"llama.cpp failed to load model. This can be caused by:\n"
                         f"  1. Corrupted GGUF file - try deleting and re-downloading\n"
-                        f"  2. Incompatible llama-cpp-python wheel - try reinstalling\n"
+                        f"  2. Incompatible llama-cpp binary - try reinstalling\n"
                         f"  3. Unsupported GGUF format version\n"
                         f"  File: {gguf_path}\n"
                         f"  Size: {file_size_mb:.1f} MB\n"
@@ -175,12 +188,52 @@ class GGUFLanguageModel(BaseModel):
                     )
                 raise
 
-        self.llama = await loop.run_in_executor(self._executor, _load_model)
+        try:
+            self.llama = await loop.run_in_executor(self._executor, _load_model)
 
-        logger.info(
-            f"GGUF model loaded successfully on {self.device} "
-            f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
-        )
+            # Initialize context management
+            self._token_counter = TokenCounter(self.llama)
+            budget = ContextBudget.from_context_size(self.actual_n_ctx)
+            self._context_manager = ContextManager(self._token_counter, budget)
+
+            # Pre-extract and cache GGUF metadata for chat template rendering
+            # This avoids re-reading the large GGUF file on every request
+            try:
+                from utils.jinja_tools import (
+                    get_chat_template_from_gguf,
+                    get_special_tokens_from_gguf,
+                    supports_native_tools,
+                )
+
+                self._chat_template = get_chat_template_from_gguf(gguf_path)
+                if self._chat_template:
+                    has_tools = supports_native_tools(self._chat_template)
+                    logger.info(
+                        f"Chat template cached ({len(self._chat_template)} chars), "
+                        f"supports_native_tools={has_tools}"
+                    )
+                else:
+                    logger.debug("No chat template found in GGUF metadata")
+
+                self._special_tokens = get_special_tokens_from_gguf(gguf_path)
+                logger.debug(
+                    f"Special tokens cached: bos='{self._special_tokens.get('bos_token', '')}', "
+                    f"eos='{self._special_tokens.get('eos_token', '')}'"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cache GGUF metadata: {e}")
+                self._chat_template = None
+                self._special_tokens = None
+
+            logger.info(
+                f"GGUF model loaded successfully on {self.device} "
+                f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
+            )
+        except Exception:
+            # Clean up executor if load fails to prevent resource leak
+            if hasattr(self, "_executor"):
+                self._executor.shutdown(wait=False)
+            raise
 
     def format_messages(self, messages: list[dict]) -> str:
         """Format chat messages into a prompt string.
@@ -219,6 +272,234 @@ class GGUFLanguageModel(BaseModel):
         prompt_parts.append("Assistant:")
         return "\n".join(prompt_parts)
 
+    @property
+    def token_counter(self) -> TokenCounter | None:
+        """Get the token counter for this model."""
+        return self._token_counter
+
+    @property
+    def context_manager(self) -> ContextManager | None:
+        """Get the context manager for this model."""
+        return self._context_manager
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens in text using the model's tokenizer.
+
+        Args:
+            text: Text to count tokens for.
+
+        Returns:
+            Number of tokens.
+
+        Raises:
+            RuntimeError: If model not loaded.
+        """
+        if self._token_counter is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+        return self._token_counter.count_tokens(text)
+
+    def validate_context(self, messages: list[dict]) -> ContextUsage:
+        """Validate messages fit within context and return usage info.
+
+        Args:
+            messages: List of chat messages to validate.
+
+        Returns:
+            ContextUsage with token counts and overflow status.
+
+        Raises:
+            RuntimeError: If model not loaded.
+        """
+        if self._context_manager is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+        return self._context_manager.validate_messages(messages)
+
+    def _render_with_jinja2(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> str | None:
+        """Try to render messages with tools using Jinja2 template.
+
+        This uses the model's native chat template (cached from GGUF metadata) to render
+        the prompt with tool definitions, which produces better results for models
+        that were trained with native tool calling support.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            tools: List of tool definitions in OpenAI format
+
+        Returns:
+            Rendered prompt string if the model supports native tools, None otherwise.
+        """
+        # Use cached template (extracted once during load())
+        template = self._chat_template
+        if not template:
+            logger.debug("Jinja2 rendering skipped: no chat template cached")
+            return None
+
+        try:
+            from utils.jinja_tools import (
+                render_chat_with_tools,
+                supports_native_tools,
+            )
+
+            has_tools = supports_native_tools(template)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"Using cached chat template ({len(template)} chars), "
+                    f"supports_native_tools={has_tools}"
+                )
+                # Log first 500 chars of template for debugging
+                logger.debug(f"Template preview: {template[:500]}...")
+
+            if not has_tools:
+                logger.debug(
+                    "Jinja2 rendering skipped: template does not support native tools "
+                    "('tools' variable not found in template)"
+                )
+                return None
+
+            # Use cached special tokens
+            special_tokens = self._special_tokens or {}
+
+            # Debug log tools being used in Jinja2 path
+            if logger.isEnabledFor(logging.DEBUG):
+                import json
+
+                tool_names = [
+                    t.get("function", {}).get("name", "unknown") for t in tools
+                ]
+                logger.debug(f"Tools provided (Jinja2 path): {tool_names}")
+                logger.debug(f"Full tool definitions:\n{json.dumps(tools, indent=2)}")
+
+            # Render the template with tools
+            prompt = render_chat_with_tools(
+                template=template,
+                messages=messages,
+                tools=tools,
+                add_generation_prompt=True,
+                bos_token=special_tokens.get("bos_token", ""),
+                eos_token=special_tokens.get("eos_token", ""),
+            )
+
+            logger.debug(
+                f"Rendered prompt with Jinja2 native tool support "
+                f"({len(prompt)} chars, {len(tools)} tools)"
+            )
+            return prompt
+
+        except Exception as e:
+            logger.debug(f"Jinja2 tool rendering failed, will use fallback: {e}")
+            return None
+
+    def _prepare_messages_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+    ) -> list[dict]:
+        """Prepare messages with tool definitions using prompt injection.
+
+        This is the fallback approach when Jinja2 rendering is not available.
+        Tools are injected into the system message using XML format.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys
+            tools: Optional list of tool definitions in OpenAI format
+            tool_choice: Tool choice strategy:
+                - None or "auto": Model may call tools (default)
+                - "none": Model should not call tools
+                - "required": Model must call at least one tool
+                - {"type": "function", "function": {"name": "X"}}: Must call specific function
+
+        Returns:
+            Messages with tools injected (if tools provided)
+        """
+        if not tools:
+            return messages
+
+        # Debug log tools and tool_choice
+        if logger.isEnabledFor(logging.DEBUG):
+            import json
+
+            tool_names = [t.get("function", {}).get("name", "unknown") for t in tools]
+            logger.debug(f"Tools provided: {tool_names}")
+            logger.debug(f"Tool choice: {tool_choice}")
+            logger.debug(f"Full tool definitions:\n{json.dumps(tools, indent=2)}")
+
+        # Inject tools into messages using prompt-based approach
+        from utils.tool_calling import inject_tools_into_messages
+
+        logger.debug(f"Using prompt-based tool injection with tool_choice={tool_choice}")
+        return inject_tools_into_messages(messages, tools, tool_choice=tool_choice)
+
+    async def _generate_from_prompt(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+        thinking_budget: int | None,
+    ) -> str:
+        """Generate completion from a pre-formatted prompt string.
+
+        This is used when Jinja2 rendering produces a prompt with native tool support.
+
+        Args:
+            prompt: Pre-formatted prompt string
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences
+            thinking_budget: Maximum tokens for thinking
+
+        Returns:
+            Generated text as a string
+        """
+        assert self.llama is not None, "Model not loaded"
+
+        loop = asyncio.get_running_loop()
+
+        # Capture llama reference for nested function (type checker can't see through closures)
+        llama = self.llama
+
+        def _generate():
+            try:
+                # Set up logits processor for thinking budget if specified
+                logits_processor = None
+                if thinking_budget is not None:
+                    from utils.thinking import ThinkingBudgetProcessor
+
+                    logits_processor = ThinkingBudgetProcessor(
+                        llama, max_thinking_tokens=thinking_budget
+                    )
+
+                # Use create_completion for raw prompts (no chat template applied)
+                return llama.create_completion(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                    logits_processor=logits_processor,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error during llama-cpp completion: {e}",
+                    exc_info=True,
+                )
+                raise RuntimeError(f"Completion failed: {e}") from e
+
+        try:
+            result = await loop.run_in_executor(self._executor, _generate)
+            content = result["choices"][0]["message"]["content"]
+            return content.strip() if content else ""
+        except Exception as e:
+            logger.error(f"Error extracting completion result: {e}", exc_info=True)
+            raise ValueError(f"Unexpected result from completion: {e}") from e
+
     async def generate(
         self,
         messages: list[dict],
@@ -227,12 +508,14 @@ class GGUFLanguageModel(BaseModel):
         top_p: float = 1.0,
         stop: list[str] | None = None,
         thinking_budget: int | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> str:
         """Generate chat completion (non-streaming).
 
-        Uses llama-cpp's create_chat_completion() which applies the chat template
-        embedded in the GGUF metadata. This is essential for models like Qwen
-        that use special tokens and thinking tags.
+        For tool calling, this method first tries to use the model's native Jinja2
+        template with tool support. If the model doesn't support native tools,
+        falls back to prompt-based tool injection.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys
@@ -241,6 +524,8 @@ class GGUFLanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
             thinking_budget: Maximum tokens for thinking before forcing </think>
+            tools: Optional list of tool definitions in OpenAI format
+            tool_choice: Optional tool choice strategy ("auto", "none", "required")
 
         Returns:
             Generated text as a string
@@ -251,6 +536,38 @@ class GGUFLanguageModel(BaseModel):
         assert self.llama is not None, "Model not loaded. Call load() first."
 
         max_tokens = max_tokens or 512
+
+        # Try Jinja2 native tool rendering first (if tools provided)
+        if tools:
+            jinja2_prompt = self._render_with_jinja2(messages, tools)
+            if jinja2_prompt is not None:
+                # Debug log the full prompt being sent to the LLM
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        f"[generate] Final prompt (Jinja2 rendered, {len(jinja2_prompt)} chars):\n"
+                        f"{'=' * 60}\n{jinja2_prompt}\n{'=' * 60}"
+                    )
+                # Use the pre-formatted prompt directly
+                return await self._generate_from_prompt(
+                    prompt=jinja2_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop,
+                    thinking_budget=thinking_budget,
+                )
+
+        # Fallback: use prompt injection + chat completion
+        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
+
+        # Debug log the prepared messages (prompt injection path)
+        if logger.isEnabledFor(logging.DEBUG):
+            import json
+
+            logger.debug(
+                f"[generate] Prepared messages ({len(prepared_messages)} messages):\n"
+                f"{'=' * 60}\n{json.dumps(prepared_messages, indent=2)}\n{'=' * 60}"
+            )
         loop = asyncio.get_running_loop()
 
         def _generate():
@@ -266,7 +583,7 @@ class GGUFLanguageModel(BaseModel):
 
                 # Use create_chat_completion which applies the model's chat template
                 return self.llama.create_chat_completion(
-                    messages=messages,
+                    messages=prepared_messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=top_p,
@@ -275,7 +592,7 @@ class GGUFLanguageModel(BaseModel):
                 )
             except Exception as e:
                 logger.error(
-                    f"Error during llama-cpp-python chat completion: {e}",
+                    f"Error during llama-cpp chat completion: {e}",
                     exc_info=True,
                 )
                 raise RuntimeError(f"Chat completion failed: {e}") from e
@@ -288,6 +605,104 @@ class GGUFLanguageModel(BaseModel):
             logger.error(f"Error extracting chat completion result: {e}", exc_info=True)
             raise ValueError(f"Unexpected result from chat completion: {e}") from e
 
+    async def _stream_from_prompt(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+        thinking_budget: int | None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream completion from a pre-formatted prompt string.
+
+        This is used when Jinja2 rendering produces a prompt with native tool support.
+
+        Args:
+            prompt: Pre-formatted prompt string
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences
+            thinking_budget: Maximum tokens for thinking
+
+        Yields:
+            Generated text tokens as strings
+        """
+        assert self.llama is not None, "Model not loaded"
+
+        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        # Capture llama reference for nested function (type checker can't see through closures)
+        llama = self.llama
+
+        def _generate_stream():
+            """Run completion in separate thread."""
+            try:
+                thinking_tokens = 0
+                in_thinking = False
+                thinking_ended = False
+                accumulated_text = ""
+
+                # Set up logits processor for thinking budget enforcement
+                logits_processor = None
+                if thinking_budget is not None:
+                    from utils.thinking import ThinkingBudgetProcessor
+
+                    logits_processor = ThinkingBudgetProcessor(
+                        llama, max_thinking_tokens=thinking_budget
+                    )
+
+                for chunk in llama.create_completion(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                    stream=True,
+                    logits_processor=logits_processor,
+                ):
+                    delta = chunk["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        accumulated_text += content
+
+                        # Track thinking state
+                        if "<think>" in accumulated_text.lower() and not in_thinking:
+                            in_thinking = True
+                        if "</think>" in accumulated_text.lower():
+                            thinking_ended = True
+                            in_thinking = False
+
+                        # Count thinking tokens
+                        if in_thinking and not thinking_ended:
+                            thinking_tokens += 1
+
+                        future = asyncio.run_coroutine_threadsafe(
+                            queue.put(content), loop
+                        )
+                        future.result()
+            except Exception as e:
+                logger.error(f"Error in GGUF completion stream: {e}", exc_info=True)
+                future = asyncio.run_coroutine_threadsafe(queue.put(e), loop)
+                future.result()
+            finally:
+                future = asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+                future.result()
+
+        loop.run_in_executor(self._executor, _generate_stream)
+
+        # Yield tokens as they arrive, propagate exceptions
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            elif isinstance(item, Exception):
+                raise item
+            else:
+                yield item
+
     async def generate_stream(
         self,
         messages: list[dict],
@@ -296,11 +711,14 @@ class GGUFLanguageModel(BaseModel):
         top_p: float = 1.0,
         stop: list[str] | None = None,
         thinking_budget: int | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> AsyncGenerator[str, None]:
         """Generate chat completion with streaming (async generator).
 
-        Uses llama-cpp's create_chat_completion() with streaming, which applies
-        the chat template embedded in the GGUF metadata.
+        For tool calling, this method first tries to use the model's native Jinja2
+        template with tool support. If the model doesn't support native tools,
+        falls back to prompt-based tool injection.
 
         Thinking budget is enforced via logits processor, which forces the model
         to generate </think> when the budget is reached.
@@ -312,6 +730,8 @@ class GGUFLanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
             thinking_budget: Maximum tokens for thinking before forcing </think>
+            tools: Optional list of tool definitions in OpenAI format
+            tool_choice: Optional tool choice strategy ("auto", "none", "required")
 
         Yields:
             Generated text tokens as strings
@@ -322,6 +742,41 @@ class GGUFLanguageModel(BaseModel):
         assert self.llama is not None, "Model not loaded. Call load() first."
 
         max_tokens = max_tokens or 512
+
+        # Try Jinja2 native tool rendering first (if tools provided)
+        if tools:
+            jinja2_prompt = self._render_with_jinja2(messages, tools)
+            if jinja2_prompt is not None:
+                # Debug log the full prompt being sent to the LLM
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        f"[generate_stream] Final prompt (Jinja2 rendered, {len(jinja2_prompt)} chars):\n"
+                        f"{'=' * 60}\n{jinja2_prompt}\n{'=' * 60}"
+                    )
+                # Use the pre-formatted prompt directly
+                async for token in self._stream_from_prompt(
+                    prompt=jinja2_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop,
+                    thinking_budget=thinking_budget,
+                ):
+                    yield token
+                return
+
+        # Fallback: use prompt injection + chat completion
+        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
+
+        # Debug log the prepared messages (prompt injection path)
+        if logger.isEnabledFor(logging.DEBUG):
+            import json
+
+            logger.debug(
+                f"[generate_stream] Prepared messages ({len(prepared_messages)} messages):\n"
+                f"{'=' * 60}\n{json.dumps(prepared_messages, indent=2)}\n{'=' * 60}"
+            )
+
         queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
@@ -343,7 +798,7 @@ class GGUFLanguageModel(BaseModel):
                     )
 
                 for chunk in self.llama.create_chat_completion(
-                    messages=messages,
+                    messages=prepared_messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=top_p,
@@ -395,7 +850,7 @@ class GGUFLanguageModel(BaseModel):
         """Unload GGUF model and free resources."""
         logger.info(f"Unloading GGUF language model: {self.model_id}")
 
-        # Clear llama-cpp-python instance
+        # Clear llama-cpp instance
         self.llama = None
 
         # Shutdown thread pool executor

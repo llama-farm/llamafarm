@@ -290,6 +290,21 @@ SetFit uses contrastive learning to fine-tune a sentence-transformer model on yo
    /classifier/fit    /classifier/predict    /classifier/save
 ```
 
+:::tip Using the LlamaFarm API (Recommended)
+The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the Universal Runtime with added features:
+- **Model Versioning**: Automatic timestamped versions when `overwrite: false`
+- **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
+- **File Upload Support**: Direct file handling without base64 encoding
+
+```bash
+# Via LlamaFarm API (port 8000)
+curl -X POST http://localhost:8000/v1/ml/classifier/fit ...
+
+# Via Universal Runtime (port 11540)
+curl -X POST http://localhost:11540/v1/classifier/fit ...
+```
+:::
+
 ### Step 1: Train Your Classifier
 
 Provide labeled examples (minimum 2, recommended 8-16 per class):

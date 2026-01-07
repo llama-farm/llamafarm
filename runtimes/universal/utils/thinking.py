@@ -135,8 +135,8 @@ class ThinkingBudgetProcessor:
     When the thinking budget is reached, this processor forces the model
     to generate </think> and proceed to the answer.
 
-    This is used with llama-cpp-python's logits_processor parameter.
-    Uses numpy arrays (required by llama-cpp-python since PR #499).
+    This is used with llama-cpp's logits_processor parameter.
+    Uses numpy arrays.
     """
 
     def __init__(

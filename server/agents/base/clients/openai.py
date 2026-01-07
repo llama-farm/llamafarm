@@ -83,7 +83,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         )
 
         # Convert tools to OpenAI format
-        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+        # Check for native_api strategy (handle both enum and string values)
+        strategy = self._model_config.tool_call_strategy
+        use_native_api = strategy in (
+            ToolCallStrategy.native_api,
+            "native_api",
+            None,  # Default to native_api if not set
+        )
+
+        if use_native_api:
             openai_tools = (
                 [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
             )
@@ -165,7 +173,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         )
 
         # Convert tools to OpenAI format
-        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+        # Check for native_api strategy (handle both enum and string values)
+        strategy = self._model_config.tool_call_strategy
+        use_native_api = strategy in (
+            ToolCallStrategy.native_api,
+            "native_api",
+            None,  # Default to native_api if not set
+        )
+
+        if use_native_api:
             openai_tools = (
                 [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
             )
@@ -217,7 +233,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             stream=stream_param,
         )
 
-        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+        if use_native_api:
             async for chunk in response_stream:
                 yield chunk
             return

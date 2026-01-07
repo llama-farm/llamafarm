@@ -174,7 +174,7 @@ class TestGGUFLanguageModel:
 
     @pytest.mark.asyncio
     async def test_generate_stream_exception_in_thread(self, caplog):
-        """Test generate_stream handles exception from llama-cpp-python gracefully."""
+        """Test generate_stream handles exception from llama-cpp gracefully."""
         import logging
 
         model = GGUFLanguageModel("test/model", "cpu")
@@ -183,9 +183,9 @@ class TestGGUFLanguageModel:
         mock_llama = Mock()
         model.llama = mock_llama
 
-        # Simulate llama-cpp-python raising an exception during streaming
+        # Simulate llama-cpp raising an exception during streaming
         def raise_exception(*args, **kwargs):
-            raise RuntimeError("Simulated llama-cpp-python error")
+            raise RuntimeError("Simulated llama-cpp error")
 
         # Mock create_chat_completion to return an iterable that raises
         mock_llama.create_chat_completion.side_effect = raise_exception
@@ -194,14 +194,12 @@ class TestGGUFLanguageModel:
             gen = model.generate_stream(
                 [{"role": "user", "content": "Hi"}], max_tokens=10
             )
-            with pytest.raises(RuntimeError, match="Simulated llama-cpp-python error"):
+            with pytest.raises(RuntimeError, match="Simulated llama-cpp error"):
                 # Exhaust the generator to trigger the exception
                 async for _ in gen:
                     pass
             # Verify that an error was logged
-            assert any(
-                "Simulated llama-cpp-python error" in r.message for r in caplog.records
-            )
+            assert any("Simulated llama-cpp error" in r.message for r in caplog.records)
 
     @pytest.mark.asyncio
     async def test_logits_processor_is_callable_not_list(self):

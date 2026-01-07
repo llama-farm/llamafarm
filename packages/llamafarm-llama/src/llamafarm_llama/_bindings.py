@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import atexit
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cffi
 
 if TYPE_CHECKING:
-    from cffi import FFI
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -404,7 +403,6 @@ def _preload_ggml_with_global(lib_dir, system):
     the backend registry is globally visible.
     """
     import ctypes
-    import sys
 
     if system == "Darwin":
         # On macOS, everything is usually linked into libllama.dylib
@@ -435,13 +433,11 @@ def _preload_ggml_with_global(lib_dir, system):
             RTLD_GLOBAL = 0
             RTLD_NOW = 0
 
-        print(f"[llamafarm_llama] Pre-loading {ggml_lib_path.name} with RTLD_GLOBAL...", file=sys.stderr, flush=True)
+        logger.debug(f"Pre-loading {ggml_lib_path.name} with RTLD_GLOBAL...")
         ctypes.CDLL(str(ggml_lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
         logger.info(f"Pre-loaded {ggml_lib_path} with RTLD_GLOBAL")
-        print(f"[llamafarm_llama] Pre-loaded {ggml_lib_path.name} successfully", file=sys.stderr, flush=True)
     except Exception as e:
         logger.warning(f"Failed to pre-load {ggml_lib_path}: {e}")
-        print(f"[llamafarm_llama] Failed to pre-load {ggml_lib_path.name}: {e}", file=sys.stderr, flush=True)
 
 
 def _load_library():
@@ -596,7 +592,7 @@ def _load_ggml_backends():
     """
     import os
     import platform
-    import sys
+
     from ._binary import get_lib_path
 
     lib_path = get_lib_path()
@@ -605,19 +601,15 @@ def _load_ggml_backends():
 
     # Log library directory contents for debugging
     logger.info(f"Loading GGML backends from: {lib_dir}")
-    print(f"[llamafarm_llama] Library directory: {lib_dir}", file=sys.stderr, flush=True)
     try:
         files = list(lib_dir.iterdir())
-        logger.info(f"Library directory contains {len(files)} files")
-        print(f"[llamafarm_llama] Library directory contains {len(files)} files:", file=sys.stderr, flush=True)
+        logger.debug(f"Library directory contains {len(files)} files")
         for f in sorted(files):
             size = f.stat().st_size if f.is_file() else 0
             ftype = "dir" if f.is_dir() else ("link" if f.is_symlink() else f"{size:,}b")
-            print(f"[llamafarm_llama]   {f.name} ({ftype})", file=sys.stderr, flush=True)
             logger.debug(f"  {f.name} ({ftype})")
     except Exception as e:
         logger.warning(f"Could not list library directory: {e}")
-        print(f"[llamafarm_llama] Could not list library directory: {e}", file=sys.stderr, flush=True)
 
     # Ensure LD_LIBRARY_PATH is set (for Linux backend plugin loading)
     if system == "Linux":
@@ -636,32 +628,26 @@ def _load_ggml_backends():
     # where to find backend plugins, which is more reliable than the default search
     lib_dir_str = str(lib_dir)
     try:
-        print(f"[llamafarm_llama] Calling ggml_backend_load_all_from_path({lib_dir_str}) from libllama (CFFI)...", file=sys.stderr, flush=True)
+        logger.debug(f"Calling ggml_backend_load_all_from_path({lib_dir_str}) from libllama (CFFI)...")
         lib.ggml_backend_load_all_from_path(lib_dir_str.encode('utf-8'))
         logger.info(f"GGML backends loaded from path {lib_dir_str} via libllama (CFFI)")
-        print(f"[llamafarm_llama] ggml_backend_load_all_from_path() from libllama succeeded", file=sys.stderr, flush=True)
         return
     except (AttributeError, OSError) as e:
-        logger.info(f"ggml_backend_load_all_from_path not available in libllama: {e}")
-        print(f"[llamafarm_llama] ggml_backend_load_all_from_path not in libllama: {e}", file=sys.stderr, flush=True)
+        logger.debug(f"ggml_backend_load_all_from_path not available in libllama: {e}")
     except Exception as e:
-        logger.info(f"Error calling ggml_backend_load_all_from_path from libllama: {e}")
-        print(f"[llamafarm_llama] Error calling from libllama: {e}", file=sys.stderr, flush=True)
+        logger.debug(f"Error calling ggml_backend_load_all_from_path from libllama: {e}")
 
     # Fallback to ggml_backend_load_all() without explicit path
     try:
-        print(f"[llamafarm_llama] Calling ggml_backend_load_all() from libllama (CFFI)...", file=sys.stderr, flush=True)
+        logger.debug("Calling ggml_backend_load_all() from libllama (CFFI)...")
         lib.ggml_backend_load_all()
         logger.info("GGML backends loaded from libllama (CFFI)")
-        print(f"[llamafarm_llama] ggml_backend_load_all() from libllama succeeded", file=sys.stderr, flush=True)
         return
     except (AttributeError, OSError) as e:
-        logger.info(f"ggml_backend_load_all not available in libllama: {e}")
-        print(f"[llamafarm_llama] ggml_backend_load_all not in libllama: {e}", file=sys.stderr, flush=True)
+        logger.debug(f"ggml_backend_load_all not available in libllama: {e}")
     except Exception as e:
         # CFFI ffi.error or other issues
-        logger.info(f"Error calling ggml_backend_load_all from libllama: {e}")
-        print(f"[llamafarm_llama] Error calling from libllama: {e}", file=sys.stderr, flush=True)
+        logger.debug(f"Error calling ggml_backend_load_all from libllama: {e}")
 
     # FALLBACK: Try loading from ggml library via ctypes
     # On Windows, ggml_backend_load_all is only in ggml.dll, not llama.dll
@@ -686,7 +672,7 @@ def _load_ggml_backends():
     if ggml_lib_path and ggml_lib_path.exists():
         try:
             import ctypes
-            print(f"[llamafarm_llama] FALLBACK: Loading ggml library from {ggml_lib_path}...", file=sys.stderr, flush=True)
+            logger.debug(f"FALLBACK: Loading ggml library from {ggml_lib_path}...")
 
             # Load with RTLD_GLOBAL on Linux so backend registrations are visible globally
             # On Windows, the mode parameter is ignored by ctypes
@@ -701,32 +687,28 @@ def _load_ggml_backends():
             # to the executable (Python.exe), NOT relative to ggml.dll. We MUST use
             # ggml_backend_load_all_from_path() with the explicit cache directory.
             try:
-                print(f"[llamafarm_llama] Calling ggml_backend_load_all_from_path({lib_dir_str}) from {ggml_lib_path.name}...", file=sys.stderr, flush=True)
+                logger.debug(f"Calling ggml_backend_load_all_from_path({lib_dir_str}) from {ggml_lib_path.name}...")
                 ggml_backend_load_all_from_path = ggml_lib.ggml_backend_load_all_from_path
                 ggml_backend_load_all_from_path.argtypes = [ctypes.c_char_p]
                 ggml_backend_load_all_from_path.restype = None
                 ggml_backend_load_all_from_path(lib_dir_str.encode('utf-8'))
 
                 logger.info(f"GGML backends loaded from path {lib_dir_str} via {ggml_lib_path.name} (fallback)")
-                print(f"[llamafarm_llama] ggml_backend_load_all_from_path() from {ggml_lib_path.name} succeeded (fallback)", file=sys.stderr, flush=True)
                 return
             except (AttributeError, OSError) as e:
-                logger.info(f"ggml_backend_load_all_from_path not available in {ggml_lib_path.name}: {e}")
-                print(f"[llamafarm_llama] ggml_backend_load_all_from_path not in {ggml_lib_path.name}: {e}", file=sys.stderr, flush=True)
+                logger.debug(f"ggml_backend_load_all_from_path not available in {ggml_lib_path.name}: {e}")
 
             # Fall back to ggml_backend_load_all() without explicit path
-            print(f"[llamafarm_llama] Calling ggml_backend_load_all() from {ggml_lib_path.name}...", file=sys.stderr, flush=True)
+            logger.debug(f"Calling ggml_backend_load_all() from {ggml_lib_path.name}...")
             ggml_backend_load_all = ggml_lib.ggml_backend_load_all
             ggml_backend_load_all.argtypes = []
             ggml_backend_load_all.restype = None
             ggml_backend_load_all()
 
             logger.info(f"GGML backends loaded from {ggml_lib_path} (fallback)")
-            print(f"[llamafarm_llama] ggml_backend_load_all() from {ggml_lib_path.name} succeeded (fallback)", file=sys.stderr, flush=True)
             return
         except Exception as e:
             logger.warning(f"Failed to load backends from {ggml_lib_path}: {e}")
-            print(f"[llamafarm_llama] Failed to load from {ggml_lib_path}: {e}", file=sys.stderr, flush=True)
 
     # If we get here, backends couldn't be loaded - this may cause model loading to fail
     logger.warning(
@@ -738,10 +720,7 @@ def _load_ggml_backends():
 
 def init_backend():
     """Initialize the llama.cpp backend."""
-    import sys
-
-    # Print to stdout as well for debugging (in case logging is misconfigured)
-    print("[llamafarm_llama] Initializing llama.cpp backend...", file=sys.stderr, flush=True)
+    logger.debug("Initializing llama.cpp backend...")
 
     lib = get_lib()
 
@@ -750,13 +729,12 @@ def init_backend():
 
     lib.llama_backend_init()
     logger.info("llama.cpp backend initialized")
-    print("[llamafarm_llama] llama_backend_init() called", file=sys.stderr, flush=True)
 
     # Load all available compute backends (CPU, CUDA, Metal, Vulkan, etc.)
     # Required for llama.cpp b7376+ - without this, model loading fails with
     # "no backends are loaded" error
     _load_ggml_backends()
-    print("[llamafarm_llama] _load_ggml_backends() completed", file=sys.stderr, flush=True)
+    logger.debug("GGML backends loading completed")
 
 
 def free_backend():

@@ -602,9 +602,25 @@ function Home() {
         {/* Condensed view for >2 projects */}
         {hasManyProjects && (
           <div className="space-y-6">
-            <p className="text-sm font-medium tracking-wide text-foreground/80">
-              Welcome to LlamaFarm 🦙
-            </p>
+            <div className="flex items-center justify-center gap-2">
+              <p className="text-sm font-medium tracking-wide text-foreground/80">
+                Welcome to LlamaFarm
+              </p>
+              {githubData && (
+                <a
+                  href="https://github.com/llama-farm/llamafarm"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-input bg-secondary hover:bg-accent/20 transition-colors text-xs text-foreground"
+                >
+                  <span>GitHub</span>
+                  <Star className="w-3 h-3 text-primary fill-primary" />
+                  <span className="font-medium">
+                    {githubData.stargazers_count.toLocaleString()}
+                  </span>
+                </a>
+              )}
+            </div>
             <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-normal leading-tight text-foreground">
               Your projects
             </h1>

@@ -1,0 +1,235 @@
+# LlamaFarm
+
+> Edge AI platform for running LLMs, RAG, classifiers, and document processing locally. No cloud required. Your data never leaves your device.
+
+LlamaFarm provides enterprise AI capabilities on your own hardware: RAG (retrieval-augmented generation), custom text classifiers (SetFit with 8-16 training examples), anomaly detection (Isolation Forest, One-Class SVM, LOF, Autoencoders), OCR/document extraction (Surya, EasyOCR, PaddleOCR), and multi-model runtime support (Ollama, OpenAI-compatible, Universal Runtime).
+
+## Quick Start
+
+- [Quickstart](https://docs.llamafarm.dev/docs/quickstart): Install CLI and run your first RAG query in 5 minutes
+- [Core Concepts](https://docs.llamafarm.dev/docs/concepts): Architecture overview - Server, RAG Worker, Universal Runtime
+
+## Common API Patterns
+
+Base URL: `http://localhost:8000`
+
+### Chat Completions (OpenAI-compatible)
+
+```bash
+POST /v1/projects/{namespace}/{project}/chat/completions
+
+curl -X POST http://localhost:8000/v1/projects/default/my-project/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false,
+    "rag_enabled": true,
+    "database": "main_db",
+    "rag_top_k": 5
+  }'
+```
+
+Key request fields:
+- `messages`: Array of {role, content} - required
+- `stream`: true for SSE streaming, false for complete response
+- `rag_enabled`: true/false to enable RAG retrieval
+- `database`: Which RAG database to query
+- `rag_top_k`: Number of documents to retrieve (default: 5)
+- `rag_score_threshold`: Minimum similarity score (0-1)
+- `model`: Select specific model from config
+- `think`: true to enable chain-of-thought reasoning
+- `thinking_budget`: Max tokens for thinking (default: 1024)
+
+Session headers:
+- `X-Session-ID`: Reuse session for conversation history
+- `X-No-Session`: Stateless mode, no history saved
+
+### Create RAG Database
+
+```bash
+POST /v1/projects/{namespace}/{project}/rag/databases
+
+curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/databases \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my_database",
+    "type": "ChromaStore",
+    "embedding_strategies": [{
+      "name": "default",
+      "type": "UniversalEmbedder",
+      "config": {"model": "sentence-transformers/all-MiniLM-L6-v2"}
+    }],
+    "retrieval_strategies": [{
+      "name": "semantic",
+      "type": "BasicSimilarityStrategy",
+      "config": {"top_k": 5}
+    }]
+  }'
+```
+
+### Create Dataset
+
+```bash
+POST /v1/projects/{namespace}/{project}/datasets
+
+curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "research_papers",
+    "database": "main_db",
+    "data_processing_strategy": "default"
+  }'
+```
+
+### Upload File to Dataset
+
+```bash
+POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data
+
+curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets/research_papers/data \
+  -F "file=@document.pdf"
+```
+
+### Process Dataset (Ingest into RAG)
+
+```bash
+POST /v1/projects/{namespace}/{project}/datasets/{dataset}/actions
+
+curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets/research_papers/actions \
+  -H "Content-Type: application/json" \
+  -d '{"action": "ingest"}'
+```
+
+### Query RAG Directly
+
+```bash
+POST /v1/projects/{namespace}/{project}/rag/query
+
+curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the key findings?",
+    "database": "main_db",
+    "top_k": 5
+  }'
+```
+
+### Train Classifier (SetFit few-shot)
+
+```bash
+POST /v1/ml/classifier/fit
+
+curl -X POST http://localhost:8000/v1/ml/classifier/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ticket-router",
+    "training_data": [
+      {"text": "Cannot log in", "label": "auth"},
+      {"text": "Password reset", "label": "auth"},
+      {"text": "Charged twice", "label": "billing"},
+      {"text": "Refund request", "label": "billing"}
+    ]
+  }'
+```
+
+### Classify Text
+
+```bash
+POST /v1/ml/classifier/predict
+
+curl -X POST http://localhost:8000/v1/ml/classifier/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ticket-router",
+    "texts": ["I forgot my password", "Need invoice copy"]
+  }'
+```
+
+### Anomaly Detection
+
+```bash
+# Train on normal data
+POST /v1/ml/anomaly/fit
+
+curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "latency-monitor",
+    "backend": "isolation_forest",
+    "data": [[50], [55], [48], [52], [51]]
+  }'
+
+# Detect anomalies
+POST /v1/ml/anomaly/detect
+
+curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "latency-monitor",
+    "data": [[52], [500], [49]],
+    "threshold": 0.5
+  }'
+```
+
+Backends: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder`
+
+### OCR (Text Extraction)
+
+```bash
+POST /v1/vision/ocr
+
+curl -X POST http://localhost:8000/v1/vision/ocr \
+  -F "file=@document.pdf" \
+  -F "model=surya"
+```
+
+OCR backends: `surya` (best), `easyocr`, `paddleocr`, `tesseract`
+
+### Embeddings
+
+```bash
+POST /v1/embeddings
+
+curl -X POST http://localhost:8000/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": ["Hello world", "How are you?"],
+    "model": "sentence-transformers/all-MiniLM-L6-v2"
+  }'
+```
+
+## Configuration
+
+- [Configuration Guide](https://docs.llamafarm.dev/docs/configuration): Complete llamafarm.yaml schema reference
+
+## RAG (Retrieval-Augmented Generation)
+
+- [RAG Overview](https://docs.llamafarm.dev/docs/rag): End-to-end document ingestion and querying
+- [Databases](https://docs.llamafarm.dev/docs/rag/databases): ChromaStore, QdrantStore vector databases
+- [Embedders](https://docs.llamafarm.dev/docs/rag/embedders): HuggingFace, Ollama, OpenAI, SentenceTransformer, Universal
+- [Parsers](https://docs.llamafarm.dev/docs/rag/parsers): PDF, CSV, Excel, DOCX, Markdown, Text parsers
+- [Retrieval Strategies](https://docs.llamafarm.dev/docs/rag/retrieval-strategies): Vector, Hybrid, BM25, Reranked, Graph retrieval
+
+## ML Capabilities
+
+- [Specialized ML](https://docs.llamafarm.dev/docs/models/specialized-ml): Classifiers, NER, OCR, reranking
+- [Anomaly Detection](https://docs.llamafarm.dev/docs/models/anomaly-detection): Train and detect with multiple backends
+- [Models & Runtime](https://docs.llamafarm.dev/docs/models): Universal Runtime, Ollama, OpenAI provider configuration
+
+## CLI Commands
+
+- `lf init <name>` - Create new project with llamafarm.yaml
+- `lf start` - Start all services (Server, Universal Runtime)
+- `lf chat` - Interactive chat with optional RAG
+- `lf datasets create -s <strategy> -b <db> <name>` - Create dataset
+- `lf datasets upload <name> <files>` - Upload files to dataset
+- `lf datasets process <name>` - Process/ingest dataset
+- `lf rag query --database <db> "query"` - Query RAG database
+
+## Optional
+
+- [MCP (Tools)](https://docs.llamafarm.dev/docs/mcp): Model Context Protocol for AI access to filesystems, databases
+- [Examples](https://docs.llamafarm.dev/docs/examples): FDA RAG assistant, Medical Records helper demos
+- [Extending](https://docs.llamafarm.dev/docs/extending): Add custom parsers, embedders, providers
+- [Deployment](https://docs.llamafarm.dev/docs/deployment): Production deployment with systemd, PM2, launchd
+- [Troubleshooting](https://docs.llamafarm.dev/docs/troubleshooting): Common issues and solutions

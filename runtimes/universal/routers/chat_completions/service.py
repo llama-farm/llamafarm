@@ -1,22 +1,47 @@
 import asyncio
+import json
 import logging
 import os
+import uuid
 from datetime import datetime
+from enum import Enum
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from openai.types.chat.chat_completion_chunk import (
     ChatCompletionChunk,
     ChoiceDelta,
+    ChoiceDeltaToolCall,
+    ChoiceDeltaToolCallFunction,
 )
 from openai.types.chat.chat_completion_chunk import (
     Choice as ChoiceChunk,
 )
 
 from models import GGUFLanguageModel
+from utils.context_manager import TruncationStrategy
+from utils.context_summarizer import ContextSummarizer
+from utils.history_compressor import HistoryCompressor
 from utils.thinking import inject_thinking_control, parse_thinking_response
+from utils.tool_calling import (
+    detect_probable_tool_call,
+    detect_tool_call_in_content,
+    extract_arguments_progress,
+    extract_tool_name_from_partial,
+    is_tool_call_complete,
+    parse_tool_choice,
+    strip_tool_call_from_content,
+)
 
-from .types import ChatCompletionRequest, ThinkingContent
+from .types import ChatCompletionRequest, ContextUsageInfo, ThinkingContent
+
+
+class ToolCallStreamState(Enum):
+    """State machine states for incremental tool call streaming."""
+
+    NORMAL = "normal"  # Streaming regular content
+    BUFFERING_START = "buffering_start"  # Detected <tool_call>, waiting for name
+    STREAMING_ARGS = "streaming_args"  # Name emitted, streaming arguments
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +135,151 @@ class ChatCompletionsService:
                 total_max_tokens = answer_tokens
                 thinking_tokens = 0
 
+            # Convert tools to dict format if provided (for streaming)
+            tools_dict = None
+            if chat_request.tools:
+                tools_dict = [dict(tool) for tool in chat_request.tools]
+
+            # Context management for GGUF models
+            context_usage_info = None
+            if is_gguf and model.context_manager:
+                # Apply history compression to reduce token usage
+                compressor = HistoryCompressor(model.token_counter)
+                messages_dict = compressor.compress(messages_dict)
+
+                # Validate context and truncate if needed
+                usage = model.context_manager.validate_messages(messages_dict)
+
+                if model.context_manager.needs_truncation(messages_dict):
+                    auto_truncate = chat_request.auto_truncate
+                    if auto_truncate is None:
+                        auto_truncate = True  # Default to auto-truncate
+
+                    if not auto_truncate:
+                        # Return error instead of truncating
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "context_length_exceeded",
+                                "message": (
+                                    f"Prompt ({usage.prompt_tokens} tokens) exceeds "
+                                    f"context limit ({usage.total_context} tokens). "
+                                    "Set auto_truncate=true to automatically truncate."
+                                ),
+                                "context_usage": {
+                                    "total_context": usage.total_context,
+                                    "prompt_tokens": usage.prompt_tokens,
+                                    "available_for_completion": usage.available_for_completion,
+                                },
+                            },
+                        )
+
+                    # Determine truncation strategy
+                    strategy = None
+                    if chat_request.truncation_strategy:
+                        try:
+                            strategy = TruncationStrategy(chat_request.truncation_strategy)
+                        except ValueError:
+                            logger.warning(
+                                f"Unknown truncation strategy: {chat_request.truncation_strategy}, "
+                                "using default (summarize)"
+                            )
+                            strategy = TruncationStrategy.SUMMARIZE
+                    else:
+                        strategy = TruncationStrategy.SUMMARIZE  # Default
+
+                    # Handle summarization strategy (async, needs special handling)
+                    if strategy == TruncationStrategy.SUMMARIZE:
+                        try:
+                            # Pass the server's load_language for proper caching
+                            summarizer = ContextSummarizer(load_language=self.load_language)
+                            messages_dict = await summarizer.summarize_messages(messages_dict)
+                            # Re-validate after summarization
+                            usage = model.context_manager.validate_messages(messages_dict)
+
+                            # Check if we STILL need truncation after summarization
+                            # (e.g., if recent messages are still too large)
+                            if model.context_manager.needs_truncation(messages_dict):
+                                logger.warning(
+                                    f"Still over budget after summarization "
+                                    f"({usage.prompt_tokens} tokens), applying fallback truncation"
+                                )
+                                messages_dict, usage = model.context_manager.truncate_if_needed(
+                                    messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                                )
+                                usage = type(usage)(
+                                    total_context=usage.total_context,
+                                    prompt_tokens=usage.prompt_tokens,
+                                    available_for_completion=usage.available_for_completion,
+                                    truncated=True,
+                                    truncated_messages=usage.truncated_messages,
+                                    strategy_used="summarize+keep_system",
+                                )
+                            else:
+                                usage = type(usage)(
+                                    total_context=usage.total_context,
+                                    prompt_tokens=usage.prompt_tokens,
+                                    available_for_completion=usage.available_for_completion,
+                                    truncated=True,
+                                    truncated_messages=0,  # Summarized, not removed
+                                    strategy_used="summarize",
+                                )
+                            logger.info(
+                                f"Context summarized: {usage.prompt_tokens} tokens after summarization"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Summarization failed: {e}, falling back to keep_system"
+                            )
+                            messages_dict, usage = model.context_manager.truncate_if_needed(
+                                messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                            )
+                    else:
+                        # Use regular truncation strategy
+                        messages_dict, usage = model.context_manager.truncate_if_needed(
+                            messages_dict, strategy
+                        )
+                        logger.info(
+                            f"Context truncated: {usage.truncated_messages} messages removed, "
+                            f"strategy={usage.strategy_used}"
+                        )
+
+                # Store context usage for response
+                context_usage_info = ContextUsageInfo(
+                    total_context=usage.total_context,
+                    prompt_tokens=usage.prompt_tokens,
+                    available_for_completion=usage.available_for_completion,
+                    truncated=usage.truncated,
+                    truncated_messages=usage.truncated_messages,
+                    strategy_used=usage.strategy_used,
+                )
+
+                # Final safety check: ensure we're actually under budget
+                if model.context_manager.needs_truncation(messages_dict):
+                    final_usage = model.context_manager.validate_messages(messages_dict)
+                    logger.error(
+                        f"CRITICAL: Still over context budget after all truncation: "
+                        f"{final_usage.prompt_tokens} tokens > "
+                        f"{model.context_manager.budget.max_prompt_tokens} max"
+                    )
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "error": "context_truncation_failed",
+                            "message": (
+                                f"Failed to reduce context to fit within budget. "
+                                f"Current: {final_usage.prompt_tokens} tokens, "
+                                f"Max: {model.context_manager.budget.max_prompt_tokens} tokens. "
+                                "Try sending fewer or shorter messages."
+                            ),
+                            "context_usage": {
+                                "total_context": final_usage.total_context,
+                                "prompt_tokens": final_usage.prompt_tokens,
+                                "available_for_completion": final_usage.available_for_completion,
+                            },
+                        },
+                    )
+
             # Handle streaming if requested
             if chat_request.stream:
                 logger.info(
@@ -147,30 +317,244 @@ class ChatCompletionsService:
                         top_p=chat_request.top_p,
                         stop=chat_request.stop,
                         thinking_budget=thinking_tokens if is_gguf else None,
+                        tools=tools_dict,
+                        tool_choice=chat_request.tool_choice,
                     )
 
-                    async for token in token_stream:
-                        chunk = ChatCompletionChunk(
-                            id=completion_id,
-                            object="chat.completion.chunk",
-                            created=created_time,
-                            model=chat_request.model,
-                            choices=[
-                                ChoiceChunk(
-                                    index=0,
-                                    delta=ChoiceDelta(role="assistant", content=token),
-                                    finish_reason=None,
-                                )
-                            ],
-                        )
-                        yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n".encode()
-                        # CRITICAL: This asyncio.sleep(0) forces the event loop to yield,
-                        # ensuring the stream flushes immediately for token-by-token delivery.
-                        # Without this, tokens would buffer and arrive in large chunks.
-                        # See test_streaming_server.py for verification tests.
-                        await asyncio.sleep(0)
+                    # State machine for incremental tool call streaming
+                    accumulated_content = ""
+                    tool_state = ToolCallStreamState.NORMAL
+                    buffered_tokens = []
+                    tool_call_id = None
+                    tool_call_index = 0
+                    args_emitted_length = 0
+                    any_tool_calls_emitted = False  # Track if we emitted any tool calls
 
-                    # Send final chunk
+                    # Parse tool_choice to determine if we should detect tool calls
+                    # When tool_choice="none", we skip tool detection entirely
+                    tool_choice_mode, _ = parse_tool_choice(chat_request.tool_choice)
+                    should_detect_tools = tools_dict and tool_choice_mode != "none"
+
+                    async for token in token_stream:
+                        accumulated_content += token
+
+                        # STATE: NORMAL - streaming regular content
+                        if tool_state == ToolCallStreamState.NORMAL:
+                            # Check if we're entering a tool call
+                            if should_detect_tools and detect_probable_tool_call(
+                                accumulated_content
+                            ):
+                                tool_state = ToolCallStreamState.BUFFERING_START
+                                buffered_tokens.append(token)
+                                continue
+
+                            # Normal content streaming
+                            chunk = ChatCompletionChunk(
+                                id=completion_id,
+                                object="chat.completion.chunk",
+                                created=created_time,
+                                model=chat_request.model,
+                                choices=[
+                                    ChoiceChunk(
+                                        index=0,
+                                        delta=ChoiceDelta(
+                                            role="assistant", content=token
+                                        ),
+                                        finish_reason=None,
+                                    )
+                                ],
+                            )
+                            yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                            # CRITICAL: This asyncio.sleep(0) forces the event loop
+                            # to yield, ensuring token-by-token delivery.
+                            await asyncio.sleep(0)
+
+                        # STATE: BUFFERING_START - waiting for tool name
+                        elif tool_state == ToolCallStreamState.BUFFERING_START:
+                            buffered_tokens.append(token)
+
+                            # Try to extract tool name
+                            tool_name = extract_tool_name_from_partial(
+                                accumulated_content
+                            )
+                            if tool_name:
+                                # Emit initial tool call chunk with name
+                                tool_call_id = f"call_{uuid.uuid4()}"
+                                initial_tool_chunk = ChatCompletionChunk(
+                                    id=completion_id,
+                                    object="chat.completion.chunk",
+                                    created=created_time,
+                                    model=chat_request.model,
+                                    choices=[
+                                        ChoiceChunk(
+                                            index=0,
+                                            delta=ChoiceDelta(
+                                                tool_calls=[
+                                                    ChoiceDeltaToolCall(
+                                                        index=tool_call_index,
+                                                        id=tool_call_id,
+                                                        type="function",
+                                                        function=ChoiceDeltaToolCallFunction(
+                                                            name=tool_name,
+                                                            arguments="",
+                                                        ),
+                                                    )
+                                                ]
+                                            ),
+                                            finish_reason=None,
+                                        )
+                                    ],
+                                )
+                                yield f"data: {initial_tool_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                                await asyncio.sleep(0)
+
+                                tool_state = ToolCallStreamState.STREAMING_ARGS
+                                args_emitted_length = 0
+                                logger.info(
+                                    f"Tool call started: {tool_name} (id={tool_call_id})"
+                                )
+
+                        # STATE: STREAMING_ARGS - incrementally streaming arguments
+                        elif tool_state == ToolCallStreamState.STREAMING_ARGS:
+                            # Check if tool call is complete
+                            if is_tool_call_complete(accumulated_content):
+                                # Parse the complete tool call to get final arguments
+                                # We only want the FIRST complete tool call in accumulated_content
+                                tool_calls = detect_tool_call_in_content(
+                                    accumulated_content
+                                )
+                                if tool_calls:
+                                    _, final_args = tool_calls[0]
+
+                                    # Emit remaining arguments (from where we left off)
+                                    if len(final_args) > args_emitted_length:
+                                        remaining_args = final_args[args_emitted_length:]
+                                        args_chunk = ChatCompletionChunk(
+                                            id=completion_id,
+                                            object="chat.completion.chunk",
+                                            created=created_time,
+                                            model=chat_request.model,
+                                            choices=[
+                                                ChoiceChunk(
+                                                    index=0,
+                                                    delta=ChoiceDelta(
+                                                        tool_calls=[
+                                                            ChoiceDeltaToolCall(
+                                                                index=tool_call_index,
+                                                                function=ChoiceDeltaToolCallFunction(
+                                                                    arguments=remaining_args,
+                                                                ),
+                                                            )
+                                                        ]
+                                                    ),
+                                                    finish_reason=None,
+                                                )
+                                            ],
+                                        )
+                                        yield f"data: {args_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                                        await asyncio.sleep(0)
+
+                                # Log the completed tool call
+                                if tool_calls:
+                                    tool_name_completed, tool_args = tool_calls[0]
+                                    logger.info(
+                                        f"Tool call completed: {tool_name_completed} "
+                                        f"(id={tool_call_id}, args={tool_args[:100]}{'...' if len(tool_args) > 100 else ''})"
+                                    )
+
+                                # Mark that we've emitted at least one tool call
+                                any_tool_calls_emitted = True
+
+                                # Reset state machine for potential next tool call
+                                # Strip the completed tool call from accumulated_content
+                                accumulated_content = strip_tool_call_from_content(
+                                    accumulated_content
+                                )
+                                tool_state = ToolCallStreamState.NORMAL
+                                buffered_tokens = []
+                                tool_call_id = None
+                                tool_call_index += 1
+                                args_emitted_length = 0
+
+                                # Check if there's already another tool call starting
+                                # in the remaining content
+                                if should_detect_tools and detect_probable_tool_call(
+                                    accumulated_content
+                                ):
+                                    tool_state = ToolCallStreamState.BUFFERING_START
+
+                                # Continue processing - don't return yet
+                                continue
+
+                            # Try to extract arguments progress
+                            args_progress = extract_arguments_progress(
+                                accumulated_content
+                            )
+                            if args_progress:
+                                _, current_args = args_progress
+                                # Emit new argument characters
+                                if len(current_args) > args_emitted_length:
+                                    new_args = current_args[args_emitted_length:]
+                                    args_chunk = ChatCompletionChunk(
+                                        id=completion_id,
+                                        object="chat.completion.chunk",
+                                        created=created_time,
+                                        model=chat_request.model,
+                                        choices=[
+                                            ChoiceChunk(
+                                                index=0,
+                                                delta=ChoiceDelta(
+                                                    tool_calls=[
+                                                        ChoiceDeltaToolCall(
+                                                            index=tool_call_index,
+                                                            function=ChoiceDeltaToolCallFunction(
+                                                                arguments=new_args,
+                                                            ),
+                                                        )
+                                                    ]
+                                                ),
+                                                finish_reason=None,
+                                            )
+                                        ],
+                                    )
+                                    yield f"data: {args_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                                    await asyncio.sleep(0)
+                                    args_emitted_length = len(current_args)
+
+                    # Handle incomplete tool calls at stream end
+                    if (
+                        tool_state != ToolCallStreamState.NORMAL
+                        and buffered_tokens
+                        and not is_tool_call_complete(accumulated_content)
+                    ):
+                        # Emit buffered tokens as regular content
+                        for buffered_token in buffered_tokens:
+                            chunk = ChatCompletionChunk(
+                                id=completion_id,
+                                object="chat.completion.chunk",
+                                created=created_time,
+                                model=chat_request.model,
+                                choices=[
+                                    ChoiceChunk(
+                                        index=0,
+                                        delta=ChoiceDelta(content=buffered_token),
+                                        finish_reason=None,
+                                    )
+                                ],
+                            )
+                            yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                            await asyncio.sleep(0)
+
+                    # Debug log the accumulated streaming response
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            f"Streaming response complete ({len(accumulated_content)} chars):\n"
+                            f"{accumulated_content}"
+                        )
+
+                    # Send final chunk with appropriate finish_reason
+                    # If we emitted any tool calls, use "tool_calls", otherwise "stop"
+                    finish_reason = "tool_calls" if any_tool_calls_emitted else "stop"
                     final_chunk = ChatCompletionChunk(
                         id=completion_id,
                         object="chat.completion.chunk",
@@ -180,7 +564,7 @@ class ChatCompletionsService:
                             ChoiceChunk(
                                 index=0,
                                 delta=ChoiceDelta(),
-                                finish_reason="stop",
+                                finish_reason=finish_reason,
                             )
                         ],
                     )
@@ -208,13 +592,88 @@ class ChatCompletionsService:
                 top_p=chat_request.top_p,
                 stop=chat_request.stop,
                 thinking_budget=thinking_tokens if is_gguf else None,
+                tools=tools_dict,
+                tool_choice=chat_request.tool_choice,
             )
+
+            # Debug log the raw response from the model
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"Model raw response ({len(response_text)} chars):\n{response_text}"
+                )
 
             # Parse thinking content from response (like Ollama does)
             # This separates <think>...</think> into a separate field
             parsed = parse_thinking_response(response_text)
 
+            # Check for tool calls in response (only if tools were provided and tool_choice != "none")
+            # This is consistent with streaming path which only checks when tools are enabled
+            tool_calls = None
+            tool_choice_mode, _ = parse_tool_choice(chat_request.tool_choice)
+            if tools_dict and tool_choice_mode != "none":
+                tool_calls = detect_tool_call_in_content(parsed.content)
+
+            if tool_calls:
+                # Log detected tool calls
+                for name, args in tool_calls:
+                    logger.info(
+                        f"Tool call detected: {name} "
+                        f"(args={args[:100]}{'...' if len(args) > 100 else ''})"
+                    )
+
+                # Build response with tool calls
+                prompt_tokens = (
+                    context_usage_info.prompt_tokens if context_usage_info else 0
+                )
+                response = {
+                    "id": f"chatcmpl-{os.urandom(16).hex()}",
+                    "object": "chat.completion",
+                    "created": int(datetime.now().timestamp()),
+                    "model": chat_request.model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {
+                                        "id": f"call_{uuid.uuid4()}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": name,
+                                            "arguments": args,
+                                        },
+                                    }
+                                    for name, args in tool_calls
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": 0,  # TODO: count completion tokens
+                        "total_tokens": prompt_tokens,
+                    },
+                }
+                # Add context usage info if available
+                if context_usage_info:
+                    response["x_context_usage"] = context_usage_info.model_dump()
+
+                # Debug log the response with tool calls
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        f"Sending response with tool calls:\n"
+                        f"{json.dumps(response, indent=2, default=str)}"
+                    )
+
+                return response
+
             # Build response with optional thinking field (Ollama-compatible)
+            prompt_tokens = (
+                context_usage_info.prompt_tokens if context_usage_info else 0
+            )
             response = {
                 "id": f"chatcmpl-{os.urandom(16).hex()}",
                 "object": "chat.completion",
@@ -228,9 +687,9 @@ class ChatCompletionsService:
                     }
                 ],
                 "usage": {
-                    "prompt_tokens": 0,  # TODO: Implement token counting
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": 0,  # TODO: count completion tokens
+                    "total_tokens": prompt_tokens,
                 },
             }
 
@@ -240,6 +699,17 @@ class ChatCompletionsService:
                     content=parsed.thinking,
                     tokens=None,  # TODO: count thinking tokens
                 ).model_dump()
+
+            # Add context usage info if available
+            if context_usage_info:
+                response["x_context_usage"] = context_usage_info.model_dump()
+
+            # Debug log the response
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"Sending response:\n"
+                    f"{json.dumps(response, indent=2, default=str)}"
+                )
 
             return response
 

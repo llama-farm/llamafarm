@@ -1,0 +1,38 @@
+# LlamaFarm Documentation - robots.txt
+# https://docs.llamafarm.dev
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://docs.llamafarm.dev/sitemap.xml
+
+# AI Crawlers - explicitly allowed
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+# LLMs.txt - AI-optimized documentation index
+# See https://llmstxt.org for specification
+# /llms.txt - concise documentation index with links
+# /llms-full.txt - complete documentation in single file
