@@ -12,6 +12,7 @@ from utils.tool_calling import (
     get_tool_call_content_after_tag,
     inject_tools_into_messages,
     is_tool_call_complete,
+    parse_tool_choice,
     strip_tool_call_from_content,
 )
 
@@ -93,6 +94,127 @@ class TestInjectToolsIntoMessages:
         _ = inject_tools_into_messages(messages, tools)
 
         assert messages[0]["content"] == original_content
+
+    def test_inject_tools_with_tool_choice_none(self):
+        """Test that tool_choice='none' skips tool injection."""
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is 2+2?"},
+        ]
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "calculator", "description": "Calculate"},
+            }
+        ]
+
+        result = inject_tools_into_messages(messages, tools, tool_choice="none")
+
+        # Messages should be unchanged (no tools injected)
+        assert len(result) == 2
+        assert result[0]["content"] == "You are a helpful assistant."
+        assert "<tools>" not in result[0]["content"]
+
+    def test_inject_tools_with_tool_choice_auto(self):
+        """Test that tool_choice='auto' uses 'may call' wording."""
+        messages = [{"role": "user", "content": "Hello"}]
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "test", "description": "Test"},
+            }
+        ]
+
+        result = inject_tools_into_messages(messages, tools, tool_choice="auto")
+
+        assert "You may call" in result[0]["content"]
+        assert "<tools>" in result[0]["content"]
+
+    def test_inject_tools_with_tool_choice_required(self):
+        """Test that tool_choice='required' uses 'MUST call' wording."""
+        messages = [{"role": "user", "content": "Hello"}]
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "test", "description": "Test"},
+            }
+        ]
+
+        result = inject_tools_into_messages(messages, tools, tool_choice="required")
+
+        assert "You MUST call" in result[0]["content"]
+        assert "<tools>" in result[0]["content"]
+
+    def test_inject_tools_with_specific_function(self):
+        """Test that specific function tool_choice filters tools and uses specific wording."""
+        messages = [{"role": "user", "content": "Hello"}]
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "get_weather", "description": "Get weather"},
+            },
+            {
+                "type": "function",
+                "function": {"name": "get_time", "description": "Get time"},
+            },
+        ]
+        tool_choice = {"type": "function", "function": {"name": "get_weather"}}
+
+        result = inject_tools_into_messages(messages, tools, tool_choice=tool_choice)
+
+        # Should only include get_weather tool
+        assert "get_weather" in result[0]["content"]
+        assert "get_time" not in result[0]["content"]
+        # Should use specific function wording
+        assert 'MUST call the function "get_weather"' in result[0]["content"]
+
+
+class TestParseToolChoice:
+    """Tests for parse_tool_choice function."""
+
+    def test_parse_none_returns_auto(self):
+        """Test that None returns 'auto' mode."""
+        mode, func = parse_tool_choice(None)
+        assert mode == "auto"
+        assert func is None
+
+    def test_parse_auto_string(self):
+        """Test that 'auto' string returns 'auto' mode."""
+        mode, func = parse_tool_choice("auto")
+        assert mode == "auto"
+        assert func is None
+
+    def test_parse_none_string(self):
+        """Test that 'none' string returns 'none' mode."""
+        mode, func = parse_tool_choice("none")
+        assert mode == "none"
+        assert func is None
+
+    def test_parse_required_string(self):
+        """Test that 'required' string returns 'required' mode."""
+        mode, func = parse_tool_choice("required")
+        assert mode == "required"
+        assert func is None
+
+    def test_parse_specific_function_dict(self):
+        """Test that specific function dict returns 'specific' mode with function name."""
+        tool_choice = {"type": "function", "function": {"name": "get_weather"}}
+        mode, func = parse_tool_choice(tool_choice)
+        assert mode == "specific"
+        assert func == "get_weather"
+
+    def test_parse_malformed_dict_returns_auto(self):
+        """Test that malformed dict falls back to 'auto' mode."""
+        tool_choice = {"type": "other", "something": "else"}
+        mode, func = parse_tool_choice(tool_choice)
+        assert mode == "auto"
+        assert func is None
+
+    def test_parse_unknown_string_returns_auto(self):
+        """Test that unknown string falls back to 'auto' mode."""
+        mode, func = parse_tool_choice("unknown_value")
+        assert mode == "auto"
+        assert func is None
 
 
 class TestDetectToolCallInContent:

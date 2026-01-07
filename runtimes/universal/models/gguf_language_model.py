@@ -401,7 +401,11 @@ class GGUFLanguageModel(BaseModel):
         Args:
             messages: List of message dicts with 'role' and 'content' keys
             tools: Optional list of tool definitions in OpenAI format
-            tool_choice: Tool choice strategy (not yet implemented, accepted for API compatibility)
+            tool_choice: Tool choice strategy:
+                - None or "auto": Model may call tools (default)
+                - "none": Model should not call tools
+                - "required": Model must call at least one tool
+                - {"type": "function", "function": {"name": "X"}}: Must call specific function
 
         Returns:
             Messages with tools injected (if tools provided)
@@ -418,18 +422,11 @@ class GGUFLanguageModel(BaseModel):
             logger.debug(f"Tool choice: {tool_choice}")
             logger.debug(f"Full tool definitions:\n{json.dumps(tools, indent=2)}")
 
-        # Log warning if tool_choice is specified (not yet implemented)
-        if tool_choice is not None:
-            logger.warning(
-                f"tool_choice='{tool_choice}' was specified but is not yet implemented. "
-                "The model will decide whether to use tools based on the prompt."
-            )
-
         # Inject tools into messages using prompt-based approach
         from utils.tool_calling import inject_tools_into_messages
 
-        logger.debug("Using prompt-based tool injection")
-        return inject_tools_into_messages(messages, tools)
+        logger.debug(f"Using prompt-based tool injection with tool_choice={tool_choice}")
+        return inject_tools_into_messages(messages, tools, tool_choice=tool_choice)
 
     async def _generate_from_prompt(
         self,
@@ -534,13 +531,6 @@ class GGUFLanguageModel(BaseModel):
 
         max_tokens = max_tokens or 512
 
-        # Log warning if tool_choice is specified (not yet implemented)
-        if tool_choice is not None:
-            logger.warning(
-                f"tool_choice='{tool_choice}' was specified but is not yet implemented. "
-                "The model will decide whether to use tools based on the prompt."
-            )
-
         # Try Jinja2 native tool rendering first (if tools provided)
         if tools:
             jinja2_prompt = self._render_with_jinja2(messages, tools)
@@ -562,7 +552,7 @@ class GGUFLanguageModel(BaseModel):
                 )
 
         # Fallback: use prompt injection + chat completion
-        prepared_messages = self._prepare_messages_with_tools(messages, tools)
+        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
 
         # Debug log the prepared messages (prompt injection path)
         if logger.isEnabledFor(logging.DEBUG):
@@ -747,13 +737,6 @@ class GGUFLanguageModel(BaseModel):
 
         max_tokens = max_tokens or 512
 
-        # Log warning if tool_choice is specified (not yet implemented)
-        if tool_choice is not None:
-            logger.warning(
-                f"tool_choice='{tool_choice}' was specified but is not yet implemented. "
-                "The model will decide whether to use tools based on the prompt."
-            )
-
         # Try Jinja2 native tool rendering first (if tools provided)
         if tools:
             jinja2_prompt = self._render_with_jinja2(messages, tools)
@@ -777,7 +760,7 @@ class GGUFLanguageModel(BaseModel):
                 return
 
         # Fallback: use prompt injection + chat completion
-        prepared_messages = self._prepare_messages_with_tools(messages, tools)
+        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
 
         # Debug log the prepared messages (prompt injection path)
         if logger.isEnabledFor(logging.DEBUG):

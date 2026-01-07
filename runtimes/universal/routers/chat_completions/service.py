@@ -29,6 +29,8 @@ from utils.tool_calling import (
     extract_arguments_progress,
     extract_tool_name_from_partial,
     is_tool_call_complete,
+    parse_tool_choice,
+    strip_tool_call_from_content,
 )
 
 from .types import ChatCompletionRequest, ContextUsageInfo, ThinkingContent
@@ -326,6 +328,12 @@ class ChatCompletionsService:
                     tool_call_id = None
                     tool_call_index = 0
                     args_emitted_length = 0
+                    any_tool_calls_emitted = False  # Track if we emitted any tool calls
+
+                    # Parse tool_choice to determine if we should detect tool calls
+                    # When tool_choice="none", we skip tool detection entirely
+                    tool_choice_mode, _ = parse_tool_choice(chat_request.tool_choice)
+                    should_detect_tools = tools_dict and tool_choice_mode != "none"
 
                     async for token in token_stream:
                         accumulated_content += token
@@ -333,7 +341,7 @@ class ChatCompletionsService:
                         # STATE: NORMAL - streaming regular content
                         if tool_state == ToolCallStreamState.NORMAL:
                             # Check if we're entering a tool call
-                            if tools_dict and detect_probable_tool_call(
+                            if should_detect_tools and detect_probable_tool_call(
                                 accumulated_content
                             ):
                                 tool_state = ToolCallStreamState.BUFFERING_START
@@ -411,6 +419,7 @@ class ChatCompletionsService:
                             # Check if tool call is complete
                             if is_tool_call_complete(accumulated_content):
                                 # Parse the complete tool call to get final arguments
+                                # We only want the FIRST complete tool call in accumulated_content
                                 tool_calls = detect_tool_call_in_content(
                                     accumulated_content
                                 )
@@ -453,24 +462,29 @@ class ChatCompletionsService:
                                         f"(id={tool_call_id}, args={tool_args[:100]}{'...' if len(tool_args) > 100 else ''})"
                                     )
 
-                                # Send final chunk with tool_calls finish reason
-                                final_chunk = ChatCompletionChunk(
-                                    id=completion_id,
-                                    object="chat.completion.chunk",
-                                    created=created_time,
-                                    model=chat_request.model,
-                                    choices=[
-                                        ChoiceChunk(
-                                            index=0,
-                                            delta=ChoiceDelta(),
-                                            finish_reason="tool_calls",
-                                        )
-                                    ],
+                                # Mark that we've emitted at least one tool call
+                                any_tool_calls_emitted = True
+
+                                # Reset state machine for potential next tool call
+                                # Strip the completed tool call from accumulated_content
+                                accumulated_content = strip_tool_call_from_content(
+                                    accumulated_content
                                 )
-                                yield f"data: {final_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
-                                await asyncio.sleep(0)
-                                yield b"data: [DONE]\n\n"
-                                return
+                                tool_state = ToolCallStreamState.NORMAL
+                                buffered_tokens = []
+                                tool_call_id = None
+                                tool_call_index += 1
+                                args_emitted_length = 0
+
+                                # Check if there's already another tool call starting
+                                # in the remaining content
+                                if should_detect_tools and detect_probable_tool_call(
+                                    accumulated_content
+                                ):
+                                    tool_state = ToolCallStreamState.BUFFERING_START
+
+                                # Continue processing - don't return yet
+                                continue
 
                             # Try to extract arguments progress
                             args_progress = extract_arguments_progress(
@@ -538,7 +552,9 @@ class ChatCompletionsService:
                             f"{accumulated_content}"
                         )
 
-                    # Send final chunk
+                    # Send final chunk with appropriate finish_reason
+                    # If we emitted any tool calls, use "tool_calls", otherwise "stop"
+                    finish_reason = "tool_calls" if any_tool_calls_emitted else "stop"
                     final_chunk = ChatCompletionChunk(
                         id=completion_id,
                         object="chat.completion.chunk",
@@ -548,7 +564,7 @@ class ChatCompletionsService:
                             ChoiceChunk(
                                 index=0,
                                 delta=ChoiceDelta(),
-                                finish_reason="stop",
+                                finish_reason=finish_reason,
                             )
                         ],
                     )
@@ -590,10 +606,11 @@ class ChatCompletionsService:
             # This separates <think>...</think> into a separate field
             parsed = parse_thinking_response(response_text)
 
-            # Check for tool calls in response (only if tools were provided)
-            # This is consistent with streaming path which only checks when tools_dict is set
+            # Check for tool calls in response (only if tools were provided and tool_choice != "none")
+            # This is consistent with streaming path which only checks when tools are enabled
             tool_calls = None
-            if tools_dict:
+            tool_choice_mode, _ = parse_tool_choice(chat_request.tool_choice)
+            if tools_dict and tool_choice_mode != "none":
                 tool_calls = detect_tool_call_in_content(parsed.content)
 
             if tool_calls:

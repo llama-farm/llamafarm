@@ -15,18 +15,53 @@ import re
 logger = logging.getLogger(__name__)
 
 
-TOOLS_SYSTEM_MESSAGE_PREFIX = """
+# =============================================================================
+# Prompt templates for different tool_choice modes
+# =============================================================================
+
+# tool_choice="auto" (default) - model may call tools if helpful
+TOOLS_PREFIX_AUTO = """
 
 You may call one or more tools to assist with the user query.
 You are provided with function signatures within <tools></tools> XML tags:
 <tools>
 """
 
-TOOLS_SYSTEM_MESSAGE_SUFFIX = """</tools>
+TOOLS_SUFFIX_AUTO = """</tools>
 For each tool call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
 <tool_call>{"name": <function-name>, "arguments": <args-json-object>}</tool_call>.
 If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.
 """
+
+# tool_choice="required" - model MUST call at least one tool
+TOOLS_PREFIX_REQUIRED = """
+
+You MUST call one or more tools to respond to the user query. Do not respond with text alone.
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+"""
+
+TOOLS_SUFFIX_REQUIRED = """</tools>
+You MUST use at least one of these tools. Return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>{"name": <function-name>, "arguments": <args-json-object>}</tool_call>.
+"""
+
+# tool_choice={"type": "function", "function": {"name": "X"}} - model MUST call specific function
+TOOLS_PREFIX_SPECIFIC = """
+
+You MUST call the function "{function_name}" to respond to this query.
+The function is defined within <tools></tools> XML tags:
+<tools>
+"""
+
+TOOLS_SUFFIX_SPECIFIC = """</tools>
+You MUST call the "{function_name}" function. Return a json object with the function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>{{"name": "{function_name}", "arguments": <args-json-object>}}</tool_call>.
+"""
+
+# Legacy aliases for backward compatibility
+TOOLS_SYSTEM_MESSAGE_PREFIX = TOOLS_PREFIX_AUTO
+TOOLS_SYSTEM_MESSAGE_SUFFIX = TOOLS_SUFFIX_AUTO
 
 
 def format_tool_for_prompt(tool: dict) -> str:
@@ -41,9 +76,46 @@ def format_tool_for_prompt(tool: dict) -> str:
     return json.dumps(tool, ensure_ascii=False)
 
 
+def parse_tool_choice(tool_choice: str | dict | None) -> tuple[str, str | None]:
+    """Parse tool_choice into a mode and optional function name.
+
+    Args:
+        tool_choice: Tool choice parameter from the API request.
+            - None or "auto": Model decides whether to call tools
+            - "none": Model should not call any tools
+            - "required": Model must call at least one tool
+            - {"type": "function", "function": {"name": "X"}}: Model must call function X
+
+    Returns:
+        Tuple of (mode, function_name) where mode is one of:
+        "auto", "none", "required", "specific"
+        and function_name is set only when mode is "specific".
+    """
+    if tool_choice is None or tool_choice == "auto":
+        return ("auto", None)
+    elif tool_choice == "none":
+        return ("none", None)
+    elif tool_choice == "required":
+        return ("required", None)
+    elif isinstance(tool_choice, dict):
+        # Handle {"type": "function", "function": {"name": "X"}}
+        if tool_choice.get("type") == "function":
+            func_info = tool_choice.get("function", {})
+            func_name = func_info.get("name")
+            if func_name:
+                return ("specific", func_name)
+        # Fallback if dict format is unexpected
+        logger.warning(f"Unexpected tool_choice dict format: {tool_choice}, using 'auto'")
+        return ("auto", None)
+    else:
+        logger.warning(f"Unknown tool_choice value: {tool_choice}, using 'auto'")
+        return ("auto", None)
+
+
 def inject_tools_into_messages(
     messages: list[dict],
     tools: list[dict],
+    tool_choice: str | dict | None = None,
 ) -> list[dict]:
     """Inject tool definitions into the system message.
 
@@ -53,6 +125,11 @@ def inject_tools_into_messages(
     Args:
         messages: List of chat messages (will not be modified).
         tools: List of tool definitions in OpenAI format.
+        tool_choice: Tool choice strategy:
+            - None or "auto": Model may call tools (default)
+            - "none": Model should not call tools (returns messages unchanged)
+            - "required": Model must call at least one tool
+            - {"type": "function", "function": {"name": "X"}}: Must call specific function
 
     Returns:
         New list of messages with tools injected into system message.
@@ -60,14 +137,49 @@ def inject_tools_into_messages(
     if not tools:
         return messages
 
+    # Parse tool_choice to determine mode
+    mode, specific_func = parse_tool_choice(tool_choice)
+
+    # "none" means don't inject tools at all
+    if mode == "none":
+        logger.debug("tool_choice='none', skipping tool injection")
+        return messages
+
     # Deep copy to avoid modifying original
     messages = copy.deepcopy(messages)
 
+    # Filter tools if a specific function is requested
+    tools_to_inject = tools
+    if mode == "specific" and specific_func:
+        tools_to_inject = [
+            t for t in tools
+            if t.get("function", {}).get("name") == specific_func
+        ]
+        if not tools_to_inject:
+            logger.warning(
+                f"tool_choice specified function '{specific_func}' but it was not found "
+                f"in provided tools. Available: {[t.get('function', {}).get('name') for t in tools]}"
+            )
+            # Fall back to auto mode with all tools
+            mode = "auto"
+            tools_to_inject = tools
+
+    # Select prefix and suffix based on mode
+    if mode == "required":
+        prefix = TOOLS_PREFIX_REQUIRED
+        suffix = TOOLS_SUFFIX_REQUIRED
+    elif mode == "specific" and specific_func:
+        prefix = TOOLS_PREFIX_SPECIFIC.format(function_name=specific_func)
+        suffix = TOOLS_SUFFIX_SPECIFIC.format(function_name=specific_func)
+    else:  # "auto" or fallback
+        prefix = TOOLS_PREFIX_AUTO
+        suffix = TOOLS_SUFFIX_AUTO
+
     # Build tools section
-    tools_section = TOOLS_SYSTEM_MESSAGE_PREFIX
-    for tool in tools:
+    tools_section = prefix
+    for tool in tools_to_inject:
         tools_section += f"<tool>{format_tool_for_prompt(tool)}</tool>\n"
-    tools_section += TOOLS_SYSTEM_MESSAGE_SUFFIX
+    tools_section += suffix
 
     # Find system message and append tools
     system_found = False

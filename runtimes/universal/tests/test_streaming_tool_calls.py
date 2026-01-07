@@ -336,3 +336,62 @@ class TestIncrementalToolCallStreaming:
         # Phase 4: Tool call completes
         accumulated += ', "arguments": {}}</tool_call>'
         assert is_tool_call_complete(accumulated) is True
+
+    @pytest.mark.asyncio
+    async def test_multiple_tool_calls_streaming_state_machine(self):
+        """Test that state machine correctly handles multiple sequential tool calls."""
+        from utils.tool_calling import (
+            detect_probable_tool_call,
+            detect_tool_call_in_content,
+            extract_tool_name_from_partial,
+            is_tool_call_complete,
+            strip_tool_call_from_content,
+        )
+
+        # Simulate streaming two tool calls
+        full_content = (
+            'I will make two calls. '
+            '<tool_call>{"name": "get_weather", "arguments": {"city": "NYC"}}</tool_call> '
+            '<tool_call>{"name": "get_time", "arguments": {"timezone": "EST"}}</tool_call>'
+        )
+
+        # Tokenize by character to simulate streaming
+        state = ToolCallStreamState.NORMAL
+        accumulated = ""
+        tool_names_found = []
+        tool_call_index = 0
+
+        for char in full_content:
+            accumulated += char
+
+            if state == ToolCallStreamState.NORMAL:
+                if detect_probable_tool_call(accumulated):
+                    state = ToolCallStreamState.BUFFERING_START
+
+            elif state == ToolCallStreamState.BUFFERING_START:
+                name = extract_tool_name_from_partial(accumulated)
+                if name:
+                    tool_names_found.append(name)
+                    state = ToolCallStreamState.STREAMING_ARGS
+
+            elif state == ToolCallStreamState.STREAMING_ARGS:
+                if is_tool_call_complete(accumulated):
+                    # Process completed tool call
+                    tool_calls = detect_tool_call_in_content(accumulated)
+                    assert tool_calls is not None
+                    assert len(tool_calls) >= 1
+
+                    # Reset state machine for next tool call
+                    accumulated = strip_tool_call_from_content(accumulated)
+                    state = ToolCallStreamState.NORMAL
+                    tool_call_index += 1
+
+                    # Check if there's already another tool call starting
+                    if detect_probable_tool_call(accumulated):
+                        state = ToolCallStreamState.BUFFERING_START
+
+        # Verify both tool calls were detected
+        assert len(tool_names_found) == 2, f"Expected 2 tool calls, got {tool_names_found}"
+        assert tool_names_found[0] == "get_weather"
+        assert tool_names_found[1] == "get_time"
+        assert tool_call_index == 2
