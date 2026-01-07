@@ -35,7 +35,43 @@ class LFAgentHistory:
         self.history.append(message)
 
     def get_history(self) -> list[dict]:
-        return [dict(msg) for msg in self.history]
+        return [self._serialize_message(msg) for msg in self.history]
+
+    @staticmethod
+    def _serialize_message(msg: LFChatCompletionMessageParam) -> dict:
+        """Serialize a message to a plain dict, handling nested objects.
+
+        OpenAI SDK types (like ChatCompletionMessageFunctionToolCallParam, Function)
+        are Pydantic models that need proper serialization to avoid issues like
+        ValidatorIterator being stringified instead of actual data.
+        """
+        result = dict(msg)
+
+        # Handle tool_calls field which may contain OpenAI SDK Pydantic models
+        if "tool_calls" in result and result["tool_calls"]:
+            serialized_tool_calls = []
+            for tc in result["tool_calls"]:
+                if hasattr(tc, "model_dump"):
+                    # Pydantic v2 model
+                    serialized_tool_calls.append(tc.model_dump())
+                elif hasattr(tc, "dict"):
+                    # Pydantic v1 model
+                    serialized_tool_calls.append(tc.dict())
+                elif isinstance(tc, dict):
+                    # Already a dict, but check nested function field
+                    tc_copy = dict(tc)
+                    if "function" in tc_copy:
+                        func = tc_copy["function"]
+                        if hasattr(func, "model_dump"):
+                            tc_copy["function"] = func.model_dump()
+                        elif hasattr(func, "dict"):
+                            tc_copy["function"] = func.dict()
+                    serialized_tool_calls.append(tc_copy)
+                else:
+                    serialized_tool_calls.append(tc)
+            result["tool_calls"] = serialized_tool_calls
+
+        return result
 
     @staticmethod
     def message_from_dict(data: dict) -> LFChatCompletionMessageParam:
@@ -53,15 +89,21 @@ class LFAgentHistory:
                 role="user", content=data.get("content", "")
             )
         elif role == "assistant":
-            return LFChatCompletionAssistantMessageParam(
-                role="assistant",
-                content=data.get("content"),
-                audio=data.get("audio"),
-                name=data.get("name") or "",
-                refusal=data.get("refusal"),
-                tool_calls=data.get("tool_calls") or [],
-                # reasoning=data.get("reasoning"),
-            )
+            # Only include optional fields if they have valid values
+            # OpenAI rejects empty strings for 'name' and empty arrays for 'tool_calls'
+            params: dict = {
+                "role": "assistant",
+                "content": data.get("content"),
+            }
+            if data.get("audio"):
+                params["audio"] = data["audio"]
+            if data.get("name"):  # Only include if non-empty
+                params["name"] = data["name"]
+            if data.get("refusal"):
+                params["refusal"] = data["refusal"]
+            if data.get("tool_calls"):  # Only include if non-empty
+                params["tool_calls"] = data["tool_calls"]
+            return LFChatCompletionAssistantMessageParam(**params)
         elif role == "tool":
             return LFChatCompletionToolMessageParam(
                 role="tool",

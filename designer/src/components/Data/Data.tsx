@@ -41,6 +41,7 @@ import {
   useCreateDataset,
   useDeleteDataset,
   useAvailableStrategies,
+  useProcessDataset,
 } from '../../hooks/useDatasets'
 import { uploadFileToDataset } from '../../api/datasets'
 import datasetService from '../../api/datasets'
@@ -56,7 +57,7 @@ import {
   loadDatasetTaskId,
   clearDatasetTaskId,
 } from '../../utils/datasetStorage'
-import { useTaskStatus } from '../../hooks/useDatasets'
+import { useTaskStatus, useCancelTask } from '../../hooks/useDatasets'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
@@ -93,11 +94,13 @@ const DatasetCard = ({
     }
   )
 
-  // Clear task ID when processing completes
+  // Clear task ID when processing completes or is cancelled
   useEffect(() => {
     if (
       taskStatus &&
-      (taskStatus.state === 'SUCCESS' || taskStatus.state === 'FAILURE')
+      (taskStatus.state === 'SUCCESS' ||
+        taskStatus.state === 'FAILURE' ||
+        taskStatus.cancelled)
     ) {
       clearDatasetTaskId(
         activeProject?.namespace || '',
@@ -125,6 +128,52 @@ const DatasetCard = ({
 
     return 0
   }, [isProcessing, taskStatus])
+
+  // Cancel task mutation
+  const cancelTaskMutation = useCancelTask()
+  const { toast } = useToast()
+
+  const handleStopProcessing = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (!taskId || !activeProject?.namespace || !activeProject?.project) return
+
+      cancelTaskMutation.mutate(
+        {
+          namespace: activeProject.namespace,
+          project: activeProject.project,
+          taskId,
+        },
+        {
+          onSuccess: () => {
+            clearDatasetTaskId(
+              activeProject.namespace,
+              activeProject.project,
+              dataset.name
+            )
+            toast({
+              message: 'Processing cancelled successfully',
+              variant: 'default',
+            })
+          },
+          onError: (error: any) => {
+            toast({
+              message:
+                error?.message || 'Failed to cancel processing. Please try again.',
+              variant: 'destructive',
+            })
+          },
+        }
+      )
+    },
+    [
+      taskId,
+      activeProject,
+      dataset.name,
+      cancelTaskMutation,
+      toast,
+    ]
+  )
 
   return (
     <div
@@ -203,9 +252,9 @@ const DatasetCard = ({
         {dataset.files.length} {dataset.files.length === 1 ? 'file' : 'files'}
       </div>
 
-      {/* Processing percentage badge */}
+      {/* Processing percentage badge and stop button */}
       {isProcessing && (
-        <div className="absolute bottom-3 right-3">
+        <div className="absolute bottom-3 right-3 flex items-center gap-2">
           <Badge
             variant="secondary"
             size="sm"
@@ -213,6 +262,23 @@ const DatasetCard = ({
           >
             Processing {processingPercent}%...
           </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleStopProcessing}
+            disabled={cancelTaskMutation.isPending}
+            className="h-7 px-2 text-xs"
+            title="Stop processing"
+          >
+            {cancelTaskMutation.isPending ? (
+              <>
+                <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin mr-1" />
+                Stopping...
+              </>
+            ) : (
+              'Stop'
+            )}
+          </Button>
         </div>
       )}
     </div>
@@ -333,6 +399,9 @@ const Data = () => {
       // Error toasts for actual failures are handled in handleDatasetSelect
     },
   })
+
+  // Process dataset mutation for auto-processing after upload
+  const processMutation = useProcessDataset()
 
   // Fetch available strategies and databases from API
   const { data: availableOptions } = useAvailableStrategies(
@@ -819,6 +888,41 @@ const Data = () => {
         if (successes.length > 0) {
           // Explicitly refetch to ensure fresh data before navigating
           await refetchDatasets()
+
+          // Auto-trigger processing after successful uploads
+          if (activeProject?.namespace && activeProject?.project) {
+            // Check if processing is already running for this dataset
+            const existingTaskId = loadDatasetTaskId(
+              activeProject.namespace,
+              activeProject.project,
+              datasetId
+            )
+
+            if (!existingTaskId) {
+              // No processing running, trigger immediately
+              try {
+                const result = await processMutation.mutateAsync({
+                  namespace: activeProject.namespace,
+                  project: activeProject.project,
+                  dataset: datasetId,
+                })
+
+                if (result.task_id) {
+                  saveDatasetTaskId(
+                    activeProject.namespace,
+                    activeProject.project,
+                    datasetId,
+                    result.task_id
+                  )
+                }
+              } catch (error) {
+                console.error('Failed to auto-start processing:', error)
+                // Don't show error toast - processing can be triggered manually in dataset view
+              }
+            }
+            // If processing is already running, DatasetView will handle queuing
+          }
+
           navigate(`/chat/data/${datasetId}`)
         }
       } catch (error) {
@@ -855,6 +959,7 @@ const Data = () => {
       toast,
       navigate,
       refetchDatasets,
+      processMutation,
     ]
   )
 

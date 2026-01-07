@@ -36,7 +36,7 @@ class BaseModel(ABC):
         """Unload the model and free resources.
 
         Default implementation for transformers models. Subclasses should override
-        if they need custom cleanup (e.g., GGUF models with llama-cpp-python).
+        if they need custom cleanup (e.g., GGUF models with llama-cpp).
         """
         logger.info(f"Unloading model: {self.model_id}")
 

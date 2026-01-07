@@ -5,6 +5,12 @@ FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
 # Usage: docker build --build-arg PYTORCH_VARIANT=cpu ...
 ARG PYTORCH_VARIANT=
 
+# Build arg to control llama.cpp backend
+# Options: cpu, vulkan, cuda12, cuda11 (Linux), metal (macOS only)
+# Usage: docker build --build-arg LLAMA_BACKEND=vulkan ...
+# If not specified, auto-detects based on platform (cpu for Linux x86_64)
+ARG LLAMA_BACKEND=
+
 # Disable/limit bytecode compilation to avoid CI stalls
 ENV UV_COMPILE_BYTECODE=0
 ENV UV_COMPILE_BYTECODE_WORKERS=1
@@ -21,20 +27,28 @@ ENV UV_EXTRA_INDEX_URL=${PYTORCH_VARIANT:+https://download.pytorch.org/whl/${PYT
 
 ENV LF_DATA_DIR=/var/lib/llamafarm
 
-RUN apt update && apt install -y curl && rm -rf /var/lib/apt/lists/*
+# Set llama.cpp cache directory for pre-downloaded binaries
+ENV LLAMAFARM_CACHE_DIR=/var/lib/llamafarm/llama-cache
+
+# Pass LLAMA_BACKEND build arg to runtime environment (if specified)
+ENV LLAMAFARM_BACKEND=${LLAMA_BACKEND}
+
+RUN apt update && apt install -y curl unzip && rm -rf /var/lib/apt/lists/*
 
 # Create UV cache and virtual environment directories with proper permissions for any user
 RUN mkdir -p /tmp/uv-cache && chmod 777 /tmp/uv-cache \
     && mkdir -p /tmp/uv-venv && chmod 777 /tmp/uv-venv \
-    && mkdir -p /var/lib/llamafarm && chmod 777 /var/lib/llamafarm
+    && mkdir -p /var/lib/llamafarm && chmod 777 /var/lib/llamafarm \
+    && mkdir -p /var/lib/llamafarm/llama-cache && chmod 777 /var/lib/llamafarm/llama-cache
 
 # Set working directory
 WORKDIR /app
 
 # Copy the required packages from the monorepo (lightweight server only)
-# Note: This Dockerfile should be run from the repo root: docker build -f server/Dockerfile .
+# Note: This Dockerfile should be run from the repo root: docker build -f runtimes/universal/Dockerfile .
 COPY config/ ./config/
 COPY common/ ./common/
+COPY packages/llamafarm-llama/ ./packages/llamafarm-llama/
 COPY rag/schema.yaml ./rag/schema.yaml
 COPY ruff.toml ./ruff.toml
 
@@ -57,6 +71,11 @@ COPY runtimes/universal/ ./runtimes/universal/
 RUN cd runtimes/universal && uv sync --locked --verbose \
     && uv cache clean \
     && rm -rf /tmp/uv-cache/*
+
+# Pre-download llama.cpp binaries during build for faster container startup
+# This downloads the appropriate binary based on platform and LLAMA_BACKEND setting
+# The binary is cached in LLAMAFARM_CACHE_DIR so it's available at runtime
+RUN cd runtimes/universal && uv run python scripts/download_llama_binary.py
 
 # Expose port (default is 11540, can be overridden with LF_RUNTIME_PORT env var)
 EXPOSE 11540

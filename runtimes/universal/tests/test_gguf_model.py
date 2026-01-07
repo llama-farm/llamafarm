@@ -84,7 +84,7 @@ class TestGGUFLanguageModel:
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
             ),
-            patch("models.gguf_language_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
             assert model.llama is not None
@@ -112,9 +112,7 @@ class TestGGUFLanguageModel:
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
             ),
-            patch(
-                "models.gguf_language_model.Llama", return_value=mock_llama
-            ) as mock_llama_cls,
+            patch("llamafarm_llama.Llama", return_value=mock_llama) as mock_llama_cls,
         ):
             await model.load()
             assert model.llama is not None
@@ -155,7 +153,7 @@ class TestGGUFLanguageModel:
                 "models.gguf_language_model.get_default_context_size",
                 return_value=(2048, []),
             ),
-            patch("models.gguf_language_model.Llama", return_value=mock_llama),
+            patch("llamafarm_llama.Llama", return_value=mock_llama),
         ):
             await model.load()
             result = await model.generate(
@@ -176,7 +174,7 @@ class TestGGUFLanguageModel:
 
     @pytest.mark.asyncio
     async def test_generate_stream_exception_in_thread(self, caplog):
-        """Test generate_stream handles exception from llama-cpp-python gracefully."""
+        """Test generate_stream handles exception from llama-cpp gracefully."""
         import logging
 
         model = GGUFLanguageModel("test/model", "cpu")
@@ -185,9 +183,9 @@ class TestGGUFLanguageModel:
         mock_llama = Mock()
         model.llama = mock_llama
 
-        # Simulate llama-cpp-python raising an exception during streaming
+        # Simulate llama-cpp raising an exception during streaming
         def raise_exception(*args, **kwargs):
-            raise RuntimeError("Simulated llama-cpp-python error")
+            raise RuntimeError("Simulated llama-cpp error")
 
         # Mock create_chat_completion to return an iterable that raises
         mock_llama.create_chat_completion.side_effect = raise_exception
@@ -196,14 +194,57 @@ class TestGGUFLanguageModel:
             gen = model.generate_stream(
                 [{"role": "user", "content": "Hi"}], max_tokens=10
             )
-            with pytest.raises(RuntimeError, match="Simulated llama-cpp-python error"):
+            with pytest.raises(RuntimeError, match="Simulated llama-cpp error"):
                 # Exhaust the generator to trigger the exception
                 async for _ in gen:
                     pass
             # Verify that an error was logged
-            assert any(
-                "Simulated llama-cpp-python error" in r.message for r in caplog.records
-            )
+            assert any("Simulated llama-cpp error" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_logits_processor_is_callable_not_list(self):
+        """Test that logits_processor is passed as callable, not wrapped in a list.
+
+        Regression test for issue #627: TypeError 'list' object is not callable.
+        The llamafarm_llama library expects logits_processor to be a callable,
+        not a list of processors.
+        """
+        model = GGUFLanguageModel("test/model", "cpu")
+
+        # Mock the llama instance
+        mock_llama = Mock()
+        model.llama = mock_llama
+
+        # Make create_chat_completion return an empty iterator
+        mock_llama.create_chat_completion.return_value = iter([])
+
+        # Call generate_stream with thinking_budget to trigger logits_processor setup
+        gen = model.generate_stream(
+            [{"role": "user", "content": "Hi"}],
+            max_tokens=10,
+            thinking_budget=100,
+        )
+
+        # Exhaust the generator
+        async for _ in gen:
+            pass
+
+        # Verify create_chat_completion was called
+        mock_llama.create_chat_completion.assert_called_once()
+
+        # Get the logits_processor argument
+        call_kwargs = mock_llama.create_chat_completion.call_args[1]
+        logits_processor = call_kwargs.get("logits_processor")
+
+        # Assert it's not a list (the bug was wrapping it in a list)
+        assert logits_processor is not None, (
+            "logits_processor should be set when thinking_budget is provided"
+        )
+        assert not isinstance(logits_processor, list), (
+            "logits_processor must be a callable, not a list. "
+            "See issue #627: TypeError 'list' object is not callable"
+        )
+        assert callable(logits_processor), "logits_processor must be callable"
 
 
 @pytest.mark.integration

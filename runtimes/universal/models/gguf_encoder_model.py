@@ -1,28 +1,33 @@
 """
-GGUF encoder model wrapper using llama-cpp-python for embeddings.
+GGUF encoder model wrapper using llama-cpp for embeddings.
 
-Provides the same interface as EncoderModel but uses llama-cpp-python for
+Provides the same interface as EncoderModel but uses llama-cpp for
 GGUF quantized embedding models, enabling faster inference and lower memory usage.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+import sys
 from concurrent.futures import ThreadPoolExecutor
-
-from llama_cpp import Llama
+from typing import TYPE_CHECKING
 
 from utils.model_format import get_gguf_file_path
 
 from .base import BaseModel
 
+if TYPE_CHECKING:
+    from llamafarm_llama import Llama
+
 logger = logging.getLogger(__name__)
 
 
 class GGUFEncoderModel(BaseModel):
-    """Wrapper for GGUF embedding models using llama-cpp-python.
+    """Wrapper for GGUF embedding models using llama-cpp.
 
     This class provides an interface compatible with EncoderModel but uses
-    llama-cpp-python for inference with GGUF quantized embedding models. GGUF
+    llama-cpp for inference with GGUF quantized embedding models. GGUF
     embedding models offer:
     - 50-75% smaller file sizes (4-bit/8-bit quantization)
     - 2-3x faster inference on Apple Silicon (Metal)
@@ -58,12 +63,12 @@ class GGUFEncoderModel(BaseModel):
         self._executor = ThreadPoolExecutor(max_workers=1)
 
     async def load(self) -> None:
-        """Load the GGUF embedding model using llama-cpp-python.
+        """Load the GGUF embedding model using llama-cpp.
 
         This method:
         1. Locates the .gguf file in the HuggingFace cache
         2. Configures GPU layers based on the target device
-        3. Initializes the llama-cpp-python Llama instance in embedding mode
+        3. Initializes the llama-cpp Llama instance in embedding mode
         4. Runs initialization in a thread pool (blocking operation)
 
         Raises:
@@ -80,10 +85,16 @@ class GGUFEncoderModel(BaseModel):
             self.token,
             preferred_quantization=self.preferred_quantization,
         )
+
+        # On Windows, convert backslashes to forward slashes for llama.cpp compatibility
+        # The underlying C library can have issues with Windows-style paths
+        if sys.platform == "win32":
+            gguf_path = gguf_path.replace("\\", "/")
+
         logger.info(f"GGUF file located at: {gguf_path}")
 
         # Configure GPU layers based on device
-        # Note: llama-cpp-python automatically uses whatever backend it was compiled with
+        # Note: llama-cpp automatically uses whatever backend it was compiled with
         # (CUDA, ROCm, Metal, Vulkan, etc.). We just tell it whether to use GPU or CPU.
         if self.device != "cpu":
             n_gpu_layers = -1  # Use all layers on GPU (any backend)
@@ -94,11 +105,19 @@ class GGUFEncoderModel(BaseModel):
             n_gpu_layers = 0  # CPU only
             logger.info("Configuring for CPU-only inference")
 
-        # Load model using llama-cpp-python in embedding mode
+        # Load model using llama-cpp in embedding mode
         # Run in thread pool since Llama() initialization is blocking
         loop = asyncio.get_running_loop()
 
         def _load_model():
+            try:
+                from llamafarm_llama import Llama
+            except ImportError as e:
+                raise ImportError(
+                    "llamafarm-llama is required for GGUF models but is not installed. "
+                    "Install it with: pip install llamafarm-llama"
+                ) from e
+
             return Llama(
                 model_path=gguf_path,
                 embedding=True,  # Enable embedding mode
@@ -150,14 +169,14 @@ class GGUFEncoderModel(BaseModel):
             try:
                 embeddings = []
                 for text in texts:
-                    # llama-cpp-python create_embedding returns dict with 'data' key
+                    # llama-cpp create_embedding returns dict with 'data' key
                     result = self.llama.create_embedding(input=text)
                     embedding = result["data"][0]["embedding"]
                     embeddings.append(embedding)
                 return embeddings
             except Exception as e:
                 logger.error(
-                    f"Error during llama-cpp-python embedding generation: {e}",
+                    f"Error during llama-cpp embedding generation: {e}",
                     exc_info=True,
                 )
                 raise RuntimeError(f"Embedding generation failed: {e}") from e
@@ -195,7 +214,7 @@ class GGUFEncoderModel(BaseModel):
         """Unload GGUF encoder model and free resources."""
         logger.info(f"Unloading GGUF encoder model: {self.model_id}")
 
-        # Clear llama-cpp-python instance
+        # Clear llama-cpp instance
         self.llama = None
 
         # Shutdown thread pool executor

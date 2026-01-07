@@ -12,6 +12,11 @@ from components.extractors.base import BaseExtractor
 from components.parsers.base.base_parser import BaseParser
 from core.base import Document
 from core.logging import RAGStructLogger
+from utils.parsing_safety import (
+    ParserFailedError,
+    UnsupportedFileTypeError,
+    get_file_extension,
+)
 
 repo_root = Path(__file__).parent.parent.parent.parent
 if str(repo_root) not in sys.path:
@@ -272,52 +277,74 @@ class BlobProcessor:
         """
         Process a blob of data with automatic parser selection based on file patterns.
 
+        Simplified logic - no fallback, explicit configuration required:
+        1. Find parsers matching file extension/pattern
+        2. If no match → raise UnsupportedFileTypeError
+        3. Try parsers in priority order
+        4. If all fail → raise ParserFailedError
+
         Args:
             blob_data: Raw bytes of the document
             metadata: Metadata including filename, content_type, etc.
 
         Returns:
             List of processed Document objects
+
+        Raises:
+            UnsupportedFileTypeError: If no parser is configured for this file type
+            ParserFailedError: If all configured parsers fail to process the file
         """
         filename = metadata.get("filename", "unknown")
+        extension = get_file_extension(filename)
+
         logger.info(f"Processing blob: {filename}")
         logger.debug(f"Blob metadata: {metadata}")
-        logger.debug(
-            f"First 20 bytes of blob: {blob_data[:20].decode(errors='replace') if blob_data else 'empty'}"
-        )
 
         # Find matching parsers based on file patterns
         matching_parsers = self._find_matching_parsers(filename)
         logger.debug(
-            f"Found {len(matching_parsers)} matching parsers for {filename}: {[p[0].type or None for p in matching_parsers]}"
+            f"Found {len(matching_parsers)} matching parsers for {filename}: "
+            f"{[p[0].type or None for p in matching_parsers]}"
         )
 
+        # No parser configured for this file type → fail immediately
+        # NO FALLBACK LOGIC - explicit configuration required
         if not matching_parsers:
-            logger.warning(f"No parser found for file: {filename}")
-            # Try with the lowest priority text parser as ultimate fallback
-            for config, parser in self.parsers:
-                if config.type and config.type == "TextParser_Python":
-                    matching_parsers = [(config, parser)]
-                    break
+            error_msg = (
+                f"No parser configured for file: {filename} (extension: {extension}). "
+                f"Add an appropriate parser to your data_processing_strategy."
+            )
+            logger.error(error_msg)
+
+            available_parser_types = [p[0].type for p in self.parsers if p[0].type]
+            raise UnsupportedFileTypeError(
+                filename=filename,
+                extension=extension,
+                available_parsers=available_parser_types,
+            )
 
         # Try parsers in priority order until one succeeds
-        documents = []
+        documents: list[Document] = []
+        tried_parsers: list[str] = []
+        parser_errors: list[str] = []
+
         for config, parser in matching_parsers:
             if not config.type:
                 logger.warning(
-                    f"Parser config missing 'type': {config}. This may indicate a misconfiguration."
+                    f"Parser config missing 'type': {config}. "
+                    f"This may indicate a misconfiguration."
                 )
                 continue
 
             parser_type = config.type
+            tried_parsers.append(parser_type)
+
             try:
                 logger.debug(
-                    f"Attempting to parse {filename} with {parser_type} (priority: {config.priority})"
+                    f"Attempting to parse {filename} with {parser_type} "
+                    f"(priority: {config.priority})"
                 )
                 documents = parser.parse_blob(blob_data, metadata)
-                logger.debug(
-                    f"{parser_type} returned {len(documents) if documents else 0} documents"
-                )
 
                 if documents:
                     # Calculate chunk statistics
@@ -327,38 +354,27 @@ class BlobProcessor:
                     )
 
                     logger.info(
-                        f"Successfully parsed {filename} with {parser_type} - got {len(documents)} chunks"
-                    )
-                    # Use debug level for detailed parser output
-                    logger.debug(f"\n📄 Parser Output: {parser_type}")
-                    logger.debug(f"   ├─ Chunks created: {len(documents)}")
-                    logger.debug(f"   ├─ Average chunk size: {avg_chunk_size} chars")
-                    logger.debug(
-                        f"   └─ Chunk sizes: min={min(chunk_sizes)}, max={max(chunk_sizes)}"
+                        f"Successfully parsed {filename} with {parser_type} - "
+                        f"got {len(documents)} chunks (avg size: {avg_chunk_size} chars)"
                     )
 
                     # Apply extractors to the documents
                     documents = self._apply_extractors(documents, filename)
-                    break
+                    return documents
 
             except Exception as e:
+                error_msg = f"{parser_type}: {e}"
+                parser_errors.append(error_msg)
                 logger.warning(f"{parser_type} FAILED for {filename}: {e}")
-                import traceback
-
-                logger.warning(f"Traceback: {traceback.format_exc()}")
                 continue
 
-        if not documents:
-            logger.error(f"All parsers failed for file: {filename}")
-            # Create a basic document with raw text as fallback
-            documents = [
-                Document(
-                    content=blob_data.decode("utf-8", errors="ignore"),
-                    metadata={**metadata, "parser": "fallback_raw"},
-                )
-            ]
-
-        return documents
+        # All configured parsers failed - NO FALLBACK
+        logger.error(f"All parsers failed for file: {filename}")
+        raise ParserFailedError(
+            filename=filename,
+            tried_parsers=tried_parsers,
+            errors=parser_errors,
+        )
 
     def _find_matching_parsers(self, filename: str) -> list[tuple[Parser, BaseParser]]:
         """

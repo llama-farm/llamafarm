@@ -566,7 +566,8 @@ async def chat(
         matched_docs = docs_service.match_docs_for_query(latest_user_message)
         agent.docs_context_provider.set_docs(matched_docs)
 
-    tools = [ToolDefinition.from_openai_tool_dict(t) for t in request.tools or []]
+    # Tools from request body (config tools are added by the agent via config_tools property)
+    tools = [ToolDefinition.from_openai_tool_dict(t) for t in (request.tools or [])]
 
     if request.stream:
         return create_streaming_response_from_iterator(
@@ -577,15 +578,16 @@ async def chat(
                 chat_agent=agent,
                 messages=request.messages,
                 tools=tools,
-                rag_enabled=resolved_params.rag_enabled,
-                database=resolved_params.database,
-                retrieval_strategy=resolved_params.rag_retrieval_strategy,
-                rag_top_k=resolved_params.rag_top_k,
-                rag_score_threshold=resolved_params.rag_score_threshold,
-                n_ctx=resolved_params.n_ctx,
-                rag_queries=resolved_params.rag_queries,
-                think=resolved_params.think,
-                thinking_budget=resolved_params.thinking_budget,
+                rag_enabled=request.rag_enabled,
+                database=request.database,
+                retrieval_strategy=request.rag_retrieval_strategy,
+                rag_top_k=request.rag_top_k,
+                rag_score_threshold=request.rag_score_threshold,
+                n_ctx=request.n_ctx,
+                rag_queries=request.rag_queries,
+                think=request.think,
+                thinking_budget=request.thinking_budget,
+                max_tokens=request.max_tokens,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -598,15 +600,16 @@ async def chat(
             chat_agent=agent,
             messages=request.messages,
             tools=tools,
-            rag_enabled=resolved_params.rag_enabled,
-            database=resolved_params.database,
-            retrieval_strategy=resolved_params.rag_retrieval_strategy,
-            rag_top_k=resolved_params.rag_top_k,
-            n_ctx=resolved_params.n_ctx,
-            rag_score_threshold=resolved_params.rag_score_threshold,
-            rag_queries=resolved_params.rag_queries,
-            think=resolved_params.think,
-            thinking_budget=resolved_params.thinking_budget,
+            rag_enabled=request.rag_enabled,
+            database=request.database,
+            retrieval_strategy=request.rag_retrieval_strategy,
+            rag_top_k=request.rag_top_k,
+            n_ctx=request.n_ctx,
+            rag_score_threshold=request.rag_score_threshold,
+            rag_queries=request.rag_queries,
+            think=request.think,
+            thinking_budget=request.thinking_budget,
+            max_tokens=request.max_tokens,
         )
     except Exception as e:
         raise HTTPException(

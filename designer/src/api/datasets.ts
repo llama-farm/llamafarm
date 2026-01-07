@@ -6,10 +6,13 @@ import {
   DeleteDatasetResponse,
   DatasetActionRequest,
   DatasetActionResponse,
+  DeleteChunksResponse,
+  DeleteAllChunksResponse,
   FileUploadResponse,
   FileDeleteResponse,
   FileDeleteParams,
   TaskStatusResponse,
+  CancelTaskResponse,
 } from '../types/datasets'
 
 /**
@@ -147,6 +150,48 @@ export async function executeDatasetAction(
 }
 
 /**
+ * Delete chunks for a file from the vector store (without deleting the source file)
+ * Used for reprocessing files
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param dataset - The dataset name
+ * @param fileHash - The file hash to delete chunks for
+ * @returns Promise<DeleteChunksResponse> - The response with deleted chunk count
+ */
+export async function deleteFileChunks(
+  namespace: string,
+  project: string,
+  dataset: string,
+  fileHash: string
+): Promise<DeleteChunksResponse> {
+  const response = await apiClient.post<DeleteChunksResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
+    { action_type: 'delete_file_chunks', file_hash: fileHash }
+  )
+  return response.data
+}
+
+/**
+ * Delete chunks for ALL files from the vector store (without deleting the source files)
+ * Used for reprocessing entire dataset
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param dataset - The dataset name
+ * @returns Promise<DeleteAllChunksResponse> - The response with deleted chunk count and files cleared
+ */
+export async function deleteAllChunks(
+  namespace: string,
+  project: string,
+  dataset: string
+): Promise<DeleteAllChunksResponse> {
+  const response = await apiClient.post<DeleteAllChunksResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/actions`,
+    { action_type: 'delete_dataset_chunks' }
+  )
+  return response.data
+}
+
+/**
  * Upload a file to a dataset using multipart form data
  * @param namespace - The project namespace
  * @param project - The project identifier
@@ -187,6 +232,7 @@ export async function uploadFileToDataset(
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 300000, // 5 minutes for file uploads (larger files need more time)
     }
   )
   return response.data
@@ -258,6 +304,24 @@ export async function getTaskStatus(
 }
 
 /**
+ * Cancel a running task
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param taskId - The task identifier to cancel
+ * @returns Promise<CancelTaskResponse> - The cancellation response with cleanup details
+ */
+export async function cancelTask(
+  namespace: string,
+  project: string,
+  taskId: string
+): Promise<CancelTaskResponse> {
+  const response = await apiClient.delete<CancelTaskResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/tasks/${encodeURIComponent(taskId)}`
+  )
+  return response.data
+}
+
+/**
  * Delete a file from a dataset
  * @param namespace - The project namespace
  * @param project - The project identifier
@@ -296,9 +360,12 @@ export default {
   createDataset,
   deleteDataset,
   executeDatasetAction,
+  deleteFileChunks,
+  deleteAllChunks,
   uploadFileToDataset,
   deleteFileFromDataset,
   ingestDataset,
   getTaskStatus,
+  cancelTask,
   deleteDatasetFile,
 }

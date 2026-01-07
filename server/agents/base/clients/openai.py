@@ -2,7 +2,7 @@ import json
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Literal, cast
+from typing import Literal
 
 from config.datamodel import ToolCallStrategy
 from openai import NOT_GIVEN, AsyncOpenAI
@@ -37,6 +37,7 @@ from .client import (
 )
 
 logger = FastAPIStructLogger(__name__)
+
 
 TOOLS_SYSTEM_MESSAGE_PREFIX = """
 
@@ -82,7 +83,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         )
 
         # Convert tools to OpenAI format
-        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+        # Check for native_api strategy (handle both enum and string values)
+        strategy = self._model_config.tool_call_strategy
+        use_native_api = strategy in (
+            ToolCallStrategy.native_api,
+            "native_api",
+            None,  # Default to native_api if not set
+        )
+
+        if use_native_api:
             openai_tools = (
                 [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
             )
@@ -93,6 +102,19 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Prepare API parameters
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
+
+        # Extract standard OpenAI parameters from extra_body into api_params
+        # These are first-class OpenAI API parameters, not provider-specific extensions
+        # Only use per-request value if project config doesn't already define it
+        extra_body_copy = dict(extra_body or {})
+        if "max_tokens" in extra_body_copy:
+            if "max_tokens" not in api_params:
+                api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            else:
+                # Project config takes precedence, discard per-request value
+                extra_body_copy.pop("max_tokens")
+        # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
+        # The universal runtime extracts them from extra_body
 
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
@@ -106,22 +128,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Project-level config takes precedence over per-request params
         # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
-            **(extra_body or {}),
+            **extra_body_copy,
             **config_extra_body,
         }
 
         # Create non-streaming request
         stream_param: Literal[False] = False
-        # Filter out None values from messages to avoid OpenAI validation errors
-        cleaned_messages = [
-            cast(
-                LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if v is not None},
-            )
-            for msg in messages
-        ]
+
         completion = await client.chat.completions.create(
-            messages=cleaned_messages,
+            messages=messages,
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,
@@ -158,7 +173,15 @@ class LFAgentClientOpenAI(LFAgentClient):
         )
 
         # Convert tools to OpenAI format
-        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+        # Check for native_api strategy (handle both enum and string values)
+        strategy = self._model_config.tool_call_strategy
+        use_native_api = strategy in (
+            ToolCallStrategy.native_api,
+            "native_api",
+            None,  # Default to native_api if not set
+        )
+
+        if use_native_api:
             openai_tools = (
                 [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
             )
@@ -169,6 +192,19 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Prepare API parameters
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
         api_params = (self._model_config.model_api_parameters or {}).copy()
+
+        # Extract standard OpenAI parameters from extra_body into api_params
+        # These are first-class OpenAI API parameters, not provider-specific extensions
+        # Only use per-request value if project config doesn't already define it
+        extra_body_copy = dict(extra_body or {})
+        if "max_tokens" in extra_body_copy:
+            if "max_tokens" not in api_params:
+                api_params["max_tokens"] = extra_body_copy.pop("max_tokens")
+            else:
+                # Project config takes precedence, discard per-request value
+                extra_body_copy.pop("max_tokens")
+        # Note: think and thinking_budget stay in extra_body - they're not standard OpenAI params
+        # The universal runtime extracts them from extra_body
 
         # Convert extra_body from Pydantic model to dict if needed
         config_extra_body = {}
@@ -182,21 +218,14 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Project-level config takes precedence over per-request params
         # to ensure enforced limits (n_ctx, etc.) can't be bypassed
         extra_body_params = {
-            **(extra_body or {}),
+            **extra_body_copy,
             **config_extra_body,
         }
 
         stream_param: Literal[True] = True
-        # Filter out None values from messages to avoid OpenAI validation errors
-        cleaned_messages = [
-            cast(
-                LFChatCompletionMessageParam,
-                {k: v for k, v in msg.items() if v is not None},
-            )
-            for msg in messages
-        ]
+
         response_stream = await client.chat.completions.create(
-            messages=cleaned_messages,
+            messages=messages,
             model=self._model_config.model,
             tools=openai_tools,
             **api_params,
@@ -204,7 +233,7 @@ class LFAgentClientOpenAI(LFAgentClient):
             stream=stream_param,
         )
 
-        if self._model_config.tool_call_strategy == ToolCallStrategy.native_api:
+        if use_native_api:
             async for chunk in response_stream:
                 yield chunk
             return

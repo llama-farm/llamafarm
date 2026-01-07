@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
@@ -55,6 +56,7 @@ import {
 } from './modelConstants'
 import type { InferenceModel, ModelStatus } from './types'
 import { CloudModelsForm } from './CloudModelsForm'
+import TrainedModels from './TrainedModels'
 
 interface TabBarProps {
   activeTab: string
@@ -467,7 +469,7 @@ function getRecommendedQuantization(
   return { quantization: null, description: null }
 }
 
-function AddOrChangeModels({
+export function AddOrChangeModels({
   onAddModel,
   onGoToProject,
   promptSetNames,
@@ -2300,17 +2302,8 @@ function AddOrChangeModels({
   )
 }
 
-function TrainingData() {
-  return (
-    <div className="rounded-xl border border-border bg-card p-10 flex items-center justify-center">
-      <div className="text-sm text-muted-foreground">
-        Training data features coming soon.
-      </div>
-    </div>
-  )
-}
-
 const Models = () => {
+  const navigate = useNavigate()
   const activeProject = useActiveProject()
   const { data: projectResponse } = useProject(
     activeProject?.namespace || '',
@@ -2319,7 +2312,9 @@ const Models = () => {
   )
   const updateProject = useUpdateProject()
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState('project')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab') === 'training' ? 'training' : 'project'
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -2328,17 +2323,6 @@ const Models = () => {
   // Fetch cached models from device
   const { data: cachedModelsResponse } = useCachedModels()
 
-  // Background download state (shared across component)
-  const [showBackgroundDownload, setShowBackgroundDownload] = useState(false)
-  const [backgroundDownloadName, setBackgroundDownloadName] = useState('')
-  const [customDownloadState, setCustomDownloadState] = useState<
-    'idle' | 'downloading' | 'success' | 'error'
-  >('idle')
-  const [customDownloadProgress, setCustomDownloadProgress] = useState(0)
-  const [customModelOpen, setCustomModelOpen] = useState(false)
-  const [downloadedBytes, setDownloadedBytes] = useState(0)
-  const [totalBytes, setTotalBytes] = useState(0)
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState('')
   const projectConfig = (projectResponse as any)?.project?.config as
     | ProjectConfig
     | undefined
@@ -2403,86 +2387,6 @@ const Models = () => {
 
     setProjectModels(mappedModels)
   }, [projectResponse])
-
-  const addProjectModel = async (m: InferenceModel, promptSets?: string[]) => {
-    if (
-      !activeProject?.namespace ||
-      !activeProject?.project ||
-      !projectResponse?.project?.config
-    )
-      return
-
-    // Add to local state first for immediate UI feedback
-    setProjectModels(prev => {
-      if (prev.some(x => x.id === m.id)) return prev
-      return [...prev, m]
-    })
-
-    // Add to config
-    const currentConfig = projectResponse.project.config
-    const runtimeModels = currentConfig.runtime?.models || []
-
-    // Determine provider based on model identifier
-    // If model identifier contains '/', it's a HuggingFace path (universal provider)
-    // Otherwise, use ollama for backward compatibility
-    const modelId = m.modelIdentifier || m.name
-    const provider = modelId.includes('/') ? 'universal' : 'ollama'
-    const baseUrl =
-      provider === 'universal' ? undefined : 'http://localhost:11434'
-
-    const newModel = {
-      name: m.name,
-      description: m.meta === 'Downloading…' ? '' : m.meta,
-      provider,
-      model: modelId,
-      ...(baseUrl && { base_url: baseUrl }),
-      prompt_format: 'unstructured',
-      provider_config: {},
-      prompts: promptSets && promptSets.length > 0 ? promptSets : ['default'],
-    }
-
-    const updatedModels = [...runtimeModels, newModel]
-
-    const nextConfig = {
-      ...currentConfig,
-      runtime: {
-        ...currentConfig.runtime,
-        models: updatedModels,
-      },
-    }
-
-    try {
-      await updateProject.mutateAsync({
-        namespace: activeProject.namespace,
-        projectId: activeProject.project,
-        request: { config: nextConfig },
-      })
-    } catch (error) {
-      console.error('Failed to add model to config:', error)
-      // Rollback local optimistic update
-      setProjectModels(prev => prev.filter(x => x.id !== m.id))
-    }
-
-    if (m.status === 'downloading') {
-      const addedId = m.id
-      setTimeout(() => {
-        setProjectModels(prev =>
-          prev.map(x =>
-            x.id === addedId
-              ? {
-                  ...x,
-                  status: 'ready',
-                  meta:
-                    x.meta === 'Downloading…'
-                      ? `Added on ${new Date().toLocaleDateString()}`
-                      : x.meta,
-                }
-              : x
-          )
-        )
-      }, 10000)
-    }
-  }
 
   const makeDefault = async (id: string) => {
     if (
@@ -2915,9 +2819,8 @@ const Models = () => {
             activeTab={activeTab}
             onChange={setActiveTab}
             tabs={[
-              { id: 'project', label: 'Project inference models' },
-              { id: 'manage', label: 'Add or change models' },
-              { id: 'training', label: 'Training data' },
+              { id: 'project', label: 'Inference models' },
+              { id: 'training', label: 'Trained models' },
             ]}
           />
 
@@ -2936,7 +2839,7 @@ const Models = () => {
                     Ollama models or configure cloud providers.
                   </div>
                   <Button
-                    onClick={() => setActiveTab('manage')}
+                    onClick={() => navigate('/chat/models/add')}
                     className="w-full sm:w-auto"
                   >
                     Add models
@@ -2944,7 +2847,15 @@ const Models = () => {
                 </div>
               </div>
             ) : (
-              <ProjectInferenceModels
+              <>
+                {/* Title and Add button row */}
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg font-medium">Project inference models</h2>
+                  <Button onClick={() => navigate('/chat/models/add')}>
+                    Add inference models
+                  </Button>
+                </div>
+                <ProjectInferenceModels
                 models={projectModels}
                 onMakeDefault={makeDefault}
                 onDelete={deleteModel}
@@ -2957,30 +2868,9 @@ const Models = () => {
                 availableDeviceModels={availableDeviceModels}
                 onModelChange={handleModelChange}
               />
+              </>
             ))}
-          {activeTab === 'manage' && (
-            <AddOrChangeModels
-              onAddModel={addProjectModel}
-              onGoToProject={() => setActiveTab('project')}
-              promptSetNames={promptSetNames}
-              customModelOpen={customModelOpen}
-              setCustomModelOpen={setCustomModelOpen}
-              customDownloadState={customDownloadState}
-              setCustomDownloadState={setCustomDownloadState}
-              customDownloadProgress={customDownloadProgress}
-              setCustomDownloadProgress={setCustomDownloadProgress}
-              setShowBackgroundDownload={setShowBackgroundDownload}
-              setBackgroundDownloadName={setBackgroundDownloadName}
-              projectModels={projectModels}
-              downloadedBytes={downloadedBytes}
-              setDownloadedBytes={setDownloadedBytes}
-              totalBytes={totalBytes}
-              setTotalBytes={setTotalBytes}
-              estimatedTimeRemaining={estimatedTimeRemaining}
-              setEstimatedTimeRemaining={setEstimatedTimeRemaining}
-            />
-          )}
-          {activeTab === 'training' && <TrainingData />}
+          {activeTab === 'training' && <TrainedModels />}
         </>
       )}
 
@@ -3018,78 +2908,6 @@ const Models = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Background download indicator */}
-      {showBackgroundDownload && customDownloadState === 'downloading' && (
-        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card shadow-lg p-4 flex flex-col gap-2">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="text-sm font-medium">
-                Downloading {backgroundDownloadName}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {formatBytes(downloadedBytes)} / {formatBytes(totalBytes)}{' '}
-                {estimatedTimeRemaining && `• ${estimatedTimeRemaining} left`}
-              </div>
-            </div>
-            <button
-              onClick={() => setShowBackgroundDownload(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <FontIcon type="close" className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Progress</span>
-              <span className="text-muted-foreground">
-                {customDownloadProgress}%
-              </span>
-            </div>
-            <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{ width: `${customDownloadProgress}%` }}
-              />
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setCustomModelOpen(true)
-              setShowBackgroundDownload(false)
-            }}
-            className="w-full"
-          >
-            Show details
-          </Button>
-        </div>
-      )}
-
-      {/* Background download success notification */}
-      {showBackgroundDownload && customDownloadState === 'success' && (
-        <div className="fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-border bg-card shadow-lg p-4 flex items-start gap-3">
-          <div className="flex-shrink-0">
-            <FontIcon
-              type="checkmark-filled"
-              className="w-5 h-5 text-primary"
-            />
-          </div>
-          <div className="flex-1">
-            <div className="text-sm font-medium">Download complete</div>
-            <div className="text-xs text-muted-foreground">
-              {backgroundDownloadName} is ready to use
-            </div>
-          </div>
-          <button
-            onClick={() => setShowBackgroundDownload(false)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <FontIcon type="close" className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   )
 }

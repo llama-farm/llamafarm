@@ -581,9 +581,26 @@ func (m *SourceManager) installHardwareWheels(dir string, componentName string) 
 	// Get the hardware-dependent packages for this component
 	packages := GetComponentPackages(componentName)
 
+	// Install llama.cpp binaries for universal-runtime
+	// This downloads pre-built binaries to a cache directory that the Python package can find
+	if componentName == "universal-runtime" {
+		utils.LogDebug("Ensuring llama.cpp binaries are installed...")
+		if _, err := EnsureLlamaBinary(); err != nil {
+			return fmt.Errorf("failed to install llama.cpp binaries: %w", err)
+		}
+		utils.LogDebug("llama.cpp binaries ready")
+	}
+
 	// No-op if no hardware-specific packages are defined
 	if len(packages) == 0 {
 		utils.LogDebug(fmt.Sprintf("No hardware-specific packages for %s, skipping wheel installation", componentName))
+		// Still need to create marker file for universal-runtime even if no packages
+		if componentName == "universal-runtime" {
+			markerFile := filepath.Join(dir, ".hardware-wheels-installed")
+			if err := os.WriteFile(markerFile, []byte("installed"), 0644); err != nil {
+				utils.LogDebug(fmt.Sprintf("Warning: could not create hardware wheels marker: %v", err))
+			}
+		}
 		return nil
 	}
 
@@ -622,7 +639,7 @@ func (m *SourceManager) syncDirectory(dir string, name string, keepPyTorchIndex 
 	// Run UV sync command in the specific project directory
 	// This ensures .venv is created in the correct location
 	// Use --no-install-workspace to prevent UV from installing workspace members, which can
-	// cause hardware-specific packages like llama-cpp-python to be built from source during
+	// cause hardware-specific packages like llamafarm-llama to be built from source during
 	// config/common sync instead of being installed via the CLI's hardware detection
 	// Use --no-group dev to skip dev dependencies (only install main dependencies)
 	cmd := exec.Command(uvPath, "sync", "--managed-python", "--no-install-workspace", "--frozen", "--no-group", "dev")
@@ -689,7 +706,7 @@ func (m *SourceManager) areDependenciesSynced() bool {
 	venvsSynced := configErr == nil && commonErr == nil && serverErr == nil && ragErr == nil && universalRuntimeErr == nil
 
 	// Also check for hardware wheels marker file (for universal-runtime)
-	// This ensures hardware-specific packages like torch and llama-cpp-python are installed
+	// This ensures hardware-specific packages like torch and llamafarm-llama are installed
 	hardwareWheelsMarker := filepath.Join(m.srcDir, "runtimes", "universal", ".hardware-wheels-installed")
 	_, hardwareWheelsErr := os.Stat(hardwareWheelsMarker)
 

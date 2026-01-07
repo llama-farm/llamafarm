@@ -5,7 +5,8 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
-    "build": "docusaurus build",
+    "build": "node scripts/generate-llms-txt.js && docusaurus build",
+    "generate-llms": "node scripts/generate-llms-txt.js",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy --skip-build",
     "clear": "docusaurus clear",

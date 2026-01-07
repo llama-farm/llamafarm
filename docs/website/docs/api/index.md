@@ -8,7 +8,7 @@ The API is served at: `http://localhost:8000`
 
 All versioned endpoints use the `/v1` prefix:
 
-```
+```text
 http://localhost:8000/v1
 ```
 
@@ -19,7 +19,7 @@ http://localhost:8000/v1
 LlamaFarm organizes your work into **namespaces** (organizational containers) and **projects** (individual configurations):
 
 - **Namespace**: A top-level organizational unit (e.g., your username, team name, or organization)
-- **Project Name**: The unique identifier for a specific LlamaFarm project within a namespace
+- **Project Name**: The unique identifier for a specific LlamaFarm project within a namespace.
 
 ### From Your llamafarm.yaml
 
@@ -134,8 +134,10 @@ Common HTTP status codes:
 
 - `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG system
 - `GET /v1/projects/{namespace}/{project}/rag/health` - Check RAG health
+- `GET /v1/projects/{namespace}/{project}/rag/stats` - Get RAG statistics
 - `GET /v1/projects/{namespace}/{project}/rag/databases` - List databases
 - `GET /v1/projects/{namespace}/{project}/rag/databases/{database}` - Get database details
+- `GET /v1/projects/{namespace}/{project}/rag/databases/{database}/documents` - List documents in database
 - `POST /v1/projects/{namespace}/{project}/rag/databases` - Create database
 - `PATCH /v1/projects/{namespace}/{project}/rag/databases/{database}` - Update database
 - `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database}` - Delete database
@@ -162,7 +164,30 @@ Common HTTP status codes:
 
 - `GET /v1/models` - List cached models
 - `POST /v1/models/download` - Download/cache a model
+- `POST /v1/models/validate-download` - Check disk space before download
+- `GET /v1/models/{model_id}/quantizations` - List GGUF quantization options
 - `DELETE /v1/models/{model_name}` - Delete cached model
+
+### Vision (OCR & Document Extraction)
+
+- `POST /v1/vision/ocr` - OCR text extraction (accepts file upload or base64)
+- `POST /v1/vision/documents/extract` - Document extraction/VQA (accepts file upload or base64)
+
+### ML (Custom Classifiers & Anomaly Detection)
+
+- `POST /v1/ml/classifier/fit` - Train custom text classifier (SetFit few-shot)
+- `POST /v1/ml/classifier/predict` - Classify texts using trained model
+- `POST /v1/ml/classifier/save` - Save trained classifier to disk
+- `POST /v1/ml/classifier/load` - Load classifier from disk
+- `GET /v1/ml/classifier/models` - List saved classifiers
+- `DELETE /v1/ml/classifier/models/{name}` - Delete saved classifier
+- `POST /v1/ml/anomaly/fit` - Train anomaly detector
+- `POST /v1/ml/anomaly/score` - Score data points for anomalies
+- `POST /v1/ml/anomaly/detect` - Detect anomalies (returns only anomalous points)
+- `POST /v1/ml/anomaly/save` - Save trained anomaly model
+- `POST /v1/ml/anomaly/load` - Load anomaly model from disk
+- `GET /v1/ml/anomaly/models` - List saved anomaly models
+- `DELETE /v1/ml/anomaly/models/{filename}` - Delete saved anomaly model
 
 ### Health
 
@@ -174,6 +199,7 @@ Common HTTP status codes:
 - `GET /` - Basic hello endpoint
 - `GET /info` - System information
 - `GET /v1/system/version-check` - Check for CLI updates
+- `GET /v1/system/disk` - Get disk space information
 
 ---
 
@@ -1437,6 +1463,97 @@ curl http://localhost:8000/v1/projects/my-org/chatbot/rag/health
 curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/health?database=main_db"
 ```
 
+### Get RAG Statistics
+
+Get statistics for a RAG database including vector counts and storage usage.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/stats`
+
+**Parameters:**
+
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database` (query, optional): Specific database to get stats for (uses default if not specified)
+
+**Response:**
+
+```json
+{
+  "database": "main_db",
+  "vector_count": 1250,
+  "storage_bytes": 52428800,
+  "storage_human": "50 MB",
+  "embedding_dimension": 768,
+  "collection_name": "documents",
+  "last_updated": "2024-01-15T10:30:00Z"
+}
+```
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/rag/stats
+```
+
+**Example (Specific database):**
+
+```bash
+curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/stats?database=research_db"
+```
+
+### List Documents in Database
+
+List all documents stored in a RAG database with their metadata.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/databases/{database_name}/documents`
+
+**Parameters:**
+
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database_name` (path, required): Name of the database
+- `limit` (query, optional): Maximum documents to return (1-1000, default: 50)
+
+**Response:**
+
+```json
+[
+  {
+    "id": "abc123def456",
+    "filename": "clinical_trial_report.pdf",
+    "chunk_count": 45,
+    "size_bytes": 1048576,
+    "parser_used": "PDFParser_LlamaIndex",
+    "date_ingested": "2024-01-15T10:30:00Z",
+    "metadata": {
+      "document_type": "report",
+      "source_dataset": "research_papers"
+    }
+  },
+  {
+    "id": "789xyz",
+    "filename": "fda_guidelines.pdf",
+    "chunk_count": 128,
+    "size_bytes": 2097152,
+    "parser_used": "PDFParser_PyPDF2",
+    "date_ingested": "2024-01-14T15:20:00Z",
+    "metadata": null
+  }
+]
+```
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents
+```
+
+**Example (With limit):**
+
+```bash
+curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents?limit=100"
+```
+
 ---
 
 ## Tasks API
@@ -1840,6 +1957,45 @@ Check if a newer version of the CLI is available.
 curl http://localhost:8000/v1/system/version-check
 ```
 
+### Get Disk Space
+
+Get disk space information for the HuggingFace cache and system disk.
+
+**Endpoint:** `GET /v1/system/disk`
+
+**Response:**
+
+```json
+{
+  "cache": {
+    "total_bytes": 500000000000,
+    "used_bytes": 200000000000,
+    "free_bytes": 300000000000,
+    "path": "/Users/username/.cache/huggingface",
+    "percent_free": 60.0
+  },
+  "system": {
+    "total_bytes": 1000000000000,
+    "used_bytes": 400000000000,
+    "free_bytes": 600000000000,
+    "path": "/",
+    "percent_free": 60.0
+  }
+}
+```
+
+**Response Fields:**
+
+- `cache`: Disk info for the HuggingFace cache directory (where models are stored)
+- `system`: Disk info for the system root directory
+- Each contains: `total_bytes`, `used_bytes`, `free_bytes`, `path`, `percent_free`
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/system/disk
+```
+
 ---
 
 ## Event Logs API
@@ -2006,6 +2162,107 @@ curl -X POST http://localhost:8000/v1/models/download \
   -d '{"model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"}'
 ```
 
+### Validate Download
+
+Check if there's sufficient disk space for a model download before starting.
+
+**Endpoint:** `POST /v1/models/validate-download`
+
+**Request Body:**
+
+```json
+{
+  "model_name": "unsloth/Qwen3-1.7B-GGUF"
+}
+```
+
+**Response:**
+
+```json
+{
+  "can_download": true,
+  "warning": false,
+  "message": "Sufficient disk space available",
+  "available_bytes": 107374182400,
+  "required_bytes": 1073741824,
+  "cache_info": {
+    "total_bytes": 500000000000,
+    "used_bytes": 200000000000,
+    "free_bytes": 300000000000,
+    "path": "/Users/username/.cache/huggingface",
+    "percent_free": 60.0
+  },
+  "system_info": {
+    "total_bytes": 1000000000000,
+    "used_bytes": 400000000000,
+    "free_bytes": 600000000000,
+    "path": "/",
+    "percent_free": 60.0
+  }
+}
+```
+
+**Response Fields:**
+
+- `can_download`: Whether download can proceed (false if critically low space)
+- `warning`: Whether space is low but download can proceed
+- `message`: Human-readable status message
+- `available_bytes`: Available disk space in bytes
+- `required_bytes`: Estimated space required for download
+- `cache_info`: Disk info for HuggingFace cache location
+- `system_info`: Disk info for system root
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/models/validate-download \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "unsloth/Qwen3-1.7B-GGUF"}'
+```
+
+### Get GGUF Quantization Options
+
+List all available GGUF quantization options for a model with file sizes.
+
+**Endpoint:** `GET /v1/models/{model_id}/quantizations`
+
+**Parameters:**
+
+- `model_id` (path, required): HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+
+**Response:**
+
+```json
+{
+  "options": [
+    {
+      "filename": "Qwen3-1.7B-Q4_K_M.gguf",
+      "quantization": "Q4_K_M",
+      "size_bytes": 1073741824,
+      "size_human": "1.0 GB"
+    },
+    {
+      "filename": "Qwen3-1.7B-Q8_0.gguf",
+      "quantization": "Q8_0",
+      "size_bytes": 1879048192,
+      "size_human": "1.75 GB"
+    },
+    {
+      "filename": "Qwen3-1.7B-F16.gguf",
+      "quantization": "F16",
+      "size_bytes": 3489660928,
+      "size_human": "3.25 GB"
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/models/unsloth/Qwen3-1.7B-GGUF/quantizations
+```
+
 ### Delete Cached Model
 
 Delete a cached model from disk.
@@ -2148,7 +2405,7 @@ LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI
 
 ### Using LlamaFarm with MCP Servers
 
-You can configure LlamaFarm projects to expose tools through MCP servers, giving AI agents access to filesystems, databases, APIs, and custom business logic. See the MCP section in the [Introduction](../intro.md#the-power-of-mcp-model-context-protocol) for configuration examples.
+You can configure LlamaFarm projects to expose tools through MCP servers, giving AI agents access to filesystems, databases, APIs, and custom business logic. See the [MCP documentation](../mcp/index.md) for configuration examples.
 
 **Example: AI Agent with LlamaFarm MCP Tools**
 
@@ -2375,11 +2632,605 @@ console.log(result.choices[0].message.content);
 
 ---
 
+## Vision API (OCR & Document Extraction)
+
+The Vision API provides OCR and document extraction capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime, handling file uploads and base64 image conversion automatically.
+
+**Base URL:** `http://localhost:8000/v1/vision`
+
+### OCR Endpoint
+
+Extract text from images and PDFs using multiple OCR backends.
+
+**Endpoint:** `POST /v1/vision/ocr`
+
+**Content-Type:** `multipart/form-data`
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `file` | file | No* | - | PDF or image file to process |
+| `images` | string | No* | - | Base64-encoded images as JSON array |
+| `model` | string | No | `surya` | OCR backend: `surya`, `easyocr`, `paddleocr`, `tesseract` |
+| `languages` | string | No | `en` | Comma-separated language codes (e.g., `en,fr`) |
+| `return_boxes` | boolean | No | `false` | Return bounding boxes for detected text |
+
+*Either `file` or `images` must be provided.
+
+**Supported File Types:** PDF, PNG, JPG, JPEG, GIF, WebP, BMP, TIFF
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "index": 0,
+      "text": "Extracted text from the document...",
+      "confidence": 0.95
+    }
+  ],
+  "model": "surya",
+  "usage": {"images_processed": 1}
+}
+```
+
+**Example (File Upload):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/ocr \
+  -F "file=@document.pdf" \
+  -F "model=easyocr" \
+  -F "languages=en"
+```
+
+**Example (Base64 Images):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/ocr \
+  -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
+  -F "model=surya" \
+  -F "languages=en"
+```
+
+### Document Extraction Endpoint
+
+Extract structured data from documents using vision-language models.
+
+**Endpoint:** `POST /v1/vision/documents/extract`
+
+**Content-Type:** `multipart/form-data`
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `file` | file | No* | - | PDF or image file to process |
+| `images` | string | No* | - | Base64-encoded images as JSON array |
+| `model` | string | Yes | - | HuggingFace model ID (e.g., `naver-clova-ix/donut-base-finetuned-docvqa`) |
+| `prompts` | string | No | - | Comma-separated prompts for VQA task |
+| `task` | string | No | `extraction` | Task type: `extraction`, `vqa`, `classification` |
+
+*Either `file` or `images` must be provided.
+
+**Supported Models:**
+
+| Model | Description |
+|-------|-------------|
+| `naver-clova-ix/donut-base-finetuned-cord-v2` | Receipt/invoice extraction |
+| `naver-clova-ix/donut-base-finetuned-docvqa` | Document Q&A |
+| `microsoft/layoutlmv3-base-finetuned-docvqa` | Document Q&A with layout |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "index": 0,
+      "confidence": 0.9,
+      "text": "<s_docvqa><s_question>What is the total?</s_question><s_answer>$15.99</s_answer>",
+      "fields": [
+        {"key": "question", "value": "What is the total?", "confidence": 0.9},
+        {"key": "answer", "value": "$15.99", "confidence": 0.9}
+      ]
+    }
+  ],
+  "model": "naver-clova-ix/donut-base-finetuned-docvqa",
+  "task": "vqa",
+  "usage": {"documents_processed": 1}
+}
+```
+
+**Example (Document VQA with File Upload):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/documents/extract \
+  -F "file=@receipt.pdf" \
+  -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
+  -F "prompts=What is the store name?,What is the total amount?" \
+  -F "task=vqa"
+```
+
+**Example (Extraction with Base64):**
+
+```bash
+curl -X POST http://localhost:8000/v1/vision/documents/extract \
+  -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
+  -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
+  -F "task=extraction"
+```
+
+---
+
+## ML API (Custom Classifiers & Anomaly Detection)
+
+The ML API provides custom text classification and anomaly detection capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime with automatic model versioning support.
+
+**Base URL:** `http://localhost:8000/v1/ml`
+
+:::tip Model Versioning
+When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
+:::
+
+### Custom Text Classification (SetFit)
+
+Train custom classifiers with as few as 8-16 examples per class using SetFit (Sentence Transformer Fine-tuning).
+
+#### Fit Classifier
+
+Train a new text classifier.
+
+**Endpoint:** `POST /v1/ml/classifier/fit`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier",
+  "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "training_data": [
+    {"text": "I need to book a flight to NYC", "label": "booking"},
+    {"text": "Reserve a hotel room for me", "label": "booking"},
+    {"text": "Cancel my reservation please", "label": "cancellation"},
+    {"text": "I want to cancel my booking", "label": "cancellation"},
+    {"text": "What time does the flight leave?", "label": "inquiry"},
+    {"text": "How much does it cost?", "label": "inquiry"}
+  ],
+  "num_iterations": 20,
+  "batch_size": 16,
+  "overwrite": false
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `model` | string | Yes | - | Base name for the classifier |
+| `base_model` | string | No | `all-MiniLM-L6-v2` | Sentence transformer to fine-tune |
+| `training_data` | array | Yes | - | List of `{"text", "label"}` objects |
+| `num_iterations` | int | No | 20 | Contrastive learning iterations |
+| `batch_size` | int | No | 16 | Training batch size |
+| `overwrite` | bool | No | false | If false, version with timestamp |
+
+**Response:**
+
+```json
+{
+  "object": "fit_result",
+  "model": "intent-classifier-test_20260102_202450",
+  "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "samples_fitted": 40,
+  "num_classes": 4,
+  "labels": ["booking", "cancellation", "complaint", "inquiry"],
+  "training_time_ms": 6751.66,
+  "status": "fitted",
+  "auto_saved": true,
+  "saved_path": "~/.llamafarm/models/classifier/intent-classifier-test_20260102_202450",
+  "base_name": "intent-classifier-test",
+  "versioned_name": "intent-classifier-test_20260102_202450",
+  "overwrite": false
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/ml/classifier/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier",
+    "training_data": [
+      {"text": "I need to book a flight to NYC", "label": "booking"},
+      {"text": "Reserve a hotel room for me", "label": "booking"},
+      {"text": "Cancel my reservation please", "label": "cancellation"},
+      {"text": "I want to cancel my booking", "label": "cancellation"},
+      {"text": "What time does the flight leave?", "label": "inquiry"},
+      {"text": "How much does it cost?", "label": "inquiry"},
+      {"text": "I am very unhappy with the service", "label": "complaint"},
+      {"text": "This is unacceptable quality", "label": "complaint"}
+    ],
+    "num_iterations": 20
+  }'
+```
+
+#### Predict with Classifier
+
+Classify texts using a trained model.
+
+**Endpoint:** `POST /v1/ml/classifier/predict`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier-latest",
+  "texts": [
+    "Book me a flight to Paris tomorrow",
+    "Cancel my upcoming trip",
+    "What are the check-in times?",
+    "This is absolutely terrible service"
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "text": "Book me a flight to Paris tomorrow",
+      "label": "booking",
+      "score": 0.66,
+      "all_scores": {"booking": 0.66, "cancellation": 0.11, "complaint": 0.11, "inquiry": 0.13}
+    },
+    {
+      "text": "Cancel my upcoming trip",
+      "label": "cancellation",
+      "score": 0.79,
+      "all_scores": {"booking": 0.09, "cancellation": 0.79, "complaint": 0.07, "inquiry": 0.05}
+    },
+    {
+      "text": "What are the check-in times?",
+      "label": "inquiry",
+      "score": 0.68,
+      "all_scores": {"booking": 0.15, "cancellation": 0.06, "complaint": 0.11, "inquiry": 0.68}
+    },
+    {
+      "text": "This is absolutely terrible service",
+      "label": "complaint",
+      "score": 0.77,
+      "all_scores": {"booking": 0.06, "cancellation": 0.08, "complaint": 0.77, "inquiry": 0.10}
+    }
+  ],
+  "total_count": 4,
+  "model": "intent-classifier-test_20260102_202450"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/ml/classifier/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "intent-classifier-latest",
+    "texts": [
+      "Book me a flight to Paris tomorrow",
+      "Cancel my upcoming trip",
+      "What are the check-in times?",
+      "This is absolutely terrible service"
+    ]
+  }'
+```
+
+#### Save Classifier
+
+Save a trained classifier to disk for production use.
+
+**Endpoint:** `POST /v1/ml/classifier/save`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier_20251215_155054"
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "save_result",
+  "model": "intent-classifier_20251215_155054",
+  "path": "~/.llamafarm/models/classifier/intent-classifier_20251215_155054",
+  "status": "saved"
+}
+```
+
+#### Load Classifier
+
+Load a previously saved classifier.
+
+**Endpoint:** `POST /v1/ml/classifier/load`
+
+**Request Body:**
+
+```json
+{
+  "model": "intent-classifier-latest"
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "load_result",
+  "model": "intent-classifier_20251215_155054",
+  "status": "loaded"
+}
+```
+
+#### List Classifier Models
+
+**Endpoint:** `GET /v1/ml/classifier/models`
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"name": "intent-classifier_20251215_155054", "labels": ["booking", "cancellation", "inquiry"]}
+  ]
+}
+```
+
+#### Delete Classifier Model
+
+**Endpoint:** `DELETE /v1/ml/classifier/models/{model_name}`
+
+---
+
+### Anomaly Detection
+
+Train anomaly detectors on normal data and detect outliers in new data.
+
+#### Fit Anomaly Detector
+
+Train an anomaly detection model.
+
+**Endpoint:** `POST /v1/ml/anomaly/fit`
+
+**Request Body (Numeric Data):**
+
+```json
+{
+  "model": "sensor-detector",
+  "backend": "isolation_forest",
+  "data": [
+    [22.1, 1024], [23.5, 1100], [21.8, 980],
+    [24.2, 1050], [22.7, 1080], [23.1, 990]
+  ],
+  "contamination": 0.1,
+  "overwrite": false
+}
+```
+
+**Request Body (Mixed Data with Schema):**
+
+```json
+{
+  "model": "api-monitor",
+  "backend": "isolation_forest",
+  "data": [
+    {"response_time_ms": 100, "bytes": 1024, "method": "GET", "user_agent": "Mozilla/5.0"},
+    {"response_time_ms": 105, "bytes": 1100, "method": "POST", "user_agent": "Chrome/90.0"}
+  ],
+  "schema": {
+    "response_time_ms": "numeric",
+    "bytes": "numeric",
+    "method": "label",
+    "user_agent": "hash"
+  },
+  "contamination": 0.1
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `model` | string | No | "default" | Model identifier |
+| `backend` | string | No | "isolation_forest" | Algorithm: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder` |
+| `data` | array | Yes | - | Training data (numeric arrays or dicts) |
+| `schema` | object | No | - | Feature encoding schema (required for dict data) |
+| `contamination` | float | No | 0.1 | Expected proportion of anomalies (0-0.5) |
+| `overwrite` | bool | No | false | If false, version with timestamp |
+
+**Response:**
+
+```json
+{
+  "object": "fit_result",
+  "model": "sensor_anomaly_detector_20260102_202438",
+  "backend": "isolation_forest",
+  "samples_fitted": 30,
+  "training_time_ms": 85.77,
+  "model_params": {
+    "backend": "isolation_forest",
+    "contamination": 0.05,
+    "threshold": 0.894,
+    "input_dim": 1
+  },
+  "status": "fitted",
+  "base_name": "sensor_anomaly_detector",
+  "versioned_name": "sensor_anomaly_detector_20260102_202438",
+  "overwrite": false
+}
+```
+
+**Example (Temperature Sensor Data):**
+
+```bash
+# Train on normal temperature readings (20-25°C range)
+curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sensor_anomaly_detector",
+    "backend": "isolation_forest",
+    "data": [
+      [22.1], [23.5], [21.8], [24.2], [22.7],
+      [23.1], [21.5], [24.8], [22.3], [23.9],
+      [21.2], [24.5], [22.8], [23.2], [21.9],
+      [24.1], [22.5], [23.7], [21.6], [24.3]
+    ],
+    "contamination": 0.05
+  }'
+```
+
+#### Score Anomalies
+
+Score all data points for anomalies.
+
+**Endpoint:** `POST /v1/ml/anomaly/score`
+
+**Request Body:**
+
+```json
+{
+  "model": "sensor-detector-latest",
+  "backend": "isolation_forest",
+  "data": [[22.0], [23.5], [0.0], [100.0], [21.5]],
+  "threshold": 0.5
+}
+```
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"index": 0, "score": 0.23, "is_anomaly": false, "raw_score": 0.12},
+    {"index": 1, "score": 0.21, "is_anomaly": false, "raw_score": 0.10},
+    {"index": 2, "score": 0.89, "is_anomaly": true, "raw_score": -0.45},
+    {"index": 3, "score": 0.95, "is_anomaly": true, "raw_score": -0.52},
+    {"index": 4, "score": 0.22, "is_anomaly": false, "raw_score": 0.11}
+  ],
+  "summary": {
+    "total_points": 5,
+    "anomaly_count": 2,
+    "anomaly_rate": 0.4,
+    "threshold": 0.5
+  }
+}
+```
+
+#### Detect Anomalies
+
+Detect anomalies (returns only anomalous points).
+
+**Endpoint:** `POST /v1/ml/anomaly/detect`
+
+Same request format as `/score`, but response only includes anomalous points.
+
+**Example (Detecting Temperature Anomalies):**
+
+```bash
+# Test with mix of normal and anomalous readings
+curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sensor_anomaly_detector-latest",
+    "backend": "isolation_forest",
+    "data": [[22.0], [23.5], [0.0], [21.5], [100.0], [24.0], [-10.0], [22.8], [35.0], [23.2]],
+    "threshold": 0.5
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"index": 2, "score": 0.61, "raw_score": 0.65},
+    {"index": 4, "score": 0.60, "raw_score": 0.64},
+    {"index": 6, "score": 0.61, "raw_score": 0.65},
+    {"index": 8, "score": 0.60, "raw_score": 0.64}
+  ],
+  "total_count": 4,
+  "model": "sensor_anomaly_detector_20260102_202438",
+  "backend": "isolation_forest",
+  "summary": {
+    "anomalies_detected": 4,
+    "threshold": 0.5
+  }
+}
+```
+
+The anomalies detected are:
+- Index 2: 0.0°C (freezing - way below normal)
+- Index 4: 100.0°C (boiling - way above normal)
+- Index 6: -10.0°C (sub-freezing)
+- Index 8: 35.0°C (elevated temperature)
+
+#### Save Anomaly Model
+
+**Endpoint:** `POST /v1/ml/anomaly/save`
+
+**Request Body:**
+
+```json
+{
+  "model": "sensor-detector_20251215_160000",
+  "backend": "isolation_forest"
+}
+```
+
+#### Load Anomaly Model
+
+**Endpoint:** `POST /v1/ml/anomaly/load`
+
+**Request Body:**
+
+```json
+{
+  "model": "sensor-detector-latest",
+  "backend": "isolation_forest"
+}
+```
+
+#### List Anomaly Models
+
+**Endpoint:** `GET /v1/ml/anomaly/models`
+
+#### Delete Anomaly Model
+
+**Endpoint:** `DELETE /v1/ml/anomaly/models/{filename}`
+
+---
+
 ## Universal Runtime API
 
 The Universal Runtime is a separate service (port 11540) that provides specialized ML endpoints for document processing, text analysis, embeddings, and anomaly detection.
 
 **Base URL:** `http://localhost:11540`
+
+:::tip Using Vision APIs
+For OCR and document extraction, you can use either:
+- **LlamaFarm API** (`/v1/vision/*`) - Accepts file uploads directly, converts PDFs to images automatically
+- **Universal Runtime** (`/v1/ocr`, `/v1/documents/extract`) - Accepts base64 images or file IDs
+:::
 
 ### Starting the Universal Runtime
 
@@ -2400,8 +3251,8 @@ nx start universal-runtime
 | **Files** | `GET /v1/files/{id}` | Get file metadata |
 | **Files** | `GET /v1/files/{id}/images` | Get file as base64 images |
 | **Files** | `DELETE /v1/files/{id}` | Delete uploaded file |
-| **OCR** | `POST /v1/ocr` | Extract text from images/PDFs |
-| **Documents** | `POST /v1/documents/extract` | Extract structured data from documents |
+| **OCR** | `POST /v1/ocr` | Extract text from images (base64) |
+| **Documents** | `POST /v1/documents/extract` | Extract structured data (base64) |
 | **Classification** | `POST /v1/classify` | Classify text using pre-trained models (sentiment, etc.) |
 | **Custom Classifier** | `POST /v1/classifier/fit` | Train custom classifier (SetFit few-shot) |
 | **Custom Classifier** | `POST /v1/classifier/predict` | Classify with trained custom model |

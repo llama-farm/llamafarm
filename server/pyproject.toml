@@ -45,6 +45,7 @@ dependencies = [
   "ollama>=0.6.0",
   "huggingface-hub>=1.0.1",
   "psutil>=5.9.0",
+  "pymupdf>=1.26.0",  # PDF to image conversion
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
 ]
