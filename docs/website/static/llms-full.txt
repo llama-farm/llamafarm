@@ -198,9 +198,10 @@ Download the all-in-one desktop application:
 
 | Platform | Download |
 |----------|----------|
-| **Mac (M1+)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest) |
-| **Windows** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest) |
-| **Linux** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest) |
+| **Mac (Universal)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg) |
+| **Windows (x86_64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe) |
+| **Linux (x86_64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
+| **Linux (arm64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage) |
 
 The desktop app bundles everything you need—no additional installation required.
 
@@ -224,9 +225,9 @@ Download the `lf` binary directly from the [releases page](https://github.com/ll
 |----------|--------|
 | macOS (Apple Silicon) | `lf-darwin-arm64` |
 | macOS (Intel) | `lf-darwin-amd64` |
-| Linux (x64) | `lf-linux-amd64` |
-| Linux (ARM64) | `lf-linux-arm64` |
-| Windows | `lf-windows-amd64.exe` |
+| Linux (x86_64) | `lf-linux-amd64` |
+| Linux (arm64) | `lf-linux-arm64` |
+| Windows (x86_64) | `lf-windows-amd64.exe` |
 
 After downloading, make it executable and add to your PATH:
 ```bash
@@ -239,7 +240,7 @@ Verify installation:
 lf --help
 ```
 
-## 3. Configure Your Runtime (Ollama)
+## 3. Configure Your Runtime (only if you plan to use Ollama)
 
 For best RAG results with longer documents, increase the Ollama context window:
 
@@ -530,7 +531,7 @@ The LlamaFarm Desktop App provides a complete local AI environment with visual p
 
 To run the desktop app with small models (1-3B parameters like Qwen 1.7B):
 
-| Component | Mac (M1+) | Windows | Linux |
+| Component | Mac | Windows | Linux |
 |-----------|-----------|---------|-------|
 | **CPU** | Apple M1 or newer | Intel i5 / AMD Ryzen 5 (8th gen+) | Intel i5 / AMD Ryzen 5 (8th gen+) |
 | **RAM** | 8 GB | 8 GB | 8 GB |
@@ -542,13 +543,13 @@ To run the desktop app with small models (1-3B parameters like Qwen 1.7B):
 
 For larger models (7-8B parameters) and better performance:
 
-| Component | Mac (M1+) | Windows | Linux |
+| Component | Mac | Windows | Linux |
 |-----------|-----------|---------|-------|
-| **CPU** | Apple M1 Pro/Max or M2+ | Intel i7 / AMD Ryzen 7 | Intel i7 / AMD Ryzen 7 |
-| **RAM** | 16 GB+ | 16 GB+ | 16 GB+ |
+| **CPU** | Apple M2 Pro or better | Intel i7 / AMD Ryzen 7 | Intel i7 / AMD Ryzen 7 |
+| **RAM** | 32 GB+ | 32 GB+ | 32 GB+ |
 | **Storage** | 50 GB+ SSD | 50 GB+ SSD | 50 GB+ SSD |
 | **OS** | macOS 13+ (Ventura) | Windows 11 | Ubuntu 22.04+ |
-| **GPU** | Unified Memory (Metal) | NVIDIA RTX 3060+ (8GB+ VRAM) | NVIDIA RTX 3060+ (8GB+ VRAM) |
+| **GPU** | Unified Memory (Metal) | NVIDIA RTX 3090+ (24GB+ VRAM) | NVIDIA RTX 3090+ (24GB+ VRAM) |
 
 ---
 
@@ -1596,10 +1597,10 @@ lf rag stats --auto-start=false
 ```yaml
 - name: Start services
   run: lf start &
-  
+
 - name: Wait for health
   run: timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
-  
+
 - name: Run tests
   run: |
     lf datasets create --auto-start=false -s pdf_ingest -b main_db test-data
@@ -12306,9 +12307,10 @@ Then run CLI commands against the default server at `http://localhost:8000`.
 
 The easiest way to run LlamaFarm is with the **Desktop App**, which bundles everything you need:
 
-- **Mac (M1+)**: [Download](https://github.com/llama-farm/llamafarm/releases)
-- **Windows**: [Download](https://github.com/llama-farm/llamafarm/releases)
-- **Linux**: [Download](https://github.com/llama-farm/llamafarm/releases)
+- **Mac (Universal)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg)
+- **Windows**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe)
+- **Linux (x86_64)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage)
+- **Linux (arm64)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage)
 
 The desktop app includes the server, Universal Runtime, and Designer UI in a single package.
 
