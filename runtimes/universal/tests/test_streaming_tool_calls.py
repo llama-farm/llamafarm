@@ -374,21 +374,23 @@ class TestIncrementalToolCallStreaming:
                     tool_names_found.append(name)
                     state = ToolCallStreamState.STREAMING_ARGS
 
-            elif state == ToolCallStreamState.STREAMING_ARGS:
-                if is_tool_call_complete(accumulated):
-                    # Process completed tool call
-                    tool_calls = detect_tool_call_in_content(accumulated)
-                    assert tool_calls is not None
-                    assert len(tool_calls) >= 1
+            elif (
+                state == ToolCallStreamState.STREAMING_ARGS
+                and is_tool_call_complete(accumulated)
+            ):
+                # Process completed tool call
+                tool_calls = detect_tool_call_in_content(accumulated)
+                assert tool_calls is not None
+                assert len(tool_calls) >= 1
 
-                    # Reset state machine for next tool call
-                    accumulated = strip_tool_call_from_content(accumulated)
-                    state = ToolCallStreamState.NORMAL
-                    tool_call_index += 1
+                # Reset state machine for next tool call
+                accumulated = strip_tool_call_from_content(accumulated)
+                state = ToolCallStreamState.NORMAL
+                tool_call_index += 1
 
-                    # Check if there's already another tool call starting
-                    if detect_probable_tool_call(accumulated):
-                        state = ToolCallStreamState.BUFFERING_START
+                # Check if there's already another tool call starting
+                if detect_probable_tool_call(accumulated):
+                    state = ToolCallStreamState.BUFFERING_START
 
         # Verify both tool calls were detected
         assert len(tool_names_found) == 2, f"Expected 2 tool calls, got {tool_names_found}"
