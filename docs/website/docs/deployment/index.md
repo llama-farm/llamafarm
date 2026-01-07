@@ -7,52 +7,14 @@ sidebar_position: 9
 
 LlamaFarm is designed for native deployment without containers. The application runs directly on your system using native binaries and the UV package manager for Python dependencies.
 
-## Local Development
-
-### Option A: `lf start` (Recommended)
-
-The easiest path is the integrated dev stack:
-
-```bash
-lf start
-```
-
-This command:
-- Starts the server and Universal Runtime natively
-- Watches `llamafarm.yaml` for changes
-- Opens the Designer web UI at `http://localhost:8000`
-
-### Option B: Manual control
-
-Open separate terminals for each service:
-
-```bash
-# Terminal 1 – API Server
-nx start server
-
-# Terminal 2 – Universal Runtime (for ML, OCR, embeddings)
-nx start universal-runtime
-```
-
-Then run CLI commands against the default server at `http://localhost:8000`.
-
-## Desktop Application
-
-The easiest way to run LlamaFarm is with the **Desktop App**, which bundles everything you need:
-
-- **Mac (M1+)**: [Download](https://github.com/llama-farm/llamafarm/releases)
-- **Windows**: [Download](https://github.com/llama-farm/llamafarm/releases)
-- **Linux**: [Download](https://github.com/llama-farm/llamafarm/releases)
-
-The desktop app includes the server, Universal Runtime, and Designer UI in a single package.
-
 ## Production Deployment
 
 ### Native Process Management
 
-For production, use process supervisors to keep services running:
+For production, use process supervisors to start services
 
 **systemd (Linux)**:
+
 ```ini
 [Unit]
 Description=LlamaFarm Server
@@ -62,7 +24,7 @@ After=network.target
 Type=simple
 User=llamafarm
 WorkingDirectory=/opt/llamafarm
-ExecStart=/opt/llamafarm/lf start
+ExecStart=/opt/llamafarm/lf services start
 Restart=always
 Environment=LF_DATA_DIR=/var/lib/llamafarm
 
@@ -71,12 +33,14 @@ WantedBy=multi-user.target
 ```
 
 **PM2 (Node.js)**:
+
 ```bash
-pm2 start "lf start" --name llamafarm
+pm2 start "lf services start" --name llamafarm
 pm2 save
 ```
 
 **launchd (macOS)**:
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -87,6 +51,7 @@ pm2 save
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/lf</string>
+        <string>services</string>
         <string>start</string>
     </array>
     <key>RunAtLoad</key>
@@ -102,7 +67,7 @@ pm2 save
 - **Environment variables**: Store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
 - **Data directory**: Set `LF_DATA_DIR` to a persistent location with adequate storage for models and vector databases.
 - **Firewall**: Restrict access to ports 8000 (API) and 11540 (Universal Runtime) as needed.
-- **TLS termination**: Use a reverse proxy (nginx, Caddy) for HTTPS in production.
+- **TLS termination**: Use a reverse proxy (Traefik, nginx, Caddy) for HTTPS in production.
 - **Monitoring**: Enable logging and set up health checks against `/health` endpoint.
 
 ### Reverse Proxy Example (nginx)
