@@ -233,7 +233,14 @@ function ClassifierResultDisplay({
   isLoading: boolean
   inputText: string
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyInput = useCallback(() => {
+    navigator.clipboard.writeText(inputText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [inputText])
 
   if (isLoading) {
     return (
@@ -250,15 +257,15 @@ function ClassifierResultDisplay({
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="text-center px-6 py-10 rounded-xl border border-destructive/30 bg-destructive/10">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/20 border border-destructive/30">
-            <FontIcon type="alert-triangle" className="w-5 h-5 text-destructive" />
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
           </div>
           <div className="text-lg font-medium text-foreground">
             Classification Error
           </div>
-          <div className="mt-2 text-sm text-destructive">
+          <div className="mt-2 text-sm text-amber-400">
             {error}
           </div>
         </div>
@@ -279,7 +286,7 @@ function ClassifierResultDisplay({
   const belowThreshold = result.predictions.filter(p => p.score < result.threshold)
 
   return (
-    <div className="flex flex-col items-center justify-center h-full w-full p-4">
+    <div className="flex flex-col items-center w-full pt-4 pb-4">
       <div className="w-full max-w-md">
         {result.isMultiLabel ? (
           // Multi-label display
@@ -411,8 +418,18 @@ function ClassifierResultDisplay({
           </button>
           {detailsOpen && (
             <div className="px-3 py-2 border-t border-border">
-              <div className="text-xs text-muted-foreground mb-1">
-                Input text:
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">
+                  Input text:
+                </span>
+                <button
+                  onClick={handleCopyInput}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  title="Copy input text"
+                >
+                  <FontIcon type={copied ? 'checkmark-filled' : 'copy'} className="w-3.5 h-3.5" />
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
               </div>
               <div className="text-sm break-words">
                 {inputText}
@@ -440,7 +457,15 @@ function AnomalyResultDisplay({
   error: string | null
   isLoading: boolean
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyInput = useCallback(() => {
+    if (!result) return
+    navigator.clipboard.writeText(result.parsedInput.join(', '))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [result])
 
   if (isLoading) {
     return (
@@ -457,15 +482,15 @@ function AnomalyResultDisplay({
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="text-center px-6 py-10 rounded-xl border border-destructive/30 bg-destructive/10">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/20 border border-destructive/30">
-            <FontIcon type="alert-triangle" className="w-5 h-5 text-destructive" />
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
           </div>
           <div className="text-lg font-medium text-foreground">
             Detection Error
           </div>
-          <div className="mt-2 text-sm text-destructive">
+          <div className="mt-2 text-sm text-amber-400">
             {error}
           </div>
         </div>
@@ -478,7 +503,7 @@ function AnomalyResultDisplay({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full w-full p-4">
+    <div className="flex flex-col items-center w-full pt-4 pb-4">
       <div className="w-full max-w-md">
         {/* Score Display - Large & Prominent */}
         <div className="flex flex-col items-center gap-3 py-6">
@@ -517,8 +542,18 @@ function AnomalyResultDisplay({
           </button>
           {detailsOpen && (
             <div className="px-3 py-2 border-t border-border">
-              <div className="text-xs text-muted-foreground mb-1">
-                Parsed input values:
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">
+                  Parsed input values:
+                </span>
+                <button
+                  onClick={handleCopyInput}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  title="Copy input values"
+                >
+                  <FontIcon type={copied ? 'checkmark-filled' : 'copy'} className="w-3.5 h-3.5" />
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
               </div>
               <div className="font-mono text-sm break-all">
                 {result.parsedInput.join(', ')}
@@ -528,6 +563,121 @@ function AnomalyResultDisplay({
         </div>
       </div>
     </div>
+  )
+}
+
+// Sidebar history item for anomaly tests
+function AnomalyHistoryItem({
+  item,
+  onRerun,
+}: {
+  item: {
+    id: string
+    timestamp: Date
+    score: number
+    isAnomaly: boolean
+    parsedInput: string[]
+    modelName: string
+    error?: string
+  }
+  onRerun: (input: string) => void
+}) {
+  const timeStr = item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const isError = !!item.error
+
+  return (
+    <button
+      onClick={() => onRerun(item.parsedInput.join(', '))}
+      className="w-full text-left px-2 py-1.5 rounded-md border border-border/50 hover:bg-muted/40 hover:border-border transition-colors"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <Badge
+            className={`text-[10px] px-1.5 py-0 ${
+              isError
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                : item.isAnomaly
+                  ? 'bg-destructive/20 text-destructive border-destructive/30'
+                  : 'bg-primary/20 text-primary border-primary/30'
+            }`}
+          >
+            {isError ? 'Error' : item.isAnomaly ? 'Anomaly' : 'Normal'}
+          </Badge>
+          {!isError && (
+            <span
+              className={`font-mono text-xs tabular-nums ${
+                item.isAnomaly ? 'text-destructive' : 'text-primary'
+              }`}
+            >
+              {item.score.toFixed(3)}
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+      </div>
+      <div
+        className="text-[10px] text-muted-foreground truncate mt-1"
+        title={isError ? item.error : item.parsedInput.join(', ')}
+      >
+        {item.parsedInput.join(', ')}
+      </div>
+    </button>
+  )
+}
+
+// Sidebar history item for classifier tests
+function ClassifierHistoryItem({
+  item,
+  onRerun,
+}: {
+  item: {
+    id: string
+    timestamp: Date
+    inputText: string
+    topLabel: string
+    topScore: number
+    modelName: string
+    error?: string
+  }
+  onRerun: (input: string) => void
+}) {
+  const timeStr = item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const isError = !!item.error
+  const isLowConfidence = !isError && item.topScore < 0.5
+
+  return (
+    <button
+      onClick={() => onRerun(item.inputText)}
+      className="w-full text-left px-2 py-1.5 rounded-md border border-border/50 hover:bg-muted/40 hover:border-border transition-colors"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <Badge
+            className={`text-[10px] px-1.5 py-0 ${
+              isError
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                : isLowConfidence
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                  : 'bg-primary/20 text-primary border-primary/30'
+            }`}
+          >
+            {isError ? 'Error' : item.topLabel}
+          </Badge>
+          {!isError && (
+            <span className="text-xs tabular-nums">
+              {(item.topScore * 100).toFixed(0)}%
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+      </div>
+      <div
+        className="text-[10px] text-muted-foreground truncate mt-1"
+        title={isError ? item.error : item.inputText}
+      >
+        {item.inputText}
+      </div>
+    </button>
   )
 }
 
@@ -564,19 +714,38 @@ export default function TestChat({
   const scoreAnomalyMutation = useScoreAnomaly()
   const loadAnomalyMutation = useLoadAnomaly()
 
-  // Get sorted anomaly models (most recent first by 'created' field)
-  const sortedAnomalyModels = useMemo(() => {
+  // Get all anomaly models sorted (most recent first by 'created' field)
+  const allAnomalyModels = useMemo(() => {
     if (!anomalyModelsData?.data) return []
     return [...anomalyModelsData.data].sort((a, b) =>
       new Date(b.created).getTime() - new Date(a.created).getTime()
     )
   }, [anomalyModelsData])
 
-  // Selected anomaly model
+  // Get only the latest version per base_name (for dropdown)
+  const sortedAnomalyModels = useMemo(() => {
+    const latestByBaseName = new Map<string, typeof allAnomalyModels[0]>()
+    for (const model of allAnomalyModels) {
+      const baseName = model.base_name
+      // Since allAnomalyModels is sorted newest first, first occurrence is the latest
+      if (!latestByBaseName.has(baseName)) {
+        latestByBaseName.set(baseName, model)
+      }
+    }
+    return Array.from(latestByBaseName.values())
+  }, [allAnomalyModels])
+
+  // Selected anomaly model (stores the actual model name, not base_name)
   const [selectedAnomalyModel, setSelectedAnomalyModel] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     return localStorage.getItem('lf_test_anomalyModel')
   })
+
+  // Get full info for the selected model
+  const selectedAnomalyModelInfo = useMemo(() => {
+    if (!selectedAnomalyModel) return null
+    return allAnomalyModels.find(m => m.name === selectedAnomalyModel) || null
+  }, [selectedAnomalyModel, allAnomalyModels])
 
   // Validate and auto-select anomaly model (similar to inference model logic)
   useEffect(() => {
@@ -621,6 +790,20 @@ export default function TestChat({
   } | null>(null)
   const [anomalyError, setAnomalyError] = useState<string | null>(null)
 
+  // Anomaly test history - persists between clears
+  const [anomalyHistory, setAnomalyHistory] = useState<Array<{
+    id: string
+    timestamp: Date
+    score: number
+    isAnomaly: boolean
+    threshold: number
+    parsedInput: string[]
+    modelName: string
+    error?: string
+  }>>([])
+  const [showAnomalyHistory, setShowAnomalyHistory] = useState(true)
+  const anomalyHistoryScrollRef = useRef<HTMLDivElement>(null)
+
   // ============================================================================
   // Classifier State & Hooks
   // ============================================================================
@@ -631,8 +814,8 @@ export default function TestChat({
   const predictClassifierMutation = usePredictClassifier()
   const loadClassifierMutation = useLoadClassifier()
 
-  // Get sorted classifier models (most recent first by 'created' field)
-  const sortedClassifierModels = useMemo(() => {
+  // Get all classifier models sorted (most recent first by 'created' field)
+  const allClassifierModels = useMemo(() => {
     if (!classifierModelsData?.data) return []
     return [...classifierModelsData.data].sort((a, b) => {
       const dateA = a.created ? new Date(a.created).getTime() : 0
@@ -641,11 +824,30 @@ export default function TestChat({
     })
   }, [classifierModelsData])
 
+  // Get only the latest version per base_name (for dropdown)
+  const sortedClassifierModels = useMemo(() => {
+    const latestByBaseName = new Map<string, typeof allClassifierModels[0]>()
+    for (const model of allClassifierModels) {
+      const baseName = model.base_name || model.name
+      // Since allClassifierModels is sorted newest first, first occurrence is the latest
+      if (!latestByBaseName.has(baseName)) {
+        latestByBaseName.set(baseName, model)
+      }
+    }
+    return Array.from(latestByBaseName.values())
+  }, [allClassifierModels])
+
   // Selected classifier model
   const [selectedClassifierModel, setSelectedClassifierModel] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     return localStorage.getItem('lf_test_classifierModel')
   })
+
+  // Get full info for the selected classifier model
+  const selectedClassifierModelInfo = useMemo(() => {
+    if (!selectedClassifierModel) return null
+    return allClassifierModels.find(m => m.name === selectedClassifierModel) || null
+  }, [selectedClassifierModel, allClassifierModels])
 
   // Validate and auto-select classifier model
   useEffect(() => {
@@ -688,6 +890,20 @@ export default function TestChat({
   } | null>(null)
   const [classifierError, setClassifierError] = useState<string | null>(null)
   const [lastClassifierInput, setLastClassifierInput] = useState('')
+
+  // Classifier test history - persists between clears
+  const [classifierHistory, setClassifierHistory] = useState<Array<{
+    id: string
+    timestamp: Date
+    inputText: string
+    topLabel: string
+    topScore: number
+    predictions: Array<{ label: string; score: number }>
+    modelName: string
+    error?: string
+  }>>([])
+  const [showClassifierHistory, setShowClassifierHistory] = useState(true)
+  const classifierHistoryScrollRef = useRef<HTMLDivElement>(null)
 
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
@@ -1088,6 +1304,8 @@ export default function TestChat({
   const listRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const anomalyInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const classifierInputRef = useRef<HTMLTextAreaElement | null>(null)
   const lastUserInputRef = useRef<string>('')
   const rafRef = useRef<number | null>(null)
 
@@ -1750,15 +1968,41 @@ export default function TestChat({
       })
 
       if (result.data && result.data.length > 0) {
-        setAnomalyResult({
+        const newResult = {
           score: result.data[0].score,
           isAnomaly: result.data[0].is_anomaly,
           threshold: result.summary.threshold,
           parsedInput: values,
-        })
+        }
+        setAnomalyResult(newResult)
+
+        // Add to history
+        setAnomalyHistory(prev => [{
+          id: `anomaly-${Date.now()}`,
+          timestamp: new Date(),
+          ...newResult,
+          modelName: selectedAnomalyModel,
+        }, ...prev].slice(0, 50)) // Keep last 50 entries
+
+        // Clear input and refocus
+        setAnomalyInput('')
+        setTimeout(() => anomalyInputRef.current?.focus(), 0)
       }
     } catch (err) {
-      setAnomalyError(err instanceof Error ? err.message : 'Detection failed')
+      const errorMsg = err instanceof Error ? err.message : 'Detection failed'
+      setAnomalyError(errorMsg)
+
+      // Add error to history
+      setAnomalyHistory(prev => [{
+        id: `anomaly-${Date.now()}`,
+        timestamp: new Date(),
+        score: 0,
+        isAnomaly: false,
+        threshold: 0,
+        parsedInput: values,
+        modelName: selectedAnomalyModel,
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
     }
   }, [selectedAnomalyModel, anomalyInput, parseAnomalyInput, sortedAnomalyModels, loadAnomalyMutation, scoreAnomalyMutation])
 
@@ -1816,14 +2060,44 @@ export default function TestChat({
           })
         }
 
-        setClassifierResult({
+        const newResult = {
           predictions,
           isMultiLabel: false, // TODO: check if model is multi-label from model info
           threshold: 0.5, // Default threshold for multi-label
-        })
+        }
+        setClassifierResult(newResult)
+
+        // Add to history
+        const inputTextForHistory = classifierInput.trim()
+        setClassifierHistory(prev => [{
+          id: `classifier-${Date.now()}`,
+          timestamp: new Date(),
+          inputText: inputTextForHistory,
+          topLabel: predictions[0]?.label || '',
+          topScore: predictions[0]?.score || 0,
+          predictions,
+          modelName: selectedClassifierModel,
+        }, ...prev].slice(0, 50)) // Keep last 50 entries
+
+        // Clear input and refocus
+        setClassifierInput('')
+        setTimeout(() => classifierInputRef.current?.focus(), 0)
       }
     } catch (err) {
-      setClassifierError(err instanceof Error ? err.message : 'Classification failed')
+      const errorMsg = err instanceof Error ? err.message : 'Classification failed'
+      setClassifierError(errorMsg)
+
+      // Add error to history
+      setClassifierHistory(prev => [{
+        id: `classifier-${Date.now()}`,
+        timestamp: new Date(),
+        inputText: classifierInput.trim(),
+        topLabel: 'Error',
+        topScore: 0,
+        predictions: [],
+        modelName: selectedClassifierModel,
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
     }
   }, [selectedClassifierModel, classifierInput, loadClassifierMutation, predictClassifierMutation])
 
@@ -1954,38 +2228,52 @@ export default function TestChat({
 
           {/* Anomaly-specific selectors */}
           {modelType === 'anomaly' && (
-            <Selector
-              value={selectedAnomalyModel || ''}
-              options={sortedAnomalyModels.map(m => ({
-                value: m.name,
-                label: m.name,
-                description: m.description,
-              }))}
-              onChange={setSelectedAnomalyModel}
-              loading={isLoadingAnomalyModels}
-              placeholder="Select anomaly model"
-              emptyMessage="No anomaly models"
-              label="Anomaly Model"
-              className="min-w-[180px]"
-            />
+            <>
+              <Selector
+                value={selectedAnomalyModel || ''}
+                options={sortedAnomalyModels.map(m => ({
+                  value: m.name,
+                  label: m.base_name,
+                  description: m.description,
+                }))}
+                onChange={setSelectedAnomalyModel}
+                loading={isLoadingAnomalyModels}
+                placeholder="Select model"
+                emptyMessage="No anomaly models"
+                label="Anomaly Model"
+                className="min-w-[140px]"
+              />
+              {selectedAnomalyModelInfo && (
+                <div className="flex items-center text-xs text-muted-foreground self-end mb-2">
+                  <span>{selectedAnomalyModelInfo.name}</span>
+                </div>
+              )}
+            </>
           )}
 
           {/* Classifier-specific selectors */}
           {modelType === 'classifier' && (
-            <Selector
-              value={selectedClassifierModel || ''}
-              options={sortedClassifierModels.map(m => ({
-                value: m.name,
-                label: m.name,
-                description: m.description,
-              }))}
-              onChange={setSelectedClassifierModel}
-              loading={isLoadingClassifierModels}
-              placeholder="Select classifier model"
-              emptyMessage="No classifier models"
-              label="Classifier Model"
-              className="min-w-[180px]"
-            />
+            <>
+              <Selector
+                value={selectedClassifierModel || ''}
+                options={sortedClassifierModels.map(m => ({
+                  value: m.name,
+                  label: m.base_name || m.name,
+                  description: m.description,
+                }))}
+                onChange={setSelectedClassifierModel}
+                loading={isLoadingClassifierModels}
+                placeholder="Select model"
+                emptyMessage="No classifier models"
+                label="Classifier Model"
+                className="min-w-[140px]"
+              />
+              {selectedClassifierModelInfo && (
+                <div className="flex items-center text-xs text-muted-foreground self-end mb-2">
+                  <span>{selectedClassifierModelInfo.name}</span>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -2061,46 +2349,158 @@ export default function TestChat({
             )}
           </>
         ) : modelType === 'anomaly' ? (
-          /* Anomaly: Result display or empty state */
-          <div className="absolute inset-0 overflow-y-auto p-3 md:p-4">
-            {sortedAnomalyModels.length === 0 && !isLoadingAnomalyModels ? (
-              <AnomalyEmptyState
-                hasModels={false}
-                onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
-              />
-            ) : anomalyResult || anomalyError || scoreAnomalyMutation.isPending ? (
-              <AnomalyResultDisplay
-                result={anomalyResult}
-                error={anomalyError}
-                isLoading={scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending}
-              />
-            ) : (
-              <AnomalyEmptyState
-                hasModels={true}
-                onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
-              />
+          /* Anomaly: Result display with optional history sidebar */
+          <div className="absolute inset-0 flex overflow-hidden">
+            {/* Main content area */}
+            <div className="flex-1 overflow-y-auto p-3 md:p-4">
+              {sortedAnomalyModels.length === 0 && !isLoadingAnomalyModels ? (
+                <AnomalyEmptyState
+                  hasModels={false}
+                  onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
+                />
+              ) : anomalyResult || anomalyError || scoreAnomalyMutation.isPending ? (
+                <AnomalyResultDisplay
+                  result={anomalyResult}
+                  error={anomalyError}
+                  isLoading={scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending}
+                />
+              ) : (
+                <AnomalyEmptyState
+                  hasModels={true}
+                  onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
+                />
+              )}
+            </div>
+
+            {/* History sidebar - right side, collapsible */}
+            {anomalyHistory.length > 0 && (
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showAnomalyHistory ? 'w-[40%]' : 'w-8'}`}>
+                {showAnomalyHistory ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        History
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setAnomalyHistory([])}
+                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Clear history"
+                        >
+                          <FontIcon type="trashcan" className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setShowAnomalyHistory(false)}
+                          className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Close history"
+                        >
+                          <FontIcon type="close" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      ref={anomalyHistoryScrollRef}
+                      className="flex-1 overflow-y-auto p-2 space-y-2"
+                    >
+                      {anomalyHistory.map(item => (
+                        <AnomalyHistoryItem
+                          key={item.id}
+                          item={item}
+                          onRerun={(input) => setAnomalyInput(input)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full items-center pt-2">
+                    <button
+                      onClick={() => setShowAnomalyHistory(true)}
+                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
+                      title="Show history"
+                    >
+                      <FontIcon type="recently-viewed" className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         ) : (
-          /* Classifier: Result display or empty state */
-          <div className="absolute inset-0 overflow-y-auto p-3 md:p-4">
-            {sortedClassifierModels.length === 0 && !isLoadingClassifierModels ? (
-              <ClassifierEmptyState
-                hasModels={false}
-                onCreateModel={() => navigate('/chat/models/train/classifier/new')}
-              />
-            ) : classifierResult || classifierError || predictClassifierMutation.isPending ? (
-              <ClassifierResultDisplay
-                result={classifierResult}
-                error={classifierError}
-                isLoading={predictClassifierMutation.isPending || loadClassifierMutation.isPending}
-                inputText={lastClassifierInput}
-              />
-            ) : (
-              <ClassifierEmptyState
-                hasModels={true}
-                onCreateModel={() => navigate('/chat/models/train/classifier/new')}
-              />
+          /* Classifier: Result display with optional history sidebar */
+          <div className="absolute inset-0 flex overflow-hidden">
+            {/* Main content area */}
+            <div className="flex-1 overflow-y-auto p-3 md:p-4">
+              {sortedClassifierModels.length === 0 && !isLoadingClassifierModels ? (
+                <ClassifierEmptyState
+                  hasModels={false}
+                  onCreateModel={() => navigate('/chat/models/train/classifier/new')}
+                />
+              ) : classifierResult || classifierError || predictClassifierMutation.isPending ? (
+                <ClassifierResultDisplay
+                  result={classifierResult}
+                  error={classifierError}
+                  isLoading={predictClassifierMutation.isPending || loadClassifierMutation.isPending}
+                  inputText={lastClassifierInput}
+                />
+              ) : (
+                <ClassifierEmptyState
+                  hasModels={true}
+                  onCreateModel={() => navigate('/chat/models/train/classifier/new')}
+                />
+              )}
+            </div>
+
+            {/* History sidebar - right side, collapsible */}
+            {classifierHistory.length > 0 && (
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showClassifierHistory ? 'w-[40%]' : 'w-8'}`}>
+                {showClassifierHistory ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        History
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setClassifierHistory([])}
+                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Clear history"
+                        >
+                          <FontIcon type="trashcan" className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setShowClassifierHistory(false)}
+                          className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Close history"
+                        >
+                          <FontIcon type="close" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      ref={classifierHistoryScrollRef}
+                      className="flex-1 overflow-y-auto p-2 space-y-2"
+                    >
+                      {classifierHistory.map(item => (
+                        <ClassifierHistoryItem
+                          key={item.id}
+                          item={item}
+                          onRerun={(input) => setClassifierInput(input)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full items-center pt-2">
+                    <button
+                      onClick={() => setShowClassifierHistory(true)}
+                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
+                      title="Show history"
+                    >
+                      <FontIcon type="recently-viewed" className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -2150,6 +2550,7 @@ export default function TestChat({
               <div className="text-xs text-destructive mb-2">{anomalyError}</div>
             )}
             <textarea
+              ref={anomalyInputRef}
               value={anomalyInput}
               onChange={e => setAnomalyInput(e.target.value)}
               onKeyDown={e => {
@@ -2190,6 +2591,7 @@ export default function TestChat({
               <div className="text-xs text-destructive mb-2">{classifierError}</div>
             )}
             <textarea
+              ref={classifierInputRef}
               value={classifierInput}
               onChange={e => setClassifierInput(e.target.value)}
               onKeyDown={e => {
