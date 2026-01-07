@@ -62,7 +62,7 @@ class ChatOrchestratorAgent(LFAgent):
     _mcp_service: MCPService | None = None
     _mcp_tool_factory: MCPToolFactory | None = None
     _mcp_tools: list[type[BaseTool]] = []
-    _prompt_variables: dict[str, str] | None = None
+    _variables: dict[str, str] | None = None
 
     def __init__(
         self,
@@ -70,13 +70,13 @@ class ChatOrchestratorAgent(LFAgent):
         project_config: LlamaFarmConfig,
         project_dir: str,
         model_name: str | None = None,
-        prompt_variables: dict[str, str] | None = None,
+        variables: dict[str, str] | None = None,
     ):
         self._project_config = project_config
         self._project_dir = project_dir
         self._session_id = None
         self._persist_enabled = False
-        self._prompt_variables = prompt_variables
+        self._variables = variables
 
         # Get the model config - if model_name is None, get_model returns the default
         model_config = ModelService.get_model(project_config, model_name)
@@ -92,7 +92,7 @@ class ChatOrchestratorAgent(LFAgent):
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
             prompts=self._get_prompt_messages_for_model(
-                model_config.name, prompt_variables
+                model_config.name, variables
             )
         )
         config = LFAgentConfig(
@@ -555,9 +555,9 @@ class ChatOrchestratorAgent(LFAgent):
     def _populate_history_with_non_system_prompts(
         self, history: LFAgentHistory, project_config: LlamaFarmConfig
     ):
-        # Use stored prompt_variables for history population
+        # Use stored variables for history population
         prompts = self._get_prompt_messages_for_model(
-            self.model_name, self._prompt_variables
+            self.model_name, self._variables
         )
         for prompt in prompts:
             # Only add non-system prompts to the history
@@ -585,9 +585,9 @@ class ChatOrchestratorAgent(LFAgent):
         # Convert to dicts for variable substitution
         message_dicts = [msg.model_dump() for msg in messages]
 
-        # Apply prompt variable substitution
-        # Priority: request_variables > model config prompt_variables
-        model_defaults = model_config.prompt_variables
+        # Apply variable substitution
+        # Priority: request_variables > model config variables
+        model_defaults = model_config.variables
         substituted = PromptVariableService.substitute_messages(
             message_dicts, model_defaults, request_variables
         )
@@ -668,13 +668,13 @@ class ChatOrchestratorAgentFactory:
         session_id: str | None = None,
         active_project_namespace: str | None = None,
         active_project_name: str | None = None,
-        prompt_variables: dict[str, str] | None = None,
+        variables: dict[str, str] | None = None,
     ) -> LFAgent:
         agent = ChatOrchestratorAgent(
             project_config=project_config,
             project_dir=project_dir,
             model_name=model_name,
-            prompt_variables=prompt_variables,
+            variables=variables,
         )
         if session_id:
             agent.enable_persistence(session_id=session_id)

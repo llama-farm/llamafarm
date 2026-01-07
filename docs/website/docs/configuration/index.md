@@ -95,7 +95,7 @@ runtime:
 | `instructor_mode`      | string or null                        | Optional                                                                   | `json`, `md_json`, `tools` for structured output modes                                                                 |
 | `prompt_format`        | string                                | Optional                                                                   | `unstructured` or other format                                                                                         |
 | `model_api_parameters` | object                                | Optional                                                                   | Passthrough parameters (temperature, top_p, etc.)                                                                      |
-| `prompt_variables`     | object                                | Optional                                                                   | Default values for prompt template variables (`{{variable_name}}` syntax). See [Prompt Variables](#prompt-variables). |
+| `variables`            | object                                | Optional                                                                   | Default values for template variables (`{{variable_name}}` syntax). See [Variables](#variables).                       |
 | `chat_defaults`        | object                                | Optional                                                                   | Default chat parameters for this model. See [Model Chat Defaults](#model-chat-defaults).                              |
 | `lemonade`             | object                                | ⚠️ Required for `provider: lemonade`                                      | Lemonade-specific configuration (see below)                                                                            |
 | `extra_body`           | object                                | Optional                                                                   | Provider-specific parameters (see `n_ctx` below)                                                                       |
@@ -127,7 +127,7 @@ runtime:
 
 > **Extending providers:** To add a new provider enum, update `config/schema.yaml`, regenerate types via `config/generate_types.py`, and implement routing in the server/CLI. See [Extending runtimes](../extending/index.md#extend-runtimes).
 
-#### Prompt Variables
+#### Variables
 
 Models can define default values for template variables used in prompts. Variables use `{{variable_name}}` syntax and are substituted before the prompt is sent to the model.
 
@@ -140,7 +140,7 @@ runtime:
       prompts: [persona_prompt]
 
       # Default values for {{variable}} placeholders in prompts
-      prompt_variables:
+      variables:
         persona_name: "DataBot"
         persona_role: "senior data analyst"
         expertise: "statistical analysis"

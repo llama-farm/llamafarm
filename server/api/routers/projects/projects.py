@@ -436,12 +436,12 @@ class ChatRequest(BaseModel):
     # max_tokens is used for the final answer, thinking_budget is additional
     thinking_budget: int | None = None
 
-    # Prompt template variables
-    # Variables in prompts use {{variable_name}} syntax
-    # These override model-level prompt_variables defaults
-    prompt_variables: dict[str, str] | None = Field(
+    # Template variables
+    # Variables use {{variable_name}} syntax
+    # These override model-level variables defaults
+    variables: dict[str, str] | None = Field(
         default=None,
-        description="Variables to substitute in prompt templates. Overrides model defaults.",
+        description="Variables to substitute in templates. Overrides model defaults.",
     )
 
 
@@ -501,7 +501,7 @@ async def chat(
             model_name=request.model,
             active_project_namespace=active_project_namespace,
             active_project_name=active_project_name,
-            prompt_variables=request.prompt_variables,
+            variables=request.variables,
         )
     else:
         # Stateful mode: use or create cached agent with disk-persisted history
@@ -527,7 +527,7 @@ async def chat(
                     session_id=session_id,
                     active_project_namespace=active_project_namespace,
                     active_project_name=active_project_name,
-                    prompt_variables=request.prompt_variables,
+                    variables=request.variables,
                 )
                 # Cache the agent in memory
                 agent_sessions[key] = SessionRecord(

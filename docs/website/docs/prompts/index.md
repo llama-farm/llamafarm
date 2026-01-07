@@ -51,7 +51,7 @@ runtime:
       prompts: [persona]
 
       # Default values for the variables above
-      prompt_variables:
+      variables:
         persona_name: "DataBot"
         persona_role: "senior data analyst"
         expertise: "statistical analysis and business intelligence"
@@ -64,7 +64,7 @@ runtime:
       prompts: [persona]
 
       # Same prompt, different personality
-      prompt_variables:
+      variables:
         persona_name: "Buddy"
         persona_role: "helpful friend"
         expertise: "general knowledge"
@@ -77,7 +77,7 @@ runtime:
 **Priority:** API Request > Model Defaults > Empty String
 
 1. Variables provided in the API request take precedence
-2. If not in the request, model-level `prompt_variables` defaults are used
+2. If not in the request, model-level `variables` defaults are used
 3. If no default exists, the variable becomes an empty string
 
 ### Override at Request Time
@@ -88,7 +88,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
   -d '{
     "messages": [{"role": "user", "content": "Introduce yourself"}],
     "model": "analyst",
-    "prompt_variables": {
+    "variables": {
       "tone": "casual",
       "persona_name": "CustomBot"
     }

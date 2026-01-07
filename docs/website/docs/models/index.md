@@ -49,8 +49,8 @@ runtime:
       model: qwen3:8b
       prompts: [persona_prompt]
 
-      # Template variables for prompts ({{variable_name}} syntax)
-      prompt_variables:
+      # Template variables ({{variable_name}} syntax)
+      variables:
         persona_name: "DataBot"
         persona_role: "senior data analyst"
         tone: "professional"
@@ -64,9 +64,9 @@ runtime:
         thinking_budget: 1500
 ```
 
-**Prompt Variables** (`prompt_variables`):
+**Variables** (`variables`):
 - Define defaults for `{{variable_name}}` placeholders in your prompts
-- Can be overridden per-request via `prompt_variables` in the API call
+- Can be overridden per-request via `variables` in the API call
 - See [Prompts Guide](../prompts/index.md#prompt-variables) for detailed syntax
 
 **Chat Defaults** (`chat_defaults`):

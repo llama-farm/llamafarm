@@ -200,12 +200,12 @@ properties:
               items:
                 $ref: "#/definitions/Tool"
               default: []
-            prompt_variables:
+            variables:
               type: object
               description: |
-                Default values for prompt template variables.
-                Variables in prompts use {{variable_name}} syntax (e.g., "You are {{persona}}").
-                These defaults can be overridden per-request via the prompt_variables parameter.
+                Default values for template variables.
+                Variables use {{variable_name}} syntax (e.g., "You are {{persona}}").
+                These defaults can be overridden per-request via the variables parameter.
               additionalProperties:
                 type: string
             chat_defaults:
