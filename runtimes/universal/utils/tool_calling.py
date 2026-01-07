@@ -14,6 +14,16 @@ import re
 
 logger = logging.getLogger(__name__)
 
+# Pre-compiled regex patterns for better performance
+# Pattern to extract tool calls from <tool_call>...</tool_call> tags
+TOOL_CALL_PATTERN = re.compile(r"<tool_call>(.*?)</tool_call>", re.DOTALL)
+
+# Pattern to strip tool call tags from content
+TOOL_CALL_STRIP_PATTERN = re.compile(r"<tool_call>.*?</tool_call>", re.DOTALL)
+
+# Pattern to extract tool name from partial JSON
+TOOL_NAME_PATTERN = re.compile(r'"name"\s*:\s*"([^"]+)"')
+
 
 # =============================================================================
 # Prompt templates for different tool_choice modes
@@ -76,6 +86,51 @@ def format_tool_for_prompt(tool: dict) -> str:
     return json.dumps(tool, ensure_ascii=False)
 
 
+def validate_tool_schema(tool: dict) -> list[str]:
+    """Validate a tool definition schema.
+
+    Args:
+        tool: Tool definition in OpenAI format.
+
+    Returns:
+        List of validation error messages (empty if valid).
+    """
+    errors = []
+
+    if not isinstance(tool, dict):
+        errors.append(f"Tool must be a dict, got {type(tool).__name__}")
+        return errors
+
+    # Check required top-level fields
+    if "type" not in tool:
+        errors.append("Tool missing required 'type' field")
+    elif tool["type"] != "function":
+        errors.append(f"Tool type must be 'function', got '{tool['type']}'")
+
+    if "function" not in tool:
+        errors.append("Tool missing required 'function' field")
+        return errors
+
+    func = tool["function"]
+    if not isinstance(func, dict):
+        errors.append(f"Tool 'function' must be a dict, got {type(func).__name__}")
+        return errors
+
+    # Check required function fields
+    if "name" not in func:
+        errors.append("Tool function missing required 'name' field")
+    elif not isinstance(func["name"], str) or not func["name"]:
+        errors.append("Tool function 'name' must be a non-empty string")
+
+    # Check optional but commonly expected fields
+    if "parameters" in func:
+        params = func["parameters"]
+        if not isinstance(params, dict):
+            errors.append(f"Tool parameters must be a dict, got {type(params).__name__}")
+
+    return errors
+
+
 def parse_tool_choice(tool_choice: str | dict | None) -> tuple[str, str | None]:
     """Parse tool_choice into a mode and optional function name.
 
@@ -136,6 +191,24 @@ def inject_tools_into_messages(
     """
     if not tools:
         return messages
+
+    # Validate tool schemas before injection
+    valid_tools = []
+    for i, tool in enumerate(tools):
+        errors = validate_tool_schema(tool)
+        if errors:
+            tool_name = tool.get("function", {}).get("name", f"tool[{i}]")
+            logger.warning(
+                f"Skipping malformed tool '{tool_name}': {'; '.join(errors)}"
+            )
+        else:
+            valid_tools.append(tool)
+
+    if not valid_tools:
+        logger.warning("No valid tools after validation, returning original messages")
+        return messages
+
+    tools = valid_tools
 
     # Parse tool_choice to determine mode
     mode, specific_func = parse_tool_choice(tool_choice)
@@ -215,14 +288,14 @@ def detect_tool_call_in_content(content: str) -> list[tuple[str, str]] | None:
     if not content:
         return None
 
-    pattern = r"<tool_call>(.*?)</tool_call>"
-    matches = re.findall(pattern, content, re.DOTALL)
+    matches = TOOL_CALL_PATTERN.findall(content)
 
     if not matches:
         return None
 
     results = []
-    for match in matches:
+    parse_errors = []
+    for i, match in enumerate(matches):
         try:
             # Parse the JSON inside the tool_call tags
             tool_call_json = json.loads(match.strip())
@@ -233,9 +306,19 @@ def detect_tool_call_in_content(content: str) -> list[tuple[str, str]] | None:
                 # Re-serialize arguments to ensure consistent JSON format
                 args_json = json.dumps(tool_args, ensure_ascii=False)
                 results.append((tool_name, args_json))
+            else:
+                parse_errors.append(f"Tool call {i + 1}: missing 'name' field")
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse tool call JSON: {e}, content: {match[:100]}")
-            continue
+            parse_errors.append(
+                f"Tool call {i + 1}: JSON parse error - {e}, content: {match[:100]!r}"
+            )
+
+    # Log summary of parsing results
+    if parse_errors:
+        logger.error(
+            f"Failed to parse {len(parse_errors)}/{len(matches)} tool call(s): "
+            f"{'; '.join(parse_errors)}"
+        )
 
     return results if results else None
 
@@ -264,8 +347,7 @@ def strip_tool_call_from_content(content: str) -> str:
     Returns:
         Content with tool call tags removed.
     """
-    pattern = r"<tool_call>.*?</tool_call>"
-    return re.sub(pattern, "", content, flags=re.DOTALL).strip()
+    return TOOL_CALL_STRIP_PATTERN.sub("", content).strip()
 
 
 # =============================================================================
@@ -305,8 +387,7 @@ def extract_tool_name_from_partial(content: str) -> str | None:
     # Use regex to extract a complete "name" value
     # Matches: "name": "value" or "name":"value"
     # The name value must be complete (closing quote found)
-    pattern = r'"name"\s*:\s*"([^"]+)"'
-    match = re.search(pattern, partial_json)
+    match = TOOL_NAME_PATTERN.search(partial_json)
 
     if match:
         return match.group(1)

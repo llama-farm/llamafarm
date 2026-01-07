@@ -14,7 +14,8 @@ import json
 import logging
 from typing import Any
 
-from jinja2 import Environment, TemplateError, Undefined
+from jinja2 import TemplateError, Undefined
+from jinja2.sandbox import SandboxedEnvironment
 from jinja2.utils import Namespace
 
 from utils.gguf_metadata_cache import get_gguf_metadata_cached
@@ -65,10 +66,10 @@ def get_chat_template_from_gguf(model_path: str) -> str | None:
         cached = get_gguf_metadata_cached(model_path)
         return cached.chat_template
     except FileNotFoundError:
-        logger.warning(f"GGUF file not found: {model_path}")
+        logger.debug(f"GGUF file not found: {model_path}")
         return None
     except Exception as e:
-        logger.warning(f"Failed to extract chat template from {model_path}: {e}")
+        logger.debug(f"Failed to extract chat template from {model_path}: {e}")
         return None
 
 
@@ -115,13 +116,16 @@ def supports_native_tools(template: str) -> bool:
     return "tools" in template
 
 
-def create_jinja_environment() -> Environment:
-    """Create a Jinja2 environment configured for chat templates.
+def create_jinja_environment() -> SandboxedEnvironment:
+    """Create a sandboxed Jinja2 environment configured for chat templates.
+
+    Uses SandboxedEnvironment to prevent arbitrary code execution from
+    potentially malicious templates in GGUF files.
 
     Returns:
-        Configured Jinja2 Environment.
+        Configured Jinja2 SandboxedEnvironment.
     """
-    env = Environment(
+    env = SandboxedEnvironment(
         # Use undefined that returns False for boolean checks
         undefined=RaiseExceptionUndefined,
         # Keep trailing newlines

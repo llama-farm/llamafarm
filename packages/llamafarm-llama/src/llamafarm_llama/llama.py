@@ -441,7 +441,16 @@ class Llama:
         for i, msg in enumerate(messages):
             role = msg.get("role", "user").encode("utf-8")
             # Handle None content (e.g., tool call messages may have content: null)
-            content = (msg.get("content") or "").encode("utf-8")
+            raw_content = msg.get("content")
+            if raw_content is None:
+                # Tool call messages typically have null content, but warn for other roles
+                msg_role = msg.get("role", "user")
+                if msg_role not in ("assistant", "tool"):
+                    logger.warning(
+                        f"Message at index {i} with role '{msg_role}' has None content, "
+                        "using empty string"
+                    )
+            content = (raw_content or "").encode("utf-8")
             role_refs.append(ffi.new("char[]", role))
             content_refs.append(ffi.new("char[]", content))
             chat_array[i].role = role_refs[-1]

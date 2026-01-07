@@ -188,46 +188,52 @@ class GGUFLanguageModel(BaseModel):
                     )
                 raise
 
-        self.llama = await loop.run_in_executor(self._executor, _load_model)
-
-        # Initialize context management
-        self._token_counter = TokenCounter(self.llama)
-        budget = ContextBudget.from_context_size(self.actual_n_ctx)
-        self._context_manager = ContextManager(self._token_counter, budget)
-
-        # Pre-extract and cache GGUF metadata for chat template rendering
-        # This avoids re-reading the large GGUF file on every request
         try:
-            from utils.jinja_tools import (
-                get_chat_template_from_gguf,
-                get_special_tokens_from_gguf,
-                supports_native_tools,
-            )
+            self.llama = await loop.run_in_executor(self._executor, _load_model)
 
-            self._chat_template = get_chat_template_from_gguf(gguf_path)
-            if self._chat_template:
-                has_tools = supports_native_tools(self._chat_template)
-                logger.info(
-                    f"Chat template cached ({len(self._chat_template)} chars), "
-                    f"supports_native_tools={has_tools}"
+            # Initialize context management
+            self._token_counter = TokenCounter(self.llama)
+            budget = ContextBudget.from_context_size(self.actual_n_ctx)
+            self._context_manager = ContextManager(self._token_counter, budget)
+
+            # Pre-extract and cache GGUF metadata for chat template rendering
+            # This avoids re-reading the large GGUF file on every request
+            try:
+                from utils.jinja_tools import (
+                    get_chat_template_from_gguf,
+                    get_special_tokens_from_gguf,
+                    supports_native_tools,
                 )
-            else:
-                logger.info("No chat template found in GGUF metadata")
 
-            self._special_tokens = get_special_tokens_from_gguf(gguf_path)
-            logger.debug(
-                f"Special tokens cached: bos='{self._special_tokens.get('bos_token', '')}', "
-                f"eos='{self._special_tokens.get('eos_token', '')}'"
+                self._chat_template = get_chat_template_from_gguf(gguf_path)
+                if self._chat_template:
+                    has_tools = supports_native_tools(self._chat_template)
+                    logger.info(
+                        f"Chat template cached ({len(self._chat_template)} chars), "
+                        f"supports_native_tools={has_tools}"
+                    )
+                else:
+                    logger.debug("No chat template found in GGUF metadata")
+
+                self._special_tokens = get_special_tokens_from_gguf(gguf_path)
+                logger.debug(
+                    f"Special tokens cached: bos='{self._special_tokens.get('bos_token', '')}', "
+                    f"eos='{self._special_tokens.get('eos_token', '')}'"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cache GGUF metadata: {e}")
+                self._chat_template = None
+                self._special_tokens = None
+
+            logger.info(
+                f"GGUF model loaded successfully on {self.device} "
+                f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
             )
-        except Exception as e:
-            logger.warning(f"Failed to cache GGUF metadata: {e}")
-            self._chat_template = None
-            self._special_tokens = None
-
-        logger.info(
-            f"GGUF model loaded successfully on {self.device} "
-            f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
-        )
+        except Exception:
+            # Clean up executor if load fails to prevent resource leak
+            if hasattr(self, "_executor"):
+                self._executor.shutdown(wait=False)
+            raise
 
     def format_messages(self, messages: list[dict]) -> str:
         """Format chat messages into a prompt string.
