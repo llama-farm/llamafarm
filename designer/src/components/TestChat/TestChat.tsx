@@ -1998,6 +1998,8 @@ export default function TestChat({
         // Clear input and refocus
         setAnomalyInput('')
         setTimeout(() => anomalyInputRef.current?.focus(), 0)
+      } else {
+        setAnomalyError('No results returned from model')
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Detection failed'
@@ -2094,6 +2096,8 @@ export default function TestChat({
         // Clear input and refocus
         setClassifierInput('')
         setTimeout(() => classifierInputRef.current?.focus(), 0)
+      } else {
+        setClassifierError('No results returned from model')
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Classification failed'

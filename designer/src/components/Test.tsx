@@ -188,12 +188,12 @@ const Test = () => {
     localStorage.setItem('lf_testchat_rag_threshold', String(ragThresholdUI))
   }, [ragThresholdUI])
 
-  // Hide settings UI when switching to config view
+  // Hide settings UI when switching to config view or away from inference mode
   useEffect(() => {
-    if (mode !== 'designer') {
+    if (mode !== 'designer' || modelType !== 'inference') {
       setIsSettingsOpen(false)
     }
-  }, [mode])
+  }, [mode, modelType])
 
   return (
     <div className="w-full h-full flex flex-col">
