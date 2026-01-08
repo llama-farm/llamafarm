@@ -762,7 +762,7 @@ function DocumentScanningResultDisplay({
       {/* Header with file info and actions */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
         <div className="flex items-center gap-3">
-          <FontIcon type="data" className="w-5 h-5 text-blue-400" />
+          <FontIcon type="data" className="w-5 h-5 text-sky-400" />
           <div>
             <div className="text-sm font-medium">{fileName}</div>
             <div className="text-xs text-muted-foreground">
@@ -956,7 +956,7 @@ function DocumentScanningHistoryItem({
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <FontIcon type="data" className="w-3.5 h-3.5 text-blue-400" />
+          <FontIcon type="data" className="w-3.5 h-3.5 text-sky-400" />
           <span className="text-xs font-medium truncate max-w-[100px]">{item.fileName}</span>
         </div>
         <span className="text-[10px] text-muted-foreground">{timeStr}</span>
@@ -965,7 +965,7 @@ function DocumentScanningHistoryItem({
         <Badge className={`text-[10px] px-1.5 py-0 ${
           isError
             ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-            : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+            : 'bg-sky-500/20 text-sky-400 border-sky-500/30'
         }`}>
           {isError ? 'Error' : `${item.pageCount} pg`}
         </Badge>
@@ -2845,7 +2845,7 @@ export default function TestChat({
 
             {/* History sidebar - right side, collapsible */}
             {anomalyHistory.length > 0 && (
-              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showAnomalyHistory ? 'w-[40%]' : 'w-8'}`}>
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showAnomalyHistory ? 'w-[25%]' : 'w-8'}`}>
                 {showAnomalyHistory ? (
                   <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
@@ -2923,7 +2923,7 @@ export default function TestChat({
 
             {/* History sidebar - right side, collapsible */}
             {classifierHistory.length > 0 && (
-              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showClassifierHistory ? 'w-[40%]' : 'w-8'}`}>
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showClassifierHistory ? 'w-[25%]' : 'w-8'}`}>
                 {showClassifierHistory ? (
                   <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
@@ -3003,7 +3003,7 @@ export default function TestChat({
 
             {/* History sidebar - right side, collapsible */}
             {scanHistory.length > 0 && (
-              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showScanHistory ? 'w-[40%]' : 'w-8'}`}>
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showScanHistory ? 'w-[25%]' : 'w-8'}`}>
                 {showScanHistory ? (
                   <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
