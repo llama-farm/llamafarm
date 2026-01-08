@@ -1,5 +1,6 @@
 import json
 from enum import Enum
+from typing import Any
 
 from config.datamodel import Dataset
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 from api.routers.datasets._models import ListDatasetsResponse
 from core.logging import FastAPIStructLogger
 from services.dataset_service import DatasetIngestLaunchResult, DatasetService
+from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
 
@@ -323,6 +325,77 @@ def _parse_parser_overrides(raw_overrides: str | None):
     return parsed
 
 
+def _validate_overrides_against_default_chunking(
+    namespace: str,
+    project: str,
+    strategy_name: str | None,
+    parser_overrides: dict | None,
+):
+    """
+    Validate merged chunk_size/chunk_overlap using default parser configs.
+
+    Ensures that providing only chunk_overlap does not exceed the default chunk_size.
+    """
+    if not parser_overrides or not strategy_name:
+        return
+
+    try:
+        project_config = ProjectService.load_config(namespace, project)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "Failed to load project config for parser override validation",
+            namespace=namespace,
+            project=project,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to load project config for parser override validation",
+        ) from exc
+
+    rag_config = getattr(project_config, "rag", None)
+    strategies = getattr(rag_config, "data_processing_strategies", None) or []
+    strategy = next(
+        (s for s in strategies if getattr(s, "name", None) == strategy_name), None
+    )
+    if not strategy or not getattr(strategy, "parsers", None):
+        return
+
+    wildcard_override = parser_overrides.get("*") or parser_overrides.get("__all__")
+
+    for parser in strategy.parsers or []:
+        parser_type = getattr(parser, "type", None)
+        merged_config: dict[str, Any] = {}
+        base_config = getattr(parser, "config", None) or {}
+        merged_config.update(base_config)
+        if wildcard_override:
+            merged_config.update(wildcard_override)
+        if parser_type:
+            merged_config.update(parser_overrides.get(parser_type, {}) or {})
+
+        chunk_size = merged_config.get("chunk_size")
+        chunk_overlap = merged_config.get("chunk_overlap")
+        if chunk_size is None or chunk_overlap is None:
+            continue
+
+        if not isinstance(chunk_size, int | float) or not isinstance(
+            chunk_overlap, int | float
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="chunk_size and chunk_overlap must be numbers after applying overrides",
+            )
+
+        if chunk_overlap >= chunk_size:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"chunk_overlap ({chunk_overlap}) must be less than chunk_size "
+                    f"({chunk_size}) for parser {parser_type or 'unknown'}"
+                ),
+            )
+
+
 @router.post(
     "/{dataset}/data",
     operation_id="dataset_data_upload",
@@ -357,6 +430,12 @@ async def upload_data(
         auto_process if auto_process is not None else dataset_auto_process
     )
     parsed_overrides = _parse_parser_overrides(parser_overrides)
+    _validate_overrides_against_default_chunking(
+        namespace=namespace,
+        project=project,
+        strategy_name=getattr(dataset_config, "data_processing_strategy", None),
+        parser_overrides=parsed_overrides,
+    )
 
     was_added, metadata_file_content = await DatasetService.add_file_to_dataset(
         namespace=namespace,
@@ -439,6 +518,12 @@ async def upload_data_bulk(
     logger.bind(namespace=namespace, project=project, dataset=dataset)
     dataset_config = DatasetService.get_dataset_config(namespace, project, dataset)
     parsed_overrides = _parse_parser_overrides(parser_overrides)
+    _validate_overrides_against_default_chunking(
+        namespace=namespace,
+        project=project,
+        strategy_name=getattr(dataset_config, "data_processing_strategy", None),
+        parser_overrides=parsed_overrides,
+    )
 
     if len(files) > 100:
         raise HTTPException(

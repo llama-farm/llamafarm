@@ -134,9 +134,35 @@ class IngestHandler:
                 merged.update(wildcard_override)
             if override_cfg:
                 merged.update(override_cfg)
+            self._validate_chunk_settings(merged, getattr(parser, "type", None))
             parser.config = merged
 
         return parsers
+
+    def _validate_chunk_settings(
+        self, config: dict[str, Any], parser_type: str | None
+    ) -> None:
+        """
+        Ensure merged chunk settings are valid before ingestion.
+        """
+        chunk_size = config.get("chunk_size")
+        chunk_overlap = config.get("chunk_overlap")
+
+        if chunk_size is None or chunk_overlap is None:
+            return
+
+        if not isinstance(chunk_size, (int, float)) or not isinstance(
+            chunk_overlap, (int, float)
+        ):
+            raise ValueError(
+                f"chunk_size and chunk_overlap must be numbers for parser {parser_type or 'unknown'}"
+            )
+
+        if chunk_overlap >= chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({chunk_overlap}) must be less than chunk_size ({chunk_size}) "
+                f"for parser {parser_type or 'unknown'}"
+            )
 
     def _get_database_config(self) -> dict[str, Any]:
         """
