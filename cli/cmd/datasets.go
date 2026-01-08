@@ -107,6 +107,11 @@ var datasetsListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if forceProcess && skipProcess {
+			fmt.Fprintln(os.Stderr, "Error: --process and --no-process cannot be used together.")
+			os.Exit(1)
+		}
+
 		// Start config watcher AFTER we've successfully loaded the config
 		// This prevents race conditions where the watcher syncs files before we read them
 		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
@@ -377,11 +382,6 @@ sends all files in one request and defaults to no processing (use --process to o
 		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		if forceProcess && skipProcess {
-			fmt.Fprintln(os.Stderr, "Error: --process and --no-process cannot be used together.")
 			os.Exit(1)
 		}
 

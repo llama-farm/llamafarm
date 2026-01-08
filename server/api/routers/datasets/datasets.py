@@ -263,6 +263,36 @@ def _parse_parser_overrides(raw_overrides: str | None):
             status_code=400,
             detail="parser_overrides must be a JSON object mapping parser type to config",
         )
+
+    # Basic safety validation for chunk settings
+    def _validate_chunk_field(name: str, value: object, allow_zero: bool):
+        if not isinstance(value, int | float):
+            raise HTTPException(
+                status_code=400, detail=f"{name} must be a number"
+            )
+        if allow_zero:
+            if value < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{name} must be greater than or equal to 0",
+                )
+        else:
+            if value <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{name} must be greater than 0",
+                )
+
+    for override in parsed.values():
+        if not isinstance(override, dict):
+            continue
+        if "chunk_size" in override:
+            _validate_chunk_field("chunk_size", override["chunk_size"], allow_zero=False)
+        if "chunk_overlap" in override:
+            _validate_chunk_field(
+                "chunk_overlap", override["chunk_overlap"], allow_zero=True
+            )
+
     return parsed
 
 
@@ -382,6 +412,12 @@ async def upload_data_bulk(
     logger.bind(namespace=namespace, project=project, dataset=dataset)
     dataset_config = DatasetService.get_dataset_config(namespace, project, dataset)
     parsed_overrides = _parse_parser_overrides(parser_overrides)
+
+    if len(files) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Bulk upload limited to 100 files at a time",
+        )
 
     # Bulk defaults to not processing unless explicitly requested
     dataset_auto_process = (
