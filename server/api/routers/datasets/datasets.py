@@ -1,5 +1,5 @@
-from enum import Enum
 import json
+from enum import Enum
 
 from config.datamodel import Dataset
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
