@@ -164,8 +164,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
             modelAlreadyCached = cachedModels.data.some(
               m => m.id === embeddingModel || m.name === embeddingModel
             )
-          } catch {
-            // If cache check fails, we attempt download anyway.
+          } catch (error) {
+            console.warn('Cache check failed, will attempt download:', error)
             // Backend will short-circuit if model is already cached.
           }
 
