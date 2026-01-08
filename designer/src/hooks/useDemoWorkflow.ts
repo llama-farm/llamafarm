@@ -9,12 +9,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import YAML from 'yaml'
 import projectService from '../api/projectService'
 import datasetService from '../api/datasets'
+import modelService from '../api/modelService'
 import { DemoConfig } from '../config/demos'
 import { projectKeys } from './useProjects'
 
 export type DemoStep =
   | 'idle'
   | 'fetching_config'
+  | 'downloading_model'
   | 'creating_project'
   | 'uploading_files'
   | 'processing_dataset'
@@ -148,23 +150,105 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
         setProgress(20)
 
-        // Step 2: Generate unique project name
+        // Step 2: Pre-download embedding model if needed
+        // This ensures the Celery task doesn't silently download models with no progress visibility
+        const embeddingModel = configData.rag?.databases
+          ?.flatMap((db: any) => db.embedding_strategies ?? [])
+          .find((s: any) => s.config?.model)?.config?.model as string | undefined
+
+        if (embeddingModel) {
+          // Check if model is already cached
+          let modelAlreadyCached = false
+          try {
+            const cachedModels = await modelService.listCachedModels('universal')
+            modelAlreadyCached = cachedModels.data.some(
+              m => m.id === embeddingModel || m.name === embeddingModel
+            )
+          } catch {
+            // If cache check fails, we attempt download anyway.
+            // Backend will short-circuit if model is already cached.
+          }
+
+          if (!modelAlreadyCached) {
+            updateStep('downloading_model')
+            setProgress(25)
+
+            const downloadCallId = addApiCall({
+              method: 'POST',
+              endpoint: '/v1/models/download',
+              status: 'pending',
+              description: `Downloading embedding model: ${embeddingModel}`,
+            })
+
+            const downloadStart = Date.now()
+
+            try {
+              let downloadCompleted = false
+              let parseError = false
+              let indeterminateProgress = 25
+
+              for await (const event of modelService.downloadModel({
+                model_name: embeddingModel,
+                provider: 'universal',
+              })) {
+                if (event.event === 'progress') {
+                  if (event.total > 0) {
+                    const percent = Math.round((event.downloaded / event.total) * 100)
+                    // Scale: 25-50% of overall progress (cap at 50 to prevent overflow)
+                    setProgress(Math.min(50, 25 + Math.round(percent * 0.25)))
+                  } else {
+                    // Unknown total size - slowly increment to show activity
+                    indeterminateProgress = Math.min(indeterminateProgress + 0.5, 49)
+                    setProgress(Math.round(indeterminateProgress))
+                  }
+                } else if (event.event === 'done') {
+                  downloadCompleted = true
+                  setProgress(50)
+                } else if (event.event === 'error') {
+                  if (event.message?.includes('parse')) {
+                    parseError = true
+                  }
+                  throw new Error(`Model download failed: ${event.message}`)
+                }
+              }
+
+              // Verify download completed successfully
+              if (!downloadCompleted) {
+                throw new Error(
+                  parseError
+                    ? 'Failed to parse download progress data'
+                    : 'Model download stream ended unexpectedly'
+                )
+              }
+
+              updateApiCall(downloadCallId, {
+                status: 'success',
+                statusCode: 200,
+                duration: Date.now() - downloadStart,
+              })
+            } catch (err) {
+              updateApiCall(downloadCallId, {
+                status: 'error',
+                duration: Date.now() - downloadStart,
+              })
+              throw err
+            }
+          } else {
+            setProgress(50)
+          }
+        } else {
+          // No embedding model specified, skip to next step
+          setProgress(50)
+        }
+
+        // Step 3: Generate unique project name
         // Fetch fresh project list (we invalidated cache at start)
         await new Promise(resolve => setTimeout(resolve, 500)) // Small delay to ensure cache is cleared
         const existingProjects = await projectService.listProjects(namespace)
 
-        console.log(
-          `📋 Found ${existingProjects.projects.length} existing projects`
-        )
-
         const demoProjects = existingProjects.projects
           .map(p => p.name)
           .filter(name => name.startsWith(`${demo.name}-`))
-
-        console.log(
-          `📋 Found ${demoProjects.length} existing demo projects:`,
-          demoProjects
-        )
 
         const numbers = demoProjects
           .map(name => {
@@ -176,12 +260,11 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1
         const newProjectName = `${demo.name}-${nextNumber}`
 
-        console.log(`✨ Creating new demo project: ${newProjectName}`)
         setProjectName(newProjectName)
 
-        // Step 3: Create project (30%)
+        // Step 4: Create project (50-55%)
         updateStep('creating_project')
-        setProgress(30)
+        setProgress(52)
 
         const createCallId = addApiCall({
           method: 'POST',
@@ -201,9 +284,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           duration: Date.now() - createStart,
         })
 
-        setProgress(40)
+        setProgress(55)
 
-        // Step 4: Update project with demo config (50%)
+        // Step 5: Update project with demo config (55-60%)
         const updateCallId = addApiCall({
           method: 'PUT',
           endpoint: `/v1/projects/${namespace}/${newProjectName}`,
@@ -222,9 +305,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
           duration: Date.now() - updateStart,
         })
 
-        setProgress(55)
+        setProgress(60)
 
-        // Step 5: Upload files (60-80%)
+        // Step 6: Upload files (60-80%)
         updateStep('uploading_files')
 
         const fileCount = demo.files.length
@@ -272,9 +355,9 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Small delay to ensure backend is ready (file metadata written, etc.)
         await new Promise(resolve => setTimeout(resolve, 1000))
 
-        // Step 6: Process dataset (90%)
+        // Step 7: Process dataset (80-100%)
         updateStep('processing_dataset')
-        setProgress(90)
+        setProgress(80)
 
         const processCallId = addApiCall({
           method: 'POST',
@@ -294,14 +377,11 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Poll for completion
         let taskResult: any = null
         if (processResult.task_id) {
-          console.log(
-            `📋 Received task ID: ${processResult.task_id} for project: ${newProjectName}`
-          )
           let completed = false
           let attempts = 0
-          // Increased timeout to 10 minutes to account for first-time model downloads
-          // Model downloads can take 2-5 minutes, plus processing time
-          const maxAttempts = 300 // 10 minutes max (300 * 2s = 600s)
+          // Model downloads now happen before processing, so this should complete faster
+          // Keeping a generous timeout for large document processing
+          const maxAttempts = 150 // 5 minutes max (150 * 2s = 300s)
 
           while (!completed && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 2000))
@@ -312,21 +392,10 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
               processResult.task_id
             )
 
-            console.log(
-              `📊 Task ${processResult.task_id} status: ${taskStatus.state} (attempt ${attempts + 1}/${maxAttempts})`
-            )
-
             if (taskStatus.state === 'SUCCESS') {
               completed = true
               taskResult = taskStatus.result
             } else if (taskStatus.state === 'FAILURE') {
-              // Extract detailed error message from task response
-              console.error('Dataset processing failed:', {
-                error: taskStatus.error,
-                traceback: taskStatus.traceback,
-                result: taskStatus.result,
-              })
-
               // Provide user-friendly error message
               let errorMsg = 'Dataset processing failed'
               if (taskStatus.error) {
@@ -363,10 +432,10 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
               throw new Error(errorMsg)
             }
 
-            // Update progress during processing (90-98%)
-            // Progress increases slowly to account for model downloads on first use
+            // Update progress during processing (80-98%)
+            // Model downloads now happen before processing, so this should be faster
             const processingProgress =
-              90 + Math.min((attempts / maxAttempts) * 8, 8)
+              80 + Math.min((attempts / maxAttempts) * 18, 18)
             setProgress(processingProgress)
             attempts++
           }
@@ -410,7 +479,6 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Navigate to test page immediately - modal will stay open over the chat page
         navigate('/chat/test', { state: { fromDemo: true } })
       } catch (err) {
-        console.error('Demo creation failed:', err)
         setCurrentStep('error')
         setError(err instanceof Error ? err.message : 'Unknown error occurred')
       }
