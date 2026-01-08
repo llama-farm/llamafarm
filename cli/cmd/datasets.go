@@ -1393,20 +1393,24 @@ func uploadFilesBulk(server string, namespace string, project string, dataset st
 	writer := multipart.NewWriter(&buf)
 
 	for _, path := range paths {
-		file, err := os.Open(path)
-		if err != nil {
-			return bulkUploadResult{err: fmt.Errorf("failed to open %s: %w", path, err)}
-		}
-		part, err := writer.CreateFormFile("files", filepath.Base(path))
-		if err != nil {
-			file.Close()
+		if err := func() error {
+			file, err := os.Open(path)
+			if err != nil {
+				return fmt.Errorf("failed to open %s: %w", path, err)
+			}
+			defer file.Close()
+
+			part, err := writer.CreateFormFile("files", filepath.Base(path))
+			if err != nil {
+				return fmt.Errorf("failed to create form file for %s: %w", path, err)
+			}
+			if _, err := io.Copy(part, file); err != nil {
+				return fmt.Errorf("failed to copy %s: %w", path, err)
+			}
+			return nil
+		}(); err != nil {
 			return bulkUploadResult{err: err}
 		}
-		if _, err := io.Copy(part, file); err != nil {
-			file.Close()
-			return bulkUploadResult{err: err}
-		}
-		file.Close()
 	}
 
 	if len(parserOverrides) > 0 {
