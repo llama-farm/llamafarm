@@ -184,7 +184,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
 
             try {
               let downloadCompleted = false
-              let parseError = false
+              let errorMessage: string | undefined
               let indeterminateProgress = 25
 
               for await (const event of modelService.downloadModel({
@@ -205,18 +205,16 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
                   downloadCompleted = true
                   setProgress(50)
                 } else if (event.event === 'error') {
-                  if (event.message?.includes('parse')) {
-                    parseError = true
-                  }
-                  throw new Error(`Model download failed: ${event.message}`)
+                  errorMessage = event.message
+                  break // Exit loop, let post-loop logic handle error
                 }
               }
 
               // Verify download completed successfully
               if (!downloadCompleted) {
                 throw new Error(
-                  parseError
-                    ? 'Failed to parse download progress data'
+                  errorMessage
+                    ? `Model download failed: ${errorMessage}`
                     : 'Model download stream ended unexpectedly'
                 )
               }
