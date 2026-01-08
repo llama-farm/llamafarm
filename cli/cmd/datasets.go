@@ -397,13 +397,8 @@ sends all files in one request and defaults to no processing (use --process to o
 		if projectCfg, cfgErr := config.LoadConfig(utils.GetEffectiveCWD()); cfgErr == nil && projectCfg != nil {
 			for _, ds := range projectCfg.Datasets {
 				if ds.Name == datasetName {
-					switch v := any(ds.AutoProcess).(type) {
-					case bool:
-						autoProcessDefault = v
-					case *bool:
-						if v != nil {
-							autoProcessDefault = *v
-						}
+					if ds.AutoProcess != nil {
+						autoProcessDefault = *ds.AutoProcess
 					}
 					break
 				}

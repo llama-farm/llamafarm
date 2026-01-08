@@ -339,7 +339,7 @@ async def upload_data(
         description="JSON object mapping parser type to override config, e.g. {'PDFParser_LlamaIndex': {'chunk_size': 1024}}",
     ),
 ):
-    """Upload a file to the dataset (stores it but does NOT process into vector database)"""
+    """Upload a file to the dataset. Processing triggered based on dataset config or auto_process parameter."""
     logger.bind(namespace=namespace, project=project, dataset=dataset)
 
     dataset_config = DatasetService.get_dataset_config(namespace, project, dataset)
