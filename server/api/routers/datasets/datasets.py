@@ -16,6 +16,9 @@ router = APIRouter(
     tags=["datasets"],
 )
 
+# Reusable FastAPI defaults to satisfy lint rule B008 (no call in defaults)
+FILES_REQUIRED = File(...)
+
 
 # Support both with and without trailing slash to avoid proxy redirect issues
 @router.get(
@@ -308,7 +311,7 @@ def _parse_parser_overrides(raw_overrides: str | None):
                 raise HTTPException(
                     status_code=400,
                     detail="chunk_size and chunk_overlap must be numbers",
-                )
+                ) from None
 
     return parsed
 
@@ -416,7 +419,7 @@ async def upload_data_bulk(
     namespace: str,
     project: str,
     dataset: str,
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] = FILES_REQUIRED,
     auto_process: bool | None = Query(
         default=None,
         description="Process all uploaded files immediately (default: false for bulk)",
