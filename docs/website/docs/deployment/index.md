@@ -5,89 +5,124 @@ sidebar_position: 9
 
 # Deployment
 
-LlamaFarm shards into two primary services: the FastAPI server and the RAG worker (Celery). You can run them locally for development or deploy to your infrastructure using the same configuration.
+LlamaFarm is designed for native deployment without containers. The application runs directly on your system using native binaries and the UV package manager for Python dependencies.
 
-## Local Development
+## Production Deployment
 
-### Option A: `lf start`
+### Native Process Management
 
-The easiest path is the integrated dev stack:
+For production, use process supervisors to start services
+
+**systemd (Linux)**:
+
+```ini
+[Unit]
+Description=LlamaFarm Server
+After=network.target
+
+[Service]
+Type=simple
+User=llamafarm
+WorkingDirectory=/opt/llamafarm
+ExecStart=/opt/llamafarm/lf services start
+Restart=always
+Environment=LF_DATA_DIR=/var/lib/llamafarm
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**PM2 (Node.js)**:
 
 ```bash
-lf start
+pm2 start "lf services start" --name llamafarm
+pm2 save
 ```
 
-This command:
-- Starts the server and RAG worker (using Docker/Nx under the hood).
-- Watches `llamafarm.yaml` for changes.
-- Opens an interactive chat UI.
+**launchd (macOS)**:
 
-### Option B: Manual control
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.llamafarm.server</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/lf</string>
+        <string>services</string>
+        <string>start</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+```
 
-Open two terminals:
+### Production Checklist
+
+- **Environment variables**: Store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
+- **Data directory**: Set `LF_DATA_DIR` to a persistent location with adequate storage for models and vector databases.
+- **Firewall**: Restrict access to ports 8000 (API) and 11540 (Universal Runtime) as needed.
+- **TLS termination**: Use a reverse proxy (Traefik, nginx, Caddy) for HTTPS in production.
+- **Monitoring**: Enable logging and set up health checks against `/health` endpoint.
+
+### Reverse Proxy Example (nginx)
+
+```nginx
+upstream llamafarm {
+    server 127.0.0.1:8000;
+}
+
+server {
+    listen 443 ssl;
+    server_name api.yourcompany.com;
+
+    ssl_certificate /etc/ssl/certs/api.yourcompany.com.crt;
+    ssl_certificate_key /etc/ssl/private/api.yourcompany.com.key;
+
+    location / {
+        proxy_pass http://llamafarm;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # For streaming responses
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}
+```
+
+## Scaling Considerations
+
+- **Multiple instances**: Run multiple LlamaFarm instances behind a load balancer for horizontal scaling.
+- **External model providers**: Use vLLM, Together, or OpenAI for model inference to offload compute.
+- **Managed vector stores**: Swap `ChromaStore` for Qdrant Cloud, Pinecone, or another managed backend for larger deployments.
+- **Shared storage**: Use NFS or object storage for `LF_DATA_DIR` when running multiple instances.
+
+## Health Checks
+
+LlamaFarm provides health endpoints for monitoring:
 
 ```bash
-# Terminal 1 – API
-cd server
-uv sync
-uv run uvicorn server.main:app --reload
+# Full health check
+curl http://localhost:8000/health
 
-# Terminal 2 – RAG worker
-cd rag
-uv sync
-uv run python cli.py worker
+# Liveness probe (for orchestrators)
+curl http://localhost:8000/health/liveness
 ```
-
-Then run CLI commands against the default server at `http://localhost:8000`.
-
-## Production Checklist
-
-- **Environment variables**: store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
-- **Process management**: use process supervisors (systemd, PM2, Docker Compose) to keep server and Celery workers running.
-- **Workers**: size Celery workers based on ingestion load; large PDFs can take minutes.
-- **Observability**: enable logging and monitoring around ingestion jobs (out-of-scope for this quick guide, but recommended).
-
-## Docker Compose (Example)
-
-```yaml
-docker-compose.yml
-version: "3.8"
-services:
-  server:
-    build: ./server
-    environment:
-      - LLAMAFARM_CONFIG=/app/llamafarm.yaml
-      - RUNTIME_API_KEY=${RUNTIME_API_KEY}
-    volumes:
-      - ./llamafarm.yaml:/app/llamafarm.yaml
-    ports:
-      - "8000:8000"
-  rag-worker:
-    build: ./rag
-    environment:
-      - LLAMAFARM_CONFIG=/app/llamafarm.yaml
-    volumes:
-      - ./llamafarm.yaml:/app/llamafarm.yaml
-```
-
-Adjust to mount datasets, persistence layers, or external vector stores as needed.
-
-## Scaling Beyond Local
-
-- **vLLM / Hosted runtimes** – run models on separate infrastructure; update `runtime.base_url` and `api_key`.
-- **Managed vector stores** – swap `ChromaStore` for Qdrant cloud or another backend you register.
-- **Multiple workers** – run additional Celery workers to parallelize ingestion.
-- **Container orchestration** – convert the Docker Compose example to Kubernetes or ECS, ensuring environment variables and secrets propagate.
-
-## Tests Before Release
-
-- `uv run --group test python -m pytest` (server)
-- `go test ./...` (CLI)
-- `nx build docs` (documentation)
-- Smoke tests on ingestion/queries using `lf datasets` and `lf rag query`
 
 ## Resources
 
-- [Quickstart](../quickstart/index.md) – local installation steps.
-- [Configuration Guide](../configuration/index.md) – runtime/provider settings.
-- [Extending LlamaFarm](../extending/index.md) – adapt to your infrastructure.
+- [Quickstart](../quickstart/index.md) – Local installation steps
+- [Configuration Guide](../configuration/index.md) – Runtime/provider settings
+- [Desktop App](../desktop-app/index.md) – Bundled application
+- [Extending LlamaFarm](../extending/index.md) – Adapt to your infrastructure

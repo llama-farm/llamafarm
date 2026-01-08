@@ -1,7 +1,22 @@
 from typing import Literal
 
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from pydantic import BaseModel
+
+
+class FunctionCall(BaseModel):
+    """Function call details within a tool call."""
+
+    name: str
+    arguments: str  # JSON string of arguments
+
+
+class ToolCall(BaseModel):
+    """A tool call made by the assistant."""
+
+    id: str
+    type: Literal["function"] = "function"
+    function: FunctionCall
 
 
 class ChatCompletionRequest(BaseModel):
@@ -20,6 +35,10 @@ class ChatCompletionRequest(BaseModel):
     n_ctx: int | None = None  # Context window size for GGUF models
     extra_body: dict | None = None
 
+    # Tool/function calling parameters
+    tools: list[ChatCompletionToolParam] | None = None
+    tool_choice: str | dict | None = None  # "auto", "none", "required", or specific tool
+
     # Thinking/reasoning model parameters (Ollama-compatible)
     # Controls whether thinking models show their reasoning process
     think: bool | None = None  # None = model default, True = enable, False = disable
@@ -27,12 +46,29 @@ class ChatCompletionRequest(BaseModel):
     # When reached, model is nudged to close </think> and provide answer
     thinking_budget: int | None = None
 
+    # Context management parameters
+    # Whether to automatically truncate messages if context is exceeded
+    auto_truncate: bool | None = True
+    # Truncation strategy: "sliding_window", "keep_system", "middle_out", "summarize"
+    truncation_strategy: str | None = None
+
 
 class ThinkingContent(BaseModel):
     """Thinking/reasoning content from a thinking model."""
 
     content: str  # The raw thinking content (without <think> tags)
     tokens: int | None = None  # Number of tokens used for thinking
+
+
+class ContextUsageInfo(BaseModel):
+    """Context window usage information."""
+
+    total_context: int  # Total context window size in tokens
+    prompt_tokens: int  # Tokens used by the prompt (input)
+    available_for_completion: int  # Remaining tokens for output
+    truncated: bool = False  # Whether truncation was applied
+    truncated_messages: int = 0  # Number of messages removed
+    strategy_used: str | None = None  # Truncation strategy used (if any)
 
 
 class ChatCompletionResponse(BaseModel):
@@ -46,3 +82,5 @@ class ChatCompletionResponse(BaseModel):
     usage: dict
     # Ollama-compatible: separate thinking from content
     thinking: ThinkingContent | None = None
+    # Context usage information (extension field)
+    x_context_usage: ContextUsageInfo | None = None

@@ -1,0 +1,76 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "llamafarm-llama",
+  "projectType": "library",
+  "sourceRoot": "packages/llamafarm-llama/src",
+  "targets": {
+    "setup": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python scripts/download_binary.py",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "setup:cpu": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python scripts/download_binary.py --backend cpu",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "setup:cuda": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python scripts/download_binary.py --backend cuda12",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "setup:metal": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python scripts/download_binary.py --backend metal",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "setup:vulkan": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python scripts/download_binary.py --backend vulkan",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "info": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python scripts/download_binary.py --info",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "list-platforms": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python scripts/download_binary.py --list-platforms",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "sync": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv sync",
+        "cwd": "packages/llamafarm-llama"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run pytest -v",
+        "cwd": "packages/llamafarm-llama"
+      }
+    }
+  },
+  "tags": [
+    "package",
+    "python",
+    "llama-cpp"
+  ]
+}
