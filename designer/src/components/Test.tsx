@@ -19,11 +19,11 @@ const Test = () => {
   const location = useLocation()
   const { openPackageModal } = usePackageModal()
 
-  // Model type for Test page: 'inference' (default), 'anomaly', or 'classifier'
-  const [modelType, setModelType] = useState<'inference' | 'anomaly' | 'classifier'>(() => {
+  // Model type for Test page: 'inference' (default), 'anomaly', 'classifier', or 'document_scanning'
+  const [modelType, setModelType] = useState<'inference' | 'anomaly' | 'classifier' | 'document_scanning'>(() => {
     if (typeof window === 'undefined') return 'inference'
     const stored = localStorage.getItem('lf_test_modelType')
-    if (stored === 'anomaly' || stored === 'classifier') return stored
+    if (stored === 'anomaly' || stored === 'classifier' || stored === 'document_scanning') return stored
     return 'inference'
   })
 

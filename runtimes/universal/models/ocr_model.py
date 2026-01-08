@@ -81,11 +81,9 @@ class OCRModel(BaseModel):
         # Backend-specific components
         self._reader = None  # EasyOCR reader
         self._ocr = None  # PaddleOCR instance
-        # Surya components (detection + recognition models and processors)
-        self._surya_det_model = None
-        self._surya_det_processor = None
-        self._surya_rec_model = None
-        self._surya_rec_processor = None
+        # Surya components (new API uses predictor classes)
+        self._surya_det_predictor = None
+        self._surya_rec_predictor = None
 
     async def load(self) -> None:
         """Load the OCR model based on selected backend."""
@@ -105,31 +103,20 @@ class OCRModel(BaseModel):
         logger.info(f"OCR model loaded: {self.backend}")
 
     async def _load_surya(self) -> None:
-        """Load Surya OCR model."""
+        """Load Surya OCR model (v0.17+ API with predictor classes)."""
         try:
-            from surya.model.detection.model import (
-                load_model as load_det_model,
-            )
-            from surya.model.detection.model import (
-                load_processor as load_det_processor,
-            )
-            from surya.model.recognition.model import load_model as load_rec_model
-            from surya.model.recognition.processor import (
-                load_processor as load_rec_processor,
-            )
+            from surya.detection import DetectionPredictor
+            from surya.recognition import FoundationPredictor, RecognitionPredictor
 
-            # Load detection model
-            self._surya_det_model = load_det_model()
-            self._surya_det_processor = load_det_processor()
+            # Map device string to surya-compatible format
+            device = self.device if self.device != "cuda" else "cuda"
 
-            # Load recognition model
-            self._surya_rec_model = load_rec_model()
-            self._surya_rec_processor = load_rec_processor()
+            # Load detection predictor
+            self._surya_det_predictor = DetectionPredictor(device=device)
 
-            # Move to device if not CPU
-            if self.device != "cpu":
-                self._surya_det_model = self._surya_det_model.to(self.device)
-                self._surya_rec_model = self._surya_rec_model.to(self.device)
+            # Load recognition predictor (requires foundation predictor)
+            foundation = FoundationPredictor(device=device)
+            self._surya_rec_predictor = RecognitionPredictor(foundation)
 
         except ImportError as e:
             raise ImportError(
@@ -251,7 +238,7 @@ class OCRModel(BaseModel):
     async def _recognize_surya(
         self, image: Image.Image, return_boxes: bool, detect_layout: bool = True
     ) -> OCRResult:
-        """Run Surya OCR.
+        """Run Surya OCR (v0.17+ API with predictor classes).
 
         Args:
             image: PIL Image to process
@@ -259,46 +246,44 @@ class OCRModel(BaseModel):
             detect_layout: If True, run text detection first to find text regions.
                 If False, treat entire image as single text block (faster but less accurate).
         """
-        from surya.recognition import batch_recognition
+        import asyncio
 
-        if detect_layout:
-            from surya.detection import batch_text_detection
-
-            # Detect text regions first
-            det_results = batch_text_detection(
-                [image], self._surya_det_model, self._surya_det_processor
+        # Run detection and recognition in thread pool to avoid blocking
+        def run_surya():
+            # New Surya API: pass det_predictor as kwarg, it handles detection internally
+            rec_results = self._surya_rec_predictor(
+                [image],
+                det_predictor=self._surya_det_predictor if detect_layout else None,
             )
-            detection_result = det_results[0]
-        else:
-            # Skip detection - pass None to recognition (processes whole image)
-            detection_result = None
+            return rec_results
 
-        # Recognize text in detected regions (or whole image if no detection)
-        rec_results = batch_recognition(
-            [image],
-            [detection_result] if detection_result else [None],
-            self._surya_rec_model,
-            self._surya_rec_processor,
-        )
+        rec_results = await asyncio.to_thread(run_surya)
 
-        # Extract results
+        # Extract results from the first image
         text_lines = []
         boxes = []
         confidences = []
 
-        for line in rec_results[0].text_lines:
+        result = rec_results[0]
+        for line in result.text_lines:
             text_lines.append(line.text)
-            confidences.append(line.confidence)
+            confidences.append(line.confidence if hasattr(line, "confidence") else 0.9)
 
-            if return_boxes and line.bbox:
+            if return_boxes and hasattr(line, "polygon") and line.polygon:
+                # Get bounding box from polygon
+                poly = line.polygon
+                x_coords = [p[0] for p in poly]
+                y_coords = [p[1] for p in poly]
                 boxes.append(
                     BoundingBox(
-                        x1=line.bbox[0],
-                        y1=line.bbox[1],
-                        x2=line.bbox[2],
-                        y2=line.bbox[3],
+                        x1=min(x_coords),
+                        y1=min(y_coords),
+                        x2=max(x_coords),
+                        y2=max(y_coords),
                         text=line.text,
-                        confidence=line.confidence,
+                        confidence=line.confidence
+                        if hasattr(line, "confidence")
+                        else 0.9,
                     )
                 )
 
@@ -524,10 +509,8 @@ class OCRModel(BaseModel):
         # Clear backend-specific components
         self._reader = None
         self._ocr = None
-        self._surya_det_model = None
-        self._surya_det_processor = None
-        self._surya_rec_model = None
-        self._surya_rec_processor = None
+        self._surya_det_predictor = None
+        self._surya_rec_predictor = None
 
         # Call parent unload for GPU cleanup
         await super().unload()

@@ -299,6 +299,34 @@ export function useTrainAndSaveAnomaly() {
 }
 
 // =============================================================================
+// Document Scanning Mutations
+// =============================================================================
+
+/**
+ * Scan a document (image or PDF) and extract text using OCR
+ */
+export function useScanDocument() {
+  return useMutation({
+    mutationFn: ({
+      file,
+      model,
+      languages,
+      returnBoxes,
+    }: {
+      file: File
+      model?: string
+      languages?: string
+      returnBoxes?: boolean
+    }) =>
+      mlService.scanDocument(file, {
+        model,
+        languages,
+        return_boxes: returnBoxes,
+      }),
+  })
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -325,4 +353,6 @@ export default {
   useLoadAnomaly,
   useDeleteAnomalyModel,
   useTrainAndSaveAnomaly,
+  // Document Scanning mutations
+  useScanDocument,
 }

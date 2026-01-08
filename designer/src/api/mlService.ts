@@ -25,6 +25,8 @@ import type {
   AnomalyLoadRequest,
   AnomalyLoadResponse,
   AnomalyListModelsResponse,
+  // Document Scanning types
+  DocumentScanningResponse,
   // Shared types
   MLHealthResponse,
   MLDeleteResponse,
@@ -208,6 +210,42 @@ export async function deleteAnomalyModel(
 }
 
 // =============================================================================
+// Document Scanning Endpoints
+// =============================================================================
+
+/**
+ * Scan a document (image or PDF) and extract text using OCR
+ * Uses the existing /v1/vision/ocr endpoint
+ */
+export async function scanDocument(
+  file: File,
+  options: {
+    model?: string
+    languages?: string
+    return_boxes?: boolean
+  } = {}
+): Promise<DocumentScanningResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('model', options.model || 'surya')
+  formData.append('languages', options.languages || 'en')
+  formData.append('return_boxes', String(options.return_boxes || false))
+
+  const response = await apiClient.post<DocumentScanningResponse>(
+    '/vision/ocr',
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      // OCR can take a while, especially first time when loading models
+      timeout: 300000, // 5 minutes
+    }
+  )
+  return response.data
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -229,4 +267,6 @@ export default {
   loadAnomaly,
   listAnomalyModels,
   deleteAnomalyModel,
+  // Document Scanning
+  scanDocument,
 }

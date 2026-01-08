@@ -474,3 +474,72 @@ export function generateUniqueModelName(
 
   return `${nameRoot}-${num}`
 }
+
+// =============================================================================
+// Document Scanning Types
+// =============================================================================
+
+export type DocumentScanningBackend = 'surya' | 'easyocr' | 'paddleocr' | 'tesseract'
+
+export const DOCUMENT_SCANNING_BACKEND_DISPLAY: Record<
+  DocumentScanningBackend,
+  { label: string; description: string }
+> = {
+  surya: {
+    label: 'Surya',
+    description: 'Best accuracy, transformer-based, layout-aware (recommended)',
+  },
+  easyocr: {
+    label: 'EasyOCR',
+    description: 'Good multilingual support (80+ languages)',
+  },
+  paddleocr: {
+    label: 'PaddleOCR',
+    description: 'Fast, optimized for production, excellent for Asian languages',
+  },
+  tesseract: {
+    label: 'Tesseract',
+    description: 'Classic OCR engine, CPU-only, widely deployed',
+  },
+}
+
+export const DOCUMENT_SCANNING_LANGUAGES: Array<{ code: string; label: string }> = [
+  { code: 'en', label: 'English' },
+  { code: 'de', label: 'German' },
+  { code: 'fr', label: 'French' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'it', label: 'Italian' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'ru', label: 'Russian' },
+]
+
+export interface DocumentScanningResultItem {
+  index: number
+  text: string
+  confidence: number
+}
+
+export interface DocumentScanningResponse {
+  object: string // "list"
+  data: DocumentScanningResultItem[]
+  model: string
+  usage: {
+    images_processed: number
+  }
+}
+
+export interface DocumentScanningHistoryEntry {
+  id: string
+  timestamp: Date
+  fileName: string
+  pageCount: number
+  avgConfidence: number
+  previewText: string
+  backend: string
+  results: DocumentScanningResultItem[]
+  error?: string
+}

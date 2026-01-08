@@ -14,13 +14,20 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
-import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier } from '../../hooks/useMLModels'
+import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument } from '../../hooks/useMLModels'
 import { Selector } from '../ui/selector'
+import {
+  DOCUMENT_SCANNING_BACKEND_DISPLAY,
+  DOCUMENT_SCANNING_LANGUAGES,
+  type DocumentScanningBackend,
+  type DocumentScanningResultItem,
+  type DocumentScanningHistoryEntry,
+} from '../../types/ml'
 
 export interface TestChatProps {
   // Mode selection
-  modelType: 'inference' | 'anomaly' | 'classifier'
-  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier') => void
+  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning'
+  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning') => void
   // Existing props
   showReferences: boolean
   allowRanking: boolean
@@ -681,6 +688,292 @@ function ClassifierHistoryItem({
   )
 }
 
+// Document Scanning Result Display
+function DocumentScanningResultDisplay({
+  results,
+  error,
+  isLoading,
+  fileName,
+}: {
+  results: DocumentScanningResultItem[] | null
+  error: string | null
+  isLoading: boolean
+  fileName: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const [selectedPage, setSelectedPage] = useState(0)
+
+  const handleCopyText = useCallback(() => {
+    if (!results) return
+    const fullText = results.map(r => r.text).join('\n\n--- Page Break ---\n\n')
+    navigator.clipboard.writeText(fullText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [results])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Extracting text...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">
+            Scanning Error
+          </div>
+          <div className="mt-2 text-sm text-amber-400">
+            {error}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!results || results.length === 0) {
+    return null
+  }
+
+  const currentResult = results[selectedPage] || results[0]
+  const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length
+
+  return (
+    <div className="flex flex-col h-full p-4">
+      {/* Header with file info and actions */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+        <div className="flex items-center gap-3">
+          <FontIcon type="data" className="w-5 h-5 text-blue-400" />
+          <div>
+            <div className="text-sm font-medium">{fileName}</div>
+            <div className="text-xs text-muted-foreground">
+              {results.length} page{results.length > 1 ? 's' : ''} • {(avgConfidence * 100).toFixed(1)}% avg confidence
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={handleCopyText}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-secondary/80 hover:bg-secondary"
+        >
+          <FontIcon type={copied ? 'checkmark-filled' : 'copy'} className="w-4 h-4" />
+          {copied ? 'Copied!' : 'Copy All'}
+        </button>
+      </div>
+
+      {/* Page selector for multi-page documents */}
+      {results.length > 1 && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-muted-foreground">Page:</span>
+          <div className="flex gap-1 flex-wrap">
+            {results.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setSelectedPage(idx)}
+                className={`px-2 py-0.5 text-xs rounded ${
+                  idx === selectedPage
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted hover:bg-muted/80'
+                }`}
+              >
+                {idx + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Text content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-muted-foreground">
+              Page {selectedPage + 1} • {(currentResult.confidence * 100).toFixed(1)}% confidence
+            </span>
+          </div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
+            {currentResult.text || '(No text detected)'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Helper to validate scan files
+function isValidScanFile(file: File): boolean {
+  const validExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif']
+  const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+  return validExtensions.includes(ext)
+}
+
+// Document Scanning Container with always-active drop zone
+function DocumentScanningContainer({
+  onFileSelect,
+  disabled,
+  children,
+}: {
+  onFileSelect: (file: File) => void
+  disabled: boolean
+  children: React.ReactNode
+}) {
+  const [isDragging, setIsDragging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (!disabled) setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    // Only set to false if leaving the container entirely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (disabled) return
+
+    const file = e.dataTransfer.files[0]
+    if (file && isValidScanFile(file)) {
+      onFileSelect(file)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && isValidScanFile(file)) {
+      onFileSelect(file)
+    }
+    // Reset input so same file can be selected again
+    e.target.value = ''
+  }
+
+  return (
+    <div
+      className="relative flex-1 overflow-y-auto flex flex-col"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Hidden file input for click-to-browse */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tiff,.tif"
+        onChange={handleFileChange}
+        className="hidden"
+        disabled={disabled}
+      />
+
+      {/* Main content (results, loading, or empty state) */}
+      {children}
+
+      {/* Drop overlay - appears when dragging */}
+      {isDragging && !disabled && (
+        <div className="absolute inset-0 z-10 bg-background/90 backdrop-blur-sm flex items-center justify-center">
+          <div className="rounded-xl border-2 border-dashed border-primary bg-primary/10 p-8 text-center">
+            <FontIcon type="upload" className="w-12 h-12 text-primary mx-auto mb-3" />
+            <div className="text-sm font-medium text-foreground">Drop file to scan</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              PDF, PNG, JPG, GIF, WebP, BMP, TIFF
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Document Scanning Empty State (shown when no file selected)
+function DocumentScanningEmptyState({
+  onBrowseClick,
+  disabled,
+}: {
+  onBrowseClick: () => void
+  disabled: boolean
+}) {
+  return (
+    <div className="flex-1 p-4 flex items-center justify-center">
+      <div
+        onClick={() => !disabled && onBrowseClick()}
+        className={`
+          w-full max-w-md rounded-xl border-2 border-dashed transition-colors cursor-pointer
+          flex flex-col items-center justify-center gap-3 p-8
+          border-border hover:border-primary/50 hover:bg-muted/20
+          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+        `}
+      >
+        <FontIcon type="upload" className="w-10 h-10 text-muted-foreground" />
+        <div className="text-center">
+          <div className="text-sm font-medium">Drop file here or click to browse</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Supports PDF, PNG, JPG, GIF, WebP, BMP, TIFF
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Sidebar history item for document scanning
+function DocumentScanningHistoryItem({
+  item,
+  onSelect,
+}: {
+  item: DocumentScanningHistoryEntry
+  onSelect: () => void
+}) {
+  const timeStr = item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const isError = !!item.error
+
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full text-left px-2 py-1.5 rounded-md border border-border/50 hover:bg-muted/40 hover:border-border transition-colors"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FontIcon type="data" className="w-3.5 h-3.5 text-blue-400" />
+          <span className="text-xs font-medium truncate max-w-[100px]">{item.fileName}</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+      </div>
+      <div className="flex items-center gap-2 mt-1">
+        <Badge className={`text-[10px] px-1.5 py-0 ${
+          isError
+            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+            : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+        }`}>
+          {isError ? 'Error' : `${item.pageCount} pg`}
+        </Badge>
+        {!isError && (
+          <span className="text-[10px] text-muted-foreground">
+            {(item.avgConfidence * 100).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      <div className="text-[10px] text-muted-foreground truncate mt-1">
+        {isError ? item.error : item.previewText}
+      </div>
+    </button>
+  )
+}
+
 export default function TestChat({
   modelType,
   onModelTypeChange,
@@ -904,6 +1197,59 @@ export default function TestChat({
   }>>([])
   const [showClassifierHistory, setShowClassifierHistory] = useState(true)
   const classifierHistoryScrollRef = useRef<HTMLDivElement>(null)
+
+  // ============================================================================
+  // Document Scanning State & Hooks
+  // ============================================================================
+
+  const scanDocumentMutation = useScanDocument()
+
+  // Document scanning backend selection (persisted)
+  const [selectedScanBackend, setSelectedScanBackend] = useState<DocumentScanningBackend>(() => {
+    if (typeof window === 'undefined') return 'surya'
+    const stored = localStorage.getItem('lf_test_scanBackend')
+    if (stored && ['surya', 'easyocr', 'paddleocr', 'tesseract'].includes(stored)) {
+      return stored as DocumentScanningBackend
+    }
+    return 'surya'
+  })
+
+  // Document scanning language selection (persisted)
+  const [selectedScanLanguage, setSelectedScanLanguage] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'en'
+    return localStorage.getItem('lf_test_scanLanguage') || 'en'
+  })
+
+  // Persist document scanning settings
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_scanBackend', selectedScanBackend)
+    }
+  }, [selectedScanBackend])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_scanLanguage', selectedScanLanguage)
+    }
+  }, [selectedScanLanguage])
+
+  // Document scanning file state
+  const [scanFile, setScanFile] = useState<File | null>(null)
+
+  // Document scanning results state
+  const [scanResults, setScanResults] = useState<DocumentScanningResultItem[] | null>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
+
+  // Document scanning history
+  const [scanHistory, setScanHistory] = useState<DocumentScanningHistoryEntry[]>([])
+  const [showScanHistory, setShowScanHistory] = useState(true)
+  const scanHistoryScrollRef = useRef<HTMLDivElement>(null)
+
+  // Track if user has completed a scan before (for first-time message)
+  const [hasScannedBefore, setHasScannedBefore] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('lf_scan_completed') === 'true'
+  })
 
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
@@ -2109,6 +2455,80 @@ export default function TestChat({
     setLastClassifierInput('')
   }, [])
 
+  // ============================================================================
+  // Document Scanning Handlers
+  // ============================================================================
+
+  // Auto-scan when file is selected
+  const handleScanFileSelect = useCallback(async (file: File) => {
+    setScanFile(file)
+    setScanResults(null)
+    setScanError(null)
+
+    // Automatically start scanning
+    try {
+      const result = await scanDocumentMutation.mutateAsync({
+        file,
+        model: selectedScanBackend,
+        languages: selectedScanLanguage,
+        returnBoxes: false,
+      })
+
+      if (result.data) {
+        setScanResults(result.data)
+
+        // Mark that user has completed a scan (for first-time message)
+        if (!hasScannedBefore) {
+          setHasScannedBefore(true)
+          localStorage.setItem('lf_scan_completed', 'true')
+        }
+
+        // Add to history
+        const avgConfidence = result.data.reduce((sum, r) => sum + r.confidence, 0) / result.data.length
+        const previewText = result.data[0]?.text?.substring(0, 100) || ''
+
+        setScanHistory(prev => [{
+          id: `scan-${Date.now()}`,
+          timestamp: new Date(),
+          fileName: file.name,
+          pageCount: result.data.length,
+          avgConfidence,
+          previewText,
+          backend: selectedScanBackend,
+          results: result.data,
+        }, ...prev].slice(0, 50))
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Document scanning failed'
+      setScanError(errorMsg)
+
+      // Add error to history
+      setScanHistory(prev => [{
+        id: `scan-${Date.now()}`,
+        timestamp: new Date(),
+        fileName: file.name,
+        pageCount: 0,
+        avgConfidence: 0,
+        previewText: '',
+        backend: selectedScanBackend,
+        results: [],
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
+    }
+  }, [selectedScanBackend, selectedScanLanguage, scanDocumentMutation, hasScannedBefore])
+
+  const clearScanResults = useCallback(() => {
+    setScanResults(null)
+    setScanError(null)
+    setScanFile(null)
+  }, [])
+
+  const handleScanHistorySelect = useCallback((historyItem: DocumentScanningHistoryEntry) => {
+    // Restore results from history
+    setScanResults(historyItem.results)
+    setScanError(historyItem.error || null)
+  }, [])
+
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
@@ -2148,6 +2568,9 @@ export default function TestChat({
               } else if (modelType === 'classifier') {
                 // Classifier mode: only clear results, NOT mode selection or model dropdown
                 clearClassifierResults()
+              } else if (modelType === 'document_scanning') {
+                // Document scanning mode: clear results and file
+                clearScanResults()
               }
             }}
             disabled={
@@ -2155,7 +2578,9 @@ export default function TestChat({
                 ? (isClearing || !hasMessages)
                 : modelType === 'anomaly'
                   ? (!anomalyResult && !anomalyError)
-                  : (!classifierResult && !classifierError)
+                  : modelType === 'classifier'
+                    ? (!classifierResult && !classifierError)
+                    : (!scanResults && !scanError && !scanFile)
             }
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -2171,8 +2596,9 @@ export default function TestChat({
               { value: 'inference', label: 'Inference' },
               { value: 'anomaly', label: 'Anomaly Detection' },
               { value: 'classifier', label: 'Classifier' },
+              { value: 'document_scanning', label: 'Document Scanning' },
             ]}
-            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier')}
+            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning')}
             label="Model Type"
             className="w-[200px]"
           />
@@ -2273,6 +2699,33 @@ export default function TestChat({
                   <span>{selectedClassifierModelInfo.name}</span>
                 </div>
               )}
+            </>
+          )}
+
+          {/* Document Scanning-specific selectors */}
+          {modelType === 'document_scanning' && (
+            <>
+              <Selector
+                value={selectedScanBackend}
+                options={Object.entries(DOCUMENT_SCANNING_BACKEND_DISPLAY).map(([value, { label, description }]) => ({
+                  value,
+                  label,
+                  description,
+                }))}
+                onChange={(v) => setSelectedScanBackend(v as DocumentScanningBackend)}
+                label="Backend"
+                className="min-w-[140px]"
+              />
+              <Selector
+                value={selectedScanLanguage}
+                options={DOCUMENT_SCANNING_LANGUAGES.map(lang => ({
+                  value: lang.code,
+                  label: lang.label,
+                }))}
+                onChange={setSelectedScanLanguage}
+                label="Language"
+                className="min-w-[100px]"
+              />
             </>
           )}
         </div>
@@ -2425,7 +2878,7 @@ export default function TestChat({
               </div>
             )}
           </div>
-        ) : (
+        ) : modelType === 'classifier' ? (
           /* Classifier: Result display with optional history sidebar */
           <div className="absolute inset-0 flex overflow-hidden">
             {/* Main content area */}
@@ -2493,6 +2946,86 @@ export default function TestChat({
                   <div className="flex flex-col h-full items-center pt-2">
                     <button
                       onClick={() => setShowClassifierHistory(true)}
+                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
+                      title="Show history"
+                    >
+                      <FontIcon type="recently-viewed" className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Document Scanning: File upload and result display with optional history sidebar */
+          <div className="absolute inset-0 flex overflow-hidden">
+            {/* Main content area - always accepts file drops */}
+            <DocumentScanningContainer
+              onFileSelect={handleScanFileSelect}
+              disabled={scanDocumentMutation.isPending}
+            >
+              {scanResults || scanError || scanDocumentMutation.isPending ? (
+                <DocumentScanningResultDisplay
+                  results={scanResults}
+                  error={scanError}
+                  isLoading={scanDocumentMutation.isPending}
+                  fileName={scanFile?.name || ''}
+                />
+              ) : (
+                <DocumentScanningEmptyState
+                  onBrowseClick={() => {
+                    // Trigger file input click - need to access the input in the container
+                    const input = document.querySelector('input[type="file"][accept*=".pdf"]') as HTMLInputElement
+                    input?.click()
+                  }}
+                  disabled={scanDocumentMutation.isPending}
+                />
+              )}
+            </DocumentScanningContainer>
+
+            {/* History sidebar - right side, collapsible */}
+            {scanHistory.length > 0 && (
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showScanHistory ? 'w-[40%]' : 'w-8'}`}>
+                {showScanHistory ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        History
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setScanHistory([])}
+                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Clear history"
+                        >
+                          <FontIcon type="trashcan" className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setShowScanHistory(false)}
+                          className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Close history"
+                        >
+                          <FontIcon type="close" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      ref={scanHistoryScrollRef}
+                      className="flex-1 overflow-y-auto p-2 space-y-2"
+                    >
+                      {scanHistory.map(item => (
+                        <DocumentScanningHistoryItem
+                          key={item.id}
+                          item={item}
+                          onSelect={() => handleScanHistorySelect(item)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full items-center pt-2">
+                    <button
+                      onClick={() => setShowScanHistory(true)}
                       className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
                       title="Show history"
                     >
@@ -2584,7 +3117,7 @@ export default function TestChat({
               />
             </div>
           </>
-        ) : (
+        ) : modelType === 'classifier' ? (
           /* Classifier: Text input */
           <>
             {classifierError && (
@@ -2623,6 +3156,51 @@ export default function TestChat({
                 className={`w-8 h-8 self-end ${!selectedClassifierModel || !classifierInput.trim() || sortedClassifierModels.length === 0 || predictClassifierMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
                 handleOnClick={handleClassify}
               />
+            </div>
+          </>
+        ) : (
+          /* Document Scanning: Status info (auto-scans on drop) */
+          <>
+            {scanError && (
+              <div className="text-xs text-destructive mb-2">{scanError}</div>
+            )}
+            <div className="flex items-center gap-3 min-h-[40px]">
+              {scanDocumentMutation.isPending ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <FontIcon type="loading" className="w-4 h-4 animate-spin" />
+                    <span>Scanning {scanFile?.name}...</span>
+                  </div>
+                  {!hasScannedBefore && (
+                    <span className="text-xs text-muted-foreground/70">
+                      First scan loads OCR models and may take a minute
+                    </span>
+                  )}
+                </div>
+              ) : scanFile ? (
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <FontIcon type="data" className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm truncate">{scanFile.name}</span>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    ({(scanFile.size / 1024).toFixed(1)} KB)
+                  </span>
+                  <button
+                    onClick={() => {
+                      setScanFile(null)
+                      setScanResults(null)
+                      setScanError(null)
+                    }}
+                    className="text-muted-foreground hover:text-foreground p-1"
+                    title="Remove file"
+                  >
+                    <FontIcon type="close" className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  Drop an image or PDF above to scan
+                </span>
+              )}
             </div>
           </>
         )}
