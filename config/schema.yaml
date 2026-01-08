@@ -74,6 +74,10 @@ properties:
         name:
           type: string
           description: Dataset name
+        auto_process:
+          type: boolean
+          description: Whether to automatically process uploads into the vector store
+          default: true
         data_processing_strategy:
           type: string
           description: RAG data processing strategy to use for the dataset

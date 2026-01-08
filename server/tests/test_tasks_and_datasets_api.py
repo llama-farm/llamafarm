@@ -41,6 +41,124 @@ def test_dataset_actions_invalid_type_returns_400():
     assert resp.status_code == 422
 
 
+def test_dataset_upload_auto_process_defaults_true(mocker):
+    launch = SimpleNamespace(task_id="task-xyz", message="Dataset ingestion started")
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.get_dataset_config",
+        return_value=SimpleNamespace(auto_process=True),
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.add_file_to_dataset",
+        return_value=(True, SimpleNamespace(hash="abc123", original_file_name="doc.pdf")),
+    )
+    start_ingest = mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.start_ingestion_for_hashes",
+        return_value=launch,
+    )
+
+    client = _client()
+    resp = client.post(
+        "/v1/projects/ns1/proj1/datasets/ds1/data",
+        files={"file": ("doc.pdf", b"hello")},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["processed"] is True
+    assert data["task_id"] == "task-xyz"
+    assert data["status"] == "processing"
+    start_ingest.assert_called_once()
+
+
+def test_dataset_upload_skipped_duplicate_no_processing(mocker):
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.get_dataset_config",
+        return_value=SimpleNamespace(auto_process=True),
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.add_file_to_dataset",
+        return_value=(False, SimpleNamespace(hash="abc123", original_file_name="doc.pdf")),
+    )
+    start_ingest = mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.start_ingestion_for_hashes",
+    )
+
+    client = _client()
+    resp = client.post(
+        "/v1/projects/ns1/proj1/datasets/ds1/data",
+        files={"file": ("doc.pdf", b"hello")},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["processed"] is False
+    assert data["skipped"] is True
+    assert data["status"] == "skipped"
+    start_ingest.assert_not_called()
+
+
+def test_dataset_bulk_upload_defaults_no_processing(mocker):
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.get_dataset_config",
+        return_value=SimpleNamespace(auto_process=True),
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.add_file_to_dataset",
+        return_value=(True, SimpleNamespace(hash="abc123", original_file_name="doc.pdf")),
+    )
+    start_ingest = mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.start_ingestion_for_hashes",
+    )
+
+    client = _client()
+    resp = client.post(
+        "/v1/projects/ns1/proj1/datasets/ds1/data/bulk",
+        files=[
+            ("files", ("doc1.pdf", b"hello")),
+            ("files", ("doc2.pdf", b"world")),
+        ],
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["uploaded"] == 2
+    assert data["status"] == "uploaded"
+    assert data.get("task_id") is None
+    start_ingest.assert_not_called()
+
+
+def test_dataset_bulk_upload_with_auto_process_true(mocker):
+    launch = SimpleNamespace(task_id="task-xyz", message="Dataset ingestion started")
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.get_dataset_config",
+        return_value=SimpleNamespace(auto_process=False),
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.add_file_to_dataset",
+        return_value=(True, SimpleNamespace(hash="abc123", original_file_name="doc.pdf")),
+    )
+    start_ingest = mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.start_ingestion_for_hashes",
+        return_value=launch,
+    )
+
+    client = _client()
+    resp = client.post(
+        "/v1/projects/ns1/proj1/datasets/ds1/data/bulk?auto_process=true",
+        files=[
+            ("files", ("doc1.pdf", b"hello")),
+            ("files", ("doc2.pdf", b"world")),
+        ],
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["uploaded"] == 2
+    assert data["status"] == "processing"
+    assert data["task_id"] == "task-xyz"
+    start_ingest.assert_called_once()
+
+
 class _FakeAsyncResult:
     def __init__(
         self, state: str, info=None, result=None, traceback: str | None = None

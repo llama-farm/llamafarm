@@ -94,8 +94,8 @@ rag:
    ```bash
    lf datasets create -s pdf_ingest -b main_db research-notes
    ```
-2. **Upload** files via `lf datasets upload` (supports globs and directories). The CLI stores file hashes for dedupe.
-3. **Process** documents with `lf datasets process research-notes`. The server schedules a Celery job; monitor progress in the CLI output and server logs.
+2. **Upload** files via `lf datasets upload` (supports globs and directories). Auto-processing runs by default; use `--no-process` or `--bulk` for batch uploads.
+3. **Process** documents with `lf datasets process research-notes` only when you skipped auto-processing. The server schedules a Celery job; monitor progress in the CLI output and server logs.
 4. **Query** with `lf rag query` to validate retrieval quality.
 
 ## Querying & Retrieval Strategies

@@ -1,12 +1,13 @@
 from enum import Enum
+import json
 
 from config.datamodel import Dataset
-from fastapi import APIRouter, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from api.routers.datasets._models import ListDatasetsResponse
 from core.logging import FastAPIStructLogger
-from services.dataset_service import DatasetService
+from services.dataset_service import DatasetIngestLaunchResult, DatasetService
 
 logger = FastAPIStructLogger()
 
@@ -225,6 +226,44 @@ class DatasetDataUploadResponse(BaseModel):
     skipped: bool = Field(
         default=False, description="Whether the file was skipped (duplicate)"
     )
+    task_id: str | None = Field(
+        default=None, description="Celery task ID if processing was started"
+    )
+    status: str | None = Field(
+        default=None,
+        description="Upload status (processing, uploaded, skipped, or error)",
+    )
+
+
+class BulkDatasetDataUploadResponse(BaseModel):
+    uploaded: int = Field(..., description="Number of files uploaded")
+    skipped: int = Field(default=0, description="Number of files skipped (duplicates)")
+    failed: int = Field(default=0, description="Number of files that failed to upload")
+    task_id: str | None = Field(
+        default=None, description="Celery task ID if processing was started"
+    )
+    status: str = Field(
+        default="uploaded",
+        description="Bulk upload status (processing when auto-process triggered)",
+    )
+
+
+def _parse_parser_overrides(raw_overrides: str | None):
+    if not raw_overrides:
+        return None
+    try:
+        parsed = json.loads(raw_overrides)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid parser_overrides JSON: {exc}",
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="parser_overrides must be a JSON object mapping parser type to config",
+        )
+    return parsed
 
 
 @router.post(
@@ -232,8 +271,7 @@ class DatasetDataUploadResponse(BaseModel):
     operation_id="dataset_data_upload",
     summary="Upload a file to the dataset",
     description=(
-        "Upload a file to the dataset (stores it but does NOT process into vector database. "
-        "Use the dataset actions endpoint with the 'process' action_type to process the file into the vector database)"
+        "Upload a file to the dataset. Processing is triggered automatically based on dataset configuration or the auto_process flag."
     ),
     responses={200: {"model": DatasetDataUploadResponse}},
 )
@@ -242,9 +280,26 @@ async def upload_data(
     project: str,
     dataset: str,
     file: UploadFile,
+    auto_process: bool | None = Query(
+        default=None,
+        description="Automatically process the file into the vector database. Defaults to dataset config (true if unspecified in config).",
+    ),
+    parser_overrides: str | None = Form(
+        default=None,
+        description="JSON object mapping parser type to override config, e.g. {'PDFParser_LlamaIndex': {'chunk_size': 1024}}",
+    ),
 ):
     """Upload a file to the dataset (stores it but does NOT process into vector database)"""
     logger.bind(namespace=namespace, project=project, dataset=dataset)
+
+    dataset_config = DatasetService.get_dataset_config(namespace, project, dataset)
+    dataset_auto_process = (
+        dataset_config.auto_process if dataset_config.auto_process is not None else True
+    )
+    effective_auto_process = (
+        auto_process if auto_process is not None else dataset_auto_process
+    )
+    parsed_overrides = _parse_parser_overrides(parser_overrides)
 
     was_added, metadata_file_content = await DatasetService.add_file_to_dataset(
         namespace=namespace,
@@ -253,26 +308,137 @@ async def upload_data(
         file=file,
     )
 
-    if was_added:
-        logger.info(
-            "File uploaded to dataset",
-            dataset=dataset,
-            filename=file.filename,
-            hash=metadata_file_content.hash,
-        )
-    else:
+    if not was_added:
         logger.info(
             "File skipped (duplicate)",
             dataset=dataset,
             filename=file.filename,
             hash=metadata_file_content.hash,
         )
+        return DatasetDataUploadResponse(
+            filename=file.filename,
+            hash=metadata_file_content.hash,
+            processed=False,
+            skipped=True,
+            status="skipped",
+        )
+
+    logger.info(
+        "File uploaded to dataset",
+        dataset=dataset,
+        filename=file.filename,
+        hash=metadata_file_content.hash,
+    )
+
+    launch: DatasetIngestLaunchResult | None = None
+    if effective_auto_process:
+        launch = DatasetService.start_ingestion_for_hashes(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hashes=[metadata_file_content.hash],
+            parser_overrides=parsed_overrides,
+        )
+        status = "processing"
+        processed = True
+    else:
+        status = "uploaded"
+        processed = False
 
     return DatasetDataUploadResponse(
         filename=file.filename,
         hash=metadata_file_content.hash,
-        processed=False,
-        skipped=not was_added,
+        processed=processed,
+        skipped=False,
+        task_id=launch.task_id if launch else None,
+        status=status,
+    )
+
+
+@router.post(
+    "/{dataset}/data/bulk",
+    operation_id="dataset_data_bulk_upload",
+    summary="Upload multiple files to the dataset",
+    description=(
+        "Bulk upload files to the dataset. Defaults to storing files without processing. "
+        "Set auto_process=true to process immediately."
+    ),
+    responses={200: {"model": BulkDatasetDataUploadResponse}},
+)
+async def upload_data_bulk(
+    namespace: str,
+    project: str,
+    dataset: str,
+    files: list[UploadFile] = File(...),
+    auto_process: bool | None = Query(
+        default=None,
+        description="Process all uploaded files immediately (default: false for bulk)",
+    ),
+    parser_overrides: str | None = Form(
+        default=None,
+        description="JSON object mapping parser type to override config",
+    ),
+):
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+    dataset_config = DatasetService.get_dataset_config(namespace, project, dataset)
+    parsed_overrides = _parse_parser_overrides(parser_overrides)
+
+    # Bulk defaults to not processing unless explicitly requested
+    dataset_auto_process = (
+        dataset_config.auto_process if dataset_config.auto_process is not None else True
+    )
+    effective_auto_process = auto_process if auto_process is not None else False
+    if auto_process is None and dataset_auto_process is False:
+        effective_auto_process = False
+
+    uploaded = 0
+    skipped = 0
+    failed = 0
+    added_hashes: list[str] = []
+
+    for file in files:
+        try:
+            was_added, metadata_file_content = await DatasetService.add_file_to_dataset(
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                file=file,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to upload file",
+                dataset=dataset,
+                filename=file.filename,
+                error=str(exc),
+            )
+            failed += 1
+            continue
+
+        if was_added:
+            uploaded += 1
+            added_hashes.append(metadata_file_content.hash)
+        else:
+            skipped += 1
+
+    task_id = None
+    status = "uploaded"
+    if effective_auto_process and added_hashes:
+        launch = DatasetService.start_ingestion_for_hashes(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hashes=added_hashes,
+            parser_overrides=parsed_overrides,
+        )
+        task_id = launch.task_id
+        status = "processing"
+
+    return BulkDatasetDataUploadResponse(
+        uploaded=uploaded,
+        skipped=skipped,
+        failed=failed,
+        task_id=task_id,
+        status=status,
     )
 
 

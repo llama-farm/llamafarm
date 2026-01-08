@@ -58,6 +58,7 @@ class IngestHandler:
         data_processing_strategy: str,
         database: str,
         dataset_name: str | None = None,
+        parser_overrides: dict[str, Any] | None = None,
     ):
         """
         Initialize the ingest handler.
@@ -72,6 +73,7 @@ class IngestHandler:
         self.data_processing_strategy = data_processing_strategy
         self.database = database
         self.dataset_name = dataset_name
+        self.parser_overrides = parser_overrides or {}
 
         # Load config to extract namespace and project
         self.config = load_config(str(self.config_path))
@@ -103,9 +105,38 @@ class IngestHandler:
         Returns:
             Dictionary with parsers and extractors
         """
-        return self.schema_handler.create_processing_config(
+        config = self.schema_handler.create_processing_config(
             self.data_processing_strategy
         )
+        if self.parser_overrides:
+            config.parsers = self._apply_parser_overrides(config.parsers or [])
+        return config
+
+    def _apply_parser_overrides(
+        self, parsers: list[Any]
+    ) -> list[Any]:
+        """
+        Apply parser-level overrides (e.g., chunk sizes) to configured parsers.
+        """
+        if not parsers:
+            return parsers
+
+        wildcard_override = self.parser_overrides.get("*") or self.parser_overrides.get(
+            "__all__"
+        )
+
+        for parser in parsers:
+            override_cfg = self.parser_overrides.get(getattr(parser, "type", None)) or {}
+            merged = {}
+            if parser.config:
+                merged.update(parser.config)
+            if wildcard_override:
+                merged.update(wildcard_override)
+            if override_cfg:
+                merged.update(override_cfg)
+            parser.config = merged
+
+        return parsers
 
     def _get_database_config(self) -> dict[str, Any]:
         """
