@@ -21,8 +21,7 @@ Get started instantly — no command line required:
 
 | Platform | Download |
 |----------|----------|
-| **Mac (M1+)** | [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-arm64.dmg) |
-| **Mac (Intel/Universal)** | [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg) |
+| **Mac (Universal)** | [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg) |
 | **Windows** | [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe) |
 | **Linux (x86_64)** | [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
 | **Linux (ARM64)** | [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage) |
