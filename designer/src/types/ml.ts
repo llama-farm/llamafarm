@@ -479,7 +479,7 @@ export function generateUniqueModelName(
 // Document Scanning Types
 // =============================================================================
 
-export type DocumentScanningBackend = 'surya' | 'easyocr' | 'paddleocr' | 'tesseract'
+export type DocumentScanningBackend = 'surya' | 'easyocr' | 'tesseract'
 
 export const DOCUMENT_SCANNING_BACKEND_DISPLAY: Record<
   DocumentScanningBackend,
@@ -492,10 +492,6 @@ export const DOCUMENT_SCANNING_BACKEND_DISPLAY: Record<
   easyocr: {
     label: 'EasyOCR',
     description: 'Good multilingual support (80+ languages)',
-  },
-  paddleocr: {
-    label: 'PaddleOCR',
-    description: 'Fast, optimized for production, excellent for Asian languages',
   },
   tesseract: {
     label: 'Tesseract',

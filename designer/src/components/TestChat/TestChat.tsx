@@ -1218,7 +1218,7 @@ export default function TestChat({
   const [selectedScanBackend, setSelectedScanBackend] = useState<DocumentScanningBackend>(() => {
     if (typeof window === 'undefined') return 'surya'
     const stored = localStorage.getItem('lf_test_scanBackend')
-    if (stored && ['surya', 'easyocr', 'paddleocr', 'tesseract'].includes(stored)) {
+    if (stored && ['surya', 'easyocr', 'tesseract'].includes(stored)) {
       return stored as DocumentScanningBackend
     }
     return 'surya'
@@ -3186,7 +3186,7 @@ export default function TestChat({
               {scanDocumentMutation.isPending ? (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FontIcon type="loading" className="w-4 h-4 animate-spin" />
+                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     <span>Scanning {scanFile?.name}...</span>
                   </div>
                   {!hasScannedBefore && (
