@@ -13,6 +13,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
+import { useListRouterModels } from '../../hooks/useMLModels'
 
 export interface TestChatProps {
   showReferences: boolean
@@ -110,29 +111,51 @@ export default function TestChat({
     !!chatParams
   )
   const runtimeCfg: any = (projectDetail as any)?.project?.config?.runtime || {}
-  const cfgModels: Array<{ name: string; model: string }> = Array.isArray(
+  const cfgModels: Array<{ name: string; model: string; provider?: string }> = Array.isArray(
     runtimeCfg?.models
   )
     ? runtimeCfg.models
     : []
   const cfgDefaultName: string | undefined = runtimeCfg?.default_model
-  // const cfgDefaultModelId: string | undefined = cfgModels.find(
-  //   m => m.name === cfgDefaultName
-  // )?.model
 
-  // Unified view of models: prefer API; fallback to config-defined models
-  const unifiedModels =
-    apiModels.length > 0
+  // Load available routers for this project
+  const { data: routersData } = useListRouterModels({
+    namespace: chatParams?.namespace,
+    projectId: chatParams?.projectId,
+    enabled: !!chatParams,
+  })
+  const trainedRouters = routersData?.data || []
+
+  // Build unified view of models: prefer API; fallback to config-defined models
+  // Also include trained routers that are not already in config
+  const unifiedModels = useMemo(() => {
+    const baseModels = apiModels.length > 0
       ? apiModels.map(m => ({
           name: (m as any).name ?? m.model,
           model: m.model,
           default: !!m.default,
+          isRouter: false,
         }))
       : cfgModels.map(m => ({
           name: m.name,
-          model: m.model,
+          model: m.model || m.name,
           default: m.name === cfgDefaultName,
+          isRouter: m.provider === 'router',
         }))
+
+    // Add trained routers that are not already in the models list
+    const existingNames = new Set(baseModels.map(m => m.name))
+    const additionalRouters = trainedRouters
+      .filter(r => r.name && !existingNames.has(r.name)) // Filter out routers without names
+      .map(r => ({
+        name: r.name,
+        model: r.name, // Router name is used as model name
+        default: false,
+        isRouter: true,
+      }))
+
+    return [...baseModels, ...additionalRouters]
+  }, [apiModels, cfgModels, cfgDefaultName, trainedRouters])
 
   const defaultModel =
     apiModels.length > 0 ? apiDefaultModel : unifiedModels.find(m => m.default)
@@ -372,14 +395,26 @@ export default function TestChat({
   const [projectInputValue, setProjectInputValue] = useState('')
   const [isProjectSending, setIsProjectSending] = useState(false)
 
-  // Convert project session messages to chatbox format
+  // Store routing info for messages (keyed by message content hash for matching)
+  const [messageRoutingInfo, setMessageRoutingInfo] = useState<
+    Map<string, ChatStreamChunk['routing_info']>
+  >(new Map())
+
+  // Convert project session messages to chatbox format, including routing metadata
   const projectSessionMessages: ChatboxMessage[] = projectSession.messages.map(
-    msg => ({
-      id: msg.id,
-      type: msg.role === 'user' ? ('user' as const) : ('assistant' as const),
-      content: msg.content,
-      timestamp: new Date(msg.timestamp),
-    })
+    msg => {
+      // Look up routing info using message content as key (for assistant messages)
+      const routingInfo = msg.role === 'assistant'
+        ? messageRoutingInfo.get(msg.content.substring(0, 200))
+        : undefined
+      return {
+        id: msg.id,
+        type: msg.role === 'user' ? ('user' as const) : ('assistant' as const),
+        content: msg.content,
+        timestamp: new Date(msg.timestamp),
+        metadata: routingInfo ? { routingInfo } : undefined,
+      }
+    }
   )
   // Transient streaming assistant message (not persisted)
   const [streamingMessage, setStreamingMessage] =
@@ -691,6 +726,7 @@ export default function TestChat({
     if (USE_PROJECT_CHAT && chatParams) {
       // Use project chat streaming API
       let accumulatedContent = ''
+      let routingInfo: ChatStreamChunk['routing_info'] | null = null
       const transientId = `stream_${Date.now()}`
 
       setIsProjectSending(true)
@@ -758,6 +794,10 @@ export default function TestChat({
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
+              // Capture routing info from first chunk (if present)
+              if (chunk.routing_info && !routingInfo) {
+                routingInfo = chunk.routing_info
+              }
               // Handle content chunks
               if (chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
@@ -768,6 +808,7 @@ export default function TestChat({
                   timestamp: new Date(),
                   isStreaming: true,
                   isLoading: false,
+                  metadata: routingInfo ? { routingInfo } : undefined,
                 })
               }
             },
@@ -779,6 +820,15 @@ export default function TestChat({
             },
             onComplete: () => {
               if (accumulatedContent && accumulatedContent.trim()) {
+                // Store routing info for this message (keyed by content prefix)
+                if (routingInfo && routingInfo !== null) {
+                  const infoToStore = routingInfo
+                  setMessageRoutingInfo(prev => {
+                    const updated = new Map(prev)
+                    updated.set(accumulatedContent.substring(0, 200), infoToStore)
+                    return updated
+                  })
+                }
                 // Append final assistant message once and clear transient bubble
                 projectSession.addMessage(accumulatedContent, 'assistant')
               }
@@ -1147,7 +1197,7 @@ export default function TestChat({
                 {!modelsLoading &&
                   unifiedModels.map(m => (
                     <option key={m.name} value={m.name}>
-                      {m.name} ({m.model}) {m.default ? '(default)' : ''}
+                      {m.isRouter ? '[Router] ' : ''}{m.name}{m.isRouter ? '' : ` (${m.model})`}{m.default ? ' (default)' : ''}
                     </option>
                   ))}
               </select>
@@ -1516,6 +1566,29 @@ export function TestChatMessage({
           </>
         )}
       </div>
+
+      {/* Routing info - show when using a router */}
+      {isAssistant && message.metadata?.routingInfo && (
+        <div className="mt-1 text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+          <span className="text-purple-400">Routed via</span>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {message.metadata.routingInfo.router_name}
+          </Badge>
+          <span className="text-muted-foreground/60">→</span>
+          <Badge className="text-[10px] px-1.5 py-0 bg-teal-500/20 text-teal-400 border-teal-500/30">
+            {message.metadata.routingInfo.target_model}
+          </Badge>
+          {message.metadata.routingInfo.route_name && (
+            <span className="text-muted-foreground/60">
+              (route: {message.metadata.routingInfo.route_name},
+              {' '}{(message.metadata.routingInfo.similarity_score * 100).toFixed(0)}% match)
+            </span>
+          )}
+          {!message.metadata.routingInfo.route_name && (
+            <span className="text-muted-foreground/60">(default fallback)</span>
+          )}
+        </div>
+      )}
 
       {/* Assistant footer actions - hidden during streaming */}
       {isAssistant && !message.isStreaming && !message.isLoading && (

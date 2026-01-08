@@ -315,10 +315,15 @@ export function useTrainAndSaveAnomaly() {
 export function useListRouterModels(options?: {
   enabled?: boolean
   staleTime?: number
+  namespace?: string
+  projectId?: string
 }) {
   return useQuery({
-    queryKey: mlModelKeys.routerList(),
-    queryFn: () => mlService.listRouterModels(),
+    queryKey: [...mlModelKeys.routerList(), options?.namespace, options?.projectId],
+    queryFn: () => mlService.listRouterModels(
+      options?.namespace || 'default',
+      options?.projectId || 'default'
+    ),
     enabled: options?.enabled !== false,
     staleTime: options?.staleTime ?? 5_000, // 5 seconds - short to catch new models quickly
     refetchOnMount: 'always', // Always refetch when component mounts

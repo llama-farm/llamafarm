@@ -33,6 +33,7 @@ import type {
   RouterLoadRequest,
   RouterLoadResponse,
   RouterListModelsResponse,
+  RouterModelInfo,
   RouterGenerateDataRequest,
   RouterGenerateDataResponse,
   RouterBatchGenerateDataResponse,
@@ -262,11 +263,61 @@ export async function loadRouter(
 }
 
 /**
- * List all saved router models
+ * Normalize router info from project-specific format to flat format
  */
-export async function listRouterModels(): Promise<RouterListModelsResponse> {
-  const response = await apiClient.get<RouterListModelsResponse>('/ml/router/models')
-  return response.data
+function normalizeRouterInfo(router: any): RouterModelInfo {
+  // Project routers have nested config, global routers have flat structure
+  if (router.config) {
+    // Name can be at top level or inside config
+    const routerName = router.name || router.config.name || router.path?.split('/').pop() || 'unnamed'
+    return {
+      name: routerName,
+      path: router.path,
+      embedder_model: router.config.embedder_model,
+      default_model: router.config.default_model,
+      similarity_threshold: router.config.similarity_threshold,
+      num_routes: router.config.routes?.length || 0,
+      routes: router.config.routes?.map((r: any) => r.name) || [],
+      // Include full route data for editing
+      routeData: router.config.routes,
+    }
+  }
+  // Global routers already have flat structure - ensure name exists
+  return {
+    ...router,
+    name: router.name || router.path?.split('/').pop() || 'unnamed',
+  }
+}
+
+/**
+ * List all saved router models (both global and project-specific)
+ */
+export async function listRouterModels(
+  namespace: string = 'default',
+  projectId: string = 'default'
+): Promise<RouterListModelsResponse> {
+  // Get project-specific routers (primary)
+  const projectResponse = await apiClient.post<any>(
+    '/ml/router/models/list',
+    { namespace, project_id: projectId }
+  )
+
+  // Get global routers (legacy/fallback)
+  const globalResponse = await apiClient.get<RouterListModelsResponse>('/ml/router/models')
+
+  // Normalize project routers to match expected format
+  const projectRouters = (projectResponse.data.data || []).map(normalizeRouterInfo)
+  const globalRouters = globalResponse.data.data || []
+
+  // Filter out global routers that have same name as project routers
+  const projectNames = new Set(projectRouters.map((r: RouterModelInfo) => r.name))
+  const uniqueGlobalRouters = globalRouters.filter((r: RouterModelInfo) => !projectNames.has(r.name))
+
+  return {
+    object: 'list',
+    data: [...projectRouters, ...uniqueGlobalRouters],
+    total: projectRouters.length + uniqueGlobalRouters.length
+  }
 }
 
 /**

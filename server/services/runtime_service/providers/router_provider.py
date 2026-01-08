@@ -23,6 +23,7 @@ from agents.base.clients.client import (
     LFAgentClient,
     LFChatCompletion,
     LFChatCompletionChunk,
+    LFChatCompletionChunkWithRouting,
 )
 from agents.base.history import LFChatCompletionMessageParam
 from agents.base.types import ToolDefinition
@@ -77,6 +78,10 @@ class RouterClient(LFAgentClient):
         """Call the universal runtime to get routing decision."""
         route_url = f"{self._universal_base_url}/v1/router/route"
 
+        # Log the query being sent for routing (truncated for readability)
+        query_preview = query[:100] + "..." if len(query) > 100 else query
+        logger.info(f"Router '{self._router_name}' routing query: '{query_preview}'")
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 route_url,
@@ -86,7 +91,13 @@ class RouterClient(LFAgentClient):
                 },
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            logger.info(
+                f"Router decision: route={result.get('route_name')}, "
+                f"target={result.get('target_model')}, "
+                f"score={result.get('similarity_score', 0):.3f}"
+            )
+            return result
 
     async def _ensure_router_loaded(self) -> None:
         """Ensure the router is loaded in the universal runtime.
@@ -229,12 +240,26 @@ class RouterClient(LFAgentClient):
 
         # Get target client and forward request
         target_client = self._get_target_client(target_model)
+        first_chunk = True
+        routing_info = {
+            "router_name": self._router_name,
+            "target_model": target_model,
+            "route_name": route_decision.get("route_name"),
+            "similarity_score": route_decision.get("similarity_score", 0.0),
+            "matched_utterance": route_decision.get("matched_utterance"),
+        }
+
         async for chunk in target_client.stream_chat(
             messages=messages,
             tools=tools,
             extra_body=extra_body,
         ):
-            yield chunk
+            # Wrap first chunk with routing metadata
+            if first_chunk:
+                first_chunk = False
+                yield LFChatCompletionChunkWithRouting(chunk, routing_info)
+            else:
+                yield chunk
 
 
 class ModelResolver:

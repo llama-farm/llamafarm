@@ -29,6 +29,29 @@ LFChatCompletion: TypeAlias = ChatCompletion
 LFChatCompletionChunk: TypeAlias = ChatCompletionChunk
 
 
+class LFChatCompletionChunkWithRouting:
+    """Wrapper for ChatCompletionChunk that can carry routing metadata."""
+
+    def __init__(
+        self,
+        chunk: ChatCompletionChunk,
+        routing_info: dict | None = None
+    ):
+        self.chunk = chunk
+        self.routing_info = routing_info
+
+    def model_dump(self, **kwargs) -> dict:
+        """Serialize chunk with optional routing info."""
+        result = self.chunk.model_dump(**kwargs)
+        if self.routing_info:
+            result["routing_info"] = self.routing_info
+        return result
+
+    def __getattr__(self, name):
+        """Delegate attribute access to the wrapped chunk."""
+        return getattr(self.chunk, name)
+
+
 class LFAgentClient(ABC):
     """Abstract base class for LLM clients.
 

@@ -24,7 +24,7 @@ import {
 import { useCachedModels } from '../../hooks/useModels'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import { useProject } from '../../hooks/useProjects'
+import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import {
   ROUTER_EMBEDDER_OPTIONS,
   DEFAULT_GENERATION_MODEL,
@@ -93,8 +93,11 @@ function RouterModel() {
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set())
   const [generatingForRoute, setGeneratingForRoute] = useState<string | null>(null)
 
-  // Generation model state (defaults to local model - no API key needed)
+  // Generation settings state (defaults to local model - no API key needed)
   const [generationModel, setGenerationModel] = useState(DEFAULT_GENERATION_MODEL)
+  const [generationCount, setGenerationCount] = useState(20)
+  const [generationComplexity, setGenerationComplexity] = useState<'simple' | 'complex' | 'mixed'>('mixed')
+  const [generationStyle, setGenerationStyle] = useState('')
 
   // Get current project for project models
   const activeProject = useActiveProject()
@@ -114,6 +117,7 @@ function RouterModel() {
   const routeQueryMutation = useRouteQuery()
   const deleteRouterMutation = useDeleteRouterModel()
   const generateDataMutation = useGenerateRouterData()
+  const updateProjectMutation = useUpdateProject()
 
   // Fetch available models
   const { data: cachedModelsData } = useCachedModels()
@@ -187,8 +191,19 @@ function RouterModel() {
         setEmbedderModel(trainedRouter.embedder_model || DEFAULT_EMBEDDER_MODEL)
         setDefaultModel(trainedRouter.default_model || '')
         setSimilarityThreshold(trainedRouter.similarity_threshold || 0.7)
-        // For trained routers without config, we only have route names
-        if (trainedRouter.routes && trainedRouter.routes.length > 0) {
+        // Check if we have full route data (from project-specific routers)
+        if (trainedRouter.routeData && trainedRouter.routeData.length > 0) {
+          setRoutes(
+            trainedRouter.routeData.map((route: any) => ({
+              id: generateRouteId(),
+              name: route.name || '',
+              targetModel: route.target_model || '',
+              description: route.description || '',
+              utterances: route.utterances || [],
+            }))
+          )
+        } else if (trainedRouter.routes && trainedRouter.routes.length > 0) {
+          // For global/legacy routers, we only have route names
           setRoutes(
             trainedRouter.routes.map((routeName: string) => ({
               id: generateRouteId(),
@@ -281,9 +296,10 @@ function RouterModel() {
       try {
         const result = await generateDataMutation.mutateAsync({
           route_description: route.description,
-          count: 20,
-          model: generationModel, // Use the selected generation model
-          // base_url defaults to local Universal Runtime - no API key needed
+          count: generationCount,
+          complexity: generationComplexity,
+          style: generationStyle || undefined,
+          model: generationModel,
         })
 
         if ('utterances' in result && result.utterances) {
@@ -297,7 +313,7 @@ function RouterModel() {
             ...newUtterances,
           ])
           toast({
-            message: `Generated ${newUtterances.length} new utterances`,
+            message: `Generated ${newUtterances.length} new ${generationComplexity} utterances`,
             icon: 'checkmark-filled',
           })
         }
@@ -311,7 +327,7 @@ function RouterModel() {
         setGeneratingForRoute(null)
       }
     },
-    [routes, generateDataMutation, handleRouteChange, toast, generationModel]
+    [routes, generateDataMutation, handleRouteChange, toast, generationModel, generationCount, generationComplexity, generationStyle]
   )
 
   // Validate router configuration
@@ -366,7 +382,66 @@ function RouterModel() {
         default_model: defaultModel.trim(),
         similarity_threshold: similarityThreshold,
         routes: routesData,
+        namespace: namespace || 'default',
+        project_id: projectId || 'default',
       })
+
+      // Add router to project config for governance
+      if (namespace && projectId && projectDetail) {
+        try {
+          const currentConfig = (projectDetail as any)?.project?.config || {}
+          const currentModels = currentConfig?.runtime?.models || []
+
+          // Build router model config
+          const routerModelConfig = {
+            name: routerName.trim(),
+            provider: 'router',
+            description: `Semantic router trained via UI`,
+            embedder_model: embedderModel,
+            default_model: defaultModel.trim(),
+            similarity_threshold: similarityThreshold,
+            routes: routesData.map(r => ({
+              name: r.name,
+              target_model: r.target_model,
+              description: r.description,
+              utterances: r.utterances,
+            })),
+          }
+
+          // Check if router already exists in config
+          const existingIndex = currentModels.findIndex(
+            (m: any) => m.name === routerName.trim() && m.provider === 'router'
+          )
+
+          let updatedModels: any[]
+          if (existingIndex >= 0) {
+            // Update existing router
+            updatedModels = [...currentModels]
+            updatedModels[existingIndex] = routerModelConfig
+          } else {
+            // Add new router
+            updatedModels = [...currentModels, routerModelConfig]
+          }
+
+          // Update project config
+          await updateProjectMutation.mutateAsync({
+            namespace,
+            projectId,
+            request: {
+              config: {
+                ...currentConfig,
+                runtime: {
+                  ...currentConfig.runtime,
+                  models: updatedModels,
+                },
+              },
+            },
+          })
+        } catch (configError) {
+          console.warn('Failed to update project config:', configError)
+          // Don't fail the whole operation - router was trained successfully
+        }
+      }
 
       setTrainingState('success')
       toast({
@@ -400,6 +475,10 @@ function RouterModel() {
     refetchRouters,
     navigate,
     toast,
+    namespace,
+    projectId,
+    projectDetail,
+    updateProjectMutation,
   ])
 
   // Test routing
@@ -418,6 +497,8 @@ function RouterModel() {
       const result = await routeQueryMutation.mutateAsync({
         model: routerName.trim(),
         query: testQuery.trim(),
+        namespace: namespace || 'default',
+        project_id: projectId || 'default',
       })
 
       const testResult: RouterTestResult = {
@@ -602,8 +683,13 @@ function RouterModel() {
       {/* Data Generation Settings */}
       <div className="rounded-lg border border-border bg-card p-6 flex flex-col gap-4">
         <h3 className="font-medium">Data Generation Settings</h3>
+        <p className="text-sm text-muted-foreground -mt-2">
+          Configure how synthetic training utterances are generated for each route
+        </p>
+
+        {/* Generation Model */}
         <div className="flex flex-col gap-2">
-          <Label htmlFor="generation-model">Generation model (for creating utterances)</Label>
+          <Label htmlFor="generation-model">Generation model</Label>
           <Select
             id="generation-model"
             value={generationModel}
@@ -616,7 +702,54 @@ function RouterModel() {
             ))}
           </Select>
           <p className="text-xs text-muted-foreground">
-            Local model used to generate synthetic training utterances. No API key required.
+            Local model used to generate utterances. No API key required.
+          </p>
+        </div>
+
+        {/* Count and Complexity Row */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="generation-count">Utterances per generation</Label>
+            <Input
+              id="generation-count"
+              type="number"
+              min={1}
+              max={100}
+              value={generationCount}
+              onChange={e => setGenerationCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 20)))}
+            />
+            <p className="text-xs text-muted-foreground">
+              1-100 utterances (default: 20)
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="generation-complexity">Complexity</Label>
+            <Select
+              id="generation-complexity"
+              value={generationComplexity}
+              onChange={e => setGenerationComplexity(e.target.value as 'simple' | 'complex' | 'mixed')}
+            >
+              <option value="mixed">Mixed (recommended)</option>
+              <option value="simple">Simple (5-10 words)</option>
+              <option value="complex">Complex (15-30 words)</option>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Variety of generated utterances
+            </p>
+          </div>
+        </div>
+
+        {/* Example Style */}
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="generation-style">Style hint (optional)</Label>
+          <Input
+            id="generation-style"
+            value={generationStyle}
+            onChange={e => setGenerationStyle(e.target.value)}
+            placeholder="e.g., formal business language, casual chat, technical jargon"
+          />
+          <p className="text-xs text-muted-foreground">
+            Optional hint for tone/style of generated utterances
           </p>
         </div>
       </div>

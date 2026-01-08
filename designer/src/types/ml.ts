@@ -334,6 +334,8 @@ export interface RouterTrainRequest {
   default_model: string
   similarity_threshold?: number // default: 0.7
   routes: RouterRoute[]
+  namespace?: string // default: "default"
+  project_id?: string // default: "default"
 }
 
 /**
@@ -354,6 +356,8 @@ export interface RouterTrainResponse {
 export interface RouterRouteRequest {
   model: string
   query: string
+  namespace?: string // default: "default"
+  project_id?: string // default: "default"
 }
 
 /**
@@ -411,9 +415,11 @@ export interface RouterModelInfo {
   num_routes: number
   routes: string[]
   embedder_model: string
-  default_model: string
-  similarity_threshold: number
+  default_model?: string
+  similarity_threshold?: number
   created?: string
+  // Full route data for editing (from project-specific routers)
+  routeData?: RouterRoute[]
 }
 
 /**
@@ -422,8 +428,10 @@ export interface RouterModelInfo {
 export interface RouterListModelsResponse {
   object: string
   data: RouterModelInfo[]
-  models_dir: string
+  models_dir?: string // optional for project-specific listing
   total: number
+  namespace?: string
+  project_id?: string
 }
 
 /**
@@ -431,7 +439,9 @@ export interface RouterListModelsResponse {
  */
 export interface RouterGenerateDataRequest {
   route_description?: string
-  count?: number // default: 20
+  count?: number // default: 20, range: 1-100
+  complexity?: 'simple' | 'complex' | 'mixed' // default: "mixed"
+  style?: string // optional style hint, e.g., "formal business language"
   model?: string // LLM to use, default: "unsloth/Qwen3-1.7B-GGUF:Q4_K_M" (local)
   api_key?: string
   base_url?: string // default: "http://localhost:11540/v1" (local Universal Runtime)
@@ -439,6 +449,7 @@ export interface RouterGenerateDataRequest {
     route_name: string
     description: string
     count?: number
+    complexity?: 'simple' | 'complex' | 'mixed'
   }>
 }
 

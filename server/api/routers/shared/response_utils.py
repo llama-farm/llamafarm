@@ -127,7 +127,8 @@ def create_streaming_response_from_iterator(
             async for chunk in stream_source:
                 if not chunk:
                     continue
-                # Chunk is already a ChatCompletionChunk - serialize it directly
+                # Serialize chunk - handles both regular chunks and wrapped chunks
+                # LFChatCompletionChunkWithRouting.model_dump() includes routing_info
                 chunk_dict = chunk.model_dump(exclude_none=True)
                 yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
                 await asyncio.sleep(0)

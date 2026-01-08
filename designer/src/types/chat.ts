@@ -157,6 +157,14 @@ export interface ChatStreamChunk {
     }
     finish_reason: string | null
   }>
+  // Routing metadata (only present when using semantic router)
+  routing_info?: {
+    router_name: string
+    target_model: string
+    route_name: string | null
+    similarity_score: number
+    matched_utterance?: string | null
+  }
 }
 
 /**
