@@ -9,13 +9,11 @@ import sys
 import time
 import uuid
 from typing import (
-    Any,
     Callable,
     Dict,
     Iterator,
     List,
     Optional,
-    Sequence,
     Union,
 )
 
@@ -23,7 +21,6 @@ from ._bindings import ensure_backend, ffi, get_lib
 from .types import (
     ChatCompletionChunk,
     ChatCompletionResponse,
-    ChatMessage,
     EmbeddingResponse,
 )
 
@@ -443,7 +440,17 @@ class Llama:
 
         for i, msg in enumerate(messages):
             role = msg.get("role", "user").encode("utf-8")
-            content = msg.get("content", "").encode("utf-8")
+            # Handle None content (e.g., tool call messages may have content: null)
+            raw_content = msg.get("content")
+            if raw_content is None:
+                # Tool call messages typically have null content, but warn for other roles
+                msg_role = msg.get("role", "user")
+                if msg_role not in ("assistant", "tool"):
+                    logger.warning(
+                        f"Message at index {i} with role '{msg_role}' has None content, "
+                        "using empty string"
+                    )
+            content = (raw_content or "").encode("utf-8")
             role_refs.append(ffi.new("char[]", role))
             content_refs.append(ffi.new("char[]", content))
             chat_array[i].role = role_refs[-1]
@@ -610,6 +617,83 @@ class Llama:
         prompt = self._apply_chat_template(messages, add_generation_prompt=True)
 
         # Tokenize
+        tokens = self.tokenize(prompt, add_special=False, parse_special=True)
+        t_tokenize = time.perf_counter()
+
+        if len(tokens) > self._n_ctx:
+            raise ValueError(
+                f"Prompt too long: {len(tokens)} tokens > {self._n_ctx} context"
+            )
+
+        # Clear KV cache
+        self._lib.llama_memory_clear(self._memory, True)
+
+        # Decode prompt (this is the main TTFT cost)
+        if not self._decode_batch(tokens):
+            raise RuntimeError("Failed to decode prompt")
+        t_prompt = time.perf_counter()
+
+        logger.info(
+            f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+            f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
+        )
+
+        # Create sampler
+        self._create_sampler(
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            min_p=min_p,
+            repeat_penalty=repeat_penalty,
+            seed=seed,
+        )
+
+        if stream:
+            return self._stream_completion(tokens, max_tokens, stop, logits_processor, t_start)
+        else:
+            return self._complete(tokens, max_tokens, stop, logits_processor, t_start)
+
+    def create_completion(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 256,
+        temperature: float = 0.7,
+        top_p: float = 0.95,
+        top_k: int = 40,
+        min_p: float = 0.05,
+        repeat_penalty: float = 1.1,
+        stop: Optional[List[str]] = None,
+        stream: bool = False,
+        seed: Optional[int] = None,
+        logits_processor: Optional[Callable] = None,
+        **kwargs,
+    ) -> Union[ChatCompletionResponse, Iterator[ChatCompletionChunk]]:
+        """
+        Generate a completion from a raw prompt string (no chat template applied).
+
+        This is useful when you have a pre-formatted prompt, such as one rendered
+        from a Jinja2 chat template with tool definitions.
+
+        Args:
+            prompt: The raw prompt string to generate from.
+            max_tokens: Maximum tokens to generate.
+            temperature: Sampling temperature.
+            top_p: Top-p sampling.
+            top_k: Top-k sampling.
+            min_p: Min-p sampling.
+            repeat_penalty: Repetition penalty.
+            stop: Stop sequences.
+            stream: Stream the response.
+            seed: Random seed.
+            logits_processor: Custom logits processor.
+
+        Returns:
+            Completion response or stream of chunks.
+        """
+        t_start = time.perf_counter()
+
+        # Tokenize directly (no chat template application)
         tokens = self.tokenize(prompt, add_special=False, parse_special=True)
         t_tokenize = time.perf_counter()
 

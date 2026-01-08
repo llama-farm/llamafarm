@@ -9,13 +9,13 @@ Determines optimal context window size based on:
 
 import fnmatch
 import logging
-import os
 from pathlib import Path
 
 import psutil
 import torch
 import yaml
-from gguf import GGUFReader
+
+from utils.gguf_metadata_cache import get_gguf_metadata_cached
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,9 @@ _config_cache: dict | None = None
 def get_gguf_metadata(gguf_path: str) -> dict:
     """Read GGUF file metadata without loading the full model.
 
-    Reads model metadata including the training context size (n_ctx_train)
-    which indicates the maximum context the model was trained to handle.
+    Uses the shared GGUF metadata cache to avoid redundant file reads.
+    The cache is populated once per file and reused by context_calculator,
+    jinja_tools, and other modules.
 
     Args:
         gguf_path: Path to .gguf file
@@ -41,52 +42,15 @@ def get_gguf_metadata(gguf_path: str) -> dict:
     Raises:
         FileNotFoundError: If GGUF file doesn't exist
     """
-    if not os.path.exists(gguf_path):
-        raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
+    # Use shared cache - single read for all metadata needs
+    cached = get_gguf_metadata_cached(gguf_path)
 
-    file_size = os.path.getsize(gguf_path)
-
-    metadata = {
-        "file_size_bytes": file_size,
-        "file_size_mb": file_size / (1024 * 1024),
-        "n_ctx_train": None,
+    # Return in legacy format for backward compatibility
+    return {
+        "file_size_bytes": cached.file_size_bytes,
+        "file_size_mb": cached.file_size_mb,
+        "n_ctx_train": cached.n_ctx_train,
     }
-
-    # Try to read GGUF metadata using gguf library
-    try:
-        # Read GGUF file metadata without loading model weights
-        reader = GGUFReader(gguf_path)
-
-        max_key_length = max(len(key) for key in reader.fields)
-        for key, field in reader.fields.items():
-            if field.data:
-                value = field.parts[field.data[0]]
-                logger.debug(f"{key:<{max_key_length}}: {value}")
-
-        # Try to get context length from metadata fields
-        # Common field names or substrings for context length
-        context_field_names = [
-            "context_length",
-            "n_ctx_train",
-            "n_ctx",
-        ]
-
-        # Check if any field key contains one of our target strings
-        for key, field in reader.fields.items():
-            if any(target in key for target in context_field_names) and field.data:
-                # Extract the value from the field parts
-                n_ctx_train = field.parts[field.data[0]]
-                if n_ctx_train:
-                    metadata["n_ctx_train"] = int(n_ctx_train)
-                    logger.debug(f"Found context size in field '{key}': {n_ctx_train}")
-                    break
-
-    except Exception as e:
-        logger.debug(f"Could not read GGUF metadata details: {e}")
-        # Not a fatal error - we can still use file size
-
-    logger.debug(f"GGUF metadata: {metadata}")
-    return metadata
 
 
 def get_available_memory(device: str) -> int:

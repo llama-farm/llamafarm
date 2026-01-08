@@ -7,7 +7,6 @@ skip gracefully (the binary can be downloaded at runtime instead).
 """
 
 import importlib.util
-import sys
 from pathlib import Path
 
 

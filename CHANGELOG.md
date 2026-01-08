@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.24](https://github.com/llama-farm/llamafarm/compare/v0.0.23...v0.0.24) (2026-01-06)
+
+
+### Features
+
+* **anomaly:** add normalization methods for anomaly detection scores ([#624](https://github.com/llama-farm/llamafarm/issues/624)) ([9850015](https://github.com/llama-farm/llamafarm/commit/9850015b19696374fabdb1c8bbaf2e43b73eb24d))
+* **designer:** ux for anomaly detection ([#635](https://github.com/llama-farm/llamafarm/issues/635)) ([2754881](https://github.com/llama-farm/llamafarm/commit/27548810b35a813797ce5b66ae8da52eff26b9bf))
+
+
+### Bug Fixes
+
+* **designer:** anomaly and classifier UX fixes  ([#645](https://github.com/llama-farm/llamafarm/issues/645)) ([5610c35](https://github.com/llama-farm/llamafarm/commit/5610c35a2e75adc8d6669914abeb7bf97dbae84a))
+
+
+### Miscellaneous Chores
+
+* release 0.0.24 ([0501ed7](https://github.com/llama-farm/llamafarm/commit/0501ed71c12224bc6f27f81e931c838c47249833))
+
 ## [0.0.23](https://github.com/llama-farm/llamafarm/compare/v0.0.22...v0.0.23) (2025-12-20)
 
 

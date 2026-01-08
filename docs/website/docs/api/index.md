@@ -8,7 +8,7 @@ The API is served at: `http://localhost:8000`
 
 All versioned endpoints use the `/v1` prefix:
 
-```
+```text
 http://localhost:8000/v1
 ```
 
@@ -134,8 +134,10 @@ Common HTTP status codes:
 
 - `POST /v1/projects/{namespace}/{project}/rag/query` - Query RAG system
 - `GET /v1/projects/{namespace}/{project}/rag/health` - Check RAG health
+- `GET /v1/projects/{namespace}/{project}/rag/stats` - Get RAG statistics
 - `GET /v1/projects/{namespace}/{project}/rag/databases` - List databases
 - `GET /v1/projects/{namespace}/{project}/rag/databases/{database}` - Get database details
+- `GET /v1/projects/{namespace}/{project}/rag/databases/{database}/documents` - List documents in database
 - `POST /v1/projects/{namespace}/{project}/rag/databases` - Create database
 - `PATCH /v1/projects/{namespace}/{project}/rag/databases/{database}` - Update database
 - `DELETE /v1/projects/{namespace}/{project}/rag/databases/{database}` - Delete database
@@ -162,6 +164,8 @@ Common HTTP status codes:
 
 - `GET /v1/models` - List cached models
 - `POST /v1/models/download` - Download/cache a model
+- `POST /v1/models/validate-download` - Check disk space before download
+- `GET /v1/models/{model_id}/quantizations` - List GGUF quantization options
 - `DELETE /v1/models/{model_name}` - Delete cached model
 
 ### Vision (OCR & Document Extraction)
@@ -195,6 +199,7 @@ Common HTTP status codes:
 - `GET /` - Basic hello endpoint
 - `GET /info` - System information
 - `GET /v1/system/version-check` - Check for CLI updates
+- `GET /v1/system/disk` - Get disk space information
 
 ---
 
@@ -1436,6 +1441,97 @@ curl http://localhost:8000/v1/projects/my-org/chatbot/rag/health
 curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/health?database=main_db"
 ```
 
+### Get RAG Statistics
+
+Get statistics for a RAG database including vector counts and storage usage.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/stats`
+
+**Parameters:**
+
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database` (query, optional): Specific database to get stats for (uses default if not specified)
+
+**Response:**
+
+```json
+{
+  "database": "main_db",
+  "vector_count": 1250,
+  "storage_bytes": 52428800,
+  "storage_human": "50 MB",
+  "embedding_dimension": 768,
+  "collection_name": "documents",
+  "last_updated": "2024-01-15T10:30:00Z"
+}
+```
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/rag/stats
+```
+
+**Example (Specific database):**
+
+```bash
+curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/stats?database=research_db"
+```
+
+### List Documents in Database
+
+List all documents stored in a RAG database with their metadata.
+
+**Endpoint:** `GET /v1/projects/{namespace}/{project}/rag/databases/{database_name}/documents`
+
+**Parameters:**
+
+- `namespace` (path, required): Project namespace
+- `project` (path, required): Project name
+- `database_name` (path, required): Name of the database
+- `limit` (query, optional): Maximum documents to return (1-1000, default: 50)
+
+**Response:**
+
+```json
+[
+  {
+    "id": "abc123def456",
+    "filename": "clinical_trial_report.pdf",
+    "chunk_count": 45,
+    "size_bytes": 1048576,
+    "parser_used": "PDFParser_LlamaIndex",
+    "date_ingested": "2024-01-15T10:30:00Z",
+    "metadata": {
+      "document_type": "report",
+      "source_dataset": "research_papers"
+    }
+  },
+  {
+    "id": "789xyz",
+    "filename": "fda_guidelines.pdf",
+    "chunk_count": 128,
+    "size_bytes": 2097152,
+    "parser_used": "PDFParser_PyPDF2",
+    "date_ingested": "2024-01-14T15:20:00Z",
+    "metadata": null
+  }
+]
+```
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents
+```
+
+**Example (With limit):**
+
+```bash
+curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents?limit=100"
+```
+
 ---
 
 ## Tasks API
@@ -1839,6 +1935,45 @@ Check if a newer version of the CLI is available.
 curl http://localhost:8000/v1/system/version-check
 ```
 
+### Get Disk Space
+
+Get disk space information for the HuggingFace cache and system disk.
+
+**Endpoint:** `GET /v1/system/disk`
+
+**Response:**
+
+```json
+{
+  "cache": {
+    "total_bytes": 500000000000,
+    "used_bytes": 200000000000,
+    "free_bytes": 300000000000,
+    "path": "/Users/username/.cache/huggingface",
+    "percent_free": 60.0
+  },
+  "system": {
+    "total_bytes": 1000000000000,
+    "used_bytes": 400000000000,
+    "free_bytes": 600000000000,
+    "path": "/",
+    "percent_free": 60.0
+  }
+}
+```
+
+**Response Fields:**
+
+- `cache`: Disk info for the HuggingFace cache directory (where models are stored)
+- `system`: Disk info for the system root directory
+- Each contains: `total_bytes`, `used_bytes`, `free_bytes`, `path`, `percent_free`
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/system/disk
+```
+
 ---
 
 ## Event Logs API
@@ -2005,6 +2140,107 @@ curl -X POST http://localhost:8000/v1/models/download \
   -d '{"model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"}'
 ```
 
+### Validate Download
+
+Check if there's sufficient disk space for a model download before starting.
+
+**Endpoint:** `POST /v1/models/validate-download`
+
+**Request Body:**
+
+```json
+{
+  "model_name": "unsloth/Qwen3-1.7B-GGUF"
+}
+```
+
+**Response:**
+
+```json
+{
+  "can_download": true,
+  "warning": false,
+  "message": "Sufficient disk space available",
+  "available_bytes": 107374182400,
+  "required_bytes": 1073741824,
+  "cache_info": {
+    "total_bytes": 500000000000,
+    "used_bytes": 200000000000,
+    "free_bytes": 300000000000,
+    "path": "/Users/username/.cache/huggingface",
+    "percent_free": 60.0
+  },
+  "system_info": {
+    "total_bytes": 1000000000000,
+    "used_bytes": 400000000000,
+    "free_bytes": 600000000000,
+    "path": "/",
+    "percent_free": 60.0
+  }
+}
+```
+
+**Response Fields:**
+
+- `can_download`: Whether download can proceed (false if critically low space)
+- `warning`: Whether space is low but download can proceed
+- `message`: Human-readable status message
+- `available_bytes`: Available disk space in bytes
+- `required_bytes`: Estimated space required for download
+- `cache_info`: Disk info for HuggingFace cache location
+- `system_info`: Disk info for system root
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8000/v1/models/validate-download \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "unsloth/Qwen3-1.7B-GGUF"}'
+```
+
+### Get GGUF Quantization Options
+
+List all available GGUF quantization options for a model with file sizes.
+
+**Endpoint:** `GET /v1/models/{model_id}/quantizations`
+
+**Parameters:**
+
+- `model_id` (path, required): HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+
+**Response:**
+
+```json
+{
+  "options": [
+    {
+      "filename": "Qwen3-1.7B-Q4_K_M.gguf",
+      "quantization": "Q4_K_M",
+      "size_bytes": 1073741824,
+      "size_human": "1.0 GB"
+    },
+    {
+      "filename": "Qwen3-1.7B-Q8_0.gguf",
+      "quantization": "Q8_0",
+      "size_bytes": 1879048192,
+      "size_human": "1.75 GB"
+    },
+    {
+      "filename": "Qwen3-1.7B-F16.gguf",
+      "quantization": "F16",
+      "size_bytes": 3489660928,
+      "size_human": "3.25 GB"
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl http://localhost:8000/v1/models/unsloth/Qwen3-1.7B-GGUF/quantizations
+```
+
 ### Delete Cached Model
 
 Delete a cached model from disk.
@@ -2147,7 +2383,7 @@ LlamaFarm's API is compatible with the Model Context Protocol (MCP), allowing AI
 
 ### Using LlamaFarm with MCP Servers
 
-You can configure LlamaFarm projects to expose tools through MCP servers, giving AI agents access to filesystems, databases, APIs, and custom business logic. See the MCP section in the [Introduction](../intro.md#the-power-of-mcp-model-context-protocol) for configuration examples.
+You can configure LlamaFarm projects to expose tools through MCP servers, giving AI agents access to filesystems, databases, APIs, and custom business logic. See the [MCP documentation](../mcp/index.md) for configuration examples.
 
 **Example: AI Agent with LlamaFarm MCP Tools**
 

@@ -613,6 +613,38 @@ parsers:
 
 ---
 
+## Directory Parser
+
+### DirectoryParser
+
+Recursively parses all files in a directory, automatically detecting file types.
+
+**Best for:** Batch processing, directory ingestion, multi-format processing
+
+```yaml
+parsers:
+  - type: DirectoryParser
+    file_include_patterns:
+      - "data/**/*"
+    config:
+      recursive: true
+      exclude_patterns:
+        - "*.tmp"
+        - "*.bak"
+      max_depth: 5
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `recursive` | boolean | `true` | Recursively process subdirectories |
+| `exclude_patterns` | array | `[]` | Glob patterns to exclude |
+| `max_depth` | integer | 10 | Maximum directory depth |
+| `follow_symlinks` | boolean | `false` | Follow symbolic links |
+
+---
+
 ## Complete Example
 
 Here's a comprehensive example processing multiple file types:

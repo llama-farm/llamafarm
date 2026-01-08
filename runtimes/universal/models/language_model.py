@@ -87,6 +87,8 @@ class LanguageModel(BaseModel):
         top_p: float = 1.0,
         stop: list[str] | None = None,
         thinking_budget: int | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> str:
         """Generate chat completion.
 
@@ -99,6 +101,8 @@ class LanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
             thinking_budget: Not used for transformers models (included for API compatibility)
+            tools: Not used for transformers models (included for API compatibility)
+            tool_choice: Not used for transformers models (included for API compatibility)
 
         Returns:
             Generated text as a string
@@ -138,6 +142,8 @@ class LanguageModel(BaseModel):
         top_p: float = 1.0,
         stop: list[str] | None = None,
         thinking_budget: int | None = None,
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
     ) -> AsyncGenerator[str, None]:
         """Generate chat completion with streaming (yields tokens as they're generated).
 
@@ -150,6 +156,8 @@ class LanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences to end generation
             thinking_budget: Not used for transformers models (included for API compatibility)
+            tools: Not used for transformers models (included for API compatibility)
+            tool_choice: Not used for transformers models (included for API compatibility)
 
         Yields:
             Generated text tokens as strings

@@ -1,12 +1,19 @@
-# LlamaFarm - Run your own AI anywhere
+# LlamaFarm - Edge AI for Everyone
 
-> Build powerful AI locally, extend anywhere.
+> Enterprise AI capabilities on your own hardware. No cloud required.
 
 [![License: Apache 2.0](https://img.shields.io/github/license/llama-farm/llamafarm)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Go 1.24+](https://img.shields.io/badge/go-1.24+-00ADD8.svg)](https://go.dev/dl/)
-[![Docs](https://img.shields.io/badge/docs-latest-4C51BF.svg)](docs/website/docs/intro.md)
+[![Docs](https://img.shields.io/badge/docs-latest-4C51BF.svg)](https://docs.llamafarm.dev)
 [![Discord](https://img.shields.io/discord/1392890421771899026.svg)](https://discord.gg/RrAUXTCVNF)
+
+**LlamaFarm** is an open-source AI platform that runs entirely on your hardware. Build RAG applications, train custom classifiers, detect anomalies, and run document processing—all locally with complete privacy.
+
+- 🔒 **Complete Privacy** — Your data never leaves your device
+- 💰 **No API Costs** — Use open-source models without per-token fees
+- 🌐 **Offline Capable** — Works without internet once models are downloaded
+- ⚡ **Hardware Optimized** — Automatic GPU/NPU acceleration on Apple Silicon, NVIDIA, and AMD
 
 ### Desktop App Downloads
 
@@ -22,12 +29,16 @@ Get started instantly — no command line required:
 
 ---
 
-LlamaFarm is an open-source framework for building retrieval-augmented and agentic AI applications. It provides a complete platform with multiple runtime options, composable RAG pipelines, and specialized ML capabilities—all configured through YAML.
+### What Can You Build?
 
-- **Local-first developer experience** with a single CLI (`lf`) that manages projects, datasets, and chat sessions
-- **Multiple runtime options** including Universal Runtime (HuggingFace models, OCR, anomaly detection), Ollama, and OpenAI-compatible endpoints
-- **Composable RAG pipelines** configured through YAML, not code
-- **Extendable everything**: runtimes, embedders, databases, parsers, extractors, and CLI commands
+| Capability | Description |
+|-----------|-------------|
+| **RAG (Retrieval-Augmented Generation)** | Ingest PDFs, docs, CSVs and query them with AI |
+| **Custom Classifiers** | Train text classifiers with 8-16 examples using SetFit |
+| **Anomaly Detection** | Detect outliers in logs, metrics, or transactions |
+| **OCR & Document Extraction** | Extract text and structured data from images and PDFs |
+| **Named Entity Recognition** | Find people, organizations, and locations |
+| **Multi-Model Runtime** | Switch between Ollama, OpenAI, vLLM, or local GGUF models |
 
 **Video demo (90 seconds):** https://youtu.be/W7MHGyN0MdQ
 
@@ -48,10 +59,12 @@ Download the desktop app above and run it. No additional setup required.
    curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
    ```
 
-   Windows (via winget):
+   Windows (PowerShell):
+   ```powershell
+   irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | iex
    ```
-   winget install LlamaFarm.CLI
-   ```
+
+   Or download directly from [releases](https://github.com/llama-farm/llamafarm/releases/latest).
 
 2. **Create and run a project**
 
@@ -322,21 +335,21 @@ The Universal Runtime provides endpoints beyond chat:
 ### OCR & Document Extraction
 
 ```bash
-curl -X POST http://localhost:11540/v1/ocr \
+curl -X POST http://localhost:8000/v1/vision/ocr \
   -F "file=@document.pdf" \
-  -F "backend=surya"
+  -F "model=surya"
 ```
 
 ### Anomaly Detection
 
 ```bash
 # Train on normal data
-curl -X POST http://localhost:11540/v1/anomaly/fit \
+curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-detector", "backend": "isolation_forest", "data": [[22.1], [23.5], ...]}'
 
 # Detect anomalies
-curl -X POST http://localhost:11540/v1/anomaly/detect \
+curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-detector", "data": [[22.0], [100.0], [23.0]], "threshold": 0.5}'
 ```

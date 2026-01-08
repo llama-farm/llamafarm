@@ -67,6 +67,93 @@ class TestLFAgentHistory:
         assert result[0] == {"role": "user", "content": "Hello"}
         assert result[1] == {"role": "assistant", "content": "Hi"}
 
+    def test_serialize_message_with_tool_calls(self):
+        """Test serialization of messages with tool_calls using OpenAI types.
+
+        This tests the fix for the ValidatorIterator serialization issue where
+        OpenAI SDK Pydantic models weren't being properly converted to dicts.
+        """
+        from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
+        from openai.types.chat.chat_completion_message_tool_call_param import Function
+
+        history = LFAgentHistory()
+
+        # Create message with tool_calls using OpenAI types (mimics chat_orchestrator)
+        msg = LFChatCompletionAssistantMessageParam(
+            role="assistant",
+            content="I'll call the weather function.",
+            tool_calls=[
+                ChatCompletionMessageFunctionToolCallParam(
+                    type="function",
+                    id="call_123",
+                    function=Function(
+                        name="get_weather",
+                        arguments='{"location": "NYC"}',
+                    ),
+                )
+            ],
+        )
+        history.add_message(msg)
+
+        # Get serialized history
+        result = history.get_history()
+
+        # Verify tool_calls was serialized correctly as plain dicts
+        assert len(result) == 1
+        assert result[0]["role"] == "assistant"
+        assert result[0]["content"] == "I'll call the weather function."
+        assert "tool_calls" in result[0]
+        assert len(result[0]["tool_calls"]) == 1
+
+        tool_call = result[0]["tool_calls"][0]
+        assert isinstance(tool_call, dict)
+        assert tool_call["type"] == "function"
+        assert tool_call["id"] == "call_123"
+        assert isinstance(tool_call["function"], dict)
+        assert tool_call["function"]["name"] == "get_weather"
+        assert tool_call["function"]["arguments"] == '{"location": "NYC"}'
+
+    def test_serialize_message_without_tool_calls(self):
+        """Test serialization of regular messages without tool_calls."""
+        history = LFAgentHistory()
+        msg = LFChatCompletionAssistantMessageParam(
+            role="assistant",
+            content="Hello!",
+        )
+        history.add_message(msg)
+
+        result = history.get_history()
+        assert len(result) == 1
+        assert result[0]["role"] == "assistant"
+        assert result[0]["content"] == "Hello!"
+        # tool_calls should not be present or should be None/falsy
+        assert not result[0].get("tool_calls")
+
+    def test_serialize_message_with_dict_tool_calls(self):
+        """Test serialization when tool_calls are already plain dicts."""
+        history = LFAgentHistory()
+        msg = LFChatCompletionAssistantMessageParam(
+            role="assistant",
+            content="Calling tool",
+            tool_calls=[
+                {
+                    "type": "function",
+                    "id": "call_456",
+                    "function": {
+                        "name": "test_func",
+                        "arguments": "{}",
+                    },
+                }
+            ],
+        )
+        history.add_message(msg)
+
+        result = history.get_history()
+        assert len(result) == 1
+        tool_call = result[0]["tool_calls"][0]
+        assert tool_call["id"] == "call_456"
+        assert tool_call["function"]["name"] == "test_func"
+
 
 class TestLFAgentSystemPromptGenerator:
     """Test suite for LFAgentSystemPromptGenerator."""
