@@ -654,6 +654,7 @@ class DatasetService:
                 "namespace": namespace,
                 "project": project,
                 "dataset": dataset,
+                "strategy": dataset_config.data_processing_strategy,
                 "files": [],
                 "total_files": 0,
             }
