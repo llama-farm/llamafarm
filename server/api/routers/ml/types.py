@@ -119,3 +119,82 @@ class AnomalyLoadRequest(BaseModel):
 
     model: str  # Model identifier to load/cache as
     backend: str = "isolation_forest"
+
+
+# =============================================================================
+# Router Types
+# =============================================================================
+
+
+class RouterRouteConfig(BaseModel):
+    """Configuration for a single route."""
+
+    name: str  # Route identifier
+    target_model: str  # Model to route to
+    description: str | None = None  # Human-readable description
+    utterances: list[str]  # Example queries for this route
+
+
+class RouterTrainRequest(BaseModel):
+    """Request to train a semantic router."""
+
+    model: str  # Router model identifier
+    embedder_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    default_model: str  # Fallback model for unmatched queries
+    similarity_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity to match a route (0-1)",
+    )
+    routes: list[RouterRouteConfig]
+    # Project context for storage
+    namespace: str = "default"
+    project_id: str = "default"
+
+
+class RouterRouteRequest(BaseModel):
+    """Request to route a query."""
+
+    model: str  # Router model identifier
+    query: str  # Query text to route
+    # Project context for storage
+    namespace: str = "default"
+    project_id: str = "default"
+
+
+class RouterLoadRequest(BaseModel):
+    """Request to load a saved router."""
+
+    model: str  # Router model identifier to load
+    # Project context for storage
+    namespace: str = "default"
+    project_id: str = "default"
+
+
+class RouterGenerateDataRouteConfig(BaseModel):
+    """Configuration for batch data generation."""
+
+    route_name: str
+    description: str
+    count: int = Field(default=20, ge=1, le=100)
+    complexity: Literal["simple", "complex", "mixed"] | None = None  # Override per-route
+
+
+class RouterGenerateDataRequest(BaseModel):
+    """Request to generate synthetic training data.
+
+    Complexity options:
+    - simple: Short, direct questions (5-10 words)
+    - complex: Detailed, multi-part questions (15-30 words)
+    - mixed: A mix of simple and complex (default)
+    """
+
+    route_description: str | None = None  # For single route generation
+    count: int = Field(default=20, ge=1, le=100)  # Number of utterances
+    complexity: Literal["simple", "complex", "mixed"] = "mixed"  # Utterance complexity
+    style: str | None = None  # Custom style instructions
+    model: str = "unsloth/Qwen3-1.7B-GGUF:Q4_K_M"  # LLM for generation (local default)
+    api_key: str | None = None  # API key for LLM (optional for local)
+    base_url: str | None = None  # Custom API base URL
+    routes: list[RouterGenerateDataRouteConfig] | None = None  # For batch generation

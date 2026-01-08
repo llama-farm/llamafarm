@@ -97,7 +97,6 @@ properties:
           required:
             - name
             - provider
-            - model
           properties:
             name:
               type: string
@@ -107,11 +106,11 @@ properties:
               description: Human-readable description of this model configuration
             provider:
               type: string
-              enum: [openai, ollama, lemonade, universal]
+              enum: [openai, ollama, lemonade, universal, router]
               description: Runtime provider for this model
             model:
               type: string
-              description: Model name or ID
+              description: Model name or ID (not required for router provider)
             base_url:
               type: string
               description: Base URL for the provider
@@ -201,6 +200,38 @@ properties:
                 $ref: "#/definitions/Tool"
               default: []
 
+            # Router-specific fields (only used when provider is "router")
+            embedder_model:
+              type: string
+              description: |
+                HuggingFace model for generating embeddings (router provider only).
+                Required when provider is "router".
+                Examples: sentence-transformers/all-MiniLM-L6-v2, BAAI/bge-small-en-v1.5
+            default_model:
+              type: string
+              description: |
+                Name of the fallback model to use when no route matches (router provider only).
+                Must reference another model name defined in the models list.
+            similarity_threshold:
+              type: number
+              minimum: 0
+              maximum: 1
+              default: 0.7
+              description: |
+                Minimum similarity score (0-1) required for a route match (router provider only).
+                Queries below this threshold route to the default_model.
+            complexity_classifier:
+              type: string
+              description: |
+                Optional name of a trained SetFit classifier for complexity-based routing.
+                Used as fallback when no topic route matches above the similarity threshold.
+            routes:
+              type: array
+              description: List of semantic routes for the router (router provider only)
+              items:
+                $ref: "#/definitions/Route"
+              minItems: 1
+
   mcp:
     type: object
     description: Model Context Protocol (MCP) client configuration
@@ -270,3 +301,32 @@ definitions:
         type: object
         description: Parameters of the tool
         additionalProperties: true
+
+  Route:
+    type: object
+    title: Route
+    description: A semantic route for the router model
+    required:
+      - name
+      - target_model
+    properties:
+      name:
+        type: string
+        description: Unique route identifier
+      target_model:
+        type: string
+        description: Name of the model to route to (must reference a model in the models list)
+      description:
+        type: string
+        description: Human-readable description of what queries this route handles (used for synthetic data generation)
+      utterances:
+        type: array
+        description: Inline list of example queries for this route
+        items:
+          type: string
+        minItems: 1
+      dataset:
+        type: string
+        description: |
+          Name of a LlamaFarm dataset containing utterances for this route.
+          Alternative to inline utterances. The dataset should use the router_utterances strategy.

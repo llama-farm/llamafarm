@@ -311,6 +311,210 @@ export interface AnomalyListModelsResponse {
 }
 
 // =============================================================================
+// Router Types
+// =============================================================================
+
+/**
+ * Route configuration for a semantic router.
+ * Each route maps semantic utterances to a target model.
+ */
+export interface RouterRoute {
+  name: string
+  target_model: string
+  description?: string
+  utterances: string[]
+}
+
+/**
+ * Request to train a semantic router.
+ */
+export interface RouterTrainRequest {
+  model: string
+  embedder_model?: string // default: "sentence-transformers/all-MiniLM-L6-v2"
+  default_model: string
+  similarity_threshold?: number // default: 0.7
+  routes: RouterRoute[]
+}
+
+/**
+ * Response from training a router.
+ */
+export interface RouterTrainResponse {
+  model: string
+  status: string
+  num_routes: number
+  routes: string[]
+  default_model: string
+  similarity_threshold: number
+}
+
+/**
+ * Request to route a query.
+ */
+export interface RouterRouteRequest {
+  model: string
+  query: string
+}
+
+/**
+ * Response from routing a query.
+ */
+export interface RouterRouteResponse {
+  object: string
+  model: string
+  target_model: string
+  route_name: string | null
+  similarity_score: number
+  matched_utterance: string | null
+  // Additional metadata from Phase E3
+  router_name?: string
+  namespace?: string
+  project_id?: string
+}
+
+/**
+ * Routing info displayed in UI components.
+ * Used for visual representation of routing decisions.
+ */
+export interface RoutingInfo {
+  target_model: string
+  route_name: string | null
+  similarity_score: number
+  router_name: string
+  matched_utterance?: string | null
+}
+
+/**
+ * Request to load a saved router.
+ */
+export interface RouterLoadRequest {
+  model: string
+}
+
+/**
+ * Response from loading a router.
+ */
+export interface RouterLoadResponse {
+  model: string
+  status: string
+  num_routes: number
+  routes: string[]
+  default_model: string
+}
+
+/**
+ * Information about a saved router model.
+ */
+export interface RouterModelInfo {
+  name: string
+  path: string
+  num_routes: number
+  routes: string[]
+  embedder_model: string
+  default_model: string
+  similarity_threshold: number
+  created?: string
+}
+
+/**
+ * Response from listing router models.
+ */
+export interface RouterListModelsResponse {
+  object: string
+  data: RouterModelInfo[]
+  models_dir: string
+  total: number
+}
+
+/**
+ * Request to generate synthetic training data.
+ */
+export interface RouterGenerateDataRequest {
+  route_description?: string
+  count?: number // default: 20
+  model?: string // LLM to use, default: "unsloth/Qwen3-1.7B-GGUF:Q4_K_M" (local)
+  api_key?: string
+  base_url?: string // default: "http://localhost:11540/v1" (local Universal Runtime)
+  routes?: Array<{
+    route_name: string
+    description: string
+    count?: number
+  }>
+}
+
+/**
+ * Default model for local data generation (no API key required).
+ */
+export const DEFAULT_GENERATION_MODEL = 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M'
+
+/**
+ * Default base URL for local data generation.
+ */
+export const DEFAULT_GENERATION_BASE_URL = 'http://localhost:11540/v1'
+
+/**
+ * Response with generated utterances (single route).
+ */
+export interface RouterGenerateDataResponse {
+  object: 'utterance_list'
+  route_description: string
+  utterances: string[]
+  count: number
+  model: string
+}
+
+/**
+ * Response with generated utterances (batch mode).
+ */
+export interface RouterBatchGenerateDataResponse {
+  object: 'batch_utterance_list'
+  routes: Array<{
+    route_name: string
+    description: string
+    utterances: string[]
+    count: number
+  }>
+  total_utterances: number
+  model: string
+}
+
+/**
+ * Available embedder models for routers.
+ */
+export const ROUTER_EMBEDDER_OPTIONS = [
+  {
+    value: 'sentence-transformers/all-MiniLM-L6-v2',
+    label: 'all-MiniLM-L6-v2 (Recommended)',
+    description: 'Fast, good quality. 384 dimensions.',
+  },
+  {
+    value: 'sentence-transformers/all-mpnet-base-v2',
+    label: 'all-mpnet-base-v2',
+    description: 'Higher quality, slower. 768 dimensions.',
+  },
+  {
+    value: 'BAAI/bge-small-en-v1.5',
+    label: 'BGE Small',
+    description: 'Compact, good for English. 384 dimensions.',
+  },
+  {
+    value: 'BAAI/bge-base-en-v1.5',
+    label: 'BGE Base',
+    description: 'Balanced quality/speed. 768 dimensions.',
+  },
+  {
+    value: 'thenlper/gte-small',
+    label: 'GTE Small',
+    description: 'Fast general embeddings. 384 dimensions.',
+  },
+  {
+    value: 'thenlper/gte-base',
+    label: 'GTE Base',
+    description: 'Better quality general embeddings. 768 dimensions.',
+  },
+]
+
+// =============================================================================
 // Shared Types
 // =============================================================================
 

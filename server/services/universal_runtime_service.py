@@ -375,6 +375,177 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/anomaly/models/{filename}")
 
     # =========================================================================
+    # Router
+    # =========================================================================
+
+    @classmethod
+    async def router_train(
+        cls,
+        model: str,
+        routes: list[dict],
+        embedder_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        default_model: str = "default",
+        similarity_threshold: float = 0.7,
+        storage_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Train a semantic router.
+
+        Args:
+            model: Router model name
+            routes: List of routes with name, target_model, and utterances
+            embedder_model: HuggingFace model for embeddings
+            default_model: Fallback model for unmatched queries
+            similarity_threshold: Minimum similarity to route (0-1)
+            storage_path: Optional custom storage path for project-specific storage
+        """
+        payload = {
+            "model": model,
+            "embedder_model": embedder_model,
+            "default_model": default_model,
+            "similarity_threshold": similarity_threshold,
+            "routes": routes,
+        }
+        if storage_path:
+            payload["storage_path"] = storage_path
+
+        return await cls._make_request(
+            "POST",
+            "/v1/router/train",
+            json=payload,
+        )
+
+    @classmethod
+    async def router_route(
+        cls,
+        model: str,
+        query: str,
+        storage_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Route a query using a trained router.
+
+        Args:
+            model: Router model name
+            query: Query text to route
+            storage_path: Optional storage path for project-specific router lookup
+        """
+        payload = {"model": model, "query": query}
+        if storage_path:
+            payload["storage_path"] = storage_path
+
+        return await cls._make_request(
+            "POST",
+            "/v1/router/route",
+            json=payload,
+        )
+
+    @classmethod
+    async def router_load(
+        cls,
+        model: str,
+        storage_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Load a saved router into memory.
+
+        Args:
+            model: Router model name
+            storage_path: Optional storage path for project-specific router
+        """
+        payload = {"model": model}
+        if storage_path:
+            payload["storage_path"] = storage_path
+
+        return await cls._make_request(
+            "POST",
+            "/v1/router/load",
+            json=payload,
+        )
+
+    @classmethod
+    async def router_list_models(
+        cls,
+        storage_path: str | None = None,
+    ) -> dict[str, Any]:
+        """List all saved router models.
+
+        Args:
+            storage_path: Optional storage path for project-specific routers
+        """
+        if storage_path:
+            return await cls._make_request(
+                "GET",
+                "/v1/router/models",
+                json={"storage_path": storage_path},
+            )
+        return await cls._make_request("GET", "/v1/router/models")
+
+    @classmethod
+    async def router_delete_model(
+        cls,
+        model_name: str,
+        storage_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Delete a saved router model.
+
+        Args:
+            model_name: Router model name to delete
+            storage_path: Optional storage path for project-specific router
+        """
+        if storage_path:
+            # Use POST with body for storage_path
+            return await cls._make_request(
+                "POST",
+                f"/v1/router/models/{model_name}/delete",
+                json={"storage_path": storage_path},
+            )
+        return await cls._make_request("DELETE", f"/v1/router/models/{model_name}")
+
+    @classmethod
+    async def router_generate_data(
+        cls,
+        route_description: str | None = None,
+        count: int = 20,
+        complexity: str = "mixed",
+        style: str | None = None,
+        model: str = "unsloth/Qwen3-1.7B-GGUF:Q4_K_M",
+        api_key: str | None = None,
+        base_url: str | None = None,
+        routes: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        """Generate synthetic training data for router routes.
+
+        Args:
+            route_description: Description for single route generation
+            count: Number of utterances to generate
+            complexity: "simple", "complex", or "mixed"
+            style: Optional custom style instructions
+            model: LLM model for generation
+            api_key: API key for the LLM
+            base_url: Custom API base URL
+            routes: List of routes for batch generation
+        """
+        payload: dict[str, Any] = {
+            "count": count,
+            "model": model,
+            "complexity": complexity,
+        }
+        if route_description:
+            payload["route_description"] = route_description
+        if style:
+            payload["style"] = style
+        if api_key:
+            payload["api_key"] = api_key
+        if base_url:
+            payload["base_url"] = base_url
+        if routes:
+            payload["routes"] = routes
+
+        return await cls._make_request(
+            "POST",
+            "/v1/router/generate-data",
+            json=payload,
+        )
+
+    # =========================================================================
     # Health Check
     # =========================================================================
 

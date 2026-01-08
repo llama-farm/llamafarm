@@ -1,5 +1,5 @@
 /**
- * React Query hooks for ML model operations (classifier and anomaly detection)
+ * React Query hooks for ML model operations (classifier, anomaly detection, and router)
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -13,6 +13,10 @@ import type {
   AnomalyScoreRequest,
   AnomalySaveRequest,
   AnomalyLoadRequest,
+  RouterTrainRequest,
+  RouterRouteRequest,
+  RouterLoadRequest,
+  RouterGenerateDataRequest,
 } from '../types/ml'
 
 // =============================================================================
@@ -28,6 +32,9 @@ export const mlModelKeys = {
   // Anomaly keys
   anomalies: () => [...mlModelKeys.all, 'anomalies'] as const,
   anomalyList: () => [...mlModelKeys.anomalies(), 'list'] as const,
+  // Router keys
+  routers: () => [...mlModelKeys.all, 'routers'] as const,
+  routerList: () => [...mlModelKeys.routers(), 'list'] as const,
 }
 
 // =============================================================================
@@ -299,6 +306,91 @@ export function useTrainAndSaveAnomaly() {
 }
 
 // =============================================================================
+// Router Queries
+// =============================================================================
+
+/**
+ * List all saved router models
+ */
+export function useListRouterModels(options?: {
+  enabled?: boolean
+  staleTime?: number
+}) {
+  return useQuery({
+    queryKey: mlModelKeys.routerList(),
+    queryFn: () => mlService.listRouterModels(),
+    enabled: options?.enabled !== false,
+    staleTime: options?.staleTime ?? 5_000, // 5 seconds - short to catch new models quickly
+    refetchOnMount: 'always', // Always refetch when component mounts
+  })
+}
+
+// =============================================================================
+// Router Mutations
+// =============================================================================
+
+/**
+ * Train a semantic router
+ */
+export function useTrainRouter() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (request: RouterTrainRequest) => mlService.trainRouter(request),
+    onSuccess: () => {
+      // Invalidate router list to show new model
+      queryClient.invalidateQueries({
+        queryKey: mlModelKeys.routerList(),
+      })
+    },
+  })
+}
+
+/**
+ * Route a query using a trained router
+ */
+export function useRouteQuery() {
+  return useMutation({
+    mutationFn: (request: RouterRouteRequest) => mlService.routeQuery(request),
+  })
+}
+
+/**
+ * Load a saved router into memory
+ */
+export function useLoadRouter() {
+  return useMutation({
+    mutationFn: (request: RouterLoadRequest) => mlService.loadRouter(request),
+  })
+}
+
+/**
+ * Delete a saved router model
+ */
+export function useDeleteRouterModel() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (modelName: string) => mlService.deleteRouterModel(modelName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: mlModelKeys.routerList(),
+      })
+    },
+  })
+}
+
+/**
+ * Generate synthetic training data for router routes
+ */
+export function useGenerateRouterData() {
+  return useMutation({
+    mutationFn: (request: RouterGenerateDataRequest) =>
+      mlService.generateRouterData(request),
+  })
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -325,4 +417,12 @@ export default {
   useLoadAnomaly,
   useDeleteAnomalyModel,
   useTrainAndSaveAnomaly,
+  // Router queries
+  useListRouterModels,
+  // Router mutations
+  useTrainRouter,
+  useRouteQuery,
+  useLoadRouter,
+  useDeleteRouterModel,
+  useGenerateRouterData,
 }

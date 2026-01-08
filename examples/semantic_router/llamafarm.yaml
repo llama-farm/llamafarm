@@ -1,0 +1,103 @@
+version: v1
+name: semantic_router_demo
+namespace: default
+
+runtime:
+  default_model: smart_router  # Use the router as the default model
+
+  models:
+    # The semantic router - routes queries to specialized models
+    - name: smart_router
+      provider: router
+      embedder_model: sentence-transformers/all-MiniLM-L6-v2
+      default_model: general_assistant  # Fallback for unmatched queries
+      similarity_threshold: 0.6  # Lower threshold for demo
+
+      routes:
+        - name: billing
+          target_model: billing_specialist
+          description: "Questions about bills, payments, invoices, and account balances"
+          utterances:
+            - "what is my bill"
+            - "how much do I owe"
+            - "payment options"
+            - "invoice question"
+            - "when is my payment due"
+            - "can I pay in installments"
+            - "billing statement"
+            - "account balance"
+            - "credit card payment"
+            - "autopay setup"
+
+        - name: support
+          target_model: tech_support
+          description: "Technical support, login issues, and account problems"
+          utterances:
+            - "help with login"
+            - "password reset"
+            - "can't access my account"
+            - "technical problem"
+            - "app not working"
+            - "connection issues"
+            - "how do I change my settings"
+            - "two-factor authentication"
+            - "app keeps crashing"
+            - "error message"
+
+        - name: sales
+          target_model: sales_team
+          description: "Pricing, plans, upgrades, and sales inquiries"
+          utterances:
+            - "pricing information"
+            - "enterprise plan"
+            - "get a quote"
+            - "upgrade subscription"
+            - "product features"
+            - "team plan"
+            - "annual discount"
+            - "compare plans"
+            - "free trial"
+            - "cancel subscription"
+
+    # Target models - all use the same Ollama model for demo
+    # In production, these would be different specialized models
+    - name: billing_specialist
+      provider: ollama
+      model: llama3.2:3b
+      base_url: http://localhost:11434
+
+    - name: tech_support
+      provider: ollama
+      model: llama3.2:3b
+      base_url: http://localhost:11434
+
+    - name: sales_team
+      provider: ollama
+      model: llama3.2:3b
+      base_url: http://localhost:11434
+
+    - name: general_assistant
+      provider: ollama
+      model: llama3.2:3b
+      base_url: http://localhost:11434
+
+prompts:
+  - name: billing_prompt
+    messages:
+      - role: system
+        content: "You are a helpful billing specialist. Answer questions about bills, payments, and invoices clearly and concisely."
+
+  - name: support_prompt
+    messages:
+      - role: system
+        content: "You are a technical support specialist. Help users with login issues, app problems, and account settings."
+
+  - name: sales_prompt
+    messages:
+      - role: system
+        content: "You are a friendly sales representative. Help users understand pricing, plans, and product features."
+
+  - name: default
+    messages:
+      - role: system
+        content: "You are a helpful assistant. Answer questions clearly and concisely."

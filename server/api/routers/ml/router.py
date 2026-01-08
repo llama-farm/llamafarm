@@ -12,8 +12,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from server.services.ml_model_service import MLModelService
+from server.services.router_storage_service import RouterStorageService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
 from .types import (
@@ -25,11 +27,29 @@ from .types import (
     ClassifierLoadRequest,
     ClassifierPredictRequest,
     ClassifierSaveRequest,
+    RouterGenerateDataRequest,
+    RouterLoadRequest,
+    RouterRouteRequest,
+    RouterTrainRequest,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ml", tags=["ml"])
+
+
+def _validate_model_name(name: str, param_name: str = "model name") -> None:
+    """Validate a model name to prevent path traversal attacks.
+
+    Args:
+        name: The model name to validate
+        param_name: Name of the parameter for error messages
+
+    Raises:
+        HTTPException: If the name contains invalid characters
+    """
+    if "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(status_code=400, detail=f"Invalid {param_name}: {name}")
 
 
 # =============================================================================
@@ -67,7 +87,8 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
     }
     ```
 
-    After fitting, use /v1/ml/classifier/save to persist the model (with optional description).
+    After fitting, use /v1/ml/classifier/save to persist the model
+    (with optional description).
     Use /v1/ml/classifier/predict to classify new texts.
     Use "{model}-latest" in predict/load to get the most recent version.
     """
@@ -217,12 +238,7 @@ async def delete_classifier_model(model_name: str) -> dict[str, Any]:
 
     Removes the model directory from disk. Does not affect cached models.
     """
-    # Validate model name to prevent path traversal
-    if "/" in model_name or "\\" in model_name or ".." in model_name:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=400, detail=f"Invalid model name: {model_name}")
-
+    _validate_model_name(model_name)
     return await UniversalRuntimeService.classifier_delete_model(model_name)
 
 
@@ -262,7 +278,8 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
     }
     ```
 
-    After fitting, use /v1/ml/anomaly/save to persist the model (with optional description).
+    After fitting, use /v1/ml/anomaly/save to persist the model
+    (with optional description).
     Use /v1/ml/anomaly/score or /v1/ml/anomaly/detect for inference.
     Use "{model}-latest" in score/detect/load to get the most recent version.
     """
@@ -456,10 +473,338 @@ async def delete_anomaly_model(filename: str) -> dict[str, Any]:
 
     Removes the model file from disk. Does not affect cached models.
     """
-    # Validate filename to prevent path traversal
-    if "/" in filename or "\\" in filename or ".." in filename:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
-
+    _validate_model_name(filename, "filename")
     return await UniversalRuntimeService.anomaly_delete_model(filename)
+
+
+# =============================================================================
+# Semantic Router Endpoints
+# =============================================================================
+
+
+@router.post("/router/train")
+async def train_router(request: RouterTrainRequest) -> dict[str, Any]:
+    """Train a semantic router with routes and utterances.
+
+    Creates a router that matches queries to target models based on
+    semantic similarity to example utterances.
+
+    Routes are automatically saved to the project directory after training.
+
+    Example request:
+    ```json
+    {
+        "model": "customer-router",
+        "embedder_model": "sentence-transformers/all-MiniLM-L6-v2",
+        "default_model": "general-assistant",
+        "similarity_threshold": 0.7,
+        "namespace": "default",
+        "project_id": "my_project",
+        "routes": [
+            {
+                "name": "billing",
+                "target_model": "billing-specialist",
+                "utterances": ["what is my bill", "payment question"]
+            },
+            {
+                "name": "support",
+                "target_model": "tech-support",
+                "utterances": ["help with login", "password reset"]
+            }
+        ]
+    }
+    ```
+    """
+    logger.info(
+        f"Training router: {request.model} "
+        f"(namespace={request.namespace}, project={request.project_id})"
+    )
+
+    # Get project-specific storage path
+    storage_path = str(
+        RouterStorageService.get_router_dir(
+            request.namespace, request.project_id, request.model
+        )
+    )
+
+    # Convert routes to dict format for service
+    routes_data = [
+        {
+            "name": route.name,
+            "target_model": route.target_model,
+            "description": route.description,
+            "utterances": route.utterances,
+        }
+        for route in request.routes
+    ]
+
+    result = await UniversalRuntimeService.router_train(
+        model=request.model,
+        routes=routes_data,
+        embedder_model=request.embedder_model,
+        default_model=request.default_model,
+        similarity_threshold=request.similarity_threshold,
+        storage_path=storage_path,
+    )
+
+    # Add project context to response
+    result["namespace"] = request.namespace
+    result["project_id"] = request.project_id
+    result["storage_path"] = storage_path
+
+    return result
+
+
+@router.post("/router/route")
+async def route_query(request: RouterRouteRequest) -> dict[str, Any]:
+    """Route a query to the appropriate target model.
+
+    Returns the routing decision including:
+    - target_model: Model to route to
+    - route_name: Matched route (or null for default)
+    - similarity_score: Confidence of the match
+    - matched_utterance: Best matching training example
+    - router_name: Name of the router that handled the request
+    - namespace: Project namespace
+    - project_id: Project ID
+
+    Example request:
+    ```json
+    {
+        "model": "customer-router",
+        "query": "I need help with my account balance",
+        "namespace": "default",
+        "project_id": "my_project"
+    }
+    ```
+    """
+    # Get project-specific storage path
+    storage_path = str(
+        RouterStorageService.get_router_dir(
+            request.namespace, request.project_id, request.model
+        )
+    )
+
+    result = await UniversalRuntimeService.router_route(
+        model=request.model,
+        query=request.query,
+        storage_path=storage_path,
+    )
+
+    # Add routing metadata for clients
+    result["router_name"] = request.model
+    result["namespace"] = request.namespace
+    result["project_id"] = request.project_id
+
+    # Log routing decision for observability
+    logger.info(
+        "Routing decision",
+        extra={
+            "router_name": request.model,
+            "target_model": result.get("target_model"),
+            "route_name": result.get("route_name"),
+            "similarity_score": result.get("similarity_score"),
+            "query_preview": (
+                request.query[:50] + "..."
+                if len(request.query) > 50
+                else request.query
+            ),
+            "namespace": request.namespace,
+            "project_id": request.project_id,
+        },
+    )
+
+    return result
+
+
+@router.post("/router/load")
+async def load_router(request: RouterLoadRequest) -> dict[str, Any]:
+    """Load a saved router into memory.
+
+    Routers are automatically loaded on first use, but this endpoint
+    allows pre-loading for faster first requests.
+
+    Example request:
+    ```json
+    {
+        "model": "customer-router",
+        "namespace": "default",
+        "project_id": "my_project"
+    }
+    ```
+    """
+    # Get project-specific storage path
+    storage_path = str(
+        RouterStorageService.get_router_dir(
+            request.namespace, request.project_id, request.model
+        )
+    )
+
+    return await UniversalRuntimeService.router_load(
+        model=request.model,
+        storage_path=storage_path,
+    )
+
+
+class RouterListModelsRequest(BaseModel):
+    """Request to list router models with project context."""
+
+    namespace: str = "default"
+    project_id: str = "default"
+
+
+class RouterDeleteRequest(BaseModel):
+    """Request to delete a router with project context."""
+
+    namespace: str = "default"
+    project_id: str = "default"
+
+
+@router.get("/router/models")
+async def list_router_models() -> dict[str, Any]:
+    """List all saved router models (global/legacy).
+
+    Returns routers saved in the global router models directory.
+    For project-specific routers, use POST /router/models/list
+    with namespace/project_id.
+
+    Returns:
+    - name: Router model name
+    - num_routes: Number of routes configured
+    - routes: List of route names
+    - embedder_model: Embedding model used
+    - default_model: Fallback model
+    - similarity_threshold: Matching threshold
+    """
+    return await UniversalRuntimeService.router_list_models()
+
+
+@router.post("/router/models/list")
+async def list_router_models_project(
+    request: RouterListModelsRequest,
+) -> dict[str, Any]:
+    """List all saved router models in a project.
+
+    Example request:
+    ```json
+    {
+        "namespace": "default",
+        "project_id": "my_project"
+    }
+    ```
+
+    Returns routers saved in the project directory with metadata:
+    - name: Router model name
+    - path: Storage path
+    - has_embeddings: Whether embeddings file exists
+    - config: Full router configuration
+    """
+    routers = RouterStorageService.list_routers(request.namespace, request.project_id)
+
+    return {
+        "object": "list",
+        "data": routers,
+        "total": len(routers),
+        "namespace": request.namespace,
+        "project_id": request.project_id,
+    }
+
+
+@router.delete("/router/models/{model_name}")
+async def delete_router_model(model_name: str) -> dict[str, Any]:
+    """Delete a saved router model (global/legacy).
+
+    Removes the router from the global storage. Does not affect cached routers.
+    For project-specific routers, use POST /router/models/{name}/delete.
+    """
+    _validate_model_name(model_name)
+    return await UniversalRuntimeService.router_delete_model(model_name)
+
+
+@router.post("/router/models/{model_name}/delete")
+async def delete_router_model_project(
+    model_name: str, request: RouterDeleteRequest
+) -> dict[str, Any]:
+    """Delete a saved router model from a project.
+
+    Example request:
+    ```json
+    {
+        "namespace": "default",
+        "project_id": "my_project"
+    }
+    ```
+    """
+    _validate_model_name(model_name)
+    deleted = RouterStorageService.delete_router(
+        request.namespace, request.project_id, model_name
+    )
+
+    return {
+        "deleted": deleted,
+        "model": model_name,
+        "namespace": request.namespace,
+        "project_id": request.project_id,
+    }
+
+
+@router.post("/router/generate-data")
+async def generate_router_data(request: RouterGenerateDataRequest) -> dict[str, Any]:
+    """Generate synthetic training data for router routes.
+
+    Uses an LLM to generate diverse example utterances based on
+    route descriptions. Uses local model by default (no API key needed).
+
+    Complexity options:
+    - simple: Short, direct questions (5-10 words)
+    - complex: Detailed, multi-part questions (15-30 words)
+    - mixed: A mix of simple and complex (default)
+
+    Single route generation:
+    ```json
+    {
+        "route_description": "billing and payment inquiries",
+        "count": 20,
+        "complexity": "simple"
+    }
+    ```
+
+    Batch generation for multiple routes:
+    ```json
+    {
+        "routes": [
+            {"route_name": "billing", "description": "billing inquiries", "count": 10},
+            {
+                "route_name": "support",
+                "description": "tech support",
+                "count": 10,
+                "complexity": "complex"
+            }
+        ],
+        "complexity": "mixed"
+    }
+    ```
+    """
+    # Convert routes to dict format if present
+    routes_data = None
+    if request.routes:
+        routes_data = [
+            {
+                "route_name": route.route_name,
+                "description": route.description,
+                "count": route.count,
+                "complexity": route.complexity,
+            }
+            for route in request.routes
+        ]
+
+    return await UniversalRuntimeService.router_generate_data(
+        route_description=request.route_description,
+        count=request.count,
+        complexity=request.complexity,
+        style=request.style,
+        model=request.model,
+        api_key=request.api_key,
+        base_url=request.base_url,
+        routes=routes_data,
+    )

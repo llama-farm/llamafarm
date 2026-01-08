@@ -16,8 +16,8 @@ export interface InferenceModel {
 }
 
 // Trained models types
-export type TrainedModelType = 'anomaly_detection' | 'classifier'
-export type TrainedModelStatus = 'ready' | 'training' | 'failed'
+export type TrainedModelType = 'anomaly_detection' | 'classifier' | 'router'
+export type TrainedModelStatus = 'ready' | 'training' | 'failed' | 'needs_training'
 
 export interface TrainedModelVersion {
   id: string
@@ -46,6 +46,14 @@ export interface TrainedModel {
   backend?: string
   // Classifier-specific fields
   labels?: string[]
+  // Router-specific fields
+  numRoutes?: number
+  routes?: string[]
+  defaultModel?: string
+  similarityThreshold?: number
+  embedderModel?: string
+  // Config source tracking
+  fromConfig?: boolean // True if model was defined in llamafarm.yaml
 }
 
 // Test result types

@@ -14,24 +14,48 @@ import type { TrainedModel, TrainedModelType } from './types'
 import {
   useListAnomalyModels,
   useListClassifierModels,
+  useListRouterModels,
   useDeleteAnomalyModel,
   useDeleteClassifierModel,
+  useDeleteRouterModel,
 } from '../../hooks/useMLModels'
 import {
   parseVersionedModelName,
   formatModelTimestamp,
   type AnomalyModelInfo,
   type ClassifierModelInfo,
+  type RouterModelInfo,
 } from '../../types/ml'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProject } from '../../hooks/useProjects'
 
 // Convert API model to unified TrainedModel type
 function toTrainedModel(
-  model: AnomalyModelInfo | ClassifierModelInfo,
+  model: AnomalyModelInfo | ClassifierModelInfo | RouterModelInfo,
   type: TrainedModelType,
   versionCount: number
 ): TrainedModel {
-  // Use API's base_name field directly
-  const baseName = model.base_name || parseVersionedModelName(model.name).baseName
+  // For router models, use name directly (no versioning)
+  if (type === 'router') {
+    const routerModel = model as RouterModelInfo
+    return {
+      id: routerModel.name,
+      name: routerModel.name,
+      type,
+      status: 'ready',
+      versionCount: 1, // Routers don't have versions
+      lastTrained: routerModel.created || new Date().toISOString(),
+      numRoutes: routerModel.num_routes,
+      routes: routerModel.routes,
+      defaultModel: routerModel.default_model,
+      similarityThreshold: routerModel.similarity_threshold,
+      embedderModel: routerModel.embedder_model,
+    }
+  }
+
+  // Use API's base_name field directly for anomaly/classifier
+  const baseName = (model as AnomalyModelInfo | ClassifierModelInfo).base_name
+    || parseVersionedModelName(model.name).baseName
   return {
     id: baseName, // Use base name as ID for navigation
     name: baseName,
@@ -39,7 +63,7 @@ function toTrainedModel(
     status: 'ready',
     versionCount,
     lastTrained: model.created || new Date().toISOString(),
-    description: model.description,
+    description: (model as AnomalyModelInfo | ClassifierModelInfo).description,
     // Anomaly-specific
     ...(type === 'anomaly_detection' && {
       backend: (model as AnomalyModelInfo).backend,
@@ -69,6 +93,14 @@ function TrainedModels() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
+  // Get active project for config-defined routers
+  const activeProject = useActiveProject()
+  const { data: projectDetail } = useProject(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    !!activeProject
+  )
+
   // Fetch models from API
   const {
     data: anomalyData,
@@ -80,12 +112,25 @@ function TrainedModels() {
     isLoading: isLoadingClassifier,
     error: classifierError,
   } = useListClassifierModels()
+  const {
+    data: routerData,
+    isLoading: isLoadingRouter,
+    error: routerError,
+  } = useListRouterModels()
 
   const deleteAnomalyMutation = useDeleteAnomalyModel()
   const deleteClassifierMutation = useDeleteClassifierModel()
+  const deleteRouterMutation = useDeleteRouterModel()
 
   // Track which model is being deleted
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null)
+
+  // Extract routers from project config (llamafarm.yaml)
+  const configRouters = useMemo(() => {
+    const runtimeCfg = (projectDetail as any)?.project?.config?.runtime || {}
+    const models = runtimeCfg?.models || []
+    return models.filter((m: any) => m.provider === 'router')
+  }, [projectDetail])
 
   // Combine and normalize models
   const trainedModels = useMemo(() => {
@@ -120,21 +165,56 @@ function TrainedModels() {
       }
     }
 
-    // Sort by last trained date (newest first)
-    return models.sort(
-      (a, b) =>
-        new Date(b.lastTrained).getTime() - new Date(a.lastTrained).getTime()
-    )
-  }, [anomalyData, classifierData])
+    // Process router models (no versioning, each is unique)
+    const trainedRouterNames = new Set<string>()
+    if (routerData?.data) {
+      for (const router of routerData.data) {
+        trainedRouterNames.add(router.name)
+        models.push(toTrainedModel(router, 'router', 1))
+      }
+    }
+
+    // Add config-defined routers that haven't been trained yet
+    for (const configRouter of configRouters) {
+      if (!trainedRouterNames.has(configRouter.name)) {
+        // Create a "needs training" router entry from config
+        models.push({
+          id: configRouter.name,
+          name: configRouter.name,
+          type: 'router',
+          status: 'needs_training',
+          versionCount: 0,
+          lastTrained: new Date().toISOString(),
+          numRoutes: configRouter.routes?.length || 0,
+          routes: configRouter.routes?.map((r: any) => r.name) || [],
+          defaultModel: configRouter.default_model,
+          similarityThreshold: configRouter.similarity_threshold,
+          embedderModel: configRouter.embedder_model,
+          fromConfig: true,
+        })
+      }
+    }
+
+    // Sort by status (needs_training first), then by last trained date (newest first)
+    return models.sort((a, b) => {
+      // Needs training models first
+      if (a.status === 'needs_training' && b.status !== 'needs_training') return -1
+      if (b.status === 'needs_training' && a.status !== 'needs_training') return 1
+      // Then by date
+      return new Date(b.lastTrained).getTime() - new Date(a.lastTrained).getTime()
+    })
+  }, [anomalyData, classifierData, routerData, configRouters])
 
   const handleDeleteModel = async (model: TrainedModel) => {
     // Confirm deletion
-    const confirmMessage = `Delete "${model.name}" and all ${model.versionCount} version${model.versionCount !== 1 ? 's' : ''}? This cannot be undone.`
+    const confirmMessage = model.type === 'router'
+      ? `Delete router "${model.name}"? This cannot be undone.`
+      : `Delete "${model.name}" and all ${model.versionCount} version${model.versionCount !== 1 ? 's' : ''}? This cannot be undone.`
     if (!window.confirm(confirmMessage)) return
 
     setDeletingModelId(model.id)
     try {
-      // Delete all versions of this model
+      // Delete model(s)
       if (model.type === 'anomaly_detection' && anomalyData?.data) {
         const versions = anomalyData.data.filter((m: AnomalyModelInfo) => {
           const parsed = parseVersionedModelName(m.name)
@@ -151,16 +231,20 @@ function TrainedModels() {
         await Promise.all(
           versions.map(version => deleteClassifierMutation.mutateAsync(version.name))
         )
+      } else if (model.type === 'router') {
+        await deleteRouterMutation.mutateAsync(model.id)
       }
 
       toast({
-        message: `Successfully deleted ${model.name} and all its versions.`,
+        message: model.type === 'router'
+          ? `Successfully deleted router ${model.name}.`
+          : `Successfully deleted ${model.name} and all its versions.`,
         icon: 'checkmark-filled',
       })
     } catch (error) {
       console.error('Failed to delete model:', error)
       toast({
-        message: 'Failed to delete some model versions. Please try again.',
+        message: 'Failed to delete model. Please try again.',
         variant: 'destructive',
         icon: 'alert-triangle',
       })
@@ -169,8 +253,8 @@ function TrainedModels() {
     }
   }
 
-  const isLoading = isLoadingAnomaly || isLoadingClassifier
-  const hasError = anomalyError || classifierError
+  const isLoading = isLoadingAnomaly || isLoadingClassifier || isLoadingRouter
+  const hasError = anomalyError || classifierError || routerError
 
   return (
     <div className="flex flex-col gap-6">
@@ -183,8 +267,8 @@ function TrainedModels() {
         </p>
       </div>
 
-      {/* Two action cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Three action cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Anomaly Detection Card */}
         <div
           className="rounded-lg border border-border bg-card p-5 flex flex-col gap-3 cursor-pointer hover:border-primary/50 transition-colors"
@@ -222,6 +306,28 @@ function TrainedModels() {
             onClick={e => {
               e.stopPropagation()
               navigate('/chat/models/train/classifier/new')
+            }}
+            className="w-fit"
+          >
+            Create
+          </Button>
+        </div>
+
+        {/* Router Card */}
+        <div
+          className="rounded-lg border border-border bg-card p-5 flex flex-col gap-3 cursor-pointer hover:border-primary/50 transition-colors"
+          onClick={() => navigate('/chat/models/train/router/new')}
+        >
+          <h3 className="font-medium">Semantic router models</h3>
+          <p className="text-sm text-muted-foreground flex-1">
+            Routes queries to the right LLM based on topic. Fast, sub-millisecond
+            routing using semantic embeddings.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={e => {
+              e.stopPropagation()
+              navigate('/chat/models/train/router/new')
             }}
             className="w-fit"
           >
@@ -283,18 +389,29 @@ function TrainedModelCard({
   isDeleting?: boolean
 }) {
   const navigate = useNavigate()
+
+  // Type label and edit path based on model type
   const typeLabel =
-    model.type === 'anomaly_detection' ? 'Anomaly detection' : 'Classifier'
+    model.type === 'anomaly_detection'
+      ? 'Anomaly detection'
+      : model.type === 'router'
+        ? 'Router'
+        : 'Classifier'
+
   const editPath =
     model.type === 'anomaly_detection'
       ? `/chat/models/train/anomaly/${model.id}`
-      : `/chat/models/train/classifier/${model.id}`
+      : model.type === 'router'
+        ? `/chat/models/train/router/${model.id}`
+        : `/chat/models/train/classifier/${model.id}`
 
-  // Use project colors: teal for anomaly detection, purple for classifier
+  // Use project colors: teal for anomaly, purple for classifier, blue for router
   const typeColorClasses =
     model.type === 'anomaly_detection'
       ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
-      : 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300'
+      : model.type === 'router'
+        ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
+        : 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300'
 
   // Format the last trained date
   const lastTrainedDisplay = (() => {
@@ -335,16 +452,18 @@ function TrainedModelCard({
             >
               Edit
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={e => {
-                e.stopPropagation()
-                onDelete()
-              }}
-              className="text-destructive"
-              disabled={isDeleting}
-            >
-              {isDeleting ? 'Deleting...' : 'Delete'}
-            </DropdownMenuItem>
+            {model.status !== 'needs_training' && (
+              <DropdownMenuItem
+                onClick={e => {
+                  e.stopPropagation()
+                  onDelete()
+                }}
+                className="text-destructive"
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -353,14 +472,25 @@ function TrainedModelCard({
           {model.description}
         </p>
       )}
-      <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-center gap-2 mt-1 flex-wrap">
         <Badge className={typeColorClasses}>{typeLabel}</Badge>
+        {model.status === 'needs_training' && (
+          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+            Needs training
+          </Badge>
+        )}
         <span className="text-xs text-muted-foreground">
-          {model.versionCount} version{model.versionCount !== 1 ? 's' : ''}
+          {model.type === 'router'
+            ? `${model.numRoutes || 0} route${model.numRoutes !== 1 ? 's' : ''}`
+            : `${model.versionCount} version${model.versionCount !== 1 ? 's' : ''}`
+          }
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        Last trained: {lastTrainedDisplay}
+        {model.status === 'needs_training'
+          ? 'Defined in llamafarm.yaml'
+          : `${model.type === 'router' ? 'Created' : 'Last trained'}: ${lastTrainedDisplay}`
+        }
       </p>
     </div>
   )

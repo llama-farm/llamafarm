@@ -83,7 +83,9 @@ class ChatOrchestratorAgent(LFAgent):
         self._model_string = model_config.model
 
         history = self._get_history(project_config)
-        provider = RuntimeService.get_provider(model_config)
+        # Pass all_models to provider for router to resolve target models
+        all_models = project_config.runtime.models or []
+        provider = RuntimeService.get_provider(model_config, all_models=all_models)
         client = provider.get_client()
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
@@ -564,7 +566,8 @@ class ChatOrchestratorAgent(LFAgent):
         self, model_name: str
     ) -> list[LFChatCompletionMessageParam]:
         model_config = ModelService.get_model(self._project_config, model_name)
-        provider = RuntimeService.get_provider(model_config)
+        all_models = self._project_config.runtime.models or []
+        provider = RuntimeService.get_provider(model_config, all_models=all_models)
         ClientClass = provider.get_client().__class__
 
         messages = PromptService.resolve_prompts_for_model(

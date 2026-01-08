@@ -22,10 +22,13 @@ Environment Variables:
 import asyncio
 import base64
 import os
+import re
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
+
+import httpx
 
 from fastapi import (
     FastAPI,
@@ -33,7 +36,7 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel as PydanticBaseModel, Field
 
 from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
@@ -46,6 +49,8 @@ from models import (
     GGUFLanguageModel,
     LanguageModel,
     OCRModel,
+    RouteDecision,
+    RouterModel,
 )
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
@@ -114,6 +119,16 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Error unloading classifier {cache_key}: {e}")
         _classifiers.clear()
 
+    if _routers:
+        logger.info(f"Unloading {len(_routers)} remaining router(s)")
+        for cache_key, router in list(_routers.items()):
+            try:
+                await router.unload()
+                logger.info(f"Unloaded router: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading router {cache_key}: {e}")
+        _routers.clear()
+
     logger.info("Shutdown complete")
 
 
@@ -136,6 +151,7 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 # Models are automatically tracked for idle time and cleaned up by background task
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_routers: ModelCache["RouterModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -164,10 +180,11 @@ async def _cleanup_idle_models() -> None:
         try:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
-            # Cleanup expired models from both caches
+            # Cleanup expired models from all caches
             for cache, cache_name in [
                 (_models, "models"),
                 (_classifiers, "classifiers"),
+                (_routers, "routers"),
             ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
@@ -2528,6 +2545,726 @@ async def delete_classifier_model(model_name: str):
         raise
     except Exception as e:
         logger.error(f"Error in delete_classifier_model: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# Semantic Router Endpoints
+# ============================================================================
+
+# Router model storage directory
+ROUTER_MODELS_DIR = _LF_DATA_DIR / "models" / "router"
+
+
+def _make_router_cache_key(model_name: str) -> str:
+    """Create a cache key for router models."""
+    return f"router:{model_name}"
+
+
+def _get_router_path(model_name: str) -> Path:
+    """Get the path for a router model directory.
+
+    The path is always within ROUTER_MODELS_DIR - users cannot control it.
+    """
+    safe_name = _sanitize_model_name(model_name)
+    return ROUTER_MODELS_DIR / safe_name
+
+
+async def _auto_save_router_model(
+    router: "RouterModel",
+    model_name: str,
+    storage_path: str | None = None,
+) -> dict[str, str | None]:
+    """Auto-save router model after training to prevent data loss.
+
+    Args:
+        router: The router model to save
+        model_name: Name of the router
+        storage_path: Optional custom storage path (for project-specific storage)
+
+    Returns:
+        Dict with saved file path
+    """
+    try:
+        if storage_path:
+            # Use custom storage path (project-specific)
+            save_path = Path(storage_path)
+            save_path.mkdir(parents=True, exist_ok=True)
+        else:
+            # Use default global storage
+            ROUTER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            save_path = _get_router_path(model_name)
+
+        await router.save(str(save_path))
+        logger.info(f"Auto-saved router model to {save_path}")
+        return {"model_path": str(save_path)}
+    except Exception as e:
+        logger.warning(f"Failed to auto-save router model: {e}")
+        return {"model_path": None}
+
+
+class RouterTrainRequest(PydanticBaseModel):
+    """Request to train a semantic router."""
+
+    model: str  # Router identifier (for caching/saving)
+    embedder_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    default_model: str = "default"
+    similarity_threshold: float = 0.7
+    routes: list[dict]  # List of {"name": "...", "target_model": "...", "utterances": [...]}
+    storage_path: str | None = None  # Custom storage path (project-specific)
+
+
+class RouterRouteRequest(PydanticBaseModel):
+    """Request to route a query."""
+
+    model: str  # Router identifier (must be trained or loaded)
+    query: str
+    storage_path: str | None = None  # Custom storage path (project-specific)
+
+
+class RouterLoadRequest(PydanticBaseModel):
+    """Request to load a saved router."""
+
+    model: str  # Model name to load
+    storage_path: str | None = None  # Custom storage path (project-specific)
+
+
+@app.post("/v1/router/train")
+async def train_router(request: RouterTrainRequest):
+    """
+    Train a semantic router from route configuration.
+
+    Creates a router with pre-computed embeddings for fast routing.
+
+    Example request:
+    ```json
+    {
+        "model": "customer-router",
+        "embedder_model": "sentence-transformers/all-MiniLM-L6-v2",
+        "default_model": "general_llm",
+        "similarity_threshold": 0.7,
+        "routes": [
+            {
+                "name": "billing",
+                "target_model": "billing_specialist",
+                "utterances": ["what is my bill", "payment options"]
+            },
+            {
+                "name": "support",
+                "target_model": "tech_support",
+                "utterances": ["help with login", "password reset"]
+            }
+        ]
+    }
+    ```
+
+    After training, use /v1/router/route to route queries.
+    """
+    try:
+        if not request.routes:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 1 route required",
+            )
+
+        # Build config for RouterModel
+        config = {
+            "name": request.model,
+            "embedder_model": request.embedder_model,
+            "default_model": request.default_model,
+            "similarity_threshold": request.similarity_threshold,
+            "routes": request.routes,
+        }
+
+        # Create and load router
+        router = RouterModel(
+            model_id=request.model,
+            device=get_device(),
+            config=config,
+        )
+        await router.load()
+
+        # Cache the router
+        cache_key = _make_router_cache_key(request.model)
+        _routers[cache_key] = router
+
+        # Auto-save to disk (project-specific if storage_path provided)
+        saved_paths = await _auto_save_router_model(
+            router=router,
+            model_name=request.model,
+            storage_path=request.storage_path,
+        )
+
+        return {
+            "object": "train_result",
+            "model": request.model,
+            "embedder_model": request.embedder_model,
+            "num_routes": len(request.routes),
+            "routes": [r["name"] for r in request.routes],
+            "status": "trained",
+            "auto_saved": saved_paths["model_path"] is not None,
+            "saved_path": saved_paths["model_path"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in train_router: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/router/route")
+async def route_query(request: RouterRouteRequest):
+    """
+    Route a query using a trained router.
+
+    Example request:
+    ```json
+    {
+        "model": "customer-router",
+        "query": "I need help with my payment",
+        "storage_path": "/path/to/project/lf_data/routers/customer-router"
+    }
+    ```
+
+    Returns the routing decision with target model and similarity score.
+    If router is not in cache, auto-loads from storage_path if provided.
+    """
+    try:
+        cache_key = _make_router_cache_key(request.model)
+        router = _routers.get(cache_key)
+
+        # Auto-load from disk if not in cache
+        if router is None and request.storage_path:
+            storage_path = Path(request.storage_path)
+            if storage_path.exists() and (storage_path / "config.json").exists():
+                logger.info(f"Auto-loading router from: {storage_path}")
+                router = RouterModel(
+                    model_id=str(storage_path),
+                    device=get_device(),
+                )
+                await router.load()
+                _routers[cache_key] = router
+
+        if router is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Router not found: {request.model}. "
+                "Train with /v1/router/train or load with /v1/router/load first.",
+            )
+
+        # Route the query
+        decision = await router.route(request.query)
+
+        return {
+            "object": "route_decision",
+            "model": request.model,
+            "query": request.query,
+            "route_name": decision.route_name,
+            "target_model": decision.target_model,
+            "similarity_score": decision.similarity_score,
+            "matched_utterance": decision.matched_utterance,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in route_query: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/router/load")
+async def load_router(request: RouterLoadRequest):
+    """
+    Load a saved router from disk.
+
+    Example request:
+    ```json
+    {
+        "model": "customer-router",
+        "storage_path": "/path/to/project/lf_data/routers/customer-router"
+    }
+    ```
+
+    If storage_path is provided, loads from project-specific location.
+    Otherwise loads from global storage.
+
+    After loading, use /v1/router/route to route queries.
+    """
+    try:
+        # Check if already loaded
+        cache_key = _make_router_cache_key(request.model)
+        if cache_key in _routers:
+            existing = _routers.pop(cache_key)
+            await existing.unload()
+            logger.info(f"Unloaded existing router: {request.model}")
+
+        # Determine model path
+        if request.storage_path:
+            # Use project-specific storage path
+            model_path = Path(request.storage_path)
+        else:
+            # Use global storage
+            model_path = _get_router_path(request.model)
+
+        if not model_path.exists():
+            # List available models for helpful error message
+            available = (
+                [f.name for f in ROUTER_MODELS_DIR.glob("*") if f.is_dir()]
+                if ROUTER_MODELS_DIR.exists()
+                else []
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Router model not found: {request.model}. "
+                f"Path: {model_path}. Available (global): {available or 'none'}",
+            )
+
+        # Load router from disk
+        router = RouterModel(
+            model_id=str(model_path),
+            device=get_device(),
+        )
+        await router.load()
+
+        # Cache the router
+        _routers[cache_key] = router
+
+        return {
+            "object": "load_result",
+            "model": request.model,
+            "status": "loaded",
+            "num_routes": len(router.routes),
+            "routes": [r.name for r in router.routes],
+            "embedder_model": router.embedder_model,
+            "loaded_from": str(model_path),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in load_router: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/router/models")
+async def list_router_models():
+    """
+    List all saved router models available for loading.
+
+    Returns models saved in the ROUTER_MODELS_DIR directory.
+    """
+    try:
+        ROUTER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        models = []
+        for path in ROUTER_MODELS_DIR.glob("*"):
+            if path.is_dir():
+                # Try to read config
+                config_file = path / "config.json"
+                config = {}
+                if config_file.exists():
+                    import json
+
+                    config = json.loads(config_file.read_text())
+
+                stat = path.stat()
+                models.append(
+                    {
+                        "name": path.name,
+                        "path": str(path),
+                        "embedder_model": config.get("embedder_model", "unknown"),
+                        "num_routes": len(config.get("routes", [])),
+                        "routes": [r["name"] for r in config.get("routes", [])],
+                        "modified": stat.st_mtime,
+                    }
+                )
+
+        # Sort by modification time (newest first)
+        models.sort(key=lambda x: x["modified"], reverse=True)
+
+        return {
+            "object": "list",
+            "data": models,
+            "models_dir": str(ROUTER_MODELS_DIR),
+            "total": len(models),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in list_router_models: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.delete("/v1/router/models/{model_name}")
+async def delete_router_model(model_name: str):
+    """
+    Delete a saved router model.
+
+    Removes the model directory from disk and unloads from cache if loaded.
+    """
+    try:
+        # Reject any path separators to prevent traversal attempts
+        if "/" in model_name or "\\" in model_name or ".." in model_name:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid model name: path separators not allowed",
+            )
+
+        model_path = _get_router_path(model_name)
+
+        # Validate the resolved path is still within the safe directory
+        try:
+            resolved_path = _validate_path_within_directory(model_path, ROUTER_MODELS_DIR)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+        if not resolved_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Router model not found: {model_name}",
+            )
+
+        # Unload from cache if loaded
+        cache_key = _make_router_cache_key(model_name)
+        if cache_key in _routers:
+            router = _routers.pop(cache_key)
+            await router.unload()
+            logger.info(f"Unloaded router from cache: {model_name}")
+
+        # Remove directory and contents
+        import shutil
+
+        shutil.rmtree(resolved_path)
+
+        return {
+            "object": "delete_result",
+            "model": model_name,
+            "deleted": True,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in delete_router_model: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# Synthetic Data Generation for Routers
+# ============================================================================
+
+
+def _build_generation_prompt(
+    route_description: str,
+    count: int,
+    complexity: str = "mixed",
+    style: str | None = None,
+) -> str:
+    """Build a prompt for generating diverse utterances.
+
+    Args:
+        route_description: Description of the route intent
+        count: Number of utterances to generate
+        complexity: "simple", "complex", or "mixed"
+        style: Optional custom style instructions
+
+    Returns:
+        Formatted prompt string
+    """
+    # Base requirements that apply to all complexity levels
+    base_requirements = [
+        "Each query should be something a real user might type or say",
+        "Include informal and formal variations",
+        "Use different vocabulary and sentence structures",
+        "Don't repeat similar phrasings",
+    ]
+
+    # Complexity-specific requirements
+    if complexity == "simple":
+        complexity_requirements = [
+            "Keep queries SHORT and DIRECT (5-10 words maximum)",
+            "Use simple, everyday language",
+            "Single question or request per query",
+            "No additional context or background",
+        ]
+    elif complexity == "complex":
+        complexity_requirements = [
+            "Generate DETAILED, multi-part questions (15-30 words)",
+            "Include context and background in the query",
+            "May include multiple related requests",
+            "Use professional or technical vocabulary where appropriate",
+        ]
+    else:  # mixed
+        complexity_requirements = [
+            f"Generate approximately {count // 2} short queries (5-10 words) and {count - count // 2} longer queries (15-25 words)",
+            "Vary the complexity naturally",
+            "Mix simple direct questions with more detailed ones",
+        ]
+
+    # Combine requirements
+    all_requirements = base_requirements + complexity_requirements
+    if style:
+        all_requirements.append(f"Style: {style}")
+
+    requirements_text = "\n".join(f"- {req}" for req in all_requirements)
+
+    return f"""Generate {count} diverse, natural user queries that match this intent:
+
+Intent: {route_description}
+
+Requirements:
+{requirements_text}
+
+Output exactly {count} queries, one per line, numbered 1 through {count}.
+Do NOT include any other text, explanations, or formatting."""
+
+
+def _parse_generated_utterances(text: str) -> list[str]:
+    """Parse LLM response into list of utterances.
+
+    Args:
+        text: Raw LLM response text
+
+    Returns:
+        List of cleaned utterance strings
+    """
+    utterances = []
+
+    for line in text.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+
+        # Remove numbering (e.g., "1.", "1)", "1:")
+        cleaned = re.sub(r"^\d+[\.\)\:\-]\s*", "", line)
+        cleaned = cleaned.strip()
+
+        # Filter out low-quality utterances
+        if len(cleaned) < 3:
+            continue
+        if cleaned.lower() in ("test", "example", "query"):
+            continue
+
+        utterances.append(cleaned)
+
+    return utterances
+
+
+class GenerateDataRequest(PydanticBaseModel):
+    """Request to generate synthetic training data."""
+
+    # Single route mode
+    route_description: str | None = None
+    count: int = Field(default=20, ge=1, le=100)
+
+    # Batch mode
+    routes: list[dict] | None = None  # List of {"route_name", "description", "count"}
+
+    # Complexity and style options (Phase E5)
+    complexity: str = Field(
+        default="mixed",
+        description="Complexity level: 'simple', 'complex', or 'mixed'",
+    )
+    style: str | None = Field(
+        default=None,
+        description="Optional custom style instructions for generation",
+    )
+
+    # Generation settings - defaults to local Universal Runtime model (no API key needed)
+    model: str = "unsloth/Qwen3-1.7B-GGUF:Q4_K_M"
+    api_key: str | None = None  # Optional API key for cloud providers
+    base_url: str | None = "http://localhost:11540/v1"  # Default to local Universal Runtime
+
+
+class GenerateDataRouteResult(PydanticBaseModel):
+    """Result for a single route in batch generation."""
+
+    route_name: str
+    description: str
+    utterances: list[str]
+    count: int
+
+
+@app.post("/v1/router/generate-data")
+async def generate_router_data(request: GenerateDataRequest):
+    """
+    Generate synthetic training data for router routes.
+
+    Can generate utterances for a single route description or batch-generate
+    for multiple routes at once.
+
+    Single route mode:
+    ```json
+    {
+        "route_description": "billing and payment inquiries",
+        "count": 50,
+        "model": "gpt-4o-mini"
+    }
+    ```
+
+    Batch mode:
+    ```json
+    {
+        "routes": [
+            {"route_name": "billing", "description": "billing questions", "count": 20},
+            {"route_name": "support", "description": "tech support", "count": 20}
+        ],
+        "model": "gpt-4o-mini"
+    }
+    ```
+    """
+    try:
+        # Validate input
+        if not request.route_description and not request.routes:
+            raise HTTPException(
+                status_code=400,
+                detail="route_description or routes required",
+            )
+
+        # Determine base URL (defaults to local Universal Runtime)
+        base_url = request.base_url or "http://localhost:11540/v1"
+        is_local = base_url.startswith("http://localhost") or base_url.startswith("http://127.0.0.1")
+
+        # Get API key - only required for non-local (cloud) endpoints
+        api_key = request.api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key and not is_local:
+            raise HTTPException(
+                status_code=400,
+                detail="api_key required for cloud providers, or set OPENAI_API_KEY environment variable",
+            )
+
+        # Build headers - only include Authorization for non-local endpoints
+        headers = {"Content-Type": "application/json"}
+        if api_key and not is_local:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        # Validate complexity
+        valid_complexities = ("simple", "complex", "mixed")
+        if request.complexity not in valid_complexities:
+            raise HTTPException(
+                status_code=400,
+                detail=f"complexity must be one of: {', '.join(valid_complexities)}",
+            )
+
+        # Single route mode
+        if request.route_description:
+            prompt = _build_generation_prompt(
+                request.route_description,
+                request.count,
+                complexity=request.complexity,
+                style=request.style,
+            )
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": request.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.9,  # Higher temp for diversity
+                        "max_tokens": 2000,
+                    },
+                    timeout=60.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+
+            # Parse response
+            content = data["choices"][0]["message"]["content"]
+            utterances = _parse_generated_utterances(content)
+
+            # Deduplicate
+            seen = set()
+            unique_utterances = []
+            for u in utterances:
+                lower = u.lower()
+                if lower not in seen:
+                    seen.add(lower)
+                    unique_utterances.append(u)
+
+            return {
+                "object": "utterance_list",
+                "route_description": request.route_description,
+                "utterances": unique_utterances,
+                "count": len(unique_utterances),
+                "model": request.model,
+                "complexity": request.complexity,
+            }
+
+        # Batch mode
+        else:
+            results = []
+
+            async with httpx.AsyncClient() as client:
+                for route_spec in request.routes:
+                    route_name = route_spec.get("route_name", "unnamed")
+                    description = route_spec.get("description", "")
+                    count = route_spec.get("count", 20)
+                    # Allow per-route complexity override
+                    route_complexity = route_spec.get("complexity", request.complexity)
+
+                    prompt = _build_generation_prompt(
+                        description,
+                        count,
+                        complexity=route_complexity,
+                        style=request.style,
+                    )
+
+                    response = await client.post(
+                        f"{base_url}/chat/completions",
+                        headers=headers,
+                        json={
+                            "model": request.model,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": 0.9,
+                            "max_tokens": 2000,
+                        },
+                        timeout=60.0,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+
+                    content = data["choices"][0]["message"]["content"]
+                    utterances = _parse_generated_utterances(content)
+
+                    # Deduplicate
+                    seen = set()
+                    unique_utterances = []
+                    for u in utterances:
+                        lower = u.lower()
+                        if lower not in seen:
+                            seen.add(lower)
+                            unique_utterances.append(u)
+
+                    results.append(
+                        {
+                            "route_name": route_name,
+                            "description": description,
+                            "utterances": unique_utterances,
+                            "count": len(unique_utterances),
+                            "complexity": route_complexity,
+                        }
+                    )
+
+            return {
+                "object": "batch_utterance_list",
+                "routes": results,
+                "total_utterances": sum(r["count"] for r in results),
+                "model": request.model,
+                "complexity": request.complexity,
+            }
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"API error in generate_router_data: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM API error: {e.response.text}",
+        ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in generate_router_data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

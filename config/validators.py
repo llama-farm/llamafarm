@@ -107,3 +107,67 @@ def validate_llamafarm_config(config_dict: dict[str, Any]) -> None:
                                         f"Model '{model_name}' references non-existent prompt set '{prompt_ref}'. "
                                         f"Available prompt sets: {available}"
                                     )
+
+    # Validate router-specific constraints
+    _validate_router_models(config_dict)
+
+
+def _validate_router_models(config_dict: dict[str, Any]) -> None:
+    """Validate router-specific model constraints."""
+    runtime = config_dict.get("runtime", {})
+    if not isinstance(runtime, dict):
+        return
+
+    models = runtime.get("models", [])
+    if not isinstance(models, list):
+        return
+
+    for model in models:
+        if not isinstance(model, dict):
+            continue
+
+        provider = model.get("provider")
+        model_name = model.get("name", "unknown")
+
+        if provider == "router":
+            # Router provider requires embedder_model
+            if not model.get("embedder_model"):
+                raise ValueError(
+                    f"Router model '{model_name}' is missing required 'embedder_model' field. "
+                    "Router models must specify an embedder model for semantic matching "
+                    "(e.g., 'sentence-transformers/all-MiniLM-L6-v2')."
+                )
+
+            # Router provider requires routes
+            routes = model.get("routes", [])
+            if not routes:
+                raise ValueError(
+                    f"Router model '{model_name}' has no routes defined. "
+                    "Router models must have at least one route."
+                )
+
+            # Validate each route
+            for idx, route in enumerate(routes):
+                if not isinstance(route, dict):
+                    continue
+
+                route_name = route.get("name", f"route_{idx}")
+
+                # Route requires either utterances or dataset
+                has_utterances = route.get("utterances") and len(route.get("utterances", [])) > 0
+                has_dataset = route.get("dataset")
+
+                if not has_utterances and not has_dataset:
+                    raise ValueError(
+                        f"Route '{route_name}' in router '{model_name}' has no training data. "
+                        "Each route must have either 'utterances' (inline examples) or "
+                        "'dataset' (reference to a LlamaFarm dataset)."
+                    )
+
+        else:
+            # Non-router models require the 'model' field
+            if not model.get("model"):
+                raise ValueError(
+                    f"Model '{model_name}' with provider '{provider}' is missing required 'model' field. "
+                    "Non-router models must specify a model name or ID."
+                )

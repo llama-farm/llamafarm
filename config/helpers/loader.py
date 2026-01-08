@@ -352,6 +352,14 @@ def load_config_dict(
         schema = _load_schema()
         _validate_config(config, schema)
 
+        # Run custom validators for constraints beyond JSON Schema
+        from config.validators import validate_llamafarm_config
+
+        try:
+            validate_llamafarm_config(config)
+        except ValueError as e:
+            raise ConfigError(f"Configuration validation failed: {e}") from e
+
     return config
 
 

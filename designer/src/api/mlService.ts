@@ -1,5 +1,5 @@
 /**
- * ML Service - API client for classifier and anomaly detection endpoints
+ * ML Service - API client for classifier, anomaly detection, and router endpoints
  * Endpoints proxy to Universal Runtime via LlamaFarm server
  */
 
@@ -25,6 +25,17 @@ import type {
   AnomalyLoadRequest,
   AnomalyLoadResponse,
   AnomalyListModelsResponse,
+  // Router types
+  RouterTrainRequest,
+  RouterTrainResponse,
+  RouterRouteRequest,
+  RouterRouteResponse,
+  RouterLoadRequest,
+  RouterLoadResponse,
+  RouterListModelsResponse,
+  RouterGenerateDataRequest,
+  RouterGenerateDataResponse,
+  RouterBatchGenerateDataResponse,
   // Shared types
   MLHealthResponse,
   MLDeleteResponse,
@@ -208,6 +219,82 @@ export async function deleteAnomalyModel(
 }
 
 // =============================================================================
+// Router Endpoints
+// =============================================================================
+
+/**
+ * Train a semantic router with routes and utterances
+ */
+export async function trainRouter(
+  request: RouterTrainRequest
+): Promise<RouterTrainResponse> {
+  const response = await apiClient.post<RouterTrainResponse>(
+    '/ml/router/train',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Route a query using a trained router
+ */
+export async function routeQuery(
+  request: RouterRouteRequest
+): Promise<RouterRouteResponse> {
+  const response = await apiClient.post<RouterRouteResponse>(
+    '/ml/router/route',
+    request
+  )
+  return response.data
+}
+
+/**
+ * Load a saved router into memory
+ */
+export async function loadRouter(
+  request: RouterLoadRequest
+): Promise<RouterLoadResponse> {
+  const response = await apiClient.post<RouterLoadResponse>(
+    '/ml/router/load',
+    request
+  )
+  return response.data
+}
+
+/**
+ * List all saved router models
+ */
+export async function listRouterModels(): Promise<RouterListModelsResponse> {
+  const response = await apiClient.get<RouterListModelsResponse>('/ml/router/models')
+  return response.data
+}
+
+/**
+ * Delete a saved router model
+ */
+export async function deleteRouterModel(
+  modelName: string
+): Promise<MLDeleteResponse> {
+  const response = await apiClient.delete<MLDeleteResponse>(
+    `/ml/router/models/${encodeURIComponent(modelName)}`
+  )
+  return response.data
+}
+
+/**
+ * Generate synthetic training data for router routes
+ */
+export async function generateRouterData(
+  request: RouterGenerateDataRequest
+): Promise<RouterGenerateDataResponse | RouterBatchGenerateDataResponse> {
+  const response = await apiClient.post<RouterGenerateDataResponse | RouterBatchGenerateDataResponse>(
+    '/ml/router/generate-data',
+    request
+  )
+  return response.data
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -229,4 +316,11 @@ export default {
   loadAnomaly,
   listAnomalyModels,
   deleteAnomalyModel,
+  // Router
+  trainRouter,
+  routeQuery,
+  loadRouter,
+  listRouterModels,
+  deleteRouterModel,
+  generateRouterData,
 }

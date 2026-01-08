@@ -1,0 +1,26 @@
+name: semantic_router
+title: Semantic Router Demo
+description: |
+  Demonstrates sub-millisecond semantic routing of queries to specialized LLM models.
+  The router uses sentence-transformer embeddings to match incoming queries to the
+  most appropriate model based on topic similarity.
+
+  Features:
+  - Topic-based routing (billing, support, sales)
+  - Automatic fallback to general model
+  - Sub-10ms routing latency
+  - No LLM calls for routing decisions
+
+prerequisites:
+  - Ollama running with llama3.2:3b model
+  - LlamaFarm server and Universal Runtime
+
+tags:
+  - router
+  - semantic
+  - routing
+  - embeddings
+  - multi-model
+
+difficulty: beginner
+estimated_time: 5 minutes

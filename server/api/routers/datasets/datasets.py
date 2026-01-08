@@ -313,3 +313,176 @@ async def delete_data(
         file_hash=file_hash,
         deleted_chunks=result.get("deleted_count", 0),
     )
+
+
+# ============================================================================
+# ROUTER UTTERANCES ENDPOINTS
+# ============================================================================
+
+
+class RouterUtteranceInput(BaseModel):
+    """Input model for a single router utterance."""
+
+    text: str = Field(..., description="The query text")
+    route: str | None = Field(None, description="Optional route label")
+
+
+class AppendUtterancesRequest(BaseModel):
+    """Request to append utterances to a dataset."""
+
+    utterances: list[RouterUtteranceInput] = Field(
+        ..., description="List of utterances to append", min_length=1
+    )
+
+
+class AppendUtterancesResponse(BaseModel):
+    """Response from appending utterances."""
+
+    count: int = Field(..., description="Number of utterances appended")
+
+
+class RouterUtteranceOutput(BaseModel):
+    """Output model for a router utterance."""
+
+    text: str
+    route: str | None
+
+
+class GetUtterancesResponse(BaseModel):
+    """Response containing utterances."""
+
+    utterances: list[RouterUtteranceOutput]
+    total: int = Field(..., description="Total count of utterances matching filter")
+
+
+@router.post(
+    "/{dataset}/utterances",
+    operation_id="dataset_append_utterances",
+    tags=["router", "mcp"],
+    summary="Append utterances to a router dataset",
+    description=(
+        "Append utterances to a router dataset for semantic router training. "
+        "Creates the utterances file if it doesn't exist. "
+        "Each utterance has a 'text' (required) and 'route' (optional) field."
+    ),
+    responses={200: {"model": AppendUtterancesResponse}},
+)
+async def append_utterances(
+    namespace: str,
+    project: str,
+    dataset: str,
+    request: AppendUtterancesRequest,
+):
+    """Append utterances to a router dataset."""
+    from services.router_dataset_service import RouterDatasetService, RouterUtterance
+
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+
+    # Convert input to service model
+    utterances = [
+        RouterUtterance(text=u.text, route=u.route) for u in request.utterances
+    ]
+
+    result = RouterDatasetService.append_utterances(
+        namespace=namespace,
+        project=project,
+        dataset=dataset,
+        utterances=utterances,
+    )
+
+    logger.info(
+        "Appended utterances to dataset",
+        dataset=dataset,
+        count=result["count"],
+    )
+
+    return AppendUtterancesResponse(count=result["count"])
+
+
+@router.get(
+    "/{dataset}/utterances",
+    operation_id="dataset_get_utterances",
+    tags=["router", "mcp"],
+    summary="Get utterances from a router dataset",
+    description=(
+        "Get utterances from a router dataset. "
+        "Supports pagination and filtering by route."
+    ),
+    responses={200: {"model": GetUtterancesResponse}},
+)
+async def get_utterances(
+    namespace: str,
+    project: str,
+    dataset: str,
+    offset: int = Query(0, ge=0, description="Number of utterances to skip"),
+    limit: int | None = Query(None, ge=1, le=1000, description="Max utterances to return"),
+    route: str | None = Query(None, description="Filter by route name"),
+):
+    """Get utterances from a router dataset."""
+    from services.router_dataset_service import RouterDatasetService
+
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+
+    # Get total count for response
+    total = RouterDatasetService.get_utterance_count(
+        namespace=namespace,
+        project=project,
+        dataset=dataset,
+        route_filter=route,
+    )
+
+    # Get utterances with pagination
+    utterances = RouterDatasetService.get_utterances(
+        namespace=namespace,
+        project=project,
+        dataset=dataset,
+        offset=offset,
+        limit=limit,
+        route_filter=route,
+    )
+
+    return GetUtterancesResponse(
+        utterances=[
+            RouterUtteranceOutput(text=u.text, route=u.route) for u in utterances
+        ],
+        total=total,
+    )
+
+
+class DeleteUtterancesResponse(BaseModel):
+    """Response from deleting utterances."""
+
+    deleted: int = Field(..., description="Number of utterances deleted")
+
+
+@router.delete(
+    "/{dataset}/utterances",
+    operation_id="dataset_delete_utterances",
+    tags=["router"],
+    summary="Delete all utterances from a router dataset",
+    description="Delete all utterances from a router dataset.",
+    responses={200: {"model": DeleteUtterancesResponse}},
+)
+async def delete_utterances(
+    namespace: str,
+    project: str,
+    dataset: str,
+):
+    """Delete all utterances from a router dataset."""
+    from services.router_dataset_service import RouterDatasetService
+
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+
+    result = RouterDatasetService.delete_utterances(
+        namespace=namespace,
+        project=project,
+        dataset=dataset,
+    )
+
+    logger.info(
+        "Deleted utterances from dataset",
+        dataset=dataset,
+        deleted=result["deleted"],
+    )
+
+    return DeleteUtterancesResponse(deleted=result["deleted"])
