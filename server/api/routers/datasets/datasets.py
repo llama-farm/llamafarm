@@ -251,6 +251,11 @@ class BulkDatasetDataUploadResponse(BaseModel):
 def _parse_parser_overrides(raw_overrides: str | None):
     if not raw_overrides:
         return None
+    if len(raw_overrides) > 10240:
+        raise HTTPException(
+            status_code=400,
+            detail="parser_overrides payload too large (max 10KB)",
+        )
     try:
         parsed = json.loads(raw_overrides)
     except json.JSONDecodeError as exc:
@@ -292,6 +297,18 @@ def _parse_parser_overrides(raw_overrides: str | None):
             _validate_chunk_field(
                 "chunk_overlap", override["chunk_overlap"], allow_zero=True
             )
+        if "chunk_size" in override and "chunk_overlap" in override:
+            try:
+                if override["chunk_overlap"] >= override["chunk_size"]:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="chunk_overlap must be less than chunk_size",
+                    )
+            except TypeError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="chunk_size and chunk_overlap must be numbers",
+                )
 
     return parsed
 
@@ -416,7 +433,7 @@ async def upload_data_bulk(
     if len(files) > 100:
         raise HTTPException(
             status_code=400,
-            detail="Bulk upload limited to 100 files at a time",
+            detail="Bulk upload limited to 100 files",
         )
 
     # Bulk defaults to not processing unless explicitly requested

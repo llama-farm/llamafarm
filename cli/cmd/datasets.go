@@ -417,6 +417,24 @@ sends all files in one request and defaults to no processing (use --process to o
 			autoProcess = false
 		}
 
+		// Validate chunk overrides
+		if cmd.Flags().Changed("chunk-size") {
+			if chunkSizeOverride <= 0 || chunkSizeOverride > 100000 {
+				fmt.Fprintln(os.Stderr, "Error: --chunk-size must be > 0 and <= 100000")
+				os.Exit(1)
+			}
+		}
+		if cmd.Flags().Changed("chunk-overlap") {
+			if chunkOverlapOverride < 0 {
+				fmt.Fprintln(os.Stderr, "Error: --chunk-overlap must be >= 0")
+				os.Exit(1)
+			}
+			if cmd.Flags().Changed("chunk-size") && chunkOverlapOverride >= chunkSizeOverride {
+				fmt.Fprintln(os.Stderr, "Error: --chunk-overlap must be less than --chunk-size")
+				os.Exit(1)
+			}
+		}
+
 		// Build parser overrides if requested
 		parserOverrides := map[string]map[string]interface{}{}
 		wildcardOverride := map[string]interface{}{}
@@ -1299,6 +1317,9 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 		if err != nil {
 			return uploadResult{err: fmt.Errorf("failed to encode parser overrides: %w", err)}
 		}
+		if len(overridesBytes) > 10240 {
+			return uploadResult{err: fmt.Errorf("parser overrides too large (max 10KB)")}
+		}
 		field, err := writer.CreateFormField("parser_overrides")
 		if err != nil {
 			return uploadResult{err: err}
@@ -1387,6 +1408,9 @@ func uploadFilesBulk(server string, namespace string, project string, dataset st
 		overridesBytes, err := json.Marshal(parserOverrides)
 		if err != nil {
 			return bulkUploadResult{err: fmt.Errorf("failed to encode parser overrides: %w", err)}
+		}
+		if len(overridesBytes) > 10240 {
+			return bulkUploadResult{err: fmt.Errorf("parser overrides too large (max 10KB)")}
 		}
 		field, err := writer.CreateFormField("parser_overrides")
 		if err != nil {
