@@ -107,11 +107,6 @@ var datasetsListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		if forceProcess && skipProcess {
-			fmt.Fprintln(os.Stderr, "Error: --process and --no-process cannot be used together.")
-			os.Exit(1)
-		}
-
 		// Start config watcher AFTER we've successfully loaded the config
 		// This prevents race conditions where the watcher syncs files before we read them
 		StartConfigWatcher(serverCfg.Namespace, serverCfg.Project)
@@ -378,6 +373,11 @@ Use --no-process to skip processing or --process to force it. The --bulk flag
 sends all files in one request and defaults to no processing (use --process to override).`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		if forceProcess && skipProcess {
+			fmt.Fprintln(os.Stderr, "Error: --process and --no-process cannot be used together.")
+			os.Exit(1)
+		}
+
 		// Load config first to ensure it's valid before starting watcher
 		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
