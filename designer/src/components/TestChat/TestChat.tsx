@@ -236,10 +236,14 @@ function ClassifierResultDisplay({
   const [detailsOpen, setDetailsOpen] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  const handleCopyInput = useCallback(() => {
-    navigator.clipboard.writeText(inputText)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const handleCopyInput = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(inputText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard access denied or not available
+    }
   }, [inputText])
 
   if (isLoading) {
@@ -460,11 +464,15 @@ function AnomalyResultDisplay({
   const [detailsOpen, setDetailsOpen] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  const handleCopyInput = useCallback(() => {
+  const handleCopyInput = useCallback(async () => {
     if (!result) return
-    navigator.clipboard.writeText(result.parsedInput.join(', '))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(result.parsedInput.join(', '))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard access denied or not available
+    }
   }, [result])
 
   if (isLoading) {
@@ -717,16 +725,18 @@ export default function TestChat({
   // Get all anomaly models sorted (most recent first by 'created' field)
   const allAnomalyModels = useMemo(() => {
     if (!anomalyModelsData?.data) return []
-    return [...anomalyModelsData.data].sort((a, b) =>
-      new Date(b.created).getTime() - new Date(a.created).getTime()
-    )
+    return [...anomalyModelsData.data].sort((a, b) => {
+      const dateA = a.created ? new Date(a.created).getTime() : 0
+      const dateB = b.created ? new Date(b.created).getTime() : 0
+      return dateB - dateA
+    })
   }, [anomalyModelsData])
 
   // Get only the latest version per base_name (for dropdown)
   const sortedAnomalyModels = useMemo(() => {
     const latestByBaseName = new Map<string, typeof allAnomalyModels[0]>()
     for (const model of allAnomalyModels) {
-      const baseName = model.base_name
+      const baseName = model.base_name || model.name
       // Since allAnomalyModels is sorted newest first, first occurrence is the latest
       if (!latestByBaseName.has(baseName)) {
         latestByBaseName.set(baseName, model)
@@ -1930,6 +1940,7 @@ export default function TestChat({
   // Handle anomaly detection
   const handleAnomalyDetect = useCallback(async () => {
     if (!selectedAnomalyModel || !anomalyInput.trim()) return
+    if (scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending) return
 
     setAnomalyError(null)
     const { values, error } = parseAnomalyInput(anomalyInput)
@@ -2019,6 +2030,7 @@ export default function TestChat({
 
   // Handle classification
   const handleClassify = useCallback(async () => {
+    if (predictClassifierMutation.isPending || loadClassifierMutation.isPending) return
     if (!selectedClassifierModel || !classifierInput.trim()) {
       if (!classifierInput.trim()) {
         setClassifierError('Enter some text to classify')
@@ -2168,7 +2180,7 @@ export default function TestChat({
           <Selector
             value={modelType}
             options={[
-              { value: 'inference', label: 'Inference' },
+              { value: 'inference', label: 'Text Generation' },
               { value: 'anomaly', label: 'Anomaly Detection' },
               { value: 'classifier', label: 'Classifier' },
             ]}
@@ -2233,11 +2245,12 @@ export default function TestChat({
                 value={selectedAnomalyModel || ''}
                 options={sortedAnomalyModels.map(m => ({
                   value: m.name,
-                  label: m.base_name,
+                  label: m.base_name || m.name,
                   description: m.description,
                 }))}
                 onChange={setSelectedAnomalyModel}
                 loading={isLoadingAnomalyModels}
+                disabled={scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending}
                 placeholder="Select model"
                 emptyMessage="No anomaly models"
                 label="Anomaly Model"
@@ -2263,6 +2276,7 @@ export default function TestChat({
                 }))}
                 onChange={setSelectedClassifierModel}
                 loading={isLoadingClassifierModels}
+                disabled={predictClassifierMutation.isPending || loadClassifierMutation.isPending}
                 placeholder="Select model"
                 emptyMessage="No classifier models"
                 label="Classifier Model"
@@ -2358,7 +2372,7 @@ export default function TestChat({
                   hasModels={false}
                   onCreateModel={() => navigate('/chat/models/train/anomaly/new')}
                 />
-              ) : anomalyResult || anomalyError || scoreAnomalyMutation.isPending ? (
+              ) : anomalyResult || anomalyError || scoreAnomalyMutation.isPending || loadAnomalyMutation.isPending ? (
                 <AnomalyResultDisplay
                   result={anomalyResult}
                   error={anomalyError}
@@ -2435,7 +2449,7 @@ export default function TestChat({
                   hasModels={false}
                   onCreateModel={() => navigate('/chat/models/train/classifier/new')}
                 />
-              ) : classifierResult || classifierError || predictClassifierMutation.isPending ? (
+              ) : classifierResult || classifierError || predictClassifierMutation.isPending || loadClassifierMutation.isPending ? (
                 <ClassifierResultDisplay
                   result={classifierResult}
                   error={classifierError}
