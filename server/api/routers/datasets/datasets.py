@@ -273,6 +273,8 @@ def _parse_parser_overrides(raw_overrides: str | None):
         )
 
     # Basic safety validation for chunk settings
+    CHUNK_SIZE_MAX = 100000
+
     def _validate_chunk_field(name: str, value: object, allow_zero: bool):
         if not isinstance(value, int | float):
             raise HTTPException(
@@ -290,6 +292,11 @@ def _parse_parser_overrides(raw_overrides: str | None):
                     status_code=400,
                     detail=f"{name} must be greater than 0",
                 )
+        if name == "chunk_size" and value > CHUNK_SIZE_MAX:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{name} must be less than or equal to {CHUNK_SIZE_MAX}",
+            )
 
     for override in parsed.values():
         if not isinstance(override, dict):
