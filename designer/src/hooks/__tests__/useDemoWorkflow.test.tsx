@@ -265,24 +265,21 @@ describe('useDemoWorkflow - Model Download Step', () => {
         ],
       } as any)
 
-      const progressValues: number[] = []
       const { result } = renderHook(() => useDemoWorkflow(), { wrapper })
-
-      // Track progress changes
-      const originalProgress = result.current.progress
 
       await act(async () => {
         result.current.startDemo(testDemo)
       })
 
+      // Wait for workflow to progress past download step
       await waitFor(
         () => {
-          expect(result.current.currentStep).not.toBe('fetching_config')
+          expect(result.current.progress).toBeGreaterThanOrEqual(50)
         },
         { timeout: 5000 }
       )
 
-      // Should NOT have downloading_model step
+      // Should NOT have downloading_model step (model was cached, so skipped)
       expect(result.current.currentStep).not.toBe('downloading_model')
     })
   })
@@ -536,8 +533,6 @@ describe('useDemoWorkflow - Model Download Step', () => {
     })
 
     it('should show activity with incrementing progress', async () => {
-      let progressUpdates: number[] = []
-
       // Create a generator that pauses so we can capture progress
       async function* slowIndeterminate(): AsyncIterableIterator<DownloadEvent> {
         yield { event: 'progress', downloaded: 1000, total: 0 }
