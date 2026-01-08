@@ -154,7 +154,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // This ensures the Celery task doesn't silently download models with no progress visibility
         const embeddingModel = configData.rag?.databases
           ?.flatMap((db: any) => db.embedding_strategies ?? [])
-          .find((s: any) => s.config?.model)?.config?.model as string | undefined
+          ?.find((s: any) => s.config?.model)?.config?.model as string | undefined
 
         if (embeddingModel) {
           // Check if model is already cached
