@@ -85,42 +85,46 @@ export async function* downloadModel(
 
   let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || '' // Keep incomplete line in buffer
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // Keep incomplete line in buffer
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6)
-        if (data.trim()) {
-          try {
-            const event = JSON.parse(data) as DownloadEvent
-            yield event
-          } catch (e) {
-            console.error('Failed to parse SSE data:', data, e)
-            yield { event: 'error', message: 'Failed to parse server response' }
-            return // Stop processing malformed stream
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6)
+          if (data.trim()) {
+            try {
+              const event = JSON.parse(data) as DownloadEvent
+              yield event
+            } catch (e) {
+              console.error('Failed to parse SSE data:', data, e)
+              yield { event: 'error', message: 'Failed to parse server response' }
+              return // Stop processing malformed stream
+            }
           }
         }
       }
     }
-  }
 
-  // Flush any remaining buffer after stream ends
-  if (buffer.trim() && buffer.startsWith('data: ')) {
-    const data = buffer.slice(6)
-    if (data.trim()) {
-      try {
-        const event = JSON.parse(data) as DownloadEvent
-        yield event
-      } catch {
-        // Ignore parse errors in final buffer - stream already ended normally
+    // Flush any remaining buffer after stream ends
+    if (buffer.trim() && buffer.startsWith('data: ')) {
+      const data = buffer.slice(6)
+      if (data.trim()) {
+        try {
+          const event = JSON.parse(data) as DownloadEvent
+          yield event
+        } catch {
+          // Ignore parse errors in final buffer - stream already ended normally
+        }
       }
     }
+  } finally {
+    reader.releaseLock()
   }
 }
 
