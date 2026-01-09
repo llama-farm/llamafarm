@@ -128,30 +128,10 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(f"Using context size: {self.actual_n_ctx}")
 
-        # Configure GPU layers for llama.cpp
-        # IMPORTANT: llama.cpp has its own GPU detection (CUDA, Metal, Vulkan, etc.)
-        # that is independent of PyTorch. We should always try to use GPU layers (-1)
-        # and let llama.cpp fall back to CPU if no GPU backend is available.
-        # This allows users with CPU-only PyTorch but GPU llama.cpp to get acceleration.
-        import os
+        # Configure GPU layers for llama.cpp (uses its own GPU detection, not PyTorch's)
+        from utils.device import get_gguf_gpu_layers
 
-        force_cpu = os.environ.get("LLAMAFARM_GGUF_FORCE_CPU", "").lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-
-        if force_cpu:
-            n_gpu_layers = 0
-            logger.info("Configuring for CPU-only inference (LLAMAFARM_GGUF_FORCE_CPU=1)")
-        else:
-            # Use all layers on GPU - llama.cpp will use whatever backend is available
-            # (CUDA, Metal, Vulkan, etc.) and fall back to CPU if none are available
-            n_gpu_layers = -1
-            logger.info(
-                "Configuring for GPU acceleration (all layers on GPU, llama.cpp will "
-                "auto-detect available backends)"
-            )
+        n_gpu_layers = get_gguf_gpu_layers()
 
         # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -225,16 +226,6 @@ func isAccessDeniedError(err error) bool {
 	// Also check error message as fallback
 	errStr := err.Error()
 	return errors.Is(err, os.ErrPermission) ||
-		(len(errStr) > 0 && (contains(errStr, "Access is denied") ||
-			contains(errStr, "being used by another process")))
-}
-
-// contains is a simple string contains check to avoid importing strings package
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+		strings.Contains(errStr, "Access is denied") ||
+		strings.Contains(errStr, "being used by another process")
 }
