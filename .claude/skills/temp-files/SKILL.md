@@ -26,7 +26,7 @@ Example: Working in `/Users/bobby/workspace/pivot/llamafarm` → `/tmp/claude/-U
 
 ```bash
 SANITIZED_PATH=$(echo "$PWD" | tr '/' '-')
-REPORT_DIR="/tmp/claude/${SANITIZED_PATH}/reports"
+REPORT_DIR="/tmp/claude/${SANITIZED_PATH}/reviews"
 mkdir -p "$REPORT_DIR"
 ```
 
@@ -48,7 +48,7 @@ Use the Write tool with the full temp path.
 
 Always tell the user where the file was created:
 
-> Report saved to: `/tmp/claude/-Users-bobby-workspace-pivot-llamafarm/reports/code-review-20260108-143052.md`
+> Report saved to: `/tmp/claude/-Users-bobby-workspace-pivot-llamafarm/reviews/code-review-20260108-143052.md`
 
 ## When to Use This Pattern
 

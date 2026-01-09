@@ -17,17 +17,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/code-review-loop.py\"",
-            "timeout": 120
-          }
-        ]
-      }
     ]
   }
 }

@@ -53,7 +53,7 @@ Create a review document using the **temp-files pattern**:
 
 ```bash
 SANITIZED_PATH=$(echo "$PWD" | tr '/' '-')
-REPORT_DIR="/tmp/claude/${SANITIZED_PATH}/reports"
+REPORT_DIR="/tmp/claude/${SANITIZED_PATH}/reviews"
 mkdir -p "$REPORT_DIR"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 FILEPATH="${REPORT_DIR}/code-review-${TIMESTAMP}.md"
@@ -79,6 +79,7 @@ Initialize with this schema:
 | Code Quality | 0 | 0 | 0 | 0 |
 | LLM Code Smells | 0 | 0 | 0 | 0 |
 | Impact Analysis | 0 | 0 | 0 | 0 |
+| Simplification | 0 | 0 | 0 | 0 |
 {domain-specific categories added based on detected domains}
 
 ## Detailed Findings
@@ -257,6 +258,47 @@ These checks apply to ALL changed code regardless of domain.
 
 **Pass criteria**: All impacted code identified and accounted for
 **Severity**: High (if unaccounted impacts found)
+
+---
+
+## Category: Simplification
+
+### Duplicate Logic
+
+**Check diff for**:
+- Repeated code patterns (not just syntactic similarity)
+- Copy-pasted code with minor variations
+- Similar validation, transformation, or formatting logic
+
+**Pass criteria**: No obvious duplication in changed code
+**Severity**: Medium
+**Suggestion**: Extract shared logic into reusable functions
+
+---
+
+### Unnecessary Complexity
+
+**Check diff for**:
+- Deeply nested conditionals (more than 3 levels)
+- Functions doing multiple unrelated things
+- Overly complex control flow
+
+**Pass criteria**: Code is reasonably flat and focused
+**Severity**: Medium
+**Suggestion**: Use early returns, extract helper functions
+
+---
+
+### Verbose Patterns
+
+**Check diff for**:
+- Patterns that have simpler alternatives in the language
+- Redundant null checks or type assertions
+- Unnecessary intermediate variables
+
+**Pass criteria**: Code uses idiomatic patterns
+**Severity**: Low
+**Suggestion**: Simplify using language built-ins
 
 ---
 

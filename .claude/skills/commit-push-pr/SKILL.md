@@ -1,7 +1,7 @@
 ---
 name: commit-push-pr
-description: Commit changes, push to GitHub, and open a PR. Handles branch creation, change selection, and existing PR detection.
-allowed-tools: Bash, Read, Write, Grep, Glob, AskUserQuestion
+description: Commit changes, push to GitHub, and open a PR. Includes quality checks (security, patterns, simplification). Use --quick to skip checks.
+allowed-tools: Bash, Read, Write, Edit, Grep, Glob, AskUserQuestion
 ---
 
 # Commit, Push & PR Skill
@@ -127,6 +127,65 @@ Proposed commit message:
 
 Do you want to use this message, modify it, or provide your own?
 ```
+
+### Step 5.5: Quality Check
+
+**Skip if**: `--quick` flag was passed.
+
+Run quality checks on staged changes before committing.
+
+#### 1. Auto-fix trivial issues (no prompt needed)
+
+Search for and remove debug statements:
+
+```bash
+# Find files with debug statements
+git diff --staged --name-only | xargs grep -l -E "(console\.(log|debug|info)|debugger|print\()" 2>/dev/null
+```
+
+For each file found:
+- Remove `console.log(...)`, `console.debug(...)`, `console.info(...)` statements
+- Remove `debugger;` statements
+- Remove `print(...)` statements (Python)
+- Re-stage the file after fixes
+
+Report: "Auto-fixed: Removed N debug statements from M files"
+
+#### 2. Check for issues requiring attention
+
+Scan staged diff for:
+
+| Issue | Severity | Action |
+|-------|----------|--------|
+| Hardcoded secrets (API keys, passwords) | BLOCK | Cannot auto-fix - user must remove |
+| Command injection (`shell=True`, `os.system`) | BLOCK | Cannot auto-fix - user must refactor |
+| Empty catch/except blocks | PROPOSE | Suggest adding error logging |
+| Duplicate code patterns | PROPOSE | Suggest extraction |
+| Unused imports | PROPOSE | Suggest removal |
+| TODO/FIXME comments | WARN | Note but allow proceed |
+
+#### 3. Handle blocking issues
+
+If BLOCK issues found:
+- List each issue with file:line reference
+- Stop the workflow
+- User must fix manually and re-run
+
+#### 4. Handle proposable fixes
+
+For each PROPOSE issue:
+- Show: file, line, problem, suggested fix
+- Ask: "Apply this fix? (y/n/all/skip)"
+- If approved: apply edit, re-stage
+- If skipped: continue without fix
+
+#### 5. Handle warnings
+
+For WARN issues:
+- Display summary
+- Continue without blocking
+
+---
 
 ### Step 6: Create the Commit
 
