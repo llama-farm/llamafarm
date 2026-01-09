@@ -20,6 +20,12 @@ import {
   ChatApiError,
 } from '../types/chat'
 import { handleSSEResponse } from '../utils/sseUtils'
+import {
+  type DevToolsCaptureCallbacks,
+  createCapturedRequest,
+  extractRequestId,
+  headersToRecord,
+} from '../hooks/useDevToolsCapture'
 
 /**
  * Result from non-streaming chat completion
@@ -42,7 +48,8 @@ export async function sendChatCompletion(
   namespace: string,
   projectId: string,
   request: ChatRequest,
-  sessionId?: string
+  sessionId?: string,
+  devToolsCapture?: DevToolsCaptureCallbacks
 ): Promise<ChatCompletionResult> {
   // Validate inputs
   if (!namespace || !projectId) {
@@ -79,12 +86,22 @@ export async function sendChatCompletion(
   // Ensure stream is false for non-streaming requests
   const chatRequest = { ...request, stream: false }
 
+  // Build full URL for DevTools capture
+  const rawBaseURL = apiClient.defaults.baseURL || ''
+  const baseURL = rawBaseURL.endsWith('/') ? rawBaseURL.slice(0, -1) : rawBaseURL
+  const urlPath = `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`
+  const fullUrl = `${baseURL}${urlPath}`
+
+  // Capture request for DevTools
+  let capturedRequestId: string | undefined
+  if (devToolsCapture) {
+    const captured = createCapturedRequest('POST', urlPath, fullUrl, headers, chatRequest, false)
+    capturedRequestId = captured.id
+    devToolsCapture.onRequestStart(captured)
+  }
+
   try {
-    const response = await apiClient.post<ChatResponse>(
-      `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`,
-      chatRequest,
-      { headers }
-    )
+    const response = await apiClient.post<ChatResponse>(urlPath, chatRequest, { headers })
 
     // Extract session ID from response headers (server provides this)
     const responseSessionId =
@@ -97,11 +114,29 @@ export async function sendChatCompletion(
       console.warn('No session ID received from server response')
     }
 
+    // Capture response for DevTools
+    if (devToolsCapture && capturedRequestId) {
+      devToolsCapture.onResponse(capturedRequestId, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers as Record<string, string>,
+        body: response.data,
+        requestId: response.headers['x-request-id'] || response.headers['X-Request-ID'] || null,
+      })
+    }
+
     return {
       response: response.data,
       sessionId: responseSessionId,
     }
   } catch (error) {
+    // Capture error for DevTools
+    if (devToolsCapture && capturedRequestId) {
+      devToolsCapture.onError(
+        capturedRequestId,
+        error instanceof Error ? error.message : 'Unknown error'
+      )
+    }
     if (
       error instanceof ValidationError ||
       error instanceof NetworkError ||
@@ -134,7 +169,8 @@ export async function streamChatCompletion(
   request: ChatRequest,
   sessionId?: string,
   options: StreamingChatOptions = {},
-  activeProject?: string
+  activeProject?: string,
+  devToolsCapture?: DevToolsCaptureCallbacks
 ): Promise<string> {
   const { onChunk, onError, onComplete, signal } = options
 
@@ -168,33 +204,40 @@ export async function streamChatCompletion(
     }
   }
 
+  // Ensure streaming is enabled
+  const streamingRequest = { ...request, stream: true }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+    'Cache-Control': 'no-cache',
+  }
+
+  // Add session header if provided
+  if (sessionId) {
+    headers['X-Session-ID'] = sessionId
+  }
+
+  // Add active project header if provided (for dev chat context)
+  if (activeProject) {
+    headers['X-Active-Project'] = activeProject
+  }
+
+  // Use fetch directly for streaming instead of axios
+  const rawBaseURL = apiClient.defaults.baseURL || ''
+  const baseURL = rawBaseURL.endsWith('/') ? rawBaseURL.slice(0, -1) : rawBaseURL
+  const urlPath = `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`
+  const url = `${baseURL}${urlPath}`
+
+  // Capture request for DevTools
+  let capturedRequestId: string | undefined
+  if (devToolsCapture) {
+    const captured = createCapturedRequest('POST', urlPath, url, headers, streamingRequest, true)
+    capturedRequestId = captured.id
+    devToolsCapture.onRequestStart(captured)
+  }
+
   try {
-    // Ensure streaming is enabled
-    const streamingRequest = { ...request, stream: true }
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      'Cache-Control': 'no-cache',
-    }
-
-    // Add session header if provided
-    if (sessionId) {
-      headers['X-Session-ID'] = sessionId
-    }
-
-    // Add active project header if provided (for dev chat context)
-    if (activeProject) {
-      headers['X-Active-Project'] = activeProject
-    }
-
-    // Use fetch directly for streaming instead of axios
-    const rawBaseURL = apiClient.defaults.baseURL || ''
-    const baseURL = rawBaseURL.endsWith('/')
-      ? rawBaseURL.slice(0, -1)
-      : rawBaseURL
-    const url = `${baseURL}/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`
-
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -207,10 +250,15 @@ export async function streamChatCompletion(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error')
-      throw new NetworkError(
+      const error = new NetworkError(
         `HTTP ${response.status}: ${response.statusText} - ${errorText}`,
         new Error(`Fetch failed with status ${response.status}`)
       )
+      // Capture error for DevTools
+      if (devToolsCapture && capturedRequestId) {
+        devToolsCapture.onError(capturedRequestId, error.message)
+      }
+      throw error
     }
 
     // Extract session ID from response headers (server provides this)
@@ -224,15 +272,36 @@ export async function streamChatCompletion(
       console.warn('No session ID received from streaming response headers')
     }
 
+    // Capture response headers for DevTools (before streaming starts)
+    if (devToolsCapture && capturedRequestId) {
+      const serverRequestId = extractRequestId(response.headers)
+      // Update with response headers - body will be filled via stream chunks
+      devToolsCapture.onResponse(capturedRequestId, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: headersToRecord(response.headers),
+        body: null, // Will be populated via stream chunks
+        requestId: serverRequestId,
+      })
+    }
+
     // Handle the streaming response using SSE utility
     await handleSSEResponse<ChatStreamChunk>(
       response,
       chunk => {
+        // Capture chunk for DevTools
+        if (devToolsCapture && capturedRequestId) {
+          devToolsCapture.onStreamChunk(capturedRequestId, chunk)
+        }
         onChunk?.(chunk)
       },
       {
         signal,
         onComplete: () => {
+          // Mark stream as complete for DevTools
+          if (devToolsCapture && capturedRequestId) {
+            devToolsCapture.onStreamComplete(capturedRequestId)
+          }
           onComplete?.()
         },
         onError: error => {
@@ -240,6 +309,10 @@ export async function streamChatCompletion(
             'onError callback invoked in streamChatCompletion:',
             error
           )
+          // Capture error for DevTools
+          if (devToolsCapture && capturedRequestId) {
+            devToolsCapture.onError(capturedRequestId, error.message)
+          }
           onError?.(error)
         },
       }
@@ -247,6 +320,14 @@ export async function streamChatCompletion(
 
     return responseSessionId
   } catch (error) {
+    // Capture error for DevTools
+    if (devToolsCapture && capturedRequestId) {
+      devToolsCapture.onError(
+        capturedRequestId,
+        error instanceof Error ? error.message : 'Unknown error'
+      )
+    }
+
     // Handle abort errors specifically
     if (error instanceof Error && error.name === 'AbortError') {
       const abortError = new NetworkError(
