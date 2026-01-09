@@ -121,6 +121,40 @@ class TestGGUFLanguageModel:
             assert call_kwargs["n_gpu_layers"] == -1
 
     @pytest.mark.asyncio
+    async def test_load_model_force_cpu(self, tmp_path, monkeypatch):
+        """Test loading GGUF model with forced CPU mode."""
+        # Create mock GGUF file
+        model_dir = tmp_path / "model"
+        model_dir.mkdir()
+        gguf_file = model_dir / "model.gguf"
+        gguf_file.write_text("mock gguf content")
+
+        # Set environment variable to force CPU
+        monkeypatch.setenv("LLAMAFARM_GGUF_FORCE_CPU", "1")
+
+        model = GGUFLanguageModel("test/model", "cpu")
+
+        # Mock the Llama class
+        mock_llama = MagicMock()
+
+        with (
+            patch(
+                "models.gguf_language_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch(
+                "models.gguf_language_model.get_default_context_size",
+                return_value=(2048, []),
+            ),
+            patch("llamafarm_llama.Llama", return_value=mock_llama) as mock_llama_cls,
+        ):
+            await model.load()
+            assert model.llama is not None
+            # Verify n_gpu_layers=0 when LLAMAFARM_GGUF_FORCE_CPU=1
+            call_kwargs = mock_llama_cls.call_args[1]
+            assert call_kwargs["n_gpu_layers"] == 0
+
+    @pytest.mark.asyncio
     async def test_generate_not_loaded(self):
         """Test generate raises error if model not loaded."""
         model = GGUFLanguageModel("test/model", "cpu")

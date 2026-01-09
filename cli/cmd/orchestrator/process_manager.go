@@ -325,16 +325,35 @@ func (pm *ProcessManager) StopProcess(name string) error {
 	return nil
 }
 
-// StopAllProcesses stops all managed processes
+// KnownServiceNames lists all service names that might have PID files.
+// This is used by StopAllProcesses to stop orphaned processes from previous CLI invocations.
+var KnownServiceNames = []string{"server", "rag", "universal-runtime"}
+
+// StopAllProcesses stops all managed processes, including orphaned ones from PID files.
+// This is important during source code upgrades when services may have been started
+// by a different CLI invocation.
 func (pm *ProcessManager) StopAllProcesses() {
+	// Collect names from in-memory tracking
 	pm.mu.RLock()
-	names := make([]string, 0, len(pm.processes))
+	names := make(map[string]bool)
 	for name := range pm.processes {
-		names = append(names, name)
+		names[name] = true
 	}
 	pm.mu.RUnlock()
 
-	for _, name := range names {
+	// Also check for orphaned processes via PID files
+	// This handles services started by a different CLI invocation
+	for _, name := range KnownServiceNames {
+		if !names[name] {
+			if pid, found := pm.ReadPIDFile(name); found && isProcessAlive(pid) {
+				names[name] = true
+				utils.LogDebug(fmt.Sprintf("Found orphaned process %s (PID %d) via PID file", name, pid))
+			}
+		}
+	}
+
+	// Stop all found processes
+	for name := range names {
 		if err := pm.StopProcess(name); err != nil {
 			utils.LogDebug(fmt.Sprintf("Error stopping %s: %v\n", name, err))
 		}
