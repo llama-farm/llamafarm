@@ -13,6 +13,8 @@ import type {
   AnomalyScoreRequest,
   AnomalySaveRequest,
   AnomalyLoadRequest,
+  EmbeddingRequest,
+  RerankRequest,
 } from '../types/ml'
 
 // =============================================================================
@@ -327,6 +329,28 @@ export function useScanDocument() {
 }
 
 // =============================================================================
+// Encoder Mutations (Embeddings & Reranking)
+// =============================================================================
+
+/**
+ * Generate embeddings for texts
+ */
+export function useCreateEmbeddings() {
+  return useMutation({
+    mutationFn: (request: EmbeddingRequest) => mlService.createEmbeddings(request),
+  })
+}
+
+/**
+ * Rerank documents based on query relevance
+ */
+export function useRerankDocuments() {
+  return useMutation({
+    mutationFn: (request: RerankRequest) => mlService.rerankDocuments(request),
+  })
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -355,4 +379,7 @@ export default {
   useTrainAndSaveAnomaly,
   // Document Scanning mutations
   useScanDocument,
+  // Encoder mutations
+  useCreateEmbeddings,
+  useRerankDocuments,
 }

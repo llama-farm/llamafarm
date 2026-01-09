@@ -539,3 +539,126 @@ export interface DocumentScanningHistoryEntry {
   results: DocumentScanningResultItem[]
   error?: string
 }
+
+// =============================================================================
+// Encoder Types (Embeddings & Reranking)
+// =============================================================================
+
+export type EncoderSubMode = 'embedding' | 'reranking'
+
+// Embedding types
+export interface EmbeddingRequest {
+  model: string
+  input: string | string[]
+  encoding_format?: 'float' | 'base64'
+}
+
+export interface EmbeddingData {
+  object: string // "embedding"
+  index: number
+  embedding: number[]
+}
+
+export interface EmbeddingResponse {
+  object: string // "list"
+  data: EmbeddingData[]
+  model: string
+  usage: {
+    prompt_tokens: number
+    total_tokens: number
+  }
+}
+
+// Reranking types
+export interface RerankRequest {
+  model: string
+  query: string
+  documents: string[]
+  top_k?: number
+  return_documents?: boolean
+}
+
+export interface RerankResult {
+  index: number
+  relevance_score: number
+  document?: string
+}
+
+export interface RerankResponse {
+  object: string // "list"
+  data: RerankResult[]
+  model: string
+  usage: {
+    prompt_tokens: number
+    total_tokens: number
+  }
+}
+
+// History entry for encoder testing
+export interface EncoderHistoryEntry {
+  id: string
+  timestamp: Date
+  mode: EncoderSubMode
+  modelName: string
+  // Embedding mode
+  texts?: string[]
+  similarities?: number[][] // cosine similarity matrix
+  // Reranking mode
+  query?: string
+  documents?: string[]
+  results?: RerankResult[]
+  error?: string
+}
+
+// Common embedding models (HuggingFace)
+export const COMMON_EMBEDDING_MODELS = [
+  {
+    value: 'sentence-transformers/all-MiniLM-L6-v2',
+    label: 'all-MiniLM-L6-v2',
+    description: 'Fast, balanced (384 dim)',
+  },
+  {
+    value: 'sentence-transformers/all-mpnet-base-v2',
+    label: 'all-mpnet-base-v2',
+    description: 'Higher quality (768 dim)',
+  },
+  {
+    value: 'BAAI/bge-small-en-v1.5',
+    label: 'BGE Small',
+    description: 'MTEB top performer (384 dim)',
+  },
+  {
+    value: 'BAAI/bge-base-en-v1.5',
+    label: 'BGE Base',
+    description: 'MTEB top performer (768 dim)',
+  },
+  {
+    value: 'nomic-ai/nomic-embed-text-v1.5',
+    label: 'Nomic Embed',
+    description: 'Long context (768 dim)',
+  },
+]
+
+// Common reranking models
+export const COMMON_RERANKING_MODELS = [
+  {
+    value: 'cross-encoder/ms-marco-MiniLM-L-6-v2',
+    label: 'MS-MARCO MiniLM L6',
+    description: 'Fast, good quality',
+  },
+  {
+    value: 'cross-encoder/ms-marco-TinyBERT-L-2-v2',
+    label: 'MS-MARCO TinyBERT',
+    description: 'Fastest, smaller',
+  },
+  {
+    value: 'BAAI/bge-reranker-base',
+    label: 'BGE Reranker Base',
+    description: 'High quality',
+  },
+  {
+    value: 'BAAI/bge-reranker-large',
+    label: 'BGE Reranker Large',
+    description: 'Highest quality',
+  },
+]

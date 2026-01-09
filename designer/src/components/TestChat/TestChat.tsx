@@ -14,7 +14,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
-import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument } from '../../hooks/useMLModels'
+import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument, useCreateEmbeddings, useRerankDocuments } from '../../hooks/useMLModels'
 import { Selector } from '../ui/selector'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
@@ -22,12 +22,17 @@ import {
   type DocumentScanningBackend,
   type DocumentScanningResultItem,
   type DocumentScanningHistoryEntry,
+  type EncoderSubMode,
+  type EncoderHistoryEntry,
+  type RerankResult,
+  COMMON_EMBEDDING_MODELS,
+  COMMON_RERANKING_MODELS,
 } from '../../types/ml'
 
 export interface TestChatProps {
   // Mode selection
-  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning'
-  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning') => void
+  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder'
+  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder') => void
   // Existing props
   showReferences: boolean
   allowRanking: boolean
@@ -982,6 +987,257 @@ function DocumentScanningHistoryItem({
   )
 }
 
+// Encoder Empty State
+function EncoderEmptyState({ subMode }: { subMode: EncoderSubMode }) {
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/20 border border-sky-500/40">
+          <FontIcon type="data" className="w-5 h-5 text-sky-400" />
+        </div>
+        <div className="text-lg font-medium text-foreground">
+          {subMode === 'embedding'
+            ? 'Test Embedding Similarity'
+            : 'Test Document Reranking'}
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          {subMode === 'embedding'
+            ? 'Enter 2+ texts to compare their semantic similarity'
+            : 'Enter a query and documents to see relevance rankings'}
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          Tip: Press Cmd+Enter to run
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Embedding Similarity Result Display
+function EmbeddingSimilarityDisplay({
+  result,
+  error,
+  isLoading,
+}: {
+  result: {
+    texts: string[]
+    similarities: number[][]
+  } | null
+  error: string | null
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Generating embeddings...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">Embedding Error</div>
+          <div className="mt-2 text-sm text-amber-400">{error}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result) return null
+
+  const { texts, similarities } = result
+
+  return (
+    <div className="flex flex-col p-4 space-y-4">
+      <div className="text-sm font-medium">Cosine Similarity Matrix</div>
+
+      {/* Similarity Matrix Table */}
+      <div className="overflow-x-auto">
+        <table className="text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className="p-2 border border-border bg-muted/30"></th>
+              {texts.map((_, i) => (
+                <th key={i} className="p-2 border border-border bg-muted/30 text-center">
+                  Text {i + 1}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {texts.map((_, i) => (
+              <tr key={i}>
+                <td className="p-2 border border-border bg-muted/30 font-medium">
+                  Text {i + 1}
+                </td>
+                {similarities[i].map((sim, j) => {
+                  // Color code: green for high similarity, yellow for medium, red for low
+                  const bgColor = i === j
+                    ? 'bg-muted/50'
+                    : sim > 0.8
+                      ? 'bg-green-500/20'
+                      : sim > 0.5
+                        ? 'bg-yellow-500/20'
+                        : 'bg-red-500/10'
+                  return (
+                    <td
+                      key={j}
+                      className={`p-2 border border-border text-center tabular-nums ${bgColor}`}
+                    >
+                      {sim.toFixed(4)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Text Legend */}
+      <div className="space-y-2 mt-4">
+        <div className="text-xs text-muted-foreground">Texts:</div>
+        {texts.map((text, i) => (
+          <div key={i} className="text-xs">
+            <span className="font-medium">Text {i + 1}:</span>{' '}
+            <span className="text-muted-foreground">{text.length > 100 ? text.substring(0, 100) + '...' : text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Rerank Result Display
+function RerankResultDisplay({
+  result,
+  error,
+  isLoading,
+  query,
+}: {
+  result: RerankResult[] | null
+  error: string | null
+  isLoading: boolean
+  query: string
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Reranking documents...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">Reranking Error</div>
+          <div className="mt-2 text-sm text-amber-400">{error}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result || result.length === 0) return null
+
+  return (
+    <div className="flex flex-col p-4 space-y-4">
+      {/* Query display */}
+      <div className="rounded-lg border border-border bg-muted/30 p-3">
+        <div className="text-xs text-muted-foreground mb-1">Query:</div>
+        <div className="text-sm">{query}</div>
+      </div>
+
+      {/* Ranked results */}
+      <div className="text-sm font-medium">Ranked by Relevance:</div>
+      <div className="space-y-2">
+        {result.map((item, rank) => (
+          <div
+            key={item.index}
+            className="rounded-lg border border-border p-3 flex items-start gap-3"
+          >
+            <div className={`
+              flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+              ${rank === 0 ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}
+            `}>
+              {rank + 1}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm">{item.document}</div>
+              <div className="mt-1 flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  Relevance: <span className="font-mono">{item.relevance_score.toFixed(4)}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Original position: {item.index + 1}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Encoder History Item
+function EncoderHistoryItem({
+  item,
+  onRerun,
+}: {
+  item: EncoderHistoryEntry
+  onRerun: () => void
+}) {
+  const timeStr = item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const isError = !!item.error
+
+  return (
+    <button
+      onClick={onRerun}
+      className="w-full text-left px-2 py-1.5 rounded-md border border-border/50 hover:bg-muted/40 hover:border-border transition-colors"
+    >
+      <div className="flex items-center justify-between">
+        <Badge
+          className={`text-[10px] px-1.5 py-0 ${
+            isError
+              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+              : item.mode === 'embedding'
+                ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
+                : 'bg-violet-500/20 text-violet-400 border-violet-500/40'
+          }`}
+        >
+          {isError ? 'Error' : item.mode === 'embedding' ? 'Embed' : 'Rerank'}
+        </Badge>
+        <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+      </div>
+      <div className="text-[10px] text-muted-foreground truncate mt-1">
+        {item.mode === 'embedding'
+          ? `${item.texts?.length || 0} texts`
+          : item.query?.substring(0, 40)}
+      </div>
+    </button>
+  )
+}
+
 export default function TestChat({
   modelType,
   onModelTypeChange,
@@ -1260,6 +1516,73 @@ export default function TestChat({
     if (typeof window === 'undefined') return false
     return localStorage.getItem('lf_scan_completed') === 'true'
   })
+
+  // ============================================================================
+  // Encoder State & Hooks (Embeddings & Reranking)
+  // ============================================================================
+
+  const createEmbeddingsMutation = useCreateEmbeddings()
+  const rerankMutation = useRerankDocuments()
+
+  // Encoder sub-mode: embedding or reranking
+  const [encoderSubMode, setEncoderSubMode] = useState<EncoderSubMode>(() => {
+    if (typeof window === 'undefined') return 'embedding'
+    const stored = localStorage.getItem('lf_test_encoderSubMode')
+    return (stored === 'reranking') ? 'reranking' : 'embedding'
+  })
+
+  // Persist encoder sub-mode
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_encoderSubMode', encoderSubMode)
+    }
+  }, [encoderSubMode])
+
+  // Selected embedding model (persisted)
+  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<string>(() => {
+    if (typeof window === 'undefined') return COMMON_EMBEDDING_MODELS[0].value
+    return localStorage.getItem('lf_test_embeddingModel') || COMMON_EMBEDDING_MODELS[0].value
+  })
+
+  // Selected reranking model (persisted)
+  const [selectedRerankingModel, setSelectedRerankingModel] = useState<string>(() => {
+    if (typeof window === 'undefined') return COMMON_RERANKING_MODELS[0].value
+    return localStorage.getItem('lf_test_rerankingModel') || COMMON_RERANKING_MODELS[0].value
+  })
+
+  // Persist model selections
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_embeddingModel', selectedEmbeddingModel)
+    }
+  }, [selectedEmbeddingModel])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_rerankingModel', selectedRerankingModel)
+    }
+  }, [selectedRerankingModel])
+
+  // Embedding mode state
+  const [embeddingTexts, setEmbeddingTexts] = useState<string>('') // One text per line
+  const [embeddingResult, setEmbeddingResult] = useState<{
+    texts: string[]
+    embeddings: number[][]
+    similarities: number[][]
+  } | null>(null)
+
+  // Reranking mode state
+  const [rerankQuery, setRerankQuery] = useState<string>('')
+  const [rerankDocuments, setRerankDocuments] = useState<string>('') // One doc per line
+  const [rerankResult, setRerankResult] = useState<RerankResult[] | null>(null)
+
+  // Shared state
+  const [encoderError, setEncoderError] = useState<string | null>(null)
+
+  // Encoder history
+  const [encoderHistory, setEncoderHistory] = useState<EncoderHistoryEntry[]>([])
+  const [showEncoderHistory, setShowEncoderHistory] = useState(true)
+  const encoderHistoryScrollRef = useRef<HTMLDivElement>(null)
 
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
@@ -2545,6 +2868,138 @@ export default function TestChat({
     setScanError(historyItem.error || null)
   }, [])
 
+  // ============================================================================
+  // Encoder Handlers
+  // ============================================================================
+
+  // Calculate cosine similarity between two vectors
+  const cosineSimilarity = useCallback((a: number[], b: number[]): number => {
+    const dot = a.reduce((sum, val, i) => sum + val * b[i], 0)
+    const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0))
+    const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0))
+    return normA && normB ? dot / (normA * normB) : 0
+  }, [])
+
+  // Handle embedding similarity calculation
+  const handleEmbedding = useCallback(async () => {
+    const texts = embeddingTexts.trim().split('\n').filter(t => t.trim())
+    if (texts.length < 2) {
+      setEncoderError('Enter at least 2 texts (one per line) to compare')
+      return
+    }
+
+    setEncoderError(null)
+    setEmbeddingResult(null)
+
+    try {
+      const response = await createEmbeddingsMutation.mutateAsync({
+        model: selectedEmbeddingModel,
+        input: texts,
+      })
+
+      // Extract embeddings
+      const embeddings = response.data.map(d => d.embedding)
+
+      // Calculate similarity matrix
+      const similarities: number[][] = []
+      for (let i = 0; i < embeddings.length; i++) {
+        similarities[i] = []
+        for (let j = 0; j < embeddings.length; j++) {
+          similarities[i][j] = cosineSimilarity(embeddings[i], embeddings[j])
+        }
+      }
+
+      setEmbeddingResult({ texts, embeddings, similarities })
+
+      // Add to history
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'embedding' as const,
+        modelName: selectedEmbeddingModel,
+        texts,
+        similarities,
+      }, ...prev].slice(0, 50))
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Embedding failed'
+      setEncoderError(errorMsg)
+
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'embedding' as const,
+        modelName: selectedEmbeddingModel,
+        texts,
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
+    }
+  }, [selectedEmbeddingModel, embeddingTexts, createEmbeddingsMutation, cosineSimilarity])
+
+  // Handle document reranking
+  const handleRerank = useCallback(async () => {
+    const query = rerankQuery.trim()
+    const documents = rerankDocuments.trim().split('\n').filter(d => d.trim())
+
+    if (!query) {
+      setEncoderError('Enter a query')
+      return
+    }
+    if (documents.length < 2) {
+      setEncoderError('Enter at least 2 documents (one per line) to rerank')
+      return
+    }
+
+    setEncoderError(null)
+    setRerankResult(null)
+
+    try {
+      const response = await rerankMutation.mutateAsync({
+        model: selectedRerankingModel,
+        query,
+        documents,
+        return_documents: true,
+      })
+
+      setRerankResult(response.data)
+
+      // Add to history
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'reranking' as const,
+        modelName: selectedRerankingModel,
+        query,
+        documents,
+        results: response.data,
+      }, ...prev].slice(0, 50))
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Reranking failed'
+      setEncoderError(errorMsg)
+
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'reranking' as const,
+        modelName: selectedRerankingModel,
+        query,
+        documents,
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
+    }
+  }, [selectedRerankingModel, rerankQuery, rerankDocuments, rerankMutation])
+
+  // Clear encoder results
+  const clearEncoderResults = useCallback(() => {
+    setEmbeddingResult(null)
+    setRerankResult(null)
+    setEncoderError(null)
+    setEmbeddingTexts('')
+    setRerankQuery('')
+    setRerankDocuments('')
+  }, [])
+
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
@@ -2587,6 +3042,9 @@ export default function TestChat({
               } else if (modelType === 'document_scanning') {
                 // Document scanning mode: clear results and file
                 clearScanResults()
+              } else if (modelType === 'encoder') {
+                // Encoder mode: clear results
+                clearEncoderResults()
               }
             }}
             disabled={
@@ -2596,7 +3054,9 @@ export default function TestChat({
                   ? (!anomalyResult && !anomalyError)
                   : modelType === 'classifier'
                     ? (!classifierResult && !classifierError)
-                    : (!scanResults && !scanError && !scanFile)
+                    : modelType === 'document_scanning'
+                      ? (!scanResults && !scanError && !scanFile)
+                      : (!embeddingResult && !rerankResult && !encoderError)
             }
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -2613,8 +3073,9 @@ export default function TestChat({
               { value: 'anomaly', label: 'Anomaly Detection' },
               { value: 'classifier', label: 'Classifier' },
               { value: 'document_scanning', label: 'Document Scanning' },
+              { value: 'encoder', label: 'Encoder' },
             ]}
-            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning')}
+            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder')}
             label="Model Type"
             className="w-[200px]"
           />
@@ -2744,6 +3205,52 @@ export default function TestChat({
                 label="Language"
                 className="min-w-[100px]"
               />
+            </>
+          )}
+
+          {/* Encoder-specific selectors */}
+          {modelType === 'encoder' && (
+            <>
+              {/* Sub-mode toggle: Embedding vs Reranking */}
+              <Selector
+                value={encoderSubMode}
+                options={[
+                  { value: 'embedding', label: 'Embedding Similarity' },
+                  { value: 'reranking', label: 'Document Reranking' },
+                ]}
+                onChange={(v) => setEncoderSubMode(v as EncoderSubMode)}
+                label="Mode"
+                className="min-w-[160px]"
+              />
+
+              {/* Model selector based on sub-mode */}
+              {encoderSubMode === 'embedding' ? (
+                <Selector
+                  value={selectedEmbeddingModel}
+                  options={COMMON_EMBEDDING_MODELS.map(m => ({
+                    value: m.value,
+                    label: m.label,
+                    description: m.description,
+                  }))}
+                  onChange={setSelectedEmbeddingModel}
+                  disabled={createEmbeddingsMutation.isPending}
+                  label="Embedding Model"
+                  className="min-w-[180px]"
+                />
+              ) : (
+                <Selector
+                  value={selectedRerankingModel}
+                  options={COMMON_RERANKING_MODELS.map(m => ({
+                    value: m.value,
+                    label: m.label,
+                    description: m.description,
+                  }))}
+                  onChange={setSelectedRerankingModel}
+                  disabled={rerankMutation.isPending}
+                  label="Reranking Model"
+                  className="min-w-[180px]"
+                />
+              )}
             </>
           )}
         </div>
@@ -2974,7 +3481,7 @@ export default function TestChat({
               </div>
             )}
           </div>
-        ) : (
+        ) : modelType === 'document_scanning' ? (
           /* Document Scanning: File upload and result display with optional history sidebar */
           <div className="absolute inset-0 flex overflow-hidden">
             {/* Main content area - always accepts file drops */}
@@ -3044,6 +3551,96 @@ export default function TestChat({
                   <div className="flex flex-col h-full items-center pt-2">
                     <button
                       onClick={() => setShowScanHistory(true)}
+                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
+                      title="Show history"
+                    >
+                      <FontIcon type="recently-viewed" className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Encoder: Embedding similarity or Reranking results */
+          <div className="absolute inset-0 flex overflow-hidden">
+            {/* Main content area */}
+            <div className="flex-1 overflow-y-auto p-3 md:p-4">
+              {encoderSubMode === 'embedding' ? (
+                embeddingResult || encoderError || createEmbeddingsMutation.isPending ? (
+                  <EmbeddingSimilarityDisplay
+                    result={embeddingResult}
+                    error={encoderError}
+                    isLoading={createEmbeddingsMutation.isPending}
+                  />
+                ) : (
+                  <EncoderEmptyState subMode="embedding" />
+                )
+              ) : (
+                rerankResult || encoderError || rerankMutation.isPending ? (
+                  <RerankResultDisplay
+                    result={rerankResult}
+                    error={encoderError}
+                    isLoading={rerankMutation.isPending}
+                    query={rerankQuery}
+                  />
+                ) : (
+                  <EncoderEmptyState subMode="reranking" />
+                )
+              )}
+            </div>
+
+            {/* History sidebar */}
+            {encoderHistory.length > 0 && (
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showEncoderHistory ? 'w-[25%]' : 'w-8'}`}>
+                {showEncoderHistory ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        History
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setEncoderHistory([])}
+                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Clear history"
+                        >
+                          <FontIcon type="trashcan" className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setShowEncoderHistory(false)}
+                          className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Close history"
+                        >
+                          <FontIcon type="close" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      ref={encoderHistoryScrollRef}
+                      className="flex-1 overflow-y-auto p-2 space-y-2"
+                    >
+                      {encoderHistory.map(item => (
+                        <EncoderHistoryItem
+                          key={item.id}
+                          item={item}
+                          onRerun={() => {
+                            setEncoderSubMode(item.mode)
+                            if (item.mode === 'embedding' && item.texts) {
+                              setEmbeddingTexts(item.texts.join('\n'))
+                            } else if (item.mode === 'reranking') {
+                              setRerankQuery(item.query || '')
+                              setRerankDocuments(item.documents?.join('\n') || '')
+                            }
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full items-center pt-2">
+                    <button
+                      onClick={() => setShowEncoderHistory(true)}
                       className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
                       title="Show history"
                     >
@@ -3176,7 +3773,7 @@ export default function TestChat({
               />
             </div>
           </>
-        ) : (
+        ) : modelType === 'document_scanning' ? (
           /* Document Scanning: Status info (auto-scans on drop) */
           <>
             {scanError && (
@@ -3220,6 +3817,88 @@ export default function TestChat({
                 </span>
               )}
             </div>
+          </>
+        ) : (
+          /* Encoder: Mode-specific inputs */
+          <>
+            {encoderError && (
+              <div className="text-xs text-destructive mb-2">{encoderError}</div>
+            )}
+            {encoderSubMode === 'embedding' ? (
+              <>
+                <textarea
+                  value={embeddingTexts}
+                  onChange={e => setEmbeddingTexts(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && e.metaKey) {
+                      e.preventDefault()
+                      handleEmbedding()
+                    }
+                  }}
+                  disabled={createEmbeddingsMutation.isPending}
+                  placeholder={
+                    createEmbeddingsMutation.isPending
+                      ? 'Generating embeddings...'
+                      : 'Enter texts to compare (one per line, minimum 2)...'
+                  }
+                  className={`${textareaClasses} min-h-[80px]`}
+                  aria-label="Embedding texts input"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {createEmbeddingsMutation.isPending ? 'Generating...' : 'Cmd+Enter to compare'}
+                  </span>
+                  <FontIcon
+                    isButton
+                    type="arrow-filled"
+                    className={`w-8 h-8 self-end ${!embeddingTexts.trim() || createEmbeddingsMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+                    handleOnClick={handleEmbedding}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={rerankQuery}
+                    onChange={e => setRerankQuery(e.target.value)}
+                    disabled={rerankMutation.isPending}
+                    placeholder="Enter query..."
+                    className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm"
+                  />
+                  <textarea
+                    value={rerankDocuments}
+                    onChange={e => setRerankDocuments(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && e.metaKey) {
+                        e.preventDefault()
+                        handleRerank()
+                      }
+                    }}
+                    disabled={rerankMutation.isPending}
+                    placeholder={
+                      rerankMutation.isPending
+                        ? 'Reranking...'
+                        : 'Enter documents to rank (one per line)...'
+                    }
+                    className={`${textareaClasses} min-h-[60px]`}
+                    aria-label="Documents input"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {rerankMutation.isPending ? 'Reranking...' : 'Cmd+Enter to rank'}
+                  </span>
+                  <FontIcon
+                    isButton
+                    type="arrow-filled"
+                    className={`w-8 h-8 self-end ${!rerankQuery.trim() || !rerankDocuments.trim() || rerankMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+                    handleOnClick={handleRerank}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

@@ -27,6 +27,11 @@ import type {
   AnomalyListModelsResponse,
   // Document Scanning types
   DocumentScanningResponse,
+  // Encoder types
+  EmbeddingRequest,
+  EmbeddingResponse,
+  RerankRequest,
+  RerankResponse,
   // Shared types
   MLHealthResponse,
   MLDeleteResponse,
@@ -246,6 +251,52 @@ export async function scanDocument(
 }
 
 // =============================================================================
+// Encoder Endpoints (Embeddings & Reranking)
+// =============================================================================
+
+// Universal Runtime URL - calls directly to runtime for encoder operations
+const UNIVERSAL_RUNTIME_URL =
+  import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://localhost:11540'
+
+/**
+ * Generate embeddings for texts
+ * Calls Universal Runtime directly at /v1/embeddings
+ */
+export async function createEmbeddings(
+  request: EmbeddingRequest
+): Promise<EmbeddingResponse> {
+  const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/v1/embeddings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+/**
+ * Rerank documents based on query relevance
+ * Calls Universal Runtime directly at /v1/rerank
+ */
+export async function rerankDocuments(
+  request: RerankRequest
+): Promise<RerankResponse> {
+  const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/v1/rerank`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -269,4 +320,7 @@ export default {
   deleteAnomalyModel,
   // Document Scanning
   scanDocument,
+  // Encoder
+  createEmbeddings,
+  rerankDocuments,
 }
