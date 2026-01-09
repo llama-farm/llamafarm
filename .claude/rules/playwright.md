@@ -1,6 +1,6 @@
 ## Prerequisites for browser evaluations
 
-- Playwright must be installed globally on the users system. To install run `npm i -g playwright`
+- Playwright must be installed globally on the user's system. To install run `npm i -g playwright`
 - The chromium browser dependency must also be installed via `playwright install chromium`
 
 ## Rules
