@@ -267,7 +267,38 @@ AI agents must assume:
 
 ---
 
-## 10. Enforcement
+## 10. Common Pitfalls to Avoid
+
+### 10.1 Platform & Environment Assumptions
+
+* **Never hardcode `/tmp`** – Use `tempfile.gettempdir()` in Python or equivalent. Respects `TMPDIR`, `TEMP`, and platform conventions.
+* **Never hardcode branch names** – Detect the default branch dynamically: `git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'`
+* **Consider case-insensitive filesystems** – macOS and Windows treat `.env` and `.ENV` as the same file. Use case-insensitive comparisons for file matching.
+* **Avoid leading dashes in generated paths** – Paths like `-Users-foo` can be interpreted as command flags. Strip leading dashes or use `./` prefix.
+
+### 10.2 API & URL Conventions
+
+* **Ollama URLs should NOT include `/v1`** – Client libraries auto-append this. Use `http://localhost:11434`, not `http://localhost:11434/v1`.
+* **Verify API paths before documenting** – Run the actual command to confirm it exists.
+
+### 10.3 Security Pattern Completeness
+
+* **Negative security patterns must be precise** – When checking "yaml.load without SafeLoader", don't just exclude `Loader=`; exclude only `Loader=SafeLoader` or `Loader=yaml.SafeLoader`.
+* **Detection patterns must be actionable** – If documenting a check, provide the complete command. "Check for X" without a working grep/search is useless.
+
+### 10.4 Exception Handling
+
+* **Never swallow exceptions silently** – At minimum, log a warning. Silent `except: pass` makes debugging impossible.
+* **Log before ignoring** – If you intentionally ignore an exception, log it first so failures are visible.
+
+### 10.5 Documentation Accuracy
+
+* **Verify commands exist** – Before documenting a CLI command, confirm it exists in the codebase.
+* **Proofread for typos and grammar** – Check possessives (`user's` not `users`), verb tenses, and spelling.
+
+---
+
+## 11. Enforcement
 
 AI agents must:
 
