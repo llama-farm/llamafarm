@@ -44,9 +44,43 @@ class TestGGUFEncoderModel:
             await model.load()
             assert model.llama is not None
             # Verify embedding=True was passed
+            # Note: n_gpu_layers=-1 is used even with device="cpu" because llama.cpp
+            # has its own GPU detection independent of PyTorch. llama.cpp will
+            # automatically fall back to CPU if no GPU backend is available.
             call_kwargs = mock_llama_cls.call_args[1]
             assert call_kwargs["embedding"] is True
-            assert call_kwargs["n_gpu_layers"] == 0  # CPU mode
+            assert call_kwargs["n_gpu_layers"] == -1
+
+    @pytest.mark.asyncio
+    async def test_load_model_force_cpu(self, tmp_path, monkeypatch):
+        """Test loading GGUF embedding model with forced CPU mode."""
+        # Create mock GGUF file
+        model_dir = tmp_path / "model"
+        model_dir.mkdir()
+        gguf_file = model_dir / "model.gguf"
+        gguf_file.write_text("mock gguf embedding content")
+
+        # Set environment variable to force CPU
+        monkeypatch.setenv("LLAMAFARM_GGUF_FORCE_CPU", "1")
+
+        model = GGUFEncoderModel("test/embed-model", "cpu")
+
+        # Mock the Llama class
+        mock_llama = MagicMock()
+
+        with (
+            patch(
+                "models.gguf_encoder_model.get_gguf_file_path",
+                return_value=str(gguf_file),
+            ),
+            patch("llamafarm_llama.Llama", return_value=mock_llama) as mock_llama_cls,
+        ):
+            await model.load()
+            assert model.llama is not None
+            # Verify n_gpu_layers=0 when LLAMAFARM_GGUF_FORCE_CPU=1
+            call_kwargs = mock_llama_cls.call_args[1]
+            assert call_kwargs["embedding"] is True
+            assert call_kwargs["n_gpu_layers"] == 0
 
     @pytest.mark.asyncio
     async def test_load_model_gpu(self, tmp_path):

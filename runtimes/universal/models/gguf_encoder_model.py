@@ -93,17 +93,30 @@ class GGUFEncoderModel(BaseModel):
 
         logger.info(f"GGUF file located at: {gguf_path}")
 
-        # Configure GPU layers based on device
-        # Note: llama-cpp automatically uses whatever backend it was compiled with
-        # (CUDA, ROCm, Metal, Vulkan, etc.). We just tell it whether to use GPU or CPU.
-        if self.device != "cpu":
-            n_gpu_layers = -1  # Use all layers on GPU (any backend)
-            logger.info(
-                f"Configuring for GPU acceleration on {self.device} (all layers on GPU)"
-            )
+        # Configure GPU layers for llama.cpp
+        # IMPORTANT: llama.cpp has its own GPU detection (CUDA, Metal, Vulkan, etc.)
+        # that is independent of PyTorch. We should always try to use GPU layers (-1)
+        # and let llama.cpp fall back to CPU if no GPU backend is available.
+        # This allows users with CPU-only PyTorch but GPU llama.cpp to get acceleration.
+        import os
+
+        force_cpu = os.environ.get("LLAMAFARM_GGUF_FORCE_CPU", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+
+        if force_cpu:
+            n_gpu_layers = 0
+            logger.info("Configuring for CPU-only inference (LLAMAFARM_GGUF_FORCE_CPU=1)")
         else:
-            n_gpu_layers = 0  # CPU only
-            logger.info("Configuring for CPU-only inference")
+            # Use all layers on GPU - llama.cpp will use whatever backend is available
+            # (CUDA, Metal, Vulkan, etc.) and fall back to CPU if none are available
+            n_gpu_layers = -1
+            logger.info(
+                "Configuring for GPU acceleration (all layers on GPU, llama.cpp will "
+                "auto-detect available backends)"
+            )
 
         # Load model using llama-cpp in embedding mode
         # Run in thread pool since Llama() initialization is blocking
