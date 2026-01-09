@@ -69,8 +69,8 @@ grep -rE "session\.(get|post)\(" --include="*.py" -B 5 | grep -E "request\.|para
 # Pickle usage
 grep -rE "pickle\.(load|loads)\(|cPickle\." --include="*.py"
 
-# YAML unsafe load
-grep -rE "yaml\.load\(" --include="*.py" | grep -v "Loader="
+# YAML unsafe load (must use SafeLoader or safe_load)
+grep -rE "yaml\.load\(" --include="*.py" | grep -v "Loader=SafeLoader\|Loader=yaml\.SafeLoader\|safe_load"
 ```
 
 **Pass criteria**: No pickle with untrusted data; YAML uses safe_load
@@ -113,9 +113,14 @@ grep -rE "@(app|router)\.(get|post|put|patch|delete)\(" --include="*.py" | grep 
 
 **Search patterns**:
 ```bash
-# Request bodies without type hints
-grep -rE "def\s+\w+\([^)]*request\s*:" --include="*.py" | grep -v "Request\["
+# Route handlers with untyped parameters (missing Pydantic models)
+grep -rE "@(app|router)\.(post|put|patch)\(" --include="*.py" -A 3 | grep -E "def\s+\w+\([^)]*:\s*(dict|Dict|Any)\b"
+
+# Body() without type annotation
 grep -rE "Body\(\.\.\.\)" --include="*.py"
+
+# Parameters with generic dict type in route handlers
+grep -rE "def\s+\w+\([^)]*:\s*dict\b" --include="*.py"
 ```
 
 **Pass criteria**: All request bodies have Pydantic model types
@@ -265,9 +270,16 @@ grep -rE "async def" --include="*.py" -A 30 | grep -E "\.execute\(|\.query\(" | 
 
 **Search patterns**:
 ```bash
-# Coroutines called without await
-grep -rE "async def (\w+)" --include="*.py" -h | sed 's/.*async def //' | sed 's/(.*$//' | sort -u > /tmp/async_funcs
-# Then check if these functions are called without await
+# Find async function calls without await (two-step process):
+# Step 1: Extract async function names defined in the codebase
+grep -rE "async def (\w+)\(" --include="*.py" -ho | sed 's/async def //' | sed 's/($//' | sort -u
+
+# Step 2: For each async function name, check for calls without await
+# Example: if 'fetch_data' is async, search for calls not preceded by await
+grep -rE "\bfetch_data\s*\(" --include="*.py" | grep -v "await\s\+fetch_data\|await fetch_data"
+
+# Common async methods called without await
+grep -rE "\.(read|write|execute|commit|send|recv|connect|close)\s*\(" --include="*.py" | grep -v "await"
 ```
 
 **Pass criteria**: All coroutines are awaited

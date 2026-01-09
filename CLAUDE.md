@@ -47,6 +47,6 @@ See `.claude/rules/` for detailed guidelines.
 - `nx dev` - Starts server, rag, and designer together
 - `nx run generate-types` - Compiles the llamfarm schema and generates python and go types
 - `nx start server` - Starts the server
-- `nx start rag` - Stars the RAG celery worker
+- `nx start rag` - Starts the RAG celery worker
 - `nx start universal-runtime` - Starts the universal runtime
 - `nx build cli` - Builds the CLI binary and places it at `./dist/lf`

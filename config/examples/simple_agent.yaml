@@ -7,7 +7,7 @@ runtime:
     - name: default
       provider: ollama
       model: llama3.1:8b
-      base_url: http://localhost:11434/v1
+      base_url: http://localhost:11434
 
 prompts:
   - name: default

@@ -27,6 +27,15 @@ Key rules:
 Run these commands to understand the current state:
 
 ```bash
+# Detect the default branch (main, master, etc.)
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+# Fallback if symbolic-ref fails (e.g., shallow clone or missing HEAD)
+if [ -z "$DEFAULT_BRANCH" ]; then
+  DEFAULT_BRANCH=$(git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}')
+fi
+# Final fallback to 'main' if detection fails
+DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
+
 # Get current branch
 BRANCH=$(git branch --show-current)
 
@@ -34,7 +43,7 @@ BRANCH=$(git branch --show-current)
 git status --porcelain
 
 # Check for unpushed commits (if branch has upstream)
-git log origin/main..HEAD --oneline 2>/dev/null || echo "No upstream or no commits ahead"
+git log origin/$DEFAULT_BRANCH..HEAD --oneline 2>/dev/null || echo "No upstream or no commits ahead"
 
 # Check if branch has upstream tracking
 git rev-parse --abbrev-ref @{upstream} 2>/dev/null || echo "No upstream"
@@ -42,8 +51,8 @@ git rev-parse --abbrev-ref @{upstream} 2>/dev/null || echo "No upstream"
 
 Determine the state:
 - `HAS_CHANGES`: Are there uncommitted changes (staged, unstaged, or untracked)?
-- `HAS_UNPUSHED`: Are there commits ahead of origin/main?
-- `ON_MAIN`: Is current branch `main` or `master`?
+- `HAS_UNPUSHED`: Are there commits ahead of origin/$DEFAULT_BRANCH?
+- `ON_DEFAULT_BRANCH`: Is current branch the default branch ($DEFAULT_BRANCH)?
 - `HAS_UPSTREAM`: Does the branch track a remote?
 
 ### Step 2: Handle "Nothing to Do" Case
@@ -73,7 +82,7 @@ gh pr list --head "$(git branch --show-current)" --json number,url,title
 
 ### Step 4: Branch Management (if HAS_CHANGES)
 
-**If on main/master:**
+**If on default branch ($DEFAULT_BRANCH):**
 
 1. Inform user that changes need to go on a feature branch
 2. Stage changes first to analyze them:
@@ -230,7 +239,7 @@ git push
 
 **If push fails due to conflicts:**
 - Inform user about the conflict
-- Suggest: `git pull --rebase origin main` or `git merge origin/main`
+- Suggest: `git pull --rebase origin $DEFAULT_BRANCH` or `git merge origin/$DEFAULT_BRANCH`
 - Do NOT force push
 
 ### Step 8: Create or Report PR

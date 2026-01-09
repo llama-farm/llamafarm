@@ -16,16 +16,16 @@ Use this base path for all temporary files (aligns with Claude Code's existing t
 /tmp/claude/{sanitized-cwd}/
 ```
 
-Where `{sanitized-cwd}` is the current working directory path with `/` replaced by `-`.
+Where `{sanitized-cwd}` is the current working directory path with `/` replaced by `-` (leading slash stripped first to avoid a leading dash).
 
-Example: Working in `/Users/bobby/workspace/pivot/llamafarm` → `/tmp/claude/-Users-bobby-workspace-pivot-llamafarm/`
+Example: Working in `/Users/bobby/workspace/pivot/llamafarm` → `/tmp/claude/Users-bobby-workspace-pivot-llamafarm/`
 
 ## Creating a Temp File
 
 ### Step 1: Create the directory
 
 ```bash
-SANITIZED_PATH=$(echo "$PWD" | tr '/' '-')
+SANITIZED_PATH=$(echo "$PWD" | sed 's|^/||' | tr '/' '-')
 REPORT_DIR="/tmp/claude/${SANITIZED_PATH}/reviews"
 mkdir -p "$REPORT_DIR"
 ```
@@ -48,7 +48,7 @@ Use the Write tool with the full temp path.
 
 Always tell the user where the file was created:
 
-> Report saved to: `/tmp/claude/-Users-bobby-workspace-pivot-llamafarm/reviews/code-review-20260108-143052.md`
+> Report saved to: `/tmp/claude/Users-bobby-workspace-pivot-llamafarm/reviews/code-review-20260108-143052.md`
 
 ## When to Use This Pattern
 

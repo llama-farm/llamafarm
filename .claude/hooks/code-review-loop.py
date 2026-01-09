@@ -14,16 +14,25 @@ to run the /code-review skill, then parses the resulting report.
 
 import hashlib
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
+# Configure logging
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger("code-review-loop")
+
 # Configuration
 MAX_ITERATIONS = 5
-STATE_DIR = Path("/tmp/claude")
+STATE_DIR = Path(tempfile.gettempdir()) / "claude"
 PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
 
 
@@ -69,8 +78,8 @@ def save_state(state: dict) -> None:
     try:
         with open(state_file, "w") as f:
             json.dump(state, f, indent=2)
-    except IOError:
-        pass  # Non-critical if state save fails
+    except IOError as e:
+        logger.warning("Failed to save state to %s: %s", state_file, e)
 
 
 def clear_state() -> None:
@@ -79,8 +88,8 @@ def clear_state() -> None:
     try:
         if state_file.exists():
             state_file.unlink()
-    except IOError:
-        pass
+    except IOError as e:
+        logger.warning("Failed to clear state file %s: %s", state_file, e)
 
 
 def get_uncommitted_changes() -> list[str]:

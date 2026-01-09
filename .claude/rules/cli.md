@@ -29,7 +29,7 @@
 - `lf chat` - Interactive chat session
 - `lf models pull` - Download models
 - `lf services status` - Check service health
-- `lf rag ingest` - Ingest documents into RAG
+- `lf datasets ingest` - Ingest documents into RAG
 
 ## Development
 
