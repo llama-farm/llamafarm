@@ -33,6 +33,7 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel as PydanticBaseModel
 
 from core.logging import UniversalRuntimeLogger, setup_logging
@@ -123,6 +124,16 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# Add CORS middleware to allow frontend calls from any origin
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(chat_completions_router)
 
 # Model unload timeout configuration (in seconds)

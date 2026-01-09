@@ -1002,11 +1002,13 @@ function EncoderEmptyState({ subMode }: { subMode: EncoderSubMode }) {
         </div>
         <div className="mt-1 text-sm text-muted-foreground">
           {subMode === 'embedding'
-            ? 'Enter 2+ texts to compare their semantic similarity'
+            ? 'Enter two texts to compare their semantic similarity'
             : 'Enter a query and documents to see relevance rankings'}
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
-          Tip: Press Cmd+Enter to run
+          {subMode === 'embedding'
+            ? 'Tip: Press Cmd+Enter to compare'
+            : 'Tip: Press Cmd+Enter to rank'}
         </div>
       </div>
     </div>
@@ -1018,13 +1020,15 @@ function EmbeddingSimilarityDisplay({
   result,
   error,
   isLoading,
+  onCompareAnother,
 }: {
   result: {
     texts: string[]
-    similarities: number[][]
+    similarity: number
   } | null
   error: string | null
   isLoading: boolean
+  onCompareAnother: () => void
 }) {
   if (isLoading) {
     return (
@@ -1032,7 +1036,7 @@ function EmbeddingSimilarityDisplay({
         <div className="text-center px-6 py-10">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           <div className="mt-3 text-sm text-muted-foreground">
-            Generating embeddings...
+            Comparing texts...
           </div>
         </div>
       </div>
@@ -1048,6 +1052,12 @@ function EmbeddingSimilarityDisplay({
           </div>
           <div className="text-lg font-medium text-foreground">Embedding Error</div>
           <div className="mt-2 text-sm text-amber-400">{error}</div>
+          <button
+            onClick={onCompareAnother}
+            className="mt-4 px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     )
@@ -1055,65 +1065,68 @@ function EmbeddingSimilarityDisplay({
 
   if (!result) return null
 
-  const { texts, similarities } = result
+  const { texts, similarity } = result
+
+  // Get similarity label and color
+  const getSimilarityLabel = (score: number) => {
+    if (score >= 0.9) return { label: 'Very High Similarity', color: 'text-green-500' }
+    if (score >= 0.7) return { label: 'High Similarity', color: 'text-green-400' }
+    if (score >= 0.5) return { label: 'Moderate Similarity', color: 'text-yellow-500' }
+    if (score >= 0.3) return { label: 'Low Similarity', color: 'text-orange-500' }
+    return { label: 'Very Low Similarity', color: 'text-red-500' }
+  }
+
+  const { label, color } = getSimilarityLabel(similarity)
+
+  // Get progress bar color
+  const getProgressColor = (score: number) => {
+    if (score >= 0.7) return 'bg-green-500'
+    if (score >= 0.5) return 'bg-yellow-500'
+    if (score >= 0.3) return 'bg-orange-500'
+    return 'bg-red-500'
+  }
 
   return (
-    <div className="flex flex-col p-4 space-y-4">
-      <div className="text-sm font-medium">Cosine Similarity Matrix</div>
-
-      {/* Similarity Matrix Table */}
-      <div className="overflow-x-auto">
-        <table className="text-xs border-collapse">
-          <thead>
-            <tr>
-              <th className="p-2 border border-border bg-muted/30"></th>
-              {texts.map((_, i) => (
-                <th key={i} className="p-2 border border-border bg-muted/30 text-center">
-                  Text {i + 1}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {texts.map((_, i) => (
-              <tr key={i}>
-                <td className="p-2 border border-border bg-muted/30 font-medium">
-                  Text {i + 1}
-                </td>
-                {similarities[i].map((sim, j) => {
-                  // Color code: green for high similarity, yellow for medium, red for low
-                  const bgColor = i === j
-                    ? 'bg-muted/50'
-                    : sim > 0.8
-                      ? 'bg-green-500/20'
-                      : sim > 0.5
-                        ? 'bg-yellow-500/20'
-                        : 'bg-red-500/10'
-                  return (
-                    <td
-                      key={j}
-                      className={`p-2 border border-border text-center tabular-nums ${bgColor}`}
-                    >
-                      {sim.toFixed(4)}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="flex flex-col items-center p-6 space-y-6">
+      {/* Score display */}
+      <div className="text-center">
+        <div className="text-5xl font-bold tabular-nums">{similarity.toFixed(3)}</div>
+        <div className={`text-lg font-medium mt-1 ${color}`}>{label}</div>
       </div>
 
-      {/* Text Legend */}
-      <div className="space-y-2 mt-4">
-        <div className="text-xs text-muted-foreground">Texts:</div>
-        {texts.map((text, i) => (
-          <div key={i} className="text-xs">
-            <span className="font-medium">Text {i + 1}:</span>{' '}
-            <span className="text-muted-foreground">{text.length > 100 ? text.substring(0, 100) + '...' : text}</span>
-          </div>
-        ))}
+      {/* Progress bar */}
+      <div className="w-full max-w-md">
+        <div className="w-full bg-muted rounded-full h-3">
+          <div
+            className={`${getProgressColor(similarity)} h-full rounded-full transition-all`}
+            style={{ width: `${similarity * 100}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+          <span>0.0</span>
+          <span>1.0</span>
+        </div>
       </div>
+
+      {/* Text previews */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+        <div className="rounded-lg border border-border bg-card/50 p-3">
+          <div className="text-xs font-medium text-muted-foreground mb-1">Text A</div>
+          <div className="text-sm">{texts[0].length > 100 ? texts[0].slice(0, 100) + '...' : texts[0]}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-card/50 p-3">
+          <div className="text-xs font-medium text-muted-foreground mb-1">Text B</div>
+          <div className="text-sm">{texts[1].length > 100 ? texts[1].slice(0, 100) + '...' : texts[1]}</div>
+        </div>
+      </div>
+
+      {/* Compare another button */}
+      <button
+        onClick={onCompareAnother}
+        className="px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+      >
+        Compare Another
+      </button>
     </div>
   )
 }
@@ -1124,19 +1137,35 @@ function RerankResultDisplay({
   error,
   isLoading,
   query,
+  onRankAgain,
 }: {
   result: RerankResult[] | null
   error: string | null
   isLoading: boolean
   query: string
+  onRankAgain: () => void
 }) {
+  const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set())
+
+  const toggleExpand = (index: number) => {
+    setExpandedDocs(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full w-full">
         <div className="text-center px-6 py-10">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           <div className="mt-3 text-sm text-muted-foreground">
-            Reranking documents...
+            Ranking documents...
           </div>
         </div>
       </div>
@@ -1152,6 +1181,12 @@ function RerankResultDisplay({
           </div>
           <div className="text-lg font-medium text-foreground">Reranking Error</div>
           <div className="mt-2 text-sm text-amber-400">{error}</div>
+          <button
+            onClick={onRankAgain}
+            className="mt-4 px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     )
@@ -1159,41 +1194,89 @@ function RerankResultDisplay({
 
   if (!result || result.length === 0) return null
 
+  // Find max score for progress bar scaling
+  const maxScore = Math.max(...result.map(r => r.relevance_score), 0.01)
+
+  // Get progress bar color based on relative rank
+  const getProgressColor = (rank: number, total: number) => {
+    const position = rank / (total - 1 || 1)
+    if (position <= 0.33) return 'bg-green-500'
+    if (position <= 0.66) return 'bg-yellow-500'
+    return 'bg-orange-500'
+  }
+
   return (
     <div className="flex flex-col p-4 space-y-4">
       {/* Query display */}
-      <div className="rounded-lg border border-border bg-muted/30 p-3">
-        <div className="text-xs text-muted-foreground mb-1">Query:</div>
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <div className="text-xs font-medium text-primary mb-1">Query:</div>
         <div className="text-sm">{query}</div>
       </div>
 
       {/* Ranked results */}
       <div className="text-sm font-medium">Ranked by Relevance:</div>
       <div className="space-y-2">
-        {result.map((item, rank) => (
-          <div
-            key={item.index}
-            className="rounded-lg border border-border p-3 flex items-start gap-3"
-          >
-            <div className={`
-              flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-              ${rank === 0 ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}
-            `}>
-              {rank + 1}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm">{item.document}</div>
-              <div className="mt-1 flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">
-                  Relevance: <span className="font-mono">{item.relevance_score.toFixed(4)}</span>
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Original position: {item.index + 1}
-                </span>
+        {result.map((item, rank) => {
+          const docText = item.document || ''
+          const isLong = docText.length > 150
+          const isExpanded = expandedDocs.has(item.index)
+          const displayText = isLong && !isExpanded ? docText.slice(0, 150) + '...' : docText
+
+          return (
+            <div
+              key={item.index}
+              className="rounded-lg border border-border p-3"
+            >
+              <div className="flex items-start gap-3">
+                {/* Rank badge */}
+                <div className={`
+                  flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+                  ${rank === 0 ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}
+                `}>
+                  #{rank + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {/* Relevance score with progress bar */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-medium tabular-nums w-12">
+                      {item.relevance_score.toFixed(2)}
+                    </span>
+                    <div className="flex-1 bg-muted rounded-full h-2">
+                      <div
+                        className={`${getProgressColor(rank, result.length)} h-full rounded-full transition-all`}
+                        style={{ width: `${(item.relevance_score / maxScore) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  {/* Document text */}
+                  <div className="text-sm">{displayText}</div>
+                  {isLong && (
+                    <button
+                      onClick={() => toggleExpand(item.index)}
+                      className="text-xs text-primary hover:underline mt-1"
+                    >
+                      {isExpanded ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
+                  {/* Original position */}
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Originally: Document {item.index + 1}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
+      </div>
+
+      {/* Rank again button */}
+      <div className="flex justify-center pt-2">
+        <button
+          onClick={onRankAgain}
+          className="px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+        >
+          Rank Again
+        </button>
       </div>
     </div>
   )
@@ -1539,15 +1622,39 @@ export default function TestChat({
   }, [encoderSubMode])
 
   // Selected embedding model (persisted)
+  // Migrates old short names (e.g., "all-MiniLM-L6-v2") to full HuggingFace paths
   const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<string>(() => {
     if (typeof window === 'undefined') return COMMON_EMBEDDING_MODELS[0].value
-    return localStorage.getItem('lf_test_embeddingModel') || COMMON_EMBEDDING_MODELS[0].value
+    const stored = localStorage.getItem('lf_test_embeddingModel')
+    if (!stored) return COMMON_EMBEDDING_MODELS[0].value
+    // Check if stored value is a valid full model path
+    const isValid = COMMON_EMBEDDING_MODELS.some(m => m.value === stored)
+    if (isValid) return stored
+    // Try to find by label (short name) for backwards compatibility
+    const byLabel = COMMON_EMBEDDING_MODELS.find(m => m.label === stored)
+    if (byLabel) {
+      localStorage.setItem('lf_test_embeddingModel', byLabel.value)
+      return byLabel.value
+    }
+    return COMMON_EMBEDDING_MODELS[0].value
   })
 
   // Selected reranking model (persisted)
+  // Migrates old short names to full HuggingFace paths
   const [selectedRerankingModel, setSelectedRerankingModel] = useState<string>(() => {
     if (typeof window === 'undefined') return COMMON_RERANKING_MODELS[0].value
-    return localStorage.getItem('lf_test_rerankingModel') || COMMON_RERANKING_MODELS[0].value
+    const stored = localStorage.getItem('lf_test_rerankingModel')
+    if (!stored) return COMMON_RERANKING_MODELS[0].value
+    // Check if stored value is a valid full model path
+    const isValid = COMMON_RERANKING_MODELS.some(m => m.value === stored)
+    if (isValid) return stored
+    // Try to find by label (short name) for backwards compatibility
+    const byLabel = COMMON_RERANKING_MODELS.find(m => m.label === stored)
+    if (byLabel) {
+      localStorage.setItem('lf_test_rerankingModel', byLabel.value)
+      return byLabel.value
+    }
+    return COMMON_RERANKING_MODELS[0].value
   })
 
   // Persist model selections
@@ -1563,17 +1670,17 @@ export default function TestChat({
     }
   }, [selectedRerankingModel])
 
-  // Embedding mode state
-  const [embeddingTexts, setEmbeddingTexts] = useState<string>('') // One text per line
+  // Embedding mode state - two side-by-side inputs
+  const [embeddingTextA, setEmbeddingTextA] = useState<string>('')
+  const [embeddingTextB, setEmbeddingTextB] = useState<string>('')
   const [embeddingResult, setEmbeddingResult] = useState<{
     texts: string[]
-    embeddings: number[][]
-    similarities: number[][]
+    similarity: number
   } | null>(null)
 
   // Reranking mode state
   const [rerankQuery, setRerankQuery] = useState<string>('')
-  const [rerankDocuments, setRerankDocuments] = useState<string>('') // One doc per line
+  const [rerankDocuments, setRerankDocuments] = useState<string[]>(['', '']) // Array of document texts
   const [rerankResult, setRerankResult] = useState<RerankResult[] | null>(null)
 
   // Shared state
@@ -1583,6 +1690,10 @@ export default function TestChat({
   const [encoderHistory, setEncoderHistory] = useState<EncoderHistoryEntry[]>([])
   const [showEncoderHistory, setShowEncoderHistory] = useState(true)
   const encoderHistoryScrollRef = useRef<HTMLDivElement>(null)
+  const rerankDocumentsScrollRef = useRef<HTMLDivElement>(null)
+
+  // Reranking right panel tab state
+  const [rerankRightPanelTab, setRerankRightPanelTab] = useState<'inputs' | 'history'>('inputs')
 
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
@@ -2882,12 +2993,15 @@ export default function TestChat({
 
   // Handle embedding similarity calculation
   const handleEmbedding = useCallback(async () => {
-    const texts = embeddingTexts.trim().split('\n').filter(t => t.trim())
-    if (texts.length < 2) {
-      setEncoderError('Enter at least 2 texts (one per line) to compare')
+    const textA = embeddingTextA.trim()
+    const textB = embeddingTextB.trim()
+
+    if (!textA || !textB) {
+      setEncoderError('Enter text in both fields to compare')
       return
     }
 
+    const texts = [textA, textB]
     setEncoderError(null)
     setEmbeddingResult(null)
 
@@ -2900,16 +3014,10 @@ export default function TestChat({
       // Extract embeddings
       const embeddings = response.data.map(d => d.embedding)
 
-      // Calculate similarity matrix
-      const similarities: number[][] = []
-      for (let i = 0; i < embeddings.length; i++) {
-        similarities[i] = []
-        for (let j = 0; j < embeddings.length; j++) {
-          similarities[i][j] = cosineSimilarity(embeddings[i], embeddings[j])
-        }
-      }
+      // Calculate similarity between the two texts
+      const similarity = cosineSimilarity(embeddings[0], embeddings[1])
 
-      setEmbeddingResult({ texts, embeddings, similarities })
+      setEmbeddingResult({ texts, similarity })
 
       // Add to history
       setEncoderHistory(prev => [{
@@ -2918,7 +3026,7 @@ export default function TestChat({
         mode: 'embedding' as const,
         modelName: selectedEmbeddingModel,
         texts,
-        similarities,
+        similarity,
       }, ...prev].slice(0, 50))
 
     } catch (err) {
@@ -2934,19 +3042,19 @@ export default function TestChat({
         error: errorMsg,
       }, ...prev].slice(0, 50))
     }
-  }, [selectedEmbeddingModel, embeddingTexts, createEmbeddingsMutation, cosineSimilarity])
+  }, [selectedEmbeddingModel, embeddingTextA, embeddingTextB, createEmbeddingsMutation, cosineSimilarity])
 
   // Handle document reranking
   const handleRerank = useCallback(async () => {
     const query = rerankQuery.trim()
-    const documents = rerankDocuments.trim().split('\n').filter(d => d.trim())
+    const documents = rerankDocuments.map(d => d.trim()).filter(d => d)
 
     if (!query) {
       setEncoderError('Enter a query')
       return
     }
     if (documents.length < 2) {
-      setEncoderError('Enter at least 2 documents (one per line) to rerank')
+      setEncoderError('Enter at least 2 documents to rerank')
       return
     }
 
@@ -2995,9 +3103,10 @@ export default function TestChat({
     setEmbeddingResult(null)
     setRerankResult(null)
     setEncoderError(null)
-    setEmbeddingTexts('')
+    setEmbeddingTextA('')
+    setEmbeddingTextB('')
     setRerankQuery('')
-    setRerankDocuments('')
+    setRerankDocuments(['', '']) // Reset to 2 empty documents
   }, [])
 
   return (
@@ -3562,99 +3671,296 @@ export default function TestChat({
             )}
           </div>
         ) : (
-          /* Encoder: Embedding similarity or Reranking results */
+          /* Encoder: Embedding similarity or Reranking */
           <div className="absolute inset-0 flex overflow-hidden">
-            {/* Main content area */}
-            <div className="flex-1 overflow-y-auto p-3 md:p-4">
-              {encoderSubMode === 'embedding' ? (
-                embeddingResult || encoderError || createEmbeddingsMutation.isPending ? (
-                  <EmbeddingSimilarityDisplay
-                    result={embeddingResult}
-                    error={encoderError}
-                    isLoading={createEmbeddingsMutation.isPending}
-                  />
-                ) : (
-                  <EncoderEmptyState subMode="embedding" />
-                )
-              ) : (
-                rerankResult || encoderError || rerankMutation.isPending ? (
-                  <RerankResultDisplay
-                    result={rerankResult}
-                    error={encoderError}
-                    isLoading={rerankMutation.isPending}
-                    query={rerankQuery}
-                  />
-                ) : (
-                  <EncoderEmptyState subMode="reranking" />
-                )
-              )}
-            </div>
+            {encoderSubMode === 'embedding' ? (
+              /* Embedding mode - original layout */
+              <>
+                {/* Main content area */}
+                <div className="flex-1 overflow-y-auto p-3 md:p-4">
+                  {embeddingResult || encoderError || createEmbeddingsMutation.isPending ? (
+                    <EmbeddingSimilarityDisplay
+                      result={embeddingResult}
+                      error={encoderError}
+                      isLoading={createEmbeddingsMutation.isPending}
+                      onCompareAnother={() => {
+                        setEmbeddingResult(null)
+                        setEncoderError(null)
+                        setEmbeddingTextA('')
+                        setEmbeddingTextB('')
+                      }}
+                    />
+                  ) : (
+                    <EncoderEmptyState subMode="embedding" />
+                  )}
+                </div>
 
-            {/* History sidebar */}
-            {encoderHistory.length > 0 && (
-              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showEncoderHistory ? 'w-[25%]' : 'w-8'}`}>
-                {showEncoderHistory ? (
-                  <div className="flex flex-col h-full">
-                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                        History
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setEncoderHistory([])}
-                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
-                          title="Clear history"
+                {/* History sidebar for embedding */}
+                {encoderHistory.filter(h => h.mode === 'embedding').length > 0 && (
+                  <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showEncoderHistory ? 'w-[25%]' : 'w-8'}`}>
+                    {showEncoderHistory ? (
+                      <div className="flex flex-col h-full">
+                        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                            History
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setEncoderHistory(prev => prev.filter(h => h.mode !== 'embedding'))}
+                              className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                              title="Clear history"
+                            >
+                              <FontIcon type="trashcan" className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setShowEncoderHistory(false)}
+                              className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                              title="Close history"
+                            >
+                              <FontIcon type="close" className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div
+                          ref={encoderHistoryScrollRef}
+                          className="flex-1 overflow-y-auto p-2 space-y-2"
                         >
-                          <FontIcon type="trashcan" className="w-3.5 h-3.5" />
-                        </button>
+                          {encoderHistory.filter(h => h.mode === 'embedding').map(item => (
+                            <EncoderHistoryItem
+                              key={item.id}
+                              item={item}
+                              onRerun={() => {
+                                setEmbeddingTextA(item.texts?.[0] || '')
+                                setEmbeddingTextB(item.texts?.[1] || '')
+                                setEmbeddingResult(null)
+                                setEncoderError(null)
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col h-full items-center pt-2">
                         <button
-                          onClick={() => setShowEncoderHistory(false)}
-                          className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
-                          title="Close history"
+                          onClick={() => setShowEncoderHistory(true)}
+                          className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
+                          title="Show history"
                         >
-                          <FontIcon type="close" className="w-4 h-4" />
+                          <FontIcon type="recently-viewed" className="w-4 h-4" />
                         </button>
                       </div>
-                    </div>
-                    <div
-                      ref={encoderHistoryScrollRef}
-                      className="flex-1 overflow-y-auto p-2 space-y-2"
-                    >
-                      {encoderHistory.map(item => (
-                        <EncoderHistoryItem
-                          key={item.id}
-                          item={item}
-                          onRerun={() => {
-                            setEncoderSubMode(item.mode)
-                            if (item.mode === 'embedding' && item.texts) {
-                              setEmbeddingTexts(item.texts.join('\n'))
-                            } else if (item.mode === 'reranking') {
-                              setRerankQuery(item.query || '')
-                              setRerankDocuments(item.documents?.join('\n') || '')
-                            }
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col h-full items-center pt-2">
-                    <button
-                      onClick={() => setShowEncoderHistory(true)}
-                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
-                      title="Show history"
-                    >
-                      <FontIcon type="recently-viewed" className="w-4 h-4" />
-                    </button>
+                    )}
                   </div>
                 )}
-              </div>
+              </>
+            ) : (
+              /* Reranking mode - split layout with inputs on right */
+              <>
+                {/* Left panel: Empty state / Results */}
+                <div className="flex-1 overflow-y-auto p-3 md:p-4">
+                  {rerankResult || encoderError || rerankMutation.isPending ? (
+                    <RerankResultDisplay
+                      result={rerankResult}
+                      error={encoderError}
+                      isLoading={rerankMutation.isPending}
+                      query={rerankQuery}
+                      onRankAgain={() => {
+                        setRerankResult(null)
+                        setEncoderError(null)
+                        setRerankRightPanelTab('inputs')
+                      }}
+                    />
+                  ) : (
+                    <EncoderEmptyState subMode="reranking" />
+                  )}
+                </div>
+
+                {/* Right panel: Inputs with History tab */}
+                <div className="w-1/2 border-l border-border bg-muted/5 flex flex-col">
+                  {/* Tabs */}
+                  <div className="flex border-b border-border">
+                    <button
+                      onClick={() => setRerankRightPanelTab('inputs')}
+                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                        rerankRightPanelTab === 'inputs'
+                          ? 'text-primary border-b-2 border-primary bg-background'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Inputs
+                    </button>
+                    <button
+                      onClick={() => encoderHistory.filter(h => h.mode === 'reranking').length > 0 && setRerankRightPanelTab('history')}
+                      disabled={encoderHistory.filter(h => h.mode === 'reranking').length === 0}
+                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                        rerankRightPanelTab === 'history'
+                          ? 'text-primary border-b-2 border-primary bg-background'
+                          : encoderHistory.filter(h => h.mode === 'reranking').length === 0
+                            ? 'text-muted-foreground/50 cursor-not-allowed'
+                            : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      History {encoderHistory.filter(h => h.mode === 'reranking').length > 0 && `(${encoderHistory.filter(h => h.mode === 'reranking').length})`}
+                    </button>
+                  </div>
+
+                  {/* Tab content */}
+                  <div className="flex-1 flex flex-col min-h-0">
+                    {rerankRightPanelTab === 'inputs' ? (
+                      /* Inputs tab */
+                      <div className="flex-1 flex flex-col min-h-0">
+                        {/* Scrollable content area */}
+                        <div ref={rerankDocumentsScrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+                          {encoderError && (
+                            <div className="text-xs text-destructive">{encoderError}</div>
+                          )}
+
+                          {/* Query section */}
+                          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                            <label className="text-xs font-medium text-primary mb-1.5 block">Query</label>
+                            <textarea
+                              value={rerankQuery}
+                              onChange={e => setRerankQuery(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                  e.preventDefault()
+                                  handleRerank()
+                                }
+                              }}
+                              disabled={rerankMutation.isPending}
+                              placeholder="Enter the query to rank against..."
+                              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm resize-none"
+                              rows={2}
+                            />
+                          </div>
+
+                          {/* Documents section */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Documents to Rank (minimum 2)
+                              </label>
+                              {rerankDocuments.length > 10 && (
+                                <span className="text-xs text-amber-500">
+                                  Many documents may slow processing
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Document cards */}
+                            <div className="space-y-2">
+                              {rerankDocuments.map((doc, index) => (
+                                <div
+                                  key={index}
+                                  className="rounded-lg border border-border bg-card/50 p-2 flex items-start gap-2"
+                                >
+                                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
+                                    {index + 1}
+                                  </div>
+                                  <textarea
+                                    value={doc}
+                                    onChange={e => {
+                                      const newDocs = [...rerankDocuments]
+                                      newDocs[index] = e.target.value
+                                      setRerankDocuments(newDocs)
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                        e.preventDefault()
+                                        handleRerank()
+                                      }
+                                    }}
+                                    disabled={rerankMutation.isPending}
+                                    placeholder={`Document ${index + 1}...`}
+                                    className="flex-1 px-2 py-1 rounded border border-input bg-background text-sm resize-none min-h-[50px]"
+                                    rows={2}
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const newDocs = rerankDocuments.filter((_, i) => i !== index)
+                                      setRerankDocuments(newDocs)
+                                    }}
+                                    disabled={rerankDocuments.length <= 2 || rerankMutation.isPending}
+                                    className="flex-shrink-0 p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                                    title={rerankDocuments.length <= 2 ? 'Minimum 2 documents required' : 'Remove document'}
+                                  >
+                                    <FontIcon type="close" className="w-4 h-4 text-muted-foreground" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Sticky action buttons */}
+                        <div className="flex-shrink-0 p-3 border-t border-border bg-background/95 backdrop-blur-sm">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setRerankDocuments([...rerankDocuments, ''])
+                                // Scroll to bottom after React updates the DOM
+                                setTimeout(() => {
+                                  rerankDocumentsScrollRef.current?.scrollTo({
+                                    top: rerankDocumentsScrollRef.current.scrollHeight,
+                                    behavior: 'smooth'
+                                  })
+                                }, 0)
+                              }}
+                              disabled={rerankMutation.isPending}
+                              className="flex-1 py-2 rounded-lg border border-dashed border-border hover:border-primary hover:bg-primary/5 text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                            >
+                              + Add
+                            </button>
+                            <button
+                              onClick={handleRerank}
+                              disabled={!rerankQuery.trim() || rerankDocuments.filter(d => d.trim()).length < 2 || rerankMutation.isPending}
+                              className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                            >
+                              {rerankMutation.isPending ? 'Ranking...' : 'Rank'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* History tab */
+                      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">
+                            {encoderHistory.filter(h => h.mode === 'reranking').length} items
+                          </span>
+                          <button
+                            onClick={() => setEncoderHistory(prev => prev.filter(h => h.mode !== 'reranking'))}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                        {encoderHistory.filter(h => h.mode === 'reranking').map(item => (
+                          <EncoderHistoryItem
+                            key={item.id}
+                            item={item}
+                            onRerun={() => {
+                              setRerankQuery(item.query || '')
+                              const docs = item.documents || []
+                              setRerankDocuments(docs.length >= 2 ? docs : [...docs, '', ''].slice(0, Math.max(2, docs.length)))
+                              setRerankResult(null)
+                              setEncoderError(null)
+                              setRerankRightPanelTab('inputs')
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
       </div>
 
-      {/* Input Area - mode conditional */}
+      {/* Input Area - mode conditional (hidden for encoder/reranking since inputs are in right panel) */}
+      {!(modelType === 'encoder' && encoderSubMode === 'reranking') && (
       <div className={inputContainerClasses}>
         {modelType === 'inference' ? (
           /* Inference: Chat input */
@@ -3826,82 +4132,61 @@ export default function TestChat({
             )}
             {encoderSubMode === 'embedding' ? (
               <>
-                <textarea
-                  value={embeddingTexts}
-                  onChange={e => setEmbeddingTexts(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && e.metaKey) {
-                      e.preventDefault()
-                      handleEmbedding()
-                    }
-                  }}
-                  disabled={createEmbeddingsMutation.isPending}
-                  placeholder={
-                    createEmbeddingsMutation.isPending
-                      ? 'Generating embeddings...'
-                      : 'Enter texts to compare (one per line, minimum 2)...'
-                  }
-                  className={`${textareaClasses} min-h-[80px]`}
-                  aria-label="Embedding texts input"
-                />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {createEmbeddingsMutation.isPending ? 'Generating...' : 'Cmd+Enter to compare'}
-                  </span>
-                  <FontIcon
-                    isButton
-                    type="arrow-filled"
-                    className={`w-8 h-8 self-end ${!embeddingTexts.trim() || createEmbeddingsMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
-                    handleOnClick={handleEmbedding}
-                  />
+                {/* Two-column layout for side-by-side text inputs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  {/* Text A Panel */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Text A</label>
+                    <textarea
+                      value={embeddingTextA}
+                      onChange={e => setEmbeddingTextA(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault()
+                          handleEmbedding()
+                        }
+                      }}
+                      disabled={createEmbeddingsMutation.isPending}
+                      placeholder="Paste or type text..."
+                      className={`${textareaClasses} min-h-[100px]`}
+                      aria-label="First text input"
+                    />
+                  </div>
+                  {/* Text B Panel */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Text B</label>
+                    <textarea
+                      value={embeddingTextB}
+                      onChange={e => setEmbeddingTextB(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault()
+                          handleEmbedding()
+                        }
+                      }}
+                      disabled={createEmbeddingsMutation.isPending}
+                      placeholder="Paste or type text..."
+                      className={`${textareaClasses} min-h-[100px]`}
+                      aria-label="Second text input"
+                    />
+                  </div>
+                </div>
+                {/* Centered submit button */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleEmbedding}
+                    disabled={!embeddingTextA.trim() || !embeddingTextB.trim() || createEmbeddingsMutation.isPending}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                  >
+                    {createEmbeddingsMutation.isPending ? 'Comparing...' : 'Compare Similarity'}
+                  </button>
                 </div>
               </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={rerankQuery}
-                    onChange={e => setRerankQuery(e.target.value)}
-                    disabled={rerankMutation.isPending}
-                    placeholder="Enter query..."
-                    className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm"
-                  />
-                  <textarea
-                    value={rerankDocuments}
-                    onChange={e => setRerankDocuments(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && e.metaKey) {
-                        e.preventDefault()
-                        handleRerank()
-                      }
-                    }}
-                    disabled={rerankMutation.isPending}
-                    placeholder={
-                      rerankMutation.isPending
-                        ? 'Reranking...'
-                        : 'Enter documents to rank (one per line)...'
-                    }
-                    className={`${textareaClasses} min-h-[60px]`}
-                    aria-label="Documents input"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {rerankMutation.isPending ? 'Reranking...' : 'Cmd+Enter to rank'}
-                  </span>
-                  <FontIcon
-                    isButton
-                    type="arrow-filled"
-                    className={`w-8 h-8 self-end ${!rerankQuery.trim() || !rerankDocuments.trim() || rerankMutation.isPending ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
-                    handleOnClick={handleRerank}
-                  />
-                </div>
-              </>
-            )}
+            ) : null /* Reranking inputs are in the right panel above */}
           </>
         )}
       </div>
+      )}
     </div>
   )
 }

@@ -602,7 +602,7 @@ export interface EncoderHistoryEntry {
   modelName: string
   // Embedding mode
   texts?: string[]
-  similarities?: number[][] // cosine similarity matrix
+  similarity?: number // single cosine similarity score for two-text comparison
   // Reranking mode
   query?: string
   documents?: string[]
