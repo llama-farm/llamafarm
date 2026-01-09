@@ -20,8 +20,80 @@ if "HF_XET_HIGH_PERFORMANCE" not in os.environ:
     os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
 
 from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub.constants import HF_HUB_CACHE
 
 logger = logging.getLogger(__name__)
+
+
+def _get_cached_gguf_files(model_id: str) -> list[str]:
+    """
+    Check local HuggingFace cache for GGUF files.
+
+    Args:
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+
+    Returns:
+        List of .gguf filenames found in local cache, or empty list if not cached
+    """
+    # HuggingFace cache structure: ~/.cache/huggingface/hub/models--{org}--{repo}/snapshots/{hash}/
+    cache_dir = os.path.join(
+        HF_HUB_CACHE, f"models--{model_id.replace('/', '--')}"
+    )
+
+    if not os.path.exists(cache_dir):
+        return []
+
+    snapshots_dir = os.path.join(cache_dir, "snapshots")
+    if not os.path.exists(snapshots_dir):
+        return []
+
+    # Find GGUF files in any snapshot
+    gguf_files = []
+    try:
+        for snapshot_hash in os.listdir(snapshots_dir):
+            snapshot_path = os.path.join(snapshots_dir, snapshot_hash)
+            if os.path.isdir(snapshot_path):
+                for filename in os.listdir(snapshot_path):
+                    if filename.endswith(".gguf") and filename not in gguf_files:
+                        # Verify it's a real file, not a broken symlink
+                        file_path = os.path.join(snapshot_path, filename)
+                        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                            gguf_files.append(filename)
+    except OSError as e:
+        logger.debug(f"Error scanning cache directory {cache_dir}: {e}")
+        return []
+
+    return gguf_files
+
+
+def _get_cached_gguf_path(model_id: str, filename: str) -> str | None:
+    """
+    Get the full path to a cached GGUF file.
+
+    Args:
+        model_id: HuggingFace model identifier
+        filename: GGUF filename to find
+
+    Returns:
+        Full path to the cached file, or None if not found
+    """
+    cache_dir = os.path.join(
+        HF_HUB_CACHE, f"models--{model_id.replace('/', '--')}"
+    )
+    snapshots_dir = os.path.join(cache_dir, "snapshots")
+
+    if not os.path.exists(snapshots_dir):
+        return None
+
+    try:
+        for snapshot_hash in os.listdir(snapshots_dir):
+            file_path = os.path.join(snapshots_dir, snapshot_hash, filename)
+            if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                return file_path
+    except OSError:
+        pass
+
+    return None
 
 # Default preference order for GGUF quantization (best balance of size/quality)
 GGUF_QUANTIZATION_PREFERENCE_ORDER = [
@@ -329,15 +401,47 @@ def get_gguf_file_path(
 
     logger.info(f"Locating GGUF file for model: {base_model_id}")
 
-    # Step 1: List all GGUF files in the repository (without downloading)
-    available_gguf_files = list_gguf_files(base_model_id, token)
+    # Step 1: Check local cache first (enables offline operation)
+    cached_gguf_files = _get_cached_gguf_files(base_model_id)
+    if cached_gguf_files:
+        logger.info(f"Found {len(cached_gguf_files)} GGUF files in local cache")
+        # Try to select from cached files
+        selected_filename = select_gguf_file(cached_gguf_files, preferred_quantization)
+        if selected_filename:
+            cached_path = _get_cached_gguf_path(base_model_id, selected_filename)
+            if cached_path:
+                quant = parse_quantization_from_filename(selected_filename)
+                logger.info(
+                    f"Using cached GGUF file: {selected_filename} "
+                    f"(quantization: {quant or 'unknown'})"
+                )
+                return cached_path
+
+    # Step 2: List all GGUF files in the repository (requires network)
+    try:
+        available_gguf_files = list_gguf_files(base_model_id, token)
+    except Exception as e:
+        # If we have cached files but network failed, use cached version
+        if cached_gguf_files:
+            logger.warning(
+                f"Network error listing files, falling back to cache: {e}"
+            )
+            selected_filename = select_gguf_file(
+                cached_gguf_files, preferred_quantization
+            )
+            if selected_filename:
+                cached_path = _get_cached_gguf_path(base_model_id, selected_filename)
+                if cached_path:
+                    logger.info(f"Using cached GGUF file (offline): {cached_path}")
+                    return cached_path
+        raise
 
     if not available_gguf_files:
         raise FileNotFoundError(
             f"No GGUF files found in model repository: {base_model_id}"
         )
 
-    # Step 2: Select the best GGUF file based on preference
+    # Step 3: Select the best GGUF file based on preference
     selected_filename = select_gguf_file_with_logging(
         available_gguf_files, preferred_quantization
     )
@@ -347,14 +451,14 @@ def get_gguf_file_path(
         f"(from {len(available_gguf_files)} available files)"
     )
 
-    # Step 3: Download only the selected file using allow_patterns
+    # Step 4: Download only the selected file using allow_patterns
     local_path = snapshot_download(
         repo_id=base_model_id,
         token=token,
         allow_patterns=[selected_filename],  # Only download this specific file
     )
 
-    # Step 4: Construct full path to the downloaded file
+    # Step 5: Construct full path to the downloaded file
     gguf_path = os.path.join(local_path, selected_filename)
 
     # Verify the file exists

@@ -303,10 +303,11 @@ class TestSelectGGUFFileWithLogging:
 class TestGetGGUFFilePath:
     """Test getting GGUF file path with download."""
 
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
     @patch("llamafarm_common.model_utils.snapshot_download")
     @patch("llamafarm_common.model_utils.HfApi")
     def test_get_gguf_file_path_strips_quantization_suffix(
-        self, mock_hf_api_class, mock_snapshot_download
+        self, mock_hf_api_class, mock_snapshot_download, mock_get_cached
     ):
         """
         Test that get_gguf_file_path() strips quantization suffix before calling HF APIs.
@@ -314,6 +315,9 @@ class TestGetGGUFFilePath:
         This test ensures both list_repo_files() and snapshot_download() receive
         clean model IDs without quantization suffixes.
         """
+        # Mock cache check to return empty (force network path)
+        mock_get_cached.return_value = []
+
         # Setup mocks
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
@@ -352,12 +356,16 @@ class TestGetGGUFFilePath:
             # Verify correct path was returned
             assert result == gguf_file
 
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
     @patch("llamafarm_common.model_utils.snapshot_download")
     @patch("llamafarm_common.model_utils.HfApi")
     def test_get_gguf_file_path_explicit_quantization(
-        self, mock_hf_api_class, mock_snapshot_download
+        self, mock_hf_api_class, mock_snapshot_download, mock_get_cached
     ):
         """Test that explicit preferred_quantization is used when provided."""
+        # Mock cache check to return empty (force network path)
+        mock_get_cached.return_value = []
+
         # Setup mocks
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
@@ -386,9 +394,15 @@ class TestGetGGUFFilePath:
             # Verify correct path was returned
             assert result == gguf_file
 
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
     @patch("llamafarm_common.model_utils.HfApi")
-    def test_get_gguf_file_path_no_files_raises(self, mock_hf_api_class):
+    def test_get_gguf_file_path_no_files_raises(
+        self, mock_hf_api_class, mock_get_cached
+    ):
         """Test that FileNotFoundError is raised when no GGUF files exist."""
+        # Mock cache check to return empty
+        mock_get_cached.return_value = []
+
         # Setup mock
         mock_api = Mock()
         mock_api.list_repo_files.return_value = ["README.md", "config.json"]
@@ -397,6 +411,53 @@ class TestGetGGUFFilePath:
         # Test
         with pytest.raises(FileNotFoundError, match="No GGUF files found"):
             get_gguf_file_path("test/model")
+
+    @patch("llamafarm_common.model_utils._get_cached_gguf_path")
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
+    def test_get_gguf_file_path_uses_cache(
+        self, mock_get_cached_files, mock_get_cached_path
+    ):
+        """Test that cached GGUF files are used without network calls."""
+        # Mock cache to return files
+        mock_get_cached_files.return_value = [
+            "qwen3-1.7b.Q4_K_M.gguf",
+            "qwen3-1.7b.Q8_0.gguf",
+        ]
+        mock_get_cached_path.return_value = "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+        # Test - should use cache without network
+        result = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
+
+        # Verify cache was checked
+        mock_get_cached_files.assert_called_once_with("unsloth/Qwen3-1.7B-GGUF")
+        mock_get_cached_path.assert_called_once_with(
+            "unsloth/Qwen3-1.7B-GGUF", "qwen3-1.7b.Q4_K_M.gguf"
+        )
+
+        # Verify correct path was returned
+        assert result == "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+    @patch("llamafarm_common.model_utils._get_cached_gguf_path")
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
+    @patch("llamafarm_common.model_utils.HfApi")
+    def test_get_gguf_file_path_fallback_to_cache_on_network_error(
+        self, mock_hf_api_class, mock_get_cached_files, mock_get_cached_path
+    ):
+        """Test that cache is used as fallback when network fails."""
+        # Mock cache to return files
+        mock_get_cached_files.return_value = ["qwen3-1.7b.Q4_K_M.gguf"]
+        mock_get_cached_path.return_value = "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+        # Mock HfApi to raise network error
+        mock_api = Mock()
+        mock_api.list_repo_files.side_effect = Exception("Network error")
+        mock_hf_api_class.return_value = mock_api
+
+        # Test - should fall back to cache
+        result = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
+
+        # Verify correct path was returned from cache
+        assert result == "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
 
 
 if __name__ == "__main__":
