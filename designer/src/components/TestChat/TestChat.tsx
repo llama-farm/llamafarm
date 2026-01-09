@@ -27,6 +27,8 @@ import {
   type RerankResult,
   COMMON_EMBEDDING_MODELS,
   COMMON_RERANKING_MODELS,
+  EMBEDDING_SAMPLES,
+  RERANKING_SAMPLES,
 } from '../../types/ml'
 
 export interface TestChatProps {
@@ -1677,11 +1679,13 @@ export default function TestChat({
     texts: string[]
     similarity: number
   } | null>(null)
+  const [embeddingSampleIndex, setEmbeddingSampleIndex] = useState<number>(0)
 
   // Reranking mode state
   const [rerankQuery, setRerankQuery] = useState<string>('')
   const [rerankDocuments, setRerankDocuments] = useState<string[]>(['', '']) // Array of document texts
   const [rerankResult, setRerankResult] = useState<RerankResult[] | null>(null)
+  const [rerankSampleIndex, setRerankSampleIndex] = useState<number>(0)
 
   // Shared state
   const [encoderError, setEncoderError] = useState<string | null>(null)
@@ -3334,31 +3338,65 @@ export default function TestChat({
 
               {/* Model selector based on sub-mode */}
               {encoderSubMode === 'embedding' ? (
-                <Selector
-                  value={selectedEmbeddingModel}
-                  options={COMMON_EMBEDDING_MODELS.map(m => ({
-                    value: m.value,
-                    label: m.label,
-                    description: m.description,
-                  }))}
-                  onChange={setSelectedEmbeddingModel}
-                  disabled={createEmbeddingsMutation.isPending}
-                  label="Embedding Model"
-                  className="min-w-[180px]"
-                />
+                <div className="flex items-end gap-2">
+                  <Selector
+                    value={selectedEmbeddingModel}
+                    options={COMMON_EMBEDDING_MODELS.map(m => ({
+                      value: m.value,
+                      label: m.label,
+                      description: m.description,
+                    }))}
+                    onChange={setSelectedEmbeddingModel}
+                    disabled={createEmbeddingsMutation.isPending}
+                    label="Embedding Model"
+                    className="min-w-[180px]"
+                  />
+                  <button
+                    onClick={() => {
+                      const sample = EMBEDDING_SAMPLES[embeddingSampleIndex]
+                      setEmbeddingTextA(sample.textA)
+                      setEmbeddingTextB(sample.textB)
+                      setEmbeddingResult(null)
+                      setEncoderError(null)
+                      setEmbeddingSampleIndex((embeddingSampleIndex + 1) % EMBEDDING_SAMPLES.length)
+                    }}
+                    disabled={createEmbeddingsMutation.isPending}
+                    className="h-9 text-xs px-3 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    title={`Sample ${embeddingSampleIndex + 1}/${EMBEDDING_SAMPLES.length}`}
+                  >
+                    Try Sample
+                  </button>
+                </div>
               ) : (
-                <Selector
-                  value={selectedRerankingModel}
-                  options={COMMON_RERANKING_MODELS.map(m => ({
-                    value: m.value,
-                    label: m.label,
-                    description: m.description,
-                  }))}
-                  onChange={setSelectedRerankingModel}
-                  disabled={rerankMutation.isPending}
-                  label="Reranking Model"
-                  className="min-w-[180px]"
-                />
+                <div className="flex items-end gap-2">
+                  <Selector
+                    value={selectedRerankingModel}
+                    options={COMMON_RERANKING_MODELS.map(m => ({
+                      value: m.value,
+                      label: m.label,
+                      description: m.description,
+                    }))}
+                    onChange={setSelectedRerankingModel}
+                    disabled={rerankMutation.isPending}
+                    label="Reranking Model"
+                    className="min-w-[180px]"
+                  />
+                  <button
+                    onClick={() => {
+                      const sample = RERANKING_SAMPLES[rerankSampleIndex]
+                      setRerankQuery(sample.query)
+                      setRerankDocuments(sample.documents)
+                      setRerankResult(null)
+                      setEncoderError(null)
+                      setRerankSampleIndex((rerankSampleIndex + 1) % RERANKING_SAMPLES.length)
+                    }}
+                    disabled={rerankMutation.isPending}
+                    className="h-9 text-xs px-3 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    title={`Sample ${rerankSampleIndex + 1}/${RERANKING_SAMPLES.length}`}
+                  >
+                    Try Sample
+                  </button>
+                </div>
               )}
             </>
           )}

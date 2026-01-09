@@ -662,3 +662,141 @@ export const COMMON_RERANKING_MODELS = [
     description: 'Highest quality',
   },
 ]
+
+// Sample data for embedding similarity testing
+export const EMBEDDING_SAMPLES = [
+  {
+    textA: 'The cat sat on the mat',
+    textB: 'A feline rested on the rug',
+  },
+  {
+    textA: 'How do I reset my password?',
+    textB: 'I forgot my login credentials and need help',
+  },
+  {
+    textA: 'The bank approved my loan application',
+    textB: 'I sat by the river bank watching the ducks',
+  },
+  {
+    textA: "I love this product, it's amazing!",
+    textB: "I hate this product, it's terrible!",
+  },
+  {
+    textA: 'The dog chased the cat across the yard',
+    textB: 'The cat chased the dog across the yard',
+  },
+  {
+    textA: 'She sold seashells by the seashore',
+    textB: 'Seashells were sold near the ocean by a woman',
+  },
+  {
+    textA: 'The server crashed and we lost all our data',
+    textB: 'Our waiter tripped and dropped all the plates',
+  },
+  {
+    textA: 'Apply a thin layer of glaze before firing',
+    textB: 'Brush on glaze coat prior to kiln firing',
+  },
+  {
+    textA: 'The Python script failed with a syntax error',
+    textB: 'The snake escaped from its enclosure at the zoo',
+  },
+  {
+    textA: "It's raining cats and dogs outside",
+    textB: 'The weather is extremely rainy right now',
+  },
+]
+
+// Sample data for document reranking testing
+export const RERANKING_SAMPLES = [
+  {
+    query: 'How do I make sourdough bread?',
+    documents: [
+      "To make sourdough, you'll need a starter, flour, water, and salt. Mix, fold, proof overnight, and bake at 450°F in a dutch oven.",
+      'Bread has been a staple food for thousands of years across many cultures.',
+      'Sourdough starter is made by fermenting flour and water over 5-7 days until bubbly and active.',
+    ],
+  },
+  {
+    query: 'why is my code returning undefined',
+    documents: [
+      'A function returns undefined when it has no return statement or the return statement has no value.',
+      'JavaScript was created by Brendan Eich in 1995.',
+      "Make sure you're not trying to access an object property before the object is initialized.",
+      'The console.log() method outputs a message to the web console.',
+      "Check if your async function is being awaited—forgetting await will give you a Promise instead of the value.",
+    ],
+  },
+  {
+    query: 'best plants for low light apartments',
+    documents: [
+      'Pothos, snake plants, and ZZ plants thrive in low light and are nearly impossible to kill.',
+      'Most vegetables need 6-8 hours of direct sunlight.',
+      'Fiddle leaf figs are a popular houseplant but require bright indirect light.',
+    ],
+  },
+  {
+    query: 'what to do if a llama spits at you',
+    documents: [
+      "Llamas spit when threatened or annoyed. If hit, calmly back away and clean up with water—their spit is mostly grass and saliva.",
+      'Llamas are domesticated South American camelids used as pack animals.',
+      'Alpacas are smaller than llamas and known for their soft fleece.',
+      "If a llama pins its ears back, it's a warning sign—give it space.",
+    ],
+  },
+  {
+    query: 'how to center a div',
+    documents: [
+      'Use flexbox: set the parent to display: flex; justify-content: center; align-items: center;',
+      'CSS Grid was introduced in 2017 and is now supported by all major browsers.',
+      'The <div> element is a block-level container in HTML.',
+      "For horizontal centering only, margin: 0 auto; works on block elements with a set width.",
+      "Tailwind CSS classes like 'flex items-center justify-center' make centering trivial.",
+      'The float property was commonly used for layouts before flexbox but caused many issues.',
+    ],
+  },
+  {
+    query: 'is mercury in retrograde right now',
+    documents: [
+      'Mercury retrograde is an optical illusion where the planet appears to move backward in the sky. Check an ephemeris for current dates.',
+      'Mercury is the smallest planet in our solar system and closest to the Sun.',
+      'Astrology is a belief system that interprets celestial positions as influencing human affairs.',
+    ],
+  },
+  {
+    query: 'ceramic glaze food safe',
+    documents: [
+      'For food-safe ceramics, use glazes labeled dinnerware-safe and fire to the proper cone. Avoid glazes with lead or cadmium.',
+      'Pottery has been used for food storage since ancient times.',
+      'Cone 6 glazes mature at approximately 2232°F (1222°C).',
+      'Always test glazes on a small piece before applying to finished work.',
+    ],
+  },
+  {
+    query: 'my docker container keeps restarting',
+    documents: [
+      "Check your container logs with docker logs <container_id> to see why it's crashing.",
+      'Docker is a platform for developing, shipping, and running applications in containers.',
+      "The restart policy 'unless-stopped' will restart containers unless explicitly stopped.",
+      "Make sure your container's entrypoint script isn't exiting immediately—it needs a foreground process.",
+      'Kubernetes is an orchestration platform that manages Docker containers at scale.',
+    ],
+  },
+  {
+    query: 'good running shoes for flat feet',
+    documents: [
+      'Runners with flat feet typically benefit from stability or motion control shoes with arch support, like Brooks Adrenaline or ASICS Gel-Kayano.',
+      'Running is an excellent cardiovascular exercise with many health benefits.',
+      'Minimalist running shoes have less cushioning and encourage natural foot movement.',
+    ],
+  },
+  {
+    query: 'how to tell if avocado is ripe',
+    documents: [
+      "A ripe avocado yields slightly to gentle pressure and has dark green to black skin. Check under the stem—if it's green underneath, it's ready.",
+      'Avocados are native to Mexico and Central America.',
+      'Store unripe avocados at room temperature; refrigerate once ripe to slow further ripening.',
+      'Guacamole is made from mashed avocados with lime juice, salt, and optional additions like cilantro and onion.',
+    ],
+  },
+]
