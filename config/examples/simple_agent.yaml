@@ -1,0 +1,55 @@
+version: v1
+name: simple-agent
+namespace: default
+
+runtime:
+  models:
+    - name: default
+      provider: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434/v1
+
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a helpful AI assistant with access to a knowledge base.
+          Answer questions based on the retrieved context when available.
+
+datasets:
+  - name: knowledge_base
+    database: docs_db
+    data_processing_strategy: default
+
+rag:
+  default_database: docs_db
+  databases:
+    - name: docs_db
+      type: ChromaStore
+      config:
+        collection_name: documents
+        persist_directory: ./data/chroma/docs
+      embedding_strategies:
+        - name: default_embeddings
+          type: OllamaEmbedder
+          config:
+            model: nomic-embed-text
+            base_url: http://localhost:11434
+      retrieval_strategies:
+        - name: simple_search
+          type: BasicSimilarityStrategy
+          config:
+            top_k: 5
+          default: true
+
+  data_processing_strategies:
+    - name: default
+      description: Basic text processing
+      parsers:
+        - type: TextParser_Python
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+          file_extensions: [".txt", ".md"]
+      extractors: []

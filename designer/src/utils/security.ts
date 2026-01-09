@@ -65,9 +65,9 @@ export const isValidAndSafeURL = (urlString: string): boolean => {
                        hostname.startsWith('10.') ||
                        hostname.startsWith('172.')
     
-    if (import.meta.env.PROD && !isLocalhost) {
-      // In production, log external URL usage for monitoring
-      console.warn('External URL detected in config:', hostname)
+    if (import.meta.env.PROD && isLocalhost) {
+      // In production, warn about localhost/private IPs (likely misconfiguration)
+      console.warn('Localhost/private IP detected in production config:', hostname)
     }
     
     return true
