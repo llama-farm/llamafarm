@@ -2570,6 +2570,64 @@ def _get_router_path(model_name: str) -> Path:
     return ROUTER_MODELS_DIR / safe_name
 
 
+def _validate_router_storage_path(storage_path: str) -> Path:
+    """Validate that a router storage path is within allowed directories.
+
+    For security, router storage paths must be within:
+    1. The global ROUTER_MODELS_DIR (~/.llamafarm/models/router/)
+    2. Project-specific lf_data directories (~/.llamafarm/projects/.../lf_data/routers/)
+    3. Custom LF_DATA_DIR locations
+
+    This prevents path traversal attacks where a malicious client could
+    read/write arbitrary files by providing paths like "/../../../etc/passwd".
+
+    Args:
+        storage_path: The path to validate
+
+    Returns:
+        The resolved (absolute) path if valid
+
+    Raises:
+        ValueError: If path is outside allowed directories
+    """
+    path = Path(storage_path)
+    resolved = path.resolve()
+
+    # Define allowed root directories
+    # Global router models directory
+    global_models_dir = ROUTER_MODELS_DIR.resolve()
+
+    # Project-specific data directories
+    # Standard location: ~/.llamafarm/projects/{namespace}/{project}/lf_data/routers/
+    projects_root = (_LF_DATA_DIR / "projects").resolve()
+
+    # Check if path is within allowed directories
+    try:
+        # Check if within global models dir
+        resolved.relative_to(global_models_dir)
+        return resolved
+    except ValueError:
+        pass
+
+    try:
+        # Check if within projects directory structure
+        resolved.relative_to(projects_root)
+        # Additional check: ensure it's in a lf_data/routers subdirectory
+        relative_path = resolved.relative_to(projects_root)
+        path_parts = relative_path.parts
+        # Expected: {namespace}/{project}/lf_data/routers/...
+        if len(path_parts) >= 4 and path_parts[2] == "lf_data" and path_parts[3] == "routers":
+            return resolved
+    except ValueError:
+        pass
+
+    # Path is not in any allowed location
+    raise ValueError(
+        f"Security error: Storage path '{storage_path}' is not within allowed directories. "
+        f"Paths must be within the global models directory or project-specific lf_data/routers directories."
+    )
+
+
 async def _auto_save_router_model(
     router: "RouterModel",
     model_name: str,
@@ -2584,11 +2642,14 @@ async def _auto_save_router_model(
 
     Returns:
         Dict with saved file path
+
+    Raises:
+        ValueError: If storage_path is outside allowed directories
     """
     try:
         if storage_path:
-            # Use custom storage path (project-specific)
-            save_path = Path(storage_path)
+            # Validate storage path to prevent path traversal attacks
+            save_path = _validate_router_storage_path(storage_path)
             save_path.mkdir(parents=True, exist_ok=True)
         else:
             # Use default global storage
@@ -2598,6 +2659,9 @@ async def _auto_save_router_model(
         await router.save(str(save_path))
         logger.info(f"Auto-saved router model to {save_path}")
         return {"model_path": str(save_path)}
+    except ValueError:
+        # Re-raise validation errors
+        raise
     except Exception as e:
         logger.warning(f"Failed to auto-save router model: {e}")
         return {"model_path": None}
@@ -2689,11 +2753,15 @@ async def train_router(request: RouterTrainRequest):
         _routers[cache_key] = router
 
         # Auto-save to disk (project-specific if storage_path provided)
-        saved_paths = await _auto_save_router_model(
-            router=router,
-            model_name=request.model,
-            storage_path=request.storage_path,
-        )
+        try:
+            saved_paths = await _auto_save_router_model(
+                router=router,
+                model_name=request.model,
+                storage_path=request.storage_path,
+            )
+        except ValueError as e:
+            # Storage path validation failed - return error to client
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
         return {
             "object": "train_result",
@@ -2736,11 +2804,16 @@ async def route_query(request: RouterRouteRequest):
 
         # Auto-load from disk if not in cache
         if router is None and request.storage_path:
-            storage_path = Path(request.storage_path)
-            if storage_path.exists() and (storage_path / "config.json").exists():
-                logger.info(f"Auto-loading router from: {storage_path}")
+            # Validate storage path to prevent path traversal attacks
+            try:
+                validated_path = _validate_router_storage_path(request.storage_path)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
+            if validated_path.exists() and (validated_path / "config.json").exists():
+                logger.info(f"Auto-loading router from: {validated_path}")
                 router = RouterModel(
-                    model_id=str(storage_path),
+                    model_id=str(validated_path),
                     device=get_device(),
                 )
                 await router.load()
@@ -2801,8 +2874,11 @@ async def load_router(request: RouterLoadRequest):
 
         # Determine model path
         if request.storage_path:
-            # Use project-specific storage path
-            model_path = Path(request.storage_path)
+            # Validate storage path to prevent path traversal attacks
+            try:
+                model_path = _validate_router_storage_path(request.storage_path)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
         else:
             # Use global storage
             model_path = _get_router_path(request.model)

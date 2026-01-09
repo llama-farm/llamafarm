@@ -2,8 +2,13 @@
 Shared pytest fixtures for Universal Runtime tests.
 """
 
+import os
 import pytest
 import torch
+
+# Allow tests to use arbitrary storage paths (bypasses security validation)
+# This is needed because tests use temp directories outside ~/.llamafarm
+os.environ["LF_ALLOW_ANY_STORAGE_PATH"] = "1"
 
 
 @pytest.fixture(scope="session")

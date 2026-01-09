@@ -138,22 +138,88 @@ class RouterModel(BaseModel):
         # Pre-computed embeddings for each route
         self._route_embeddings: dict[str, np.ndarray] = {}
 
+    def _validate_path_within_root(self, path: Path, root: Path) -> bool:
+        """Validate that a path is safely within a root directory.
+
+        Prevents path traversal attacks by ensuring the resolved path
+        is a subdirectory of the allowed root.
+        """
+        try:
+            resolved_path = path.resolve()
+            resolved_root = root.resolve()
+            # Check if path is within root (handles symlinks, .., etc.)
+            resolved_path.relative_to(resolved_root)
+            return True
+        except ValueError:
+            return False
+
+    def _is_allowed_storage_path(self, path: Path) -> bool:
+        """Check if a path is within any allowed storage directory.
+
+        Allowed directories:
+        1. Global router models dir (~/.llamafarm/models/router/)
+        2. Project-specific dirs (~/.llamafarm/projects/.../lf_data/routers/)
+
+        For testing, set LF_ALLOW_ANY_STORAGE_PATH=1 to bypass validation.
+        """
+        # Allow bypassing validation for tests
+        if os.environ.get("LF_ALLOW_ANY_STORAGE_PATH") == "1":
+            return True
+
+        # Check global models directory
+        if self._validate_path_within_root(path, ROUTER_MODELS_DIR):
+            return True
+
+        # Check project-specific directories
+        projects_root = _LF_DATA_DIR / "projects"
+        if self._validate_path_within_root(path, projects_root):
+            # Additional check: ensure it's in a lf_data/routers subdirectory
+            try:
+                resolved_path = path.resolve()
+                resolved_projects = projects_root.resolve()
+                relative_path = resolved_path.relative_to(resolved_projects)
+                path_parts = relative_path.parts
+                # Expected: {namespace}/{project}/lf_data/routers/...
+                if len(path_parts) >= 4 and path_parts[2] == "lf_data" and path_parts[3] == "routers":
+                    return True
+            except ValueError:
+                pass
+
+        return False
+
     async def load(self) -> None:
         """Load the embedder model and compute route embeddings.
 
         If model_id is a path to a saved router, loads from disk instead.
+        Only loads from paths within allowed directories for security.
         """
-        # Check if model_id is a path to saved router
-        model_path = Path(self.model_id)
-        if model_path.exists() and (model_path / "config.json").exists():
-            await self._load_from_disk(model_path)
-            return
+        # Ensure ROUTER_MODELS_DIR exists for validation
+        ROUTER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Also check in ROUTER_MODELS_DIR
-        saved_path = ROUTER_MODELS_DIR / self.model_id
-        if saved_path.exists() and (saved_path / "config.json").exists():
-            await self._load_from_disk(saved_path)
-            return
+        # Check if model_id looks like a path and is within allowed directory
+        model_path = Path(self.model_id)
+        if model_path.is_absolute():
+            # For absolute paths, validate they are within allowed roots
+            if self._is_allowed_storage_path(model_path):
+                resolved_path = model_path.resolve()
+                if resolved_path.exists() and (resolved_path / "config.json").exists():
+                    await self._load_from_disk(resolved_path)
+                    return
+            else:
+                logger.warning(
+                    f"Refusing to load router from path outside allowed directory: "
+                    f"{model_path}"
+                )
+
+        # Check in ROUTER_MODELS_DIR using sanitized model_id (no path traversal)
+        # Sanitize: remove any path components, just use the base name
+        safe_model_id = Path(self.model_id).name if "/" in self.model_id else self.model_id
+        saved_path = ROUTER_MODELS_DIR / safe_model_id
+        if self._validate_path_within_root(saved_path, ROUTER_MODELS_DIR):
+            resolved_saved = saved_path.resolve()
+            if resolved_saved.exists() and (resolved_saved / "config.json").exists():
+                await self._load_from_disk(resolved_saved)
+                return
 
         logger.info(f"Loading router model: {self.model_id}")
         logger.info(f"Using embedder: {self.embedder_model}")

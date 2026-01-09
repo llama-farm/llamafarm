@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -24,10 +25,15 @@ class TestRouterModel:
     """Test class for RouterModel functionality."""
 
     @pytest.fixture
-    def route_config(self):
-        """Sample route configuration."""
+    def unique_router_id(self):
+        """Generate unique router ID to avoid conflicts with saved routers."""
+        return f"test_router_{uuid.uuid4().hex[:8]}"
+
+    @pytest.fixture
+    def route_config(self, unique_router_id):
+        """Sample route configuration with unique name."""
         return {
-            "name": "test_router",
+            "name": unique_router_id,
             "embedder_model": "sentence-transformers/all-MiniLM-L6-v2",
             "default_model": "general_llm",
             "similarity_threshold": 0.7,
@@ -71,29 +77,29 @@ class TestRouterModel:
             yield Path(temp_dir)
 
     @pytest.mark.asyncio
-    async def test_router_model_instantiation(self, route_config):
+    async def test_router_model_instantiation(self, route_config, unique_router_id):
         """Test RouterModel can be instantiated with route config."""
         from models.router_model import RouterModel
 
         router = RouterModel(
-            model_id="test_router",
+            model_id=unique_router_id,
             device="cpu",
             config=route_config,
         )
 
-        assert router.model_id == "test_router"
+        assert router.model_id == unique_router_id
         assert router.embedder_model == "sentence-transformers/all-MiniLM-L6-v2"
         assert router.default_model == "general_llm"
         assert router.similarity_threshold == 0.7
         assert len(router.routes) == 3
 
     @pytest.mark.asyncio
-    async def test_router_model_load(self, route_config):
+    async def test_router_model_load(self, route_config, unique_router_id):
         """Test RouterModel loads embedder and computes embeddings."""
         from models.router_model import RouterModel
 
         router = RouterModel(
-            model_id="test_router",
+            model_id=unique_router_id,
             device="cpu",
             config=route_config,
         )
@@ -113,12 +119,12 @@ class TestRouterModel:
         await router.unload()
 
     @pytest.mark.asyncio
-    async def test_router_route_correct_target(self, route_config):
+    async def test_router_route_correct_target(self, route_config, unique_router_id):
         """Test RouterModel.route() returns correct target model for known utterance."""
         from models.router_model import RouterModel
 
         router = RouterModel(
-            model_id="test_router",
+            model_id=unique_router_id,
             device="cpu",
             config=route_config,
         )
@@ -143,12 +149,12 @@ class TestRouterModel:
         await router.unload()
 
     @pytest.mark.asyncio
-    async def test_router_default_model_low_similarity(self, route_config):
+    async def test_router_default_model_low_similarity(self, route_config, unique_router_id):
         """Test RouterModel.route() returns default model for low-similarity query."""
         from models.router_model import RouterModel
 
         router = RouterModel(
-            model_id="test_router",
+            model_id=unique_router_id,
             device="cpu",
             config=route_config,
         )
@@ -164,12 +170,12 @@ class TestRouterModel:
         await router.unload()
 
     @pytest.mark.asyncio
-    async def test_router_latency_under_10ms(self, route_config):
+    async def test_router_latency_under_10ms(self, route_config, unique_router_id):
         """Test RouterModel routing latency is < 10ms for 10 routes."""
         from models.router_model import RouterModel
 
         router = RouterModel(
-            model_id="test_router",
+            model_id=unique_router_id,
             device="cpu",
             config=route_config,
         )
@@ -207,7 +213,7 @@ class TestRouterModel:
         await router.unload()
 
     @pytest.mark.asyncio
-    async def test_router_save_and_load(self, route_config, temp_model_dir):
+    async def test_router_save_and_load(self, route_config, temp_model_dir, unique_router_id):
         """Test RouterModel saves and loads from disk correctly."""
         from models.router_model import RouterModel, ROUTER_MODELS_DIR
 
@@ -217,7 +223,7 @@ class TestRouterModel:
 
         with patch("models.router_model.ROUTER_MODELS_DIR", test_models_dir):
             router = RouterModel(
-                model_id="test_router",
+                model_id=unique_router_id,
                 device="cpu",
                 config=route_config,
             )
@@ -252,12 +258,12 @@ class TestRouterModel:
             await router2.unload()
 
     @pytest.mark.asyncio
-    async def test_router_loads_embedder_correctly(self, route_config):
+    async def test_router_loads_embedder_correctly(self, route_config, unique_router_id):
         """Test RouterModel loads the specified embedder model."""
         from models.router_model import RouterModel
 
         router = RouterModel(
-            model_id="test_router",
+            model_id=unique_router_id,
             device="cpu",
             config=route_config,
         )
