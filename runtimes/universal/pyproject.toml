@@ -29,6 +29,16 @@ dependencies = [
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",  # TTL-based model caching
   "jinja2>=3.0.0",  # For tool-aware chat template rendering
+  # Anomaly detection
+  "scikit-learn>=1.3.0",
+  # Text classification (few-shot learning with SetFit)
+  "setfit>=1.1.0",
+  "sentence-transformers>=3.0.0",
+  # OCR backends
+  "surya-ocr>=0.6.0",
+  "easyocr>=1.7.0",
+  "opencv-python-headless>=4.8.0",
+  "pytesseract>=0.3.10",
 ]
 
 [dependency-groups]
