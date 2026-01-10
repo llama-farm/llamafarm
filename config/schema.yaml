@@ -183,17 +183,15 @@ properties:
                     OS memory management.
                 cache_type_k:
                   type: string
-                  enum: [f32, f16, q8_0, q5_1, q5_0, q4_1, q4_0]
                   description: |
                     KV cache key quantization type. Lower precision reduces memory usage.
-                    Options: f32 (full), f16 (half), q8_0, q5_1, q5_0, q4_1, q4_0.
+                    Common values: f32 (full), f16 (half), q8_0, q5_1, q5_0, q4_1, q4_0.
                     Using q4_0 can reduce KV cache memory by ~4x vs f16.
                 cache_type_v:
                   type: string
-                  enum: [f32, f16, q8_0, q5_1, q5_0, q4_1, q4_0]
                   description: |
                     KV cache value quantization type. Lower precision reduces memory usage.
-                    Options: f32 (full), f16 (half), q8_0, q5_1, q5_0, q4_1, q4_0.
+                    Common values: f32 (full), f16 (half), q8_0, q5_1, q5_0, q4_1, q4_0.
                     Using q4_0 can reduce KV cache memory by ~4x vs f16.
               additionalProperties: true
             encoder_config:
