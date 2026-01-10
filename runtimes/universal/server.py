@@ -207,6 +207,8 @@ def _make_language_cache_key(
     flash_attn: bool | None = None,
     use_mmap: bool | None = None,
     use_mlock: bool | None = None,
+    cache_type_k: str | None = None,
+    cache_type_v: str | None = None,
     preferred_quantization: str | None = None,
 ) -> str:
     """Generate a cache key for a causal language model.
@@ -220,6 +222,8 @@ def _make_language_cache_key(
         flash_attn: Optional flash attention flag for GGUF models
         use_mmap: Optional memory-mapping flag for GGUF models
         use_mlock: Optional memory-lock flag for GGUF models
+        cache_type_k: Optional KV cache key quantization for GGUF models
+        cache_type_v: Optional KV cache value quantization for GGUF models
         preferred_quantization: Optional quantization preference for GGUF models
 
     Returns:
@@ -235,9 +239,12 @@ def _make_language_cache_key(
     flash_key = flash_attn if flash_attn is not None else "default"
     mmap_key = use_mmap if use_mmap is not None else "default"
     mlock_key = use_mlock if use_mlock is not None else "default"
+    cache_k_key = cache_type_k if cache_type_k is not None else "default"
+    cache_v_key = cache_type_v if cache_type_v is not None else "default"
     return (
         f"language:{model_id}:ctx{ctx_key}:batch{batch_key}:gpu{gpu_key}:"
-        f"threads{threads_key}:flash{flash_key}:mmap{mmap_key}:mlock{mlock_key}:quant{quant_key}"
+        f"threads{threads_key}:flash{flash_key}:mmap{mmap_key}:mlock{mlock_key}:"
+        f"cachek{cache_k_key}:cachev{cache_v_key}:quant{quant_key}"
     )
 
 
@@ -250,6 +257,8 @@ async def load_language(
     flash_attn: bool | None = None,
     use_mmap: bool | None = None,
     use_mlock: bool | None = None,
+    cache_type_k: str | None = None,
+    cache_type_v: str | None = None,
     preferred_quantization: str | None = None,
 ):
     """Load a causal language model (GGUF or transformers format).
@@ -272,6 +281,9 @@ async def load_language(
                     defaults to True for faster inference.
         use_mmap: Optional flag for memory-mapped file loading. If None, defaults to True.
         use_mlock: Optional flag to lock model in RAM. If None, defaults to False.
+        cache_type_k: Optional KV cache key quantization type (e.g., "q4_0", "q8_0", "f16").
+                      Using "q4_0" can reduce KV cache memory by ~4x.
+        cache_type_v: Optional KV cache value quantization type. Same options as cache_type_k.
         preferred_quantization: Optional quantization preference for GGUF models
                                 (e.g., "Q4_K_M", "Q8_0"). If None, defaults to Q4_K_M.
                                 Only downloads the specified quantization to save disk space.
@@ -281,7 +293,7 @@ async def load_language(
     # Use "auto"/"default" for None values to allow automatic detection
     cache_key = _make_language_cache_key(
         model_id, n_ctx, n_batch, n_gpu_layers, n_threads, flash_attn,
-        use_mmap, use_mlock, preferred_quantization
+        use_mmap, use_mlock, cache_type_k, cache_type_v, preferred_quantization
     )
     if cache_key not in _models:
         async with _model_load_lock:
@@ -292,7 +304,9 @@ async def load_language(
                     f"(n_ctx={n_ctx if n_ctx is not None else 'auto'}, "
                     f"n_batch={n_batch if n_batch is not None else 'auto'}, "
                     f"n_gpu_layers={n_gpu_layers if n_gpu_layers is not None else 'auto'}, "
-                    f"flash_attn={flash_attn if flash_attn is not None else 'default'})"
+                    f"flash_attn={flash_attn if flash_attn is not None else 'default'}, "
+                    f"cache_type_k={cache_type_k if cache_type_k is not None else 'default'}, "
+                    f"cache_type_v={cache_type_v if cache_type_v is not None else 'default'})"
                 )
                 device = get_device()
 
@@ -313,6 +327,8 @@ async def load_language(
                         flash_attn=flash_attn,
                         use_mmap=use_mmap,
                         use_mlock=use_mlock,
+                        cache_type_k=cache_type_k,
+                        cache_type_v=cache_type_v,
                         preferred_quantization=preferred_quantization,
                     )
                 else:

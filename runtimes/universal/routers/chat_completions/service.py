@@ -70,6 +70,8 @@ class ChatCompletionsService:
             flash_attn = chat_request.flash_attn
             use_mmap = chat_request.use_mmap
             use_mlock = chat_request.use_mlock
+            cache_type_k = chat_request.cache_type_k
+            cache_type_v = chat_request.cache_type_v
 
             # Also check extra_body for these parameters (OpenAI SDK sends custom params there)
             if chat_request.extra_body:
@@ -87,6 +89,10 @@ class ChatCompletionsService:
                     use_mmap = chat_request.extra_body.get("use_mmap")
                 if use_mlock is None and "use_mlock" in chat_request.extra_body:
                     use_mlock = chat_request.extra_body.get("use_mlock")
+                if cache_type_k is None and "cache_type_k" in chat_request.extra_body:
+                    cache_type_k = chat_request.extra_body.get("cache_type_k")
+                if cache_type_v is None and "cache_type_v" in chat_request.extra_body:
+                    cache_type_v = chat_request.extra_body.get("cache_type_v")
 
             # Parse model name to extract quantization if present
             model_id, gguf_quantization = parse_model_with_quantization(
@@ -102,6 +108,8 @@ class ChatCompletionsService:
                 flash_attn=flash_attn,
                 use_mmap=use_mmap,
                 use_mlock=use_mlock,
+                cache_type_k=cache_type_k,
+                cache_type_v=cache_type_v,
                 preferred_quantization=gguf_quantization,
             )
 

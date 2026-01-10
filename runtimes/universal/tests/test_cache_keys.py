@@ -198,6 +198,54 @@ class TestCacheKeys:
         assert "mlockFalse" in cache_key_false
         assert "mlockdefault" in cache_key_default
 
+    def test_load_language_cache_key_includes_cache_type_k(self):
+        """Test that different cache_type_k settings result in different cache keys."""
+        model_id = "unsloth/Qwen3-1.7B-GGUF"
+        n_ctx = 8192
+        quant = "Q4_K_M"
+
+        # Test case: Same model, different cache_type_k should have different keys
+        cache_key_q4 = _make_language_cache_key(
+            model_id, n_ctx=n_ctx, cache_type_k="q4_0", preferred_quantization=quant
+        )
+        cache_key_q8 = _make_language_cache_key(
+            model_id, n_ctx=n_ctx, cache_type_k="q8_0", preferred_quantization=quant
+        )
+        cache_key_default = _make_language_cache_key(
+            model_id, n_ctx=n_ctx, cache_type_k=None, preferred_quantization=quant
+        )
+
+        # Cache keys should be different
+        assert cache_key_q4 != cache_key_q8
+        assert cache_key_q4 != cache_key_default
+        assert "cachekq4_0" in cache_key_q4
+        assert "cachekq8_0" in cache_key_q8
+        assert "cachekdefault" in cache_key_default
+
+    def test_load_language_cache_key_includes_cache_type_v(self):
+        """Test that different cache_type_v settings result in different cache keys."""
+        model_id = "unsloth/Qwen3-1.7B-GGUF"
+        n_ctx = 8192
+        quant = "Q4_K_M"
+
+        # Test case: Same model, different cache_type_v should have different keys
+        cache_key_q4 = _make_language_cache_key(
+            model_id, n_ctx=n_ctx, cache_type_v="q4_0", preferred_quantization=quant
+        )
+        cache_key_f16 = _make_language_cache_key(
+            model_id, n_ctx=n_ctx, cache_type_v="f16", preferred_quantization=quant
+        )
+        cache_key_default = _make_language_cache_key(
+            model_id, n_ctx=n_ctx, cache_type_v=None, preferred_quantization=quant
+        )
+
+        # Cache keys should be different
+        assert cache_key_q4 != cache_key_f16
+        assert cache_key_q4 != cache_key_default
+        assert "cachevq4_0" in cache_key_q4
+        assert "cachevf16" in cache_key_f16
+        assert "cachevdefault" in cache_key_default
+
     def test_load_language_cache_key_none_quantization(self):
         """Test that None quantization uses 'default' in cache key."""
         model_id = "unsloth/Qwen3-1.7B-GGUF"
@@ -252,6 +300,8 @@ class TestCacheKeys:
             flash_attn=True,
             use_mmap=True,
             use_mlock=False,
+            cache_type_k="q4_0",
+            cache_type_v="q4_0",
             preferred_quantization=quant,
         )
         cache_key2 = _make_language_cache_key(
@@ -263,6 +313,8 @@ class TestCacheKeys:
             flash_attn=True,
             use_mmap=True,
             use_mlock=False,
+            cache_type_k="q4_0",
+            cache_type_v="q4_0",
             preferred_quantization=quant,
         )
 
@@ -283,6 +335,8 @@ class TestCacheKeys:
             flash_attn=True,  # Use Ampere optimizations
             use_mmap=True,  # Efficient memory swapping
             use_mlock=False,  # Allow OS memory management on 8GB device
+            cache_type_k="q4_0",  # Quantize KV cache keys for memory savings
+            cache_type_v="q4_0",  # Quantize KV cache values for memory savings
             preferred_quantization="Q4_K_M",
         )
 
@@ -294,4 +348,6 @@ class TestCacheKeys:
         assert "flashTrue" in cache_key
         assert "mmapTrue" in cache_key
         assert "mlockFalse" in cache_key
+        assert "cachekq4_0" in cache_key
+        assert "cachevq4_0" in cache_key
         assert "quantQ4_K_M" in cache_key

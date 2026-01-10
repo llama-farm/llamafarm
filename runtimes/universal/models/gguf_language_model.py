@@ -54,6 +54,8 @@ class GGUFLanguageModel(BaseModel):
         flash_attn: bool | None = None,
         use_mmap: bool | None = None,
         use_mlock: bool | None = None,
+        cache_type_k: str | None = None,
+        cache_type_v: str | None = None,
         preferred_quantization: str | None = None,
     ):
         """Initialize GGUF language model.
@@ -76,6 +78,11 @@ class GGUFLanguageModel(BaseModel):
                       Recommended True on memory-constrained devices for efficient swapping.
             use_mlock: Optional flag to lock model in RAM. If None, defaults to False.
                        Set False on 8GB devices to allow OS memory management.
+            cache_type_k: Optional KV cache key quantization type (e.g., "q4_0", "q8_0", "f16").
+                          Using "q4_0" can reduce KV cache memory by ~4x. Critical for
+                          memory-constrained devices like Jetson Orin Nano (8GB shared).
+            cache_type_v: Optional KV cache value quantization type. Same options as cache_type_k.
+                          Setting both to "q4_0" provides maximum memory savings.
             preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0").
                                     If None, defaults to Q4_K_M. Only downloads the specified
                                     quantization to save disk space.
@@ -92,6 +99,8 @@ class GGUFLanguageModel(BaseModel):
         self.requested_flash_attn = flash_attn  # Store requested value (None = default True)
         self.requested_use_mmap = use_mmap  # Store requested value (None = default True)
         self.requested_use_mlock = use_mlock  # Store requested value (None = default False)
+        self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
+        self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
         self.preferred_quantization = preferred_quantization
         self._executor = ThreadPoolExecutor(max_workers=1)
 
@@ -226,6 +235,14 @@ class GGUFLanguageModel(BaseModel):
         use_mlock = self.requested_use_mlock if self.requested_use_mlock is not None else False
         logger.info(f"Using use_mlock: {use_mlock}")
 
+        # Configure KV cache quantization (None = default f16, use q4_0 for memory savings)
+        cache_type_k = self.requested_cache_type_k
+        cache_type_v = self.requested_cache_type_v
+        if cache_type_k is not None:
+            logger.info(f"Using cache_type_k: {cache_type_k}")
+        if cache_type_v is not None:
+            logger.info(f"Using cache_type_v: {cache_type_v}")
+
         # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking
         loop = asyncio.get_running_loop()
@@ -260,6 +277,8 @@ class GGUFLanguageModel(BaseModel):
                     flash_attn=flash_attn,  # Flash attention optimization
                     use_mmap=use_mmap,  # Memory-mapped file loading
                     use_mlock=use_mlock,  # Lock model in RAM
+                    cache_type_k=cache_type_k,  # KV cache key quantization
+                    cache_type_v=cache_type_v,  # KV cache value quantization
                     verbose=False,  # Disable verbose logging (managed by ggml_logging)
                     seed=-1,  # Random seed (-1 = random)
                 )
