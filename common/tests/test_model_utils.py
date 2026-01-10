@@ -443,20 +443,33 @@ class TestGetGGUFFilePath:
     def test_get_gguf_file_path_fallback_to_cache_on_network_error(
         self, mock_hf_api_class, mock_get_cached_files, mock_get_cached_path
     ):
-        """Test that cache is used as fallback when network fails."""
+        """Test that cache is used as fallback when network fails.
+
+        This tests the scenario where:
+        1. Cache has files but _get_cached_gguf_path fails initially (forcing network path)
+        2. Network call fails
+        3. Fallback to cache succeeds on retry
+        """
         # Mock cache to return files
         mock_get_cached_files.return_value = ["qwen3-1.7b.Q4_K_M.gguf"]
-        mock_get_cached_path.return_value = "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+        # First call returns None (forcing network path), second call succeeds (fallback)
+        mock_get_cached_path.side_effect = [None, "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"]
 
         # Mock HfApi to raise network error
         mock_api = Mock()
         mock_api.list_repo_files.side_effect = Exception("Network error")
         mock_hf_api_class.return_value = mock_api
 
-        # Test - should fall back to cache
+        # Test - should fall back to cache after network failure
         result = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
 
-        # Verify correct path was returned from cache
+        # Verify _get_cached_gguf_path was called twice:
+        # 1. First in Step 1 (returns None, forcing network path)
+        # 2. Second in fallback after network error (returns path)
+        assert mock_get_cached_path.call_count == 2
+
+        # Verify correct path was returned from cache fallback
         assert result == "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
 
 

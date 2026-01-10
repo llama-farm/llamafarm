@@ -25,6 +25,31 @@ from huggingface_hub.constants import HF_HUB_CACHE
 logger = logging.getLogger(__name__)
 
 
+def _validate_model_id(model_id: str) -> str:
+    """
+    Validate and sanitize a HuggingFace model ID to prevent path traversal.
+
+    Args:
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+
+    Returns:
+        Sanitized model_id safe for use in file paths
+
+    Raises:
+        ValueError: If model_id contains path traversal attempts or invalid characters
+    """
+    # Check for path traversal attempts
+    if ".." in model_id or model_id.startswith("/") or model_id.startswith("\\"):
+        raise ValueError(f"Invalid model_id: path traversal not allowed: {model_id}")
+
+    # Valid HuggingFace model IDs: org/repo or just repo
+    # Allow alphanumeric, hyphens, underscores, periods, and single forward slash
+    if not re.match(r"^[a-zA-Z0-9_.\-]+(/[a-zA-Z0-9_.\-]+)?$", model_id):
+        raise ValueError(f"Invalid model_id format: {model_id}")
+
+    return model_id
+
+
 def _get_cached_gguf_files(model_id: str) -> list[str]:
     """
     Check local HuggingFace cache for GGUF files.
@@ -34,7 +59,13 @@ def _get_cached_gguf_files(model_id: str) -> list[str]:
 
     Returns:
         List of .gguf filenames found in local cache, or empty list if not cached
+
+    Raises:
+        ValueError: If model_id contains path traversal attempts
     """
+    # Validate model_id to prevent path traversal
+    _validate_model_id(model_id)
+
     # HuggingFace cache structure: ~/.cache/huggingface/hub/models--{org}--{repo}/snapshots/{hash}/
     cache_dir = os.path.join(
         HF_HUB_CACHE, f"models--{model_id.replace('/', '--')}"
@@ -76,7 +107,15 @@ def _get_cached_gguf_path(model_id: str, filename: str) -> str | None:
 
     Returns:
         Full path to the cached file, or None if not found
+
+    Raises:
+        ValueError: If model_id or filename contains path traversal attempts
     """
+    # Validate inputs to prevent path traversal
+    _validate_model_id(model_id)
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise ValueError(f"Invalid filename: path traversal not allowed: {filename}")
+
     cache_dir = os.path.join(
         HF_HUB_CACHE, f"models--{model_id.replace('/', '--')}"
     )
