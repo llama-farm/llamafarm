@@ -32,7 +32,7 @@ class BoundingBox:
     x2: float
     y2: float
     text: str
-    confidence: float
+    confidence: float | None = None  # None when confidence is unavailable
 
 
 @dataclass
@@ -40,7 +40,7 @@ class OCRResult:
     """Result from OCR processing."""
 
     text: str
-    confidence: float
+    confidence: float | None = None  # None when confidence is unavailable
     boxes: list[BoundingBox] | None = None
     language: str | None = None
 
@@ -267,11 +267,19 @@ class OCRModel(BaseModel):
         result = rec_results[0]
         for line in result.text_lines:
             text_lines.append(line.text)
-            confidences.append(line.confidence if hasattr(line, "confidence") else 0.9)
+            # Use None for unknown confidence rather than a misleading default
+            line_confidence = getattr(line, "confidence", None)
+            confidences.append(line_confidence)
 
             if return_boxes and hasattr(line, "polygon") and line.polygon:
-                # Get bounding box from polygon
+                # Get bounding box from polygon - validate polygon structure
                 poly = line.polygon
+                if not poly or not all(
+                    isinstance(p, (list, tuple)) and len(p) >= 2 for p in poly
+                ):
+                    logger.warning(f"Invalid polygon for line: {line.text}")
+                    continue
+
                 x_coords = [p[0] for p in poly]
                 y_coords = [p[1] for p in poly]
                 boxes.append(
@@ -281,14 +289,18 @@ class OCRModel(BaseModel):
                         x2=max(x_coords),
                         y2=max(y_coords),
                         text=line.text,
-                        confidence=line.confidence
-                        if hasattr(line, "confidence")
-                        else 0.9,
+                        confidence=line_confidence,
                     )
                 )
 
         full_text = "\n".join(text_lines)
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        # Filter out None confidences when calculating average
+        valid_confidences = [c for c in confidences if c is not None]
+        avg_confidence = (
+            sum(valid_confidences) / len(valid_confidences)
+            if valid_confidences
+            else None
+        )
 
         return OCRResult(
             text=full_text,

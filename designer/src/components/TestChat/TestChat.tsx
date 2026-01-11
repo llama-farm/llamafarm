@@ -837,13 +837,23 @@ function DocumentScanningContainer({
   onFileSelect,
   disabled,
   children,
+  onInputRefReady,
 }: {
   onFileSelect: (file: File) => void
   disabled: boolean
   children: React.ReactNode
+  /** Callback to expose the file input trigger function to parent */
+  onInputRefReady?: (triggerBrowse: () => void) => void
 }) {
   const [isDragging, setIsDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Expose browse trigger to parent on mount
+  useEffect(() => {
+    if (onInputRefReady) {
+      onInputRefReady(() => inputRef.current?.click())
+    }
+  }, [onInputRefReady])
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -1595,6 +1605,8 @@ export default function TestChat({
   const [scanHistory, setScanHistory] = useState<DocumentScanningHistoryEntry[]>([])
   const [showScanHistory, setShowScanHistory] = useState(true)
   const scanHistoryScrollRef = useRef<HTMLDivElement>(null)
+  // Ref to trigger file browse from empty state
+  const triggerScanBrowseRef = useRef<(() => void) | null>(null)
 
   // Track if user has completed a scan before (for first-time message)
   const [hasScannedBefore, setHasScannedBefore] = useState(() => {
@@ -3635,6 +3647,7 @@ export default function TestChat({
             <DocumentScanningContainer
               onFileSelect={handleScanFileSelect}
               disabled={scanDocumentMutation.isPending}
+              onInputRefReady={(trigger) => { triggerScanBrowseRef.current = trigger }}
             >
               {scanResults || scanError || scanDocumentMutation.isPending ? (
                 <DocumentScanningResultDisplay
@@ -3645,11 +3658,7 @@ export default function TestChat({
                 />
               ) : (
                 <DocumentScanningEmptyState
-                  onBrowseClick={() => {
-                    // Trigger file input click - need to access the input in the container
-                    const input = document.querySelector('input[type="file"][accept*=".pdf"]') as HTMLInputElement
-                    input?.click()
-                  }}
+                  onBrowseClick={() => triggerScanBrowseRef.current?.()}
                   disabled={scanDocumentMutation.isPending}
                 />
               )}

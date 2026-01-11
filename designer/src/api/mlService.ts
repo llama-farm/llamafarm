@@ -240,9 +240,7 @@ export async function scanDocument(
     '/vision/ocr',
     formData,
     {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      // Don't set Content-Type header - axios will set it automatically with the correct boundary
       // OCR can take a while, especially first time when loading models
       timeout: 300000, // 5 minutes
     }
