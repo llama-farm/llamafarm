@@ -43,6 +43,12 @@ class TemplateService:
     - {{variable_name}} - Required variable (error if missing)
     - {{variable_name | default_value}} - Optional variable with default
     - {{ variable_name }} - Whitespace is allowed and trimmed
+
+    Security Note:
+        Templates should ONLY be defined in trusted configuration files.
+        Variable values are substituted as-is without sanitization.
+        This design assumes templates come from config files (not user input)
+        and variable values come from trusted API consumers.
     """
 
     # Pattern to match {{variable}} or {{variable | default}}

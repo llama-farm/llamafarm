@@ -543,10 +543,18 @@ async def chat(
 
     # Resolve template variables in prompts and config tools if provided
     if request.variables:
-        if hasattr(agent, "update_prompts_with_variables"):
+        has_prompt_support = hasattr(agent, "update_prompts_with_variables")
+        has_tool_support = hasattr(agent, "update_config_tools_with_variables")
+        if has_prompt_support:
             agent.update_prompts_with_variables(request.variables)
-        if hasattr(agent, "update_config_tools_with_variables"):
+        if has_tool_support:
             agent.update_config_tools_with_variables(request.variables)
+        if not has_prompt_support and not has_tool_support:
+            logger.warning(
+                "Variables provided but agent doesn't support variable substitution",
+                agent_type=type(agent).__name__,
+                variable_count=len(request.variables),
+            )
 
     # Tools from request body (config tools are added by the agent via config_tools property)
     # Resolve template variables in request tools if provided
