@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
@@ -434,6 +435,14 @@ class ChatRequest(BaseModel):
     # max_tokens is used for the final answer, thinking_budget is additional
     thinking_budget: int | None = None
 
+    # Dynamic template variables for prompt and tool substitution
+    variables: dict[str, Any] | None = Field(
+        default=None,
+        description="Dynamic variables for template substitution in prompts and tools. "
+        "Use {{variable_name}} syntax in config prompts/tools, then pass values here. "
+        "Example: {'user_name': 'Alice', 'company': 'Acme Corp'}",
+    )
+
 
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
@@ -532,8 +541,21 @@ async def chat(
         matched_docs = docs_service.match_docs_for_query(latest_user_message)
         agent.docs_context_provider.set_docs(matched_docs)
 
+    # Resolve template variables in prompts and config tools if provided
+    if request.variables:
+        if hasattr(agent, "update_prompts_with_variables"):
+            agent.update_prompts_with_variables(request.variables)
+        if hasattr(agent, "update_config_tools_with_variables"):
+            agent.update_config_tools_with_variables(request.variables)
+
     # Tools from request body (config tools are added by the agent via config_tools property)
-    tools = [ToolDefinition.from_openai_tool_dict(t) for t in (request.tools or [])]
+    # Resolve template variables in request tools if provided
+    request_tools = request.tools or []
+    if request.variables and request_tools:
+        from services.template_service import TemplateService
+
+        request_tools = TemplateService.resolve_object(request_tools, request.variables)
+    tools = [ToolDefinition.from_openai_tool_dict(t) for t in request_tools]
 
     if request.stream:
         return create_streaming_response_from_iterator(

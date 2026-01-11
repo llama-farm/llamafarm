@@ -5,8 +5,10 @@ import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+from typing import Any
+
 from atomic_agents import BaseTool
-from config.datamodel import LlamaFarmConfig
+from config.datamodel import LlamaFarmConfig, Model
 from openai.types.chat import ChatCompletionMessageFunctionToolCallParam
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_chunk import (
@@ -61,6 +63,8 @@ class ChatOrchestratorAgent(LFAgent):
     _mcp_service: MCPService | None = None
     _mcp_tool_factory: MCPToolFactory | None = None
     _mcp_tools: list[type[BaseTool]] = []
+    _model_config: "Model"  # Store for later variable resolution
+    _resolved_config_tools: list["ToolDefinition"] | None = None  # Cache resolved tools
 
     def __init__(
         self,
@@ -76,6 +80,7 @@ class ChatOrchestratorAgent(LFAgent):
 
         # Get the model config - if model_name is None, get_model returns the default
         model_config = ModelService.get_model(project_config, model_name)
+        self._model_config = model_config  # Store for variable resolution
         # Store the model name (the config name), not the model string
         # This allows lookup by name in the config
         self.model_name = model_config.name
@@ -96,6 +101,40 @@ class ChatOrchestratorAgent(LFAgent):
         )
 
         super().__init__(config=config)
+        self._resolved_config_tools = None  # Initialize
+
+    @property
+    def config_tools(self) -> list["ToolDefinition"]:
+        """Get config tools, using resolved version if available."""
+        from agents.base.types import ToolDefinition
+
+        if self._resolved_config_tools is not None:
+            return self._resolved_config_tools
+        return [
+            ToolDefinition.from_datamodel_tool(t)
+            for t in self._model_config.tools or []
+        ]
+
+    def update_config_tools_with_variables(
+        self, variables: dict[str, Any] | None
+    ) -> None:
+        """Update config tools with resolved template variables.
+
+        Call this before run_async() when using dynamic tool templates.
+
+        Args:
+            variables: Dict of variable name -> value for template substitution.
+        """
+        if not variables:
+            self._resolved_config_tools = None
+            return
+
+        self._resolved_config_tools = self.get_resolved_config_tools(variables)
+        logger.debug(
+            "Updated config tools with variables",
+            variable_count=len(variables),
+            tool_count=len(self._resolved_config_tools),
+        )
 
     def _create_tool_result_guidance_message(
         self, tool_name: str, result_content: str
@@ -561,20 +600,93 @@ class ChatOrchestratorAgent(LFAgent):
         return history
 
     def _get_prompt_messages_for_model(
-        self, model_name: str
+        self, model_name: str, variables: dict[str, Any] | None = None
     ) -> list[LFChatCompletionMessageParam]:
         model_config = ModelService.get_model(self._project_config, model_name)
         provider = RuntimeService.get_provider(model_config)
         ClientClass = provider.get_client().__class__
 
         messages = PromptService.resolve_prompts_for_model(
-            self._project_config, model_config
+            self._project_config, model_config, variables=variables
         )
 
         return [
             ClientClass.prompt_message_to_chat_completion_message(message)
             for message in messages
         ]
+
+    def update_prompts_with_variables(self, variables: dict[str, Any] | None) -> None:
+        """Update the system prompts with resolved template variables.
+
+        Call this before run_async() when using dynamic prompt templates.
+        This re-resolves the prompts with the given variables and updates
+        the system prompt generator.
+
+        Args:
+            variables: Dict of variable name -> value for template substitution.
+                       Use {{name}} or {{name | default}} syntax in prompts.
+        """
+        if not variables:
+            return  # No variables to resolve, keep existing prompts
+
+        # Re-resolve prompts with variables
+        resolved_prompts = self._get_prompt_messages_for_model(
+            self.model_name, variables=variables
+        )
+
+        # Update the system prompt generator
+        from agents.base.system_prompt_generator import LFAgentPrompt
+
+        self._system_prompt_generator.system_prompts = [
+            LFAgentPrompt(role="system", content=str(prompt.get("content", "")))
+            for prompt in resolved_prompts
+            if prompt.get("role", None) == "system"
+        ]
+
+        logger.debug(
+            "Updated prompts with variables",
+            variable_count=len(variables),
+            prompt_count=len(self._system_prompt_generator.system_prompts),
+        )
+
+    def get_resolved_config_tools(
+        self, variables: dict[str, Any] | None = None
+    ) -> list["ToolDefinition"]:
+        """Get config tools with template variables resolved.
+
+        Args:
+            variables: Dict of variable name -> value for template substitution.
+
+        Returns:
+            List of ToolDefinition with resolved templates.
+        """
+        from agents.base.types import ToolDefinition
+        from services.template_service import TemplateService
+
+        # Get raw config tools
+        raw_tools = self._model_config.tools or []
+        if not raw_tools:
+            return []
+
+        # Convert to dicts for resolution
+        tool_dicts = [
+            {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.parameters,
+                },
+            }
+            for t in raw_tools
+        ]
+
+        # Resolve variables if provided
+        if variables:
+            tool_dicts = TemplateService.resolve_object(tool_dicts, variables)
+
+        # Convert back to ToolDefinition
+        return [ToolDefinition.from_openai_tool_dict(t) for t in tool_dicts]
 
     @property
     def _history_file_path(self) -> Path | None:
