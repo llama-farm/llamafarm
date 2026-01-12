@@ -49,7 +49,19 @@ class TemplateService:
         Variable values are substituted as-is without sanitization.
         This design assumes templates come from config files (not user input)
         and variable values come from trusted API consumers.
+
+    Threat Model:
+        - Templates: Trusted (come from config YAML files under developer control)
+        - Variable values: Semi-trusted (come from API consumers)
+        - Validation: Max length enforced, type coercion logged
+
+    Limitations:
+        - Default values containing '}' before '}}' may not parse correctly
+        - Nested template markers (e.g., {{outer_{{inner}}}}) are not supported
     """
+
+    # Maximum allowed length for variable values (prevents DoS)
+    MAX_VALUE_LENGTH = 100_000  # 100KB per value
 
     # Pattern to match {{variable}} or {{variable | default}}
     # Captures: (variable_name, optional_default_with_pipe)
@@ -90,7 +102,33 @@ class TemplateService:
 
             if var_name in variables:
                 value = variables[var_name]
-                return str(value) if value is not None else "None"
+
+                # Handle None explicitly - treat as empty string
+                if value is None:
+                    logger.debug(
+                        "Variable value is None, using empty string",
+                        variable=var_name,
+                    )
+                    return ""
+
+                # Convert to string with type logging for non-strings
+                if not isinstance(value, str):
+                    logger.debug(
+                        "Converting non-string variable to string",
+                        variable=var_name,
+                        original_type=type(value).__name__,
+                    )
+                    value = str(value)
+
+                # Enforce max length to prevent DoS
+                if len(value) > cls.MAX_VALUE_LENGTH:
+                    raise TemplateError(
+                        f"Variable '{var_name}' value exceeds maximum length "
+                        f"({len(value)} > {cls.MAX_VALUE_LENGTH})",
+                        variable_name=var_name,
+                    )
+
+                return value
 
             if default_value is not None:
                 # Default was provided (even if empty string)

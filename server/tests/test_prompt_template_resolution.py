@@ -4,8 +4,8 @@ Tests that PromptService resolves template variables in prompt messages.
 """
 
 import pytest
-
 from config.datamodel import LlamaFarmConfig, Model, PromptMessage, PromptSet
+
 from services.prompt_service import PromptService
 
 

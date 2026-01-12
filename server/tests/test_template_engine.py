@@ -244,9 +244,9 @@ class TestTemplateEdgeCases:
     """Additional edge case tests."""
 
     def test_none_value(self):
-        """None value is converted to string."""
+        """None value becomes empty string (not 'None' literal)."""
         result = TemplateService.resolve("Value: {{val}}", {"val": None})
-        assert result == "Value: None"
+        assert result == "Value: "
 
     def test_numeric_value(self):
         """Numeric value is converted to string."""

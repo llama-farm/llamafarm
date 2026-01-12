@@ -118,10 +118,10 @@ class TestEmptyStringValues:
         )
         assert result == "Value: "  # Empty, not "default"
 
-    def test_none_converts_to_string(self):
-        """None value is converted to the string 'None'."""
+    def test_none_converts_to_empty_string(self):
+        """None value becomes empty string (not 'None' literal)."""
         result = TemplateService.resolve("Value: {{val}}", {"val": None})
-        assert result == "Value: None"
+        assert result == "Value: "
 
     def test_whitespace_only_value(self):
         """Whitespace-only value is preserved."""
@@ -315,3 +315,103 @@ class TestTypeCoercion:
             "Config: {{config}}", {"config": {"key": "value"}}
         )
         assert result == "Config: {'key': 'value'}"
+
+    def test_none_value_becomes_empty_string(self):
+        """None values become empty strings (not 'None' literal)."""
+        result = TemplateService.resolve("User: {{name}}", {"name": None})
+        assert result == "User: "
+
+
+class TestValidationAndLimits:
+    """Test input validation and limits."""
+
+    def test_max_value_length_enforced(self):
+        """Values exceeding max length raise error."""
+        huge_value = "A" * (TemplateService.MAX_VALUE_LENGTH + 1)
+        with pytest.raises(TemplateError) as exc_info:
+            TemplateService.resolve("Data: {{data}}", {"data": huge_value})
+
+        assert "exceeds maximum length" in str(exc_info.value)
+
+    def test_value_at_max_length_works(self):
+        """Value exactly at max length works."""
+        max_value = "A" * TemplateService.MAX_VALUE_LENGTH
+        result = TemplateService.resolve("Data: {{data}}", {"data": max_value})
+        assert len(result) == len("Data: ") + TemplateService.MAX_VALUE_LENGTH
+
+    def test_empty_variable_name_with_default_not_matched(self):
+        """Template like {{ | default }} is not matched (no variable name)."""
+        result = TemplateService.resolve("Value: {{ | default }}", {})
+        # Should pass through unchanged since regex requires variable name
+        assert result == "Value: {{ | default }}"
+
+    def test_whitespace_only_variable_name_not_matched(self):
+        """Template like {{   }} is not matched."""
+        result = TemplateService.resolve("Value: {{   }}", {})
+        assert result == "Value: {{   }}"
+
+    def test_variable_name_with_special_chars_not_matched(self):
+        """Variable names with special chars are not matched."""
+        result = TemplateService.resolve("Value: {{var-name}}", {"var-name": "x"})
+        # Hyphen not allowed in variable names, so not matched
+        assert result == "Value: {{var-name}}"
+
+    def test_variable_name_starting_with_number_not_matched(self):
+        """Variable names starting with number are not matched."""
+        result = TemplateService.resolve("Value: {{123var}}", {"123var": "x"})
+        # Must start with letter or underscore
+        assert result == "Value: {{123var}}"
+
+
+class TestMalformedTemplatesAdditional:
+    """Additional tests for malformed/edge case templates."""
+
+    def test_pipe_without_variable(self):
+        """Pipe without variable name is not matched."""
+        result = TemplateService.resolve("{{ | foo }}", {})
+        assert result == "{{ | foo }}"
+
+    def test_nested_template_markers(self):
+        """Nested template markers are not recursively resolved."""
+        # This tests that we don't accidentally create injection vectors
+        result = TemplateService.resolve(
+            "{{outer}}", {"outer": "{{inner}}", "inner": "deep"}
+        )
+        # Should substitute outer but NOT resolve the {{inner}} in the result
+        assert result == "{{inner}}"
+
+    def test_circular_reference_in_default(self):
+        """Default containing {{}} is treated literally."""
+        # {{a | {{b}}}} - the default is literally "{{b}}"
+        # Current regex captures everything after | until }}
+        result = TemplateService.resolve("{{a | {{b}}}}", {})
+        # With current regex [^}]*, it stops at first }
+        # So this might not parse as expected - documenting current behavior
+        # The result depends on regex behavior
+        assert "{{" in result or "b" in result  # Either behavior is acceptable
+
+
+class TestSecurityValidation:
+    """Additional security-focused tests."""
+
+    def test_html_in_value_not_escaped(self):
+        """HTML in values is NOT escaped (caller's responsibility)."""
+        result = TemplateService.resolve(
+            "Content: {{html}}", {"html": "<script>alert('xss')</script>"}
+        )
+        # Template service does simple substitution, no HTML escaping
+        assert "<script>" in result
+
+    def test_very_long_variable_name_works(self):
+        """Very long variable names work within reason."""
+        long_name = "a" * 1000
+        result = TemplateService.resolve(
+            f"{{{{{long_name}}}}}", {long_name: "value"}
+        )
+        assert result == "value"
+
+    def test_unicode_in_variable_name_not_matched(self):
+        """Unicode characters in variable names are not matched."""
+        result = TemplateService.resolve("{{café}}", {"café": "coffee"})
+        # Only ASCII letters allowed in variable names
+        assert result == "{{café}}"

@@ -4,8 +4,8 @@ Tests that prompts and tools resolve correctly together in realistic scenarios.
 """
 
 import pytest
-
 from config.datamodel import LlamaFarmConfig, Model, PromptMessage, PromptSet, Tool
+
 from services.prompt_service import PromptService
 from services.template_service import TemplateError, TemplateService
 

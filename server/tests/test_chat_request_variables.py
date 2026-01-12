@@ -4,8 +4,6 @@ Tests that the ChatRequest model accepts the new `variables` field
 for dynamic template substitution.
 """
 
-import pytest
-from pydantic import ValidationError
 
 
 class TestChatRequestWithVariables:
