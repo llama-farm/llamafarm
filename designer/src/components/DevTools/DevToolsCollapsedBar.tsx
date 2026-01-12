@@ -1,49 +1,10 @@
 import { ChevronUp } from 'lucide-react'
 import type { CapturedRequest } from '../../contexts/DevToolsContext'
-import { cn } from '@/lib/utils'
+import { StatusBadge, MethodBadge } from './DevToolsShared'
 
 interface DevToolsCollapsedBarProps {
   request: CapturedRequest | null
   onClick: () => void
-}
-
-const methodColors: Record<string, string> = {
-  GET: 'bg-blue-500/20 text-blue-400',
-  POST: 'bg-green-500/20 text-green-400',
-  PUT: 'bg-yellow-500/20 text-yellow-400',
-  PATCH: 'bg-orange-500/20 text-orange-400',
-  DELETE: 'bg-red-500/20 text-red-400',
-}
-
-function StatusBadge({ status }: { status?: number }) {
-  if (!status) return null
-
-  const isSuccess = status >= 200 && status < 300
-  return (
-    <span
-      className={cn(
-        'px-1.5 py-0.5 rounded text-xs font-medium',
-        isSuccess
-          ? 'bg-emerald-500/20 text-emerald-400'
-          : 'bg-red-500/20 text-red-400'
-      )}
-    >
-      {status}
-    </span>
-  )
-}
-
-function MethodBadge({ method }: { method: string }) {
-  return (
-    <span
-      className={cn(
-        'px-1.5 py-0.5 rounded text-xs font-mono font-medium',
-        methodColors[method] || 'bg-muted text-muted-foreground'
-      )}
-    >
-      {method}
-    </span>
-  )
 }
 
 export default function DevToolsCollapsedBar({

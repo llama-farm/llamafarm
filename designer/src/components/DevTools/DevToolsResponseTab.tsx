@@ -18,9 +18,12 @@ function StreamingIndicator({ chunkCount }: { chunkCount: number }) {
 export default function DevToolsResponseTab({ request }: DevToolsResponseTabProps) {
   const isStreaming = request.isStreaming && !request.streamComplete
   const hasError = !!request.error
+  // Check if response is complete (has status code)
+  const hasResponse = request.status !== undefined
 
   // For streaming responses, show accumulated chunks
   let responseContent: string | null = null
+  let hasResponseBody = false
 
   if (request.isStreaming && request.streamChunks.length > 0) {
     // Try to extract content from stream chunks
@@ -36,11 +39,15 @@ export default function DevToolsResponseTab({ request }: DevToolsResponseTabProp
 
     if (contents.length > 0) {
       responseContent = contents.join('')
+      hasResponseBody = true
     } else {
       // Fallback: show raw chunks
       responseContent = JSON.stringify(request.streamChunks, null, 2)
+      hasResponseBody = true
     }
-  } else if (request.responseBody) {
+  } else if (request.responseBody !== null && request.responseBody !== undefined) {
+    // Check explicitly for null/undefined to allow empty strings
+    hasResponseBody = true
     responseContent =
       typeof request.responseBody === 'string'
         ? request.responseBody
@@ -81,14 +88,14 @@ export default function DevToolsResponseTab({ request }: DevToolsResponseTabProp
       )}
 
       {/* Response Body */}
-      {responseContent ? (
+      {hasResponseBody ? (
         <div>
           <h4 className="text-xs font-medium text-muted-foreground mb-2">
             {request.isStreaming ? 'Streamed Content' : 'Response Body'}
           </h4>
-          <CodeBlock content={responseContent} />
+          <CodeBlock content={responseContent ?? ''} />
         </div>
-      ) : !isStreaming && !hasError ? (
+      ) : !isStreaming && !hasError && !hasResponse ? (
         <div className="text-xs text-muted-foreground">Awaiting response...</div>
       ) : null}
     </div>

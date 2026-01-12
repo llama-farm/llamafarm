@@ -231,6 +231,7 @@ export async function streamChatCompletion(
 
   // Capture request for DevTools
   let capturedRequestId: string | undefined
+  let errorCaptured = false // Track if error was already captured to prevent duplicates
   if (devToolsCapture) {
     const captured = createCapturedRequest('POST', urlPath, url, headers, streamingRequest, true)
     capturedRequestId = captured.id
@@ -255,8 +256,9 @@ export async function streamChatCompletion(
         new Error(`Fetch failed with status ${response.status}`)
       )
       // Capture error for DevTools
-      if (devToolsCapture && capturedRequestId) {
+      if (devToolsCapture && capturedRequestId && !errorCaptured) {
         devToolsCapture.onError(capturedRequestId, error.message)
+        errorCaptured = true
       }
       throw error
     }
@@ -309,9 +311,10 @@ export async function streamChatCompletion(
             'onError callback invoked in streamChatCompletion:',
             error
           )
-          // Capture error for DevTools
-          if (devToolsCapture && capturedRequestId) {
+          // Capture error for DevTools (only if not already captured)
+          if (devToolsCapture && capturedRequestId && !errorCaptured) {
             devToolsCapture.onError(capturedRequestId, error.message)
+            errorCaptured = true
           }
           onError?.(error)
         },
@@ -320,12 +323,13 @@ export async function streamChatCompletion(
 
     return responseSessionId
   } catch (error) {
-    // Capture error for DevTools
-    if (devToolsCapture && capturedRequestId) {
+    // Capture error for DevTools (only if not already captured)
+    if (devToolsCapture && capturedRequestId && !errorCaptured) {
       devToolsCapture.onError(
         capturedRequestId,
         error instanceof Error ? error.message : 'Unknown error'
       )
+      errorCaptured = true
     }
 
     // Handle abort errors specifically

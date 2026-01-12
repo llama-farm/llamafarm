@@ -68,10 +68,11 @@ export function generatePython(request: CapturedRequest): string {
       lines.push('# files = {"file": open("path/to/file", "rb")}')
       lines.push('')
     } else {
+      // Use word boundaries to avoid replacing "null"/"true"/"false" inside string values
       const bodyStr = JSON.stringify(request.body, null, 4)
-        .replace(/null/g, 'None')
-        .replace(/true/g, 'True')
-        .replace(/false/g, 'False')
+        .replace(/\bnull\b/g, 'None')
+        .replace(/\btrue\b/g, 'True')
+        .replace(/\bfalse\b/g, 'False')
       lines.push(`payload = ${bodyStr}`)
       lines.push('')
     }
@@ -132,9 +133,16 @@ export function generateJavaScript(request: CapturedRequest): string {
   }
 
   // Generate the code
-  if (request.body && request.method !== 'GET' && !headers['Content-Type']?.includes('multipart/form-data')) {
-    const bodyStr = JSON.stringify(request.body, null, 2)
-    lines.push(`const payload = ${bodyStr};`)
+  const hasJsonBody = request.body && request.method !== 'GET' && !headers['Content-Type']?.includes('multipart/form-data')
+  if (hasJsonBody) {
+    // If body is already a string, show it directly; otherwise stringify the object
+    if (typeof request.body === 'string') {
+      // Body is already a string - show as-is (it's already JSON)
+      lines.push(`const payload = ${request.body};`)
+    } else {
+      const bodyStr = JSON.stringify(request.body, null, 2)
+      lines.push(`const payload = ${bodyStr};`)
+    }
     lines.push('')
   }
 
@@ -145,7 +153,7 @@ export function generateJavaScript(request: CapturedRequest): string {
     lines.push(`  headers: ${JSON.stringify(options.headers, null, 2).split('\n').map((l, i) => i === 0 ? l : '  ' + l).join('\n')},`)
   }
 
-  if (request.body && request.method !== 'GET' && !headers['Content-Type']?.includes('multipart/form-data')) {
+  if (hasJsonBody) {
     lines.push(`  body: JSON.stringify(payload),`)
   }
 

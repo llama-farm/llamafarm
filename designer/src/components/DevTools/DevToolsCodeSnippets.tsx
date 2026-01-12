@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Check, Copy } from 'lucide-react'
 import type { CapturedRequest } from '../../contexts/DevToolsContext'
 import { generateCode, type CodeFormat } from '../../utils/devToolsCodeGen'
@@ -17,6 +17,16 @@ const codeFormats: { id: CodeFormat; label: string }[] = [
 export default function DevToolsCodeSnippets({ request }: DevToolsCodeSnippetsProps) {
   const [format, setFormat] = useState<CodeFormat>('curl')
   const [copied, setCopied] = useState(false)
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Cleanup timeout on unmount to prevent memory leak
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const code = generateCode(request, format)
 
@@ -24,7 +34,11 @@ export default function DevToolsCodeSnippets({ request }: DevToolsCodeSnippetsPr
     try {
       await navigator.clipboard.writeText(code)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      // Clear any existing timeout before setting a new one
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
     }

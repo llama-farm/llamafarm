@@ -85,7 +85,12 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
   // Persist expanded state to localStorage
   const [isExpanded, setIsExpandedState] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
-    return localStorage.getItem('lf_devtools_expanded') === 'true'
+    try {
+      return localStorage.getItem('lf_devtools_expanded') === 'true'
+    } catch {
+      // localStorage may be disabled (private mode, security settings)
+      return false
+    }
   })
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('request')
@@ -93,7 +98,11 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
   // Persist expanded state
   useEffect(() => {
     if (typeof window === 'undefined') return
-    localStorage.setItem('lf_devtools_expanded', String(isExpanded))
+    try {
+      localStorage.setItem('lf_devtools_expanded', String(isExpanded))
+    } catch {
+      // Ignore quota or security errors
+    }
   }, [isExpanded])
 
   // Persist requests to sessionStorage
@@ -152,7 +161,9 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
             responseBody: response.body,
             requestId: response.requestId ?? req.requestId,
             duration: Date.now() - req.timestamp,
-            streamComplete: true,
+            // Only mark streamComplete for non-streaming requests
+            // Streaming requests are completed via completeStream()
+            streamComplete: req.isStreaming ? req.streamComplete : true,
           }
           // Update selected if this is the selected request
           setSelectedRequest(current =>

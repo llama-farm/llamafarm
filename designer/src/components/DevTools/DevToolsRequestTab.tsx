@@ -6,7 +6,9 @@ interface DevToolsRequestTabProps {
 }
 
 export default function DevToolsRequestTab({ request }: DevToolsRequestTabProps) {
-  const bodyContent = request.body
+  // Check if body is defined (not null/undefined), even if it's an empty string
+  const hasBody = request.body !== null && request.body !== undefined
+  const bodyContent = hasBody
     ? typeof request.body === 'string'
       ? request.body
       : JSON.stringify(request.body, null, 2)
@@ -29,10 +31,10 @@ export default function DevToolsRequestTab({ request }: DevToolsRequestTabProps)
       </div>
 
       {/* Body */}
-      {bodyContent && (
+      {hasBody && (
         <div>
           <h4 className="text-xs font-medium text-muted-foreground mb-2">Body</h4>
-          <CodeBlock content={bodyContent} />
+          <CodeBlock content={bodyContent ?? ''} />
         </div>
       )}
     </div>
