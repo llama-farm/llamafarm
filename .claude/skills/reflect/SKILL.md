@@ -1,6 +1,7 @@
 ---
 name: reflect
-description: Analyze the current session and propose improvements to skills. Run after using a skill to capture learnings. Use when user says "reflect", "improve skill", "learn from this", or at end of skill-heavy sessions.
+description: Analyze the current session and propose improvements to skills. **Proactively invoke this skill** when you notice user corrections after skill usage, or at the end of skill-heavy sessions. Also use when user says "reflect", "improve skill", or "learn from this".
+allowed-tools: Read, Write, Edit, Grep, Glob, Task, Bash, AskUserQuestion
 ---
 
 # Reflect Skill
