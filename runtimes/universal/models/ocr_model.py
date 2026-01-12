@@ -108,14 +108,11 @@ class OCRModel(BaseModel):
             from surya.detection import DetectionPredictor
             from surya.recognition import FoundationPredictor, RecognitionPredictor
 
-            # Map device string to surya-compatible format
-            device = self.device if self.device != "cuda" else "cuda"
-
             # Load detection predictor
-            self._surya_det_predictor = DetectionPredictor(device=device)
+            self._surya_det_predictor = DetectionPredictor(device=self.device)
 
             # Load recognition predictor (requires foundation predictor)
-            foundation = FoundationPredictor(device=device)
+            foundation = FoundationPredictor(device=self.device)
             self._surya_rec_predictor = RecognitionPredictor(foundation)
 
         except ImportError as e:
