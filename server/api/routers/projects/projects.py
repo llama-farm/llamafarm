@@ -560,7 +560,7 @@ async def chat(
         raise HTTPException(
             status_code=400,
             detail=f"Template resolution failed: {e}",
-        )
+        ) from e
 
     # Warn if variables provided but agent doesn't support substitution
     if request.variables and not has_prompt_support and not has_tool_support:
@@ -582,7 +582,7 @@ async def chat(
             raise HTTPException(
                 status_code=400,
                 detail=f"Template resolution failed in request tools: {e}",
-            )
+            ) from e
     tools = [ToolDefinition.from_openai_tool_dict(t) for t in request_tools]
 
     if request.stream:
