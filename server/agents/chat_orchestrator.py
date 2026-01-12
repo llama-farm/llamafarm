@@ -121,18 +121,17 @@ class ChatOrchestratorAgent(LFAgent):
         """Update config tools with resolved template variables.
 
         Call this before run_async() when using dynamic tool templates.
+        Always resolves templates to apply default values even when variables
+        is None or empty.
 
         Args:
             variables: Dict of variable name -> value for template substitution.
         """
-        if not variables:
-            self._resolved_config_tools = None
-            return
-
+        # Always resolve to apply defaults (even with empty variables)
         self._resolved_config_tools = self.get_resolved_config_tools(variables)
         logger.debug(
             "Updated config tools with variables",
-            variable_count=len(variables),
+            variable_count=len(variables) if variables else 0,
             tool_count=len(self._resolved_config_tools),
         )
 
@@ -622,14 +621,14 @@ class ChatOrchestratorAgent(LFAgent):
         This re-resolves the prompts with the given variables and updates
         the system prompt generator.
 
+        Always resolves templates to apply default values even when variables
+        is None or empty.
+
         Args:
             variables: Dict of variable name -> value for template substitution.
                        Use {{name}} or {{name | default}} syntax in prompts.
         """
-        if not variables:
-            return  # No variables to resolve, keep existing prompts
-
-        # Re-resolve prompts with variables
+        # Always resolve prompts to apply defaults (even with empty variables)
         resolved_prompts = self._get_prompt_messages_for_model(
             self.model_name, variables=variables
         )
@@ -645,7 +644,7 @@ class ChatOrchestratorAgent(LFAgent):
 
         logger.debug(
             "Updated prompts with variables",
-            variable_count=len(variables),
+            variable_count=len(variables) if variables else 0,
             prompt_count=len(self._system_prompt_generator.system_prompts),
         )
 
@@ -681,9 +680,8 @@ class ChatOrchestratorAgent(LFAgent):
             for t in raw_tools
         ]
 
-        # Resolve variables if provided
-        if variables:
-            tool_dicts = TemplateService.resolve_object(tool_dicts, variables)
+        # Always resolve templates (even with empty dict) to apply defaults
+        tool_dicts = TemplateService.resolve_object(tool_dicts, variables or {})
 
         # Convert back to ToolDefinition
         return [ToolDefinition.from_openai_tool_dict(t) for t in tool_dicts]

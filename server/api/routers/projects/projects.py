@@ -541,37 +541,43 @@ async def chat(
         matched_docs = docs_service.match_docs_for_query(latest_user_message)
         agent.docs_context_provider.set_docs(matched_docs)
 
-    # Resolve template variables in prompts and config tools if provided
-    if request.variables:
-        from services.template_service import TemplateError
+    # Resolve template variables in prompts, config tools, and request tools
+    # Always resolve to apply defaults even when variables is empty/None
+    from core.logging import FastAPIStructLogger
+    from services.template_service import TemplateError, TemplateService
 
-        has_prompt_support = hasattr(agent, "update_prompts_with_variables")
-        has_tool_support = hasattr(agent, "update_config_tools_with_variables")
-        try:
-            if has_prompt_support:
-                agent.update_prompts_with_variables(request.variables)
-            if has_tool_support:
-                agent.update_config_tools_with_variables(request.variables)
-        except TemplateError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Template resolution failed: {e}",
-            )
-        if not has_prompt_support and not has_tool_support:
-            logger.warning(
-                "Variables provided but agent doesn't support variable substitution",
-                agent_type=type(agent).__name__,
-                variable_count=len(request.variables),
-            )
+    template_logger = FastAPIStructLogger(__name__)
+
+    # Resolve prompts and config tools via agent methods
+    has_prompt_support = hasattr(agent, "update_prompts_with_variables")
+    has_tool_support = hasattr(agent, "update_config_tools_with_variables")
+    try:
+        if has_prompt_support:
+            agent.update_prompts_with_variables(request.variables)
+        if has_tool_support:
+            agent.update_config_tools_with_variables(request.variables)
+    except TemplateError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Template resolution failed: {e}",
+        )
+
+    # Warn if variables provided but agent doesn't support substitution
+    if request.variables and not has_prompt_support and not has_tool_support:
+        template_logger.warning(
+            "Variables provided but agent doesn't support variable substitution",
+            agent_type=type(agent).__name__,
+            variable_count=len(request.variables),
+        )
 
     # Tools from request body (config tools are added by the agent via config_tools property)
-    # Resolve template variables in request tools if provided
+    # Always resolve templates to apply defaults
     request_tools = request.tools or []
-    if request.variables and request_tools:
-        from services.template_service import TemplateError, TemplateService
-
+    if request_tools:
         try:
-            request_tools = TemplateService.resolve_object(request_tools, request.variables)
+            request_tools = TemplateService.resolve_object(
+                request_tools, request.variables or {}
+            )
         except TemplateError as e:
             raise HTTPException(
                 status_code=400,
