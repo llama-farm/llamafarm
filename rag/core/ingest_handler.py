@@ -151,11 +151,21 @@ class IngestHandler:
         if chunk_size is None or chunk_overlap is None:
             return
 
-        if not isinstance(chunk_size, (int, float)) or not isinstance(
-            chunk_overlap, (int, float)
+        if not isinstance(chunk_size, int | float) or not isinstance(
+            chunk_overlap, int | float
         ):
             raise ValueError(
                 f"chunk_size and chunk_overlap must be numbers for parser {parser_type or 'unknown'}"
+            )
+
+        if chunk_size <= 0:
+            raise ValueError(
+                f"chunk_size must be greater than 0 for parser {parser_type or 'unknown'}"
+            )
+
+        if chunk_overlap < 0:
+            raise ValueError(
+                f"chunk_overlap must be greater than or equal to 0 for parser {parser_type or 'unknown'}"
             )
 
         if chunk_overlap >= chunk_size:
@@ -412,21 +422,20 @@ class IngestHandler:
             )
 
             # Health check: Verify embedder is available before processing batch
-            if hasattr(self.embedder, "validate_config"):
-                if not self.embedder.validate_config():
-                    error_msg = (
-                        f"Embedder {self.embedder.__class__.__name__} is not available. "
-                        "Please ensure the embedding service is running."
-                    )
-                    logger.error(error_msg)
-                    event_logger.fail_event(error_msg)
-                    return {
-                        "status": "error",
-                        "message": error_msg,
-                        "filename": filename,
-                        "document_count": 0,
-                        "reason": "embedder_unavailable",
-                    }
+            if hasattr(self.embedder, "validate_config") and not self.embedder.validate_config():
+                error_msg = (
+                    f"Embedder {self.embedder.__class__.__name__} is not available. "
+                    "Please ensure the embedding service is running."
+                )
+                logger.error(error_msg)
+                event_logger.fail_event(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg,
+                    "filename": filename,
+                    "document_count": 0,
+                    "reason": "embedder_unavailable",
+                }
 
             # Generate embeddings for each document
             embedded_documents = []

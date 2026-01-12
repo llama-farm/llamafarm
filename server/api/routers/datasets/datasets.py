@@ -386,6 +386,18 @@ def _validate_overrides_against_default_chunking(
                 detail="chunk_size and chunk_overlap must be numbers after applying overrides",
             )
 
+        if chunk_size <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="chunk_size must be greater than 0 after applying overrides",
+            )
+
+        if chunk_overlap < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="chunk_overlap must be greater than or equal to 0 after applying overrides",
+            )
+
         if chunk_overlap >= chunk_size:
             raise HTTPException(
                 status_code=400,

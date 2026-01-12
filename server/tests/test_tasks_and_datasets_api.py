@@ -147,6 +147,102 @@ def test_dataset_upload_rejects_chunk_overlap_exceeding_default(mocker):
     add_file.assert_not_called()
 
 
+def test_dataset_upload_rejects_zero_chunk_size(mocker):
+    dataset_cfg = SimpleNamespace(
+        auto_process=False, data_processing_strategy="default"
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.get_dataset_config",
+        return_value=dataset_cfg,
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.add_file_to_dataset",
+        return_value=(True, SimpleNamespace(hash="abc123", original_file_name="doc.pdf")),
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.start_ingestion_for_hashes",
+    )
+
+    processing_strategy = SimpleNamespace(
+        name="default",
+        parsers=[
+            SimpleNamespace(
+                type="PDFParser_LlamaIndex",
+                config={"chunk_size": 1000},
+            )
+        ],
+    )
+    project_config = SimpleNamespace(
+        rag=SimpleNamespace(data_processing_strategies=[processing_strategy])
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.ProjectService.load_config",
+        return_value=project_config,
+    )
+
+    client = _client()
+    resp = client.post(
+        "/v1/projects/ns1/proj1/datasets/ds1/data",
+        files={"file": ("doc.pdf", b"hello")},
+        data={
+            "parser_overrides": json.dumps(
+                {"PDFParser_LlamaIndex": {"chunk_size": 0, "chunk_overlap": 0}}
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "chunk_size" in resp.json()["detail"]
+
+
+def test_dataset_upload_rejects_negative_overlap(mocker):
+    dataset_cfg = SimpleNamespace(
+        auto_process=False, data_processing_strategy="default"
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.get_dataset_config",
+        return_value=dataset_cfg,
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.add_file_to_dataset",
+        return_value=(True, SimpleNamespace(hash="abc123", original_file_name="doc.pdf")),
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.DatasetService.start_ingestion_for_hashes",
+    )
+
+    processing_strategy = SimpleNamespace(
+        name="default",
+        parsers=[
+            SimpleNamespace(
+                type="PDFParser_LlamaIndex",
+                config={"chunk_size": 1000},
+            )
+        ],
+    )
+    project_config = SimpleNamespace(
+        rag=SimpleNamespace(data_processing_strategies=[processing_strategy])
+    )
+    mocker.patch(
+        "api.routers.datasets.datasets.ProjectService.load_config",
+        return_value=project_config,
+    )
+
+    client = _client()
+    resp = client.post(
+        "/v1/projects/ns1/proj1/datasets/ds1/data",
+        files={"file": ("doc.pdf", b"hello")},
+        data={
+            "parser_overrides": json.dumps(
+                {"PDFParser_LlamaIndex": {"chunk_overlap": -1}}
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "chunk_overlap" in resp.json()["detail"]
+
+
 def test_dataset_bulk_upload_defaults_no_processing(mocker):
     mocker.patch(
         "api.routers.datasets.datasets.DatasetService.get_dataset_config",
