@@ -135,14 +135,9 @@ export function generateJavaScript(request: CapturedRequest): string {
   // Generate the code
   const hasJsonBody = request.body && request.method !== 'GET' && !headers['Content-Type']?.includes('multipart/form-data')
   if (hasJsonBody) {
-    // If body is already a string, show it directly; otherwise stringify the object
-    if (typeof request.body === 'string') {
-      // Body is already a string - show as-is (it's already JSON)
-      lines.push(`const payload = ${request.body};`)
-    } else {
-      const bodyStr = JSON.stringify(request.body, null, 2)
-      lines.push(`const payload = ${bodyStr};`)
-    }
+    // Always use JSON.stringify to ensure valid JS syntax
+    const bodyStr = JSON.stringify(request.body, null, 2)
+    lines.push(`const payload = ${bodyStr};`)
     lines.push('')
   }
 
