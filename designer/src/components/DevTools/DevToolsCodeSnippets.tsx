@@ -31,7 +31,7 @@ export default function DevToolsCodeSnippets({ request }: DevToolsCodeSnippetsPr
   }
 
   return (
-    <div className="p-4 space-y-3">
+    <div className="p-4 h-full flex flex-col gap-3">
       {/* Format selector */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1">
@@ -72,7 +72,7 @@ export default function DevToolsCodeSnippets({ request }: DevToolsCodeSnippetsPr
       </div>
 
       {/* Code display */}
-      <pre className="block p-3 rounded bg-muted text-foreground font-mono text-xs overflow-x-auto max-h-48 scrollbar-thin whitespace-pre-wrap">
+      <pre className="block p-3 rounded bg-muted text-foreground font-mono text-xs overflow-auto flex-1 scrollbar-thin whitespace-pre-wrap">
         {code}
       </pre>
     </div>

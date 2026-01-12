@@ -60,13 +60,26 @@ interface DevToolsContextValue {
 const DevToolsContext = createContext<DevToolsContextValue | null>(null)
 
 const MAX_REQUESTS = 50
+const STORAGE_KEY = 'lf_devtools_requests'
+
+// Helper to safely parse stored requests
+function loadStoredRequests(): CapturedRequest[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const stored = sessionStorage.getItem(STORAGE_KEY)
+    if (!stored) return []
+    return JSON.parse(stored) as CapturedRequest[]
+  } catch {
+    return []
+  }
+}
 
 interface DevToolsProviderProps {
   children: ReactNode
 }
 
 export function DevToolsProvider({ children }: DevToolsProviderProps) {
-  const [requests, setRequests] = useState<CapturedRequest[]>([])
+  const [requests, setRequests] = useState<CapturedRequest[]>(loadStoredRequests)
   const [selectedRequest, setSelectedRequest] = useState<CapturedRequest | null>(null)
 
   // Persist expanded state to localStorage
@@ -82,6 +95,16 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
     if (typeof window === 'undefined') return
     localStorage.setItem('lf_devtools_expanded', String(isExpanded))
   }, [isExpanded])
+
+  // Persist requests to sessionStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(requests))
+    } catch {
+      // Ignore quota errors
+    }
+  }, [requests])
 
   const setIsExpanded = useCallback((expanded: boolean) => {
     setIsExpandedState(expanded)
@@ -203,6 +226,11 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
   const clearHistory = useCallback(() => {
     setRequests([])
     setSelectedRequest(null)
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // Ignore errors
+    }
   }, [])
 
   const value: DevToolsContextValue = {

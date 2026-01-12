@@ -5,11 +5,14 @@ import DevToolsExpandedPanel from './DevToolsExpandedPanel'
 
 export default function DevToolsDrawer() {
   const {
+    requests,
     selectedRequest,
     isExpanded,
     activeTab,
     setIsExpanded,
     setActiveTab,
+    selectRequest,
+    clearHistory,
   } = useDevTools()
 
   const panelRef = useRef<HTMLDivElement>(null)
@@ -49,7 +52,7 @@ export default function DevToolsDrawer() {
       {/* Overlay when expanded - covers only the Test page content area */}
       {isExpanded && (
         <div
-          className="devtools-overlay absolute inset-0 z-40 bg-black/60 animate-in fade-in-0 duration-200"
+          className="devtools-overlay absolute inset-0 z-40 bg-gray-200/80 dark:bg-black/60 animate-in fade-in-0 duration-200"
           aria-hidden="true"
         />
       )}
@@ -61,14 +64,17 @@ export default function DevToolsDrawer() {
       >
         {isExpanded ? (
           <DevToolsExpandedPanel
-            request={selectedRequest}
+            requests={requests}
+            selectedRequest={selectedRequest}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            onSelectRequest={selectRequest}
+            onClearHistory={clearHistory}
             onClose={() => setIsExpanded(false)}
           />
         ) : (
           <DevToolsCollapsedBar
-            request={selectedRequest}
+            request={selectedRequest ?? requests[0] ?? null}
             onClick={() => setIsExpanded(true)}
           />
         )}
