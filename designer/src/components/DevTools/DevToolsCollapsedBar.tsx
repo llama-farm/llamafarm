@@ -54,7 +54,7 @@ export default function DevToolsCollapsedBar({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-2 bg-card border-t border-border hover:bg-accent/40 transition-colors cursor-pointer text-left"
+      className="w-full flex items-center gap-3 px-4 py-2 bg-card border-t border-border hover:bg-accent/40 transition-colors cursor-pointer text-left rounded-t-lg"
     >
       {/* Dev Tools label with caret */}
       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">

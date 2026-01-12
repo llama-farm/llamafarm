@@ -83,7 +83,7 @@ export default function DevToolsExpandedPanel({
   }
 
   return (
-    <div className="bg-card border-t border-border flex flex-col max-h-[50vh]">
+    <div className="bg-card border-t border-border flex flex-col max-h-[70vh] rounded-t-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
