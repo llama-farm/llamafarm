@@ -28,7 +28,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
   const showTypingIndicator =
     type === 'assistant' &&
     (isLoading || isStreaming) &&
-    (!content || content.trim() === '' || content === 'Thinking...' || content.startsWith('Loading model'))
+    (!content || content.trim() === '' || content === 'Thinking...' || content === 'Thinking…')
 
   const getMessageStyles = (): string => {
     const baseStyles = 'flex flex-col mb-4'

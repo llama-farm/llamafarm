@@ -1459,7 +1459,7 @@ export default function TestChat({
       lastUserInputRef.current = content
       const assistantId = addMessage({
         type: 'assistant',
-        content: 'Loading model (may take a moment if downloading)…',
+        content: 'Thinking…',
         timestamp: new Date(),
         isLoading: true,
       })
@@ -2785,7 +2785,7 @@ export function TestChatMessage({
         }
       >
         {message.isLoading && isAssistant ? (
-          <TypingDots label="Loading model (may take a moment if downloading)" />
+          <TypingDots label="Thinking" />
         ) : message.metadata?.isTest && isUser ? (
           <div className="whitespace-pre-wrap">
             <div className="mb-2">
@@ -3196,7 +3196,7 @@ function References({ sources }: { sources: any[] }) {
   )
 }
 
-function TypingDots({ label = 'Loading model' }: { label?: string }) {
+function TypingDots({ label = 'Thinking' }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-1 opacity-80">
       <span>{label}</span>
