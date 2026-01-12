@@ -99,7 +99,7 @@ def _get_cached_gguf_files(model_id: str) -> list[str]:
         logger.debug(f"Error scanning cache directory {cache_dir}: {e}")
         return []
 
-    return list(gguf_files)
+    return sorted(gguf_files)
 
 
 def _get_cached_gguf_path(model_id: str, filename: str) -> str | None:
