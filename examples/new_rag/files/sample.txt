@@ -1,0 +1,22 @@
+# Sample Document for RAG Demo
+
+## Introduction
+
+This is a sample document used to demonstrate the LlamaFarm RAG pipeline.
+The new parsing system includes Docling for PDFs and MarkItDown for Office documents.
+
+## Key Features
+
+### 1. AI-Powered Parsing
+Docling uses AI to understand document structure, achieving 97.9% accuracy on table extraction.
+
+### 2. Smart Chunking
+The HybridChunker is tokenizer-aware, ensuring chunks are optimally sized for LLM processing.
+
+### 3. Metadata Preservation
+All parsers preserve important metadata like page numbers, headings, and document structure.
+
+## Conclusion
+
+The new RAG system simplifies document processing while improving accuracy.
+Users no longer need to understand LlamaIndex internals to get great results.

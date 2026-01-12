@@ -1,0 +1,61 @@
+parsers:
+  - name: MarkItDownParser
+    display_name: "MarkItDown Parser (Microsoft)"
+    tool: MarkItDown
+    version: "1.0.0"
+    description: |
+      Fast, lightweight document-to-markdown converter using Microsoft's MarkItDown library.
+      Optimized for quick conversion of various file formats to clean, structured markdown.
+      Preserves document structure including headings, lists, tables, and links.
+      Best for simple documents where speed is more important than complex layout analysis.
+    supported_extensions:
+      - .pdf
+      - .docx
+      - .pptx
+      - .xlsx
+      - .xls
+      - .html
+      - .htm
+      - .csv
+      - .json
+      - .xml
+      - .epub
+      - .png
+      - .jpg
+      - .jpeg
+      - .wav
+      - .mp3
+    mime_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+      - text/html
+      - text/csv
+      - application/json
+      - application/xml
+      - application/epub+zip
+      - image/png
+      - image/jpeg
+      - audio/wav
+      - audio/mpeg
+    capabilities:
+      - text_extraction
+      - markdown_conversion
+      - table_extraction
+      - multi_format_support
+      - fast_processing
+      - structure_preservation
+    dependencies:
+      required:
+        - markitdown
+      optional:
+        - openai  # For image descriptions
+        - azure-ai-documentintelligence  # For enhanced PDF parsing
+    default_config:
+      output_format: markdown
+      extract_metadata: true
+      use_llm_for_images: false
+      chunk_size: null  # MarkItDown doesn't chunk by default
+      chunk_strategy: none

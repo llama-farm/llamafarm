@@ -40,6 +40,168 @@ rag:
 
 ---
 
+## Recommended Parsers (New)
+
+LlamaFarm now includes two powerful new parsers that simplify document processing:
+
+### DoclingParser (Recommended for PDFs)
+
+IBM's Docling parser provides AI-powered document understanding with 97.9% table extraction accuracy. It includes built-in smart chunking via HybridChunker.
+
+**Best for:** PDFs, complex documents, tables, forms, scanned documents
+
+```yaml
+parsers:
+  - type: DoclingParser
+    file_include_patterns:
+      - "*.pdf"
+    priority: 0  # Highest priority
+    config:
+      chunk_size: 512        # Target chunk size in tokens
+      chunk_strategy: hybrid # AI-aware chunking (hybrid, hierarchical, none)
+      output_format: markdown
+      extract_metadata: true
+      extract_tables: true
+      extract_images: false
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `chunk_size` | integer | 512 | Target chunk size in tokens |
+| `chunk_strategy` | string | `hybrid` | `hybrid`, `hierarchical`, `none` |
+| `output_format` | string | `markdown` | `markdown`, `text`, `json` |
+| `extract_metadata` | boolean | `true` | Extract document metadata |
+| `extract_tables` | boolean | `true` | Extract tables with AI analysis |
+| `extract_images` | boolean | `false` | Extract embedded images |
+
+**Why use DoclingParser?**
+- 97.9% table extraction accuracy (vs ~60% for text-based parsers)
+- AI-powered layout analysis understands document structure
+- Built-in HybridChunker is tokenizer-aware for optimal LLM usage
+- No external API calls - runs locally
+
+### MarkItDownParser (Recommended for Office Docs)
+
+Microsoft's MarkItDown provides fast, reliable conversion of Office documents to markdown.
+
+**Best for:** DOCX, PPTX, XLSX, HTML, images with OCR
+
+```yaml
+parsers:
+  - type: MarkItDownParser
+    file_include_patterns:
+      - "*.docx"
+      - "*.pptx"
+      - "*.xlsx"
+    priority: 0
+    config:
+      output_format: markdown
+      extract_metadata: true
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `output_format` | string | `markdown` | `markdown`, `text` |
+| `extract_metadata` | boolean | `true` | Extract document metadata |
+
+**Why use MarkItDownParser?**
+- Fast conversion to clean markdown
+- Excellent handling of Office documents
+- Simpler configuration than LlamaIndex parsers
+- Good fallback for non-PDF documents
+
+---
+
+## SimpleChunker (Standalone)
+
+For cases where you want to separate parsing from chunking, use SimpleChunker:
+
+```yaml
+chunker:
+  type: SimpleChunker
+  strategy: sentences  # characters, sentences, paragraphs, sections, pages, tokens
+  chunk_size: 512
+  overlap: 50
+```
+
+#### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `strategy` | string | `sentences` | Chunking strategy (see below) |
+| `chunk_size` | integer | 512 | Target chunk size |
+| `overlap` | integer | 0 | Character overlap between chunks |
+
+**Available Strategies:**
+- `characters` - Fixed character count
+- `sentences` - Sentence boundaries (NLTK)
+- `paragraphs` - Paragraph boundaries
+- `sections` - Markdown header boundaries
+- `pages` - Page boundaries (from metadata)
+- `tokens` - Token-based (tiktoken)
+
+---
+
+## Migration Guide
+
+### Migrating from LlamaIndex Parsers
+
+If you're currently using LlamaIndex-based parsers, here's how to migrate:
+
+**Before (LlamaIndex):**
+```yaml
+parsers:
+  - type: PDFParser_LlamaIndex
+    config:
+      chunk_size: 1000
+      chunk_overlap: 100
+      chunk_strategy: semantic
+      fallback_strategies:
+        - llama_pdf_reader
+        - llama_pymupdf_reader
+```
+
+**After (Docling):**
+```yaml
+parsers:
+  - type: DoclingParser
+    config:
+      chunk_size: 512  # Now in tokens, not characters
+      chunk_strategy: hybrid
+```
+
+**Key differences:**
+1. `chunk_size` is now in tokens (not characters) when using HybridChunker
+2. No need for `fallback_strategies` - Docling handles complex documents
+3. `chunk_strategy: hybrid` replaces `semantic` with better results
+4. No external API dependencies
+
+### Backward Compatibility
+
+All existing parsers continue to work. You can:
+1. Keep using LlamaIndex parsers unchanged
+2. Gradually migrate to new parsers
+3. Mix old and new parsers with priority fallback
+
+```yaml
+parsers:
+  # New parser (try first)
+  - type: DoclingParser
+    file_include_patterns: ["*.pdf"]
+    priority: 0
+
+  # Legacy fallback (try if Docling fails)
+  - type: PDFParser_PyPDF2
+    file_include_patterns: ["*.pdf"]
+    priority: 2
+```
+
+---
+
 ## Auto Parser
 
 The `auto` parser automatically detects file types and applies the appropriate parser.

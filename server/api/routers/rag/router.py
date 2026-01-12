@@ -1,11 +1,13 @@
 """RAG router for query endpoints."""
 
 import asyncio
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from api.errors import DatabaseNotFoundError
@@ -15,6 +17,13 @@ from services.database_service import DatabaseService
 from services.project_service import ProjectService
 
 from .rag_health import RAGHealthResponse, handle_rag_health
+from .rag_parse import (
+    ChunkStrategy,
+    OutputFormat,
+    ParseResponse,
+    is_supported_file,
+    parse_file_content,
+)
 from .rag_query import QueryResponse, RAGQueryRequest, handle_rag_query
 from .rag_stats import RAGStatsResponse, handle_rag_stats
 
@@ -82,6 +91,138 @@ async def query_rag(namespace: str, project: str, request: RAGQueryRequest):
 
     # Use the handler function from rag_query.py
     return await handle_rag_query(request, project_config, str(project_dir))
+
+
+# ============================================================================
+# Parse-Only Endpoint (No Database Storage)
+# ============================================================================
+
+
+@router.post(
+    "/parse",
+    response_model=ParseResponse,
+    operation_id="rag_parse",
+    tags=["mcp"],
+    summary="Parse a document without storing to database",
+    description="""
+Parse a document and return its content without storing anything to the RAG database.
+
+Useful for:
+- Testing parser configurations
+- Previewing document content before ingestion
+- Extracting content for external processing
+- Validating file compatibility
+
+Supported formats: PDF, DOCX, PPTX, XLSX, TXT, MD, CSV, HTML
+""",
+)
+async def parse_document(
+    namespace: str,
+    project: str,
+    file: UploadFile = File(..., description="File to parse"),
+    output_format: str = Form(
+        "markdown",
+        description="Output format: markdown, text, or json",
+    ),
+    chunk_strategy: str = Form(
+        "none",
+        description="Chunking strategy: none, characters, sentences, paragraphs, sections, hybrid",
+    ),
+    chunk_size: int = Form(
+        512,
+        description="Target chunk size (characters or tokens depending on strategy)",
+        ge=50,
+        le=10000,
+    ),
+    chunk_overlap: int = Form(
+        0,
+        description="Overlap between chunks",
+        ge=0,
+        le=1000,
+    ),
+):
+    """
+    Parse a document and return its content without storing to database.
+
+    This endpoint is useful for testing parser configurations and previewing
+    content before ingestion.
+    """
+    start_time = time.time()
+    logger.bind(namespace=namespace, project=project, filename=file.filename)
+
+    # Validate project exists
+    project_dir = ProjectService.get_project_dir(namespace, project)
+    if not Path(project_dir).exists():
+        raise HTTPException(
+            status_code=404, detail=f"Project {namespace}/{project} not found"
+        )
+
+    # Validate file
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    if not is_supported_file(file.filename):
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type. Supported: PDF, DOCX, PPTX, XLSX, TXT, MD, CSV, HTML",
+        )
+
+    # Read file content
+    file_content = await file.read()
+    if not file_content:
+        raise HTTPException(status_code=400, detail="File is empty")
+
+    # Parse output format
+    try:
+        out_fmt = OutputFormat(output_format.lower())
+    except ValueError:
+        out_fmt = OutputFormat.MARKDOWN
+
+    # Parse chunk strategy
+    try:
+        chunk_strat = ChunkStrategy(chunk_strategy.lower())
+    except ValueError:
+        chunk_strat = ChunkStrategy.NONE
+
+    # Save to temp file for parsing
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=Path(file.filename).suffix
+    ) as tmp:
+        tmp.write(file_content)
+        tmp_path = tmp.name
+
+    try:
+        # Parse the file
+        result = await parse_file_content(
+            file_path=tmp_path,
+            filename=file.filename,
+            output_format=out_fmt,
+            chunk_strategy=chunk_strat,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
+        processing_time = (time.time() - start_time) * 1000
+
+        return ParseResponse(
+            content=result["content"],
+            format=result["format"],
+            chunks=[
+                {"content": c["content"], "metadata": c["metadata"]}
+                for c in result.get("chunks", [])
+            ],
+            metadata=result.get("metadata", {}),
+            processing_time_ms=processing_time,
+            parser_used=result.get("parser_used", "unknown"),
+            filename=file.filename,
+        )
+
+    finally:
+        # Clean up temp file
+        try:
+            Path(tmp_path).unlink()
+        except Exception:
+            pass
 
 
 @router.get("/health", response_model=RAGHealthResponse)

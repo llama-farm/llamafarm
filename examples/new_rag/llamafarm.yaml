@@ -1,0 +1,134 @@
+# LlamaFarm Configuration for New RAG System Demo
+# This configuration uses the new Docling and MarkItDown parsers
+# with SimpleChunker for optimal document processing.
+
+version: v1
+name: new-rag-demo
+namespace: default
+
+# Runtime configuration for models
+runtime:
+  models:
+    - name: demo-model
+      description: "Demo model for RAG queries"
+      provider: ollama
+      model: llama3.1:8b
+      base_url: http://localhost:11434
+      default: true
+      prompt_format: unstructured
+      model_api_parameters:
+        temperature: 0.2
+
+# RAG Configuration
+rag:
+  # Default database for queries
+  default_database: main_db
+
+  # Database configurations
+  databases:
+    - name: main_db
+      type: ChromaStore
+      config:
+        persist_directory: ./data/chroma_db
+        collection_name: new_rag_demo
+        distance_function: cosine
+
+      # Embedding strategies
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v2-moe
+            dimension: 768
+            batch_size: 16
+            timeout: 60
+
+      # Retrieval strategies
+      retrieval_strategies:
+        - name: semantic_search
+          type: BasicSimilarityStrategy
+          default: true
+          config:
+            distance_metric: cosine
+            top_k: 5
+
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: semantic_search
+
+  # Data processing strategies using new parsers
+  data_processing_strategies:
+    # Primary strategy using Docling for PDFs
+    - name: docling_default
+      description: "Default strategy using Docling for PDFs with HybridChunker"
+      parsers:
+        # Docling for PDFs - AI-powered parsing with 97.9% table accuracy
+        - type: DoclingParser
+          file_include_patterns:
+            - "*.pdf"
+            - "*.PDF"
+          priority: 0
+          config:
+            chunk_size: 512
+            chunk_strategy: hybrid
+            output_format: markdown
+            extract_metadata: true
+            extract_tables: true
+
+        # MarkItDown for Office documents
+        - type: MarkItDownParser
+          file_include_patterns:
+            - "*.docx"
+            - "*.pptx"
+            - "*.xlsx"
+          priority: 0
+          config:
+            output_format: markdown
+            extract_metadata: true
+
+        # Legacy fallback for PDFs (if Docling fails)
+        - type: PDFParser_PyPDF2
+          file_include_patterns:
+            - "*.pdf"
+          priority: 2
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+
+        # Text files
+        - type: TextParser_Python
+          file_include_patterns:
+            - "*.txt"
+            - "*.md"
+            - "*.csv"
+          priority: 0
+          config:
+            chunk_size: 500
+            chunk_overlap: 50
+
+    # Simple strategy for quick processing (no AI chunking)
+    - name: simple_fast
+      description: "Fast processing without AI-powered chunking"
+      parsers:
+        - type: DoclingParser
+          file_include_patterns:
+            - "*.pdf"
+          priority: 0
+          config:
+            chunk_strategy: none
+            output_format: text
+
+        - type: MarkItDownParser
+          file_include_patterns:
+            - "*.docx"
+            - "*.pptx"
+            - "*.xlsx"
+          priority: 0
+          config:
+            output_format: text
+
+# Datasets configuration
+datasets:
+  - name: sample_documents
+    data_processing_strategy: docling_default
+    database: main_db
+    description: "Sample documents for testing the new RAG system"

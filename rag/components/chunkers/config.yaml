@@ -1,0 +1,67 @@
+# Simple Chunker Configuration
+
+name: SimpleChunker
+description: Flexible text chunker with multiple splitting strategies
+version: "1.0.0"
+
+# Available strategies
+strategies:
+  characters:
+    description: Split by character count
+    use_case: General-purpose, predictable chunk sizes
+    default_chunk_size: 512
+    overlap_recommended: 50
+
+  sentences:
+    description: Split on sentence boundaries
+    use_case: Preserves sentence integrity for NLP
+    default_chunk_size: 512
+    overlap_recommended: 0
+
+  paragraphs:
+    description: Split on paragraph boundaries
+    use_case: Preserves paragraph structure
+    default_chunk_size: 1024
+    overlap_recommended: 0
+
+  sections:
+    description: Split on markdown headers
+    use_case: Preserves document structure
+    default_chunk_size: 2048
+    overlap_recommended: 0
+
+  pages:
+    description: Split on page boundaries
+    use_case: Page-aware chunking for PDFs
+    default_chunk_size: null
+    overlap_recommended: 0
+
+  tokens:
+    description: Split by token/word count
+    use_case: Token-aware for LLM context limits
+    default_chunk_size: 256
+    overlap_recommended: 20
+
+# Default settings
+defaults:
+  strategy: characters
+  chunk_size: 512
+  overlap: 0
+  min_chunk_size: 50
+  max_chunk_size: 4096
+  preserve_whitespace: false
+
+# Capabilities
+capabilities:
+  - text_chunking
+  - overlap_support
+  - metadata_preservation
+  - position_tracking
+  - multiple_strategies
+
+# Dependencies
+dependencies:
+  required: []
+  optional:
+    - nltk  # For improved sentence detection
+    - tiktoken  # For accurate token counting

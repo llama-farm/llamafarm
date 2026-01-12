@@ -1,0 +1,61 @@
+parsers:
+  - name: DoclingParser
+    display_name: "Docling Parser (IBM)"
+    tool: Docling
+    version: "1.0.0"
+    description: |
+      Advanced document parser using IBM's Docling library with AI-powered layout analysis,
+      table structure recognition, and built-in smart chunking. Supports PDF, DOCX, PPTX,
+      XLSX, HTML, and images. Extracts comprehensive metadata including page numbers,
+      document structure, headings, and tables.
+    supported_extensions:
+      - .pdf
+      - .docx
+      - .pptx
+      - .xlsx
+      - .html
+      - .htm
+      - .png
+      - .jpg
+      - .jpeg
+      - .tiff
+      - .bmp
+    mime_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - text/html
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - image/bmp
+    capabilities:
+      - text_extraction
+      - layout_analysis
+      - table_extraction
+      - heading_extraction
+      - smart_chunking
+      - page_aware_splitting
+      - metadata_extraction
+      - structure_preservation
+      - ocr_support
+      - multi_format_support
+    dependencies:
+      required:
+        - docling
+        - docling-core
+      optional:
+        - transformers
+        - torch
+    default_config:
+      chunk_size: 512
+      chunk_overlap: 50
+      chunk_strategy: hybrid  # Uses docling's HybridChunker
+      extract_metadata: true
+      extract_tables: true
+      extract_headings: true
+      extract_images: false
+      output_format: markdown  # markdown, text, or json
+      preserve_structure: true
+      page_aware: true

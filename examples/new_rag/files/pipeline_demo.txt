@@ -1,0 +1,25 @@
+# Pipeline Demo Document
+
+## Overview
+
+This document demonstrates the complete RAG pipeline.
+
+## Section 1: Parsing
+
+Documents are parsed using Docling (for PDFs) or MarkItDown (for Office docs).
+The parsers extract text and preserve structure.
+
+## Section 2: Chunking
+
+After parsing, content is chunked using smart strategies.
+The HybridChunker respects document structure.
+
+## Section 3: Embedding
+
+Chunks are ready for embedding with any sentence transformer.
+Metadata is preserved for filtering during retrieval.
+
+## Section 4: Retrieval
+
+Semantic search finds relevant chunks.
+Metadata filters narrow results by document type, date, etc.

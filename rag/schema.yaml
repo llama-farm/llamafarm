@@ -55,6 +55,9 @@ definitions:
           - $ref: "#/definitions/parsers/textParserPythonConfig"
           - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/msgParserExtractMsgConfig"
+          # New modern parsers
+          - $ref: "#/definitions/parsers/doclingParserConfig"
+          - $ref: "#/definitions/parsers/markItDownParserConfig"
   parsers:
     # Auto-detection parser configuration
     autoParserConfig:
@@ -710,6 +713,177 @@ definitions:
           type: string
           default: utf-8
           description: Encoding
+    # Docling Parser - AI-powered document parsing (IBM)
+    doclingParserConfig:
+      type: object
+      description: |
+        Docling Parser: AI-powered document parsing using IBM's Docling library.
+        Features: Layout analysis (DocLayNet), Table extraction (TableFormer),
+        Smart chunking (HybridChunker), OCR support, multi-format support.
+        Recommended as the PRIMARY parser for PDFs and complex documents.
+      defaultExtensions: [".pdf", ".docx", ".pptx", ".xlsx", ".html", ".png", ".jpg"]
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 512
+          minimum: 50
+          maximum: 8192
+          description: Target chunk size in tokens (uses HybridChunker tokenizer)
+        chunk_overlap:
+          type: integer
+          default: 50
+          minimum: 0
+          maximum: 500
+          description: Overlap between chunks in tokens
+        chunk_strategy:
+          type: string
+          enum: [hybrid, hierarchical, none]
+          default: hybrid
+          description: |
+            Chunking strategy:
+            - hybrid: Tokenizer-aware chunking that respects document structure (recommended)
+            - hierarchical: One chunk per document element
+            - none: No chunking, return full document
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract document metadata (headings, page count, tables)
+        extract_tables:
+          type: boolean
+          default: true
+          description: Extract and structure tables
+        extract_headings:
+          type: boolean
+          default: true
+          description: Extract document headings
+        output_format:
+          type: string
+          enum: [markdown, text, json]
+          default: markdown
+          description: Output content format
+        preserve_structure:
+          type: boolean
+          default: true
+          description: Preserve document structure in output
+        page_aware:
+          type: boolean
+          default: true
+          description: Include page numbers in chunk metadata
+    # MarkItDown Parser - Fast document-to-markdown conversion (Microsoft)
+    markItDownParserConfig:
+      type: object
+      description: |
+        MarkItDown Parser: Fast document-to-markdown conversion using Microsoft's library.
+        Features: Quick conversion, wide format support, minimal dependencies.
+        Use for: Simple documents, fast conversion when AI analysis isn't needed.
+        Note: Does not include chunking - use SimpleChunker separately if needed.
+      defaultExtensions: [".pdf", ".docx", ".xlsx", ".pptx", ".html", ".csv", ".json", ".xml", ".zip", ".epub"]
+      additionalProperties: false
+      properties:
+        output_format:
+          type: string
+          enum: [markdown, text]
+          default: markdown
+          description: Output content format
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract document metadata
+        use_llm_for_images:
+          type: boolean
+          default: false
+          description: Use LLM for image description (requires API key)
+        llm_model:
+          type: string
+          default: gpt-4o-mini
+          description: LLM model for image description (if use_llm_for_images is true)
+  # Chunker definitions - for flexible text splitting independent of parsers
+  chunkerConfig:
+    type: object
+    additionalProperties: false
+    required: [type]
+    properties:
+      type:
+        type: string
+        description: Chunker type identifier
+        enum:
+          - SimpleChunker
+          - DoclingHybridChunker
+      config:
+        type: object
+        oneOf:
+          - $ref: "#/definitions/chunkers/simpleChunkerConfig"
+          - $ref: "#/definitions/chunkers/doclingHybridChunkerConfig"
+  chunkers:
+    # SimpleChunker - flexible text splitting with multiple strategies
+    simpleChunkerConfig:
+      type: object
+      description: Simple chunker with multiple splitting strategies
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 512
+          minimum: 50
+          maximum: 10000
+          description: Target chunk size (meaning depends on strategy)
+        overlap:
+          type: integer
+          default: 0
+          minimum: 0
+          maximum: 500
+          description: Number of units to overlap between chunks
+        strategy:
+          type: string
+          enum: [characters, sentences, paragraphs, sections, pages, tokens]
+          default: characters
+          description: |
+            Chunking strategy:
+            - characters: Fixed character count
+            - sentences: Split on sentence boundaries
+            - paragraphs: Split on paragraph boundaries
+            - sections: Split on markdown headers
+            - pages: Split on page boundaries
+            - tokens: Token/word-based splitting
+        min_chunk_size:
+          type: integer
+          default: 50
+          minimum: 1
+          description: Minimum chunk size (chunks smaller than this are merged)
+        max_chunk_size:
+          type: integer
+          default: 4096
+          minimum: 100
+          description: Maximum chunk size (chunks larger than this are split)
+        preserve_whitespace:
+          type: boolean
+          default: false
+          description: Preserve original whitespace in chunks
+    # DoclingHybridChunker - Docling's built-in smart chunker
+    doclingHybridChunkerConfig:
+      type: object
+      description: Docling's HybridChunker with tokenizer-aware chunking
+      additionalProperties: false
+      properties:
+        max_tokens:
+          type: integer
+          default: 512
+          minimum: 50
+          maximum: 8192
+          description: Maximum tokens per chunk (uses tokenizer)
+        tokenizer:
+          type: string
+          default: sentence-transformers/all-MiniLM-L6-v2
+          description: Hugging Face tokenizer for accurate token counting
+        merge_peers:
+          type: boolean
+          default: true
+          description: Merge peer-level chunks that fit within token limit
+        heading_as_metadata:
+          type: boolean
+          default: true
+          description: Store section headings as metadata instead of content
   extractorConfig:
     type: object
     additionalProperties: false

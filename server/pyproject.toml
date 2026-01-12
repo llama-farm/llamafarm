@@ -46,6 +46,7 @@ dependencies = [
   "huggingface-hub>=1.0.1",
   "psutil>=5.9.0",
   "pymupdf>=1.26.0",  # PDF to image conversion
+  "markitdown>=0.1.4",  # Office document conversion (40KB, lightweight)
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
 ]
