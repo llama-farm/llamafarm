@@ -79,22 +79,27 @@ def _get_cached_gguf_files(model_id: str) -> list[str]:
         return []
 
     # Find GGUF files in any snapshot
-    gguf_files = []
+    gguf_files: set[str] = set()  # Use set to avoid duplicates efficiently
     try:
         for snapshot_hash in os.listdir(snapshots_dir):
             snapshot_path = os.path.join(snapshots_dir, snapshot_hash)
             if os.path.isdir(snapshot_path):
                 for filename in os.listdir(snapshot_path):
                     if filename.endswith(".gguf") and filename not in gguf_files:
-                        # Verify it's a real file, not a broken symlink
+                        # Verify it's a real file with content
+                        # Use single getsize() call which fails on broken symlinks
                         file_path = os.path.join(snapshot_path, filename)
-                        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                            gguf_files.append(filename)
+                        try:
+                            if os.path.getsize(file_path) > 0:
+                                gguf_files.add(filename)
+                        except (OSError, FileNotFoundError):
+                            # Broken symlink or file removed - skip silently
+                            pass
     except OSError as e:
         logger.debug(f"Error scanning cache directory {cache_dir}: {e}")
         return []
 
-    return gguf_files
+    return list(gguf_files)
 
 
 def _get_cached_gguf_path(model_id: str, filename: str) -> str | None:
@@ -127,8 +132,13 @@ def _get_cached_gguf_path(model_id: str, filename: str) -> str | None:
     try:
         for snapshot_hash in os.listdir(snapshots_dir):
             file_path = os.path.join(snapshots_dir, snapshot_hash, filename)
-            if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                return file_path
+            try:
+                # Single getsize() call - fails on broken symlinks or missing files
+                if os.path.getsize(file_path) > 0:
+                    return file_path
+            except (OSError, FileNotFoundError):
+                # File doesn't exist or is broken symlink - continue to next snapshot
+                continue
     except OSError:
         pass
 

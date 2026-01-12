@@ -7,6 +7,9 @@ from unittest.mock import Mock, patch
 import pytest
 from llamafarm_common.model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
+    _get_cached_gguf_files,
+    _get_cached_gguf_path,
+    _validate_model_id,
     get_gguf_file_path,
     list_gguf_files,
     parse_model_with_quantization,
@@ -471,6 +474,63 @@ class TestGetGGUFFilePath:
 
         # Verify correct path was returned from cache fallback
         assert result == "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+
+class TestPathTraversalValidation:
+    """Test path traversal protection in cache functions."""
+
+    def test_validate_model_id_valid(self):
+        """Test that valid model IDs pass validation."""
+        # Standard org/repo format
+        assert _validate_model_id("unsloth/Qwen3-1.7B-GGUF") == "unsloth/Qwen3-1.7B-GGUF"
+        # Repo only format
+        assert _validate_model_id("gpt2") == "gpt2"
+        # With hyphens, underscores, and dots
+        assert _validate_model_id("org_name/model-v1.2") == "org_name/model-v1.2"
+
+    def test_validate_model_id_rejects_path_traversal(self):
+        """Test that path traversal attempts are rejected."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("../../../etc/passwd")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("org/../repo")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("org/repo/..")
+
+    def test_validate_model_id_rejects_absolute_paths(self):
+        """Test that absolute paths are rejected."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("/etc/passwd")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("\\windows\\system32")
+
+    def test_validate_model_id_rejects_invalid_format(self):
+        """Test that invalid model ID formats are rejected."""
+        with pytest.raises(ValueError, match="Invalid model_id format"):
+            _validate_model_id("org/repo/extra")  # Too many slashes
+        with pytest.raises(ValueError, match="Invalid model_id format"):
+            _validate_model_id("org//repo")  # Double slash
+        with pytest.raises(ValueError, match="Invalid model_id format"):
+            _validate_model_id("org/repo:tag")  # Colon not allowed in model_id
+
+    def test_get_cached_gguf_files_validates_model_id(self):
+        """Test that _get_cached_gguf_files validates model_id."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_files("../malicious")
+
+    def test_get_cached_gguf_path_validates_model_id(self):
+        """Test that _get_cached_gguf_path validates model_id."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("../malicious", "model.gguf")
+
+    def test_get_cached_gguf_path_validates_filename(self):
+        """Test that _get_cached_gguf_path validates filename for path traversal."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("valid/model", "../../../etc/passwd")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("valid/model", "path/to/file.gguf")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("valid/model", "..\\windows\\file.gguf")
 
 
 if __name__ == "__main__":
