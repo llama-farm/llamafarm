@@ -193,13 +193,19 @@ export function useUploadFileToDataset() {
       dataset: string
       file: File
       signal?: AbortSignal
+      autoProcess?: boolean
+      parserOverrides?: Record<string, any>
     }) =>
       datasetService.uploadFileToDataset(
         data.namespace,
         data.project,
         data.dataset,
         data.file,
-        data.signal
+        {
+          signal: data.signal,
+          autoProcess: data.autoProcess,
+          parserOverrides: data.parserOverrides,
+        }
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh file counts
@@ -254,6 +260,8 @@ export function useUploadMultipleFiles() {
       project: string
       dataset: string
       files: File[]
+      autoProcess?: boolean
+      parserOverrides?: Record<string, any>
     }) => {
       const results = []
       for (const file of data.files) {
@@ -261,7 +269,11 @@ export function useUploadMultipleFiles() {
           data.namespace,
           data.project,
           data.dataset,
-          file
+          file,
+          {
+            autoProcess: data.autoProcess,
+            parserOverrides: data.parserOverrides,
+          }
         )
         results.push(result)
       }

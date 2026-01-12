@@ -33,6 +33,7 @@ import { useImportExampleDataset } from '../../hooks/useExamples'
 import PageActions from '../common/PageActions'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
+import { Switch } from '../ui/switch'
 import { useToast } from '../ui/toast'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -41,7 +42,6 @@ import {
   useCreateDataset,
   useDeleteDataset,
   useAvailableStrategies,
-  useProcessDataset,
 } from '../../hooks/useDatasets'
 import { uploadFileToDataset } from '../../api/datasets'
 import datasetService from '../../api/datasets'
@@ -296,6 +296,7 @@ const Data = () => {
     useState(false)
   const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [autoProcessUploads, setAutoProcessUploads] = useState(true)
   const [uploadingFileCount, setUploadingFileCount] = useState(0)
   const activeUploadControllersRef = useRef<AbortController[]>([])
   const [isTransitioningToCreate, setIsTransitioningToCreate] = useState(false)
@@ -371,12 +372,16 @@ const Data = () => {
       project,
       dataset,
       file,
+      autoProcess,
+      parserOverrides,
       signal,
     }: {
       namespace: string
       project: string
       dataset: string
       file: File
+      autoProcess?: boolean
+      parserOverrides?: Record<string, any>
       signal?: AbortSignal
     }) => {
       // Use the API service which properly handles the signal
@@ -385,7 +390,11 @@ const Data = () => {
         project,
         dataset,
         file,
-        signal
+        {
+          signal,
+          autoProcess,
+          parserOverrides,
+        }
       )
     },
     onError: error => {
@@ -399,9 +408,6 @@ const Data = () => {
       // Error toasts for actual failures are handled in handleDatasetSelect
     },
   })
-
-  // Process dataset mutation for auto-processing after upload
-  const processMutation = useProcessDataset()
 
   // Fetch available strategies and databases from API
   const { data: availableOptions } = useAvailableStrategies(
@@ -719,6 +725,7 @@ const Data = () => {
       datasetId: string,
       namespace: string,
       project: string,
+      autoProcess: boolean,
       batchSize: number = UPLOAD_BATCH_SIZE
     ) => {
       const results = []
@@ -752,6 +759,7 @@ const Data = () => {
                 project,
                 dataset: datasetId,
                 file,
+                autoProcess,
                 signal: controller.signal,
               })
               return {
@@ -827,7 +835,8 @@ const Data = () => {
           pendingFiles,
           datasetId,
           namespace,
-          project
+          project,
+          autoProcessUploads
         )
 
         const cancelled = results.some(r => (r as any).cancelled)
@@ -836,6 +845,15 @@ const Data = () => {
         )
         const successes = results.filter(r => r.success && !(r as any).skipped)
         const skipped = results.filter(r => r.success && (r as any).skipped)
+        const taskIds = results
+          .map(r => (r as any).result?.task_id)
+          .filter(Boolean) as string[]
+        const hasProcessing =
+          results.some(r => (r as any).result?.status === 'processing') ||
+          taskIds.length > 0
+        const hasPending =
+          results.some(r => (r as any).result?.status === 'uploaded') ||
+          !autoProcessUploads
 
         // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
         if (cancelled) {
@@ -878,10 +896,26 @@ const Data = () => {
           })
         } else {
           // All files succeeded
-          toast({
-            message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
-            variant: 'default',
-          })
+          const message =
+            hasPending && !hasProcessing
+              ? `Uploaded ${fileCount} file(s) to ${datasetName}. Processing is paused.`
+              : hasProcessing
+                ? `Uploaded ${fileCount} file(s) to ${datasetName}. Processing started.`
+                : `Successfully uploaded ${fileCount} file(s) to ${datasetName}`
+          toast({ message, variant: 'default' })
+        }
+
+        if (
+          taskIds.length > 0 &&
+          activeProject?.namespace &&
+          activeProject?.project
+        ) {
+          saveDatasetTaskId(
+            activeProject.namespace,
+            activeProject.project,
+            datasetId,
+            taskIds[0]
+          )
         }
 
         // Navigate to the dataset view to see uploaded files (only if some succeeded)
@@ -889,41 +923,12 @@ const Data = () => {
           // Explicitly refetch to ensure fresh data before navigating
           await refetchDatasets()
 
-          // Auto-trigger processing after successful uploads
-          if (activeProject?.namespace && activeProject?.project) {
-            // Check if processing is already running for this dataset
-            const existingTaskId = loadDatasetTaskId(
-              activeProject.namespace,
-              activeProject.project,
-              datasetId
-            )
-
-            if (!existingTaskId) {
-              // No processing running, trigger immediately
-              try {
-                const result = await processMutation.mutateAsync({
-                  namespace: activeProject.namespace,
-                  project: activeProject.project,
-                  dataset: datasetId,
-                })
-
-                if (result.task_id) {
-                  saveDatasetTaskId(
-                    activeProject.namespace,
-                    activeProject.project,
-                    datasetId,
-                    result.task_id
-                  )
-                }
-              } catch (error) {
-                console.error('Failed to auto-start processing:', error)
-                // Don't show error toast - processing can be triggered manually in dataset view
-              }
-            }
-            // If processing is already running, DatasetView will handle queuing
-          }
-
-          navigate(`/chat/data/${datasetId}`)
+          navigate(`/chat/data/${datasetId}`, {
+            state: {
+              taskId: taskIds[0] || null,
+              pendingProcessing: hasPending && !hasProcessing,
+            },
+          })
         }
       } catch (error) {
         console.error('Upload failed:', error)
@@ -959,7 +964,7 @@ const Data = () => {
       toast,
       navigate,
       refetchDatasets,
-      processMutation,
+      autoProcessUploads,
     ]
   )
 
@@ -1079,7 +1084,21 @@ const Data = () => {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+      <div className="space-y-4 py-4">
+        <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">Auto-process after upload</span>
+            <span className="text-xs text-muted-foreground">
+              Turn off for batch uploads or when you want to review before processing.
+            </span>
+          </div>
+          <Switch
+            checked={autoProcessUploads}
+            onCheckedChange={v => setAutoProcessUploads(Boolean(v))}
+            aria-label="Toggle automatic processing after upload"
+          />
+        </div>
+
           {/* Create new dataset with dropped files */}
           <button
             onClick={() => {
