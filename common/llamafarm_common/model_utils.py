@@ -256,6 +256,17 @@ def parse_quantization_from_filename(filename: str) -> str | None:
     return None
 
 
+def is_split_gguf_file(filename: str) -> bool:
+    """Check if a GGUF file is a split file (part of a multi-file model).
+
+    Split files have patterns like:
+    - model-00001-of-00002.gguf
+    - model-00001-of-00002.Q4_K_M.gguf
+    - qwen2.5-coder-7b-instruct-q4_k_m-00001-of-00002.gguf
+    """
+    return bool(re.search(r"-\d{5}-of-\d{5}[.\-]", filename, re.IGNORECASE))
+
+
 def select_gguf_file(
     gguf_files: list[str], preferred_quantization: str | None = None
 ) -> str | None:
@@ -263,9 +274,10 @@ def select_gguf_file(
     Select the best GGUF file from a list based on quantization preference.
 
     Selection logic:
-    1. If preferred_quantization is specified and found, use it
-    2. Otherwise, use default preference order: Q4_K_M > Q4_K > Q5_K_M > Q5_K > Q8_0 > others
-    3. Fall back to first file if no quantized versions found
+    1. Filter out split files when a non-split version with same quantization exists
+    2. If preferred_quantization is specified and found, use it
+    3. Otherwise, use default preference order: Q4_K_M > Q4_K > Q5_K_M > Q5_K > Q8_0 > others
+    4. Fall back to first file if no quantized versions found
 
     Args:
         gguf_files: List of .gguf filenames from the repository
@@ -288,10 +300,18 @@ def select_gguf_file(
     if len(gguf_files) == 1:
         return gguf_files[0]
 
-    # Parse quantization types for all files
+    # Separate split and non-split files
+    non_split_files = [f for f in gguf_files if not is_split_gguf_file(f)]
+    split_files = [f for f in gguf_files if is_split_gguf_file(f)]
+
+    # Prefer non-split files; only use split files if no non-split version exists
+    # for the desired quantization
+    working_files = non_split_files if non_split_files else split_files
+
+    # Parse quantization types for working files
     file_quantizations = [
         (filename, parse_quantization_from_filename(filename))
-        for filename in gguf_files
+        for filename in working_files
     ]
 
     # If preferred quantization specified, try to find exact match
@@ -300,6 +320,12 @@ def select_gguf_file(
         for filename, quant in file_quantizations:
             if quant and quant.upper() == preferred_upper:
                 return filename
+        # If not found in non-split, check split files
+        if non_split_files and split_files:
+            for filename in split_files:
+                quant = parse_quantization_from_filename(filename)
+                if quant and quant.upper() == preferred_upper:
+                    return filename
 
     # Use default preference order
     for preferred in GGUF_QUANTIZATION_PREFERENCE_ORDER:
@@ -308,7 +334,7 @@ def select_gguf_file(
                 return filename
 
     # No quantized version found in preference order - use first file
-    return gguf_files[0]
+    return working_files[0] if working_files else gguf_files[0]
 
 
 def list_gguf_files(model_id: str, token: str | None = None) -> list[str]:

@@ -175,6 +175,41 @@ class TestSelectGGUFFile:
         result = select_gguf_file([])
         assert result is None
 
+    def test_select_prefers_non_split_files(self):
+        """Test that non-split files are preferred over split files."""
+        files = [
+            "model-00001-of-00002.Q4_K_M.gguf",  # split Q4_K_M
+            "model-00002-of-00002.Q4_K_M.gguf",  # split Q4_K_M
+            "model.Q4_K_M.gguf",  # non-split Q4_K_M
+            "model.Q8_0.gguf",  # non-split Q8_0
+        ]
+        result = select_gguf_file(files)
+        assert result == "model.Q4_K_M.gguf"
+
+    def test_select_uses_split_when_only_option(self):
+        """Test that split files are used when no non-split version exists for requested quant."""
+        files = [
+            "model-00001-of-00002.F16.gguf",  # split F16
+            "model-00002-of-00002.F16.gguf",  # split F16
+            "model.Q4_K_M.gguf",  # non-split Q4_K_M
+        ]
+        result = select_gguf_file(files, preferred_quantization="F16")
+        assert result == "model-00001-of-00002.F16.gguf"
+
+    def test_select_split_file_pattern_variants(self):
+        """Test that various split file patterns are detected correctly."""
+        from llamafarm_common.model_utils import is_split_gguf_file
+
+        # These should be detected as split files
+        assert is_split_gguf_file("model-00001-of-00002.gguf")
+        assert is_split_gguf_file("model-00001-of-00002.Q4_K_M.gguf")
+        assert is_split_gguf_file("qwen2.5-coder-7b-instruct-q4_k_m-00001-of-00002.gguf")
+
+        # These should NOT be detected as split files
+        assert not is_split_gguf_file("model.Q4_K_M.gguf")
+        assert not is_split_gguf_file("model-v2.Q4_K_M.gguf")
+        assert not is_split_gguf_file("model.gguf")
+
     def test_preference_order_defined(self):
         """Test that GGUF_QUANTIZATION_PREFERENCE_ORDER is defined correctly."""
         assert GGUF_QUANTIZATION_PREFERENCE_ORDER[0] == "Q4_K_M"
