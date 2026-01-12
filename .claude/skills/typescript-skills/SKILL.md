@@ -1,3 +1,10 @@
+---
+name: typescript-skills
+description: Shared TypeScript best practices for Designer and Electron subsystems.
+allowed-tools: Read, Grep, Glob
+user-invocable: false
+---
+
 # TypeScript Skills for LlamaFarm
 
 Shared TypeScript best practices for Designer (React) and Electron App subsystems.

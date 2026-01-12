@@ -1,3 +1,10 @@
+---
+name: cli-skills
+description: CLI best practices for LlamaFarm. Covers Cobra, Bubbletea, Lipgloss patterns for Go CLI development.
+allowed-tools: Read, Grep, Glob
+user-invocable: false
+---
+
 # CLI Skills for LlamaFarm
 
 Framework-specific patterns for the LlamaFarm CLI. These guidelines extend the [shared Go skills](../go-skills/SKILL.md) with Cobra, Bubbletea, and Lipgloss best practices.

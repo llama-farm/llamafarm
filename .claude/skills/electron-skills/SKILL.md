@@ -1,3 +1,10 @@
+---
+name: electron-skills
+description: Electron patterns for LlamaFarm Desktop. Covers main/renderer processes, IPC, security, and packaging.
+allowed-tools: Read, Grep, Glob
+user-invocable: false
+---
+
 # Electron Skills for LlamaFarm Desktop
 
 Electron 28 + Electron Vite patterns for the LlamaFarm Desktop application.

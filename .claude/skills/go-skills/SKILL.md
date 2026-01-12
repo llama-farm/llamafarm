@@ -1,3 +1,10 @@
+---
+name: go-skills
+description: Shared Go best practices for LlamaFarm CLI. Covers idiomatic patterns, error handling, and testing.
+allowed-tools: Read, Grep, Glob
+user-invocable: false
+---
+
 # Go Skills for LlamaFarm CLI
 
 Shared Go best practices for LlamaFarm CLI development. These guidelines ensure idiomatic, maintainable, and secure Go code.

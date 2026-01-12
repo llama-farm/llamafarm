@@ -1,3 +1,10 @@
+---
+name: designer-skills
+description: Designer subsystem patterns for LlamaFarm. Covers React 18, TanStack Query, TailwindCSS, and Radix UI.
+allowed-tools: Read, Grep, Glob
+user-invocable: false
+---
+
 # Designer Skills for LlamaFarm
 
 Framework-specific patterns and checklists for the Designer subsystem (React 18 + TanStack Query + TailwindCSS + Radix UI).
