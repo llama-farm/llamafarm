@@ -97,6 +97,11 @@ class TemplateService:
                 return default_value.strip()
 
             # No value and no default - error
+            logger.warning(
+                "Template variable not found",
+                variable=var_name,
+                available_variables=list(variables.keys()) if variables else [],
+            )
             raise TemplateError(
                 f"Template variable '{{{{ {var_name} }}}}' not found in provided variables. "
                 f"Available variables: {list(variables.keys()) if variables else '(none)'}. "

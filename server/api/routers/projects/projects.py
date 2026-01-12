@@ -543,12 +543,20 @@ async def chat(
 
     # Resolve template variables in prompts and config tools if provided
     if request.variables:
+        from services.template_service import TemplateError
+
         has_prompt_support = hasattr(agent, "update_prompts_with_variables")
         has_tool_support = hasattr(agent, "update_config_tools_with_variables")
-        if has_prompt_support:
-            agent.update_prompts_with_variables(request.variables)
-        if has_tool_support:
-            agent.update_config_tools_with_variables(request.variables)
+        try:
+            if has_prompt_support:
+                agent.update_prompts_with_variables(request.variables)
+            if has_tool_support:
+                agent.update_config_tools_with_variables(request.variables)
+        except TemplateError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Template resolution failed: {e}",
+            )
         if not has_prompt_support and not has_tool_support:
             logger.warning(
                 "Variables provided but agent doesn't support variable substitution",
@@ -560,9 +568,15 @@ async def chat(
     # Resolve template variables in request tools if provided
     request_tools = request.tools or []
     if request.variables and request_tools:
-        from services.template_service import TemplateService
+        from services.template_service import TemplateError, TemplateService
 
-        request_tools = TemplateService.resolve_object(request_tools, request.variables)
+        try:
+            request_tools = TemplateService.resolve_object(request_tools, request.variables)
+        except TemplateError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Template resolution failed in request tools: {e}",
+            )
     tools = [ToolDefinition.from_openai_tool_dict(t) for t in request_tools]
 
     if request.stream:
