@@ -464,7 +464,9 @@ func (m *SourceManager) DownloadSource(version string) error {
 	extractedSrcDir := filepath.Join(extractDir, entries[0].Name())
 
 	// Remove old source directory if it exists
-	if err := os.RemoveAll(m.srcDir); err != nil && !os.IsNotExist(err) {
+	// Use RemoveAllWithRetry to handle Windows file locking issues
+	// where Python processes may still hold file handles briefly after termination
+	if err := utils.RemoveAllWithRetry(m.srcDir); err != nil {
 		return fmt.Errorf("failed to remove old source directory: %w", err)
 	}
 

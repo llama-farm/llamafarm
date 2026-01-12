@@ -33,6 +33,7 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel as PydanticBaseModel
 
 from core.logging import UniversalRuntimeLogger, setup_logging
@@ -123,6 +124,21 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# CORS configuration - use environment variable for allowed origins
+# Default allows common local development ports
+# Set CORS_ALLOWED_ORIGINS to a comma-separated list of origins in production
+_default_origins = "http://localhost:3000,http://localhost:5173,http://localhost:4200,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:4200"
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(chat_completions_router)
 
 # Model unload timeout configuration (in seconds)

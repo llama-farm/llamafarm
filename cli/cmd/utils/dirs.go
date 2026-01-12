@@ -6,7 +6,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
+	"time"
 )
 
 // GetLFDataDir returns the directory to store LlamaFarm data.
@@ -153,4 +156,76 @@ func copyDir(src, dst string) error {
 	}
 
 	return nil
+}
+
+// RemoveAllWithRetry removes a directory and all its contents with retry logic.
+// On Windows, file handles may be held briefly after a process terminates,
+// causing "Access is denied" errors. This function retries with delays to
+// handle such cases.
+func RemoveAllWithRetry(path string) error {
+	// Check if path exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil // Nothing to remove
+	}
+
+	// On non-Windows platforms, just use os.RemoveAll directly
+	if runtime.GOOS != "windows" {
+		return os.RemoveAll(path)
+	}
+
+	// Windows-specific: retry with delays to handle locked files
+	// This handles the case where Python processes have just terminated
+	// but Windows hasn't yet released file handles
+	maxRetries := 5
+	retryDelay := 1 * time.Second
+
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			LogDebug(fmt.Sprintf("Retrying directory removal (attempt %d/%d) after delay...", i+1, maxRetries))
+			time.Sleep(retryDelay)
+			// Increase delay for subsequent retries
+			retryDelay = retryDelay * 2
+			if retryDelay > 5*time.Second {
+				retryDelay = 5 * time.Second
+			}
+		}
+
+		lastErr = os.RemoveAll(path)
+		if lastErr == nil {
+			return nil // Success
+		}
+
+		// Check if it's an access denied error (common on Windows with locked files)
+		if !isAccessDeniedError(lastErr) {
+			return lastErr // Different error, don't retry
+		}
+
+		LogDebug(fmt.Sprintf("Directory removal failed (access denied), will retry: %v", lastErr))
+	}
+
+	return fmt.Errorf("failed to remove directory after %d attempts: %w", maxRetries, lastErr)
+}
+
+// isAccessDeniedError checks if an error is an access denied error.
+// On Windows, this typically happens when a file is still locked by another process.
+func isAccessDeniedError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for Windows-specific error codes
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		// Windows ERROR_ACCESS_DENIED = 5, ERROR_SHARING_VIOLATION = 32
+		if errno, ok := pathErr.Err.(syscall.Errno); ok {
+			return errno == 5 || errno == 32
+		}
+	}
+
+	// Also check error message as fallback
+	errStr := err.Error()
+	return errors.Is(err, os.ErrPermission) ||
+		strings.Contains(errStr, "Access is denied") ||
+		strings.Contains(errStr, "being used by another process")
 }

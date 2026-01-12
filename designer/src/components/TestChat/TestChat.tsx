@@ -14,13 +14,27 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
-import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier } from '../../hooks/useMLModels'
+import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument, useCreateEmbeddings, useRerankDocuments } from '../../hooks/useMLModels'
 import { Selector } from '../ui/selector'
+import {
+  DOCUMENT_SCANNING_BACKEND_DISPLAY,
+  DOCUMENT_SCANNING_LANGUAGES,
+  type DocumentScanningBackend,
+  type DocumentScanningResultItem,
+  type DocumentScanningHistoryEntry,
+  type EncoderSubMode,
+  type EncoderHistoryEntry,
+  type RerankResult,
+  COMMON_EMBEDDING_MODELS,
+  COMMON_RERANKING_MODELS,
+  EMBEDDING_SAMPLES,
+  RERANKING_SAMPLES,
+} from '../../types/ml'
 
 export interface TestChatProps {
   // Mode selection
-  modelType: 'inference' | 'anomaly' | 'classifier'
-  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier') => void
+  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder'
+  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder') => void
   // Existing props
   showReferences: boolean
   allowRanking: boolean
@@ -689,6 +703,636 @@ function ClassifierHistoryItem({
   )
 }
 
+// Document Scanning Result Display
+function DocumentScanningResultDisplay({
+  results,
+  error,
+  isLoading,
+  fileName,
+}: {
+  results: DocumentScanningResultItem[] | null
+  error: string | null
+  isLoading: boolean
+  fileName: string
+}) {
+  const [copied, setCopied] = useState(false)
+  const [selectedPage, setSelectedPage] = useState(0)
+
+  const handleCopyText = useCallback(() => {
+    if (!results) return
+    const fullText = results.map(r => r.text).join('\n\n--- Page Break ---\n\n')
+    navigator.clipboard.writeText(fullText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [results])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Extracting text...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">
+            Scanning Error
+          </div>
+          <div className="mt-2 text-sm text-amber-400">
+            {error}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!results || results.length === 0) {
+    return null
+  }
+
+  const currentResult = results[selectedPage] || results[0]
+  const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length
+
+  return (
+    <div className="flex flex-col h-full p-4">
+      {/* Header with file info and actions */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+        <div className="flex items-center gap-3">
+          <FontIcon type="data" className="w-5 h-5 text-sky-400" />
+          <div>
+            <div className="text-sm font-medium">{fileName}</div>
+            <div className="text-xs text-muted-foreground">
+              {results.length} page{results.length > 1 ? 's' : ''} • {(avgConfidence * 100).toFixed(1)}% avg confidence
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={handleCopyText}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-secondary/80 hover:bg-secondary"
+        >
+          <FontIcon type={copied ? 'checkmark-filled' : 'copy'} className="w-4 h-4" />
+          {copied ? 'Copied!' : 'Copy All'}
+        </button>
+      </div>
+
+      {/* Page selector for multi-page documents */}
+      {results.length > 1 && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-muted-foreground">Page:</span>
+          <div className="flex gap-1 flex-wrap">
+            {results.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setSelectedPage(idx)}
+                className={`px-2 py-0.5 text-xs rounded ${
+                  idx === selectedPage
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted hover:bg-muted/80'
+                }`}
+              >
+                {idx + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Text content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-muted-foreground">
+              Page {selectedPage + 1} • {(currentResult.confidence * 100).toFixed(1)}% confidence
+            </span>
+          </div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
+            {currentResult.text || '(No text detected)'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Helper to validate scan files
+function isValidScanFile(file: File): boolean {
+  const validExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif']
+  const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+  return validExtensions.includes(ext)
+}
+
+// Document Scanning Container with always-active drop zone
+function DocumentScanningContainer({
+  onFileSelect,
+  disabled,
+  children,
+  onInputRefReady,
+}: {
+  onFileSelect: (file: File) => void
+  disabled: boolean
+  children: React.ReactNode
+  /** Callback to expose the file input trigger function to parent */
+  onInputRefReady?: (triggerBrowse: () => void) => void
+}) {
+  const [isDragging, setIsDragging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Expose browse trigger to parent on mount
+  useEffect(() => {
+    if (onInputRefReady) {
+      onInputRefReady(() => inputRef.current?.click())
+    }
+  }, [onInputRefReady])
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (!disabled) setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    // Only set to false if leaving the container entirely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (disabled) return
+
+    const file = e.dataTransfer.files[0]
+    if (file && isValidScanFile(file)) {
+      onFileSelect(file)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && isValidScanFile(file)) {
+      onFileSelect(file)
+    }
+    // Reset input so same file can be selected again
+    e.target.value = ''
+  }
+
+  return (
+    <div
+      className="relative flex-1 overflow-y-auto flex flex-col"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Hidden file input for click-to-browse */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tiff,.tif"
+        onChange={handleFileChange}
+        className="hidden"
+        disabled={disabled}
+      />
+
+      {/* Main content (results, loading, or empty state) */}
+      {children}
+
+      {/* Drop overlay - appears when dragging */}
+      {isDragging && !disabled && (
+        <div className="absolute inset-0 z-10 bg-background/90 backdrop-blur-sm flex items-center justify-center">
+          <div className="rounded-xl border-2 border-dashed border-primary bg-primary/10 p-8 text-center">
+            <FontIcon type="upload" className="w-12 h-12 text-primary mx-auto mb-3" />
+            <div className="text-sm font-medium text-foreground">Drop file to scan</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              PDF, PNG, JPG, GIF, WebP, BMP, TIFF
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Document Scanning Empty State (shown when no file selected)
+function DocumentScanningEmptyState({
+  onBrowseClick,
+  disabled,
+}: {
+  onBrowseClick: () => void
+  disabled: boolean
+}) {
+  return (
+    <div className="flex-1 p-4 flex items-center justify-center">
+      <div
+        onClick={() => !disabled && onBrowseClick()}
+        className={`
+          w-full max-w-md rounded-xl border-2 border-dashed transition-colors cursor-pointer
+          flex flex-col items-center justify-center gap-3 p-8
+          border-border hover:border-primary/50 hover:bg-muted/20
+          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+        `}
+      >
+        <FontIcon type="upload" className="w-10 h-10 text-muted-foreground" />
+        <div className="text-center">
+          <div className="text-sm font-medium">Drop file here or click to browse</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Supports PDF, PNG, JPG, GIF, WebP, BMP, TIFF
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Sidebar history item for document scanning
+function DocumentScanningHistoryItem({
+  item,
+  onSelect,
+}: {
+  item: DocumentScanningHistoryEntry
+  onSelect: () => void
+}) {
+  const timeStr = item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const isError = !!item.error
+
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full text-left px-2 py-1.5 rounded-md border border-border/50 hover:bg-muted/40 hover:border-border transition-colors"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FontIcon type="data" className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-xs font-medium truncate max-w-[100px]">{item.fileName}</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+      </div>
+      <div className="flex items-center gap-2 mt-1">
+        <Badge className={`text-[10px] px-1.5 py-0 ${
+          isError
+            ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+            : 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+        }`}>
+          {isError ? 'Error' : `${item.pageCount} pg`}
+        </Badge>
+        {!isError && (
+          <span className="text-[10px] text-muted-foreground">
+            {(item.avgConfidence * 100).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      <div className="text-[10px] text-muted-foreground truncate mt-1">
+        {isError ? item.error : item.previewText}
+      </div>
+    </button>
+  )
+}
+
+// Encoder Empty State
+function EncoderEmptyState({ subMode }: { subMode: EncoderSubMode }) {
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/20 border border-sky-500/40">
+          <FontIcon type="data" className="w-5 h-5 text-sky-400" />
+        </div>
+        <div className="text-lg font-medium text-foreground">
+          {subMode === 'embedding'
+            ? 'Test Embedding Similarity'
+            : 'Test Document Reranking'}
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          {subMode === 'embedding'
+            ? 'Enter two texts to compare their semantic similarity'
+            : 'Enter a query and documents to see relevance rankings'}
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          {subMode === 'embedding'
+            ? 'Tip: Press Cmd+Enter to compare'
+            : 'Tip: Press Cmd+Enter to rank'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Embedding Similarity Result Display
+function EmbeddingSimilarityDisplay({
+  result,
+  error,
+  isLoading,
+  onCompareAnother,
+}: {
+  result: {
+    texts: string[]
+    similarity: number
+  } | null
+  error: string | null
+  isLoading: boolean
+  onCompareAnother: () => void
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Comparing texts...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">Embedding Error</div>
+          <div className="mt-2 text-sm text-amber-400">{error}</div>
+          <button
+            onClick={onCompareAnother}
+            className="mt-4 px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result) return null
+
+  const { texts, similarity } = result
+
+  // Get similarity label and color
+  const getSimilarityLabel = (score: number) => {
+    if (score >= 0.9) return { label: 'Very High Similarity', color: 'text-green-500' }
+    if (score >= 0.7) return { label: 'High Similarity', color: 'text-green-400' }
+    if (score >= 0.5) return { label: 'Moderate Similarity', color: 'text-yellow-500' }
+    if (score >= 0.3) return { label: 'Low Similarity', color: 'text-orange-500' }
+    return { label: 'Very Low Similarity', color: 'text-red-500' }
+  }
+
+  const { label, color } = getSimilarityLabel(similarity)
+
+  // Get progress bar color
+  const getProgressColor = (score: number) => {
+    if (score >= 0.7) return 'bg-green-500'
+    if (score >= 0.5) return 'bg-yellow-500'
+    if (score >= 0.3) return 'bg-orange-500'
+    return 'bg-red-500'
+  }
+
+  return (
+    <div className="flex flex-col items-center p-6 space-y-6">
+      {/* Score display */}
+      <div className="text-center">
+        <div className="text-5xl font-bold tabular-nums">{similarity.toFixed(3)}</div>
+        <div className={`text-lg font-medium mt-1 ${color}`}>{label}</div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="w-full max-w-md">
+        <div className="w-full bg-muted rounded-full h-3">
+          <div
+            className={`${getProgressColor(similarity)} h-full rounded-full transition-all`}
+            style={{ width: `${similarity * 100}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+          <span>0.0</span>
+          <span>1.0</span>
+        </div>
+      </div>
+
+      {/* Text previews */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+        <div className="rounded-lg border border-border bg-card/50 p-3">
+          <div className="text-xs font-medium text-muted-foreground mb-1">Text A</div>
+          <div className="text-sm">{texts[0].length > 100 ? texts[0].slice(0, 100) + '...' : texts[0]}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-card/50 p-3">
+          <div className="text-xs font-medium text-muted-foreground mb-1">Text B</div>
+          <div className="text-sm">{texts[1].length > 100 ? texts[1].slice(0, 100) + '...' : texts[1]}</div>
+        </div>
+      </div>
+
+      {/* Compare another button */}
+      <button
+        onClick={onCompareAnother}
+        className="px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+      >
+        Compare Another
+      </button>
+    </div>
+  )
+}
+
+// Rerank Result Display
+function RerankResultDisplay({
+  result,
+  error,
+  isLoading,
+  query,
+  onRankAgain,
+}: {
+  result: RerankResult[] | null
+  error: string | null
+  isLoading: boolean
+  query: string
+  onRankAgain: () => void
+}) {
+  const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set())
+
+  const toggleExpand = (index: number) => {
+    setExpandedDocs(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="text-center px-6 py-10">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="mt-3 text-sm text-muted-foreground">
+            Ranking documents...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center w-full pt-4 pb-4">
+        <div className="text-center px-6 py-10 rounded-xl border border-amber-500/30 bg-amber-500/10">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 border border-amber-500/30">
+            <FontIcon type="alert-triangle" className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-lg font-medium text-foreground">Reranking Error</div>
+          <div className="mt-2 text-sm text-amber-400">{error}</div>
+          <button
+            onClick={onRankAgain}
+            className="mt-4 px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result || result.length === 0) return null
+
+  // Find max score for progress bar scaling
+  const maxScore = Math.max(...result.map(r => r.relevance_score), 0.01)
+
+  // Get progress bar color based on relative rank
+  const getProgressColor = (rank: number, total: number) => {
+    const position = rank / (total - 1 || 1)
+    if (position <= 0.33) return 'bg-green-500'
+    if (position <= 0.66) return 'bg-yellow-500'
+    return 'bg-orange-500'
+  }
+
+  return (
+    <div className="flex flex-col p-4 space-y-4">
+      {/* Query display */}
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <div className="text-xs font-medium text-primary mb-1">Query:</div>
+        <div className="text-sm">{query}</div>
+      </div>
+
+      {/* Ranked results */}
+      <div className="text-sm font-medium">Ranked by Relevance:</div>
+      <div className="space-y-2">
+        {result.map((item, rank) => {
+          const docText = item.document || ''
+          const isLong = docText.length > 150
+          const isExpanded = expandedDocs.has(item.index)
+          const displayText = isLong && !isExpanded ? docText.slice(0, 150) + '...' : docText
+
+          return (
+            <div
+              key={item.index}
+              className="rounded-lg border border-border p-3"
+            >
+              <div className="flex items-start gap-3">
+                {/* Rank badge */}
+                <div className={`
+                  flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+                  ${rank === 0 ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}
+                `}>
+                  #{rank + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {/* Relevance score with progress bar */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-medium tabular-nums w-12">
+                      {item.relevance_score.toFixed(2)}
+                    </span>
+                    <div className="flex-1 bg-muted rounded-full h-2">
+                      <div
+                        className={`${getProgressColor(rank, result.length)} h-full rounded-full transition-all`}
+                        style={{ width: `${(item.relevance_score / maxScore) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  {/* Document text */}
+                  <div className="text-sm">{displayText}</div>
+                  {isLong && (
+                    <button
+                      onClick={() => toggleExpand(item.index)}
+                      className="text-xs text-primary hover:underline mt-1"
+                    >
+                      {isExpanded ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
+                  {/* Original position */}
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Originally: Document {item.index + 1}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Rank again button */}
+      <div className="flex justify-center pt-2">
+        <button
+          onClick={onRankAgain}
+          className="px-4 py-2 rounded-lg border border-input bg-background hover:bg-accent text-sm"
+        >
+          Rank Again
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Encoder History Item
+function EncoderHistoryItem({
+  item,
+  onRerun,
+}: {
+  item: EncoderHistoryEntry
+  onRerun: () => void
+}) {
+  const timeStr = item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const isError = !!item.error
+
+  return (
+    <button
+      onClick={onRerun}
+      className="w-full text-left px-2 py-1.5 rounded-md border border-border/50 hover:bg-muted/40 hover:border-border transition-colors"
+    >
+      <div className="flex items-center justify-between">
+        <Badge
+          className={`text-[10px] px-1.5 py-0 ${
+            isError
+              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+              : item.mode === 'embedding'
+                ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
+                : 'bg-violet-500/20 text-violet-400 border-violet-500/40'
+          }`}
+        >
+          {isError ? 'Error' : item.mode === 'embedding' ? 'Embed' : 'Rerank'}
+        </Badge>
+        <span className="text-[10px] text-muted-foreground">{timeStr}</span>
+      </div>
+      <div className="text-[10px] text-muted-foreground truncate mt-1">
+        {item.mode === 'embedding'
+          ? `${item.texts?.length || 0} texts`
+          : item.query?.substring(0, 40)}
+      </div>
+    </button>
+  )
+}
+
 export default function TestChat({
   modelType,
   onModelTypeChange,
@@ -914,6 +1558,158 @@ export default function TestChat({
   }>>([])
   const [showClassifierHistory, setShowClassifierHistory] = useState(true)
   const classifierHistoryScrollRef = useRef<HTMLDivElement>(null)
+
+  // ============================================================================
+  // Document Scanning State & Hooks
+  // ============================================================================
+
+  const scanDocumentMutation = useScanDocument()
+
+  // Document scanning backend selection (persisted)
+  const [selectedScanBackend, setSelectedScanBackend] = useState<DocumentScanningBackend>(() => {
+    if (typeof window === 'undefined') return 'surya'
+    const stored = localStorage.getItem('lf_test_scanBackend')
+    if (stored && ['surya', 'easyocr', 'tesseract'].includes(stored)) {
+      return stored as DocumentScanningBackend
+    }
+    return 'surya'
+  })
+
+  // Document scanning language selection (persisted)
+  const [selectedScanLanguage, setSelectedScanLanguage] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'en'
+    return localStorage.getItem('lf_test_scanLanguage') || 'en'
+  })
+
+  // Persist document scanning settings
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_scanBackend', selectedScanBackend)
+    }
+  }, [selectedScanBackend])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_scanLanguage', selectedScanLanguage)
+    }
+  }, [selectedScanLanguage])
+
+  // Document scanning file state
+  const [scanFile, setScanFile] = useState<File | null>(null)
+
+  // Document scanning results state
+  const [scanResults, setScanResults] = useState<DocumentScanningResultItem[] | null>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
+
+  // Document scanning history
+  const [scanHistory, setScanHistory] = useState<DocumentScanningHistoryEntry[]>([])
+  const [showScanHistory, setShowScanHistory] = useState(true)
+  const scanHistoryScrollRef = useRef<HTMLDivElement>(null)
+  // Ref to trigger file browse from empty state
+  const triggerScanBrowseRef = useRef<(() => void) | null>(null)
+
+  // Track if user has completed a scan before (for first-time message)
+  const [hasScannedBefore, setHasScannedBefore] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('lf_scan_completed') === 'true'
+  })
+
+  // ============================================================================
+  // Encoder State & Hooks (Embeddings & Reranking)
+  // ============================================================================
+
+  const createEmbeddingsMutation = useCreateEmbeddings()
+  const rerankMutation = useRerankDocuments()
+
+  // Encoder sub-mode: embedding or reranking
+  const [encoderSubMode, setEncoderSubMode] = useState<EncoderSubMode>(() => {
+    if (typeof window === 'undefined') return 'embedding'
+    const stored = localStorage.getItem('lf_test_encoderSubMode')
+    return (stored === 'reranking') ? 'reranking' : 'embedding'
+  })
+
+  // Persist encoder sub-mode
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_encoderSubMode', encoderSubMode)
+    }
+  }, [encoderSubMode])
+
+  // Selected embedding model (persisted)
+  // Migrates old short names (e.g., "all-MiniLM-L6-v2") to full HuggingFace paths
+  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<string>(() => {
+    if (typeof window === 'undefined') return COMMON_EMBEDDING_MODELS[0].value
+    const stored = localStorage.getItem('lf_test_embeddingModel')
+    if (!stored) return COMMON_EMBEDDING_MODELS[0].value
+    // Check if stored value is a valid full model path
+    const isValid = COMMON_EMBEDDING_MODELS.some(m => m.value === stored)
+    if (isValid) return stored
+    // Try to find by label (short name) for backwards compatibility
+    const byLabel = COMMON_EMBEDDING_MODELS.find(m => m.label === stored)
+    if (byLabel) {
+      localStorage.setItem('lf_test_embeddingModel', byLabel.value)
+      return byLabel.value
+    }
+    return COMMON_EMBEDDING_MODELS[0].value
+  })
+
+  // Selected reranking model (persisted)
+  // Migrates old short names to full HuggingFace paths
+  const [selectedRerankingModel, setSelectedRerankingModel] = useState<string>(() => {
+    if (typeof window === 'undefined') return COMMON_RERANKING_MODELS[0].value
+    const stored = localStorage.getItem('lf_test_rerankingModel')
+    if (!stored) return COMMON_RERANKING_MODELS[0].value
+    // Check if stored value is a valid full model path
+    const isValid = COMMON_RERANKING_MODELS.some(m => m.value === stored)
+    if (isValid) return stored
+    // Try to find by label (short name) for backwards compatibility
+    const byLabel = COMMON_RERANKING_MODELS.find(m => m.label === stored)
+    if (byLabel) {
+      localStorage.setItem('lf_test_rerankingModel', byLabel.value)
+      return byLabel.value
+    }
+    return COMMON_RERANKING_MODELS[0].value
+  })
+
+  // Persist model selections
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_embeddingModel', selectedEmbeddingModel)
+    }
+  }, [selectedEmbeddingModel])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_rerankingModel', selectedRerankingModel)
+    }
+  }, [selectedRerankingModel])
+
+  // Embedding mode state - two side-by-side inputs
+  const [embeddingTextA, setEmbeddingTextA] = useState<string>('')
+  const [embeddingTextB, setEmbeddingTextB] = useState<string>('')
+  const [embeddingResult, setEmbeddingResult] = useState<{
+    texts: string[]
+    similarity: number
+  } | null>(null)
+  const [embeddingSampleIndex, setEmbeddingSampleIndex] = useState<number>(0)
+
+  // Reranking mode state
+  const [rerankQuery, setRerankQuery] = useState<string>('')
+  const [rerankDocuments, setRerankDocuments] = useState<string[]>(['', '']) // Array of document texts
+  const [rerankResult, setRerankResult] = useState<RerankResult[] | null>(null)
+  const [rerankSampleIndex, setRerankSampleIndex] = useState<number>(0)
+
+  // Shared state
+  const [encoderError, setEncoderError] = useState<string | null>(null)
+
+  // Encoder history
+  const [encoderHistory, setEncoderHistory] = useState<EncoderHistoryEntry[]>([])
+  const [showEncoderHistory, setShowEncoderHistory] = useState(true)
+  const encoderHistoryScrollRef = useRef<HTMLDivElement>(null)
+  const rerankDocumentsScrollRef = useRef<HTMLDivElement>(null)
+
+  // Reranking right panel tab state
+  const [rerankRightPanelTab, setRerankRightPanelTab] = useState<'inputs' | 'history'>('inputs')
 
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
@@ -2125,6 +2921,210 @@ export default function TestChat({
     setLastClassifierInput('')
   }, [])
 
+  // ============================================================================
+  // Document Scanning Handlers
+  // ============================================================================
+
+  // Auto-scan when file is selected
+  const handleScanFileSelect = useCallback(async (file: File) => {
+    setScanFile(file)
+    setScanResults(null)
+    setScanError(null)
+
+    // Automatically start scanning
+    try {
+      const result = await scanDocumentMutation.mutateAsync({
+        file,
+        model: selectedScanBackend,
+        languages: selectedScanLanguage,
+        returnBoxes: false,
+      })
+
+      if (result.data) {
+        setScanResults(result.data)
+
+        // Mark that user has completed a scan (for first-time message)
+        if (!hasScannedBefore) {
+          setHasScannedBefore(true)
+          localStorage.setItem('lf_scan_completed', 'true')
+        }
+
+        // Add to history
+        const avgConfidence = result.data.reduce((sum, r) => sum + r.confidence, 0) / result.data.length
+        const previewText = result.data[0]?.text?.substring(0, 100) || ''
+
+        setScanHistory(prev => [{
+          id: `scan-${Date.now()}`,
+          timestamp: new Date(),
+          fileName: file.name,
+          pageCount: result.data.length,
+          avgConfidence,
+          previewText,
+          backend: selectedScanBackend,
+          results: result.data,
+        }, ...prev].slice(0, 50))
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Document scanning failed'
+      setScanError(errorMsg)
+
+      // Add error to history
+      setScanHistory(prev => [{
+        id: `scan-${Date.now()}`,
+        timestamp: new Date(),
+        fileName: file.name,
+        pageCount: 0,
+        avgConfidence: 0,
+        previewText: '',
+        backend: selectedScanBackend,
+        results: [],
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
+    }
+  }, [selectedScanBackend, selectedScanLanguage, scanDocumentMutation, hasScannedBefore])
+
+  const clearScanResults = useCallback(() => {
+    setScanResults(null)
+    setScanError(null)
+    setScanFile(null)
+  }, [])
+
+  const handleScanHistorySelect = useCallback((historyItem: DocumentScanningHistoryEntry) => {
+    // Restore results from history
+    setScanResults(historyItem.results)
+    setScanError(historyItem.error || null)
+  }, [])
+
+  // ============================================================================
+  // Encoder Handlers
+  // ============================================================================
+
+  // Calculate cosine similarity between two vectors
+  const cosineSimilarity = useCallback((a: number[], b: number[]): number => {
+    const dot = a.reduce((sum, val, i) => sum + val * b[i], 0)
+    const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0))
+    const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0))
+    return normA && normB ? dot / (normA * normB) : 0
+  }, [])
+
+  // Handle embedding similarity calculation
+  const handleEmbedding = useCallback(async () => {
+    const textA = embeddingTextA.trim()
+    const textB = embeddingTextB.trim()
+
+    if (!textA || !textB) {
+      setEncoderError('Enter text in both fields to compare')
+      return
+    }
+
+    const texts = [textA, textB]
+    setEncoderError(null)
+    setEmbeddingResult(null)
+
+    try {
+      const response = await createEmbeddingsMutation.mutateAsync({
+        model: selectedEmbeddingModel,
+        input: texts,
+      })
+
+      // Extract embeddings
+      const embeddings = response.data.map(d => d.embedding)
+
+      // Calculate similarity between the two texts
+      const similarity = cosineSimilarity(embeddings[0], embeddings[1])
+
+      setEmbeddingResult({ texts, similarity })
+
+      // Add to history
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'embedding' as const,
+        modelName: selectedEmbeddingModel,
+        texts,
+        similarity,
+      }, ...prev].slice(0, 50))
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Embedding failed'
+      setEncoderError(errorMsg)
+
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'embedding' as const,
+        modelName: selectedEmbeddingModel,
+        texts,
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
+    }
+  }, [selectedEmbeddingModel, embeddingTextA, embeddingTextB, createEmbeddingsMutation, cosineSimilarity])
+
+  // Handle document reranking
+  const handleRerank = useCallback(async () => {
+    const query = rerankQuery.trim()
+    const documents = rerankDocuments.map(d => d.trim()).filter(d => d)
+
+    if (!query) {
+      setEncoderError('Enter a query')
+      return
+    }
+    if (documents.length < 2) {
+      setEncoderError('Enter at least 2 documents to rerank')
+      return
+    }
+
+    setEncoderError(null)
+    setRerankResult(null)
+
+    try {
+      const response = await rerankMutation.mutateAsync({
+        model: selectedRerankingModel,
+        query,
+        documents,
+        return_documents: true,
+      })
+
+      setRerankResult(response.data)
+
+      // Add to history
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'reranking' as const,
+        modelName: selectedRerankingModel,
+        query,
+        documents,
+        results: response.data,
+      }, ...prev].slice(0, 50))
+
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Reranking failed'
+      setEncoderError(errorMsg)
+
+      setEncoderHistory(prev => [{
+        id: `encoder-${Date.now()}`,
+        timestamp: new Date(),
+        mode: 'reranking' as const,
+        modelName: selectedRerankingModel,
+        query,
+        documents,
+        error: errorMsg,
+      }, ...prev].slice(0, 50))
+    }
+  }, [selectedRerankingModel, rerankQuery, rerankDocuments, rerankMutation])
+
+  // Clear encoder results
+  const clearEncoderResults = useCallback(() => {
+    setEmbeddingResult(null)
+    setRerankResult(null)
+    setEncoderError(null)
+    setEmbeddingTextA('')
+    setEmbeddingTextB('')
+    setRerankQuery('')
+    setRerankDocuments(['', '']) // Reset to 2 empty documents
+  }, [])
+
   return (
     <div className={containerClasses}>
       {/* Header row actions */}
@@ -2164,6 +3164,12 @@ export default function TestChat({
               } else if (modelType === 'classifier') {
                 // Classifier mode: only clear results, NOT mode selection or model dropdown
                 clearClassifierResults()
+              } else if (modelType === 'document_scanning') {
+                // Document scanning mode: clear results and file
+                clearScanResults()
+              } else if (modelType === 'encoder') {
+                // Encoder mode: clear results
+                clearEncoderResults()
               }
             }}
             disabled={
@@ -2171,7 +3177,11 @@ export default function TestChat({
                 ? (isClearing || !hasMessages)
                 : modelType === 'anomaly'
                   ? (!anomalyResult && !anomalyError)
-                  : (!classifierResult && !classifierError)
+                  : modelType === 'classifier'
+                    ? (!classifierResult && !classifierError)
+                    : modelType === 'document_scanning'
+                      ? (!scanResults && !scanError && !scanFile)
+                      : (!embeddingResult && !rerankResult && !encoderError)
             }
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -2187,8 +3197,10 @@ export default function TestChat({
               { value: 'inference', label: 'Text Generation' },
               { value: 'anomaly', label: 'Anomaly Detection' },
               { value: 'classifier', label: 'Classifier' },
+              { value: 'document_scanning', label: 'Document Scanning' },
+              { value: 'encoder', label: 'Encoder' },
             ]}
-            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier')}
+            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder')}
             label="Model Type"
             className="w-[200px]"
           />
@@ -2293,6 +3305,113 @@ export default function TestChat({
               )}
             </>
           )}
+
+          {/* Document Scanning-specific selectors */}
+          {modelType === 'document_scanning' && (
+            <>
+              <Selector
+                value={selectedScanBackend}
+                options={Object.entries(DOCUMENT_SCANNING_BACKEND_DISPLAY).map(([value, { label, description }]) => ({
+                  value,
+                  label,
+                  description,
+                }))}
+                onChange={(v) => setSelectedScanBackend(v as DocumentScanningBackend)}
+                label="Backend"
+                className="min-w-[140px]"
+              />
+              <Selector
+                value={selectedScanLanguage}
+                options={DOCUMENT_SCANNING_LANGUAGES.map(lang => ({
+                  value: lang.code,
+                  label: lang.label,
+                }))}
+                onChange={setSelectedScanLanguage}
+                label="Language"
+                className="min-w-[100px]"
+              />
+            </>
+          )}
+
+          {/* Encoder-specific selectors */}
+          {modelType === 'encoder' && (
+            <>
+              {/* Sub-mode toggle: Embedding vs Reranking */}
+              <Selector
+                value={encoderSubMode}
+                options={[
+                  { value: 'embedding', label: 'Embedding Similarity' },
+                  { value: 'reranking', label: 'Document Reranking' },
+                ]}
+                onChange={(v) => setEncoderSubMode(v as EncoderSubMode)}
+                label="Mode"
+                className="min-w-[160px]"
+              />
+
+              {/* Model selector based on sub-mode */}
+              {encoderSubMode === 'embedding' ? (
+                <div className="flex items-end gap-2">
+                  <Selector
+                    value={selectedEmbeddingModel}
+                    options={COMMON_EMBEDDING_MODELS.map(m => ({
+                      value: m.value,
+                      label: m.label,
+                      description: m.description,
+                    }))}
+                    onChange={setSelectedEmbeddingModel}
+                    disabled={createEmbeddingsMutation.isPending}
+                    label="Embedding Model"
+                    className="min-w-[180px]"
+                  />
+                  <button
+                    onClick={() => {
+                      const sample = EMBEDDING_SAMPLES[embeddingSampleIndex]
+                      setEmbeddingTextA(sample.textA)
+                      setEmbeddingTextB(sample.textB)
+                      setEmbeddingResult(null)
+                      setEncoderError(null)
+                      setEmbeddingSampleIndex((embeddingSampleIndex + 1) % EMBEDDING_SAMPLES.length)
+                    }}
+                    disabled={createEmbeddingsMutation.isPending}
+                    className="h-9 text-xs px-3 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    title={`Sample ${embeddingSampleIndex + 1}/${EMBEDDING_SAMPLES.length}`}
+                  >
+                    Try Sample
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-end gap-2">
+                  <Selector
+                    value={selectedRerankingModel}
+                    options={COMMON_RERANKING_MODELS.map(m => ({
+                      value: m.value,
+                      label: m.label,
+                      description: m.description,
+                    }))}
+                    onChange={setSelectedRerankingModel}
+                    disabled={rerankMutation.isPending}
+                    label="Reranking Model"
+                    className="min-w-[180px]"
+                  />
+                  <button
+                    onClick={() => {
+                      const sample = RERANKING_SAMPLES[rerankSampleIndex]
+                      setRerankQuery(sample.query)
+                      setRerankDocuments(sample.documents)
+                      setRerankResult(null)
+                      setEncoderError(null)
+                      setRerankSampleIndex((rerankSampleIndex + 1) % RERANKING_SAMPLES.length)
+                    }}
+                    disabled={rerankMutation.isPending}
+                    className="h-9 text-xs px-3 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    title={`Sample ${rerankSampleIndex + 1}/${RERANKING_SAMPLES.length}`}
+                  >
+                    Try Sample
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -2392,7 +3511,7 @@ export default function TestChat({
 
             {/* History sidebar - right side, collapsible */}
             {anomalyHistory.length > 0 && (
-              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showAnomalyHistory ? 'w-[40%]' : 'w-8'}`}>
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showAnomalyHistory ? 'w-[25%]' : 'w-8'}`}>
                 {showAnomalyHistory ? (
                   <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
@@ -2443,7 +3562,7 @@ export default function TestChat({
               </div>
             )}
           </div>
-        ) : (
+        ) : modelType === 'classifier' ? (
           /* Classifier: Result display with optional history sidebar */
           <div className="absolute inset-0 flex overflow-hidden">
             {/* Main content area */}
@@ -2470,7 +3589,7 @@ export default function TestChat({
 
             {/* History sidebar - right side, collapsible */}
             {classifierHistory.length > 0 && (
-              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showClassifierHistory ? 'w-[40%]' : 'w-8'}`}>
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showClassifierHistory ? 'w-[25%]' : 'w-8'}`}>
                 {showClassifierHistory ? (
                   <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
@@ -2521,10 +3640,374 @@ export default function TestChat({
               </div>
             )}
           </div>
+        ) : modelType === 'document_scanning' ? (
+          /* Document Scanning: File upload and result display with optional history sidebar */
+          <div className="absolute inset-0 flex overflow-hidden">
+            {/* Main content area - always accepts file drops */}
+            <DocumentScanningContainer
+              onFileSelect={handleScanFileSelect}
+              disabled={scanDocumentMutation.isPending}
+              onInputRefReady={(trigger) => { triggerScanBrowseRef.current = trigger }}
+            >
+              {scanResults || scanError || scanDocumentMutation.isPending ? (
+                <DocumentScanningResultDisplay
+                  results={scanResults}
+                  error={scanError}
+                  isLoading={scanDocumentMutation.isPending}
+                  fileName={scanFile?.name || ''}
+                />
+              ) : (
+                <DocumentScanningEmptyState
+                  onBrowseClick={() => triggerScanBrowseRef.current?.()}
+                  disabled={scanDocumentMutation.isPending}
+                />
+              )}
+            </DocumentScanningContainer>
+
+            {/* History sidebar - right side, collapsible */}
+            {scanHistory.length > 0 && (
+              <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showScanHistory ? 'w-[25%]' : 'w-8'}`}>
+                {showScanHistory ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                        History
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setScanHistory([])}
+                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Clear history"
+                        >
+                          <FontIcon type="trashcan" className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setShowScanHistory(false)}
+                          className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                          title="Close history"
+                        >
+                          <FontIcon type="close" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      ref={scanHistoryScrollRef}
+                      className="flex-1 overflow-y-auto p-2 space-y-2"
+                    >
+                      {scanHistory.map(item => (
+                        <DocumentScanningHistoryItem
+                          key={item.id}
+                          item={item}
+                          onSelect={() => handleScanHistorySelect(item)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full items-center pt-2">
+                    <button
+                      onClick={() => setShowScanHistory(true)}
+                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
+                      title="Show history"
+                    >
+                      <FontIcon type="recently-viewed" className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Encoder: Embedding similarity or Reranking */
+          <div className="absolute inset-0 flex overflow-hidden">
+            {encoderSubMode === 'embedding' ? (
+              /* Embedding mode - original layout */
+              <>
+                {/* Main content area */}
+                <div className="flex-1 overflow-y-auto p-3 md:p-4">
+                  {embeddingResult || encoderError || createEmbeddingsMutation.isPending ? (
+                    <EmbeddingSimilarityDisplay
+                      result={embeddingResult}
+                      error={encoderError}
+                      isLoading={createEmbeddingsMutation.isPending}
+                      onCompareAnother={() => {
+                        setEmbeddingResult(null)
+                        setEncoderError(null)
+                        setEmbeddingTextA('')
+                        setEmbeddingTextB('')
+                      }}
+                    />
+                  ) : (
+                    <EncoderEmptyState subMode="embedding" />
+                  )}
+                </div>
+
+                {/* History sidebar for embedding */}
+                {encoderHistory.filter(h => h.mode === 'embedding').length > 0 && (
+                  <div className={`flex-shrink-0 border-l border-border bg-muted/10 transition-all ${showEncoderHistory ? 'w-[25%]' : 'w-8'}`}>
+                    {showEncoderHistory ? (
+                      <div className="flex flex-col h-full">
+                        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                            History
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setEncoderHistory(prev => prev.filter(h => h.mode !== 'embedding'))}
+                              className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                              title="Clear history"
+                            >
+                              <FontIcon type="trashcan" className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setShowEncoderHistory(false)}
+                              className="p-0.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+                              title="Close history"
+                            >
+                              <FontIcon type="close" className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div
+                          ref={encoderHistoryScrollRef}
+                          className="flex-1 overflow-y-auto p-2 space-y-2"
+                        >
+                          {encoderHistory.filter(h => h.mode === 'embedding').map(item => (
+                            <EncoderHistoryItem
+                              key={item.id}
+                              item={item}
+                              onRerun={() => {
+                                setEmbeddingTextA(item.texts?.[0] || '')
+                                setEmbeddingTextB(item.texts?.[1] || '')
+                                setEmbeddingResult(null)
+                                setEncoderError(null)
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col h-full items-center pt-2">
+                        <button
+                          onClick={() => setShowEncoderHistory(true)}
+                          className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded"
+                          title="Show history"
+                        >
+                          <FontIcon type="recently-viewed" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Reranking mode - split layout with inputs on right */
+              <>
+                {/* Left panel: Empty state / Results */}
+                <div className="flex-1 overflow-y-auto p-3 md:p-4">
+                  {rerankResult || encoderError || rerankMutation.isPending ? (
+                    <RerankResultDisplay
+                      result={rerankResult}
+                      error={encoderError}
+                      isLoading={rerankMutation.isPending}
+                      query={rerankQuery}
+                      onRankAgain={() => {
+                        setRerankResult(null)
+                        setEncoderError(null)
+                        setRerankRightPanelTab('inputs')
+                      }}
+                    />
+                  ) : (
+                    <EncoderEmptyState subMode="reranking" />
+                  )}
+                </div>
+
+                {/* Right panel: Inputs with History tab */}
+                <div className="w-1/2 border-l border-border bg-muted/5 flex flex-col">
+                  {/* Tabs */}
+                  <div className="flex border-b border-border">
+                    <button
+                      onClick={() => setRerankRightPanelTab('inputs')}
+                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                        rerankRightPanelTab === 'inputs'
+                          ? 'text-primary border-b-2 border-primary bg-background'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Inputs
+                    </button>
+                    <button
+                      onClick={() => encoderHistory.filter(h => h.mode === 'reranking').length > 0 && setRerankRightPanelTab('history')}
+                      disabled={encoderHistory.filter(h => h.mode === 'reranking').length === 0}
+                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                        rerankRightPanelTab === 'history'
+                          ? 'text-primary border-b-2 border-primary bg-background'
+                          : encoderHistory.filter(h => h.mode === 'reranking').length === 0
+                            ? 'text-muted-foreground/50 cursor-not-allowed'
+                            : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      History {encoderHistory.filter(h => h.mode === 'reranking').length > 0 && `(${encoderHistory.filter(h => h.mode === 'reranking').length})`}
+                    </button>
+                  </div>
+
+                  {/* Tab content */}
+                  <div className="flex-1 flex flex-col min-h-0">
+                    {rerankRightPanelTab === 'inputs' ? (
+                      /* Inputs tab */
+                      <div className="flex-1 flex flex-col min-h-0">
+                        {/* Scrollable content area */}
+                        <div ref={rerankDocumentsScrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+                          {encoderError && (
+                            <div className="text-xs text-destructive">{encoderError}</div>
+                          )}
+
+                          {/* Query section */}
+                          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                            <label className="text-xs font-medium text-primary mb-1.5 block">Query</label>
+                            <textarea
+                              value={rerankQuery}
+                              onChange={e => setRerankQuery(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                  e.preventDefault()
+                                  handleRerank()
+                                }
+                              }}
+                              disabled={rerankMutation.isPending}
+                              placeholder="Enter the query to rank against..."
+                              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm resize-none"
+                              rows={2}
+                            />
+                          </div>
+
+                          {/* Documents section */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Documents to Rank (minimum 2)
+                              </label>
+                              {rerankDocuments.length > 10 && (
+                                <span className="text-xs text-amber-500">
+                                  Many documents may slow processing
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Document cards */}
+                            <div className="space-y-2">
+                              {rerankDocuments.map((doc, index) => (
+                                <div
+                                  key={index}
+                                  className="rounded-lg border border-border bg-card/50 p-2 flex items-start gap-2"
+                                >
+                                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
+                                    {index + 1}
+                                  </div>
+                                  <textarea
+                                    value={doc}
+                                    onChange={e => {
+                                      const newDocs = [...rerankDocuments]
+                                      newDocs[index] = e.target.value
+                                      setRerankDocuments(newDocs)
+                                    }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                        e.preventDefault()
+                                        handleRerank()
+                                      }
+                                    }}
+                                    disabled={rerankMutation.isPending}
+                                    placeholder={`Document ${index + 1}...`}
+                                    className="flex-1 px-2 py-1 rounded border border-input bg-background text-sm resize-none min-h-[50px]"
+                                    rows={2}
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const newDocs = rerankDocuments.filter((_, i) => i !== index)
+                                      setRerankDocuments(newDocs)
+                                    }}
+                                    disabled={rerankDocuments.length <= 2 || rerankMutation.isPending}
+                                    className="flex-shrink-0 p-1 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                                    title={rerankDocuments.length <= 2 ? 'Minimum 2 documents required' : 'Remove document'}
+                                  >
+                                    <FontIcon type="close" className="w-4 h-4 text-muted-foreground" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Sticky action buttons */}
+                        <div className="flex-shrink-0 p-3 border-t border-border bg-background/95 backdrop-blur-sm">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setRerankDocuments([...rerankDocuments, ''])
+                                // Scroll to bottom after React updates the DOM
+                                setTimeout(() => {
+                                  rerankDocumentsScrollRef.current?.scrollTo({
+                                    top: rerankDocumentsScrollRef.current.scrollHeight,
+                                    behavior: 'smooth'
+                                  })
+                                }, 0)
+                              }}
+                              disabled={rerankMutation.isPending}
+                              className="flex-1 py-2 rounded-lg border border-dashed border-border hover:border-primary hover:bg-primary/5 text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                            >
+                              + Add
+                            </button>
+                            <button
+                              onClick={handleRerank}
+                              disabled={!rerankQuery.trim() || rerankDocuments.filter(d => d.trim()).length < 2 || rerankMutation.isPending}
+                              className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                            >
+                              {rerankMutation.isPending ? 'Ranking...' : 'Rank'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* History tab */
+                      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">
+                            {encoderHistory.filter(h => h.mode === 'reranking').length} items
+                          </span>
+                          <button
+                            onClick={() => setEncoderHistory(prev => prev.filter(h => h.mode !== 'reranking'))}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                        {encoderHistory.filter(h => h.mode === 'reranking').map(item => (
+                          <EncoderHistoryItem
+                            key={item.id}
+                            item={item}
+                            onRerun={() => {
+                              setRerankQuery(item.query || '')
+                              const docs = item.documents || []
+                              setRerankDocuments(docs.length >= 2 ? docs : [...docs, '', ''].slice(0, Math.max(2, docs.length)))
+                              setRerankResult(null)
+                              setEncoderError(null)
+                              setRerankRightPanelTab('inputs')
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Input Area - mode conditional */}
+      {/* Input Area - mode conditional (hidden for encoder/reranking since inputs are in right panel) */}
+      {!(modelType === 'encoder' && encoderSubMode === 'reranking') && (
       <div className={inputContainerClasses}>
         {modelType === 'inference' ? (
           /* Inference: Chat input */
@@ -2602,7 +4085,7 @@ export default function TestChat({
               />
             </div>
           </>
-        ) : (
+        ) : modelType === 'classifier' ? (
           /* Classifier: Text input */
           <>
             {classifierError && (
@@ -2643,8 +4126,114 @@ export default function TestChat({
               />
             </div>
           </>
+        ) : modelType === 'document_scanning' ? (
+          /* Document Scanning: Status info (auto-scans on drop) */
+          <>
+            {scanError && (
+              <div className="text-xs text-destructive mb-2">{scanError}</div>
+            )}
+            <div className="flex items-center gap-3 min-h-[40px]">
+              {scanDocumentMutation.isPending ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    <span>Scanning {scanFile?.name}...</span>
+                  </div>
+                  {!hasScannedBefore && (
+                    <span className="text-xs text-muted-foreground/70">
+                      First scan loads OCR models and may take a minute
+                    </span>
+                  )}
+                </div>
+              ) : scanFile ? (
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <FontIcon type="data" className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm truncate">{scanFile.name}</span>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                    ({(scanFile.size / 1024).toFixed(1)} KB)
+                  </span>
+                  <button
+                    onClick={() => {
+                      setScanFile(null)
+                      setScanResults(null)
+                      setScanError(null)
+                    }}
+                    className="text-muted-foreground hover:text-foreground p-1"
+                    title="Remove file"
+                  >
+                    <FontIcon type="close" className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  Drop an image or PDF above to scan
+                </span>
+              )}
+            </div>
+          </>
+        ) : (
+          /* Encoder: Mode-specific inputs */
+          <>
+            {encoderError && (
+              <div className="text-xs text-destructive mb-2">{encoderError}</div>
+            )}
+            {encoderSubMode === 'embedding' ? (
+              <>
+                {/* Two-column layout for side-by-side text inputs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  {/* Text A Panel */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Text A</label>
+                    <textarea
+                      value={embeddingTextA}
+                      onChange={e => setEmbeddingTextA(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault()
+                          handleEmbedding()
+                        }
+                      }}
+                      disabled={createEmbeddingsMutation.isPending}
+                      placeholder="Paste or type text..."
+                      className={`${textareaClasses} min-h-[100px]`}
+                      aria-label="First text input"
+                    />
+                  </div>
+                  {/* Text B Panel */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Text B</label>
+                    <textarea
+                      value={embeddingTextB}
+                      onChange={e => setEmbeddingTextB(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault()
+                          handleEmbedding()
+                        }
+                      }}
+                      disabled={createEmbeddingsMutation.isPending}
+                      placeholder="Paste or type text..."
+                      className={`${textareaClasses} min-h-[100px]`}
+                      aria-label="Second text input"
+                    />
+                  </div>
+                </div>
+                {/* Centered submit button */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleEmbedding}
+                    disabled={!embeddingTextA.trim() || !embeddingTextB.trim() || createEmbeddingsMutation.isPending}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                  >
+                    {createEmbeddingsMutation.isPending ? 'Comparing...' : 'Compare Similarity'}
+                  </button>
+                </div>
+              </>
+            ) : null /* Reranking inputs are in the right panel above */}
+          </>
         )}
       </div>
+      )}
     </div>
   )
 }

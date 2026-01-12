@@ -384,6 +384,9 @@ func newChatModel(projectInfo *config.ProjectInfo, initialMode SessionMode) chat
 	var currentDatabase string
 	var currentStrategy string
 
+	// Collect startup warnings for display in TUI
+	var startupWarnings []string
+
 	if projectInfo != nil {
 		// Fetch models
 		availableModels = fetchAvailableModels(serverURL, projectInfo.Namespace, projectInfo.Project)
@@ -401,9 +404,17 @@ func newChatModel(projectInfo *config.ProjectInfo, initialMode SessionMode) chat
 		}
 
 		// Fetch databases and retrieval strategies
-		availableDatabases = fetchAvailableDatabases(serverURL, projectInfo.Namespace, projectInfo.Project)
+		var dbWarning string
+		availableDatabases, dbWarning = fetchAvailableDatabases(serverURL, projectInfo.Namespace, projectInfo.Project)
+		if dbWarning != "" {
+			startupWarnings = append(startupWarnings, dbWarning)
+		}
 		// Fetch dataset names for commands menu
-		availableDatasets = fetchAvailableDatasets(serverURL, projectInfo.Namespace, projectInfo.Project)
+		var dsWarning string
+		availableDatasets, dsWarning = fetchAvailableDatasets(serverURL, projectInfo.Namespace, projectInfo.Project)
+		if dsWarning != "" {
+			startupWarnings = append(startupWarnings, dsWarning)
+		}
 		// Load prompts from project config file on disk (best effort)
 		if cfg, err := config.LoadConfig(utils.GetEffectiveCWD()); err == nil && cfg != nil {
 			availablePrompts = cfg.Prompts
@@ -468,6 +479,10 @@ func newChatModel(projectInfo *config.ProjectInfo, initialMode SessionMode) chat
 	}
 	// Add server status to project messages as well
 	projectMessages = append(projectMessages, Message{Role: "client", Content: renderServerStatusProblems(serverHealth)})
+	// Add any startup warnings
+	for _, warning := range startupWarnings {
+		projectMessages = append(projectMessages, Message{Role: "client", Content: fmt.Sprintf("⚠️  %s", warning)})
+	}
 
 	projectCtx := &ModeContext{
 		Mode:              ModeProject,

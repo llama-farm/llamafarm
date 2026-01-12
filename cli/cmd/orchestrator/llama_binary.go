@@ -66,7 +66,7 @@ var WindowsBinarySpec = map[HardwareCapability]BinaryInfo{
 		LibName: "llama.dll",
 	},
 	HardwareCUDA: {
-		URL:     fmt.Sprintf("https://github.com/ggml-org/llama.cpp/releases/download/%s/llama-%s-bin-win-cuda12.4-x64.zip", LlamaCppVersion, LlamaCppVersion),
+		URL:     fmt.Sprintf("https://github.com/ggml-org/llama.cpp/releases/download/%s/llama-%s-bin-win-cuda-12.4-x64.zip", LlamaCppVersion, LlamaCppVersion),
 		SHA256:  "",
 		LibPath: "llama.dll",
 		LibName: "llama.dll",
@@ -450,8 +450,8 @@ func createDependencySymlinks(destDir string) error {
 				continue
 			}
 
-			baseName := name[:soIndex]        // libggml or libggml-base
-			versionPart := name[soIndex+4:]   // 0.0.0
+			baseName := name[:soIndex]      // libggml or libggml-base
+			versionPart := name[soIndex+4:] // 0.0.0
 			versionParts := strings.Split(versionPart, ".")
 			if len(versionParts) < 1 {
 				continue

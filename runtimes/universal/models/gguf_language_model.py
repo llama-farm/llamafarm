@@ -128,17 +128,10 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(f"Using context size: {self.actual_n_ctx}")
 
-        # Configure GPU layers based on device
-        # Note: llama-cpp automatically uses whatever backend it was compiled with
-        # (CUDA, ROCm, Metal, Vulkan, etc.). We just tell it whether to use GPU or CPU.
-        if self.device != "cpu":
-            n_gpu_layers = -1  # Use all layers on GPU (any backend)
-            logger.info(
-                f"Configuring for GPU acceleration on {self.device} (all layers on GPU)"
-            )
-        else:
-            n_gpu_layers = 0  # CPU only
-            logger.info("Configuring for CPU-only inference")
+        # Configure GPU layers for llama.cpp (uses its own GPU detection, not PyTorch's)
+        from utils.device import get_gguf_gpu_layers
+
+        n_gpu_layers = get_gguf_gpu_layers()
 
         # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking
