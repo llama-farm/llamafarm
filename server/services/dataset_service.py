@@ -2,12 +2,13 @@ import contextlib
 import os
 import uuid
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from celery import group  # type: ignore[import-untyped]
 from config.datamodel import Dataset
 from fastapi import UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.errors import DatasetNotFoundError
 from core.celery import app
@@ -17,6 +18,51 @@ from services.data_service import DataService, MetadataFileContent
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
+
+
+class DocumentScanningBackend(str, Enum):
+    """OCR backend options for document scanning"""
+
+    SURYA = "surya"
+    EASYOCR = "easyocr"
+    TESSERACT = "tesseract"
+
+
+class DocumentScanningSettings(BaseModel):
+    """Document scanning (OCR) settings for a dataset"""
+
+    enabled: bool = Field(
+        default=False, description="Whether document scanning is enabled"
+    )
+    backend: DocumentScanningBackend = Field(
+        default=DocumentScanningBackend.SURYA,
+        description="OCR backend to use (surya recommended for best quality)",
+    )
+    language: str = Field(default="en", description="Language code for OCR")
+    parse_by_page: bool = Field(
+        default=True, description="Whether to return separate results per page"
+    )
+
+
+class ScanPageResult(BaseModel):
+    """Result of scanning a single page"""
+
+    index: int = Field(..., description="Page index (0-based)")
+    text: str = Field(..., description="Extracted text content")
+    confidence: float = Field(..., description="OCR confidence score (0-1)")
+
+
+class FileScanResult(BaseModel):
+    """Complete scan result for a file"""
+
+    pages: list[ScanPageResult] = Field(
+        default_factory=list, description="Array of page results"
+    )
+    error: str | None = Field(None, description="Error message if scan failed")
+    scanned_at: str | None = Field(
+        None, description="Timestamp when scan was performed"
+    )
+    backend: str | None = Field(None, description="Backend used for scanning")
 
 
 @dataclass
@@ -587,3 +633,145 @@ class DatasetService:
             message="Dataset ingestion started",
             files=dataset_file_hashes,
         )
+
+    # =========================================================================
+    # Document Scanning Methods
+    # =========================================================================
+
+    @classmethod
+    def get_scan_settings_path(cls, namespace: str, project: str, dataset: str) -> Path:
+        """Get the path to the scan settings file for a dataset"""
+        data_dir = DataService.ensure_data_dir(namespace, project, dataset)
+        return Path(data_dir) / "scan_settings.json"
+
+    @classmethod
+    def get_scans_dir(cls, namespace: str, project: str, dataset: str) -> Path:
+        """Get the path to the scans directory for a dataset"""
+        data_dir = DataService.ensure_data_dir(namespace, project, dataset)
+        scans_dir = Path(data_dir) / "scans"
+        scans_dir.mkdir(exist_ok=True)
+        return scans_dir
+
+    @classmethod
+    def save_scan_settings(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        settings: DocumentScanningSettings,
+    ) -> None:
+        """Save document scanning settings for a dataset"""
+        settings_path = cls.get_scan_settings_path(namespace, project, dataset)
+        with open(settings_path, "w") as f:
+            f.write(settings.model_dump_json(indent=2))
+        logger.info(
+            "Saved scan settings",
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            enabled=settings.enabled,
+        )
+
+    @classmethod
+    def get_scan_settings(
+        cls, namespace: str, project: str, dataset: str
+    ) -> DocumentScanningSettings | None:
+        """Get document scanning settings for a dataset"""
+        settings_path = cls.get_scan_settings_path(namespace, project, dataset)
+        if not settings_path.exists():
+            return None
+        try:
+            with open(settings_path) as f:
+                return DocumentScanningSettings.model_validate_json(f.read())
+        except Exception as e:
+            logger.warning(
+                "Failed to load scan settings",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                error=str(e),
+            )
+            return None
+
+    @classmethod
+    def save_file_scan_result(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file_hash: str,
+        result: FileScanResult,
+    ) -> None:
+        """Save scan result for a file"""
+        scans_dir = cls.get_scans_dir(namespace, project, dataset)
+        scan_path = scans_dir / f"{file_hash}.json"
+        with open(scan_path, "w") as f:
+            f.write(result.model_dump_json(indent=2))
+        logger.info(
+            "Saved file scan result",
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hash=file_hash,
+            pages=len(result.pages),
+        )
+
+    @classmethod
+    def get_file_scan_result(
+        cls, namespace: str, project: str, dataset: str, file_hash: str
+    ) -> FileScanResult | None:
+        """Get scan result for a file"""
+        scans_dir = cls.get_scans_dir(namespace, project, dataset)
+        scan_path = scans_dir / f"{file_hash}.json"
+        if not scan_path.exists():
+            return None
+        try:
+            with open(scan_path) as f:
+                return FileScanResult.model_validate_json(f.read())
+        except Exception as e:
+            logger.warning(
+                "Failed to load file scan result",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                file_hash=file_hash,
+                error=str(e),
+            )
+            return None
+
+    @classmethod
+    def delete_file_scan_result(
+        cls, namespace: str, project: str, dataset: str, file_hash: str
+    ) -> bool:
+        """Delete scan result for a file. Returns True if deleted, False if not found."""
+        scans_dir = cls.get_scans_dir(namespace, project, dataset)
+        scan_path = scans_dir / f"{file_hash}.json"
+        if scan_path.exists():
+            scan_path.unlink()
+            logger.info(
+                "Deleted file scan result",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                file_hash=file_hash,
+            )
+            return True
+        return False
+
+    @classmethod
+    def delete_all_scan_results(cls, namespace: str, project: str, dataset: str) -> int:
+        """Delete all scan results for a dataset. Returns count of deleted files."""
+        scans_dir = cls.get_scans_dir(namespace, project, dataset)
+        deleted = 0
+        for scan_file in scans_dir.glob("*.json"):
+            scan_file.unlink()
+            deleted += 1
+        if deleted > 0:
+            logger.info(
+                "Deleted all scan results",
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                count=deleted,
+            )
+        return deleted

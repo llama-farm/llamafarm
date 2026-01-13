@@ -58,6 +58,12 @@ import {
   clearDatasetTaskId,
 } from '../../utils/datasetStorage'
 import { useTaskStatus, useCancelTask } from '../../hooks/useDatasets'
+import {
+  type DocumentScanningBackend,
+  DOCUMENT_SCANNING_BACKEND_DISPLAY,
+  DOCUMENT_SCANNING_LANGUAGES,
+} from '../../types/ml'
+import { Selector } from '../ui/selector'
 
 // Batch size for uploads to prevent overwhelming the backend
 const UPLOAD_BATCH_SIZE = 3
@@ -556,6 +562,12 @@ const Data = () => {
   ] = useState('')
   const [datasetNameError, setDatasetNameError] = useState<string | null>(null)
 
+  // Document scanning settings for new dataset
+  const [enableDocumentScanning, setEnableDocumentScanning] = useState(false)
+  const [scanBackend, setScanBackend] = useState<DocumentScanningBackend>('surya')
+  const [scanLanguage, setScanLanguage] = useState('en')
+  const [parseByPage, setParseByPage] = useState(false)
+
   // Set default values when dialog opens and options are available
   useEffect(() => {
     if (isCreateOpen && availableOptions) {
@@ -615,6 +627,15 @@ const Data = () => {
         name,
         data_processing_strategy: newDatasetDataProcessingStrategy || 'default',
         database: newDatasetDatabase || 'default',
+        // Include document scanning settings if enabled
+        ...(enableDocumentScanning && {
+          document_scanning: {
+            enabled: true,
+            backend: scanBackend,
+            language: scanLanguage,
+            parse_by_page: parseByPage,
+          },
+        }),
       })
 
       toast({ message: 'Dataset created successfully', variant: 'default' })
@@ -623,13 +644,24 @@ const Data = () => {
       setNewDatasetDatabase('')
       setNewDatasetDataProcessingStrategy('')
       setDatasetNameError(null)
+      // Reset document scanning settings
+      setEnableDocumentScanning(false)
+      setScanBackend('surya')
+      setScanLanguage('en')
+      setParseByPage(false)
 
-      // If we should upload files after creating, use the newly created dataset
+      // Navigate to the newly created dataset
       // Note: In this system, dataset name serves as the unique identifier (ID)
-      if (shouldUploadAfterCreate && response?.dataset?.name) {
+      if (response?.dataset?.name) {
         const datasetId = response.dataset.name
-        const datasetName = response.dataset.name
-        handleDatasetSelect(datasetId, datasetName)
+
+        // If we have pending files, upload them first
+        if (shouldUploadAfterCreate) {
+          handleDatasetSelect(datasetId, datasetId)
+        } else {
+          // Navigate directly to the dataset view for file upload
+          navigate(`/chat/data/${datasetId}`)
+        }
       }
     } catch (error) {
       console.error('Failed to create dataset:', error)
@@ -1421,6 +1453,11 @@ const Data = () => {
                           setDatasetNameError(null)
                           setPendingFiles([])
                           setShouldUploadAfterCreate(false)
+                          // Reset document scanning settings
+                          setEnableDocumentScanning(false)
+                          setScanBackend('surya')
+                          setScanLanguage('en')
+                          setParseByPage(false)
                         }
                       }
                     }}
@@ -1471,48 +1508,110 @@ const Data = () => {
                             </p>
                           )}
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="text-xs text-muted-foreground">
-                            Data Processing Strategy
+                        <Selector
+                          label="Data Processing Strategy"
+                          value={newDatasetDataProcessingStrategy}
+                          onChange={setNewDatasetDataProcessingStrategy}
+                          placeholder="Select a strategy..."
+                          emptyMessage="No strategies available"
+                          options={
+                            availableOptions?.data_processing_strategies?.map(
+                              strategy => ({
+                                value: strategy,
+                                label: strategy,
+                              })
+                            ) || []
+                          }
+                        />
+                        <Selector
+                          label="Database"
+                          value={newDatasetDatabase}
+                          onChange={setNewDatasetDatabase}
+                          placeholder="Select a database..."
+                          emptyMessage="No databases available"
+                          options={
+                            availableOptions?.databases?.map(database => ({
+                              value: database,
+                              label: database,
+                            })) || []
+                          }
+                        />
+
+                        {/* Document Scanning Toggle */}
+                        <div className="pt-2 border-t border-border">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enableDocumentScanning}
+                              onChange={e =>
+                                setEnableDocumentScanning(e.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-input"
+                            />
+                            <span className="text-sm font-medium">
+                              Enable Document Scanning
+                            </span>
                           </label>
-                          <select
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={newDatasetDataProcessingStrategy}
-                            onChange={e =>
-                              setNewDatasetDataProcessingStrategy(
-                                e.target.value
-                              )
-                            }
-                          >
-                            <option value="">Select a strategy...</option>
-                            {availableOptions?.data_processing_strategies?.map(
-                              strategy => (
-                                <option key={strategy} value={strategy}>
-                                  {strategy}
-                                </option>
-                              )
-                            )}
-                          </select>
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="text-xs text-muted-foreground">
-                            Database
-                          </label>
-                          <select
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={newDatasetDatabase}
-                            onChange={e =>
-                              setNewDatasetDatabase(e.target.value)
-                            }
-                          >
-                            <option value="">Select a database...</option>
-                            {availableOptions?.databases?.map(database => (
-                              <option key={database} value={database}>
-                                {database}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+
+                        {/* Document Scanning Settings (shown when enabled) */}
+                        {enableDocumentScanning && (
+                          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+                            <p className="text-xs text-muted-foreground">
+                              Document scanning extracts text from PDFs and images using OCR.
+                              Best for scanned documents, contracts, and forms.
+                              Adds processing time.
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              <span className="font-medium">Supported formats:</span> PDF, PNG, JPG
+                            </p>
+
+                            {/* Backend Selection */}
+                            <Selector
+                              label="OCR Backend"
+                              value={scanBackend}
+                              onChange={value =>
+                                setScanBackend(value as DocumentScanningBackend)
+                              }
+                              options={Object.entries(
+                                DOCUMENT_SCANNING_BACKEND_DISPLAY
+                              ).map(([key, { label, description }]) => ({
+                                value: key,
+                                label,
+                                description,
+                              }))}
+                            />
+
+                            {/* Language Selection */}
+                            <Selector
+                              label="Language"
+                              value={scanLanguage}
+                              onChange={setScanLanguage}
+                              options={DOCUMENT_SCANNING_LANGUAGES.map(
+                                ({ code, label }) => ({
+                                  value: code,
+                                  label,
+                                })
+                              )}
+                            />
+
+                            {/* Parse by Page Checkbox */}
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={parseByPage}
+                                onChange={e => setParseByPage(e.target.checked)}
+                                className="h-4 w-4 rounded border-input"
+                              />
+                              <div>
+                                <span className="text-sm">Parse by page</span>
+                                <p className="text-xs text-muted-foreground">
+                                  Returns separate results per page instead of combining
+                                </p>
+                              </div>
+                            </label>
+                          </div>
+                        )}
                       </div>
                       <DialogFooter>
                         <DialogClose

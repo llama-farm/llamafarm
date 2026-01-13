@@ -49,6 +49,20 @@ export interface DatasetDetails {
 }
 
 /**
+ * Document scanning settings for dataset creation
+ */
+export interface CreateDatasetDocumentScanning {
+  /** Whether document scanning is enabled */
+  enabled: boolean
+  /** OCR backend to use */
+  backend: 'surya' | 'easyocr' | 'tesseract'
+  /** Language code for OCR */
+  language: string
+  /** Whether to parse by page */
+  parse_by_page: boolean
+}
+
+/**
  * Request payload for creating a new dataset
  */
 export interface CreateDatasetRequest {
@@ -58,6 +72,8 @@ export interface CreateDatasetRequest {
   data_processing_strategy: string
   /** Database to use for processing */
   database: string
+  /** Optional document scanning settings */
+  document_scanning?: CreateDatasetDocumentScanning
 }
 
 /**
@@ -307,4 +323,141 @@ export interface ProcessDatasetResponse {
   details: FileProcessingDetail[]
   /** Task ID for async processing */
   task_id?: string | null
+}
+
+// =============================================================================
+// Document Scanning Types for Datasets
+// =============================================================================
+
+import type { DocumentScanningBackend } from './ml'
+
+/**
+ * Document scanning settings for a dataset
+ */
+export interface DatasetScanSettings {
+  /** OCR backend to use */
+  backend: DocumentScanningBackend
+  /** Language code for OCR */
+  language: string
+  /** Whether to parse by page (true) or combine all pages (false) */
+  parse_by_page: boolean
+}
+
+/**
+ * Scan status for a file in a scan-enabled dataset
+ */
+export type FileScanStatus = 'pending' | 'scanning' | 'scanned' | 'failed'
+
+/**
+ * Process status for a file
+ */
+export type FileProcessStatus = 'pending' | 'processing' | 'processed' | 'failed'
+
+/**
+ * Extended file info with scan status (for scan-enabled datasets)
+ */
+export interface DatasetFileWithScan extends DatasetFile {
+  /** Scan status (only present in scan-enabled datasets) */
+  scan_status?: FileScanStatus
+  /** Process status */
+  process_status?: FileProcessStatus
+  /** Scan error message if failed */
+  scan_error?: string
+  /** Process error message if failed */
+  process_error?: string
+}
+
+/**
+ * Result of scanning a single page
+ */
+export interface ScanPageResult {
+  /** Page index (0-based) */
+  index: number
+  /** Extracted text content */
+  text: string
+  /** OCR confidence score (0-1) */
+  confidence: number
+}
+
+/**
+ * Complete scan result for a file
+ */
+export interface FileScanResult {
+  /** Array of page results */
+  pages: ScanPageResult[]
+  /** Error message if scan failed */
+  error?: string
+  /** Timestamp when scan was performed */
+  scanned_at?: string
+  /** Backend used for scanning */
+  backend?: string
+}
+
+/**
+ * Extended dataset with document scanning settings
+ */
+export interface DatasetWithScanning extends Dataset {
+  /** Whether document scanning is enabled for this dataset */
+  document_scanning_enabled?: boolean
+  /** Document scanning settings (only present if enabled) */
+  scan_settings?: DatasetScanSettings
+}
+
+/**
+ * Request payload for creating a dataset with scanning options
+ */
+export interface CreateDatasetWithScanningRequest extends CreateDatasetRequest {
+  /** Enable document scanning for this dataset */
+  document_scanning_enabled?: boolean
+  /** Document scanning settings */
+  scan_settings?: DatasetScanSettings
+}
+
+/**
+ * Helper to check if a file is scannable (PDF or image)
+ */
+export function isScannableFile(mimeType: string): boolean {
+  const scannableMimeTypes = [
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/gif',
+    'image/webp',
+    'image/bmp',
+    'image/tiff',
+  ]
+  return scannableMimeTypes.includes(mimeType.toLowerCase())
+}
+
+/**
+ * Get the combined state of a file in a scan-enabled dataset
+ */
+export type FileState =
+  | 'uploading'
+  | 'pending'
+  | 'scanning'
+  | 'scan_failed'
+  | 'scanned_not_processed'
+  | 'processing'
+  | 'process_failed'
+  | 'ready'
+
+/**
+ * Determine the current state of a file based on scan and process status
+ */
+export function getFileState(
+  file: DatasetFileWithScan,
+  isUploading?: boolean
+): FileState {
+  if (isUploading) return 'uploading'
+  if (file.scan_status === 'scanning') return 'scanning'
+  if (file.scan_status === 'failed') return 'scan_failed'
+  if (file.scan_status === 'scanned' && file.process_status !== 'processed') {
+    return 'scanned_not_processed'
+  }
+  if (file.process_status === 'processing') return 'processing'
+  if (file.process_status === 'failed') return 'process_failed'
+  if (file.process_status === 'processed') return 'ready'
+  return 'pending'
 }
