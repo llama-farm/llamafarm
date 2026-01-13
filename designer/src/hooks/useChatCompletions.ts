@@ -18,7 +18,6 @@ import {
 } from '../api/chatCompletionsService'
 import { ChatRequest, StreamingChatOptions } from '../types/chat'
 import { useActiveProject } from './useActiveProject'
-import { useDevToolsCapture } from './useDevToolsCapture'
 
 /**
  * Query keys for chat completions
@@ -69,11 +68,10 @@ export interface StreamingChatCompletionParams extends ChatCompletionParams {
  */
 export function useChatCompletion() {
   const queryClient = useQueryClient()
-  const devToolsCapture = useDevToolsCapture()
 
   return useMutation<ChatCompletionResult, Error, ChatCompletionParams>({
     mutationFn: async ({ namespace, projectId, request, sessionId }) => {
-      return await sendChatCompletion(namespace, projectId, request, sessionId, devToolsCapture)
+      return await sendChatCompletion(namespace, projectId, request, sessionId)
     },
     onSuccess: (data, variables) => {
       // Invalidate completion queries for this project
@@ -122,7 +120,6 @@ export function useChatCompletion() {
  */
 export function useStreamingChatCompletion() {
   const queryClient = useQueryClient()
-  const devToolsCapture = useDevToolsCapture()
 
   return useMutation<string, Error, StreamingChatCompletionParams>({
     mutationFn: async ({
@@ -137,9 +134,7 @@ export function useStreamingChatCompletion() {
         projectId,
         request,
         sessionId,
-        options,
-        undefined, // activeProject
-        devToolsCapture
+        options
       )
     },
     onSuccess: (sessionId, variables) => {
@@ -185,7 +180,6 @@ export function useStreamingChatCompletion() {
  */
 export function useChatCompletionMessage() {
   const queryClient = useQueryClient()
-  const devToolsCapture = useDevToolsCapture()
 
   return useMutation<
     ChatCompletionResult,
@@ -206,7 +200,7 @@ export function useChatCompletionMessage() {
       options,
     }) => {
       const request = createChatCompletionRequest(message, options)
-      return await sendChatCompletion(namespace, projectId, request, sessionId, devToolsCapture)
+      return await sendChatCompletion(namespace, projectId, request, sessionId)
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({
@@ -254,7 +248,6 @@ export function useChatCompletionMessage() {
 export function useStreamingChatCompletionMessage() {
   const queryClient = useQueryClient()
   const activeProject = useActiveProject()
-  const devToolsCapture = useDevToolsCapture()
 
   return useMutation<
     string,
@@ -301,8 +294,7 @@ export function useStreamingChatCompletionMessage() {
         request,
         sessionId,
         streamingOptions,
-        activeProjectHeader,
-        devToolsCapture
+        activeProjectHeader
       )
     },
     onSuccess: (sessionId, variables) => {

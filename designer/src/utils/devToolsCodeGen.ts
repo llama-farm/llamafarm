@@ -1,19 +1,37 @@
 import type { CapturedRequest } from '../contexts/DevToolsContext'
 
 /**
+ * Escape single quotes for shell strings (used in cURL)
+ */
+function escapeShellSingleQuote(str: string): string {
+  return str.replace(/'/g, "'\\''")
+}
+
+/**
+ * Case-insensitive header lookup
+ */
+function getHeader(headers: Record<string, string>, key: string): string | undefined {
+  const lowerKey = key.toLowerCase()
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === lowerKey) return v
+  }
+  return undefined
+}
+
+/**
  * Generate a cURL command from a captured request
  */
 export function generateCurl(request: CapturedRequest): string {
   const lines: string[] = []
 
-  lines.push(`curl -X ${request.method} '${request.fullUrl}'`)
+  lines.push(`curl -X ${request.method} '${escapeShellSingleQuote(request.fullUrl)}'`)
 
   // Add headers (skip content-type if we're adding -d with JSON)
   const headers = { ...request.headers }
   for (const [key, value] of Object.entries(headers)) {
     // Skip internal headers
     if (key.toLowerCase() === 'content-length') continue
-    lines.push(`  -H '${key}: ${value}'`)
+    lines.push(`  -H '${escapeShellSingleQuote(key)}: ${escapeShellSingleQuote(value)}'`)
   }
 
   // Add body if present
@@ -23,16 +41,24 @@ export function generateCurl(request: CapturedRequest): string {
         ? request.body
         : JSON.stringify(request.body, null, 2)
 
-    // For multipart, show a comment instead
-    if (headers['Content-Type']?.includes('multipart/form-data')) {
+    // For multipart, show a comment instead (case-insensitive check)
+    const contentType = getHeader(headers, 'content-type')
+    if (contentType?.includes('multipart/form-data')) {
       lines.push(`  # Note: multipart/form-data body not shown`)
       lines.push(`  # Use appropriate -F flags for file uploads`)
     } else {
-      lines.push(`  -d '${bodyStr.replace(/'/g, "'\\''")}'`)
+      lines.push(`  -d '${escapeShellSingleQuote(bodyStr)}'`)
     }
   }
 
   return lines.join(' \\\n')
+}
+
+/**
+ * Escape a string for Python double-quoted strings
+ */
+function escapePythonString(str: string): string {
+  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
 /**
@@ -44,26 +70,29 @@ export function generatePython(request: CapturedRequest): string {
   lines.push('import requests')
   lines.push('')
 
-  // Headers
-  const headers = { ...request.headers }
-  // Remove content-length as requests handles it
-  delete headers['content-length']
-  delete headers['Content-Length']
+  // Headers - filter out content-length (case-insensitive)
+  const headers: Record<string, string> = {}
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (key.toLowerCase() !== 'content-length') {
+      headers[key] = value
+    }
+  }
 
   const hasHeaders = Object.keys(headers).length > 0
   if (hasHeaders) {
     lines.push('headers = {')
     for (const [key, value] of Object.entries(headers)) {
-      lines.push(`    "${key}": "${value}",`)
+      lines.push(`    "${escapePythonString(key)}": "${escapePythonString(value)}",`)
     }
     lines.push('}')
     lines.push('')
   }
 
   // Body
+  const contentType = getHeader(headers, 'content-type')
   const hasBody = request.body && request.method !== 'GET'
   if (hasBody) {
-    if (headers['Content-Type']?.includes('multipart/form-data')) {
+    if (contentType?.includes('multipart/form-data')) {
       lines.push('# Note: For file uploads, use the files parameter')
       lines.push('# files = {"file": open("path/to/file", "rb")}')
       lines.push('')
@@ -80,13 +109,13 @@ export function generatePython(request: CapturedRequest): string {
 
   // Request call
   const method = request.method.toLowerCase()
-  const args: string[] = [`"${request.fullUrl}"`]
+  const args: string[] = [`"${escapePythonString(request.fullUrl)}"`]
 
   if (hasHeaders) {
     args.push('headers=headers')
   }
 
-  if (hasBody && !headers['Content-Type']?.includes('multipart/form-data')) {
+  if (hasBody && !contentType?.includes('multipart/form-data')) {
     args.push('json=payload')
   }
 
@@ -101,28 +130,39 @@ export function generatePython(request: CapturedRequest): string {
 }
 
 /**
+ * Escape a string for JavaScript double-quoted strings
+ */
+function escapeJavaScriptString(str: string): string {
+  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+/**
  * Generate JavaScript fetch code from a captured request
  */
 export function generateJavaScript(request: CapturedRequest): string {
   const lines: string[] = []
 
   // Build fetch options
-  const options: Record<string, any> = {
+  const options: Record<string, unknown> = {
     method: request.method,
   }
 
-  // Headers
-  const headers = { ...request.headers }
-  delete headers['content-length']
-  delete headers['Content-Length']
+  // Headers - filter out content-length (case-insensitive)
+  const headers: Record<string, string> = {}
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (key.toLowerCase() !== 'content-length') {
+      headers[key] = value
+    }
+  }
 
   if (Object.keys(headers).length > 0) {
     options.headers = headers
   }
 
   // Body
+  const contentType = getHeader(headers, 'content-type')
   if (request.body && request.method !== 'GET') {
-    if (headers['Content-Type']?.includes('multipart/form-data')) {
+    if (contentType?.includes('multipart/form-data')) {
       lines.push('// Note: For file uploads, use FormData')
       lines.push('// const formData = new FormData();')
       lines.push('// formData.append("file", fileInput.files[0]);')
@@ -133,7 +173,7 @@ export function generateJavaScript(request: CapturedRequest): string {
   }
 
   // Generate the code
-  const hasJsonBody = request.body && request.method !== 'GET' && !headers['Content-Type']?.includes('multipart/form-data')
+  const hasJsonBody = request.body && request.method !== 'GET' && !contentType?.includes('multipart/form-data')
   if (hasJsonBody) {
     // Always use JSON.stringify to ensure valid JS syntax
     const bodyStr = JSON.stringify(request.body, null, 2)
@@ -141,7 +181,8 @@ export function generateJavaScript(request: CapturedRequest): string {
     lines.push('')
   }
 
-  lines.push(`const response = await fetch("${request.fullUrl}", {`)
+  // Use JSON.stringify for the URL to handle any special characters
+  lines.push(`const response = await fetch("${escapeJavaScriptString(request.fullUrl)}", {`)
   lines.push(`  method: "${request.method}",`)
 
   if (options.headers) {
