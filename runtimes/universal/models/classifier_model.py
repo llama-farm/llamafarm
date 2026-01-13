@@ -16,8 +16,14 @@ Designed for:
 Security Notes:
 - Model loading is restricted to a designated safe directory (CLASSIFIER_MODELS_DIR)
 - Path traversal attacks are prevented by validating paths are within the safe directory
+
+Non-Blocking Training:
+- The fit() method uses run_in_executor() to offload CPU-bound SetFit training
+  to a thread pool, preventing blocking of the async event loop
+- This allows health checks and other requests to be served during training
 """
 
+import asyncio
 import logging
 import os
 import time
@@ -222,10 +228,58 @@ class ClassifierModel(BaseModel):
     ) -> ClassifierFitResult:
         """Fit the classifier on labeled training data.
 
+        This method offloads CPU-bound SetFit training to a thread pool to avoid
+        blocking the async event loop. Health checks and other requests
+        can be served during training.
+
         Args:
             texts: List of training texts
             labels: List of corresponding labels
             num_iterations: Number of training iterations (default: 20)
+            batch_size: Training batch size
+
+        Returns:
+            ClassifierFitResult with training statistics
+        """
+        from utils.training_executor import get_training_executor
+
+        # Store unique labels
+        self._labels = sorted(set(labels))
+        logger.info(
+            f"Training classifier with {len(self._labels)} classes: {self._labels}"
+        )
+
+        # Offload CPU-bound training to thread pool
+        loop = asyncio.get_running_loop()
+        executor = get_training_executor()
+
+        fit_result = await loop.run_in_executor(
+            executor,
+            self._fit_sync,
+            texts,
+            labels,
+            num_iterations,
+            batch_size,
+        )
+
+        return fit_result
+
+    def _fit_sync(
+        self,
+        texts: list[str],
+        labels: list[str],
+        num_iterations: int,
+        batch_size: int,
+    ) -> ClassifierFitResult:
+        """Synchronous training logic (runs in thread pool).
+
+        This method contains all the CPU-bound SetFit training code that would
+        otherwise block the async event loop.
+
+        Args:
+            texts: List of training texts
+            labels: List of corresponding labels
+            num_iterations: Number of training iterations
             batch_size: Training batch size
 
         Returns:
@@ -240,12 +294,6 @@ class ClassifierModel(BaseModel):
             ) from e
 
         start_time = time.time()
-
-        # Store unique labels
-        self._labels = sorted(set(labels))
-        logger.info(
-            f"Training classifier with {len(self._labels)} classes: {self._labels}"
-        )
 
         # Create dataset
         train_dataset = Dataset.from_dict({"text": texts, "label": labels})

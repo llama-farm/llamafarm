@@ -10,6 +10,11 @@ from .feature_encoder import (
     register_encoder,
 )
 from .file_utils import save_image_with_metadata
+from .training_executor import (
+    get_training_executor,
+    get_training_executor_stats,
+    shutdown_training_executor,
+)
 
 __all__ = [
     "get_optimal_device",
@@ -20,4 +25,7 @@ __all__ = [
     "FeatureSchema",
     "register_encoder",
     "ENCODER_REGISTRY",
+    "get_training_executor",
+    "get_training_executor_stats",
+    "shutdown_training_executor",
 ]

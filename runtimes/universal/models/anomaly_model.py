@@ -53,11 +53,18 @@ Security Notes:
 - Model loading is restricted to a designated safe directory (ANOMALY_MODELS_DIR)
 - Path traversal attacks are prevented by validating paths are within the safe directory
 - Pickle/joblib deserialization is only performed on trusted files from the safe directory
+
+Non-Blocking Training:
+- The fit() method uses run_in_executor() to offload CPU-bound sklearn/torch
+  training to a thread pool, preventing blocking of the async event loop
+- This allows health checks and other requests to be served during training
 """
 
+import asyncio
 import logging
 import os
 import pickle
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -360,6 +367,10 @@ class AnomalyModel(BaseModel):
     ) -> FitResult:
         """Fit the anomaly detector on normal data.
 
+        This method offloads CPU-bound training to a thread pool to avoid
+        blocking the async event loop. Health checks and other requests
+        can be served during training.
+
         Args:
             data: Training data (assumed to be mostly normal)
             epochs: Training epochs (autoencoder only)
@@ -368,11 +379,9 @@ class AnomalyModel(BaseModel):
         Returns:
             FitResult with training statistics
         """
-        import time
+        from utils.training_executor import get_training_executor
 
-        start_time = time.time()
-
-        # Convert to numpy array
+        # Convert to numpy array (must be done before offloading)
         X = np.array(data) if not isinstance(data, np.ndarray) else data
 
         # Handle 1D input (e.g., single feature time series)
@@ -380,20 +389,54 @@ class AnomalyModel(BaseModel):
         if len(X.shape) == 1:
             X = X.reshape(-1, 1)
 
+        # Offload CPU-bound training to thread pool
+        loop = asyncio.get_running_loop()
+        executor = get_training_executor()
+
+        fit_result = await loop.run_in_executor(
+            executor,
+            self._fit_sync,
+            X,
+            epochs,
+            batch_size,
+        )
+
+        return fit_result
+
+    def _fit_sync(
+        self,
+        X: np.ndarray,
+        epochs: int,
+        batch_size: int,
+    ) -> FitResult:
+        """Synchronous training logic (runs in thread pool).
+
+        This method contains all the CPU-bound training code that would
+        otherwise block the async event loop.
+
+        Args:
+            X: Preprocessed numpy array of training data
+            epochs: Training epochs (autoencoder only)
+            batch_size: Batch size (autoencoder only)
+
+        Returns:
+            FitResult with training statistics
+        """
+        start_time = time.time()
+
         # Fit scaler and transform data
         X_scaled = self._scaler.fit_transform(X)
 
         if self.backend == "autoencoder":
-            await self._fit_autoencoder(X_scaled, epochs, batch_size)
+            self._fit_autoencoder_sync(X_scaled, epochs, batch_size)
         else:
-            # Sklearn models
+            # Sklearn models - this is the blocking call
             self._detector.fit(X_scaled)
 
         self._is_fitted = True
 
-        # Compute and store normalization statistics from training data
-        # These are used during scoring to ensure consistent normalization
-        raw_scores = await self._compute_raw_scores(X_scaled)
+        # Compute raw scores for normalization statistics
+        raw_scores = self._compute_raw_scores_sync(X_scaled)
 
         # Statistics for standardization (sigmoid) method
         self._norm_median = float(np.median(raw_scores))
@@ -432,10 +475,47 @@ class AnomalyModel(BaseModel):
             },
         )
 
-    async def _fit_autoencoder(
+    def _compute_raw_scores_sync(self, X: np.ndarray) -> np.ndarray:
+        """Compute raw anomaly scores synchronously.
+
+        This is the sync version called from _fit_sync in the thread pool.
+        """
+        if self.backend == "autoencoder":
+            return self._autoencoder_scores_sync(X)
+
+        elif self.backend == "isolation_forest":
+            # IsolationForest: negative score = more anomalous
+            return -self._detector.score_samples(X)
+
+        elif self.backend == "one_class_svm":
+            # OneClassSVM: negative distance = more anomalous
+            return -self._detector.decision_function(X)
+
+        elif self.backend == "local_outlier_factor":
+            # LOF: negative score = more anomalous
+            return -self._detector.score_samples(X)
+
+        else:
+            raise ValueError(f"Unsupported backend: {self.backend}")
+
+    def _autoencoder_scores_sync(self, X: np.ndarray) -> np.ndarray:
+        """Compute reconstruction error scores synchronously."""
+        import torch
+
+        X_tensor = torch.FloatTensor(X).to(self.device)
+
+        with torch.no_grad():
+            encoded = self._encoder(X_tensor)
+            decoded = self._decoder(encoded)
+            # MSE per sample
+            reconstruction_error = torch.mean((X_tensor - decoded) ** 2, dim=1)
+
+        return reconstruction_error.cpu().numpy()
+
+    def _fit_autoencoder_sync(
         self, X: np.ndarray, epochs: int, batch_size: int
     ) -> None:
-        """Fit autoencoder model."""
+        """Fit autoencoder model synchronously (runs in thread pool)."""
         import torch
         import torch.nn as nn
         from torch.utils.data import DataLoader, TensorDataset
