@@ -3,6 +3,7 @@ Anomaly detection model wrapper.
 
 Supports multiple backends:
 - autoencoder: Neural network trained on normal data, detects anomalies by reconstruction error
+- vae: Variational Autoencoder with probabilistic latent space, anomaly score = negative ELBO
 - isolation_forest: Tree-based ensemble method, fast and effective
 - one_class_svm: Support vector machine for outlier detection
 - local_outlier_factor: Density-based anomaly detection
@@ -115,7 +116,7 @@ def _validate_model_path(model_path: Path) -> Path:
 
 
 AnomalyBackend = Literal[
-    "autoencoder", "isolation_forest", "one_class_svm", "local_outlier_factor"
+    "autoencoder", "vae", "isolation_forest", "one_class_svm", "local_outlier_factor"
 ]
 
 ScalerType = Literal["standard", "robust"]
@@ -201,6 +202,9 @@ class AnomalyModel(BaseModel):
         threshold: float | None = None,
         normalization: NormalizationMethod = "standardization",
         scaler_type: ScalerType = "robust",
+        validation_split: float = 0.1,
+        patience: int = 10,
+        min_delta: float = 1e-4,
     ):
         """Initialize anomaly detection model.
 
@@ -221,6 +225,12 @@ class AnomalyModel(BaseModel):
             scaler_type: Input data scaler type. See ScalerType docs.
                 - "robust": RobustScaler using median/IQR (default, recommended)
                 - "standard": StandardScaler using mean/std
+            validation_split: Fraction of training data for validation (autoencoder/VAE only).
+                Used for early stopping. Default: 0.1 (10% holdout)
+            patience: Number of epochs with no improvement before stopping (autoencoder/VAE).
+                Default: 10 epochs
+            min_delta: Minimum change in validation loss to qualify as improvement.
+                Default: 1e-4
         """
         super().__init__(model_id, device)
         self.backend = backend
@@ -228,6 +238,9 @@ class AnomalyModel(BaseModel):
         self._threshold = threshold
         self.normalization = normalization
         self.scaler_type = scaler_type
+        self.validation_split = validation_split
+        self.patience = patience
+        self.min_delta = min_delta
         self.model_type = f"anomaly_{backend}"
         self.supports_streaming = False
 
@@ -236,9 +249,17 @@ class AnomalyModel(BaseModel):
         self._scaler = None  # For normalizing input data
         self._is_fitted = False
 
-        # For autoencoder
+        # For autoencoder/VAE
         self._encoder = None
         self._decoder = None
+        # VAE-specific: mu and logvar layers for reparameterization
+        self._mu_layer = None
+        self._logvar_layer = None
+
+        # Training metrics
+        self._best_val_loss = None
+        self._epochs_trained = None
+        self._early_stopped = False
 
         # Normalization statistics (computed during fit, used during score)
         # For standardization (sigmoid)
@@ -298,7 +319,7 @@ class AnomalyModel(BaseModel):
         logger.info(f"Loading pretrained model from validated path: {model_path}")
 
         if model_path.suffix == ".pt":
-            # PyTorch autoencoder
+            # PyTorch autoencoder or VAE
             import torch
 
             # Note: weights_only=False is required for loading nn.Module objects
@@ -317,6 +338,13 @@ class AnomalyModel(BaseModel):
             self._norm_mean = checkpoint.get("norm_mean")
             self._norm_std = checkpoint.get("norm_std")
             self.normalization = checkpoint.get("normalization", "standardization")
+
+            # VAE-specific layers
+            if checkpoint.get("backend") == "vae" or "mu_layer" in checkpoint:
+                self._mu_layer = checkpoint.get("mu_layer")
+                self._logvar_layer = checkpoint.get("logvar_layer")
+                self.backend = "vae"
+
             self._is_fitted = True
         else:
             # Sklearn model (pickle or joblib)
@@ -371,7 +399,7 @@ class AnomalyModel(BaseModel):
                 n_jobs=-1,
             )
 
-        elif self.backend == "autoencoder":
+        elif self.backend in ("autoencoder", "vae"):
             # Will be created during fit() based on input dimensions
             pass
 
@@ -474,6 +502,8 @@ class AnomalyModel(BaseModel):
 
         if self.backend == "autoencoder":
             self._fit_autoencoder_sync(X_scaled, epochs, batch_size)
+        elif self.backend == "vae":
+            self._fit_vae_sync(X_scaled, epochs, batch_size)
         else:
             # Sklearn models - this is the blocking call
             self._detector.fit(X_scaled)
@@ -528,6 +558,9 @@ class AnomalyModel(BaseModel):
         if self.backend == "autoencoder":
             return self._autoencoder_scores_sync(X)
 
+        elif self.backend == "vae":
+            return self._vae_scores_sync(X)
+
         elif self.backend == "isolation_forest":
             # IsolationForest: negative score = more anomalous
             return -self._detector.score_samples(X)
@@ -560,7 +593,14 @@ class AnomalyModel(BaseModel):
     def _fit_autoencoder_sync(
         self, X: np.ndarray, epochs: int, batch_size: int
     ) -> None:
-        """Fit autoencoder model synchronously (runs in thread pool)."""
+        """Fit autoencoder model with early stopping (runs in thread pool).
+
+        Uses validation holdout and early stopping to prevent overfitting.
+        Training stops when validation loss hasn't improved for `patience` epochs.
+        Best weights are restored on early stop.
+        """
+        import copy
+
         import torch
         import torch.nn as nn
         from torch.utils.data import DataLoader, TensorDataset
@@ -588,24 +628,38 @@ class AnomalyModel(BaseModel):
         self._encoder = self._encoder.to(self.device)
         self._decoder = self._decoder.to(self.device)
 
-        # Prepare data
-        X_tensor = torch.FloatTensor(X).to(self.device)
-        dataset = TensorDataset(X_tensor)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        # Split data for validation
+        n_samples = len(X)
+        n_val = max(1, int(n_samples * self.validation_split))
+        indices = np.random.permutation(n_samples)
+        train_idx, val_idx = indices[n_val:], indices[:n_val]
 
-        # Training
+        X_train = torch.FloatTensor(X[train_idx]).to(self.device)
+        X_val = torch.FloatTensor(X[val_idx]).to(self.device)
+
+        train_dataset = TensorDataset(X_train)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+        # Training setup
         optimizer = torch.optim.Adam(
             list(self._encoder.parameters()) + list(self._decoder.parameters()),
             lr=0.001,
         )
         criterion = nn.MSELoss()
 
+        # Early stopping state
+        best_val_loss = float("inf")
+        best_encoder_state = None
+        best_decoder_state = None
+        epochs_without_improvement = 0
+
         self._encoder.train()
         self._decoder.train()
 
         for epoch in range(epochs):
+            # Training phase
             epoch_loss = 0.0
-            for (batch,) in dataloader:
+            for (batch,) in train_loader:
                 optimizer.zero_grad()
                 encoded = self._encoder(batch)
                 decoded = self._decoder(encoded)
@@ -614,13 +668,238 @@ class AnomalyModel(BaseModel):
                 optimizer.step()
                 epoch_loss += loss.item()
 
+            train_loss = epoch_loss / len(train_loader)
+
+            # Validation phase
+            self._encoder.eval()
+            self._decoder.eval()
+            with torch.no_grad():
+                val_encoded = self._encoder(X_val)
+                val_decoded = self._decoder(val_encoded)
+                val_loss = criterion(val_decoded, X_val).item()
+            self._encoder.train()
+            self._decoder.train()
+
+            # Early stopping check
+            if val_loss < best_val_loss - self.min_delta:
+                best_val_loss = val_loss
+                best_encoder_state = copy.deepcopy(self._encoder.state_dict())
+                best_decoder_state = copy.deepcopy(self._decoder.state_dict())
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+
             if (epoch + 1) % 20 == 0:
                 logger.debug(
-                    f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss / len(dataloader):.4f}"
+                    f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, "
+                    f"Val Loss: {val_loss:.4f}"
                 )
 
+            if epochs_without_improvement >= self.patience:
+                logger.info(
+                    f"Early stopping at epoch {epoch + 1}. "
+                    f"Best val loss: {best_val_loss:.4f}"
+                )
+                self._early_stopped = True
+                break
+
+        # Restore best weights
+        if best_encoder_state is not None:
+            self._encoder.load_state_dict(best_encoder_state)
+            self._decoder.load_state_dict(best_decoder_state)
+
+        self._best_val_loss = best_val_loss
+        self._epochs_trained = epoch + 1
         self._encoder.eval()
         self._decoder.eval()
+
+    def _fit_vae_sync(
+        self, X: np.ndarray, epochs: int, batch_size: int
+    ) -> None:
+        """Fit Variational Autoencoder with early stopping.
+
+        VAE learns a probabilistic latent space. Anomaly score is the negative
+        ELBO (Evidence Lower Bound): reconstruction loss + KL divergence.
+        Higher scores indicate samples that are unlikely under the learned
+        distribution, i.e., anomalies.
+
+        The VAE uses the reparameterization trick: z = mu + eps * exp(0.5 * logvar)
+        where eps ~ N(0, 1). This allows backpropagation through the sampling.
+        """
+        import copy
+
+        import torch
+        import torch.nn as nn
+        from torch.utils.data import DataLoader, TensorDataset
+
+        input_dim = X.shape[1]
+        hidden_dim = max(input_dim // 2, 8)
+        latent_dim = max(hidden_dim // 2, 4)
+
+        # Define encoder (outputs mu and logvar instead of direct latent)
+        self._encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+        )
+        # Separate heads for mu and logvar
+        self._mu_layer = nn.Linear(hidden_dim, latent_dim)
+        self._logvar_layer = nn.Linear(hidden_dim, latent_dim)
+
+        # Define decoder
+        self._decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, input_dim),
+        )
+
+        # Move to device
+        self._encoder = self._encoder.to(self.device)
+        self._mu_layer = self._mu_layer.to(self.device)
+        self._logvar_layer = self._logvar_layer.to(self.device)
+        self._decoder = self._decoder.to(self.device)
+
+        # Split data for validation
+        n_samples = len(X)
+        n_val = max(1, int(n_samples * self.validation_split))
+        indices = np.random.permutation(n_samples)
+        train_idx, val_idx = indices[n_val:], indices[:n_val]
+
+        X_train = torch.FloatTensor(X[train_idx]).to(self.device)
+        X_val = torch.FloatTensor(X[val_idx]).to(self.device)
+
+        train_dataset = TensorDataset(X_train)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+        # Training setup
+        all_params = (
+            list(self._encoder.parameters())
+            + list(self._mu_layer.parameters())
+            + list(self._logvar_layer.parameters())
+            + list(self._decoder.parameters())
+        )
+        optimizer = torch.optim.Adam(all_params, lr=0.001)
+
+        # Early stopping state
+        best_val_loss = float("inf")
+        best_state = None
+        epochs_without_improvement = 0
+
+        def vae_loss(x: torch.Tensor, recon: torch.Tensor, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+            """Compute ELBO loss = reconstruction + KL divergence."""
+            # Reconstruction loss (MSE)
+            recon_loss = torch.mean(torch.sum((x - recon) ** 2, dim=1))
+            # KL divergence: -0.5 * sum(1 + logvar - mu^2 - exp(logvar))
+            kl_loss = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
+            return recon_loss + kl_loss
+
+        def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+            """Reparameterization trick: z = mu + eps * std."""
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            return mu + eps * std
+
+        self._encoder.train()
+        self._decoder.train()
+
+        for epoch in range(epochs):
+            # Training phase
+            epoch_loss = 0.0
+            for (batch,) in train_loader:
+                optimizer.zero_grad()
+                h = self._encoder(batch)
+                mu = self._mu_layer(h)
+                logvar = self._logvar_layer(h)
+                z = reparameterize(mu, logvar)
+                recon = self._decoder(z)
+                loss = vae_loss(batch, recon, mu, logvar)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+
+            train_loss = epoch_loss / len(train_loader)
+
+            # Validation phase
+            self._encoder.eval()
+            self._decoder.eval()
+            with torch.no_grad():
+                h_val = self._encoder(X_val)
+                mu_val = self._mu_layer(h_val)
+                logvar_val = self._logvar_layer(h_val)
+                z_val = reparameterize(mu_val, logvar_val)
+                recon_val = self._decoder(z_val)
+                val_loss = vae_loss(X_val, recon_val, mu_val, logvar_val).item()
+            self._encoder.train()
+            self._decoder.train()
+
+            # Early stopping check
+            if val_loss < best_val_loss - self.min_delta:
+                best_val_loss = val_loss
+                best_state = {
+                    "encoder": copy.deepcopy(self._encoder.state_dict()),
+                    "mu_layer": copy.deepcopy(self._mu_layer.state_dict()),
+                    "logvar_layer": copy.deepcopy(self._logvar_layer.state_dict()),
+                    "decoder": copy.deepcopy(self._decoder.state_dict()),
+                }
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+
+            if (epoch + 1) % 20 == 0:
+                logger.debug(
+                    f"VAE Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, "
+                    f"Val Loss: {val_loss:.4f}"
+                )
+
+            if epochs_without_improvement >= self.patience:
+                logger.info(
+                    f"VAE early stopping at epoch {epoch + 1}. "
+                    f"Best val loss: {best_val_loss:.4f}"
+                )
+                self._early_stopped = True
+                break
+
+        # Restore best weights
+        if best_state is not None:
+            self._encoder.load_state_dict(best_state["encoder"])
+            self._mu_layer.load_state_dict(best_state["mu_layer"])
+            self._logvar_layer.load_state_dict(best_state["logvar_layer"])
+            self._decoder.load_state_dict(best_state["decoder"])
+
+        self._best_val_loss = best_val_loss
+        self._epochs_trained = epoch + 1
+        self._encoder.eval()
+        self._decoder.eval()
+
+    def _vae_scores_sync(self, X: np.ndarray) -> np.ndarray:
+        """Compute negative ELBO scores for VAE (higher = more anomalous).
+
+        For anomaly detection, we use the reconstruction error plus KL divergence
+        as the anomaly score. Points with high negative ELBO are unlikely under
+        the learned distribution.
+        """
+        import torch
+
+        X_tensor = torch.FloatTensor(X).to(self.device)
+
+        with torch.no_grad():
+            h = self._encoder(X_tensor)
+            mu = self._mu_layer(h)
+            logvar = self._logvar_layer(h)
+            # Use mean for scoring (no sampling noise)
+            z = mu
+            recon = self._decoder(z)
+            # Reconstruction error per sample
+            recon_error = torch.sum((X_tensor - recon) ** 2, dim=1)
+            # KL divergence per sample
+            kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1)
+            # Total negative ELBO (higher = more anomalous)
+            neg_elbo = recon_error + kl_div
+
+        return neg_elbo.cpu().numpy()
 
     async def score(
         self,
@@ -680,6 +959,9 @@ class AnomalyModel(BaseModel):
         if self.backend == "autoencoder":
             return await self._autoencoder_scores(X)
 
+        elif self.backend == "vae":
+            return await self._vae_scores(X)
+
         elif self.backend == "isolation_forest":
             # IsolationForest: negative score = more anomalous
             return -self._detector.score_samples(X)
@@ -708,6 +990,14 @@ class AnomalyModel(BaseModel):
             reconstruction_error = torch.mean((X_tensor - decoded) ** 2, dim=1)
 
         return reconstruction_error.cpu().numpy()
+
+    async def _vae_scores(self, X: np.ndarray) -> np.ndarray:
+        """Compute negative ELBO scores for VAE (async wrapper).
+
+        Higher scores indicate samples that are unlikely under the learned
+        distribution, i.e., anomalies.
+        """
+        return self._vae_scores_sync(X)
 
     def _normalize_scores(self, scores: np.ndarray) -> np.ndarray:
         """Normalize scores based on the configured normalization method.
@@ -800,6 +1090,20 @@ class AnomalyModel(BaseModel):
                 {
                     "encoder": self._encoder,
                     "decoder": self._decoder,
+                    **common_fields,
+                },
+                model_path.with_suffix(".pt"),
+            )
+        elif self.backend == "vae":
+            import torch
+
+            torch.save(
+                {
+                    "encoder": self._encoder,
+                    "decoder": self._decoder,
+                    "mu_layer": self._mu_layer,
+                    "logvar_layer": self._logvar_layer,
+                    "backend": "vae",
                     **common_fields,
                 },
                 model_path.with_suffix(".pt"),

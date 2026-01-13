@@ -1244,6 +1244,9 @@ async def load_anomaly(
     threshold: float | None = None,
     normalization: str = "standardization",
     scaler_type: str = "robust",
+    validation_split: float = 0.1,
+    patience: int = 10,
+    min_delta: float = 1e-4,
 ):
     """Load an anomaly detection model.
 
@@ -1254,6 +1257,9 @@ async def load_anomaly(
         threshold: Custom anomaly threshold
         normalization: Score normalization method (standardization, zscore, raw)
         scaler_type: Input data scaler type (robust or standard)
+        validation_split: Fraction of data for validation (autoencoder/vae only)
+        patience: Epochs without improvement before stopping (autoencoder/vae only)
+        min_delta: Minimum change in validation loss for improvement
 
     Returns:
         Loaded AnomalyModel instance
@@ -1274,6 +1280,9 @@ async def load_anomaly(
                     threshold=threshold,
                     normalization=normalization,
                     scaler_type=scaler_type,
+                    validation_split=validation_split,
+                    patience=patience,
+                    min_delta=min_delta,
                 )
 
                 await model.load()
@@ -1396,6 +1405,10 @@ class AnomalyFitRequest(PydanticBaseModel):
     batch_size: int = 32  # Batch size (autoencoder only)
     normalization: str = "standardization"  # standardization, zscore, or raw
     scaler_type: str = "robust"  # Input data scaler: robust (default) or standard
+    # VAE / Early Stopping parameters (Phase 3)
+    validation_split: float = 0.1  # Fraction of data for validation (autoencoder/vae)
+    patience: int = 10  # Epochs without improvement before stopping
+    min_delta: float = 1e-4  # Minimum change in validation loss for improvement
 
 
 @app.post("/v1/anomaly/score")
@@ -1506,14 +1519,23 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
     - one_class_svm: Good for small datasets
     - local_outlier_factor: Density-based, good for clustering anomalies
     - autoencoder: Best for complex patterns, requires more data
+    - vae: Variational Autoencoder with probabilistic scoring (ELBO-based)
 
-    Example request:
+    Early Stopping (autoencoder/vae only):
+    - validation_split: Fraction of data held out for validation (default: 0.1)
+    - patience: Epochs without improvement before stopping (default: 10)
+    - min_delta: Minimum change in validation loss for improvement (default: 1e-4)
+
+    Example request (VAE with early stopping):
     ```json
     {
         "model": "sensor-detector",
-        "backend": "isolation_forest",
+        "backend": "vae",
         "data": [[1.0, 2.0], [1.1, 2.1], [0.9, 1.9], ...],
-        "contamination": 0.1
+        "contamination": 0.1,
+        "epochs": 200,
+        "patience": 10,
+        "validation_split": 0.1
     }
     ```
 
@@ -1538,6 +1560,9 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             contamination=request.contamination,
             normalization=request.normalization,
             scaler_type=request.scaler_type,
+            validation_split=request.validation_split,
+            patience=request.patience,
+            min_delta=request.min_delta,
         )
 
         # Fit model
