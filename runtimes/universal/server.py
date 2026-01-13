@@ -51,6 +51,7 @@ from models import (
     ObjectDetectionModel,
     OCRModel,
     PIIModel,
+    TimeSeriesModel,
 )
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
@@ -156,6 +157,7 @@ _lang_detection_models: ModelCache["LanguageDetectionModel"] = ModelCache(ttl=MO
 _pii_models: ModelCache["PIIModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _object_detection_models: ModelCache["ObjectDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _background_removal_models: ModelCache["BackgroundRemovalModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_timeseries_models: ModelCache["TimeSeriesModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -3730,6 +3732,169 @@ async def remove_background_batch(request: BackgroundRemovalBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in remove_background_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# Time-Series Forecasting Endpoint (Chronos-Bolt)
+# =============================================================================
+
+
+class TimeSeriesForecastRequest(PydanticBaseModel):
+    """Time-series forecast request."""
+
+    values: list[float]  # Historical time-series values
+    horizon: int = 7  # Number of future steps to forecast
+    quantiles: list[float] | None = None  # Quantile levels (default: [0.1, 0.5, 0.9])
+    num_samples: int = 20  # Number of samples for uncertainty
+    model: str = "amazon/chronos-t5-small"  # HuggingFace model name
+
+
+class TimeSeriesForecastBatchRequest(PydanticBaseModel):
+    """Batch time-series forecast request."""
+
+    series: list[list[float]]  # List of time-series
+    horizon: int = 7
+    quantiles: list[float] | None = None
+    num_samples: int = 20
+    model: str = "amazon/chronos-t5-small"
+
+
+def _make_timeseries_cache_key(model_name: str) -> str:
+    """Create a cache key for time-series models."""
+    return f"timeseries:{model_name}"
+
+
+async def load_timeseries_model(
+    model_name: str = "amazon/chronos-t5-small",
+) -> TimeSeriesModel:
+    """Load or retrieve cached time-series model."""
+    cache_key = _make_timeseries_cache_key(model_name)
+
+    if cache_key not in _timeseries_models:
+        async with _model_load_lock:
+            if cache_key not in _timeseries_models:
+                logger.info(f"Loading time-series model: {model_name}")
+                device = get_device()
+
+                model = TimeSeriesModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _timeseries_models[cache_key] = model
+
+    return _timeseries_models.get(cache_key)
+
+
+@app.post("/v1/timeseries/forecast")
+async def forecast_timeseries(request: TimeSeriesForecastRequest):
+    """
+    Generate time-series forecasts using Chronos-Bolt.
+
+    Chronos-Bolt is a transformer-based time-series forecasting model that
+    produces probabilistic forecasts with confidence intervals.
+
+    Example request:
+    ```json
+    {
+        "values": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        "horizon": 7,
+        "quantiles": [0.1, 0.5, 0.9]
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "timeseries_forecast",
+        "forecasts": [
+            {"step": 1, "point": 8.0, "lower": 7.5, "upper": 8.5},
+            {"step": 2, "point": 9.0, "lower": 8.3, "upper": 9.7},
+            ...
+        ],
+        "horizon": 7,
+        "input_length": 7
+    }
+    ```
+    """
+    try:
+        if len(request.values) < 3:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 3 historical values are required",
+            )
+
+        if request.horizon < 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Horizon must be at least 1",
+            )
+
+        model = await load_timeseries_model(request.model)
+        result = await model.forecast(
+            request.values,
+            horizon=request.horizon,
+            quantiles=request.quantiles,
+            num_samples=request.num_samples,
+        )
+
+        return {
+            "object": "timeseries_forecast",
+            "forecasts": result["forecasts"],
+            "horizon": result["horizon"],
+            "input_length": result["input_length"],
+            "quantiles": result["quantiles"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in forecast_timeseries: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/timeseries/forecast/batch")
+async def forecast_timeseries_batch(request: TimeSeriesForecastBatchRequest):
+    """
+    Generate forecasts for multiple time-series.
+
+    Returns forecasts for each series in the batch.
+    """
+    try:
+        if not request.series:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one time-series is required",
+            )
+
+        for i, s in enumerate(request.series):
+            if len(s) < 3:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Series {i} has fewer than 3 values",
+                )
+
+        model = await load_timeseries_model(request.model)
+        results = await model.forecast_batch(
+            request.series,
+            horizon=request.horizon,
+            quantiles=request.quantiles,
+            num_samples=request.num_samples,
+        )
+
+        return {
+            "object": "timeseries_forecast_batch",
+            "results": results,
+            "total_series": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in forecast_timeseries_batch: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
