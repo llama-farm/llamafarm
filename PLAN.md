@@ -566,7 +566,7 @@ New endpoints to add:
 ### Phase 14 Checkpoint
 - [x] Tests verified passing
 - [x] Demo verified working
-- [ ] **COMMIT**: `git commit -m "feat(streaming): add concept drift detection endpoint with River"`
+- [x] **COMMIT**: `git commit -m "feat(streaming): add concept drift detection endpoint with River"`
 - [x] Ready for Phase 15
 
 ---
@@ -574,34 +574,34 @@ New endpoints to add:
 ## Phase 15: SHAP Explanations for Anomalies
 
 ### Phase 15 Tests (Define FIRST)
-- [ ] Test: SHAP explainer initializes for trained anomaly model
-- [ ] Test: Returns feature importance for anomalous points
-- [ ] Test: Explanations are human-readable
-- [ ] Test: Works with all anomaly backends (IF, OC-SVM, LOF)
-- [ ] Test file: `runtimes/universal/tests/test_shap_explanations.py`
+- [x] Test: SHAP explainer initializes for trained anomaly model
+- [x] Test: Returns feature importance for anomalous points
+- [x] Test: Explanations are human-readable
+- [x] Test: Works with all anomaly backends (IF, OC-SVM, LOF)
+- [x] Test file: `runtimes/universal/tests/test_shap_explanations.py`
 
 ### Phase 15 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-anomaly-explain.sh`
-- [ ] Demo shows: Explain WHY a data point is anomalous
-- [ ] Expected output: "Anomaly because 'CPU' is high AND 'Memory' is low"
+- [x] Demo script: `examples/ml/demo-anomaly-explain.sh`
+- [x] Demo shows: Explain WHY a data point is anomalous
+- [x] Expected output: "Anomaly because 'CPU' is high AND 'Memory' is low"
 
 ### Phase 15 Implementation
-- [ ] Create `/v1/anomaly/explain` endpoint
+- [x] Create `/v1/anomaly/explain` endpoint
   - Use SHAP KernelExplainer (model-agnostic)
   - Request: `{"model": "...", "data": [[...]], "background_samples": 100}`
   - Response: `{"explanations": [{"feature": "cpu", "importance": 0.82, "value": 95.0}, ...]}`
-- [ ] Add to `pyproject.toml`: `issues = [..., "shap>=0.44.0"]`
-- [ ] Lazy import SHAP only when endpoint is called
+- [x] Add to `pyproject.toml`: `issues = [..., "shap>=0.44.0"]`
+- [x] Lazy import SHAP only when endpoint is called
 
 ### Phase 15 Verification
-- [ ] Run tests: all Phase 15 tests pass
-- [ ] Run demo: demo runs successfully
+- [x] Run tests: all Phase 15 tests pass (16 tests)
+- [x] Run demo: demo runs successfully
 
 ### Phase 15 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
-- [ ] **COMMIT**: `git commit -m "feat(anomaly): add SHAP-based anomaly explanation endpoint"`
-- [ ] Ready for Phase 16
+- [x] Tests verified passing
+- [x] Demo verified working
+- [x] **COMMIT**: `git commit -m "feat(anomaly): add SHAP-based anomaly explanation endpoint"`
+- [x] Ready for Phase 16
 
 ---
 

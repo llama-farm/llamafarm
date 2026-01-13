@@ -3817,6 +3817,19 @@ class DriftUpdateRequest(PydanticBaseModel):
     detector_id: str | None = None  # Optional ID for persistent detector
 
 
+class AnomalyExplainRequest(PydanticBaseModel):
+    """Anomaly explanation request."""
+
+    model_id: str  # ID of trained anomaly model
+    data: list[list[float]]  # Data points to explain
+    feature_names: list[str] | None = None  # Optional feature names
+    background_samples: int = 100  # Number of background samples
+    nsamples: int = 100  # Number of SHAP samples
+    backend: str = "isolation_forest"  # Backend used when training
+    normalization: str = "standardization"  # Normalization method
+    scaler_type: str = "robust"  # Scaler type
+
+
 def _make_timeseries_cache_key(model_name: str) -> str:
     """Create a cache key for time-series models."""
     return f"timeseries:{model_name}"
@@ -4493,6 +4506,113 @@ async def delete_drift_detector(detector_id: str):
         raise
     except Exception as e:
         logger.error(f"Error in delete_drift_detector: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# ANOMALY EXPLANATION ENDPOINTS
+# =============================================================================
+
+
+@app.post("/v1/anomaly/explain")
+async def explain_anomaly(request: AnomalyExplainRequest):
+    """
+    Explain why data points are flagged as anomalies using SHAP.
+
+    SHAP (SHapley Additive exPlanations) provides feature importance
+    showing which features contributed most to the anomaly score.
+
+    Requires a trained anomaly detection model.
+
+    Example request:
+    ```json
+    {
+        "model_id": "my-anomaly-model",
+        "data": [[95.0, 20.0, 150.0]],
+        "feature_names": ["cpu", "memory", "latency"],
+        "background_samples": 100
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "anomaly_explanation",
+        "explanations": [{
+            "features": [
+                {"feature": "cpu", "importance": 0.82, "value": 95.0, "direction": "high"},
+                {"feature": "latency", "importance": 0.45, "value": 150.0, "direction": "high"},
+                {"feature": "memory", "importance": 0.12, "value": 20.0, "direction": "low"}
+            ],
+            "top_contributors": [...]
+        }]
+    }
+    ```
+    """
+    try:
+        import numpy as np
+        from utils.anomaly_explainer import create_explainer_for_sklearn
+
+        # Get the trained model using the same cache key pattern as /v1/anomaly/fit
+        cache_key = _make_anomaly_cache_key(
+            request.model_id, request.backend, request.normalization, request.scaler_type
+        )
+
+        if cache_key not in _models:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Anomaly model '{request.model_id}' not found. Train a model first with /v1/anomaly/fit",
+            )
+
+        model = _models[cache_key]
+
+        if model is None or not model.is_fitted:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{request.model_id}' is not trained. Train it first with /v1/anomaly/fit",
+            )
+
+        # Get the sklearn model (IsolationForest, etc.)
+        sklearn_model = model.get_sklearn_model()
+        if sklearn_model is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Model does not support SHAP explanations (no sklearn model)",
+            )
+
+        # Convert data to numpy array
+        data = np.array(request.data, dtype=np.float64)
+
+        # Get background data from the model's training data
+        training_data = model.get_training_data()
+        if training_data is None or len(training_data) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Model has no training data for SHAP background",
+            )
+
+        # Create explainer
+        explainer = create_explainer_for_sklearn(
+            model=sklearn_model,
+            background_data=training_data,
+            feature_names=request.feature_names,
+            n_background_samples=request.background_samples,
+        )
+
+        # Get explanations
+        explanations = explainer.explain(data, nsamples=request.nsamples)
+
+        return {
+            "object": "anomaly_explanation",
+            "model_id": request.model_id,
+            "explanations": explanations,
+            "total_points": len(explanations),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in explain_anomaly: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

@@ -248,6 +248,7 @@ class AnomalyModel(BaseModel):
         self._detector = None
         self._scaler = None  # For normalizing input data
         self._is_fitted = False
+        self._training_data = None  # Store training data for SHAP explanations
 
         # For autoencoder/VAE
         self._encoder = None
@@ -572,6 +573,14 @@ class AnomalyModel(BaseModel):
 
         # Fit scaler and transform data
         X_scaled = self._scaler.fit_transform(X)
+
+        # Store scaled training data for SHAP explanations (limit to 1000 samples)
+        max_samples = min(1000, len(X_scaled))
+        if len(X_scaled) > max_samples:
+            indices = np.random.choice(len(X_scaled), max_samples, replace=False)
+            self._training_data = X_scaled[indices].copy()
+        else:
+            self._training_data = X_scaled.copy()
 
         if self.backend == "autoencoder":
             self._fit_autoencoder_sync(X_scaled, epochs, batch_size)
@@ -1208,6 +1217,7 @@ class AnomalyModel(BaseModel):
         self._norm_iqr = None
         self._norm_mean = None
         self._norm_std = None
+        self._training_data = None
         self._is_fitted = False
         await super().unload()
 
@@ -1225,3 +1235,23 @@ class AnomalyModel(BaseModel):
             }
         )
         return info
+
+    def get_sklearn_model(self) -> Any:
+        """Get the underlying sklearn model for SHAP explanations.
+
+        Returns:
+            The sklearn detector (IsolationForest, OneClassSVM, etc.)
+            or None if using autoencoder/VAE backend.
+        """
+        if self.backend in ("autoencoder", "vae"):
+            return None
+        return self._detector
+
+    def get_training_data(self) -> np.ndarray | None:
+        """Get a sample of the training data for SHAP background.
+
+        Returns:
+            Numpy array of scaled training data (max 1000 samples)
+            or None if model hasn't been trained.
+        """
+        return self._training_data

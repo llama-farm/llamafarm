@@ -1,0 +1,169 @@
+#!/bin/bash
+# Demo: SHAP-based Anomaly Explanations
+# Phase 15 of Universal Runtime ML Enhancements
+#
+# Explains WHY data points are flagged as anomalies using SHAP values.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:11540}"
+
+echo "=========================================="
+echo "SHAP Anomaly Explanation Demo"
+echo "=========================================="
+echo ""
+
+# Check if server is running
+echo "1. Checking server health..."
+if ! curl -s "$RUNTIME_URL/health" > /dev/null 2>&1; then
+    echo "   ERROR: Server not running at $RUNTIME_URL"
+    echo "   Start with: cd runtimes/universal && uv run python server.py"
+    exit 1
+fi
+echo "   Server is healthy!"
+echo ""
+
+# Generate training data (normal server metrics)
+echo "2. Training an Anomaly Detection Model"
+echo "   Generating normal server metrics data..."
+echo ""
+
+TRAINING_DATA=$(python3 -c "
+import random
+random.seed(42)
+# Normal server metrics: CPU ~30%, Memory ~50%, Latency ~25ms
+data = []
+for _ in range(100):
+    cpu = 30 + random.uniform(-10, 10)
+    memory = 50 + random.uniform(-15, 15)
+    latency = 25 + random.uniform(-5, 5)
+    data.append([round(cpu, 1), round(memory, 1), round(latency, 1)])
+print(str(data).replace(' ', ''))
+")
+
+# Train the model
+echo "   Training IsolationForest model..."
+RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/fit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"model\": \"server-metrics-model\",
+        \"data\": $TRAINING_DATA,
+        \"backend\": \"isolation_forest\",
+        \"contamination\": 0.1
+    }")
+
+echo "   Training response:"
+echo "$RESPONSE" | python3 -m json.tool
+echo ""
+
+# Check model status
+echo "3. Checking Model Status"
+RESPONSE=$(curl -s "$RUNTIME_URL/v1/anomaly/server-metrics-model/info")
+echo "   Model info:"
+echo "$RESPONSE" | python3 -m json.tool
+echo ""
+
+# Create anomalous data points
+echo "4. Generating Anomalous Data Points"
+echo "   Creating server metrics that should be anomalous..."
+echo ""
+
+# Different types of anomalies
+ANOMALY_1="[95.0, 50.0, 25.0]"  # High CPU only
+ANOMALY_2="[30.0, 95.0, 200.0]"  # High Memory + High Latency
+ANOMALY_3="[95.0, 95.0, 200.0]"  # All high (severe anomaly)
+
+echo "   Anomaly 1: CPU=95%, Memory=50%, Latency=25ms (High CPU)"
+echo "   Anomaly 2: CPU=30%, Memory=95%, Latency=200ms (High Memory + Latency)"
+echo "   Anomaly 3: CPU=95%, Memory=95%, Latency=200ms (All metrics high)"
+echo ""
+
+# Explain the anomalies
+echo "5. Explaining Anomalies with SHAP"
+echo "   Asking WHY each point is anomalous..."
+echo ""
+
+RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/explain" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"model_id\": \"server-metrics-model\",
+        \"backend\": \"isolation_forest\",
+        \"data\": [$ANOMALY_1, $ANOMALY_2, $ANOMALY_3],
+        \"feature_names\": [\"cpu\", \"memory\", \"latency\"],
+        \"background_samples\": 50,
+        \"nsamples\": 50
+    }")
+
+echo "   SHAP Explanations:"
+echo "$RESPONSE" | python3 -m json.tool
+echo ""
+
+# Extract top contributors for each anomaly
+echo "6. Summary: Top Contributors to Anomaly Score"
+echo ""
+
+echo "$RESPONSE" | python3 -c "
+import sys
+import json
+
+data = json.load(sys.stdin)
+if 'explanations' in data:
+    anomaly_labels = [
+        'Anomaly 1 (High CPU)',
+        'Anomaly 2 (High Mem+Lat)',
+        'Anomaly 3 (All High)'
+    ]
+    for i, exp in enumerate(data['explanations']):
+        print(f'   {anomaly_labels[i]}:')
+        for contrib in exp.get('top_contributors', [])[:3]:
+            direction = '↑' if contrib['direction'] == 'high' else '↓'
+            print(f'     - {contrib[\"feature\"]}: {direction} (importance: {contrib[\"importance\"]:.3f}, value: {contrib[\"value\"]:.1f})')
+        print()
+"
+
+# Score the anomalies to show correlation
+echo "7. Anomaly Scores for Reference"
+echo "   Scoring the same anomalous points..."
+echo ""
+
+RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/server-metrics-model/score" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"data\": [$ANOMALY_1, $ANOMALY_2, $ANOMALY_3]
+    }")
+
+echo "   Anomaly scores (higher = more anomalous):"
+echo "$RESPONSE" | python3 -c "
+import sys
+import json
+
+data = json.load(sys.stdin)
+if 'scores' in data:
+    labels = ['High CPU', 'High Mem+Lat', 'All High']
+    for i, score in enumerate(data['scores']):
+        is_anomaly = '🚨 ANOMALY' if score > 0.5 else '✓ Normal'
+        print(f'   {labels[i]}: {score:.3f} {is_anomaly}')
+"
+echo ""
+
+# Clean up
+echo "8. Cleanup"
+curl -s -X DELETE "$RUNTIME_URL/v1/anomaly/server-metrics-model" > /dev/null
+echo "   Deleted model: server-metrics-model"
+echo ""
+
+echo "=========================================="
+echo "Demo Complete!"
+echo "=========================================="
+echo ""
+echo "Key insights:"
+echo "  - SHAP explains feature contributions to anomaly scores"
+echo "  - 'direction' shows if feature is unusually high or low"
+echo "  - 'importance' shows how much each feature contributes"
+echo "  - Top contributors help understand WHY something is anomalous"
+echo ""
+echo "Use cases:"
+echo "  - Debugging ML model predictions"
+echo "  - Root cause analysis for anomalies"
+echo "  - Building trust in anomaly detection systems"
