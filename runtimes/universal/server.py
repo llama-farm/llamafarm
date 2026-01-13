@@ -3042,6 +3042,186 @@ async def detect_language_batch(request: LanguageDetectBatchRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+# ============================================================================
+# Keyword Extraction Endpoints
+# ============================================================================
+
+
+# Cache for keyword extractor (reuses encoder models)
+_keyword_extractor = None
+_keyword_extractor_lock = asyncio.Lock()
+
+
+async def get_keyword_extractor():
+    """Get or create keyword extractor with encoder model."""
+    global _keyword_extractor
+
+    if _keyword_extractor is None:
+        async with _keyword_extractor_lock:
+            if _keyword_extractor is None:
+                from utils.keyword_extractor import KeywordExtractor
+
+                # Try to get an encoder model for better results
+                try:
+                    # Use a small, fast encoder model
+                    encoder = await get_or_load_encoder(
+                        "sentence-transformers/all-MiniLM-L6-v2"
+                    )
+                    _keyword_extractor = KeywordExtractor(encoder_model=encoder)
+                    logger.info("Keyword extractor initialized with encoder model")
+                except Exception as e:
+                    logger.warning(f"Could not load encoder for keywords, using frequency fallback: {e}")
+                    _keyword_extractor = KeywordExtractor(encoder_model=None)
+
+    return _keyword_extractor
+
+
+class KeywordExtractRequest(PydanticBaseModel):
+    """Keyword extraction request."""
+
+    text: str  # Text to extract keywords from
+    top_k: int = 10  # Number of keywords to return
+    diversity: float = 0.5  # Diversity parameter (0-1)
+    ngram_range: list[int] = [1, 3]  # Min and max n-gram size
+
+
+class KeywordExtractBatchRequest(PydanticBaseModel):
+    """Keyword extraction batch request."""
+
+    texts: list[str]  # List of texts
+    top_k: int = 10  # Keywords per text
+    diversity: float = 0.5
+    ngram_range: list[int] = [1, 3]
+
+
+@app.post("/v1/text/keywords")
+async def extract_keywords(request: KeywordExtractRequest):
+    """
+    Extract keywords and keyphrases from text.
+
+    Uses sentence embeddings to find the most relevant n-grams in the text.
+    Supports diversity parameter to avoid redundant keywords.
+
+    Example request:
+    ```json
+    {
+        "text": "Machine learning is a subset of artificial intelligence...",
+        "top_k": 10,
+        "diversity": 0.5,
+        "ngram_range": [1, 3]
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "keyword_extraction",
+        "keywords": [
+            {"keyword": "machine learning", "score": 0.87},
+            {"keyword": "artificial intelligence", "score": 0.82}
+        ],
+        "count": 10
+    }
+    ```
+    """
+    try:
+        if not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Text cannot be empty",
+            )
+
+        extractor = await get_keyword_extractor()
+
+        # Run extraction in executor to not block
+        loop = asyncio.get_running_loop()
+        keywords = await loop.run_in_executor(
+            None,
+            lambda: extractor.extract(
+                request.text,
+                top_k=request.top_k,
+                ngram_range=tuple(request.ngram_range),
+                diversity=request.diversity,
+            )
+        )
+
+        return {
+            "object": "keyword_extraction",
+            "keywords": keywords,
+            "count": len(keywords),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in extract_keywords: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/text/keywords/batch")
+async def extract_keywords_batch(request: KeywordExtractBatchRequest):
+    """
+    Extract keywords from multiple texts.
+
+    Example request:
+    ```json
+    {
+        "texts": ["First document...", "Second document..."],
+        "top_k": 5
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "list",
+        "data": [
+            {"keywords": [...], "count": 5},
+            {"keywords": [...], "count": 5}
+        ],
+        "total_count": 2
+    }
+    ```
+    """
+    try:
+        if not request.texts:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one text is required",
+            )
+
+        extractor = await get_keyword_extractor()
+        loop = asyncio.get_running_loop()
+
+        results = []
+        for text in request.texts:
+            keywords = await loop.run_in_executor(
+                None,
+                lambda t=text: extractor.extract(
+                    t,
+                    top_k=request.top_k,
+                    ngram_range=tuple(request.ngram_range),
+                    diversity=request.diversity,
+                )
+            )
+            results.append({
+                "keywords": keywords,
+                "count": len(keywords),
+            })
+
+        return {
+            "object": "list",
+            "data": results,
+            "total_count": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in extract_keywords_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 if __name__ == "__main__":
     import uvicorn
     from llamafarm_common.pidfile import write_pid
