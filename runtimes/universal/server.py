@@ -25,7 +25,7 @@ import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import (
     FastAPI,
@@ -3782,6 +3782,22 @@ class ChangePointBatchRequest(PydanticBaseModel):
     min_size: int = 2
 
 
+class TableQARequest(PydanticBaseModel):
+    """Table question answering request."""
+
+    table: dict[str, Any]  # {"columns": [...], "rows": [[...], ...]}
+    question: str  # Natural language question
+    model: str = "google/tapas-base-finetuned-wtq"
+
+
+class TableQABatchRequest(PydanticBaseModel):
+    """Batch table question answering request."""
+
+    table: dict[str, Any]  # Same table for all questions
+    questions: list[str]  # Multiple questions
+    model: str = "google/tapas-base-finetuned-wtq"
+
+
 def _make_timeseries_cache_key(model_name: str) -> str:
     """Create a cache key for time-series models."""
     return f"timeseries:{model_name}"
@@ -4076,6 +4092,157 @@ async def detect_changepoints_batch(request: ChangePointBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in detect_changepoints_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# TABLE QUESTION ANSWERING ENDPOINTS
+# =============================================================================
+
+_table_qa_models: dict[str, Any] = {}
+
+
+def _make_table_qa_cache_key(model_name: str) -> str:
+    """Create a cache key for table QA models."""
+    return f"tableqa:{model_name}"
+
+
+async def load_table_qa_model(
+    model_name: str = "google/tapas-base-finetuned-wtq",
+) -> Any:
+    """Load or retrieve cached table QA model."""
+    from models.table_qa_model import TableQAModel
+
+    cache_key = _make_table_qa_cache_key(model_name)
+
+    if cache_key not in _table_qa_models:
+        async with _model_load_lock:
+            if cache_key not in _table_qa_models:
+                logger.info(f"Loading table QA model: {model_name}")
+                device = get_device()
+
+                model = TableQAModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _table_qa_models[cache_key] = model
+
+    return _table_qa_models.get(cache_key)
+
+
+@app.post("/v1/analysis/table-qa")
+async def table_question_answering(request: TableQARequest):
+    """
+    Answer questions about tabular data using TAPAS.
+
+    TAPAS (Table Parser) can answer natural language questions about tables,
+    including questions that require aggregation (sum, average, count).
+
+    Example request:
+    ```json
+    {
+        "table": {
+            "columns": ["Name", "Age", "City"],
+            "rows": [
+                ["Alice", "30", "New York"],
+                ["Bob", "25", "Los Angeles"],
+                ["Charlie", "35", "Chicago"]
+            ]
+        },
+        "question": "Who is the oldest?"
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "table_qa",
+        "answer": "Charlie",
+        "cells": [{"row": 2, "column": 0}],
+        "aggregation": "NONE"
+    }
+    ```
+    """
+    try:
+        if "columns" not in request.table or "rows" not in request.table:
+            raise HTTPException(
+                status_code=400,
+                detail="Table must have 'columns' and 'rows' keys",
+            )
+
+        if not request.table["columns"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Table must have at least one column",
+            )
+
+        if not request.table["rows"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Table must have at least one row",
+            )
+
+        if not request.question.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Question cannot be empty",
+            )
+
+        model = await load_table_qa_model(request.model)
+        result = await model.answer(request.table, request.question)
+
+        return {
+            "object": "table_qa",
+            "answer": result["answer"],
+            "cells": result["cells"],
+            "cell_values": result["cell_values"],
+            "aggregation": result["aggregation"],
+            "question": result["question"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in table_question_answering: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/analysis/table-qa/batch")
+async def table_question_answering_batch(request: TableQABatchRequest):
+    """
+    Answer multiple questions about the same table.
+
+    Returns answers for each question in the batch.
+    """
+    try:
+        if "columns" not in request.table or "rows" not in request.table:
+            raise HTTPException(
+                status_code=400,
+                detail="Table must have 'columns' and 'rows' keys",
+            )
+
+        if not request.questions:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one question is required",
+            )
+
+        model = await load_table_qa_model(request.model)
+        results = await model.answer_batch(request.table, request.questions)
+
+        return {
+            "object": "table_qa_batch",
+            "results": results,
+            "total_questions": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in table_question_answering_batch: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

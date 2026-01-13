@@ -18,6 +18,7 @@ from .language_model import LanguageModel
 from .object_detection_model import ObjectDetectionModel
 from .ocr_model import OCRModel
 from .pii_model import PIIModel
+from .table_qa_model import TableQAModel
 from .timeseries_model import TimeSeriesModel
 from .vision_model import CLIPVisionModel
 
@@ -37,4 +38,5 @@ __all__ = [
     "ObjectDetectionModel",
     "BackgroundRemovalModel",
     "TimeSeriesModel",
+    "TableQAModel",
 ]
