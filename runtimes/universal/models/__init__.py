@@ -14,6 +14,7 @@ from .gguf_encoder_model import GGUFEncoderModel
 from .gguf_language_model import GGUFLanguageModel
 from .language_model import LanguageModel
 from .ocr_model import OCRModel
+from .vision_model import CLIPVisionModel
 
 __all__ = [
     "BaseModel",
@@ -25,4 +26,5 @@ __all__ = [
     "DocumentModel",
     "AnomalyModel",
     "ClassifierModel",
+    "CLIPVisionModel",
 ]

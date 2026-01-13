@@ -40,6 +40,7 @@ from models import (
     AnomalyModel,
     BaseModel,
     ClassifierModel,
+    CLIPVisionModel,
     DocumentModel,
     EncoderModel,
     GGUFEncoderModel,
@@ -114,6 +115,16 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Error unloading classifier {cache_key}: {e}")
         _classifiers.clear()
 
+    if _vision_models:
+        logger.info(f"Unloading {len(_vision_models)} remaining vision model(s)")
+        for cache_key, model in list(_vision_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded vision model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading vision model {cache_key}: {e}")
+        _vision_models.clear()
+
     logger.info("Shutdown complete")
 
 
@@ -136,6 +147,7 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 # Models are automatically tracked for idle time and cleaned up by background task
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_vision_models: ModelCache["CLIPVisionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -164,10 +176,11 @@ async def _cleanup_idle_models() -> None:
         try:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
-            # Cleanup expired models from both caches
+            # Cleanup expired models from all caches
             for cache, cache_name in [
                 (_models, "models"),
                 (_classifiers, "classifiers"),
+                (_vision_models, "vision_models"),
             ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
@@ -2672,6 +2685,190 @@ async def delete_classifier_model(model_name: str):
         raise
     except Exception as e:
         logger.error(f"Error in delete_classifier_model: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# Vision Endpoints (CLIP Zero-Shot Classification)
+# ============================================================================
+
+
+def _make_vision_cache_key(
+    model_name: str,
+) -> str:
+    """Generate a cache key for a vision model.
+
+    Args:
+        model_name: HuggingFace model name or short name
+
+    Returns:
+        A unique cache key string for this vision model configuration
+    """
+    return f"vision:clip:{model_name}"
+
+
+async def load_vision_model(
+    model_name: str = "openai/clip-vit-base-patch32",
+) -> CLIPVisionModel:
+    """Load a CLIP vision model.
+
+    Args:
+        model_name: HuggingFace model name (default: openai/clip-vit-base-patch32)
+
+    Returns:
+        Loaded CLIPVisionModel instance
+    """
+    cache_key = _make_vision_cache_key(model_name)
+
+    if cache_key not in _vision_models:
+        async with _model_load_lock:
+            if cache_key not in _vision_models:
+                logger.info(f"Loading CLIP vision model: {model_name}")
+                device = get_device()
+
+                model = CLIPVisionModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _vision_models[cache_key] = model
+
+    # Return model (get() refreshes TTL automatically)
+    return _vision_models.get(cache_key)
+
+
+class ZeroShotClassifyRequest(PydanticBaseModel):
+    """Zero-shot image classification request."""
+
+    image: str  # Base64-encoded image or file path
+    labels: list[str]  # Labels to classify against
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model to use
+
+
+class ZeroShotClassifyBatchRequest(PydanticBaseModel):
+    """Zero-shot image classification batch request."""
+
+    images: list[str]  # List of base64-encoded images or file paths
+    labels: list[str]  # Labels to classify against
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model to use
+
+
+@app.post("/v1/vision/classify-zero-shot")
+async def classify_zero_shot(request: ZeroShotClassifyRequest):
+    """
+    Zero-shot image classification using CLIP.
+
+    Classify images into arbitrary categories without training. Simply provide
+    a list of text labels and the model will predict probabilities for each.
+
+    Example request:
+    ```json
+    {
+        "image": "<base64 encoded image>",
+        "labels": ["cat", "dog", "bird"],
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "classification",
+        "label": "cat",
+        "score": 0.87,
+        "all_scores": {"cat": 0.87, "dog": 0.10, "bird": 0.03},
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+
+    Supported image formats: PNG, JPEG, WebP, GIF, BMP
+    Image can be provided as:
+    - Base64-encoded string
+    - File path (for local files)
+    """
+    try:
+        if not request.labels:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one label is required",
+            )
+
+        model = await load_vision_model(request.model)
+        result = await model.classify_zero_shot(request.image, request.labels)
+
+        return {
+            "object": "classification",
+            "label": result["label"],
+            "score": result["score"],
+            "all_scores": result["all_scores"],
+            "model": request.model,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in classify_zero_shot: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/classify-zero-shot/batch")
+async def classify_zero_shot_batch(request: ZeroShotClassifyBatchRequest):
+    """
+    Batch zero-shot image classification using CLIP.
+
+    Classify multiple images into arbitrary categories without training.
+    More efficient than calling single endpoint multiple times.
+
+    Example request:
+    ```json
+    {
+        "images": ["<base64 image 1>", "<base64 image 2>"],
+        "labels": ["cat", "dog", "bird"],
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "list",
+        "data": [
+            {"label": "cat", "score": 0.87, "all_scores": {...}},
+            {"label": "dog", "score": 0.91, "all_scores": {...}}
+        ],
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+    """
+    try:
+        if not request.labels:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one label is required",
+            )
+
+        if not request.images:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one image is required",
+            )
+
+        model = await load_vision_model(request.model)
+        results = await model.classify_zero_shot_batch(request.images, request.labels)
+
+        return {
+            "object": "list",
+            "data": results,
+            "model": request.model,
+            "total_count": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in classify_zero_shot_batch: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
