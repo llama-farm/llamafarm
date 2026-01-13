@@ -6,10 +6,10 @@ Compiles server, rag, and runtime components into standalone executables.
 Native dependencies (llama.cpp) are downloaded by the CLI.
 
 Usage:
-    python build/nuitka/build.py --component server
-    python build/nuitka/build.py --component rag
-    python build/nuitka/build.py --component runtime
-    python build/nuitka/build.py --all
+    python tools/nuitka/build.py --component server
+    python tools/nuitka/build.py --component rag
+    python tools/nuitka/build.py --component runtime
+    python tools/nuitka/build.py --all
 
 Output:
     dist/
@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 # Project root is 2 levels up from this file
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 DIST_DIR = PROJECT_ROOT / "dist" / "nuitka"
 
 
@@ -42,8 +42,6 @@ def find_python_with_nuitka() -> str:
         "python3.11",
         "python3",
         "python",
-        # Also try conda paths
-        "/opt/homebrew/Caskroom/miniconda/base/bin/python",
     ]
 
     for python in candidates:
@@ -63,7 +61,11 @@ def find_python_with_nuitka() -> str:
                     text=True,
                     timeout=10,
                 )
-                version = version_result.stdout.split("\n")[0] if version_result.returncode == 0 else "unknown"
+                version = (
+                    version_result.stdout.split("\n")[0]
+                    if version_result.returncode == 0
+                    else "unknown"
+                )
                 print(f"Found nuitka {version} in {python}")
                 return python
         except (subprocess.SubprocessError, FileNotFoundError):
@@ -72,6 +74,27 @@ def find_python_with_nuitka() -> str:
     print("ERROR: nuitka not found in any Python interpreter")
     print("Install with: pip install nuitka")
     sys.exit(1)
+
+
+def verify_packages(packages: list[str]) -> bool:
+    """Verify required packages are importable in the current Python environment."""
+    import importlib
+
+    missing = []
+    for pkg in packages:
+        try:
+            importlib.import_module(pkg)
+        except ImportError as e:
+            missing.append(f"{pkg} ({e})")
+
+    if missing:
+        print("ERROR: Missing required packages:")
+        for m in missing:
+            print(f"  - {m}")
+        print("Install them with:")
+        print("  uv pip install -e ./config -e ./common -e ./<component>")
+        return False
+    return True
 
 
 def get_platform_suffix() -> str:
@@ -112,6 +135,11 @@ def get_common_nuitka_args() -> list[str]:
         "--nofollow-import-to=setuptools",
         "--nofollow-import-to=pip",
         "--nofollow-import-to=wheel",
+        # Exclude test modules from all packages
+        "--nofollow-import-to=*.tests",
+        "--nofollow-import-to=*.tests.*",
+        "--nofollow-import-to=config.tests",
+        "--nofollow-import-to=config.tests.*",
         # Heavy optional dependencies (lazy-loaded at runtime if needed)
         "--nofollow-import-to=fitz",  # PyMuPDF - PDF rendering
         "--nofollow-import-to=pymupdf",
@@ -129,6 +157,11 @@ def build_server(output_dir: Path, python: str) -> Path:
     print("\n" + "=" * 60)
     print("Building: llamafarm-server")
     print("=" * 60)
+
+    # Verify required packages are installed
+    required = ["config", "llamafarm_common", "fastapi", "uvicorn", "celery"]
+    if not verify_packages(required):
+        sys.exit(1)
 
     output_name = f"llamafarm-server-{get_platform_suffix()}"
     output_path = output_dir / output_name
@@ -183,6 +216,11 @@ def build_rag(output_dir: Path, python: str) -> Path:
     print("Building: llamafarm-rag")
     print("=" * 60)
 
+    # Verify required packages are installed
+    required = ["config", "llamafarm_common", "celery"]
+    if not verify_packages(required):
+        sys.exit(1)
+
     output_name = f"llamafarm-rag-{get_platform_suffix()}"
     output_path = output_dir / output_name
 
@@ -235,6 +273,11 @@ def build_runtime(output_dir: Path, python: str) -> Path:
     print("Building: llamafarm-runtime")
     print("=" * 60)
 
+    # Verify required packages are installed
+    required = ["config", "llamafarm_common", "llamafarm_llama", "fastapi", "uvicorn"]
+    if not verify_packages(required):
+        sys.exit(1)
+
     output_name = f"llamafarm-runtime-{get_platform_suffix()}"
     output_path = output_dir / output_name
 
@@ -283,7 +326,9 @@ def build_runtime(output_dir: Path, python: str) -> Path:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build LlamaFarm components with Nuitka")
+    parser = argparse.ArgumentParser(
+        description="Build LlamaFarm components with Nuitka"
+    )
     parser.add_argument(
         "--component",
         choices=["server", "rag", "runtime"],

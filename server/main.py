@@ -38,13 +38,17 @@ mcp.mount_http(
 
 
 if __name__ == "__main__":
+    # Nuitka-compiled binaries can't use string imports for uvicorn
+    # Check if running compiled (Nuitka sets __compiled__)
+    is_compiled = "__compiled__" in dir()
+
     uvicorn.run(
-        "server.main:app",
+        app if is_compiled else "server.main:app",
         host=settings.HOST,
         port=settings.PORT,
-        reload=settings.RELOAD,
+        reload=settings.RELOAD if not is_compiled else False,
         # Limit reload scanning to the server app directory only
-        reload_dirs=[str(Path(__file__).parent.resolve())],
+        reload_dirs=[str(Path(__file__).parent.resolve())] if not is_compiled else None,
         log_config=None,  # Disable uvicorn's log config (handled in setup_logging)
         access_log=False,  # Disable uvicorn access logs (handled by StructLogMiddleware)
     )

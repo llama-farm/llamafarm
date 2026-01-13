@@ -25,6 +25,10 @@ on:
       - "tools/nuitka/**"
       - ".github/workflows/nuitka.yml"
 
+# Default to minimal permissions, override per-job as needed
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: "3.12"
   UV_SYSTEM_PYTHON: 1
@@ -120,14 +124,21 @@ jobs:
             nuitka-${{ matrix.os }}-${{ matrix.component }}-
             nuitka-${{ matrix.os }}-
 
-      # Cache ccache for C compilation (Linux/macOS)
-      - name: Install ccache (Linux)
+      # Install C compiler and ccache for compilation (Linux/macOS)
+      - name: Install build tools (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y ccache
+        run: sudo apt-get install -y build-essential ccache
 
       - name: Install ccache (macOS)
         if: runner.os == 'macOS'
         run: brew install ccache
+
+      - name: Setup Xcode Command Line Tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+          # Verify clang is available
+          clang --version
 
       - name: Cache ccache
         if: runner.os != 'Windows'
@@ -139,13 +150,21 @@ jobs:
             ccache-${{ matrix.os }}-${{ matrix.component }}-
             ccache-${{ matrix.os }}-
 
-      - name: Configure ccache
-        if: runner.os != 'Windows'
+      - name: Configure ccache (Linux)
+        if: runner.os == 'Linux'
         run: |
           ccache --max-size=500M
           ccache --set-config=compiler_check=content
           echo "CC=ccache gcc" >> $GITHUB_ENV
           echo "CXX=ccache g++" >> $GITHUB_ENV
+
+      - name: Configure ccache (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ccache --max-size=500M
+          ccache --set-config=compiler_check=content
+          echo "CC=ccache clang" >> $GITHUB_ENV
+          echo "CXX=ccache clang++" >> $GITHUB_ENV
 
       - name: Install build dependencies
         run: |
