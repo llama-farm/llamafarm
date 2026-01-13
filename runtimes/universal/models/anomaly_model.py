@@ -118,6 +118,21 @@ AnomalyBackend = Literal[
     "autoencoder", "isolation_forest", "one_class_svm", "local_outlier_factor"
 ]
 
+ScalerType = Literal["standard", "robust"]
+"""Input data scaler type for preprocessing training and inference data.
+
+- "standard": StandardScaler - uses mean and standard deviation for centering
+    and scaling. Best for data with normal distribution and few outliers.
+
+- "robust": RobustScaler - uses median and IQR (interquartile range) for
+    centering and scaling. Much more robust to outliers in training data.
+    Recommended when training data may contain outliers/anomalies.
+
+Note: The scaler type affects how input features are normalized before being
+passed to the anomaly detection backend. Using RobustScaler can significantly
+improve anomaly detection when the training data is contaminated with outliers.
+"""
+
 NormalizationMethod = Literal["standardization", "zscore", "raw"]
 """Score normalization methods for anomaly detection.
 
@@ -185,6 +200,7 @@ class AnomalyModel(BaseModel):
         contamination: float = 0.1,
         threshold: float | None = None,
         normalization: NormalizationMethod = "standardization",
+        scaler_type: ScalerType = "robust",
     ):
         """Initialize anomaly detection model.
 
@@ -202,12 +218,16 @@ class AnomalyModel(BaseModel):
                 - "standardization": Sigmoid 0-1 range (default)
                 - "zscore": Standard deviations from mean
                 - "raw": No normalization, backend-native scores
+            scaler_type: Input data scaler type. See ScalerType docs.
+                - "robust": RobustScaler using median/IQR (default, recommended)
+                - "standard": StandardScaler using mean/std
         """
         super().__init__(model_id, device)
         self.backend = backend
         self.contamination = contamination
         self._threshold = threshold
         self.normalization = normalization
+        self.scaler_type = scaler_type
         self.model_type = f"anomaly_{backend}"
         self.supports_streaming = False
 
@@ -290,6 +310,8 @@ class AnomalyModel(BaseModel):
             self._decoder = checkpoint.get("decoder")
             self._threshold = checkpoint.get("threshold", 0.5)
             self._scaler = checkpoint.get("scaler")
+            # Load scaler_type with backward compatibility (default to "standard" for old models)
+            self.scaler_type = checkpoint.get("scaler_type", "standard")
             self._norm_median = checkpoint.get("norm_median")
             self._norm_iqr = checkpoint.get("norm_iqr")
             self._norm_mean = checkpoint.get("norm_mean")
@@ -310,6 +332,8 @@ class AnomalyModel(BaseModel):
 
             self._detector = data.get("detector")
             self._scaler = data.get("scaler")
+            # Load scaler_type with backward compatibility (default to "standard" for old models)
+            self.scaler_type = data.get("scaler_type", "standard")
             self._threshold = data.get("threshold", 0.5)
             self._norm_median = data.get("norm_median")
             self._norm_iqr = data.get("norm_iqr")
@@ -354,10 +378,31 @@ class AnomalyModel(BaseModel):
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
 
-        # Initialize scaler for data normalization
-        from sklearn.preprocessing import StandardScaler
+        # Initialize scaler for data normalization based on scaler_type
+        self._scaler = self._create_scaler()
 
-        self._scaler = StandardScaler()
+    def _create_scaler(self):
+        """Create the appropriate scaler based on scaler_type.
+
+        Returns:
+            StandardScaler or RobustScaler instance
+
+        Note:
+            RobustScaler uses median and IQR for centering/scaling, making it
+            much more robust to outliers in the training data. This is the
+            recommended choice when training data may contain anomalies.
+
+            StandardScaler uses mean and std, which can be heavily influenced
+            by outliers. Use only when training data is clean.
+        """
+        if self.scaler_type == "robust":
+            from sklearn.preprocessing import RobustScaler
+
+            return RobustScaler()
+        else:  # standard
+            from sklearn.preprocessing import StandardScaler
+
+            return StandardScaler()
 
     async def fit(
         self,
@@ -738,6 +783,7 @@ class AnomalyModel(BaseModel):
         common_fields = {
             "threshold": self._threshold,
             "scaler": self._scaler,
+            "scaler_type": self.scaler_type,
             "normalization": self.normalization,
             # Standardization stats
             "norm_median": self._norm_median,
@@ -797,6 +843,7 @@ class AnomalyModel(BaseModel):
                 "contamination": self.contamination,
                 "threshold": self._threshold,
                 "normalization": self.normalization,
+                "scaler_type": self.scaler_type,
                 "is_fitted": self._is_fitted,
             }
         )

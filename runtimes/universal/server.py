@@ -1213,7 +1213,7 @@ async def extract_text_from_images(request: OCRRequest):
 
 
 def _make_anomaly_cache_key(
-    model_id: str, backend: str, normalization: str | None = None
+    model_id: str, backend: str, normalization: str | None = None, scaler_type: str | None = None
 ) -> str:
     """Generate a cache key for an anomaly model.
 
@@ -1223,13 +1223,18 @@ def _make_anomaly_cache_key(
         normalization: Score normalization method. If provided, it becomes part of
             the cache key to ensure models with different normalization methods
             are cached separately.
+        scaler_type: Input data scaler type (robust or standard)
 
     Returns:
         Cache key string
     """
+    parts = ["anomaly", backend]
     if normalization:
-        return f"anomaly:{backend}:{normalization}:{model_id}"
-    return f"anomaly:{backend}:{model_id}"
+        parts.append(normalization)
+    if scaler_type:
+        parts.append(scaler_type)
+    parts.append(model_id)
+    return ":".join(parts)
 
 
 async def load_anomaly(
@@ -1238,6 +1243,7 @@ async def load_anomaly(
     contamination: float = 0.1,
     threshold: float | None = None,
     normalization: str = "standardization",
+    scaler_type: str = "robust",
 ):
     """Load an anomaly detection model.
 
@@ -1247,11 +1253,12 @@ async def load_anomaly(
         contamination: Expected proportion of anomalies
         threshold: Custom anomaly threshold
         normalization: Score normalization method (standardization, zscore, raw)
+        scaler_type: Input data scaler type (robust or standard)
 
     Returns:
         Loaded AnomalyModel instance
     """
-    cache_key = _make_anomaly_cache_key(model_id, backend, normalization)
+    cache_key = _make_anomaly_cache_key(model_id, backend, normalization, scaler_type)
 
     if cache_key not in _models:
         async with _model_load_lock:
@@ -1266,6 +1273,7 @@ async def load_anomaly(
                     contamination=contamination,
                     threshold=threshold,
                     normalization=normalization,
+                    scaler_type=scaler_type,
                 )
 
                 await model.load()
@@ -1352,6 +1360,7 @@ class AnomalyScoreRequest(PydanticBaseModel):
     )
     threshold: float | None = None  # Override default threshold
     normalization: str = "standardization"  # standardization, zscore, or raw
+    scaler_type: str = "robust"  # Input data scaler: robust (default) or standard
 
 
 class AnomalyFitRequest(PydanticBaseModel):
@@ -1386,6 +1395,7 @@ class AnomalyFitRequest(PydanticBaseModel):
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
     normalization: str = "standardization"  # standardization, zscore, or raw
+    scaler_type: str = "robust"  # Input data scaler: robust (default) or standard
 
 
 @app.post("/v1/anomaly/score")
@@ -1418,13 +1428,14 @@ async def score_anomalies(request: AnomalyScoreRequest):
     """
     try:
         cache_key = _make_anomaly_cache_key(
-            request.model, request.backend, request.normalization
+            request.model, request.backend, request.normalization, request.scaler_type
         )
 
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
             normalization=request.normalization,
+            scaler_type=request.scaler_type,
         )
 
         if not model.is_fitted:
@@ -1510,7 +1521,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
     """
     try:
         cache_key = _make_anomaly_cache_key(
-            request.model, request.backend, request.normalization
+            request.model, request.backend, request.normalization, request.scaler_type
         )
 
         # Prepare data (encode if dict-based, and fit the encoder)
@@ -1526,6 +1537,7 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             backend=request.backend,
             contamination=request.contamination,
             normalization=request.normalization,
+            scaler_type=request.scaler_type,
         )
 
         # Fit model
@@ -1591,13 +1603,14 @@ async def detect_anomalies(request: AnomalyScoreRequest):
     """
     try:
         cache_key = _make_anomaly_cache_key(
-            request.model, request.backend, request.normalization
+            request.model, request.backend, request.normalization, request.scaler_type
         )
 
         model = await load_anomaly(
             model_id=request.model,
             backend=request.backend,
             normalization=request.normalization,
+            scaler_type=request.scaler_type,
         )
 
         if not model.is_fitted:
