@@ -1396,7 +1396,8 @@ class AnomalyFitRequest(PydanticBaseModel):
 
     model: str = "default"  # Model identifier (for caching)
     backend: str = "isolation_forest"  # Backend to use
-    data: list[list[float]] | list[dict]  # Training data (numeric arrays or dicts)
+    data: list[list[float]] | list[dict] | None = None  # Training data (numeric arrays or dicts)
+    training_file: str | None = None  # File reference ID from upload-training-data endpoint
     schema: dict[str, str] | None = (
         None  # Feature encoding schema (required for dict data)
     )
@@ -1506,6 +1507,87 @@ async def score_anomalies(request: AnomalyScoreRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+# Global streaming data loader for file uploads
+_streaming_loader = None
+
+
+def get_streaming_loader():
+    """Get or create the global streaming data loader."""
+    global _streaming_loader
+    if _streaming_loader is None:
+        from utils.streaming_data import StreamingDataLoader
+        _streaming_loader = StreamingDataLoader()
+    return _streaming_loader
+
+
+@app.post("/v1/anomaly/upload-training-data")
+async def upload_training_data(
+    file: UploadFile,
+    skip_columns: str = Form(default=""),
+):
+    """
+    Upload a training data file for streaming training.
+
+    Upload CSV, JSON Lines, or Parquet files for memory-efficient training
+    on large datasets. Returns a file reference ID that can be used with
+    the /v1/anomaly/fit endpoint's training_file parameter.
+
+    Supported formats:
+    - CSV (.csv) - First row should be header
+    - JSON Lines (.jsonl, .ndjson) - One JSON object per line
+    - Parquet (.parquet) - Requires pyarrow
+
+    Args:
+        file: The uploaded file
+        skip_columns: Comma-separated list of column names to skip (e.g., "timestamp,id")
+
+    Returns:
+        file_id: Reference ID for use in fit endpoint
+        row_count: Number of rows in the file
+        column_count: Number of columns (after skipping)
+        columns: List of column names
+    """
+    import tempfile
+    from pathlib import Path
+
+    try:
+        # Save uploaded file to temp location
+        suffix = Path(file.filename).suffix.lower() if file.filename else ".csv"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        # Upload to streaming loader
+        loader = get_streaming_loader()
+        file_ref = await loader.upload_file(tmp_path, copy_to_temp=True)
+
+        # Clean up the initial temp file
+        import os
+        os.unlink(tmp_path)
+
+        # Handle skip_columns
+        columns_to_use = file_ref.column_names
+        if skip_columns:
+            skip_list = [c.strip() for c in skip_columns.split(",")]
+            columns_to_use = [c for c in columns_to_use if c not in skip_list]
+
+        return {
+            "object": "file_reference",
+            "file_id": file_ref.file_id,
+            "filename": file.filename,
+            "file_type": file_ref.file_type,
+            "row_count": file_ref.row_count,
+            "column_count": len(columns_to_use),
+            "columns": columns_to_use,
+            "status": "ready",
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading training data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @app.post("/v1/anomaly/fit")
 async def fit_anomaly_detector(request: AnomalyFitRequest):
     """
@@ -1546,13 +1628,12 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             request.model, request.backend, request.normalization, request.scaler_type
         )
 
-        # Prepare data (encode if dict-based, and fit the encoder)
-        prepared_data = _prepare_anomaly_data(
-            data=request.data,
-            schema=request.schema,
-            cache_key=cache_key,
-            fit_mode=True,  # Fit encoder on training data
-        )
+        # Validate that either data or training_file is provided
+        if request.data is None and request.training_file is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Either 'data' or 'training_file' must be provided",
+            )
 
         model = await load_anomaly(
             model_id=request.model,
@@ -1565,12 +1646,37 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
             min_delta=request.min_delta,
         )
 
-        # Fit model
-        result = await model.fit(
-            data=prepared_data,
-            epochs=request.epochs,
-            batch_size=request.batch_size,
-        )
+        # Fit from file or in-memory data
+        if request.training_file:
+            # Streaming training from file reference
+            loader = get_streaming_loader()
+            file_ref = loader.get_file_ref(request.training_file)
+            if file_ref is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Training file not found: {request.training_file}",
+                )
+
+            result = await model.fit_from_file(
+                file_ref=file_ref,
+                batch_size=request.batch_size,
+                epochs=request.epochs,
+            )
+        else:
+            # Prepare data (encode if dict-based, and fit the encoder)
+            prepared_data = _prepare_anomaly_data(
+                data=request.data,
+                schema=request.schema,
+                cache_key=cache_key,
+                fit_mode=True,  # Fit encoder on training data
+            )
+
+            # Fit model
+            result = await model.fit(
+                data=prepared_data,
+                epochs=request.epochs,
+                batch_size=request.batch_size,
+            )
 
         # Include encoder info in response if used
         encoder_info = None
