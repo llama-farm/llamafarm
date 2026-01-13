@@ -47,6 +47,7 @@ from models import (
     GGUFLanguageModel,
     LanguageDetectionModel,
     LanguageModel,
+    ObjectDetectionModel,
     OCRModel,
     PIIModel,
 )
@@ -152,6 +153,7 @@ _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOU
 _vision_models: ModelCache["CLIPVisionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _lang_detection_models: ModelCache["LanguageDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _pii_models: ModelCache["PIIModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_object_detection_models: ModelCache["ObjectDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -3401,6 +3403,169 @@ async def redact_pii(request: PIIRedactRequest):
         raise
     except Exception as e:
         logger.error(f"Error in redact_pii: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# Object Detection Endpoint (YOLOS)
+# =============================================================================
+
+
+class ObjectDetectionRequest(PydanticBaseModel):
+    """Object detection request."""
+
+    image: str  # Base64-encoded image or file path
+    threshold: float = 0.5  # Confidence threshold (0-1)
+    labels: list[str] | None = None  # Filter to specific object labels
+    model: str = "hustvl/yolos-tiny"  # HuggingFace model name
+
+
+class ObjectDetectionBatchRequest(PydanticBaseModel):
+    """Batch object detection request."""
+
+    images: list[str]  # List of base64-encoded images or file paths
+    threshold: float = 0.5
+    labels: list[str] | None = None
+    model: str = "hustvl/yolos-tiny"
+
+
+def _make_object_detection_cache_key(model_name: str) -> str:
+    """Create a cache key for object detection models."""
+    return f"object_detection:{model_name}"
+
+
+async def load_object_detection_model(
+    model_name: str = "hustvl/yolos-tiny",
+) -> ObjectDetectionModel:
+    """Load or retrieve cached object detection model."""
+    cache_key = _make_object_detection_cache_key(model_name)
+
+    if cache_key not in _object_detection_models:
+        async with _model_load_lock:
+            if cache_key not in _object_detection_models:
+                logger.info(f"Loading object detection model: {model_name}")
+                device = get_device()
+
+                model = ObjectDetectionModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _object_detection_models[cache_key] = model
+
+    return _object_detection_models.get(cache_key)
+
+
+@app.post("/v1/vision/detect-objects")
+async def detect_objects(request: ObjectDetectionRequest):
+    """
+    Detect objects in an image using YOLOS.
+
+    YOLOS (You Only Look at One Sequence) is a Vision Transformer-based
+    object detector that identifies objects and their bounding boxes.
+
+    The model detects 80 COCO classes including:
+    person, bicycle, car, motorcycle, airplane, bus, train, truck, boat,
+    traffic light, fire hydrant, stop sign, bench, bird, cat, dog, horse,
+    sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag,
+    tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat,
+    baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass,
+    cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli,
+    carrot, hot dog, pizza, donut, cake, chair, couch, potted plant, bed,
+    dining table, toilet, tv, laptop, mouse, remote, keyboard, cell phone,
+    microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors,
+    teddy bear, hair drier, toothbrush
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "threshold": 0.5,
+        "labels": ["person", "car", "dog"]
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "object_detection",
+        "objects": [
+            {"label": "person", "score": 0.95, "box": {"x1": 10, "y1": 20, "x2": 100, "y2": 200}},
+            {"label": "car", "score": 0.88, "box": {"x1": 150, "y1": 50, "x2": 300, "y2": 180}}
+        ],
+        "count": 2,
+        "image_size": {"width": 640, "height": 480}
+    }
+    ```
+    """
+    try:
+        if not request.image:
+            raise HTTPException(
+                status_code=400,
+                detail="Image data is required",
+            )
+
+        model = await load_object_detection_model(request.model)
+        result = await model.detect(
+            request.image,
+            threshold=request.threshold,
+            labels=request.labels,
+        )
+
+        return {
+            "object": "object_detection",
+            "objects": result["objects"],
+            "count": result["count"],
+            "image_size": result["image_size"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_objects: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/detect-objects/batch")
+async def detect_objects_batch(request: ObjectDetectionBatchRequest):
+    """
+    Detect objects in multiple images.
+
+    Returns detection results for each image in the batch.
+    """
+    try:
+        if not request.images:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one image is required",
+            )
+
+        model = await load_object_detection_model(request.model)
+        results = await model.detect_batch(
+            request.images,
+            threshold=request.threshold,
+            labels=request.labels,
+        )
+
+        return {
+            "object": "object_detection_batch",
+            "results": [
+                {
+                    "objects": r["objects"],
+                    "count": r["count"],
+                    "image_size": r["image_size"],
+                }
+                for r in results
+            ],
+            "total_images": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_objects_batch: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

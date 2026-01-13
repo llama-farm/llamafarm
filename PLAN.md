@@ -197,158 +197,168 @@ New endpoints to add:
 - [x] Tests verified passing
 - [x] Demo verified working
 - [x] Memory efficiency verified
-- [ ] **COMMIT**: `git commit -m "feat(anomaly): add streaming training support for large datasets"`
-- [ ] Ready for Phase 5
+- [x] **COMMIT**: `git commit -m "feat(anomaly): add streaming training support for large datasets"`
+- [x] Ready for Phase 5
 
 ---
 
 ## Phase 5: Zero-Shot Image Classification (CLIP)
 
 ### Phase 5 Tests (Define FIRST)
-- [ ] Test: CLIP model loads successfully
-- [ ] Test: Zero-shot classification returns probabilities for all labels
-- [ ] Test: Classification works with various image formats (PNG, JPEG, WebP)
-- [ ] Test: Labels are case-insensitive
-- [ ] Test: Batch processing multiple images works
-- [ ] Test file: `runtimes/universal/tests/test_vision_clip.py`
+- [x] Test: CLIP model loads successfully
+- [x] Test: Zero-shot classification returns probabilities for all labels
+- [x] Test: Classification works with various image formats (PNG, JPEG, WebP)
+- [x] Test: Labels are case-insensitive
+- [x] Test: Batch processing multiple images works
+- [x] Test file: `runtimes/universal/tests/test_vision_clip.py`
 
 ### Phase 5 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-clip-classification.sh`
-- [ ] Demo shows: Upload image, classify as "receipt", "contract", or "ID card"
-- [ ] Expected output: Returns probability distribution over labels
+- [x] Demo script: `examples/ml/demo-clip-classification.sh`
+- [x] Demo shows: Upload image, classify as "receipt", "contract", or "ID card"
+- [x] Expected output: Returns probability distribution over labels
 
 ### Phase 5 Implementation
-- [ ] Create `models/vision_model.py` with `CLIPVisionModel` class
+- [x] Create `models/vision_model.py` with `CLIPVisionModel` class
   - Load `openai/clip-vit-base-patch32` from HuggingFace
   - Support image input: file path, base64, URL
   - Support custom label lists
-- [ ] Create `/v1/vision/classify-zero-shot` endpoint
+- [x] Create `/v1/vision/classify-zero-shot` endpoint
   - Request: `{"image": "<base64 or path>", "labels": ["receipt", "contract", "id_card"]}`
   - Response: `{"label": "receipt", "score": 0.87, "all_scores": {...}}`
-- [ ] Add to `pyproject.toml` optional dependency: `vision = [...]`
-- [ ] Lazy import to avoid loading CLIP unless endpoint is called
+- [x] Add to `pyproject.toml` optional dependency: `vision = [...]`
+- [x] Lazy import to avoid loading CLIP unless endpoint is called
 
 ### Phase 5 Verification
-- [ ] Run tests: all Phase 5 tests pass
-- [ ] Run demo: demo runs successfully
-- [ ] Classification accuracy > 80% on test images
+- [x] Run tests: all Phase 5 tests pass (11/11)
+- [x] Run demo: demo runs successfully
+- [x] Classification accuracy > 80% on test images (cat: 97.6%, horse: 100%)
+
+### Phase 5 Learnings
+- **IMPORTANT**: Large images (>500KB) can cause terminal/server issues when base64 encoded
+- Demo script resizes images to max 512px before encoding to avoid memory issues
+- Vision model `_load_image()` handles long base64 strings by skipping file path check for strings > 4096 chars
 
 ### Phase 5 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
-- [ ] Code review completed
-- [ ] **COMMIT**: `git commit -m "feat(vision): add zero-shot image classification with CLIP"`
-- [ ] Ready for Phase 6
+- [x] Tests verified passing
+- [x] Demo verified working
+- [x] Code review completed
+- [x] **COMMIT**: `git commit -m "feat(vision): add zero-shot image classification with CLIP"`
+- [x] Ready for Phase 6
 
 ---
 
 ## Phase 6: Language Identification
 
 ### Phase 6 Tests (Define FIRST)
-- [ ] Test: Language detection model loads successfully
-- [ ] Test: Correctly identifies English, Spanish, French, German, Chinese, Japanese
-- [ ] Test: Returns confidence scores
-- [ ] Test: Batch processing multiple texts works
-- [ ] Test file: `runtimes/universal/tests/test_language_detection.py`
+- [x] Test: Language detection model loads successfully
+- [x] Test: Correctly identifies English, Spanish, French, German, Chinese, Japanese
+- [x] Test: Returns confidence scores
+- [x] Test: Batch processing multiple texts works
+- [x] Test file: `runtimes/universal/tests/test_language_detection.py`
 
 ### Phase 6 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-language-detection.sh`
-- [ ] Demo shows: Detect language of multilingual texts
-- [ ] Expected output: Correct language with >90% confidence
+- [x] Demo script: `examples/ml/demo-language-detection.sh`
+- [x] Demo shows: Detect language of multilingual texts
+- [x] Expected output: Correct language with >90% confidence
 
 ### Phase 6 Implementation
-- [ ] Extend `ClassifierModel` or create new `LanguageModel`
+- [x] Create new `LanguageDetectionModel`
   - Use `papluca/xlm-roberta-base-language-detection`
   - Pre-trained, no training needed
-- [ ] Create `/v1/text/language` endpoint
-  - Request: `{"texts": ["Hello world", "Bonjour le monde"]}`
-  - Response: `{"results": [{"text": "...", "language": "en", "confidence": 0.99}, ...]}`
-- [ ] Support ISO 639-1 language codes in output
+- [x] Create `/v1/text/language` endpoint
+  - Request: `{"text": "Hello world", "top_k": 5}`
+  - Response: `{"language": "en", "language_name": "English", "confidence": 0.99, "all_scores": {...}}`
+- [x] Create `/v1/text/language/batch` endpoint for batch processing
+- [x] Support ISO 639-1 language codes in output (20 languages supported)
 
 ### Phase 6 Verification
-- [ ] Run tests: all Phase 6 tests pass
-- [ ] Run demo: demo runs successfully
+- [x] Run tests: all Phase 6 tests pass (17/17)
+- [x] Run demo: demo runs successfully (all 7 tests pass)
 
 ### Phase 6 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
-- [ ] **COMMIT**: `git commit -m "feat(text): add language identification endpoint"`
-- [ ] Ready for Phase 7
+- [x] Tests verified passing
+- [x] Demo verified working
+- [x] **COMMIT**: `git commit -m "feat(text): add language identification endpoint"`
+- [x] Ready for Phase 7
 
 ---
 
 ## Phase 7: Keyword/Keyphrase Extraction
 
 ### Phase 7 Tests (Define FIRST)
-- [ ] Test: Keyword extraction returns ranked keywords
-- [ ] Test: N-gram generation (1-3 words) works correctly
-- [ ] Test: Cosine similarity ranking produces relevant keywords
-- [ ] Test: Works with documents of various lengths
-- [ ] Test file: `runtimes/universal/tests/test_keyword_extraction.py`
+- [x] Test: Keyword extraction returns ranked keywords
+- [x] Test: N-gram generation (1-3 words) works correctly
+- [x] Test: Cosine similarity ranking produces relevant keywords
+- [x] Test: Works with documents of various lengths
+- [x] Test file: `runtimes/universal/tests/test_keyword_extraction.py`
 
 ### Phase 7 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-keyword-extraction.sh`
-- [ ] Demo shows: Extract keywords from a technical document
-- [ ] Expected output: Top 10 relevant keyphrases with scores
+- [x] Demo script: `examples/ml/demo-keyword-extraction.sh`
+- [x] Demo shows: Extract keywords from a technical document
+- [x] Expected output: Top 10 relevant keyphrases with scores
 
 ### Phase 7 Implementation
-- [ ] Create `utils/keyword_extractor.py`
+- [x] Create `utils/keyword_extractor.py`
   - Generate n-gram candidates (1-3 words)
   - Embed document using existing sentence-transformers
   - Embed candidate phrases
   - Rank by cosine similarity to document embedding
   - Return top-k keywords with scores
-- [ ] Create `/v1/text/keywords` endpoint
-  - Request: `{"text": "...", "top_k": 10, "max_ngram": 3}`
-  - Response: `{"keywords": [{"phrase": "machine learning", "score": 0.89}, ...]}`
-- [ ] No new dependencies (reuse existing embeddings infrastructure)
+  - MMR (Maximal Marginal Relevance) for diversity
+- [x] Create `/v1/text/keywords` endpoint
+  - Request: `{"text": "...", "top_k": 10, "ngram_range": [1, 3], "diversity": 0.5}`
+  - Response: `{"keywords": [{"keyword": "machine learning", "score": 0.89}, ...], "count": 10}`
+- [x] Create `/v1/text/keywords/batch` endpoint for batch processing
+- [x] No new dependencies (reuse existing embeddings infrastructure)
 
 ### Phase 7 Verification
-- [ ] Run tests: all Phase 7 tests pass
-- [ ] Run demo: demo runs successfully
+- [x] Run tests: all Phase 7 tests pass (20/20)
+- [x] Run demo: demo runs successfully (5 tests)
 
 ### Phase 7 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
-- [ ] **COMMIT**: `git commit -m "feat(text): add keyword and keyphrase extraction endpoint"`
-- [ ] Ready for Phase 8
+- [x] Tests verified passing
+- [x] Demo verified working
+- [x] **COMMIT**: `git commit -m "feat(text): add keyword and keyphrase extraction endpoint"`
+- [x] Ready for Phase 8
 
 ---
 
 ## Phase 8: PII Redaction (GLiNER)
 
 ### Phase 8 Tests (Define FIRST)
-- [ ] Test: GLiNER model loads successfully
-- [ ] Test: Detects standard PII types (SSN, phone, email, credit card)
-- [ ] Test: Custom entity types work (e.g., "employee ID")
-- [ ] Test: Redaction replaces PII with placeholders
-- [ ] Test: Returns both original positions and redacted text
-- [ ] Test file: `runtimes/universal/tests/test_pii_redaction.py`
+- [x] Test: GLiNER model loads successfully
+- [x] Test: Detects standard PII types (SSN, phone, email, credit card)
+- [x] Test: Custom entity types work (e.g., "medical record number")
+- [x] Test: Redaction replaces PII with placeholders
+- [x] Test: Returns both original positions and redacted text
+- [x] Test file: `runtimes/universal/tests/test_pii_detection.py`
 
 ### Phase 8 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-pii-redaction.sh`
-- [ ] Demo shows: Redact PII from sample text before sending to external LLM
-- [ ] Expected output: Text with [SSN], [PHONE], [EMAIL] placeholders
+- [x] Demo script: `examples/ml/demo-pii-redaction.sh`
+- [x] Demo shows: Redact PII from sample text with custom replacements
+- [x] Expected output: Text with [REDACTED], [NAME], [EMAIL] placeholders
 
 ### Phase 8 Implementation
-- [ ] Create `models/ner_model.py` with `GLiNERModel` class
+- [x] Create `models/pii_model.py` with `PIIModel` class
   - Load `urchade/gliner_small-v2.1`
   - Support dynamic entity type specification
   - Zero-shot NER without retraining
-- [ ] Create `/v1/text/pii-redact` endpoint
-  - Request: `{"text": "...", "entity_types": ["ssn", "phone", "email"], "redact": true}`
-  - Response: `{"redacted_text": "...", "entities": [{"type": "SSN", "start": 10, "end": 21, "text": "123-45-6789"}]}`
-- [ ] Add to `pyproject.toml`: `pii = ["gliner>=0.1.0"]`
+  - Regex patterns for high-precision common PII (email, phone, SSN, IP, credit card)
+- [x] Create `/v1/text/pii-detect` endpoint for detection only
+- [x] Create `/v1/text/pii-redact` endpoint for detection + redaction
+  - Support custom replacement strings
+  - Support per-entity-type replacement map
+- [x] Add GLiNER dependency to pyproject.toml
 
 ### Phase 8 Verification
-- [ ] Run tests: all Phase 8 tests pass
-- [ ] Run demo: demo runs successfully
+- [x] Run tests: all Phase 8 tests pass (22/22)
+- [x] Run demo: demo runs successfully (5 tests)
 
 ### Phase 8 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
-- [ ] **COMMIT**: `git commit -m "feat(text): add PII redaction endpoint with GLiNER"`
-- [ ] Ready for Phase 9
+- [x] Tests verified passing
+- [x] Demo verified working
+- [x] **COMMIT**: `git commit -m "feat(text): add PII redaction endpoint with GLiNER"`
+- [x] Ready for Phase 9
 
 ---
 
