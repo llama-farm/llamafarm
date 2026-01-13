@@ -1,10 +1,12 @@
+# pyright: reportMissingImports=false
+
 import contextlib
 import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from celery import group  # type: ignore[import-untyped]
+from celery import group  # type: ignore[import-not-found,import-untyped]
 from config.datamodel import Dataset
 from fastapi import UploadFile
 from pydantic import BaseModel
@@ -62,6 +64,7 @@ class DatasetService:
 
             dataset_with_details = DatasetWithFileDetails(
                 name=dataset.name,
+                auto_process=dataset.auto_process,
                 data_processing_strategy=dataset.data_processing_strategy,
                 database=dataset.database,
                 details=DatasetDetails(files_metadata=files_with_details),
@@ -154,6 +157,7 @@ class DatasetService:
         name: str,
         data_processing_strategy: str,
         database: str,
+        auto_process: bool | None = True,
     ) -> Dataset:
         """
         Create a new dataset in the project
@@ -190,6 +194,7 @@ class DatasetService:
 
         new_dataset = Dataset(
             name=name,
+            auto_process=auto_process,
             data_processing_strategy=data_processing_strategy,
             database=database,
         )
