@@ -116,7 +116,8 @@ def _validate_model_path(model_path: Path) -> Path:
 
 
 AnomalyBackend = Literal[
-    "autoencoder", "vae", "isolation_forest", "one_class_svm", "local_outlier_factor"
+    "autoencoder", "vae", "isolation_forest", "one_class_svm", "local_outlier_factor",
+    "copod", "hbos", "ecod",  # PyOD backends
 ]
 
 ScalerType = Literal["standard", "robust"]
@@ -404,6 +405,22 @@ class AnomalyModel(BaseModel):
             # Will be created during fit() based on input dimensions
             pass
 
+        # PyOD backends
+        elif self.backend == "copod":
+            from pyod.models.copod import COPOD
+
+            self._detector = COPOD(contamination=self.contamination)
+
+        elif self.backend == "hbos":
+            from pyod.models.hbos import HBOS
+
+            self._detector = HBOS(contamination=self.contamination)
+
+        elif self.backend == "ecod":
+            from pyod.models.ecod import ECOD
+
+            self._detector = ECOD(contamination=self.contamination)
+
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
 
@@ -654,6 +671,10 @@ class AnomalyModel(BaseModel):
         elif self.backend == "local_outlier_factor":
             # LOF: negative score = more anomalous
             return -self._detector.score_samples(X)
+
+        # PyOD backends: use decision_function (higher = more anomalous)
+        elif self.backend in ("copod", "hbos", "ecod"):
+            return self._detector.decision_function(X)
 
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
@@ -1055,6 +1076,10 @@ class AnomalyModel(BaseModel):
         elif self.backend == "local_outlier_factor":
             # LOF: negative score = more anomalous
             return -self._detector.score_samples(X)
+
+        # PyOD backends: use decision_function (higher = more anomalous)
+        elif self.backend in ("copod", "hbos", "ecod"):
+            return self._detector.decision_function(X)
 
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")

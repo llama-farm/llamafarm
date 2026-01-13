@@ -642,34 +642,34 @@ New endpoints to add:
 ## Phase 17: PyOD Integration (Advanced Anomaly Detection)
 
 ### Phase 17 Tests (Define FIRST)
-- [ ] Test: COPOD algorithm loads and trains
-- [ ] Test: HBOS algorithm loads and trains
-- [ ] Test: PyOD models integrate with existing anomaly API
-- [ ] Test: Model save/load works for PyOD backends
-- [ ] Test file: `runtimes/universal/tests/test_pyod_integration.py`
+- [x] Test: COPOD algorithm loads and trains
+- [x] Test: HBOS algorithm loads and trains
+- [x] Test: PyOD models integrate with existing anomaly API
+- [x] Test: Model save/load works for PyOD backends
+- [x] Test file: `runtimes/universal/tests/test_pyod_integration.py`
 
 ### Phase 17 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-pyod-anomaly.sh`
-- [ ] Demo shows: Compare COPOD vs Isolation Forest on same data
-- [ ] Expected output: Both models detect anomalies, show differences
+- [x] Demo script: `examples/ml/demo-pyod-anomaly.sh`
+- [x] Demo shows: Compare COPOD vs Isolation Forest on same data
+- [x] Expected output: Both models detect anomalies, show differences
 
 ### Phase 17 Implementation
-- [ ] Extend `AnomalyModel` to support PyOD backends
+- [x] Extend `AnomalyModel` to support PyOD backends
   - Add `copod` backend (Copula-Based, no hyperparameters!)
   - Add `hbos` backend (Histogram-Based, very fast)
   - Add `ecod` backend (Empirical Cumulative Distribution)
-- [ ] Update `/v1/anomaly/fit` to accept new backends
-- [ ] Add to `pyproject.toml`: `issues = [..., "pyod>=1.1.2"]`
+- [x] Update `/v1/anomaly/fit` to accept new backends
+- [x] Add to `pyproject.toml`: `pyod>=2.0.6`
 
 ### Phase 17 Verification
-- [ ] Run tests: all Phase 17 tests pass
-- [ ] Run demo: demo runs successfully
+- [x] Run tests: all Phase 17 tests pass (27 tests)
+- [x] Run demo: demo runs successfully
 
 ### Phase 17 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
-- [ ] **COMMIT**: `git commit -m "feat(anomaly): add PyOD backends (COPOD, HBOS, ECOD)"`
-- [ ] Ready for Phase 18
+- [x] Tests verified passing
+- [x] Demo verified working
+- [x] **COMMIT**: `git commit -m "feat(anomaly): add PyOD backends (COPOD, HBOS, ECOD)"`
+- [x] Ready for Phase 18
 
 ---
 
