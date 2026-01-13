@@ -42,13 +42,16 @@ if [ ! -f "$IMAGE_PATH" ]; then
 fi
 
 IMAGE_B64=$(base64 -i "$IMAGE_PATH")
+PAYLOAD_FILE=$(mktemp)
+cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}"}
+EOFPAYLOAD
 
 RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/vision/remove-background" \
     -H "Content-Type: application/json" \
     --max-time 120 \
-    -d "{
-        \"image\": \"${IMAGE_B64}\"
-    }")
+    -d @"$PAYLOAD_FILE")
+rm -f "$PAYLOAD_FILE"
 
 echo "$RESPONSE" | python3 -c "
 import sys, json, base64

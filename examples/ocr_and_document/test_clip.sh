@@ -54,16 +54,21 @@ if [ ! -f "$IMAGE_PATH" ]; then
     exit 1
 fi
 
-# Base64 encode the image
+# Base64 encode the image and create JSON payload file
 IMAGE_B64=$(base64 -i "$IMAGE_PATH")
+PAYLOAD_FILE=$(mktemp)
+cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{
+    "image": "${IMAGE_B64}",
+    "labels": ["cat", "dog", "horse", "bird", "fish", "bear"]
+}
+EOFPAYLOAD
 
 RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/classify" \
     -H "Content-Type: application/json" \
     --max-time 120 \
-    -d "{
-        \"image\": \"${IMAGE_B64}\",
-        \"labels\": [\"cat\", \"dog\", \"horse\", \"bird\", \"fish\", \"bear\"]
-    }")
+    -d @"$PAYLOAD_FILE")
+rm -f "$PAYLOAD_FILE"
 
 echo "Labels: cat, dog, horse, bird, fish, bear"
 echo ""
@@ -102,14 +107,16 @@ for IMG in cat1.jpg cat2.jpg horse.jpg; do
     if [ -f "$IMAGE_PATH" ]; then
         echo -e "${YELLOW}Testing with ${IMG}...${NC}"
         IMAGE_B64=$(base64 -i "$IMAGE_PATH")
+        PAYLOAD_FILE=$(mktemp)
+        cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}", "labels": ["cat", "dog", "horse", "bird", "fish", "bear"]}
+EOFPAYLOAD
 
         RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/classify" \
             -H "Content-Type: application/json" \
             --max-time 120 \
-            -d "{
-                \"image\": \"${IMAGE_B64}\",
-                \"labels\": ${LABELS}
-            }")
+            -d @"$PAYLOAD_FILE")
+        rm -f "$PAYLOAD_FILE"
 
         echo "$RESPONSE" | python3 -c "
 import sys, json
@@ -157,14 +164,16 @@ if [ -f "$VIDEO_PATH" ] && command -v ffmpeg &> /dev/null; then
         if [ -f "$FRAME" ]; then
             FRAME_NUM=$((FRAME_NUM + 1))
             IMAGE_B64=$(base64 -i "$FRAME")
+            PAYLOAD_FILE=$(mktemp)
+            cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}", "labels": ["cat", "dog", "horse", "bird", "fish", "bear"]}
+EOFPAYLOAD
 
             RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/classify" \
                 -H "Content-Type: application/json" \
                 --max-time 120 \
-                -d "{
-                    \"image\": \"${IMAGE_B64}\",
-                    \"labels\": ${LABELS}
-                }")
+                -d @"$PAYLOAD_FILE")
+            rm -f "$PAYLOAD_FILE"
 
             echo "$RESPONSE" | python3 -c "
 import sys, json

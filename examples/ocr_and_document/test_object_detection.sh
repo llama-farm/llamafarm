@@ -54,14 +54,16 @@ if [ ! -f "$IMAGE_PATH" ]; then
 fi
 
 IMAGE_B64=$(base64 -i "$IMAGE_PATH")
+PAYLOAD_FILE=$(mktemp)
+cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}", "threshold": 0.5}
+EOFPAYLOAD
 
 RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/detect" \
     -H "Content-Type: application/json" \
     --max-time 120 \
-    -d "{
-        \"image\": \"${IMAGE_B64}\",
-        \"threshold\": 0.5
-    }")
+    -d @"$PAYLOAD_FILE")
+rm -f "$PAYLOAD_FILE"
 
 echo "$RESPONSE" | python3 -c "
 import sys, json
@@ -100,14 +102,16 @@ for IMG in cat1.jpg cat2.jpg horse.jpg; do
     if [ -f "$IMAGE_PATH" ]; then
         echo -e "${YELLOW}Testing with ${IMG}...${NC}"
         IMAGE_B64=$(base64 -i "$IMAGE_PATH")
+        PAYLOAD_FILE=$(mktemp)
+        cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}", "threshold": 0.3}
+EOFPAYLOAD
 
         RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/detect" \
             -H "Content-Type: application/json" \
             --max-time 120 \
-            -d "{
-                \"image\": \"${IMAGE_B64}\",
-                \"threshold\": 0.3
-            }")
+            -d @"$PAYLOAD_FILE")
+        rm -f "$PAYLOAD_FILE"
 
         echo "$RESPONSE" | python3 -c "
 import sys, json
@@ -142,13 +146,15 @@ IMAGE_PATH="${FILES_DIR}/cat.png"
 IMAGE_B64=$(base64 -i "$IMAGE_PATH")
 
 for THRESHOLD in 0.9 0.5 0.3 0.1; do
+    PAYLOAD_FILE=$(mktemp)
+    cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}", "threshold": ${THRESHOLD}}
+EOFPAYLOAD
     RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/detect" \
         -H "Content-Type: application/json" \
         --max-time 120 \
-        -d "{
-            \"image\": \"${IMAGE_B64}\",
-            \"threshold\": ${THRESHOLD}
-        }")
+        -d @"$PAYLOAD_FILE")
+    rm -f "$PAYLOAD_FILE"
 
     COUNT=$(echo "$RESPONSE" | python3 -c "
 import sys, json

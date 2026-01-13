@@ -59,13 +59,16 @@ if [ ! -f "$IMAGE_PATH" ]; then
 fi
 
 IMAGE_B64=$(base64 -i "$IMAGE_PATH")
+PAYLOAD_FILE=$(mktemp)
+cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}"}
+EOFPAYLOAD
 
 RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/remove-background" \
     -H "Content-Type: application/json" \
     --max-time 120 \
-    -d "{
-        \"image\": \"${IMAGE_B64}\"
-    }")
+    -d @"$PAYLOAD_FILE")
+rm -f "$PAYLOAD_FILE"
 
 # Save the result
 echo "$RESPONSE" | python3 -c "
@@ -105,13 +108,16 @@ for IMG in cat1.jpg horse.jpg; do
     if [ -f "$IMAGE_PATH" ]; then
         echo -e "${YELLOW}Processing ${IMG}...${NC}"
         IMAGE_B64=$(base64 -i "$IMAGE_PATH")
+        PAYLOAD_FILE=$(mktemp)
+        cat > "$PAYLOAD_FILE" << EOFPAYLOAD
+{"image": "${IMAGE_B64}"}
+EOFPAYLOAD
 
         RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/vision/remove-background" \
             -H "Content-Type: application/json" \
             --max-time 120 \
-            -d "{
-                \"image\": \"${IMAGE_B64}\"
-            }")
+            -d @"$PAYLOAD_FILE")
+        rm -f "$PAYLOAD_FILE"
 
         OUTPUT_NAME="${IMG%.*}_no_bg.png"
         echo "$RESPONSE" | python3 -c "
