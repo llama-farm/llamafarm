@@ -45,6 +45,7 @@ from models import (
     EncoderModel,
     GGUFEncoderModel,
     GGUFLanguageModel,
+    LanguageDetectionModel,
     LanguageModel,
     OCRModel,
 )
@@ -148,6 +149,7 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _vision_models: ModelCache["CLIPVisionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_lang_detection_models: ModelCache["LanguageDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -2869,6 +2871,174 @@ async def classify_zero_shot_batch(request: ZeroShotClassifyBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in classify_zero_shot_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# Language Detection Endpoints
+# ============================================================================
+
+
+def _make_lang_detection_cache_key(model_name: str) -> str:
+    """Create a cache key for language detection models."""
+    return f"lang_detect:{model_name}"
+
+
+async def load_lang_detection_model(
+    model_name: str = "papluca/xlm-roberta-base-language-detection",
+) -> LanguageDetectionModel:
+    """Load a language detection model.
+
+    Args:
+        model_name: HuggingFace model name
+
+    Returns:
+        Loaded LanguageDetectionModel instance
+    """
+    cache_key = _make_lang_detection_cache_key(model_name)
+
+    if cache_key not in _lang_detection_models:
+        async with _model_load_lock:
+            if cache_key not in _lang_detection_models:
+                logger.info(f"Loading language detection model: {model_name}")
+                device = get_device()
+
+                model = LanguageDetectionModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _lang_detection_models[cache_key] = model
+
+    return _lang_detection_models.get(cache_key)
+
+
+class LanguageDetectRequest(PydanticBaseModel):
+    """Language detection request."""
+
+    text: str  # Single text to detect
+    top_k: int = 5  # Number of top predictions
+
+
+class LanguageDetectBatchRequest(PydanticBaseModel):
+    """Language detection batch request."""
+
+    texts: list[str]  # List of texts to detect
+    top_k: int = 1  # Number of top predictions per text
+
+
+@app.post("/v1/text/language")
+async def detect_language(request: LanguageDetectRequest):
+    """
+    Detect the language of a text.
+
+    Uses XLM-RoBERTa fine-tuned for language detection. Supports 20 languages:
+    Arabic, Bulgarian, German, Greek, English, Spanish, French, Hindi, Italian,
+    Japanese, Dutch, Polish, Portuguese, Russian, Swahili, Thai, Turkish,
+    Urdu, Vietnamese, Chinese.
+
+    Example request:
+    ```json
+    {
+        "text": "Hello, how are you today?",
+        "top_k": 5
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "language_detection",
+        "language": "en",
+        "language_name": "English",
+        "confidence": 0.99,
+        "all_scores": {"en": 0.99, "de": 0.005, ...}
+    }
+    ```
+    """
+    try:
+        if not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Text cannot be empty",
+            )
+
+        model = await load_lang_detection_model()
+        result = await model.detect(request.text, top_k=request.top_k)
+
+        return {
+            "object": "language_detection",
+            "language": result["language"],
+            "language_name": result["language_name"],
+            "confidence": result["confidence"],
+            "all_scores": result["all_scores"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_language: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/text/language/batch")
+async def detect_language_batch(request: LanguageDetectBatchRequest):
+    """
+    Detect the language of multiple texts.
+
+    More efficient than calling single endpoint multiple times.
+
+    Example request:
+    ```json
+    {
+        "texts": ["Hello world", "Bonjour le monde", "Hallo Welt"],
+        "top_k": 1
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "list",
+        "data": [
+            {"language": "en", "language_name": "English", "confidence": 0.99, ...},
+            {"language": "fr", "language_name": "French", "confidence": 0.98, ...},
+            {"language": "de", "language_name": "German", "confidence": 0.97, ...}
+        ],
+        "total_count": 3
+    }
+    ```
+    """
+    try:
+        if not request.texts:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one text is required",
+            )
+
+        model = await load_lang_detection_model()
+        results = await model.detect_batch(request.texts, top_k=request.top_k)
+
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "language": r["language"],
+                    "language_name": r["language_name"],
+                    "confidence": r["confidence"],
+                    "all_scores": r["all_scores"],
+                }
+                for r in results
+            ],
+            "total_count": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_language_batch: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
