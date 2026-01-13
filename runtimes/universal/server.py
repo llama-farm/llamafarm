@@ -38,6 +38,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     AnomalyModel,
+    BackgroundRemovalModel,
     BaseModel,
     ClassifierModel,
     CLIPVisionModel,
@@ -154,6 +155,7 @@ _vision_models: ModelCache["CLIPVisionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIME
 _lang_detection_models: ModelCache["LanguageDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _pii_models: ModelCache["PIIModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _object_detection_models: ModelCache["ObjectDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_background_removal_models: ModelCache["BackgroundRemovalModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -3566,6 +3568,168 @@ async def detect_objects_batch(request: ObjectDetectionBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in detect_objects_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# Background Removal Endpoint (RMBG)
+# =============================================================================
+
+
+class BackgroundRemovalRequest(PydanticBaseModel):
+    """Background removal request."""
+
+    image: str  # Base64-encoded image or file path
+    return_mask: bool = False  # Whether to also return the alpha mask
+    model: str = "briaai/RMBG-1.4"  # HuggingFace model name
+
+
+class BackgroundRemovalBatchRequest(PydanticBaseModel):
+    """Batch background removal request."""
+
+    images: list[str]  # List of base64-encoded images or file paths
+    return_mask: bool = False
+    model: str = "briaai/RMBG-1.4"
+
+
+def _make_background_removal_cache_key(model_name: str) -> str:
+    """Create a cache key for background removal models."""
+    return f"background_removal:{model_name}"
+
+
+async def load_background_removal_model(
+    model_name: str = "briaai/RMBG-1.4",
+) -> BackgroundRemovalModel:
+    """Load or retrieve cached background removal model."""
+    cache_key = _make_background_removal_cache_key(model_name)
+
+    if cache_key not in _background_removal_models:
+        async with _model_load_lock:
+            if cache_key not in _background_removal_models:
+                logger.info(f"Loading background removal model: {model_name}")
+                device = get_device()
+
+                model = BackgroundRemovalModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _background_removal_models[cache_key] = model
+
+    return _background_removal_models.get(cache_key)
+
+
+@app.post("/v1/vision/segment")
+async def remove_background(request: BackgroundRemovalRequest):
+    """
+    Remove background from an image using RMBG.
+
+    RMBG (Remove Background) is a state-of-the-art background removal model
+    that produces high-quality alpha masks for separating foreground from background.
+
+    Returns a PNG image with transparent background (alpha channel).
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "return_mask": false
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "background_removal",
+        "image": "<base64-encoded-PNG-with-alpha>",
+        "width": 640,
+        "height": 480
+    }
+    ```
+
+    With `return_mask: true`:
+    ```json
+    {
+        "object": "background_removal",
+        "image": "<base64-encoded-PNG-with-alpha>",
+        "mask": "<base64-encoded-grayscale-mask>",
+        "width": 640,
+        "height": 480
+    }
+    ```
+    """
+    try:
+        if not request.image:
+            raise HTTPException(
+                status_code=400,
+                detail="Image data is required",
+            )
+
+        model = await load_background_removal_model(request.model)
+        result = await model.remove_background(
+            request.image,
+            return_mask=request.return_mask,
+        )
+
+        response = {
+            "object": "background_removal",
+            "image": result["image"],
+            "width": result["width"],
+            "height": result["height"],
+        }
+
+        if request.return_mask and "mask" in result:
+            response["mask"] = result["mask"]
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in remove_background: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/segment/batch")
+async def remove_background_batch(request: BackgroundRemovalBatchRequest):
+    """
+    Remove background from multiple images.
+
+    Returns processed images with transparent backgrounds.
+    """
+    try:
+        if not request.images:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one image is required",
+            )
+
+        model = await load_background_removal_model(request.model)
+        results = await model.remove_background_batch(
+            request.images,
+            return_mask=request.return_mask,
+        )
+
+        return {
+            "object": "background_removal_batch",
+            "results": [
+                {
+                    "image": r["image"],
+                    "width": r["width"],
+                    "height": r["height"],
+                    **({"mask": r["mask"]} if request.return_mask and "mask" in r else {}),
+                }
+                for r in results
+            ],
+            "total_images": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in remove_background_batch: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

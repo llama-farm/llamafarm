@@ -6,6 +6,7 @@ anomaly detection, and text classification.
 """
 
 from .anomaly_model import AnomalyModel
+from .background_removal_model import BackgroundRemovalModel
 from .base import BaseModel
 from .classifier_model import ClassifierModel
 from .document_model import DocumentModel
@@ -33,4 +34,5 @@ __all__ = [
     "LanguageDetectionModel",
     "PIIModel",
     "ObjectDetectionModel",
+    "BackgroundRemovalModel",
 ]
