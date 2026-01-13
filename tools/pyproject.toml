@@ -1,0 +1,13 @@
+[project]
+name = "llamafarm-build"
+version = "0.1.0"
+description = "Build tools for LlamaFarm native binaries"
+requires-python = ">=3.11"
+dependencies = [
+    "nuitka>=2.0.0",
+    "ordered-set>=4.1.0",
+    "zstandard>=0.22.0",
+]
+
+[project.scripts]
+llamafarm-build = "build:main"

@@ -1,14 +1,20 @@
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
 default_data_dir = str(Path.home() / ".llamafarm")
 
 
-class Settings(BaseSettings, env_file=".env"):
+class Settings(BaseSettings):
+    # Allow extra fields in .env file without validation errors
+    # This is important for deployments where users may have various env vars
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",  # Ignore unknown env vars instead of raising errors
+    )
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     RELOAD: bool = False  # if true, the server will reload on code changes

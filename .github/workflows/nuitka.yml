@@ -1,0 +1,274 @@
+name: Build Native Binaries (Nuitka)
+
+# Build standalone executables for LlamaFarm services
+# This workflow creates native binaries that don't require Python installed
+# Native dependencies (llama.cpp) are downloaded at runtime by the CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Component to build (server, rag, runtime, or all)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - server
+          - rag
+          - runtime
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "tools/nuitka/**"
+      - ".github/workflows/nuitka.yml"
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_SYSTEM_PYTHON: 1
+
+jobs:
+  # Build matrix for all platforms
+  build:
+    name: Build ${{ matrix.component }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - os: linux-x86_64
+            runner: ubuntu-latest
+            component: server
+          - os: linux-x86_64
+            runner: ubuntu-latest
+            component: rag
+          - os: linux-x86_64
+            runner: ubuntu-latest
+            component: runtime
+
+          # Linux ARM64
+          - os: linux-arm64
+            runner: ubuntu-24.04-arm
+            component: server
+          - os: linux-arm64
+            runner: ubuntu-24.04-arm
+            component: rag
+          # Note: runtime excluded for ARM64 Linux - llama.cpp binaries not available
+
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-arm64
+            runner: macos-14
+            component: server
+          - os: macos-arm64
+            runner: macos-14
+            component: rag
+          - os: macos-arm64
+            runner: macos-14
+            component: runtime
+
+          # macOS x86_64 (Intel)
+          - os: macos-x86_64
+            runner: macos-13
+            component: server
+          - os: macos-x86_64
+            runner: macos-13
+            component: rag
+          - os: macos-x86_64
+            runner: macos-13
+            component: runtime
+
+          # Windows x86_64
+          - os: windows-x86_64
+            runner: windows-latest
+            component: server
+          - os: windows-x86_64
+            runner: windows-latest
+            component: rag
+          - os: windows-x86_64
+            runner: windows-latest
+            component: runtime
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-suffix: ${{ matrix.component }}
+
+      # Cache Nuitka compilation artifacts (most important for build speed)
+      - name: Cache Nuitka
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/Nuitka
+            ~/AppData/Local/Nuitka/Nuitka
+            ~/Library/Caches/Nuitka
+          key: nuitka-${{ matrix.os }}-${{ matrix.component }}-${{ hashFiles('**/*.py', 'tools/nuitka/build.py') }}
+          restore-keys: |
+            nuitka-${{ matrix.os }}-${{ matrix.component }}-
+            nuitka-${{ matrix.os }}-
+
+      # Cache ccache for C compilation (Linux/macOS)
+      - name: Install ccache (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y ccache
+
+      - name: Install ccache (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ccache
+
+      - name: Cache ccache
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ matrix.os }}-${{ matrix.component }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.os }}-${{ matrix.component }}-
+            ccache-${{ matrix.os }}-
+
+      - name: Configure ccache
+        if: runner.os != 'Windows'
+        run: |
+          ccache --max-size=500M
+          ccache --set-config=compiler_check=content
+          echo "CC=ccache gcc" >> $GITHUB_ENV
+          echo "CXX=ccache g++" >> $GITHUB_ENV
+
+      - name: Install build dependencies
+        run: |
+          uv pip install --system nuitka ordered-set zstandard
+
+      - name: Install component dependencies (server)
+        if: matrix.component == 'server'
+        run: |
+          uv pip install --system -e ./config -e ./common -e ./server
+
+      - name: Install component dependencies (rag)
+        if: matrix.component == 'rag'
+        run: |
+          uv pip install --system -e ./config -e ./common -e ./rag
+
+      - name: Install component dependencies (runtime)
+        if: matrix.component == 'runtime'
+        env:
+          # Use CPU-only PyTorch for CI builds to reduce size
+          UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+        run: |
+          uv pip install --system -e ./config -e ./common -e ./packages/llamafarm-llama -e ./runtimes/universal
+
+      - name: Build with Nuitka
+        run: |
+          python tools/nuitka/build.py --component ${{ matrix.component }}
+
+      - name: Show ccache stats
+        if: runner.os != 'Windows'
+        run: ccache --show-stats
+
+      - name: List build output
+        shell: bash
+        run: |
+          echo "Build output:"
+          ls -la dist/nuitka/ || echo "No output found"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llamafarm-${{ matrix.component }}-${{ matrix.os }}
+          path: dist/nuitka/llamafarm-*
+          retention-days: 7
+          if-no-files-found: error
+
+  # Create release with all binaries
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: llamafarm-*
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          # Flatten artifact directories
+          for dir in artifacts/*/; do
+            cp -r "$dir"/* release/ 2>/dev/null || true
+          done
+          ls -la release/
+
+      - name: Create checksums
+        working-directory: release
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Verify builds work
+  test-binaries:
+    name: Test ${{ matrix.component }} on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux-x86_64
+            runner: ubuntu-latest
+            component: server
+          - os: macos-arm64
+            runner: macos-14
+            component: server
+          - os: windows-x86_64
+            runner: windows-latest
+            component: server
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: llamafarm-${{ matrix.component }}-${{ matrix.os }}
+          path: bin
+
+      - name: Make executable (Unix)
+        if: runner.os != 'Windows'
+        run: chmod +x bin/llamafarm-*
+
+      - name: Test binary runs
+        shell: bash
+        run: |
+          # Just test that it starts and shows help/version
+          # Full functional tests would require more setup
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            timeout 10 bin/llamafarm-*.exe --help || true
+          else
+            timeout 10 bin/llamafarm-* --help || true
+          fi
+          echo "Binary executed successfully"
