@@ -306,6 +306,22 @@ wheels = [
 ]
 
 [[package]]
+name = "cleanlab"
+version = "2.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "scikit-learn" },
+    { name = "termcolor" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/82/ab/80cbcd832bda6e18ef22f0f9120675f70b7d532a164f762fb660f73fc346/cleanlab-2.9.0.tar.gz", hash = "sha256:abe25fe0c772ced8c4b36a94e0de71726db00802224b7fb7bee06db6ff95eb4e", size = 273633, upload-time = "2026-01-13T18:02:46.7Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/8a/612ba4408b0b21c7ca8cf5671d61ddb5499e675bcec3058e6f48839672cb/cleanlab-2.9.0-py3-none-any.whl", hash = "sha256:9a317d9ba547c388dd15fffec71fcf838cda1404ef4034b6865da78be6603f4e", size = 306078, upload-time = "2026-01-13T18:02:44.912Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3440,6 +3456,7 @@ dependencies = [
     { name = "accelerate" },
     { name = "cachetools" },
     { name = "chronos-forecasting" },
+    { name = "cleanlab" },
     { name = "diffusers" },
     { name = "einops" },
     { name = "fastapi" },
@@ -3517,6 +3534,7 @@ requires-dist = [
     { name = "accelerate", specifier = ">=0.25.0" },
     { name = "cachetools", specifier = ">=6.0.0" },
     { name = "chronos-forecasting", specifier = ">=2.2.2" },
+    { name = "cleanlab", specifier = ">=2.9.0" },
     { name = "diffusers", specifier = ">=0.25.0" },
     { name = "easyocr", marker = "extra == 'ocr'", specifier = ">=1.7.0" },
     { name = "easyocr", marker = "extra == 'ocr-easyocr'", specifier = ">=1.7.0" },

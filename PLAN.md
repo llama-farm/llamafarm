@@ -608,33 +608,34 @@ New endpoints to add:
 ## Phase 16: Dataset Quality Audit (Cleanlab)
 
 ### Phase 16 Tests (Define FIRST)
-- [ ] Test: Cleanlab finds label errors in synthetic noisy dataset
-- [ ] Test: Returns confidence scores for each label
-- [ ] Test: Identifies near-duplicates
-- [ ] Test: Works with classifier training data format
-- [ ] Test file: `runtimes/universal/tests/test_dataset_audit.py`
+- [x] Test: Cleanlab finds label errors in synthetic noisy dataset
+- [x] Test: Returns confidence scores for each label
+- [x] Test: Identifies near-duplicates
+- [x] Test: Works with classifier training data format
+- [x] Test file: `runtimes/universal/tests/test_dataset_audit.py`
 
 ### Phase 16 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-dataset-audit.sh`
-- [ ] Demo shows: Find mislabeled examples in training data
-- [ ] Expected output: List of potentially mislabeled samples
+- [x] Demo script: `examples/ml/demo-dataset-audit.sh`
+- [x] Demo shows: Find mislabeled examples in training data
+- [x] Expected output: List of potentially mislabeled samples
 
 ### Phase 16 Implementation
-- [ ] Create `/v1/dataset/audit` endpoint
+- [x] Create `/v1/dataset/audit` endpoint
   - Use Cleanlab's `find_label_issues`
   - Request: `{"texts": [...], "labels": [...], "check_duplicates": true}`
   - Response: `{"label_issues": [{"index": 5, "given_label": "A", "suggested_label": "B", "confidence": 0.23}], "duplicates": [...]}`
-- [ ] Add to `pyproject.toml`: `issues = ["cleanlab>=2.5.0", ...]`
+- [x] Create `/v1/dataset/quality-scores` endpoint for per-sample scores
+- [x] Add to `pyproject.toml`: `cleanlab>=2.9.0`
 
 ### Phase 16 Verification
-- [ ] Run tests: all Phase 16 tests pass
-- [ ] Run demo: demo runs successfully
+- [x] Run tests: all Phase 16 tests pass (20 tests)
+- [x] Run demo: demo runs successfully
 
 ### Phase 16 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
-- [ ] **COMMIT**: `git commit -m "feat(dataset): add quality audit endpoint with Cleanlab"`
-- [ ] Ready for Phase 17
+- [x] Tests verified passing
+- [x] Demo verified working
+- [x] **COMMIT**: `git commit -m "feat(dataset): add quality audit endpoint with Cleanlab"`
+- [x] Ready for Phase 17
 
 ---
 

@@ -3830,6 +3830,17 @@ class AnomalyExplainRequest(PydanticBaseModel):
     scaler_type: str = "robust"  # Scaler type
 
 
+class DatasetAuditRequest(PydanticBaseModel):
+    """Dataset quality audit request."""
+
+    labels: list[int]  # Ground truth labels (integer indices)
+    pred_probs: list[list[float]]  # Prediction probabilities (n_samples, n_classes)
+    features: list[list[float]] | None = None  # Feature vectors for duplicate detection
+    label_names: list[str] | None = None  # Optional label name mapping
+    check_duplicates: bool = True  # Whether to check for near-duplicates
+    duplicate_threshold: float = 0.95  # Cosine similarity threshold
+
+
 def _make_timeseries_cache_key(model_name: str) -> str:
     """Create a cache key for time-series models."""
     return f"timeseries:{model_name}"
@@ -4613,6 +4624,131 @@ async def explain_anomaly(request: AnomalyExplainRequest):
         raise
     except Exception as e:
         logger.error(f"Error in explain_anomaly: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/dataset/audit")
+async def audit_dataset(request: DatasetAuditRequest):
+    """
+    Audit dataset quality using Cleanlab.
+
+    Identifies potential label errors, near-duplicates, and quality issues
+    in classification datasets.
+
+    Requires prediction probabilities from a trained classifier. You can:
+    1. Use our /v1/classify endpoint to get predictions
+    2. Use your own classifier's predict_proba output
+
+    Example request:
+    ```json
+    {
+        "labels": [0, 1, 0, 1, 0],
+        "pred_probs": [[0.9, 0.1], [0.2, 0.8], [0.3, 0.7], [0.1, 0.9], [0.85, 0.15]],
+        "label_names": ["cat", "dog"],
+        "check_duplicates": true
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "dataset_audit",
+        "label_issues": [
+            {
+                "index": 2,
+                "given_label": 0,
+                "given_label_name": "cat",
+                "suggested_label": 1,
+                "suggested_label_name": "dog",
+                "given_confidence": 0.3,
+                "suggested_confidence": 0.7
+            }
+        ],
+        "duplicates": [...],
+        "summary": {
+            "total_samples": 5,
+            "label_issue_count": 1,
+            "label_issue_rate": 0.2
+        }
+    }
+    ```
+    """
+    try:
+        import numpy as np
+        from utils.dataset_auditor import DatasetAuditor
+
+        # Convert to numpy array
+        pred_probs = np.array(request.pred_probs, dtype=np.float64)
+        features = None
+        if request.features is not None:
+            features = np.array(request.features, dtype=np.float64)
+
+        # Create auditor
+        auditor = DatasetAuditor(label_names=request.label_names)
+
+        # Run audit
+        result = auditor.audit(
+            labels=request.labels,
+            pred_probs=pred_probs,
+            features=features,
+            check_duplicates=request.check_duplicates,
+            duplicate_threshold=request.duplicate_threshold,
+        )
+
+        return {
+            "object": "dataset_audit",
+            **result,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in audit_dataset: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/dataset/quality-scores")
+async def get_quality_scores(request: DatasetAuditRequest):
+    """
+    Get per-sample label quality scores.
+
+    Returns a quality score for each sample (0-1, higher = better quality).
+    Low scores indicate potentially mislabeled examples.
+
+    Example request:
+    ```json
+    {
+        "labels": [0, 1, 0, 1, 0],
+        "pred_probs": [[0.9, 0.1], [0.2, 0.8], [0.3, 0.7], [0.1, 0.9], [0.85, 0.15]]
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "quality_scores",
+        "scores": [0.95, 0.82, 0.31, 0.93, 0.88],
+        "mean_quality": 0.78
+    }
+    ```
+    """
+    try:
+        import numpy as np
+        from utils.dataset_auditor import DatasetAuditor
+
+        pred_probs = np.array(request.pred_probs, dtype=np.float64)
+
+        auditor = DatasetAuditor(label_names=request.label_names)
+        scores = auditor.get_label_quality_scores(request.labels, pred_probs)
+
+        return {
+            "object": "quality_scores",
+            "scores": scores.tolist(),
+            "mean_quality": float(np.mean(scores)),
+            "min_quality": float(np.min(scores)),
+            "max_quality": float(np.max(scores)),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_quality_scores: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

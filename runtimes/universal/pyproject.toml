@@ -34,6 +34,7 @@ dependencies = [
   "ruptures>=1.1.10",
   "river>=0.23.0",
   "shap>=0.50.0",
+  "cleanlab>=2.9.0",
 ]
 
 [dependency-groups]
