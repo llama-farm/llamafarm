@@ -29,6 +29,7 @@ dependencies = [
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",  # TTL-based model caching
   "jinja2>=3.0.0",  # For tool-aware chat template rendering
+  "gliner>=0.2.24",
 ]
 
 [dependency-groups]

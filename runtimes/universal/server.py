@@ -48,6 +48,7 @@ from models import (
     LanguageDetectionModel,
     LanguageModel,
     OCRModel,
+    PIIModel,
 )
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
@@ -150,6 +151,7 @@ _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _vision_models: ModelCache["CLIPVisionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _lang_detection_models: ModelCache["LanguageDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_pii_models: ModelCache["PIIModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -3219,6 +3221,186 @@ async def extract_keywords_batch(request: KeywordExtractBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in extract_keywords_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# PII Detection and Redaction Endpoints
+# ============================================================================
+
+
+def _make_pii_cache_key(model_name: str) -> str:
+    """Create a cache key for PII models."""
+    return f"pii:{model_name}"
+
+
+async def load_pii_model(
+    model_name: str = "urchade/gliner_small-v2.1",
+) -> PIIModel:
+    """Load a PII detection model.
+
+    Args:
+        model_name: HuggingFace GLiNER model name
+
+    Returns:
+        Loaded PIIModel instance
+    """
+    cache_key = _make_pii_cache_key(model_name)
+
+    if cache_key not in _pii_models:
+        async with _model_load_lock:
+            if cache_key not in _pii_models:
+                logger.info(f"Loading PII detection model: {model_name}")
+                device = get_device()
+
+                model = PIIModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _pii_models[cache_key] = model
+
+    return _pii_models.get(cache_key)
+
+
+class PIIDetectRequest(PydanticBaseModel):
+    """PII detection request."""
+
+    text: str  # Text to analyze
+    entity_types: list[str] | None = None  # Custom entity types (default: standard PII)
+    threshold: float = 0.5  # Detection confidence threshold
+    use_regex: bool = True  # Also use regex patterns
+
+
+class PIIRedactRequest(PydanticBaseModel):
+    """PII redaction request."""
+
+    text: str  # Text to redact
+    entity_types: list[str] | None = None  # Entity types to redact
+    replacement: str = "[REDACTED]"  # Default replacement
+    replacement_map: dict[str, str] | None = None  # Per-type replacements
+    threshold: float = 0.5
+    use_regex: bool = True
+
+
+@app.post("/v1/text/pii-detect")
+async def detect_pii(request: PIIDetectRequest):
+    """
+    Detect PII (Personally Identifiable Information) in text.
+
+    Uses GLiNER for zero-shot entity detection plus regex patterns for
+    common PII formats. Supports custom entity types.
+
+    Default entity types detected:
+    - person, email, phone number, social security number
+    - credit card number, address, date of birth
+    - passport number, driver license, bank account, ip address
+
+    Example request:
+    ```json
+    {
+        "text": "Contact John at john@email.com or 555-123-4567",
+        "threshold": 0.5
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "pii_detection",
+        "entities": [
+            {"text": "John", "label": "person", "start": 8, "end": 12, "score": 0.95},
+            {"text": "john@email.com", "label": "email", "start": 16, "end": 30, "score": 1.0}
+        ],
+        "entity_count": 2
+    }
+    ```
+    """
+    try:
+        if not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Text cannot be empty",
+            )
+
+        model = await load_pii_model()
+        entities = await model.detect(
+            request.text,
+            entity_types=request.entity_types,
+            threshold=request.threshold,
+            use_regex=request.use_regex,
+        )
+
+        return {
+            "object": "pii_detection",
+            "entities": entities,
+            "entity_count": len(entities),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_pii: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/text/pii-redact")
+async def redact_pii(request: PIIRedactRequest):
+    """
+    Detect and redact PII from text.
+
+    Returns the text with PII replaced by configurable replacement strings.
+    Supports per-entity-type replacement patterns.
+
+    Example request:
+    ```json
+    {
+        "text": "Contact John at john@email.com",
+        "replacement": "[REDACTED]",
+        "replacement_map": {"email": "[EMAIL]", "person": "[NAME]"}
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "pii_redaction",
+        "redacted_text": "Contact [NAME] at [EMAIL]",
+        "entities": [...],
+        "entity_count": 2
+    }
+    ```
+    """
+    try:
+        if not request.text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Text cannot be empty",
+            )
+
+        model = await load_pii_model()
+        result = await model.redact(
+            request.text,
+            entity_types=request.entity_types,
+            replacement=request.replacement,
+            replacement_map=request.replacement_map,
+            threshold=request.threshold,
+            use_regex=request.use_regex,
+        )
+
+        return {
+            "object": "pii_redaction",
+            "redacted_text": result["redacted_text"],
+            "entities": result["entities"],
+            "entity_count": result["entity_count"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in redact_pii: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

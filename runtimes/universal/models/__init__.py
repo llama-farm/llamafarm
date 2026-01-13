@@ -15,6 +15,7 @@ from .gguf_language_model import GGUFLanguageModel
 from .language_detection_model import LanguageDetectionModel
 from .language_model import LanguageModel
 from .ocr_model import OCRModel
+from .pii_model import PIIModel
 from .vision_model import CLIPVisionModel
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "ClassifierModel",
     "CLIPVisionModel",
     "LanguageDetectionModel",
+    "PIIModel",
 ]
