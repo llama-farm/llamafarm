@@ -4,8 +4,10 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react'
+import { devToolsEmitter } from '../utils/devToolsEmitter'
 
 export interface CapturedRequest {
   id: string // Client-generated UUID
@@ -242,6 +244,37 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
     } catch {
       // Ignore errors
     }
+  }, [])
+
+  // Store callbacks in refs so the subscription doesn't need to be recreated
+  const captureRequestRef = useRef(captureRequest)
+  const updateResponseRef = useRef(updateResponse)
+  const setErrorRef = useRef(setError)
+
+  // Keep refs in sync with latest callbacks
+  useEffect(() => {
+    captureRequestRef.current = captureRequest
+    updateResponseRef.current = updateResponse
+    setErrorRef.current = setError
+  }, [captureRequest, updateResponse, setError])
+
+  // Subscribe to global DevTools emitter for axios interceptor events
+  useEffect(() => {
+    const unsubscribe = devToolsEmitter.subscribe(event => {
+      switch (event.type) {
+        case 'request':
+          captureRequestRef.current(event.request)
+          break
+        case 'response':
+          updateResponseRef.current(event.id, event.response)
+          break
+        case 'error':
+          setErrorRef.current(event.id, event.error)
+          break
+      }
+    })
+
+    return unsubscribe
   }, [])
 
   const value: DevToolsContextValue = {

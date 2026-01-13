@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 // HTTP method color mapping
 export const methodColors: Record<string, string> = {
-  GET: 'bg-blue-500/20 text-blue-400',
+  GET: 'bg-sky-500/20 text-sky-300',
   POST: 'bg-green-500/20 text-green-400',
   PUT: 'bg-yellow-500/20 text-yellow-400',
   PATCH: 'bg-orange-500/20 text-orange-400',
