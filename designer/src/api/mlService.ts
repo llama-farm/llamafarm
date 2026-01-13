@@ -228,6 +228,7 @@ export async function scanDocument(
     model?: string
     languages?: string
     return_boxes?: boolean
+    parse_by_page?: boolean
   } = {}
 ): Promise<DocumentScanningResponse> {
   const formData = new FormData()
@@ -235,6 +236,7 @@ export async function scanDocument(
   formData.append('model', options.model || 'surya')
   formData.append('languages', options.languages || 'en')
   formData.append('return_boxes', String(options.return_boxes || false))
+  formData.append('parse_by_page', String(options.parse_by_page || false))
 
   const response = await apiClient.post<DocumentScanningResponse>(
     '/vision/ocr',
