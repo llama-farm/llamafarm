@@ -3760,6 +3760,28 @@ class TimeSeriesForecastBatchRequest(PydanticBaseModel):
     model: str = "amazon/chronos-t5-small"
 
 
+class ChangePointRequest(PydanticBaseModel):
+    """Change point detection request."""
+
+    values: list[float]  # Time-series values
+    n_changepoints: int | None = None  # Exact number (if known)
+    penalty: float | None = None  # Penalty for regularization (higher = fewer points)
+    algorithm: str = "pelt"  # pelt, binseg, window, bottomup
+    model: str = "rbf"  # l1, l2, rbf, normal, ar
+    min_size: int = 2  # Minimum segment size
+
+
+class ChangePointBatchRequest(PydanticBaseModel):
+    """Batch change point detection request."""
+
+    series: list[list[float]]  # List of time-series
+    n_changepoints: int | None = None
+    penalty: float | None = None
+    algorithm: str = "pelt"
+    model: str = "rbf"
+    min_size: int = 2
+
+
 def _make_timeseries_cache_key(model_name: str) -> str:
     """Create a cache key for time-series models."""
     return f"timeseries:{model_name}"
@@ -3895,6 +3917,165 @@ async def forecast_timeseries_batch(request: TimeSeriesForecastBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in forecast_timeseries_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# CHANGE POINT DETECTION ENDPOINTS
+# =============================================================================
+
+
+@app.post("/v1/timeseries/changepoints")
+async def detect_changepoints(request: ChangePointRequest):
+    """
+    Detect change points in a time-series using ruptures.
+
+    Change points are locations where the statistical properties of the
+    time-series (mean, variance, trend) change significantly.
+
+    Algorithms:
+    - pelt: Optimal algorithm with linear complexity (default)
+    - binseg: Binary segmentation (fast but approximate)
+    - window: Sliding window (good for trend changes)
+    - bottomup: Bottom-up segmentation
+
+    Models (cost functions):
+    - rbf: Radial basis function (default, general purpose)
+    - l1: L1 norm (robust to outliers)
+    - l2: L2 norm (sensitive to mean shifts)
+    - normal: Normal distribution
+    - ar: Autoregressive model
+
+    Example request:
+    ```json
+    {
+        "values": [1, 1, 1, 1, 5, 5, 5, 5, 2, 2, 2, 2],
+        "algorithm": "pelt",
+        "model": "rbf"
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "changepoint_detection",
+        "change_points": [4, 8],
+        "n_segments": 3,
+        "segment_boundaries": [
+            {"start": 0, "end": 4},
+            {"start": 4, "end": 8},
+            {"start": 8, "end": 12}
+        ]
+    }
+    ```
+    """
+    try:
+        from utils.changepoint_detector import ChangePointDetector, SUPPORTED_ALGORITHMS, SUPPORTED_MODELS
+
+        if request.algorithm.lower() not in SUPPORTED_ALGORITHMS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported algorithm: {request.algorithm}. Choose from {SUPPORTED_ALGORITHMS}",
+            )
+
+        if request.model.lower() not in SUPPORTED_MODELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported model: {request.model}. Choose from {SUPPORTED_MODELS}",
+            )
+
+        if len(request.values) < request.min_size * 2:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Signal too short. Need at least {request.min_size * 2} points.",
+            )
+
+        detector = ChangePointDetector(
+            algorithm=request.algorithm,
+            model=request.model,
+            min_size=request.min_size,
+        )
+
+        result = detector.detect(
+            request.values,
+            n_changepoints=request.n_changepoints,
+            penalty=request.penalty,
+        )
+
+        return {
+            "object": "changepoint_detection",
+            "change_points": result["change_points"],
+            "n_segments": result["n_segments"],
+            "segment_boundaries": result["segment_boundaries"],
+            "signal_length": result["signal_length"],
+            "algorithm": result["algorithm"],
+            "model": result["model"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_changepoints: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/timeseries/changepoints/batch")
+async def detect_changepoints_batch(request: ChangePointBatchRequest):
+    """
+    Detect change points in multiple time-series.
+
+    Returns change point results for each series in the batch.
+    """
+    try:
+        from utils.changepoint_detector import ChangePointDetector, SUPPORTED_ALGORITHMS, SUPPORTED_MODELS
+
+        if not request.series:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one time-series is required",
+            )
+
+        if request.algorithm.lower() not in SUPPORTED_ALGORITHMS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported algorithm: {request.algorithm}. Choose from {SUPPORTED_ALGORITHMS}",
+            )
+
+        if request.model.lower() not in SUPPORTED_MODELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported model: {request.model}. Choose from {SUPPORTED_MODELS}",
+            )
+
+        for i, s in enumerate(request.series):
+            if len(s) < request.min_size * 2:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Series {i} too short. Need at least {request.min_size * 2} points.",
+                )
+
+        detector = ChangePointDetector(
+            algorithm=request.algorithm,
+            model=request.model,
+            min_size=request.min_size,
+        )
+
+        results = detector.detect_batch(
+            request.series,
+            n_changepoints=request.n_changepoints,
+            penalty=request.penalty,
+        )
+
+        return {
+            "object": "changepoint_detection_batch",
+            "results": results,
+            "total_series": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_changepoints_batch: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

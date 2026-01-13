@@ -467,35 +467,36 @@ New endpoints to add:
 ## Phase 12: Change Point Detection (Ruptures)
 
 ### Phase 12 Tests (Define FIRST)
-- [ ] Test: Ruptures algorithms load successfully
-- [ ] Test: Detects change points in synthetic signal
-- [ ] Test: Multiple algorithms available (Pelt, Binseg, Window)
-- [ ] Test: Returns change point indices
-- [ ] Test file: `runtimes/universal/tests/test_changepoint_detection.py`
+- [x] Test: Ruptures algorithms load successfully
+- [x] Test: Detects change points in synthetic signal
+- [x] Test: Multiple algorithms available (Pelt, Binseg, Window, BottomUp)
+- [x] Test: Returns change point indices
+- [x] Test file: `runtimes/universal/tests/test_changepoint_detection.py` (37 tests)
 
 ### Phase 12 Demo (Define FIRST)
-- [ ] Demo script: `examples/ml/demo-changepoint-detection.sh`
-- [ ] Demo shows: Detect when CPU usage shifted from baseline
-- [ ] Expected output: Index where the change occurred
+- [x] Demo script: `examples/ml/demo-changepoint-detection.sh`
+- [x] Demo shows: Detect when CPU usage shifted from baseline
+- [x] Expected output: Index where the change occurred
 
 ### Phase 12 Implementation
-- [ ] Create `utils/signal_analysis.py`
-  - Wrap Ruptures algorithms (Pelt, Binseg, Window)
-  - Support different cost functions (l1, l2, rbf)
-- [ ] Create `/v1/timeseries/changepoints` endpoint
+- [x] Create `utils/changepoint_detector.py`
+  - Wrap Ruptures algorithms (Pelt, Binseg, Window, BottomUp)
+  - Support different cost functions (l1, l2, rbf, normal, ar)
+- [x] Create `/v1/timeseries/changepoints` endpoint
   - Request: `{"values": [...], "algorithm": "pelt", "penalty": 10, "min_size": 5}`
-  - Response: `{"changepoints": [45, 112, 289], "segments": [[0,45], [45,112], ...]}`
-- [ ] Add to `pyproject.toml`: `trends = [..., "ruptures>=1.1.9"]`
+  - Response: `{"change_points": [45, 112], "segments": [{"start":0,"end":45}, ...]}`
+- [x] Create `/v1/timeseries/changepoints/batch` endpoint
+- [x] ruptures already in `pyproject.toml`
 
 ### Phase 12 Verification
-- [ ] Run tests: all Phase 12 tests pass
-- [ ] Run demo: demo runs successfully
+- [x] Run tests: all 37 Phase 12 tests pass
+- [x] Run demo: demo runs successfully
 
 ### Phase 12 Checkpoint
-- [ ] Tests verified passing
-- [ ] Demo verified working
+- [x] Tests verified passing
+- [x] Demo verified working
 - [ ] **COMMIT**: `git commit -m "feat(timeseries): add change point detection endpoint with Ruptures"`
-- [ ] Ready for Phase 13
+- [x] Ready for Phase 13
 
 ---
 
