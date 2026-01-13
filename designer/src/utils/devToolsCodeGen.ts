@@ -62,6 +62,39 @@ function escapePythonString(str: string): string {
 }
 
 /**
+ * Convert a JavaScript value to Python literal syntax
+ * Properly handles null -> None, true -> True, false -> False
+ * without corrupting string values that contain these words
+ */
+function toPythonLiteral(value: unknown, indent = 0): string {
+  const spaces = '    '.repeat(indent)
+  const nextSpaces = '    '.repeat(indent + 1)
+
+  if (value === null) return 'None'
+  if (value === true) return 'True'
+  if (value === false) return 'False'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') return `"${escapePythonString(value)}"`
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]'
+    const items = value.map(v => `${nextSpaces}${toPythonLiteral(v, indent + 1)}`).join(',\n')
+    return `[\n${items}\n${spaces}]`
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value)
+    if (entries.length === 0) return '{}'
+    const items = entries
+      .map(([k, v]) => `${nextSpaces}"${escapePythonString(k)}": ${toPythonLiteral(v, indent + 1)}`)
+      .join(',\n')
+    return `{\n${items}\n${spaces}}`
+  }
+
+  return String(value)
+}
+
+/**
  * Generate Python requests code from a captured request
  */
 export function generatePython(request: CapturedRequest): string {
@@ -97,11 +130,8 @@ export function generatePython(request: CapturedRequest): string {
       lines.push('# files = {"file": open("path/to/file", "rb")}')
       lines.push('')
     } else {
-      // Use word boundaries to avoid replacing "null"/"true"/"false" inside string values
-      const bodyStr = JSON.stringify(request.body, null, 4)
-        .replace(/\bnull\b/g, 'None')
-        .replace(/\btrue\b/g, 'True')
-        .replace(/\bfalse\b/g, 'False')
+      // Convert to Python literal syntax (properly handles null/true/false without affecting strings)
+      const bodyStr = toPythonLiteral(request.body)
       lines.push(`payload = ${bodyStr}`)
       lines.push('')
     }
