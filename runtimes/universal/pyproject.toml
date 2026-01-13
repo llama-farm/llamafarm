@@ -31,6 +31,8 @@ dependencies = [
   "jinja2>=3.0.0",  # For tool-aware chat template rendering
   "gliner>=0.2.24",
   "chronos-forecasting>=2.2.2",
+  "ruptures>=1.1.10",
+  "river>=0.23.0",
 ]
 
 [dependency-groups]

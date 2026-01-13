@@ -3798,6 +3798,25 @@ class TableQABatchRequest(PydanticBaseModel):
     model: str = "google/tapas-base-finetuned-wtq"
 
 
+class DriftDetectionRequest(PydanticBaseModel):
+    """Concept drift detection request."""
+
+    values: list[float]  # Data stream values
+    algorithm: str = "adwin"  # adwin, page_hinkley, kswin, ddm
+    delta: float | None = None  # Sensitivity parameter (for ADWIN, PageHinkley)
+    threshold: float | None = None  # Threshold (for PageHinkley)
+    alpha: float | None = None  # Significance level (for KSWIN)
+    window_size: int | None = None  # Window size (for KSWIN)
+
+
+class DriftUpdateRequest(PydanticBaseModel):
+    """Single value drift update request."""
+
+    value: float  # New data point
+    algorithm: str = "adwin"
+    detector_id: str | None = None  # Optional ID for persistent detector
+
+
 def _make_timeseries_cache_key(model_name: str) -> str:
     """Create a cache key for time-series models."""
     return f"timeseries:{model_name}"
@@ -4243,6 +4262,237 @@ async def table_question_answering_batch(request: TableQABatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in table_question_answering_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# CONCEPT DRIFT DETECTION ENDPOINTS
+# =============================================================================
+
+# In-memory drift detector storage (for stateful streaming)
+_drift_detectors: dict[str, Any] = {}
+
+
+@app.post("/v1/streaming/drift/detect")
+async def detect_drift(request: DriftDetectionRequest):
+    """
+    Detect concept drift in a data stream using River.
+
+    Concept drift occurs when the statistical properties of data change over time,
+    indicating that an ML model may need retraining.
+
+    Algorithms:
+    - adwin: ADaptive WINdowing - detects changes in mean (default)
+    - page_hinkley: Page-Hinkley test - detects changes in mean
+    - kswin: Kolmogorov-Smirnov Windowing - detects distribution changes
+    - ddm: Drift Detection Method - monitors error rate
+
+    Example request:
+    ```json
+    {
+        "values": [1.0, 1.1, 1.0, 0.9, 1.0, 5.0, 5.1, 4.9, 5.0, 5.1],
+        "algorithm": "adwin"
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "drift_detection",
+        "drift_detected": true,
+        "drift_points": [6],
+        "total_processed": 10
+    }
+    ```
+    """
+    try:
+        from utils.drift_detector import DriftDetector, SUPPORTED_ALGORITHMS
+
+        if request.algorithm.lower() not in SUPPORTED_ALGORITHMS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported algorithm: {request.algorithm}. Choose from {SUPPORTED_ALGORITHMS}",
+            )
+
+        if len(request.values) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 values are required for drift detection",
+            )
+
+        # Build kwargs from optional parameters
+        kwargs: dict[str, Any] = {}
+        if request.delta is not None:
+            kwargs["delta"] = request.delta
+        if request.threshold is not None:
+            kwargs["threshold"] = request.threshold
+        if request.alpha is not None:
+            kwargs["alpha"] = request.alpha
+        if request.window_size is not None:
+            kwargs["window_size"] = request.window_size
+
+        detector = DriftDetector(algorithm=request.algorithm, **kwargs)
+        result = detector.update_batch(request.values)
+
+        return {
+            "object": "drift_detection",
+            "drift_detected": result["drift_detected"],
+            "drift_points": result["drift_points"],
+            "total_processed": result["total_processed"],
+            "algorithm": result["algorithm"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_drift: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/streaming/drift/create")
+async def create_drift_detector(
+    algorithm: str = "adwin",
+    detector_id: str | None = None,
+    delta: float | None = None,
+    threshold: float | None = None,
+    alpha: float | None = None,
+    window_size: int | None = None,
+):
+    """
+    Create a stateful drift detector for streaming updates.
+
+    Returns a detector_id that can be used for subsequent update calls.
+    """
+    try:
+        from utils.drift_detector import DriftDetector, SUPPORTED_ALGORITHMS
+        import uuid
+
+        if algorithm.lower() not in SUPPORTED_ALGORITHMS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported algorithm: {algorithm}. Choose from {SUPPORTED_ALGORITHMS}",
+            )
+
+        # Generate ID if not provided
+        if detector_id is None:
+            detector_id = str(uuid.uuid4())[:8]
+
+        # Build kwargs
+        kwargs: dict[str, Any] = {}
+        if delta is not None:
+            kwargs["delta"] = delta
+        if threshold is not None:
+            kwargs["threshold"] = threshold
+        if alpha is not None:
+            kwargs["alpha"] = alpha
+        if window_size is not None:
+            kwargs["window_size"] = window_size
+
+        detector = DriftDetector(algorithm=algorithm, **kwargs)
+        _drift_detectors[detector_id] = detector
+
+        return {
+            "object": "drift_detector",
+            "detector_id": detector_id,
+            "algorithm": algorithm,
+            "status": "created",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in create_drift_detector: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/streaming/drift/update/{detector_id}")
+async def update_drift_detector(detector_id: str, value: float):
+    """
+    Update a drift detector with a new value.
+
+    Args:
+        detector_id: ID of the detector (from create endpoint)
+        value: New data point
+
+    Returns drift detection result.
+    """
+    try:
+        if detector_id not in _drift_detectors:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Detector '{detector_id}' not found",
+            )
+
+        detector = _drift_detectors[detector_id]
+        result = detector.update(value)
+
+        return {
+            "object": "drift_update",
+            "detector_id": detector_id,
+            "drift_detected": result["drift_detected"],
+            "index": result["index"],
+            "value": result["value"],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_drift_detector: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/streaming/drift/state/{detector_id}")
+async def get_drift_detector_state(detector_id: str):
+    """
+    Get the current state of a drift detector.
+    """
+    try:
+        if detector_id not in _drift_detectors:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Detector '{detector_id}' not found",
+            )
+
+        detector = _drift_detectors[detector_id]
+        state = detector.get_state()
+
+        return {
+            "object": "drift_detector_state",
+            "detector_id": detector_id,
+            **state,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_drift_detector_state: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.delete("/v1/streaming/drift/{detector_id}")
+async def delete_drift_detector(detector_id: str):
+    """
+    Delete a drift detector.
+    """
+    try:
+        if detector_id not in _drift_detectors:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Detector '{detector_id}' not found",
+            )
+
+        del _drift_detectors[detector_id]
+
+        return {
+            "object": "drift_detector",
+            "detector_id": detector_id,
+            "status": "deleted",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in delete_drift_detector: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
