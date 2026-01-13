@@ -37,7 +37,7 @@ from observability.event_logger import EventLogger  # noqa: E402
 
 try:
     from config import load_config
-    from config.datamodel import Database, DataProcessingStrategy
+    from config.datamodel import Database, DataProcessingStrategy, Parser
 except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
@@ -113,8 +113,8 @@ class IngestHandler:
         return config
 
     def _apply_parser_overrides(
-        self, parsers: list[Any]
-    ) -> list[Any]:
+        self, parsers: list[Parser]
+    ) -> list[Parser]:
         """
         Apply parser-level overrides (e.g., chunk sizes) to configured parsers.
         """
