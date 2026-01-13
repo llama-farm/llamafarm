@@ -300,9 +300,12 @@ def _parse_parser_overrides(raw_overrides: str | None):
                 detail=f"{name} must be less than or equal to {CHUNK_SIZE_MAX}",
             )
 
-    for override in parsed.values():
+    for parser_type, override in parsed.items():
         if not isinstance(override, dict):
-            continue
+            raise HTTPException(
+                status_code=400,
+                detail=f"Override for {parser_type or 'parser'} must be an object",
+            )
         if "chunk_size" in override:
             _validate_chunk_field("chunk_size", override["chunk_size"], allow_zero=False)
         if "chunk_overlap" in override:
