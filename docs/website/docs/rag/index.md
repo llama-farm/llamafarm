@@ -35,17 +35,36 @@ For detailed configuration options, see these reference guides:
 Each database entry declares a store type (default `ChromaStore` or `QdrantStore`) and the embedding/retrieval strategies available.
 
 ```yaml
+components:
+  embedding_strategies:
+    - name: default_embeddings
+      type: UniversalEmbedder
+      config:
+        model: sentence-transformers/all-MiniLM-L6-v2
+  retrieval_strategies:
+    - name: semantic_search
+      type: BasicSimilarityStrategy
+      config:
+        top_k: 5
+  defaults:
+    embedding_strategy: default_embeddings
+    retrieval_strategy: semantic_search
+
 rag:
   databases:
     - name: main_db
+      type: ChromaStore
+      embedding_strategy: default_embeddings   # reference to components
+      retrieval_strategy: semantic_search      # reference to components
+    - name: hybrid_db
       type: ChromaStore
       default_embedding_strategy: default_embeddings
       default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            model: nomic-embed-text:latest
+            model: sentence-transformers/all-MiniLM-L6-v2
       retrieval_strategies:
         - name: semantic_search
           type: VectorRetriever
@@ -61,6 +80,10 @@ rag:
 - Add multiple strategies for different workloads (semantic, keyword, reranked).
 - Set `default_*` fields to control CLI defaults.
 - Extend store/types by editing `rag/schema.yaml` and following the [Extending guide](../extending/index.md#extend-rag-components).
+- References vs inline:
+  - Use references (`embedding_strategy`, `retrieval_strategy`) to DRY configs; defaults apply when fields are omitted.
+  - Inline arrays (`embedding_strategies`, `retrieval_strategies`) still work for one-off configs.
+  - The server resolves references at load time and returns fully inlined configs on GET.
 
 ## Define Processing Strategies
 

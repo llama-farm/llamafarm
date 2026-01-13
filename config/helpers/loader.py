@@ -98,6 +98,7 @@ def _deep_merge(target: dict, source: dict) -> dict:
 # Handle both relative and absolute imports
 try:
     from config.datamodel import LlamaFarmConfig
+    from .component_resolver import ComponentResolver
 except ImportError:
     # If relative import fails, try absolute import (when run directly)
     import sys
@@ -109,6 +110,7 @@ except ImportError:
         sys.path.insert(0, str(current_dir))
 
     from ..datamodel import LlamaFarmConfig
+    from .component_resolver import ComponentResolver
 
 
 class ConfigError(Exception):
@@ -405,7 +407,11 @@ def load_config(
     """
 
     config_dict = load_config_dict(config_path, directory, validate)
-    return LlamaFarmConfig(**config_dict)
+    config_obj = LlamaFarmConfig(**config_dict)
+
+    # Resolve reusable components (embedding/retrieval/parsers) into inline configs
+    resolver = ComponentResolver(config_obj)
+    return resolver.resolve_config(config_obj)
 
 
 # ============================================================================

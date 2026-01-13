@@ -22,6 +22,9 @@ properties:
     type: string
     description: Project namespace
     example: my-namespace
+  components:
+    $ref: "../rag/schema.yaml#/definitions/componentsDefinition"
+    description: Reusable RAG components (embedding/retrieval strategies, parsers, defaults)
   prompts:
     type: array
     description: List of named prompt sets

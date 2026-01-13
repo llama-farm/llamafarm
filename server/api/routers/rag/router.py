@@ -456,8 +456,16 @@ class CreateDatabaseRequest(BaseModel):
     embedding_strategies: list[dict[str, Any]] | None = Field(
         None, description="Embedding strategies for this database"
     )
+    embedding_strategy: str | None = Field(
+        None,
+        description="Reference to reusable embedding strategy defined under components.embedding_strategies",
+    )
     retrieval_strategies: list[dict[str, Any]] | None = Field(
         None, description="Retrieval strategies for this database"
+    )
+    retrieval_strategy: str | None = Field(
+        None,
+        description="Reference to reusable retrieval strategy defined under components.retrieval_strategies",
     )
     default_embedding_strategy: str | None = Field(
         None, description="Name of default embedding strategy"
@@ -559,6 +567,18 @@ async def create_database(
     """
     logger.bind(namespace=namespace, project=project, database=request.name)
 
+    # Validate mutual exclusivity between reference and inline for embedding/retrieval
+    if request.embedding_strategy and request.embedding_strategies:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either embedding_strategy reference or embedding_strategies inline, not both",
+        )
+    if request.retrieval_strategy and request.retrieval_strategies:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either retrieval_strategy reference or retrieval_strategies inline, not both",
+        )
+
     # Convert request to Database model
     try:
         # Build embedding strategies if provided
@@ -580,7 +600,9 @@ async def create_database(
             type=request.type,
             config=request.config,
             embedding_strategies=embedding_strategies,
+            embedding_strategy=request.embedding_strategy,
             retrieval_strategies=retrieval_strategies,
+            retrieval_strategy=request.retrieval_strategy,
             default_embedding_strategy=request.default_embedding_strategy,
             default_retrieval_strategy=request.default_retrieval_strategy,
         )

@@ -7,6 +7,7 @@ from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
 
 from api.errors import DatabaseNotFoundError
 from core.logging import FastAPIStructLogger
+from config.helpers.component_resolver import ComponentResolver
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
@@ -75,10 +76,40 @@ class DatabaseService:
             if db.name == database.name:
                 raise ValueError(f"Database '{database.name}' already exists")
 
-        # Add the new database to the project config
-        existing_databases.append(database)
-        project_config.rag.databases = existing_databases
-        ProjectService.save_config(namespace, project, project_config)
+        # Build a working copy to resolve references and defaults
+        working_config = project_config.model_copy(deep=True)
+        working_databases = working_config.rag.databases or []
+
+        # Append the incoming database (may include references)
+        working_databases.append(database)
+        working_config.rag.databases = working_databases
+
+        # Resolve components to inline definitions
+        resolver = ComponentResolver(working_config)
+        resolved_config = resolver.resolve_config(working_config)
+
+        # Extract the resolved database we just added
+        resolved_db = next(
+            (db for db in resolved_config.rag.databases or [] if db.name == database.name),
+            None,
+        )
+        if resolved_db is None:
+            raise ValueError("Failed to resolve database configuration")
+
+        # Ensure strategies exist after resolution (neither inline nor defaults)
+        if not resolved_db.embedding_strategies:
+            raise ValueError(
+                "No embedding strategy provided or resolved. Specify embedding_strategy reference, "
+                "embedding_strategies inline, or define a default in components.defaults."
+            )
+        if not resolved_db.retrieval_strategies:
+            raise ValueError(
+                "No retrieval strategy provided or resolved. Specify retrieval_strategy reference, "
+                "retrieval_strategies inline, or define a default in components.defaults."
+            )
+
+        # Persist the fully resolved config
+        ProjectService.save_config(namespace, project, resolved_config)
 
         logger.info(
             "Created database",
@@ -90,7 +121,7 @@ class DatabaseService:
             else str(database.type),
         )
 
-        return database
+        return resolved_db
 
     @classmethod
     def update_database(
