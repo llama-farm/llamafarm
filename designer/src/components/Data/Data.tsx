@@ -719,28 +719,25 @@ const Data = () => {
       autoProcess: boolean,
       batchSize: number = UPLOAD_BATCH_SIZE
     ) => {
-      const results = []
+      type UploadBatchAggregate = {
+        files: string[]
+        uploaded: number
+        skipped: number
+        failed: number
+        status?: 'processing' | 'uploaded'
+        taskId?: string | null
+        cancelled?: boolean
+        error?: unknown
+      }
+
+      const results: UploadBatchAggregate[] = []
       let cancelled = false
 
       for (let i = 0; i < files.length; i += batchSize) {
-        // CHECK FOR CANCELLATION AT START OF EACH BATCH
-        if (cancelled) {
-          // Add cancelled results for remaining files
-          const remainingFiles = files.slice(i)
-          remainingFiles.forEach(file => {
-            results.push({
-              file: file.name,
-              success: false,
-              error: new Error('Cancelled'),
-              cancelled: true,
-            })
-          })
-          break
-        }
-
         const batch = files.slice(i, i + batchSize)
         const controller = new AbortController()
         activeUploadControllersRef.current.push(controller)
+        const batchFiles = batch.map(file => file.name)
 
         try {
           const bulkResult = await bulkUploadMutation.mutateAsync({
@@ -752,49 +749,14 @@ const Data = () => {
             signal: controller.signal,
           })
 
-          const statuses: Array<'uploaded' | 'skipped' | 'failed'> = [
-            ...Array(bulkResult.uploaded).fill('uploaded'),
-            ...Array(bulkResult.skipped).fill('skipped'),
-            ...Array(bulkResult.failed).fill('failed'),
-          ]
-
-          // Ensure we have a status for each file; default failures if counts mismatch
-          while (statuses.length < batch.length) {
-            statuses.push('failed')
-          }
-
-          const batchResults = batch.map((file, idx) => {
-            const status = statuses[idx] ?? 'failed'
-            if (status === 'uploaded') {
-              return {
-                file: file.name,
-                success: true,
-                result: {
-                  status: bulkResult.status,
-                  task_id: bulkResult.task_id ?? null,
-                },
-                skipped: false,
-              }
-            }
-            if (status === 'skipped') {
-              return {
-                file: file.name,
-                success: true,
-                result: {
-                  status: 'skipped',
-                  task_id: bulkResult.task_id ?? null,
-                },
-                skipped: true,
-              }
-            }
-            return {
-              file: file.name,
-              success: false,
-              error: new Error('Bulk upload failed for file'),
-            }
+          results.push({
+            files: batchFiles,
+            uploaded: bulkResult.uploaded,
+            skipped: bulkResult.skipped,
+            failed: bulkResult.failed,
+            status: bulkResult.status,
+            taskId: bulkResult.task_id ?? null,
           })
-
-          results.push(...batchResults)
         } catch (error) {
           // Check if this is an abort/cancellation error
           if (
@@ -803,39 +765,29 @@ const Data = () => {
             (error as any)?.message?.includes('cancel')
           ) {
             cancelled = true // Set flag to stop processing more batches
-            const cancelledResults = batch.map(file => ({
-              file: file.name,
-              success: false,
-              error,
+            results.push({
+              files: batchFiles,
+              uploaded: 0,
+              skipped: 0,
+              failed: batchFiles.length,
               cancelled: true,
-            }))
-            results.push(...cancelledResults)
-          } else {
-            const failedResults = batch.map(file => ({
-              file: file.name,
-              success: false,
               error,
-            }))
-            results.push(...failedResults)
+            })
+          } else {
+            results.push({
+              files: batchFiles,
+              uploaded: 0,
+              skipped: 0,
+              failed: batchFiles.length,
+              error,
+            })
           }
         } finally {
           activeUploadControllersRef.current =
             activeUploadControllersRef.current.filter(c => c !== controller)
         }
 
-        // Check if any upload in this batch was cancelled
-        if (results.slice(-batch.length).some(r => (r as any).cancelled)) {
-          cancelled = true
-          // Add cancelled results for remaining files
-          const remainingFiles = files.slice(i + batchSize)
-          remainingFiles.forEach(file => {
-            results.push({
-              file: file.name,
-              success: false,
-              error: new Error('Cancelled'),
-              cancelled: true,
-            })
-          })
+        if (cancelled) {
           break
         }
       }
@@ -869,21 +821,15 @@ const Data = () => {
           autoProcessUploads
         )
 
-        const cancelled = results.some(r => (r as any).cancelled)
-        const failures = results.filter(
-          r => !r.success && !(r as any).cancelled
-        )
-        const successes = results.filter(r => r.success && !(r as any).skipped)
-        const skipped = results.filter(r => r.success && (r as any).skipped)
-        const taskIds = results
-          .map(r => (r as any).result?.task_id)
-          .filter(Boolean) as string[]
+        const cancelled = results.some(r => r.cancelled)
+        const totalUploaded = results.reduce((sum, r) => sum + r.uploaded, 0)
+        const totalSkipped = results.reduce((sum, r) => sum + r.skipped, 0)
+        const totalFailed = results.reduce((sum, r) => sum + r.failed, 0)
+        const taskIds = results.map(r => r.taskId).filter(Boolean) as string[]
         const hasProcessing =
-          results.some(r => (r as any).result?.status === 'processing') ||
-          taskIds.length > 0
+          results.some(r => r.status === 'processing') || taskIds.length > 0
         const hasPending =
-          results.some(r => (r as any).result?.status === 'uploaded') ||
-          !autoProcessUploads
+          results.some(r => r.status === 'uploaded') || !autoProcessUploads
 
         // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
         if (cancelled) {
@@ -891,47 +837,47 @@ const Data = () => {
         }
 
         // Show appropriate toast based on results
-        if (failures.length > 0 && successes.length > 0) {
+        if (totalFailed > 0 && totalUploaded > 0) {
           // Partial success: some uploads succeeded, some failed
           const skippedMsg =
-            skipped.length > 0 ? `, skipped ${skipped.length} duplicate(s)` : ''
+            totalSkipped > 0 ? `, skipped ${totalSkipped} duplicate(s)` : ''
           toast({
-            message: `Uploaded ${successes.length} of ${fileCount} file(s)${skippedMsg}. Failed: ${failures.map(f => f.file).join(', ')}`,
+            message: `Uploaded ${totalUploaded} of ${fileCount} file(s)${skippedMsg}. Failed: ${totalFailed} file(s).`,
             variant: 'destructive',
           })
-        } else if (failures.length > 0 && skipped.length > 0) {
+        } else if (totalFailed > 0 && totalSkipped > 0) {
           // All files either failed or were skipped
           toast({
-            message: `Upload failed for ${failures.length} file(s), skipped ${skipped.length} duplicate(s). Failed: ${failures.map(f => f.file).join(', ')}`,
+            message: `Upload failed for ${totalFailed} file(s), skipped ${totalSkipped} duplicate(s).`,
             variant: 'destructive',
           })
-        } else if (failures.length > 0) {
+        } else if (totalFailed > 0) {
           // All files failed
           toast({
-            message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
+            message: `Upload failed for all files (${totalFailed}).`,
             variant: 'destructive',
           })
-        } else if (skipped.length > 0 && successes.length === 0) {
+        } else if (totalSkipped > 0 && totalUploaded === 0) {
           // All files were duplicates
           toast({
-            message: `All ${skipped.length} file(s) were already in ${datasetName}`,
+            message: `All ${totalSkipped} file(s) were already in ${datasetName}`,
             variant: 'default',
             icon: 'alert-triangle',
           })
-        } else if (skipped.length > 0) {
+        } else if (totalSkipped > 0) {
           // Some successes with some skipped
           toast({
-            message: `Uploaded ${successes.length} file(s) to ${datasetName}, skipped ${skipped.length} duplicate(s)`,
+            message: `Uploaded ${totalUploaded} file(s) to ${datasetName}, skipped ${totalSkipped} duplicate(s)`,
             variant: 'default',
           })
         } else {
           // All files succeeded
           const message =
             hasPending && !hasProcessing
-              ? `Uploaded ${fileCount} file(s) to ${datasetName}. Processing is paused.`
+              ? `Uploaded ${totalUploaded} file(s) to ${datasetName}. Processing is paused.`
               : hasProcessing
-                ? `Uploaded ${fileCount} file(s) to ${datasetName}. Processing started.`
-                : `Successfully uploaded ${fileCount} file(s) to ${datasetName}`
+                ? `Uploaded ${totalUploaded} file(s) to ${datasetName}. Processing started.`
+                : `Successfully uploaded ${totalUploaded} file(s) to ${datasetName}`
           toast({ message, variant: 'default' })
         }
 
@@ -949,7 +895,7 @@ const Data = () => {
         }
 
         // Navigate to the dataset view to see uploaded files (only if some succeeded)
-        if (successes.length > 0) {
+        if (totalUploaded > 0) {
           // Explicitly refetch to ensure fresh data before navigating
           await refetchDatasets()
 
