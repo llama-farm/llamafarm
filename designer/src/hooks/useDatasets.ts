@@ -261,7 +261,6 @@ export function useUploadMultipleFiles() {
     dataset: string
     files: File[]
     autoProcess?: boolean
-    parserOverrides?: Record<string, any>
   }>({
     mutationFn: data =>
       datasetService.uploadFilesBulk(
@@ -271,7 +270,6 @@ export function useUploadMultipleFiles() {
         data.files,
         {
           autoProcess: data.autoProcess,
-          parserOverrides: data.parserOverrides,
         }
       ),
     onSuccess: (_, variables) => {

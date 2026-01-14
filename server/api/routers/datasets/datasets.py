@@ -546,13 +546,13 @@ async def upload_data_bulk(
             detail="Bulk upload limited to 100 files",
         )
 
-    # Bulk defaults to not processing unless explicitly requested
+    # Precedence: explicit param > dataset config default > False
     dataset_auto_process = (
-        dataset_config.auto_process if dataset_config.auto_process is not None else True
+        dataset_config.auto_process if dataset_config.auto_process is not None else False
     )
-    effective_auto_process = auto_process if auto_process is not None else False
-    if auto_process is None and dataset_auto_process is False:
-        effective_auto_process = False
+    effective_auto_process = (
+        auto_process if auto_process is not None else dataset_auto_process
+    )
 
     uploaded = 0
     skipped = 0

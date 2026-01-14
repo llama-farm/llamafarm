@@ -267,14 +267,10 @@ export async function uploadFilesBulk(
   options?: {
     signal?: AbortSignal
     autoProcess?: boolean
-    parserOverrides?: Record<string, any>
   }
 ): Promise<BulkFileUploadResponse> {
   const formData = new FormData()
   files.forEach(file => formData.append('files', file))
-  if (options?.parserOverrides) {
-    formData.append('parser_overrides', JSON.stringify(options.parserOverrides))
-  }
 
   const response = await apiClient.post<BulkFileUploadResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/bulk`,
