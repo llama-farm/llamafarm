@@ -144,6 +144,11 @@ def get_common_nuitka_args() -> list[str]:
         "--nofollow-import-to=fitz",  # PyMuPDF - PDF rendering
         "--nofollow-import-to=pymupdf",
         "--nofollow-import-to=frontend",  # PyMuPDF frontend
+        # ONNX runtime is pulled in by chromadb but we use Universal Runtime
+        # for embeddings. Excluding avoids ARM64 relocation overflow errors
+        # (sympy.polys.polyquinticconst alone exceeds ±128MB branch limit)
+        "--nofollow-import-to=onnxruntime",
+        "--nofollow-import-to=sympy",
         # Enable useful plugins
         "--enable-plugin=anti-bloat",
         # Show progress
@@ -187,6 +192,8 @@ def build_server(output_dir: Path, python: str) -> Path:
         # Shared packages (config imports as 'config', common as 'llamafarm_common')
         "--include-package=config",
         "--include-package=llamafarm_common",
+        # Include config templates and data files
+        "--include-package-data=config",
         # Celery and related packages (have dynamic imports)
         "--include-package=celery",
         "--include-package=kombu",
@@ -245,6 +252,8 @@ def build_rag(output_dir: Path, python: str) -> Path:
         # Shared packages
         "--include-package=config",
         "--include-package=llamafarm_common",
+        # Include config templates and data files
+        "--include-package-data=config",
         # Celery and related packages (have dynamic imports)
         "--include-package=celery",
         "--include-package=kombu",
@@ -303,6 +312,8 @@ def build_runtime(output_dir: Path, python: str) -> Path:
         "--include-package=llamafarm_common",
         "--include-package=llamafarm_llama",
         "--include-package=config",
+        # Include config templates and data files
+        "--include-package-data=config",
         # PyTorch is optional - will be loaded dynamically if available
         "--nofollow-import-to=torch",
         "--nofollow-import-to=torchvision",

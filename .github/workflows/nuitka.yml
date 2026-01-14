@@ -64,24 +64,24 @@ jobs:
 
           # macOS ARM64 (Apple Silicon)
           - os: macos-arm64
-            runner: macos-14
+            runner: macos-latest
             component: server
           - os: macos-arm64
-            runner: macos-14
+            runner: macos-latest
             component: rag
           - os: macos-arm64
-            runner: macos-14
+            runner: macos-latest
             component: runtime
 
           # macOS x86_64 (Intel)
           - os: macos-x86_64
-            runner: macos-13
+            runner: macos-15-intel
             component: server
           - os: macos-x86_64
-            runner: macos-13
+            runner: macos-15-intel
             component: rag
           - os: macos-x86_64
-            runner: macos-13
+            runner: macos-15-intel
             component: runtime
 
           # Windows x86_64
