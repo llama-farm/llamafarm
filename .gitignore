@@ -763,3 +763,7 @@ llamafarm.yaml.backup*
 lf
 thoughts
 .plans
+
+# Claude Code orchestration files (local config)
+.claude/
+PLAN.md
