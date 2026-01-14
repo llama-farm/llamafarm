@@ -50,18 +50,28 @@ class TemplateService:
         This design assumes templates come from config files (not user input)
         and variable values come from trusted API consumers.
 
+        IMPORTANT: Variable values should NEVER come from untrusted end-user input.
+        While template markers in values are not recursively expanded (preventing
+        injection attacks), values are inserted verbatim which could enable:
+        - Prompt injection if values end up in LLM prompts
+        - XSS if values end up in HTML output (caller must escape)
+
     Threat Model:
         - Templates: Trusted (come from config YAML files under developer control)
-        - Variable values: Semi-trusted (come from API consumers)
-        - Validation: Max length enforced, type coercion logged
+        - Variable values: Semi-trusted (come from API consumers, not end users)
+        - Validation: Max length enforced, complex types rejected
 
     Limitations:
         - Default values containing '}' before '}}' may not parse correctly
         - Nested template markers (e.g., {{outer_{{inner}}}}) are not supported
+        - Only primitive types allowed (str, int, float, bool, None)
     """
 
     # Maximum allowed length for variable values (prevents DoS)
     MAX_VALUE_LENGTH = 100_000  # 100KB per value
+
+    # Allowed types for variable values (primitives only)
+    ALLOWED_TYPES = (str, int, float, bool, type(None))
 
     # Pattern to match {{variable}} or {{variable | default}}
     # Captures: (variable_name, optional_default_with_pipe)
@@ -102,6 +112,14 @@ class TemplateService:
 
             if var_name in variables:
                 value = variables[var_name]
+
+                # Validate type - only allow primitives
+                if not isinstance(value, cls.ALLOWED_TYPES):
+                    raise TemplateError(
+                        f"Variable '{var_name}' has unsupported type '{type(value).__name__}'. "
+                        f"Only primitive types are allowed: str, int, float, bool, None.",
+                        variable_name=var_name,
+                    )
 
                 # Handle None explicitly - treat as empty string
                 if value is None:

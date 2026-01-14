@@ -304,17 +304,21 @@ class TestTypeCoercion:
         result = TemplateService.resolve("Enabled: {{flag}}", {"flag": True})
         assert result == "Enabled: True"
 
-    def test_list_value(self):
-        """List values are converted to string representation."""
-        result = TemplateService.resolve("Items: {{items}}", {"items": [1, 2, 3]})
-        assert result == "Items: [1, 2, 3]"
+    def test_list_value_rejected(self):
+        """List values are rejected with clear error."""
+        with pytest.raises(TemplateError) as exc_info:
+            TemplateService.resolve("Items: {{items}}", {"items": [1, 2, 3]})
+        assert "unsupported type" in str(exc_info.value)
+        assert "list" in str(exc_info.value)
 
-    def test_dict_value(self):
-        """Dict values are converted to string representation."""
-        result = TemplateService.resolve(
-            "Config: {{config}}", {"config": {"key": "value"}}
-        )
-        assert result == "Config: {'key': 'value'}"
+    def test_dict_value_rejected(self):
+        """Dict values are rejected with clear error."""
+        with pytest.raises(TemplateError) as exc_info:
+            TemplateService.resolve(
+                "Config: {{config}}", {"config": {"key": "value"}}
+            )
+        assert "unsupported type" in str(exc_info.value)
+        assert "dict" in str(exc_info.value)
 
     def test_none_value_becomes_empty_string(self):
         """None values become empty strings (not 'None' literal)."""
@@ -415,3 +419,78 @@ class TestSecurityValidation:
         result = TemplateService.resolve("{{café}}", {"café": "coffee"})
         # Only ASCII letters allowed in variable names
         assert result == "{{café}}"
+
+
+class TestSecurityNoRecursiveExpansion:
+    """Security tests ensuring template markers in values are NOT recursively expanded."""
+
+    def test_nested_template_in_value_not_expanded(self):
+        """Template markers in variable values are treated as literal text."""
+        # This is the key security test - prevents injection attacks
+        result = TemplateService.resolve(
+            "Message: {{msg}}",
+            {"msg": "Try {{secret}} injection", "secret": "LEAKED"},
+        )
+        # The {{secret}} in the value should NOT be resolved
+        assert result == "Message: Try {{secret}} injection"
+        assert "LEAKED" not in result
+
+    def test_double_expansion_not_possible(self):
+        """Cannot achieve double expansion through nested templates."""
+        result = TemplateService.resolve(
+            "{{outer}}",
+            {"outer": "{{inner}}", "inner": "SHOULD_NOT_APPEAR"},
+        )
+        # Only one level of expansion - inner template not resolved
+        assert result == "{{inner}}"
+        assert "SHOULD_NOT_APPEAR" not in result
+
+    def test_value_with_complete_template_literal(self):
+        """Complete template syntax in value is not interpreted."""
+        result = TemplateService.resolve(
+            "Help: {{help_text}}",
+            {"help_text": "Use {{variable_name | default}} syntax"},
+        )
+        assert result == "Help: Use {{variable_name | default}} syntax"
+
+    def test_malicious_escape_sequence_in_value(self):
+        """Escape sequences in values don't break template parsing."""
+        result = TemplateService.resolve(
+            "Data: {{data}}",
+            {"data": "}}{{other}}{{"},  # Attempt to break out of template
+        )
+        assert result == "Data: }}{{other}}{{"
+
+    def test_custom_class_rejected(self):
+        """Custom class instances are rejected."""
+
+        class CustomObject:
+            def __str__(self):
+                return "custom"
+
+        with pytest.raises(TemplateError) as exc_info:
+            TemplateService.resolve("Value: {{obj}}", {"obj": CustomObject()})
+        assert "unsupported type" in str(exc_info.value)
+
+
+class TestDefaultsWithClosingBrace:
+    """Tests for defaults containing closing brace characters."""
+
+    def test_default_empty_object(self):
+        """Default value of empty object literal."""
+        result = TemplateService.resolve("JSON: {{data | {}}}", {})
+        assert result == "JSON: {}"
+
+    def test_default_simple_json(self):
+        """Default with simple JSON-like structure."""
+        # Note: Due to regex limitation, this stops at first }
+        result = TemplateService.resolve('{{cfg | {"a":1}}}', {})
+        # Current behavior: captures up to first }
+        # This is a documented limitation
+        assert "{" in result  # At minimum we get the opening brace
+
+    def test_default_with_single_closing_brace_mid_string(self):
+        """Default containing } in middle of string."""
+        result = TemplateService.resolve("{{val | hello}world}}", {})
+        # Regex stops at first } after |, so default is "hello"
+        assert "hello" in result

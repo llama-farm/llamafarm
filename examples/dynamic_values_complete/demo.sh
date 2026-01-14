@@ -17,9 +17,17 @@
 
 set -e
 
-API_BASE="${API_BASE:-http://localhost:8000}"
-NAMESPACE="${NAMESPACE:-examples}"
-PROJECT="${PROJECT:-dynamic_values_complete}"
+# Load port from .env if available
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/../../.env"
+if [ -f "$ENV_FILE" ]; then
+  PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2)
+fi
+PORT="${PORT:-8000}"
+
+API_BASE="${API_BASE:-http://localhost:$PORT}"
+NAMESPACE="${NAMESPACE:-test}"
+PROJECT="${PROJECT:-demo}"
 
 echo "=============================================="
 echo "  LlamaFarm Dynamic Values - Complete Demo"
@@ -42,7 +50,7 @@ echo "  - account_tier: premium"
 echo "  - current_date: 2024-01-15"
 echo ""
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -76,7 +84,7 @@ echo "Variables: Only user_name and account_tier provided"
 echo "Others use defaults: company=Acme Corp, department=General, etc."
 echo ""
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -106,7 +114,7 @@ echo "Variables: None provided - all defaults used"
 echo "Expected: Acme Corp, General department, Valued Customer, standard tier"
 echo ""
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -131,7 +139,7 @@ echo ""
 echo "Adding a custom tool that also uses variables"
 echo ""
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{

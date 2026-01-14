@@ -14,9 +14,17 @@
 
 set -e
 
-API_BASE="${API_BASE:-http://localhost:8000}"
-NAMESPACE="${NAMESPACE:-examples}"
-PROJECT="${PROJECT:-dynamic_prompts_demo}"
+# Load port from .env if available
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/../../.env"
+if [ -f "$ENV_FILE" ]; then
+  PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2)
+fi
+PORT="${PORT:-8000}"
+
+API_BASE="${API_BASE:-http://localhost:$PORT}"
+NAMESPACE="${NAMESPACE:-test}"
+PROJECT="${PROJECT:-demo}"
 
 echo "=== Dynamic Prompt Variables Demo ==="
 echo "API: $API_BASE"
@@ -27,7 +35,7 @@ echo ""
 echo "Test 1: Chat with custom variables (user_name=Alice, company_name=TechCorp)"
 echo "------------------------------------------------------------------------"
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -53,7 +61,7 @@ echo ""
 echo "Test 2: Chat using defaults (no variables provided)"
 echo "----------------------------------------------------"
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -73,7 +81,7 @@ echo ""
 echo "Test 3: Partial variables (only user_name provided)"
 echo "----------------------------------------------------"
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{

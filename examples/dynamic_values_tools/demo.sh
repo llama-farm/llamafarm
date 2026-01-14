@@ -13,9 +13,17 @@
 
 set -e
 
-API_BASE="${API_BASE:-http://localhost:8000}"
-NAMESPACE="${NAMESPACE:-examples}"
-PROJECT="${PROJECT:-dynamic_tools_demo}"
+# Load port from .env if available
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/../../.env"
+if [ -f "$ENV_FILE" ]; then
+  PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2)
+fi
+PORT="${PORT:-8000}"
+
+API_BASE="${API_BASE:-http://localhost:$PORT}"
+NAMESPACE="${NAMESPACE:-test}"
+PROJECT="${PROJECT:-demo}"
 
 echo "=== Dynamic Tool Variables Demo ==="
 echo "API: $API_BASE"
@@ -28,7 +36,7 @@ echo "---------------------------------------"
 echo "Setting api_name='ProductService' and api_base='https://api.products.com'"
 echo ""
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -53,7 +61,7 @@ echo ""
 echo "Test 2: Tool using defaults (no variables)"
 echo "-------------------------------------------"
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -74,7 +82,7 @@ echo ""
 echo "Test 3: Request-level tool with variables"
 echo "------------------------------------------"
 
-response=$(curl -s -X POST "$API_BASE/v1/$NAMESPACE/$PROJECT/chat/completions" \
+response=$(curl -s -X POST "$API_BASE/v1/projects/$NAMESPACE/$PROJECT/chat/completions" \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
