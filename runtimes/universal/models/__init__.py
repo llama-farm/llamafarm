@@ -10,6 +10,7 @@ from .background_removal_model import BackgroundRemovalModel
 from .base import BaseModel
 from .classifier_model import ClassifierModel
 from .document_model import DocumentModel
+from .few_shot_classifier import FewShotImageClassifier
 from .encoder_model import EncoderModel
 from .gguf_encoder_model import GGUFEncoderModel
 from .gguf_language_model import GGUFLanguageModel
@@ -17,6 +18,7 @@ from .language_detection_model import LanguageDetectionModel
 from .language_model import LanguageModel
 from .object_detection_model import ObjectDetectionModel
 from .ocr_model import OCRModel
+from .open_vocab_detection_model import OpenVocabDetectionModel
 from .pii_model import PIIModel
 from .table_qa_model import TableQAModel
 from .timeseries_model import TimeSeriesModel
@@ -33,9 +35,11 @@ __all__ = [
     "AnomalyModel",
     "ClassifierModel",
     "CLIPVisionModel",
+    "FewShotImageClassifier",
     "LanguageDetectionModel",
     "PIIModel",
     "ObjectDetectionModel",
+    "OpenVocabDetectionModel",
     "BackgroundRemovalModel",
     "TimeSeriesModel",
     "TableQAModel",

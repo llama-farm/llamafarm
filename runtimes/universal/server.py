@@ -44,12 +44,14 @@ from models import (
     CLIPVisionModel,
     DocumentModel,
     EncoderModel,
+    FewShotImageClassifier,
     GGUFEncoderModel,
     GGUFLanguageModel,
     LanguageDetectionModel,
     LanguageModel,
     ObjectDetectionModel,
     OCRModel,
+    OpenVocabDetectionModel,
     PIIModel,
     TimeSeriesModel,
 )
@@ -130,6 +132,26 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Error unloading vision model {cache_key}: {e}")
         _vision_models.clear()
 
+    if _few_shot_classifiers:
+        logger.info(f"Unloading {len(_few_shot_classifiers)} remaining few-shot classifier(s)")
+        for cache_key, model in list(_few_shot_classifiers.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded few-shot classifier: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading few-shot classifier {cache_key}: {e}")
+        _few_shot_classifiers.clear()
+
+    if _open_vocab_detection_models:
+        logger.info(f"Unloading {len(_open_vocab_detection_models)} remaining open-vocab detection model(s)")
+        for cache_key, model in list(_open_vocab_detection_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded open-vocab detection model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading open-vocab detection model {cache_key}: {e}")
+        _open_vocab_detection_models.clear()
+
     logger.info("Shutdown complete")
 
 
@@ -158,6 +180,8 @@ _pii_models: ModelCache["PIIModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _object_detection_models: ModelCache["ObjectDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _background_removal_models: ModelCache["BackgroundRemovalModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _timeseries_models: ModelCache["TimeSeriesModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_few_shot_classifiers: ModelCache["FewShotImageClassifier"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_open_vocab_detection_models: ModelCache["OpenVocabDetectionModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -191,6 +215,8 @@ async def _cleanup_idle_models() -> None:
                 (_models, "models"),
                 (_classifiers, "classifiers"),
                 (_vision_models, "vision_models"),
+                (_few_shot_classifiers, "few_shot_classifiers"),
+                (_open_vocab_detection_models, "open_vocab_detection_models"),
             ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
@@ -2883,6 +2909,478 @@ async def classify_zero_shot_batch(request: ZeroShotClassifyBatchRequest):
 
 
 # ============================================================================
+# Few-Shot Image Classification Endpoints
+# ============================================================================
+
+
+def _make_few_shot_cache_key(classifier_id: str, model_name: str) -> str:
+    """Generate a cache key for a few-shot classifier.
+
+    Args:
+        classifier_id: User-provided classifier identifier
+        model_name: CLIP model name for embeddings
+
+    Returns:
+        A unique cache key string
+    """
+    return f"few_shot:{classifier_id}:{model_name}"
+
+
+async def load_few_shot_classifier(
+    classifier_id: str,
+    model_name: str = "openai/clip-vit-base-patch32",
+    create_if_missing: bool = True,
+) -> FewShotImageClassifier | None:
+    """Load or create a few-shot classifier.
+
+    Args:
+        classifier_id: Unique identifier for this classifier
+        model_name: CLIP model to use for embeddings
+        create_if_missing: If True, create a new classifier if not found
+
+    Returns:
+        FewShotImageClassifier instance or None if not found and create_if_missing=False
+    """
+    cache_key = _make_few_shot_cache_key(classifier_id, model_name)
+
+    if cache_key not in _few_shot_classifiers:
+        if not create_if_missing:
+            return None
+        async with _model_load_lock:
+            if cache_key not in _few_shot_classifiers:
+                logger.info(f"Creating few-shot classifier: {classifier_id} (CLIP: {model_name})")
+                device = get_device()
+
+                model = FewShotImageClassifier(
+                    model_id=classifier_id,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _few_shot_classifiers[cache_key] = model
+
+    return _few_shot_classifiers.get(cache_key)
+
+
+class FewShotTrainRequest(PydanticBaseModel):
+    """Request to train a few-shot classifier."""
+
+    classifier_id: str  # Unique ID for this classifier
+    images: list[str]  # Base64-encoded images or file paths
+    labels: list[str]  # Labels for each image (same length as images)
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model for embeddings
+    epochs: int = 100  # Training epochs
+    learning_rate: float = 0.001  # Learning rate
+
+
+class FewShotRefineRequest(PydanticBaseModel):
+    """Request to refine an existing few-shot classifier with more data."""
+
+    classifier_id: str  # Classifier ID to refine
+    images: list[str]  # Additional images
+    labels: list[str]  # Labels for additional images
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model (must match original)
+    epochs: int = 50  # Refinement epochs
+    learning_rate: float = 0.0005  # Lower learning rate for refinement
+
+
+class FewShotPredictRequest(PydanticBaseModel):
+    """Request to classify an image with a trained few-shot classifier."""
+
+    classifier_id: str  # Classifier ID to use
+    image: str  # Base64-encoded image or file path
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model (must match training)
+
+
+class FewShotPredictBatchRequest(PydanticBaseModel):
+    """Request to classify multiple images with a trained few-shot classifier."""
+
+    classifier_id: str  # Classifier ID to use
+    images: list[str]  # Base64-encoded images or file paths
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model (must match training)
+
+
+@app.post("/v1/vision/classify/fit")
+async def train_few_shot_classifier(request: FewShotTrainRequest):
+    """
+    Train a few-shot image classifier using CLIP embeddings with linear probe.
+
+    This creates a custom classifier that can distinguish between your specific
+    categories using just 5-50 images per class. The classifier uses frozen
+    CLIP features with a trainable linear classifier head.
+
+    Example workflow:
+    1. Train: POST /v1/vision/classify/fit with images and labels
+    2. Predict: POST /v1/vision/classify/predict with classifier_id
+    3. Refine: POST /v1/vision/classify/refine to add more data or classes
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "cat-dog-classifier",
+        "images": ["<base64 cat1>", "<base64 cat2>", "<base64 dog1>", "<base64 dog2>"],
+        "labels": ["cat", "cat", "dog", "dog"],
+        "model": "openai/clip-vit-base-patch32",
+        "epochs": 100
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "few_shot_classifier",
+        "classifier_id": "cat-dog-classifier",
+        "success": true,
+        "num_samples": 4,
+        "num_classes": 2,
+        "classes": ["cat", "dog"],
+        "final_accuracy": 1.0,
+        "training_time_ms": 1234.5
+    }
+    ```
+    """
+    try:
+        if len(request.images) != len(request.labels):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Number of images ({len(request.images)}) must match labels ({len(request.labels)})",
+            )
+
+        if len(request.images) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Need at least 2 images to train a classifier",
+            )
+
+        classifier = await load_few_shot_classifier(
+            classifier_id=request.classifier_id,
+            model_name=request.model,
+        )
+
+        result = await classifier.fit(
+            images=request.images,
+            labels=request.labels,
+            epochs=request.epochs,
+            learning_rate=request.learning_rate,
+        )
+
+        return {
+            "object": "few_shot_classifier",
+            "classifier_id": request.classifier_id,
+            **result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in train_few_shot_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/classify/refine")
+async def refine_few_shot_classifier(request: FewShotRefineRequest):
+    """
+    Refine a few-shot classifier with additional training data.
+
+    Use this to:
+    - Add more examples of existing classes
+    - Add entirely new classes
+    - Correct misclassifications by adding correctly labeled examples
+
+    The classifier will be fine-tuned on the new data while preserving
+    knowledge of existing classes.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "cat-dog-classifier",
+        "images": ["<base64 bird1>", "<base64 bird2>"],
+        "labels": ["bird", "bird"],
+        "epochs": 50
+    }
+    ```
+
+    Response includes the new classes list:
+    ```json
+    {
+        "object": "few_shot_classifier",
+        "classifier_id": "cat-dog-classifier",
+        "success": true,
+        "refined_samples": 2,
+        "num_classes": 3,
+        "classes": ["bird", "cat", "dog"],
+        "new_classes_added": ["bird"],
+        "accuracy_on_new_data": 1.0
+    }
+    ```
+    """
+    try:
+        if len(request.images) != len(request.labels):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Number of images ({len(request.images)}) must match labels ({len(request.labels)})",
+            )
+
+        classifier = await load_few_shot_classifier(
+            classifier_id=request.classifier_id,
+            model_name=request.model,
+            create_if_missing=False,
+        )
+
+        if classifier is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier '{request.classifier_id}' not found. Train it first with /v1/vision/classify/fit",
+            )
+
+        result = await classifier.refine(
+            images=request.images,
+            labels=request.labels,
+            epochs=request.epochs,
+            learning_rate=request.learning_rate,
+        )
+
+        return {
+            "object": "few_shot_classifier",
+            "classifier_id": request.classifier_id,
+            **result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in refine_few_shot_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/classify/predict")
+async def predict_few_shot(request: FewShotPredictRequest):
+    """
+    Classify an image using a trained few-shot classifier.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "cat-dog-classifier",
+        "image": "<base64 encoded image>"
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "classification",
+        "classifier_id": "cat-dog-classifier",
+        "label": "cat",
+        "score": 0.92,
+        "all_scores": {"cat": 0.92, "dog": 0.08}
+    }
+    ```
+    """
+    try:
+        classifier = await load_few_shot_classifier(
+            classifier_id=request.classifier_id,
+            model_name=request.model,
+            create_if_missing=False,
+        )
+
+        if classifier is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier '{request.classifier_id}' not found. Train it first with /v1/vision/classify/fit",
+            )
+
+        if not classifier.is_trained:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Classifier '{request.classifier_id}' exists but is not trained. Call /v1/vision/classify/fit first.",
+            )
+
+        result = await classifier.predict(request.image)
+
+        return {
+            "object": "classification",
+            "classifier_id": request.classifier_id,
+            **result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in predict_few_shot: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/classify/predict/batch")
+async def predict_few_shot_batch(request: FewShotPredictBatchRequest):
+    """
+    Classify multiple images using a trained few-shot classifier.
+
+    More efficient than calling the single-image endpoint multiple times.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "cat-dog-classifier",
+        "images": ["<base64 image 1>", "<base64 image 2>"]
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        "object": "list",
+        "classifier_id": "cat-dog-classifier",
+        "data": [
+            {"label": "cat", "score": 0.92, "all_scores": {"cat": 0.92, "dog": 0.08}},
+            {"label": "dog", "score": 0.87, "all_scores": {"cat": 0.13, "dog": 0.87}}
+        ],
+        "total_count": 2
+    }
+    ```
+    """
+    try:
+        if not request.images:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one image is required",
+            )
+
+        classifier = await load_few_shot_classifier(
+            classifier_id=request.classifier_id,
+            model_name=request.model,
+            create_if_missing=False,
+        )
+
+        if classifier is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier '{request.classifier_id}' not found. Train it first with /v1/vision/classify/fit",
+            )
+
+        if not classifier.is_trained:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Classifier '{request.classifier_id}' exists but is not trained. Call /v1/vision/classify/fit first.",
+            )
+
+        results = await classifier.predict_batch(request.images)
+
+        return {
+            "object": "list",
+            "classifier_id": request.classifier_id,
+            "data": results,
+            "total_count": len(results),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in predict_few_shot_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/vision/classify/info/{classifier_id}")
+async def get_few_shot_classifier_info(
+    classifier_id: str,
+    model: str = "openai/clip-vit-base-patch32",
+):
+    """
+    Get information about a few-shot classifier.
+
+    Returns details about the classifier including:
+    - Whether it's loaded and trained
+    - Classes it can recognize
+    - Model configuration
+
+    Example response:
+    ```json
+    {
+        "object": "few_shot_classifier_info",
+        "classifier_id": "cat-dog-classifier",
+        "is_loaded": true,
+        "is_trained": true,
+        "classes": ["cat", "dog"],
+        "num_classes": 2,
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+    """
+    try:
+        classifier = await load_few_shot_classifier(
+            classifier_id=classifier_id,
+            model_name=model,
+            create_if_missing=False,
+        )
+
+        if classifier is None:
+            return {
+                "object": "few_shot_classifier_info",
+                "classifier_id": classifier_id,
+                "is_loaded": False,
+                "is_trained": False,
+                "classes": [],
+                "num_classes": 0,
+                "model": model,
+                "message": "Classifier not found",
+            }
+
+        info = classifier.get_model_info()
+        return {
+            "object": "few_shot_classifier_info",
+            "classifier_id": classifier_id,
+            **info,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_few_shot_classifier_info: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.delete("/v1/vision/classify/{classifier_id}")
+async def delete_few_shot_classifier(
+    classifier_id: str,
+    model: str = "openai/clip-vit-base-patch32",
+):
+    """
+    Delete a few-shot classifier and free its resources.
+
+    Example response:
+    ```json
+    {
+        "object": "delete",
+        "classifier_id": "cat-dog-classifier",
+        "deleted": true
+    }
+    ```
+    """
+    try:
+        cache_key = _make_few_shot_cache_key(classifier_id, model)
+
+        if cache_key in _few_shot_classifiers:
+            classifier = _few_shot_classifiers.pop(cache_key)
+            if classifier:
+                await classifier.unload()
+            return {
+                "object": "delete",
+                "classifier_id": classifier_id,
+                "deleted": True,
+            }
+
+        return {
+            "object": "delete",
+            "classifier_id": classifier_id,
+            "deleted": False,
+            "message": "Classifier not found",
+        }
+
+    except Exception as e:
+        logger.error(f"Error in delete_few_shot_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
 # Language Detection Endpoints
 # ============================================================================
 
@@ -3570,6 +4068,258 @@ async def detect_objects_batch(request: ObjectDetectionBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in detect_objects_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# =============================================================================
+# Open-Vocabulary Object Detection (OWL-ViT)
+# =============================================================================
+
+
+def _make_open_vocab_cache_key(model_name: str) -> str:
+    """Create a cache key for open-vocab detection models."""
+    return f"open_vocab:{model_name}"
+
+
+async def load_open_vocab_detection_model(
+    model_name: str = "google/owlvit-base-patch32",
+) -> OpenVocabDetectionModel:
+    """Load or retrieve cached open-vocabulary detection model."""
+    cache_key = _make_open_vocab_cache_key(model_name)
+
+    if cache_key not in _open_vocab_detection_models:
+        async with _model_load_lock:
+            if cache_key not in _open_vocab_detection_models:
+                logger.info(f"Loading OWL-ViT model: {model_name}")
+                device = get_device()
+
+                model = OpenVocabDetectionModel(
+                    model_id=cache_key,
+                    device=device,
+                    hf_model_name=model_name,
+                )
+
+                await model.load()
+                _open_vocab_detection_models[cache_key] = model
+
+    return _open_vocab_detection_models.get(cache_key)
+
+
+class OpenVocabDetectTextRequest(PydanticBaseModel):
+    """Open-vocabulary detection using text queries."""
+
+    image: str  # Base64-encoded image or file path
+    queries: list[str]  # Text queries describing what to find
+    threshold: float = 0.1  # Confidence threshold (lower = more detections)
+    top_k: int | None = None  # Limit number of detections
+    model: str = "google/owlvit-base-patch32"
+
+
+class OpenVocabDetectTextBatchRequest(PydanticBaseModel):
+    """Batch open-vocabulary detection using text queries."""
+
+    images: list[str]  # List of base64-encoded images or file paths
+    queries: list[str]  # Text queries (applied to all images)
+    threshold: float = 0.1
+    top_k: int | None = None
+    model: str = "google/owlvit-base-patch32"
+
+
+class OpenVocabDetectImageRequest(PydanticBaseModel):
+    """Open-vocabulary detection using reference images."""
+
+    image: str  # Target image to search in
+    query_images: list[str]  # Reference images showing what to find
+    threshold: float = 0.9  # Similarity threshold (higher = stricter match)
+    top_k: int | None = None
+    model: str = "google/owlvit-base-patch32"
+
+
+@app.post("/v1/vision/detect-open")
+async def detect_open_vocabulary(request: OpenVocabDetectTextRequest):
+    """
+    Detect objects using natural language text queries.
+
+    OWL-ViT enables open-vocabulary object detection - find any object
+    described in natural language, without retraining. This is ideal for:
+    - Finding specific objects (\"a red fire hydrant\")
+    - Species identification (\"a golden retriever\", \"a tabby cat\")
+    - Fine-grained detection (\"a person wearing a hat\")
+    - Custom domain objects (\"a damaged car door\")
+
+    Tips for better results:
+    - Use descriptive queries: \"a photo of a cat\" works better than just \"cat\"
+    - Lower threshold (0.05-0.2) for recall, higher (0.3-0.5) for precision
+    - Combine with few-shot classification for species/subspecies refinement
+
+    Example request:
+    ```json
+    {
+        \"image\": \"<base64 encoded image>\",
+        \"queries\": [\"a golden retriever\", \"a german shepherd\", \"a labrador\"],
+        \"threshold\": 0.1,
+        \"top_k\": 10
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        \"object\": \"open_vocab_detection\",
+        \"objects\": [
+            {
+                \"query\": \"a golden retriever\",
+                \"label\": \"a golden retriever\",
+                \"score\": 0.85,
+                \"box\": {\"x1\": 100, \"y1\": 50, \"x2\": 400, \"y2\": 350}
+            }
+        ],
+        \"count\": 1,
+        \"queries\": [\"a golden retriever\", \"a german shepherd\", \"a labrador\"],
+        \"image_size\": {\"width\": 640, \"height\": 480}
+    }
+    ```
+
+    Workflow for species identification:
+    1. Use detect-open to find animals with broad queries
+    2. Crop detected regions
+    3. Use /v1/vision/classify/predict with a trained classifier for species
+    """
+    try:
+        if not request.queries:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one text query is required",
+            )
+
+        model = await load_open_vocab_detection_model(request.model)
+        result = await model.detect_by_text(
+            image=request.image,
+            queries=request.queries,
+            threshold=request.threshold,
+            top_k=request.top_k,
+        )
+
+        return {
+            "object": "open_vocab_detection",
+            **result,
+            "model": request.model,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_open_vocabulary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/detect-open/batch")
+async def detect_open_vocabulary_batch(request: OpenVocabDetectTextBatchRequest):
+    """
+    Detect objects in multiple images using text queries.
+
+    Applies the same queries to all images. More efficient than
+    calling the single-image endpoint multiple times.
+    """
+    try:
+        if not request.images:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one image is required",
+            )
+        if not request.queries:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one text query is required",
+            )
+
+        model = await load_open_vocab_detection_model(request.model)
+        results = await model.detect_batch_by_text(
+            images=request.images,
+            queries=request.queries,
+            threshold=request.threshold,
+            top_k=request.top_k,
+        )
+
+        return {
+            "object": "open_vocab_detection_batch",
+            "results": results,
+            "total_images": len(results),
+            "model": request.model,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_open_vocabulary_batch: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/v1/vision/detect-open/by-image")
+async def detect_by_reference_image(request: OpenVocabDetectImageRequest):
+    """
+    Detect objects similar to reference images (few-shot detection).
+
+    Use this when you have example images of what you want to find.
+    The model will locate similar objects in the target image.
+
+    Example use cases:
+    - Find products matching a reference photo
+    - Locate specific landmarks or logos
+    - Few-shot object detection for rare categories
+
+    Example request:
+    ```json
+    {
+        \"image\": \"<base64 target image>\",
+        \"query_images\": [\"<base64 reference cat image>\"],
+        \"threshold\": 0.9,
+        \"top_k\": 5
+    }
+    ```
+
+    Response:
+    ```json
+    {
+        \"object\": \"image_guided_detection\",
+        \"objects\": [
+            {
+                \"query_index\": 0,
+                \"score\": 0.95,
+                \"box\": {\"x1\": 100, \"y1\": 50, \"x2\": 300, \"y2\": 250}
+            }
+        ],
+        \"count\": 1,
+        \"num_queries\": 1,
+        \"image_size\": {\"width\": 640, \"height\": 480}
+    }
+    ```
+    """
+    try:
+        if not request.query_images:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one query image is required",
+            )
+
+        model = await load_open_vocab_detection_model(request.model)
+        result = await model.detect_by_image(
+            image=request.image,
+            query_images=request.query_images,
+            threshold=request.threshold,
+            top_k=request.top_k,
+        )
+
+        return {
+            "object": "image_guided_detection",
+            **result,
+            "model": request.model,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in detect_by_reference_image: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
