@@ -99,6 +99,10 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
       case 1:
         return answers.projectType !== null
       case 2:
+        // If sample-data is selected, must also pick a sample dataset
+        if (answers.dataStatus === 'sample-data') {
+          return answers.selectedSampleDataset !== null
+        }
         return answers.dataStatus !== null
       case 3:
         return answers.deployTarget !== null
@@ -173,14 +177,26 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
   }, [])
 
   const completeWizard = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      wizardOpen: false,
-      currentStep: 'complete',
-      onboardingCompleted: true,
-      checklistVisible: true,
-      checklistDismissed: false,
-    }))
+    setState(prev => {
+      // If sample data was selected, dispatch event to trigger auto-import
+      if (prev.answers.dataStatus === 'sample-data' && prev.answers.selectedSampleDataset) {
+        // Dispatch event for Dashboard to handle navigation and import
+        window.dispatchEvent(
+          new CustomEvent('lf-onboarding-import-sample', {
+            detail: { demoId: prev.answers.selectedSampleDataset },
+          })
+        )
+      }
+
+      return {
+        ...prev,
+        wizardOpen: false,
+        currentStep: 'complete',
+        onboardingCompleted: true,
+        checklistVisible: true,
+        checklistDismissed: false,
+      }
+    })
   }, [])
 
   // Answer actions
@@ -194,7 +210,19 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
   const setDataStatus = useCallback((status: DataStatus) => {
     setState(prev => ({
       ...prev,
-      answers: { ...prev.answers, dataStatus: status },
+      answers: {
+        ...prev.answers,
+        dataStatus: status,
+        // Clear sample dataset selection if not using sample-data
+        selectedSampleDataset: status === 'sample-data' ? prev.answers.selectedSampleDataset : null,
+      },
+    }))
+  }, [])
+
+  const setSelectedSampleDataset = useCallback((demoId: string | null) => {
+    setState(prev => ({
+      ...prev,
+      answers: { ...prev.answers, selectedSampleDataset: demoId },
     }))
   }, [])
 
@@ -307,6 +335,7 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     // Answer actions
     setProjectType,
     setDataStatus,
+    setSelectedSampleDataset,
     setDeployTarget,
     setExperienceLevel,
 

@@ -10,7 +10,8 @@ interface RadioOption<T extends string> {
   id: T
   title: string
   description: string
-  emoji?: string
+  icon?: React.ReactNode
+  iconBg?: string
 }
 
 interface RadioSelectorProps<T extends string> {
@@ -48,21 +49,23 @@ export function RadioSelector<T extends string>({
               'group w-full flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-200',
               'hover:scale-[1.01] hover:shadow-md',
               'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+              'bg-card',
               selected === option.id
-                ? 'border-primary bg-primary/10 shadow-sm'
-                : 'border-border bg-card hover:border-primary/40'
+                ? 'border-primary shadow-md'
+                : 'border-border hover:border-primary/40'
             )}
             role="radio"
             aria-checked={selected === option.id}
           >
-            {/* Emoji or number indicator */}
+            {/* Icon or number indicator */}
             <div className={cn(
-              'flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-xl transition-all duration-200',
-              selected === option.id
-                ? 'bg-primary/20 scale-105'
-                : 'bg-muted group-hover:bg-primary/10'
+              'flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200',
+              option.iconBg || (selected === option.id
+                ? 'bg-primary/20'
+                : 'bg-muted group-hover:bg-primary/10'),
+              selected === option.id ? 'scale-105' : 'group-hover:scale-105'
             )}>
-              {option.emoji || (
+              {option.icon || (
                 <span className={cn(
                   'text-lg font-semibold',
                   selected === option.id ? 'text-primary' : 'text-muted-foreground'

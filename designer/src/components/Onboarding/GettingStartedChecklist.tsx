@@ -3,13 +3,65 @@
  * Full-width horizontal layout at the top of the dashboard
  */
 
-import { useMemo } from 'react'
+import { useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { X, ArrowRight, RotateCcw } from 'lucide-react'
+import { ChevronUp, ArrowRight, RotateCcw } from 'lucide-react'
 import { useOnboardingContext } from '../../contexts/OnboardingContext'
+
+// Fire confetti from a specific element position
+const fireConfettiAt = (element: HTMLElement) => {
+  // Check for reduced motion preference
+  try {
+    if (
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return
+    }
+  } catch {}
+
+  const rect = element.getBoundingClientRect()
+  const x = (rect.left + rect.width / 2) / window.innerWidth
+  const y = (rect.top + rect.height / 2) / window.innerHeight
+
+  const fire = () => {
+    const confetti = (window as any).confetti
+    if (!confetti) return
+
+    const isDark = document.documentElement.classList.contains('dark')
+    const colors = isDark
+      ? ['#14b8a6', '#f472b6', '#38bdf8', '#ffffff']
+      : ['#0d9488', '#ec4899', '#38bdf8', '#0f172a']
+
+    confetti({
+      particleCount: 30,
+      spread: 50,
+      origin: { x, y },
+      colors,
+      scalar: 0.8,
+      gravity: 1.2,
+    })
+  }
+
+  // Load confetti script if not already loaded
+  const existing = (window as any).confetti
+  if (existing) {
+    fire()
+    return
+  }
+
+  try {
+    const script = document.createElement('script')
+    script.src =
+      'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js'
+    script.async = true
+    script.onload = () => fire()
+    document.body.appendChild(script)
+  } catch {}
+}
 
 interface GettingStartedChecklistProps {
   className?: string
@@ -19,6 +71,7 @@ export function GettingStartedChecklist({
   className,
 }: GettingStartedChecklistProps) {
   const navigate = useNavigate()
+  const checkboxRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const {
     checklist,
     getDescription,
@@ -36,13 +89,17 @@ export function GettingStartedChecklist({
     return checklist.filter(step => isStepCompleted(step.id)).length
   }, [checklist, isStepCompleted])
 
-  const handleToggleComplete = (stepId: string, completed: boolean) => {
+  const handleToggleComplete = useCallback((stepId: string, completed: boolean, element?: HTMLElement) => {
     if (completed) {
       completeChecklistStep(stepId)
+      // Fire confetti from checkbox position
+      if (element) {
+        fireConfettiAt(element)
+      }
     } else {
       uncompleteChecklistStep(stepId)
     }
-  }
+  }, [completeChecklistStep, uncompleteChecklistStep])
 
   const handleAction = (step: typeof checklist[0]) => {
     if (step.linkLabel === 'Start over') {
@@ -59,6 +116,9 @@ export function GettingStartedChecklist({
     <div
       className={cn(
         'rounded-xl border border-border bg-card',
+        'animate-in fade-in slide-in-from-top-2 duration-500',
+        'ring-2 ring-primary/20 ring-offset-2 ring-offset-background',
+        'shadow-lg shadow-primary/5',
         className
       )}
     >
@@ -99,8 +159,9 @@ export function GettingStartedChecklist({
               size="sm"
               onClick={dismissChecklist}
               className="h-8 w-8 p-0 text-muted-foreground"
+              title="Collapse checklist"
             >
-              <X className="h-4 w-4" />
+              <ChevronUp className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -126,8 +187,15 @@ export function GettingStartedChecklist({
                 {/* Checkbox in top right */}
                 <div className="absolute top-3 right-3">
                   <Checkbox
+                    ref={(el) => {
+                      if (el) checkboxRefs.current.set(step.id, el)
+                      else checkboxRefs.current.delete(step.id)
+                    }}
                     checked={completed}
-                    onCheckedChange={(checked) => handleToggleComplete(step.id, !!checked)}
+                    onCheckedChange={(checked) => {
+                      const element = checkboxRefs.current.get(step.id)
+                      handleToggleComplete(step.id, !!checked, element)
+                    }}
                     aria-label={`Mark "${step.title}" as ${completed ? 'incomplete' : 'complete'}`}
                     className="h-5 w-5"
                   />

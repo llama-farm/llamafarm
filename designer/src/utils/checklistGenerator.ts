@@ -19,8 +19,8 @@ const DOC_QA_CHECKLIST: ChecklistStep[] = [
     descriptionShort:
       'Create a dataset, upload files, and process them.',
     descriptionMinimal: 'Upload and process your files.',
-    linkPath: '/chat/data',
-    linkLabel: 'Go to Data',
+    linkPath: '/chat/data?modal=create',
+    linkLabel: 'Create dataset',
   },
   {
     id: 'doc-qa-prompt',
@@ -69,8 +69,8 @@ const CLASSIFIER_CHECKLIST: ChecklistStep[] = [
     descriptionShort:
       'Prepare labeled examples for training.',
     descriptionMinimal: 'Prepare labeled training data.',
-    linkPath: '/chat/data',
-    linkLabel: 'Go to Data',
+    linkPath: '/chat/data?modal=create',
+    linkLabel: 'Create dataset',
   },
   {
     id: 'classifier-create',
@@ -119,8 +119,8 @@ const ANOMALY_CHECKLIST: ChecklistStep[] = [
     descriptionShort:
       'Prepare examples of normal data for training.',
     descriptionMinimal: 'Prepare baseline training data.',
-    linkPath: '/chat/data',
-    linkLabel: 'Go to Data',
+    linkPath: '/chat/data?modal=create',
+    linkLabel: 'Create dataset',
   },
   {
     id: 'anomaly-create',
@@ -169,8 +169,8 @@ const DOC_SCAN_CHECKLIST: ChecklistStep[] = [
     descriptionShort:
       'Upload and process your documents.',
     descriptionMinimal: 'Upload your documents.',
-    linkPath: '/chat/data',
-    linkLabel: 'Go to Data',
+    linkPath: '/chat/data?modal=create',
+    linkLabel: 'Create dataset',
   },
   {
     id: 'doc-scan-test',
@@ -201,14 +201,14 @@ const EXPLORING_CHECKLIST: ChecklistStep[] = [
   {
     id: 'exploring-sample',
     stepNumber: 1,
-    title: 'Load sample data',
+    title: 'Find & import data',
     descriptionFull:
-      "Grab our sample dataset so you have something to test with. This gives you real data to explore without needing your own files yet.",
+      "Find data on Hugging Face or generate synthetic data, then import it.",
     descriptionShort:
       'Import a sample dataset to experiment with.',
     descriptionMinimal: 'Import sample data.',
-    linkPath: '/chat/data',
-    linkLabel: 'Go to Data',
+    linkPath: '/chat/data?modal=import',
+    linkLabel: 'Import sample',
   },
   {
     id: 'exploring-test',
@@ -276,7 +276,8 @@ function applyDataStatusModifications(
     firstStep.descriptionShort =
       'Import a sample dataset to get started.'
     firstStep.descriptionMinimal = 'Import sample data.'
-    firstStep.linkLabel = 'Import sample dataset'
+    firstStep.linkPath = '/chat/data?modal=import'
+    firstStep.linkLabel = 'Import sample'
   } else if (dataStatus === 'need-data') {
     firstStep.title = 'Find & import data'
     firstStep.descriptionFull =
@@ -284,7 +285,8 @@ function applyDataStatusModifications(
     firstStep.descriptionShort =
       'Find data on Hugging Face or generate synthetic data, then import it.'
     firstStep.descriptionMinimal = 'Find and import data.'
-    firstStep.linkLabel = 'Go to Data'
+    firstStep.linkPath = '/chat/data?modal=import'
+    firstStep.linkLabel = 'Import sample'
   }
 
   // For classifier and anomaly, the first step points to the training page if they have data

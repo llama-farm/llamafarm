@@ -29,6 +29,7 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
     completeWizard,
     setProjectType,
     setDataStatus,
+    setSelectedSampleDataset,
     setDeployTarget,
     setExperienceLevel,
   } = useOnboardingContext()
@@ -164,6 +165,8 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
               <DataStatusSelector
                 selected={answers.dataStatus}
                 onSelect={setDataStatus}
+                selectedSampleDataset={answers.selectedSampleDataset}
+                onSelectSampleDataset={setSelectedSampleDataset}
               />
             )}
             {currentStep === 3 && (
@@ -182,11 +185,12 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
         </div>
 
         {/* Footer with navigation */}
-        <div className="flex-shrink-0 flex items-center justify-between border-t border-border px-6 py-4">
+        <div className="flex-shrink-0 flex items-center justify-between border-t border-border px-6 py-4 bg-muted/30">
           <Button
-            variant="ghost"
+            variant="outline"
+            size="lg"
             onClick={prevStep}
-            className="gap-2"
+            className="gap-2 px-6"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -194,18 +198,20 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
 
           {currentStep === 4 ? (
             <Button
+              size="lg"
               onClick={handleBuildGuide}
               disabled={!canProceed}
-              className="gap-2"
+              className="gap-2 px-8 font-semibold"
             >
               Build my guide
               <ArrowRight className="h-4 w-4" />
             </Button>
           ) : (
             <Button
+              size="lg"
               onClick={nextStep}
               disabled={!canProceed}
-              className="gap-2"
+              className="gap-2 px-8 font-semibold"
             >
               Next
               <ArrowRight className="h-4 w-4" />

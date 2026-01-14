@@ -16,7 +16,6 @@ import {
 interface ProjectTypeOption {
   id: ProjectType
   icon: React.ReactNode
-  emoji: string
   title: string
   subtitle: string
   gradient: string
@@ -26,8 +25,7 @@ interface ProjectTypeOption {
 const projectTypes: ProjectTypeOption[] = [
   {
     id: 'doc-qa',
-    icon: <MessageSquare className="w-6 h-6" />,
-    emoji: '💬',
+    icon: <MessageSquare className="w-7 h-7" />,
     title: 'Chat with my documents',
     subtitle: 'Ask questions, get answers from your files',
     gradient: 'from-blue-500/20 to-cyan-500/20',
@@ -35,8 +33,7 @@ const projectTypes: ProjectTypeOption[] = [
   },
   {
     id: 'classifier',
-    icon: <Tag className="w-6 h-6" />,
-    emoji: '🏷️',
+    icon: <Tag className="w-7 h-7" />,
     title: 'Sort & label content',
     subtitle: 'Teach AI to categorize like you do',
     gradient: 'from-purple-500/20 to-pink-500/20',
@@ -44,8 +41,7 @@ const projectTypes: ProjectTypeOption[] = [
   },
   {
     id: 'anomaly',
-    icon: <AlertTriangle className="w-6 h-6" />,
-    emoji: '🔍',
+    icon: <AlertTriangle className="w-7 h-7" />,
     title: 'Spot the odd ones out',
     subtitle: 'Find what doesn\'t belong',
     gradient: 'from-amber-500/20 to-orange-500/20',
@@ -53,8 +49,7 @@ const projectTypes: ProjectTypeOption[] = [
   },
   {
     id: 'doc-scan',
-    icon: <FileText className="w-6 h-6" />,
-    emoji: '📄',
+    icon: <FileText className="w-7 h-7" />,
     title: 'Extract info from docs',
     subtitle: 'Pull structured data from messy files',
     gradient: 'from-emerald-500/20 to-teal-500/20',
@@ -62,8 +57,7 @@ const projectTypes: ProjectTypeOption[] = [
   },
   {
     id: 'exploring',
-    icon: <FlaskConical className="w-6 h-6" />,
-    emoji: '🧪',
+    icon: <FlaskConical className="w-7 h-7" />,
     title: 'Just poking around',
     subtitle: 'Show me what this thing can do!',
     gradient: 'from-rose-500/20 to-violet-500/20',
@@ -108,19 +102,11 @@ export function ProjectTypeSelector({
             )}
             aria-pressed={selected === option.id}
           >
-            {/* Emoji floating above */}
+            {/* Centered icon */}
             <div className={cn(
-              'text-3xl mb-3 transition-transform duration-200',
-              selected === option.id ? 'scale-110' : 'group-hover:scale-110'
-            )}>
-              {option.emoji}
-            </div>
-
-            {/* Icon badge */}
-            <div className={cn(
-              'absolute top-3 right-3 p-1.5 rounded-lg transition-all duration-200',
+              'w-14 h-14 rounded-xl flex items-center justify-center mb-4 transition-all duration-200',
               option.iconBg,
-              selected === option.id ? 'opacity-100' : 'opacity-50 group-hover:opacity-80'
+              selected === option.id ? 'scale-110' : 'group-hover:scale-110'
             )}>
               {option.icon}
             </div>

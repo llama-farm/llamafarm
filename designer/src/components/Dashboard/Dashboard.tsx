@@ -17,6 +17,7 @@ import {
   GettingStartedChecklist,
   OnboardingWizard,
   RestartOnboardingBanner,
+  CollapsedChecklist,
 } from '../Onboarding'
 
 const Dashboard = () => {
@@ -95,10 +96,13 @@ const Dashboard = () => {
   const showWizard = onboarding.state.wizardOpen
   const showChecklist =
     onboarding.state.onboardingCompleted && !onboarding.state.checklistDismissed
-  // Show restart banner when onboarding was skipped/dismissed (no wizard, no checklist)
+  // Show collapsed checklist when onboarding completed but checklist was dismissed
+  const showCollapsedChecklist =
+    onboarding.state.onboardingCompleted && onboarding.state.checklistDismissed
+  // Show restart banner when onboarding was never completed (skipped before finishing)
   const showRestartBanner =
     !onboarding.state.wizardOpen &&
-    (onboarding.state.checklistDismissed || !onboarding.state.onboardingCompleted) &&
+    !onboarding.state.onboardingCompleted &&
     !showChecklist
 
   // Auto-open wizard on first visit to an empty project
@@ -129,6 +133,22 @@ const Dashboard = () => {
     isDatasetsLoading,
     onboarding.openWizard,
   ])
+
+  // Listen for onboarding sample import event and navigate to Data page
+  useEffect(() => {
+    const handleImportSample = (event: Event) => {
+      const demoId = (event as CustomEvent<{ demoId: string }>).detail?.demoId
+      if (demoId) {
+        // Navigate to Data page with auto-import param
+        navigate(`/chat/data?autoImportDemo=${encodeURIComponent(demoId)}`)
+      }
+    }
+
+    window.addEventListener('lf-onboarding-import-sample', handleImportSample)
+    return () => {
+      window.removeEventListener('lf-onboarding-import-sample', handleImportSample)
+    }
+  }, [navigate])
 
   useEffect(() => {
     const refresh = () => {
@@ -286,6 +306,11 @@ const Dashboard = () => {
             {/* Onboarding: Getting Started Checklist - full width top */}
             {showChecklist && (
               <GettingStartedChecklist className="mb-4" />
+            )}
+
+            {/* Onboarding: Collapsed checklist when dismissed */}
+            {showCollapsedChecklist && (
+              <CollapsedChecklist className="mb-4" />
             )}
 
             {/* Onboarding: Restart banner when skipped/dismissed */}

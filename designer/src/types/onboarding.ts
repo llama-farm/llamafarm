@@ -47,6 +47,7 @@ export interface ChecklistStep {
 export interface OnboardingAnswers {
   projectType: ProjectType | null
   dataStatus: DataStatus | null
+  selectedSampleDataset: string | null // Demo ID when sample-data is selected
   deployTarget: DeployTarget | null
   experienceLevel: ExperienceLevel | null
 }
@@ -102,6 +103,7 @@ export interface UseOnboardingReturn {
   // Answer actions
   setProjectType: (type: ProjectType) => void
   setDataStatus: (status: DataStatus) => void
+  setSelectedSampleDataset: (demoId: string | null) => void
   setDeployTarget: (target: DeployTarget) => void
   setExperienceLevel: (level: ExperienceLevel) => void
 
@@ -128,6 +130,7 @@ export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
   answers: {
     projectType: null,
     dataStatus: null,
+    selectedSampleDataset: null,
     deployTarget: null,
     experienceLevel: null,
   },
