@@ -43,7 +43,6 @@ import {
   useDeleteDataset,
   useAvailableStrategies,
 } from '../../hooks/useDatasets'
-import { uploadFileToDataset } from '../../api/datasets'
 import datasetService from '../../api/datasets'
 import projectService from '../../api/projectService'
 import { useProject } from '../../hooks/useProjects'
@@ -365,13 +364,13 @@ const Data = () => {
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
 
-  // Custom upload mutation with proper AbortSignal handling
-  const uploadMutation = useMutation({
+  // Bulk upload mutation to leverage the bulk endpoint (supports cancellation)
+  const bulkUploadMutation = useMutation({
     mutationFn: async ({
       namespace,
       project,
       dataset,
-      file,
+      files,
       autoProcess,
       parserOverrides,
       signal,
@@ -379,24 +378,16 @@ const Data = () => {
       namespace: string
       project: string
       dataset: string
-      file: File
+      files: File[]
       autoProcess?: boolean
       parserOverrides?: Record<string, any>
       signal?: AbortSignal
-    }) => {
-      // Use the API service which properly handles the signal
-      return await uploadFileToDataset(
-        namespace,
-        project,
-        dataset,
-        file,
-        {
-          signal,
-          autoProcess,
-          parserOverrides,
-        }
-      )
-    },
+    }) =>
+      datasetService.uploadFilesBulk(namespace, project, dataset, files, {
+        autoProcess,
+        parserOverrides,
+        signal,
+      }),
     onError: error => {
       // Don't show error toast for aborted uploads
       if (
@@ -748,53 +739,92 @@ const Data = () => {
         }
 
         const batch = files.slice(i, i + batchSize)
-        const batchResults = await Promise.all(
-          batch.map(async file => {
-            const controller = new AbortController()
-            activeUploadControllersRef.current.push(controller)
+        const controller = new AbortController()
+        activeUploadControllersRef.current.push(controller)
 
-            try {
-              const result = await uploadMutation.mutateAsync({
-                namespace,
-                project,
-                dataset: datasetId,
-                file,
-                autoProcess,
-                signal: controller.signal,
-              })
+        try {
+          const bulkResult = await bulkUploadMutation.mutateAsync({
+            namespace,
+            project,
+            dataset: datasetId,
+            files: batch,
+            autoProcess,
+            signal: controller.signal,
+          })
+
+          const statuses: Array<'uploaded' | 'skipped' | 'failed'> = [
+            ...Array(bulkResult.uploaded).fill('uploaded'),
+            ...Array(bulkResult.skipped).fill('skipped'),
+            ...Array(bulkResult.failed).fill('failed'),
+          ]
+
+          // Ensure we have a status for each file; default failures if counts mismatch
+          while (statuses.length < batch.length) {
+            statuses.push('failed')
+          }
+
+          const batchResults = batch.map((file, idx) => {
+            const status = statuses[idx] ?? 'failed'
+            if (status === 'uploaded') {
               return {
                 file: file.name,
                 success: true,
-                result,
-                skipped: result.skipped || false,
+                result: {
+                  status: bulkResult.status,
+                  task_id: bulkResult.task_id ?? null,
+                },
+                skipped: false,
               }
-            } catch (error) {
-              // Check if this is an abort/cancellation error
-              if (
-                (error instanceof Error && error.name === 'AbortError') ||
-                (error as any)?.code === 'ERR_CANCELED' ||
-                (error as any)?.message?.includes('cancel')
-              ) {
-                cancelled = true // Set flag to stop processing more batches
-                return {
-                  file: file.name,
-                  success: false,
-                  error,
-                  cancelled: true,
-                }
+            }
+            if (status === 'skipped') {
+              return {
+                file: file.name,
+                success: true,
+                result: {
+                  status: 'skipped',
+                  task_id: bulkResult.task_id ?? null,
+                },
+                skipped: true,
               }
-              return { file: file.name, success: false, error }
-            } finally {
-              activeUploadControllersRef.current =
-                activeUploadControllersRef.current.filter(c => c !== controller)
+            }
+            return {
+              file: file.name,
+              success: false,
+              error: new Error('Bulk upload failed for file'),
             }
           })
-        )
 
-        results.push(...batchResults)
+          results.push(...batchResults)
+        } catch (error) {
+          // Check if this is an abort/cancellation error
+          if (
+            (error instanceof Error && error.name === 'AbortError') ||
+            (error as any)?.code === 'ERR_CANCELED' ||
+            (error as any)?.message?.includes('cancel')
+          ) {
+            cancelled = true // Set flag to stop processing more batches
+            const cancelledResults = batch.map(file => ({
+              file: file.name,
+              success: false,
+              error,
+              cancelled: true,
+            }))
+            results.push(...cancelledResults)
+          } else {
+            const failedResults = batch.map(file => ({
+              file: file.name,
+              success: false,
+              error,
+            }))
+            results.push(...failedResults)
+          }
+        } finally {
+          activeUploadControllersRef.current =
+            activeUploadControllersRef.current.filter(c => c !== controller)
+        }
 
         // Check if any upload in this batch was cancelled
-        if (batchResults.some(r => (r as any).cancelled)) {
+        if (results.slice(-batch.length).some(r => (r as any).cancelled)) {
           cancelled = true
           // Add cancelled results for remaining files
           const remainingFiles = files.slice(i + batchSize)
@@ -812,7 +842,7 @@ const Data = () => {
 
       return results
     },
-    [uploadMutation]
+    [bulkUploadMutation]
   )
 
   // Handle file upload to selected dataset
@@ -1786,7 +1816,7 @@ const Data = () => {
                   type: demoFile.type,
                 })
 
-                await uploadFileToDataset(
+                await datasetService.uploadFileToDataset(
                   activeProject.namespace,
                   activeProject.project,
                   name,
