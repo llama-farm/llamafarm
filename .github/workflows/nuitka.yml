@@ -188,6 +188,10 @@ jobs:
         run: |
           uv pip install --system -e ./config -e ./common -e ./packages/llamafarm-llama -e ./runtimes/universal
 
+      - name: Generate config types
+        run: |
+          cd config && python generate_types.py
+
       - name: Build with Nuitka
         run: |
           python tools/nuitka/build.py --component ${{ matrix.component }}
