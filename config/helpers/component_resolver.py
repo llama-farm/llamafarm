@@ -33,19 +33,35 @@ class ComponentResolver:
         self._config = config
         # Safely extract components; fallback to empty dicts when absent to keep resolver tolerant
         components = getattr(config, "components", None) or {}
+
+        def _get_component_collection(name: str) -> list[Any]:
+            if isinstance(components, dict):
+                return components.get(name, []) or []
+            return getattr(components, name, []) or []
+
+        embedding_sources = _get_component_collection("embedding_strategies")
+        retrieval_sources = _get_component_collection("retrieval_strategies")
+        parser_sources = _get_component_collection("parsers")
+
         self._embedding_map = {
             c.get("name") if isinstance(c, dict) else getattr(c, "name", None): c
-            for c in components.get("embedding_strategies", []) or []
+            for c in embedding_sources
         }
         self._retrieval_map = {
             c.get("name") if isinstance(c, dict) else getattr(c, "name", None): c
-            for c in components.get("retrieval_strategies", []) or []
+            for c in retrieval_sources
         }
         self._parser_map = {
             c.get("name") if isinstance(c, dict) else getattr(c, "name", None): c
-            for c in components.get("parsers", []) or []
+            for c in parser_sources
         }
-        self._defaults = components.get("defaults", {}) if isinstance(components, dict) else {}
+
+        defaults_source = (
+            components.get("defaults", {})
+            if isinstance(components, dict)
+            else getattr(components, "defaults", {}) or {}
+        )
+        self._defaults = defaults_source if isinstance(defaults_source, dict) else {}
 
     def resolve_config(self, config: LlamaFarmConfig) -> LlamaFarmConfig:
         """Return a deep-copied config with all component references expanded."""

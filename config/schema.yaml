@@ -23,7 +23,8 @@ properties:
     description: Project namespace
     example: my-namespace
   components:
-    $ref: "../rag/schema.yaml#/definitions/componentsDefinition"
+    allOf:
+      - $ref: "../rag/schema.yaml#/definitions/componentsDefinition"
     description: Reusable RAG components (embedding/retrieval strategies, parsers, defaults)
   prompts:
     type: array

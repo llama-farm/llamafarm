@@ -34,6 +34,10 @@ rag:
       type: ChromaStore
       embedding_strategy: default_embeddings
       retrieval_strategy: semantic_search
+  data_processing_strategies:
+    - name: default_processing
+      parsers:
+        - pdf_parser
     
     - name: inline_db
       type: ChromaStore
@@ -51,9 +55,9 @@ runtime:
   models:
     - name: default
       provider: openai
-      model_id: gpt-4o-mini
+      model: gpt-4o-mini
 
 datasets:
   - name: test_dataset
     database: main_db
-    processing_strategy: default_processing
+    data_processing_strategy: default_processing
