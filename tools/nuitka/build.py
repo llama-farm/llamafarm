@@ -135,11 +135,11 @@ def get_common_nuitka_args() -> list[str]:
         "--nofollow-import-to=setuptools",
         "--nofollow-import-to=pip",
         "--nofollow-import-to=wheel",
-        # Exclude test modules from all packages
-        "--nofollow-import-to=*.tests",
-        "--nofollow-import-to=*.tests.*",
+        # Exclude test modules from our packages only (not third-party like jinja2.tests)
         "--nofollow-import-to=config.tests",
         "--nofollow-import-to=config.tests.*",
+        "--nofollow-import-to=tests",
+        "--nofollow-import-to=tests.*",
         # Heavy optional dependencies (lazy-loaded at runtime if needed)
         "--nofollow-import-to=fitz",  # PyMuPDF - PDF rendering
         "--nofollow-import-to=pymupdf",
@@ -193,6 +193,8 @@ def build_server(output_dir: Path, python: str) -> Path:
         "--include-package=amqp",
         "--include-package=billiard",
         "--include-package=vine",
+        # Include Celery static files (banner image, etc.)
+        "--include-package-data=celery",
         # FastAPI/uvicorn plugins
         "--enable-plugin=no-qt",
         # Entry point
@@ -249,6 +251,8 @@ def build_rag(output_dir: Path, python: str) -> Path:
         "--include-package=amqp",
         "--include-package=billiard",
         "--include-package=vine",
+        # Include Celery static files (banner image, etc.)
+        "--include-package-data=celery",
         # No Qt needed
         "--enable-plugin=no-qt",
         # Entry point
