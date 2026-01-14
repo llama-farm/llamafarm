@@ -802,6 +802,16 @@ const Data = () => {
       }
 
       const fileCount = pendingFiles.length // Store count before clearing
+
+      if (autoProcessUploads && fileCount > 100) {
+        toast({
+          message:
+            'Auto-process supports up to 100 files per upload. Please reduce the batch size or disable auto-process.',
+          variant: 'destructive',
+        })
+        return
+      }
+
       setUploadingFileCount(fileCount)
       setIsUploading(true)
       setIsSelectDatasetModalOpen(false)
