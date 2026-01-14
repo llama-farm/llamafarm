@@ -2272,7 +2272,7 @@ definitions:
 
   namedParserDefinition:
     type: object
-    required: [name, type, config]
+    required: [name, type]
     additionalProperties: false
     properties:
       name:
