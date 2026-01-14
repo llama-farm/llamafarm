@@ -147,34 +147,38 @@ function DatasetView() {
   const [pendingProcessing, setPendingProcessing] = useState<boolean>(
     Boolean(navigationState?.pendingProcessing)
   )
+  const initialNavigationStateRef = useRef(navigationState)
 
   // Handle navigation state from uploads (task id or pending processing flag)
   useEffect(() => {
+    const state = initialNavigationStateRef.current
     if (
-      navigationState?.taskId &&
-      !currentTaskId &&
-      activeProject?.namespace &&
-      activeProject?.project &&
-      datasetId
+      !state ||
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !datasetId
     ) {
-      setCurrentTaskId(navigationState.taskId)
+      return
+    }
+
+    if (state.taskId && !currentTaskId) {
+      setCurrentTaskId(state.taskId)
       saveDatasetTaskId(
         activeProject.namespace,
         activeProject.project,
         datasetId,
-        navigationState.taskId
+        state.taskId
       )
     }
 
-    if (navigationState?.pendingProcessing) {
+    if (state.pendingProcessing) {
       setPendingProcessing(true)
     }
 
-    if (navigationState) {
-      navigate('.', { replace: true, state: null })
-    }
+    // Clear the navigation state once consumed to avoid re-processing on re-render
+    navigate('.', { replace: true, state: null })
+    initialNavigationStateRef.current = null
   }, [
-    navigationState,
     currentTaskId,
     activeProject?.namespace,
     activeProject?.project,
