@@ -12,11 +12,8 @@ Usage:
 """
 
 import re
-import string
-from collections.abc import Sequence
 
 import numpy as np
-
 
 # Common English stopwords to filter out
 STOPWORDS = {
@@ -37,7 +34,7 @@ STOPWORDS = {
     "themselves", "what", "which", "who", "whom", "this", "that", "these",
     "those", "am", "is", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "having", "do", "does", "did", "doing", "would",
-    "could", "ought", "im", "youre", "hes", "shes", "its", "were", "theyre",
+    "could", "ought", "im", "youre", "hes", "shes", "theyre",
     "ive", "youve", "weve", "theyve", "id", "youd", "hed", "shed", "wed",
     "theyd", "ill", "youll", "hell", "shell", "well", "theyll", "isnt",
     "arent", "wasnt", "werent", "hasnt", "havent", "hadnt", "doesnt",

@@ -227,25 +227,36 @@ class PIIModel(BaseModel):
         gliner_entities: list[dict],
         regex_entities: list[dict],
     ) -> list[dict[str, Any]]:
-        """Merge GLiNER and regex entities, removing overlaps."""
-        all_entities = gliner_entities.copy()
+        """Merge GLiNER and regex entities, removing overlaps.
 
-        # Add regex entities that don't overlap with GLiNER entities
-        for regex_ent in regex_entities:
-            overlaps = False
-            for gliner_ent in gliner_entities:
-                # Check for overlap
-                if not (regex_ent["end"] <= gliner_ent["start"] or
-                        regex_ent["start"] >= gliner_ent["end"]):
-                    overlaps = True
-                    break
+        When entities overlap, prioritizes by score (higher wins).
+        This handles all overlap cases: GLiNER-GLiNER, regex-regex,
+        and GLiNER-regex overlaps.
+        """
+        # Combine all entities and sort by start position, then by score (descending)
+        all_entities = gliner_entities + regex_entities
+        if not all_entities:
+            return []
 
-            if not overlaps:
-                all_entities.append(regex_ent)
+        all_entities.sort(key=lambda x: (x["start"], -x.get("score", 0.0)))
 
-        # Sort by start position
-        all_entities.sort(key=lambda x: x["start"])
-        return all_entities
+        # Greedily select non-overlapping entities
+        merged = []
+        current_end = -1
+
+        for entity in all_entities:
+            # If this entity starts after the current covered region, add it
+            if entity["start"] >= current_end:
+                merged.append(entity)
+                current_end = entity["end"]
+            # If it overlaps, only keep it if it has a higher score and different span
+            elif entity.get("score", 0) > merged[-1].get("score", 0):
+                # Check if it's a better match for a similar span
+                if entity["start"] == merged[-1]["start"]:
+                    merged[-1] = entity
+                    current_end = entity["end"]
+
+        return merged
 
     async def redact(
         self,

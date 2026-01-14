@@ -9,7 +9,6 @@ Verifies that:
 """
 
 import importlib
-import sys
 
 import pytest
 
@@ -128,8 +127,9 @@ class TestChangePointBackends:
     @pytest.mark.parametrize("algorithm", ["binseg", "window", "bottomup"])
     def test_changepoint_backend_available(self, algorithm):
         """Test that changepoint detection backends work."""
-        from utils.changepoint_detector import ChangePointDetector
         import numpy as np
+
+        from utils.changepoint_detector import ChangePointDetector
 
         detector = ChangePointDetector(algorithm=algorithm)
         # Generate simple test data
@@ -144,8 +144,9 @@ class TestChangePointBackends:
 
     def test_pelt_backend_available(self):
         """Test PELT backend works (uses penalty parameter instead of n_changepoints)."""
-        from utils.changepoint_detector import ChangePointDetector
         import numpy as np
+
+        from utils.changepoint_detector import ChangePointDetector
 
         detector = ChangePointDetector(algorithm="pelt")
         data = np.concatenate([

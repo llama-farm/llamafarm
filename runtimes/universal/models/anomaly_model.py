@@ -503,15 +503,18 @@ class AnomalyModel(BaseModel):
     ) -> FitResult:
         """Fit the anomaly detector from a streaming file reference.
 
-        Memory-efficient training for large datasets. The file is read in
-        batches rather than loading the entire dataset into memory.
+        IMPORTANT: This method streams data from disk but still loads all data
+        into memory for training. Use this when your data is on disk and you
+        want to avoid loading the file twice, but note that the full dataset
+        must fit in memory.
 
         For sklearn backends (isolation_forest, one_class_svm, local_outlier_factor),
         the data is accumulated in batches and fit at once (sklearn models
         don't support incremental fitting for anomaly detection).
 
-        For neural network backends (autoencoder, vae), the data is processed
-        in batches during training epochs.
+        For neural network backends (autoencoder, vae), the data is also loaded
+        fully into memory before training. True streaming training for very
+        large datasets is not yet supported.
 
         Args:
             file_ref: FileReference from StreamingDataLoader.upload_file()

@@ -5,7 +5,7 @@ Phase 6 of Universal Runtime ML Enhancements.
 
 import pytest
 
-from models.language_detection_model import LanguageDetectionModel, LANGUAGE_NAMES
+from models.language_detection_model import LANGUAGE_NAMES, LanguageDetectionModel
 
 
 class TestLanguageDetectionModelLoading:

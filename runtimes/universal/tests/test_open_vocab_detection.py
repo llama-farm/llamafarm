@@ -356,7 +356,7 @@ class TestErrorHandling:
         model = OpenVocabDetectionModel(model_id="test_owl_no_queries")
         await model.load()
 
-        with pytest.raises(ValueError, match="at least one"):
+        with pytest.raises(ValueError, match="(?i)at least one"):
             await model.detect_by_text(temp_image_simple, [])
 
     @pytest.mark.asyncio
@@ -367,7 +367,7 @@ class TestErrorHandling:
         model = OpenVocabDetectionModel(model_id="test_owl_no_query_img")
         await model.load()
 
-        with pytest.raises(ValueError, match="at least one"):
+        with pytest.raises(ValueError, match="(?i)at least one"):
             await model.detect_by_image(temp_image_simple, [])
 
 

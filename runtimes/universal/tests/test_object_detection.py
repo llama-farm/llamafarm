@@ -5,12 +5,11 @@ Phase 9 of Universal Runtime ML Enhancements.
 
 import base64
 from io import BytesIO
-from pathlib import Path
 
 import pytest
 from PIL import Image
 
-from models.object_detection_model import ObjectDetectionModel, COCO_CLASSES
+from models.object_detection_model import COCO_CLASSES, ObjectDetectionModel
 
 
 def create_test_image(width: int = 224, height: int = 224) -> bytes:

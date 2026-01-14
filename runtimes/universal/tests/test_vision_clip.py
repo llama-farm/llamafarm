@@ -14,9 +14,7 @@ import base64
 import os
 import tempfile
 from io import BytesIO
-from pathlib import Path
 
-import numpy as np
 import pytest
 from PIL import Image
 
@@ -224,7 +222,7 @@ class TestLabelHandling:
 
         assert result is not None
         # Result label should be normalized to lowercase
-        assert result["label"].lower() in [l.lower() for l in labels]
+        assert result["label"].lower() in [lbl.lower() for lbl in labels]
 
     @pytest.mark.asyncio
     async def test_many_labels(self, temp_image_png):

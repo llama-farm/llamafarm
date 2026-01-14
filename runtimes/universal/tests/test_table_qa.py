@@ -5,7 +5,7 @@ Phase 13 of Universal Runtime ML Enhancements.
 
 import pytest
 
-from models.table_qa_model import TableQAModel, AGGREGATION_TYPES
+from models.table_qa_model import AGGREGATION_TYPES, TableQAModel
 
 
 def create_simple_table() -> dict:

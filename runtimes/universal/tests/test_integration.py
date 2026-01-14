@@ -89,7 +89,7 @@ class TestDataQualityPipeline:
         # Add label noise (flip 20% of labels)
         labels = true_labels.tolist()
         for i in range(0, n_samples, 5):  # Every 5th sample
-            wrong = [l for l in range(n_classes) if l != true_labels[i]]
+            wrong = [lbl for lbl in range(n_classes) if lbl != true_labels[i]]
             labels[i] = np.random.choice(wrong)
 
         # 1. Run audit

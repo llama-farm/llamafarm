@@ -3,9 +3,8 @@
 Phase 7 of Universal Runtime ML Enhancements.
 """
 
-import pytest
 
-from utils.keyword_extractor import KeywordExtractor, STOPWORDS
+from utils.keyword_extractor import STOPWORDS, KeywordExtractor
 
 
 class TestKeywordExtractorBasics:

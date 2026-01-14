@@ -1680,24 +1680,23 @@ async def upload_training_data(
         column_count: Number of columns (after skipping)
         columns: List of column names
     """
+    import os
     import tempfile
     from pathlib import Path
 
+    tmp_path = None
     try:
-        # Save uploaded file to temp location
+        # Save uploaded file to temp location using streaming to prevent memory exhaustion
         suffix = Path(file.filename).suffix.lower() if file.filename else ".csv"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            content = await file.read()
-            tmp.write(content)
             tmp_path = tmp.name
+            # Stream in 1MB chunks to avoid loading entire file into memory
+            while chunk := await file.read(1024 * 1024):
+                tmp.write(chunk)
 
         # Upload to streaming loader
         loader = get_streaming_loader()
         file_ref = await loader.upload_file(tmp_path, copy_to_temp=True)
-
-        # Clean up the initial temp file
-        import os
-        os.unlink(tmp_path)
 
         # Handle skip_columns
         columns_to_use = file_ref.column_names
@@ -1719,6 +1718,10 @@ async def upload_training_data(
     except Exception as e:
         logger.error(f"Error uploading training data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        # Always clean up the temp file
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 @app.post("/v1/anomaly/fit")
@@ -3137,6 +3140,14 @@ async def train_few_shot_classifier(request: FewShotTrainRequest):
                 detail="Need at least 2 images to train a classifier",
             )
 
+        unique_classes = set(request.labels)
+        if len(unique_classes) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Training requires at least 2 distinct classes. "
+                       f"Found {len(unique_classes)} class(es): {sorted(unique_classes)}",
+            )
+
         classifier = await load_few_shot_classifier(
             classifier_id=request.classifier_id,
             model_name=request.model,
@@ -3654,7 +3665,7 @@ async def get_keyword_extractor():
                 # Try to get an encoder model for better results
                 try:
                     # Use a small, fast encoder model
-                    encoder = await get_or_load_encoder(
+                    encoder = await load_encoder(
                         "sentence-transformers/all-MiniLM-L6-v2"
                     )
                     _keyword_extractor = KeywordExtractor(encoder_model=encoder)
@@ -4863,7 +4874,11 @@ async def detect_changepoints(request: ChangePointRequest):
     ```
     """
     try:
-        from utils.changepoint_detector import ChangePointDetector, SUPPORTED_ALGORITHMS, SUPPORTED_MODELS
+        from utils.changepoint_detector import (
+            SUPPORTED_ALGORITHMS,
+            SUPPORTED_MODELS,
+            ChangePointDetector,
+        )
 
         if request.algorithm.lower() not in SUPPORTED_ALGORITHMS:
             raise HTTPException(
@@ -4920,7 +4935,11 @@ async def detect_changepoints_batch(request: ChangePointBatchRequest):
     Returns change point results for each series in the batch.
     """
     try:
-        from utils.changepoint_detector import ChangePointDetector, SUPPORTED_ALGORITHMS, SUPPORTED_MODELS
+        from utils.changepoint_detector import (
+            SUPPORTED_ALGORITHMS,
+            SUPPORTED_MODELS,
+            ChangePointDetector,
+        )
 
         if not request.series:
             raise HTTPException(
@@ -5164,7 +5183,7 @@ async def detect_drift(request: DriftDetectionRequest):
     ```
     """
     try:
-        from utils.drift_detector import DriftDetector, SUPPORTED_ALGORITHMS
+        from utils.drift_detector import SUPPORTED_ALGORITHMS, DriftDetector
 
         if request.algorithm.lower() not in SUPPORTED_ALGORITHMS:
             raise HTTPException(
@@ -5222,8 +5241,9 @@ async def create_drift_detector(
     Returns a detector_id that can be used for subsequent update calls.
     """
     try:
-        from utils.drift_detector import DriftDetector, SUPPORTED_ALGORITHMS
         import uuid
+
+        from utils.drift_detector import SUPPORTED_ALGORITHMS, DriftDetector
 
         if algorithm.lower() not in SUPPORTED_ALGORITHMS:
             raise HTTPException(
@@ -5396,6 +5416,7 @@ async def explain_anomaly(request: AnomalyExplainRequest):
     """
     try:
         import numpy as np
+
         from utils.anomaly_explainer import create_explainer_for_sklearn
 
         # Get the trained model using the same cache key pattern as /v1/anomaly/fit
@@ -5509,6 +5530,7 @@ async def audit_dataset(request: DatasetAuditRequest):
     """
     try:
         import numpy as np
+
         from utils.dataset_auditor import DatasetAuditor
 
         # Convert to numpy array
@@ -5566,6 +5588,7 @@ async def get_quality_scores(request: DatasetAuditRequest):
     """
     try:
         import numpy as np
+
         from utils.dataset_auditor import DatasetAuditor
 
         pred_probs = np.array(request.pred_probs, dtype=np.float64)

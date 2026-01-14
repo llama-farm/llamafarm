@@ -17,8 +17,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import torch
-
 from models.base import BaseModel
 
 if TYPE_CHECKING:

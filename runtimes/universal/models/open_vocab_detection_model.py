@@ -289,24 +289,29 @@ class OpenVocabDetectionModel(BaseModel):
             target_sizes=target_sizes,
         )[0]
 
-        # Build output
+        # Build output - handle case where no detections are found
         objects = []
-        for score, label_id, box in zip(
-            results["scores"].cpu().numpy(),
-            results["labels"].cpu().numpy(),
-            results["boxes"].cpu().numpy(),
-            strict=True,
-        ):
-            objects.append({
-                "query_index": int(label_id),
-                "score": float(score),
-                "box": {
-                    "x1": float(box[0]),
-                    "y1": float(box[1]),
-                    "x2": float(box[2]),
-                    "y2": float(box[3]),
-                },
-            })
+        scores = results.get("scores")
+        labels = results.get("labels")
+        boxes = results.get("boxes")
+
+        if scores is not None and labels is not None and boxes is not None and len(scores) > 0:
+            for score, label_id, box in zip(
+                scores.cpu().numpy(),
+                labels.cpu().numpy(),
+                boxes.cpu().numpy(),
+                strict=True,
+            ):
+                objects.append({
+                    "query_index": int(label_id),
+                    "score": float(score),
+                    "box": {
+                        "x1": float(box[0]),
+                        "y1": float(box[1]),
+                        "x2": float(box[2]),
+                        "y2": float(box[3]),
+                    },
+                })
 
         # Sort by score descending
         objects.sort(key=lambda x: x["score"], reverse=True)
@@ -331,6 +336,9 @@ class OpenVocabDetectionModel(BaseModel):
     ) -> list[dict[str, Any]]:
         """Detect objects in multiple images using text queries.
 
+        Processes all images in a single batch for better performance than
+        calling detect_by_text in a loop.
+
         Args:
             images: List of image inputs
             queries: Text queries to search for (applied to all images)
@@ -343,16 +351,90 @@ class OpenVocabDetectionModel(BaseModel):
         if not self.is_loaded:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        results = []
-        for image in images:
-            result = await self.detect_by_text(
-                image,
-                queries=queries,
-                threshold=threshold,
-                top_k=top_k,
-            )
-            results.append(result)
-        return results
+        if not images:
+            return []
+
+        if not queries:
+            raise ValueError("At least one text query is required")
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._detect_batch_by_text_sync,
+            images,
+            queries,
+            threshold,
+            top_k,
+        )
+
+    def _detect_batch_by_text_sync(
+        self,
+        images: list[str | bytes | Any],
+        queries: list[str],
+        threshold: float,
+        top_k: int | None,
+    ) -> list[dict[str, Any]]:
+        """Synchronous batch text-conditioned detection."""
+        # Load all images
+        pil_images = [self._load_image(img) for img in images]
+        target_sizes = torch.tensor([[img.size[1], img.size[0]] for img in pil_images])
+
+        # Process all images in a single batch
+        inputs = self.processor(
+            text=queries, images=pil_images, return_tensors="pt", padding=True
+        )
+        inputs = {k: self.to_device(v) for k, v in inputs.items()}
+
+        # Run inference on batch
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        # Post-process results for entire batch
+        batch_results = self.processor.post_process_object_detection(
+            outputs,
+            threshold=threshold,
+            target_sizes=target_sizes,
+        )
+
+        # Format results for each image
+        final_results = []
+        for results, pil_image in zip(batch_results, pil_images, strict=True):
+            width, height = pil_image.size
+            objects = []
+
+            for score, label_id, box in zip(
+                results["scores"].cpu().numpy(),
+                results["labels"].cpu().numpy(),
+                results["boxes"].cpu().numpy(),
+                strict=True,
+            ):
+                objects.append({
+                    "query": queries[label_id],
+                    "label": queries[label_id],
+                    "score": float(score),
+                    "box": {
+                        "x1": float(box[0]),
+                        "y1": float(box[1]),
+                        "x2": float(box[2]),
+                        "y2": float(box[3]),
+                    },
+                })
+
+            # Sort by score descending
+            objects.sort(key=lambda x: x["score"], reverse=True)
+
+            # Apply top_k limit
+            if top_k is not None and top_k > 0:
+                objects = objects[:top_k]
+
+            final_results.append({
+                "objects": objects,
+                "count": len(objects),
+                "queries": queries,
+                "image_size": {"width": width, "height": height},
+            })
+
+        return final_results
 
     def _load_image(self, image: str | bytes | Any) -> "Image.Image":
         """Load an image from various input formats."""

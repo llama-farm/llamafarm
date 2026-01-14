@@ -9,6 +9,7 @@ These tests verify that:
 """
 
 import asyncio
+
 import numpy as np
 import pytest
 

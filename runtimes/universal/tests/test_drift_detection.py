@@ -5,7 +5,11 @@ Phase 14 of Universal Runtime ML Enhancements.
 
 import pytest
 
-from utils.drift_detector import DriftDetector, SUPPORTED_ALGORITHMS, detect_drift_in_stream
+from utils.drift_detector import (
+    SUPPORTED_ALGORITHMS,
+    DriftDetector,
+    detect_drift_in_stream,
+)
 
 
 def create_stable_stream(length: int = 100, mean: float = 10.0, noise: float = 0.5) -> list[float]:

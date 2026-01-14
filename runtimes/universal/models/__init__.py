@@ -10,8 +10,8 @@ from .background_removal_model import BackgroundRemovalModel
 from .base import BaseModel
 from .classifier_model import ClassifierModel
 from .document_model import DocumentModel
-from .few_shot_classifier import FewShotImageClassifier
 from .encoder_model import EncoderModel
+from .few_shot_classifier import FewShotImageClassifier
 from .gguf_encoder_model import GGUFEncoderModel
 from .gguf_language_model import GGUFLanguageModel
 from .language_detection_model import LanguageDetectionModel

@@ -5,7 +5,7 @@ Phase 8 of Universal Runtime ML Enhancements.
 
 import pytest
 
-from models.pii_model import PIIModel, DEFAULT_PII_TYPES, PII_PATTERNS
+from models.pii_model import DEFAULT_PII_TYPES, PII_PATTERNS, PIIModel
 
 
 class TestPIIModelLoading:

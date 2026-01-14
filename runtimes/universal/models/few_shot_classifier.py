@@ -21,12 +21,10 @@ Usage:
 import asyncio
 import base64
 import logging
-import pickle
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -137,7 +135,6 @@ class FewShotImageClassifier(BaseModel):
 
     def _extract_features(self, images: list) -> torch.Tensor:
         """Extract CLIP embeddings for a list of images."""
-        from PIL import Image as PILImage
 
         # Load all images
         pil_images = [self._load_image(img) for img in images]
@@ -182,11 +179,45 @@ class FewShotImageClassifier(BaseModel):
         if not self.is_loaded:
             raise RuntimeError("Model not loaded. Call load() first.")
 
+        # Input validation
+        if not images:
+            raise ValueError("Images list cannot be empty")
+
+        if not labels:
+            raise ValueError("Labels list cannot be empty")
+
         if len(images) != len(labels):
             raise ValueError(f"Number of images ({len(images)}) must match labels ({len(labels)})")
 
         if len(images) < 2:
             raise ValueError("Need at least 2 images to train")
+
+        # Validate all labels are strings
+        for i, label in enumerate(labels):
+            if not isinstance(label, str):
+                raise ValueError(f"Label at index {i} must be a string, got {type(label).__name__}")
+            if not label.strip():
+                raise ValueError(f"Label at index {i} cannot be empty or whitespace")
+
+        # Check for minimum class count
+        unique_classes = set(labels)
+        if len(unique_classes) < 2:
+            raise ValueError(
+                f"Need at least 2 distinct classes to train. "
+                f"Found {len(unique_classes)}: {sorted(unique_classes)}"
+            )
+
+        # Warn about class imbalance (but don't block)
+        from collections import Counter
+        class_counts = Counter(labels)
+        min_count = min(class_counts.values())
+        max_count = max(class_counts.values())
+        if max_count > min_count * 10:
+            logger.warning(
+                f"Significant class imbalance detected: "
+                f"min={min_count}, max={max_count}. "
+                f"Consider balancing your training data."
+            )
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
@@ -223,7 +254,7 @@ class FewShotImageClassifier(BaseModel):
         features = self._extract_features(images)
 
         # Convert labels to indices
-        label_indices = torch.tensor([class_to_idx[l] for l in labels], device=self.device)
+        label_indices = torch.tensor([class_to_idx[lbl] for lbl in labels], device=self.device)
 
         # Create classifier
         self.classifier = LinearProbe(self._embed_dim, num_classes).to(self.device)
@@ -235,7 +266,7 @@ class FewShotImageClassifier(BaseModel):
         self.classifier.train()
         losses = []
 
-        for epoch in range(epochs):
+        for _epoch in range(epochs):
             # Simple full-batch training for small datasets
             logits = self.classifier(features)
             loss = criterion(logits, label_indices)
@@ -403,7 +434,7 @@ class FewShotImageClassifier(BaseModel):
         start_time = time.time()
 
         # Check for new classes
-        new_classes = [l for l in set(labels) if l not in self.classes]
+        new_classes = [lbl for lbl in set(labels) if lbl not in self.classes]
         if new_classes:
             # Need to expand classifier head
             old_classes = self.classes
@@ -428,7 +459,7 @@ class FewShotImageClassifier(BaseModel):
         # Extract features for new images
         logger.info(f"Refining with {len(images)} additional images...")
         features = self._extract_features(images)
-        label_indices = torch.tensor([class_to_idx[l] for l in labels], device=self.device)
+        label_indices = torch.tensor([class_to_idx[lbl] for lbl in labels], device=self.device)
 
         # Fine-tune
         optimizer = torch.optim.Adam(self.classifier.parameters(), lr=learning_rate)
@@ -437,7 +468,7 @@ class FewShotImageClassifier(BaseModel):
         self.classifier.train()
         losses = []
 
-        for epoch in range(epochs):
+        for _epoch in range(epochs):
             logits = self.classifier(features)
             loss = criterion(logits, label_indices)
 
@@ -468,29 +499,67 @@ class FewShotImageClassifier(BaseModel):
         }
 
     def save_state(self) -> bytes:
-        """Save the trained classifier state."""
+        """Save the trained classifier state.
+
+        Uses a safe serialization format with JSON for metadata and
+        PyTorch's safetensors-compatible format for weights.
+        """
         if not self.is_trained:
             raise RuntimeError("No trained classifier to save")
 
-        state = {
+        import io
+        import json
+
+        # Separate metadata (JSON-safe) from model weights
+        metadata = {
+            "version": 1,
             "classes": self.classes,
-            "classifier_state": self.classifier.state_dict(),
             "embed_dim": self._embed_dim,
             "hf_model_name": self.hf_model_name,
         }
-        return pickle.dumps(state)
+
+        # Save model weights using PyTorch's safe format (protocol 2 for weights_only compatibility)
+        weights_buffer = io.BytesIO()
+        torch.save(self.classifier.state_dict(), weights_buffer, pickle_protocol=2)
+        weights_bytes = weights_buffer.getvalue()
+
+        # Pack format: 4-byte metadata length + JSON metadata + weights
+        metadata_bytes = json.dumps(metadata).encode("utf-8")
+        metadata_len = len(metadata_bytes).to_bytes(4, byteorder="big")
+
+        return metadata_len + metadata_bytes + weights_bytes
 
     def load_state(self, state_bytes: bytes) -> None:
-        """Load a previously saved classifier state."""
-        state = pickle.loads(state_bytes)
+        """Load a previously saved classifier state.
 
-        self.classes = state["classes"]
-        self._embed_dim = state["embed_dim"]
-        self.hf_model_name = state["hf_model_name"]
+        Safely deserializes metadata from JSON and weights from PyTorch format.
+        """
+        import io
+        import json
+
+        # Unpack format: 4-byte metadata length + JSON metadata + weights
+        metadata_len = int.from_bytes(state_bytes[:4], byteorder="big")
+        metadata_bytes = state_bytes[4:4 + metadata_len]
+        weights_bytes = state_bytes[4 + metadata_len:]
+
+        # Parse JSON metadata (safe from code execution)
+        metadata = json.loads(metadata_bytes.decode("utf-8"))
+
+        # Validate metadata
+        if metadata.get("version", 0) < 1:
+            raise ValueError("Invalid or unsupported state format version")
+
+        self.classes = metadata["classes"]
+        self._embed_dim = metadata["embed_dim"]
+        self.hf_model_name = metadata["hf_model_name"]
+
+        # Load model weights using PyTorch (weights_only=True for safety)
+        weights_buffer = io.BytesIO(weights_bytes)
+        state_dict = torch.load(weights_buffer, map_location=self.device, weights_only=True)
 
         # Recreate classifier
         self.classifier = LinearProbe(self._embed_dim, len(self.classes)).to(self.device)
-        self.classifier.load_state_dict(state["classifier_state"])
+        self.classifier.load_state_dict(state_dict)
         self.classifier.eval()
 
         self._is_trained = True

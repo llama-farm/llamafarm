@@ -4,7 +4,6 @@ Phase 16 of Universal Runtime ML Enhancements.
 """
 
 import numpy as np
-import pytest
 
 from utils.dataset_auditor import DatasetAuditor
 
@@ -63,7 +62,7 @@ def generate_noisy_dataset(
 
     for idx in noisy_indices:
         # Flip to a different label
-        wrong_labels = [l for l in range(n_classes) if l != true_labels[idx]]
+        wrong_labels = [lbl for lbl in range(n_classes) if lbl != true_labels[idx]]
         labels[idx] = np.random.choice(wrong_labels)
 
     return labels, pred_probs, noisy_indices

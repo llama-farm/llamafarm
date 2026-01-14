@@ -92,73 +92,117 @@ class FileReference:
         batch_size: int,
         skip_header: bool,
     ) -> AsyncIterator[np.ndarray]:
-        """Iterate CSV file in batches."""
+        """Iterate CSV file in batches using true streaming.
+
+        Uses an asyncio Queue to stream batches from the file reader thread
+        to the async consumer without loading all batches into memory at once.
+        """
         loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[np.ndarray | None] = asyncio.Queue(maxsize=2)
 
-        def read_batches():
-            """Synchronous batch reader (run in executor)."""
-            batches = []
-            with open(self.file_path, newline="") as f:
-                reader = csv.reader(f)
-                if skip_header:
-                    next(reader, None)  # Skip header
+        def read_and_queue():
+            """Synchronous batch reader that puts batches into queue."""
+            try:
+                with open(self.file_path, newline="") as f:
+                    reader = csv.reader(f)
+                    if skip_header:
+                        next(reader, None)  # Skip header
 
-                batch_data = []
-                for row in reader:
-                    batch_data.append([float(x) for x in row])
-                    if len(batch_data) >= batch_size:
-                        batches.append(np.array(batch_data, dtype=np.float32))
-                        batch_data = []
+                    batch_data = []
+                    for row in reader:
+                        try:
+                            batch_data.append([float(x) for x in row])
+                        except (ValueError, TypeError):
+                            logger.warning("Skipping non-numeric row in CSV")
+                            continue
 
-                # Don't forget the last batch
-                if batch_data:
-                    batches.append(np.array(batch_data, dtype=np.float32))
+                        if len(batch_data) >= batch_size:
+                            batch = np.array(batch_data, dtype=np.float32)
+                            asyncio.run_coroutine_threadsafe(
+                                queue.put(batch), loop
+                            ).result()
+                            batch_data = []
 
-            return batches
+                    # Don't forget the last batch
+                    if batch_data:
+                        batch = np.array(batch_data, dtype=np.float32)
+                        asyncio.run_coroutine_threadsafe(
+                            queue.put(batch), loop
+                        ).result()
+            finally:
+                # Signal end of batches
+                asyncio.run_coroutine_threadsafe(queue.put(None), loop).result()
 
-        # Run blocking I/O in thread pool
-        batches = await loop.run_in_executor(None, read_batches)
-        for batch in batches:
+        # Start reader in thread pool
+        reader_future = loop.run_in_executor(None, read_and_queue)
+
+        # Yield batches as they become available
+        while True:
+            batch = await queue.get()
+            if batch is None:
+                break
             yield batch
+
+        # Ensure reader completes
+        await reader_future
 
     async def _iter_jsonl_batches(
         self,
         batch_size: int,
     ) -> AsyncIterator[np.ndarray]:
-        """Iterate JSON Lines file in batches."""
+        """Iterate JSON Lines file in batches using true streaming."""
         loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[np.ndarray | None] = asyncio.Queue(maxsize=2)
+        column_names = self.column_names
 
-        def read_batches():
-            """Synchronous batch reader."""
-            batches = []
-            with open(self.file_path) as f:
-                batch_data = []
-                for line in f:
-                    row = json.loads(line.strip())
-                    # Extract values in consistent order
-                    if self.column_names:
-                        values = [float(row.get(col, 0)) for col in self.column_names]
-                    else:
-                        values = [float(v) for v in row.values()]
-                    batch_data.append(values)
-                    if len(batch_data) >= batch_size:
-                        batches.append(np.array(batch_data, dtype=np.float32))
-                        batch_data = []
+        def read_and_queue():
+            """Synchronous batch reader that puts batches into queue."""
+            try:
+                with open(self.file_path) as f:
+                    batch_data = []
+                    for line in f:
+                        try:
+                            row = json.loads(line.strip())
+                            # Extract values in consistent order
+                            if column_names:
+                                values = [float(row.get(col, 0)) for col in column_names]
+                            else:
+                                values = [float(v) for v in row.values()]
+                            batch_data.append(values)
+                        except (ValueError, TypeError, json.JSONDecodeError):
+                            logger.warning("Skipping malformed row in JSONL")
+                            continue
 
-                if batch_data:
-                    batches.append(np.array(batch_data, dtype=np.float32))
+                        if len(batch_data) >= batch_size:
+                            batch = np.array(batch_data, dtype=np.float32)
+                            asyncio.run_coroutine_threadsafe(
+                                queue.put(batch), loop
+                            ).result()
+                            batch_data = []
 
-            return batches
+                    if batch_data:
+                        batch = np.array(batch_data, dtype=np.float32)
+                        asyncio.run_coroutine_threadsafe(
+                            queue.put(batch), loop
+                        ).result()
+            finally:
+                asyncio.run_coroutine_threadsafe(queue.put(None), loop).result()
 
-        batches = await loop.run_in_executor(None, read_batches)
-        for batch in batches:
+        reader_future = loop.run_in_executor(None, read_and_queue)
+
+        while True:
+            batch = await queue.get()
+            if batch is None:
+                break
             yield batch
+
+        await reader_future
 
     async def _iter_parquet_batches(
         self,
         batch_size: int,
     ) -> AsyncIterator[np.ndarray]:
-        """Iterate Parquet file in batches."""
+        """Iterate Parquet file in batches using true streaming."""
         try:
             import pyarrow.parquet as pq
         except ImportError as e:
@@ -168,22 +212,32 @@ class FileReference:
             ) from e
 
         loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[np.ndarray | None] = asyncio.Queue(maxsize=2)
+        file_path = self.file_path
 
-        def read_batches():
-            """Synchronous batch reader."""
-            batches = []
-            parquet_file = pq.ParquetFile(self.file_path)
+        def read_and_queue():
+            """Synchronous batch reader that puts batches into queue."""
+            try:
+                parquet_file = pq.ParquetFile(file_path)
+                for batch in parquet_file.iter_batches(batch_size=batch_size):
+                    # Convert to numpy
+                    df = batch.to_pandas()
+                    np_batch = df.values.astype(np.float32)
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put(np_batch), loop
+                    ).result()
+            finally:
+                asyncio.run_coroutine_threadsafe(queue.put(None), loop).result()
 
-            for batch in parquet_file.iter_batches(batch_size=batch_size):
-                # Convert to numpy
-                df = batch.to_pandas()
-                batches.append(df.values.astype(np.float32))
+        reader_future = loop.run_in_executor(None, read_and_queue)
 
-            return batches
-
-        batches = await loop.run_in_executor(None, read_batches)
-        for batch in batches:
+        while True:
+            batch = await queue.get()
+            if batch is None:
+                break
             yield batch
+
+        await reader_future
 
 
 class StreamingDataLoader:

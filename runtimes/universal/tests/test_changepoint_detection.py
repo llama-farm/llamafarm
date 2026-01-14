@@ -5,13 +5,17 @@ Phase 12 of Universal Runtime ML Enhancements.
 
 import pytest
 
-from utils.changepoint_detector import ChangePointDetector, SUPPORTED_ALGORITHMS, SUPPORTED_MODELS
+from utils.changepoint_detector import (
+    SUPPORTED_ALGORITHMS,
+    SUPPORTED_MODELS,
+    ChangePointDetector,
+)
 
 
 def create_step_signal(lengths: list[int], values: list[float]) -> list[float]:
     """Create a signal with step changes."""
     signal = []
-    for length, value in zip(lengths, values):
+    for length, value in zip(lengths, values, strict=True):
         signal.extend([value] * length)
     return signal
 
