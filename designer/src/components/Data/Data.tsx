@@ -372,7 +372,6 @@ const Data = () => {
       dataset,
       files,
       autoProcess,
-      parserOverrides,
       signal,
     }: {
       namespace: string
@@ -380,12 +379,10 @@ const Data = () => {
       dataset: string
       files: File[]
       autoProcess?: boolean
-      parserOverrides?: Record<string, any>
       signal?: AbortSignal
     }) =>
       datasetService.uploadFilesBulk(namespace, project, dataset, files, {
         autoProcess,
-        parserOverrides,
         signal,
       }),
     onError: error => {
@@ -818,7 +815,8 @@ const Data = () => {
           datasetId,
           namespace,
           project,
-          autoProcessUploads
+          autoProcessUploads,
+          autoProcessUploads ? pendingFiles.length : UPLOAD_BATCH_SIZE
         )
 
         const cancelled = results.some(r => r.cancelled)
@@ -1070,7 +1068,7 @@ const Data = () => {
           </div>
           <Switch
             checked={autoProcessUploads}
-            onCheckedChange={v => setAutoProcessUploads(Boolean(v))}
+            onCheckedChange={setAutoProcessUploads}
             aria-label="Toggle automatic processing after upload"
           />
         </div>
