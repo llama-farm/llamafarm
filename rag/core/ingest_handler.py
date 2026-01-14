@@ -37,7 +37,7 @@ from observability.event_logger import EventLogger  # noqa: E402
 
 try:
     from config import load_config
-    from config.datamodel import Database, DataProcessingStrategy
+    from config.datamodel import Database, DataProcessingStrategy, Parser
 except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
@@ -58,6 +58,7 @@ class IngestHandler:
         data_processing_strategy: str,
         database: str,
         dataset_name: str | None = None,
+        parser_overrides: dict[str, Any] | None = None,
     ):
         """
         Initialize the ingest handler.
@@ -72,6 +73,7 @@ class IngestHandler:
         self.data_processing_strategy = data_processing_strategy
         self.database = database
         self.dataset_name = dataset_name
+        self.parser_overrides = parser_overrides or {}
 
         # Load config to extract namespace and project
         self.config = load_config(str(self.config_path))
@@ -103,9 +105,74 @@ class IngestHandler:
         Returns:
             Dictionary with parsers and extractors
         """
-        return self.schema_handler.create_processing_config(
+        config = self.schema_handler.create_processing_config(
             self.data_processing_strategy
         )
+        if self.parser_overrides:
+            config.parsers = self._apply_parser_overrides(config.parsers or [])
+        return config
+
+    def _apply_parser_overrides(
+        self, parsers: list[Parser]
+    ) -> list[Parser]:
+        """
+        Apply parser-level overrides (e.g., chunk sizes) to configured parsers.
+        """
+        if not parsers:
+            return parsers
+
+        wildcard_override = self.parser_overrides.get("*") or self.parser_overrides.get(
+            "__all__"
+        )
+
+        for parser in parsers:
+            override_cfg = self.parser_overrides.get(getattr(parser, "type", None)) or {}
+            merged = {}
+            if parser.config:
+                merged.update(parser.config)
+            if wildcard_override:
+                merged.update(wildcard_override)
+            if override_cfg:
+                merged.update(override_cfg)
+            self._validate_chunk_settings(merged, getattr(parser, "type", None))
+            parser.config = merged
+
+        return parsers
+
+    def _validate_chunk_settings(
+        self, config: dict[str, Any], parser_type: str | None
+    ) -> None:
+        """
+        Ensure merged chunk settings are valid before ingestion.
+        """
+        chunk_size = config.get("chunk_size")
+        chunk_overlap = config.get("chunk_overlap")
+
+        if chunk_size is None or chunk_overlap is None:
+            return
+
+        if not isinstance(chunk_size, int | float) or not isinstance(
+            chunk_overlap, int | float
+        ):
+            raise ValueError(
+                f"chunk_size and chunk_overlap must be numbers for parser {parser_type or 'unknown'}"
+            )
+
+        if chunk_size <= 0:
+            raise ValueError(
+                f"chunk_size must be greater than 0 for parser {parser_type or 'unknown'}"
+            )
+
+        if chunk_overlap < 0:
+            raise ValueError(
+                f"chunk_overlap must be greater than or equal to 0 for parser {parser_type or 'unknown'}"
+            )
+
+        if chunk_overlap >= chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({chunk_overlap}) must be less than chunk_size ({chunk_size}) "
+                f"for parser {parser_type or 'unknown'}"
+            )
 
     def _get_database_config(self) -> dict[str, Any]:
         """
@@ -355,21 +422,20 @@ class IngestHandler:
             )
 
             # Health check: Verify embedder is available before processing batch
-            if hasattr(self.embedder, "validate_config"):
-                if not self.embedder.validate_config():
-                    error_msg = (
-                        f"Embedder {self.embedder.__class__.__name__} is not available. "
-                        "Please ensure the embedding service is running."
-                    )
-                    logger.error(error_msg)
-                    event_logger.fail_event(error_msg)
-                    return {
-                        "status": "error",
-                        "message": error_msg,
-                        "filename": filename,
-                        "document_count": 0,
-                        "reason": "embedder_unavailable",
-                    }
+            if hasattr(self.embedder, "validate_config") and not self.embedder.validate_config():
+                error_msg = (
+                    f"Embedder {self.embedder.__class__.__name__} is not available. "
+                    "Please ensure the embedding service is running."
+                )
+                logger.error(error_msg)
+                event_logger.fail_event(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg,
+                    "filename": filename,
+                    "document_count": 0,
+                    "reason": "embedder_unavailable",
+                }
 
             # Generate embeddings for each document
             embedded_documents = []

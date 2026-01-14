@@ -13,8 +13,6 @@ import {
   FileDeleteParams,
   TaskStatusResponse,
   CancelTaskResponse,
-  FileScanResult,
-  type DatasetScanSettings,
 } from '../types/datasets'
 
 /**
@@ -360,136 +358,6 @@ export async function deleteDatasetFile(
   return response.data
 }
 
-// =============================================================================
-// Document Scanning API Functions
-// =============================================================================
-
-/**
- * Download raw file from a dataset
- * @param namespace - The project namespace
- * @param project - The project identifier
- * @param dataset - The dataset name
- * @param fileHash - The hash of the file to download
- * @returns Promise<Blob> - The raw file as a Blob
- */
-export async function downloadRawFile(
-  namespace: string,
-  project: string,
-  dataset: string,
-  fileHash: string
-): Promise<Blob> {
-  const response = await apiClient.get(
-    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/${encodeURIComponent(fileHash)}/raw`,
-    {
-      responseType: 'blob',
-    }
-  )
-  return response.data
-}
-
-/**
- * Scan a file in a dataset using OCR
- * Note: This requires backend support. The endpoint is not yet implemented.
- * @param namespace - The project namespace
- * @param project - The project identifier
- * @param dataset - The dataset name
- * @param fileHash - The hash of the file to scan
- * @param settings - Scan settings (backend, language, parseByPage)
- * @returns Promise with task_id for tracking the scan
- */
-export async function scanDatasetFile(
-  namespace: string,
-  project: string,
-  dataset: string,
-  fileHash: string,
-  settings?: DatasetScanSettings
-): Promise<{ task_id: string }> {
-  const response = await apiClient.post<{ task_id: string }>(
-    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/${encodeURIComponent(fileHash)}/scan`,
-    settings || {}
-  )
-  return response.data
-}
-
-/**
- * Get the scan result for a file in a dataset
- * @param namespace - The project namespace
- * @param project - The project identifier
- * @param dataset - The dataset name
- * @param fileHash - The hash of the file to get scan result for
- * @returns Promise<FileScanResult> - The scan result with pages and confidence
- */
-export async function getFileScanResult(
-  namespace: string,
-  project: string,
-  dataset: string,
-  fileHash: string
-): Promise<FileScanResult> {
-  const response = await apiClient.get<FileScanResult>(
-    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/${encodeURIComponent(fileHash)}/scan`
-  )
-  return response.data
-}
-
-/**
- * Save a scan result for a file in a dataset
- * @param namespace - The project namespace
- * @param project - The project identifier
- * @param dataset - The dataset name
- * @param fileHash - The hash of the file to save scan result for
- * @param result - The scan result to save
- * @returns Promise with file_hash and pages_saved
- */
-export async function saveFileScanResult(
-  namespace: string,
-  project: string,
-  dataset: string,
-  fileHash: string,
-  result: { pages: Array<{ index: number; text: string; confidence: number }>; backend?: string }
-): Promise<{ file_hash: string; pages_saved: number }> {
-  const response = await apiClient.post<{ file_hash: string; pages_saved: number }>(
-    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/${encodeURIComponent(fileHash)}/scan`,
-    result
-  )
-  return response.data
-}
-
-/**
- * Scan settings response from backend
- */
-export interface ScanSettingsResponse {
-  enabled: boolean
-  backend: string
-  language: string
-  parse_by_page: boolean
-}
-
-/**
- * Get document scanning settings for a dataset
- * @param namespace - The project namespace
- * @param project - The project identifier
- * @param dataset - The dataset name
- * @returns Promise<ScanSettingsResponse | null> - The scan settings or null if not enabled
- */
-export async function getDatasetScanSettings(
-  namespace: string,
-  project: string,
-  dataset: string
-): Promise<ScanSettingsResponse | null> {
-  try {
-    const response = await apiClient.get<ScanSettingsResponse>(
-      `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/scan-settings`
-    )
-    return response.data
-  } catch (error: any) {
-    // 404 means scanning not enabled - return null instead of throwing
-    if (error?.response?.status === 404) {
-      return null
-    }
-    throw error
-  }
-}
-
 /**
  * Default export with all dataset service functions
  */
@@ -507,10 +375,4 @@ export default {
   getTaskStatus,
   cancelTask,
   deleteDatasetFile,
-  // Document scanning
-  downloadRawFile,
-  scanDatasetFile,
-  getFileScanResult,
-  saveFileScanResult,
-  getDatasetScanSettings,
 }

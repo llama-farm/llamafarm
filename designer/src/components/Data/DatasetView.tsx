@@ -58,8 +58,6 @@ import {
   type FileScanResult,
 } from '../../types/datasets'
 import DocumentScanPanel from './DocumentScanPanel'
-import { downloadRawFile, getFileScanResult, saveFileScanResult, getDatasetScanSettings, type ScanSettingsResponse } from '../../api/datasets'
-import { scanDocument } from '../../api/mlService'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
@@ -248,38 +246,6 @@ function DatasetView() {
     currentTaskId,
   ])
 
-  // Load dataset scan settings on mount
-  useEffect(() => {
-    const loadScanSettings = async () => {
-      console.log('[DatasetView] loadScanSettings triggered with:', {
-        namespace: activeProject?.namespace,
-        project: activeProject?.project,
-        datasetId,
-        hasNamespace: !!activeProject?.namespace,
-        hasProject: !!activeProject?.project,
-        hasDatasetId: !!datasetId
-      })
-      if (!activeProject?.namespace || !activeProject?.project || !datasetId) {
-        console.log('[DatasetView] Skipping scan settings load - missing required params')
-        return
-      }
-      try {
-        console.log('[DatasetView] Calling getDatasetScanSettings...')
-        const settings = await getDatasetScanSettings(
-          activeProject.namespace,
-          activeProject.project,
-          datasetId
-        )
-        console.log('[DatasetView] Loaded scan settings:', settings)
-        setDatasetScanSettings(settings)
-      } catch (error) {
-        // Non-critical - just log and continue
-        console.error('[DatasetView] Failed to load scan settings:', error)
-        setDatasetScanSettings(null)
-      }
-    }
-    loadScanSettings()
-  }, [activeProject?.namespace, activeProject?.project, datasetId])
 
   const processMutation = useProcessDataset()
   const deleteFileMutation = useDeleteDatasetFile()
@@ -577,8 +543,7 @@ function DatasetView() {
   const [scanLoading, setScanLoading] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
 
-  // Dataset-level scan settings (loaded from backend)
-  const [datasetScanSettings, setDatasetScanSettings] = useState<ScanSettingsResponse | null>(null)
+  // Track files being auto-scanned
   const [autoScanningFiles, setAutoScanningFiles] = useState<Set<string>>(new Set())
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -832,91 +797,6 @@ function DatasetView() {
       // Refetch datasets to update the file list
       await refetchDatasets()
 
-      // Auto-scan scannable files if dataset has scanning enabled
-      console.log('[DatasetView] Auto-scan check:', {
-        successCount,
-        datasetScanSettings,
-        resultsWithHashes: results.map(r => ({ fileName: r.fileName, fileHash: r.fileHash, mimeType: r.mimeType, success: r.success, skipped: r.skipped }))
-      })
-      if (successCount > 0 && datasetScanSettings?.enabled) {
-        const scannableResults = results.filter(
-          r => r.success && !r.skipped && r.fileHash && r.mimeType && isScannableFile(r.mimeType)
-        )
-        console.log('[DatasetView] Scannable results:', scannableResults)
-
-        if (scannableResults.length > 0) {
-          toast({
-            message: `Scanning ${scannableResults.length} document(s)...`,
-            variant: 'default',
-          })
-
-          // Track files being scanned
-          const scanningHashes = new Set(scannableResults.map(r => r.fileHash!))
-          setAutoScanningFiles(scanningHashes)
-
-          // Scan each file
-          await Promise.all(
-            scannableResults.map(async (result) => {
-              try {
-                console.log(`[DatasetView] Scanning file: ${result.fileName} (hash: ${result.fileHash})`)
-                // Download the file to scan it
-                const blob = await downloadRawFile(
-                  activeProject!.namespace!,
-                  activeProject!.project!,
-                  datasetId!,
-                  result.fileHash!
-                )
-                console.log(`[DatasetView] Downloaded file blob, size: ${blob.size}`)
-
-                const file = new File([blob], result.fileName, { type: result.mimeType })
-
-                // Scan using the dataset's configured settings
-                console.log(`[DatasetView] Calling scanDocument with settings:`, {
-                  model: datasetScanSettings.backend,
-                  languages: datasetScanSettings.language,
-                  parse_by_page: datasetScanSettings.parse_by_page,
-                })
-                const scanResponse = await scanDocument(file, {
-                  model: datasetScanSettings.backend,
-                  languages: datasetScanSettings.language,
-                  parse_by_page: datasetScanSettings.parse_by_page,
-                })
-                console.log(`[DatasetView] Scan response:`, scanResponse)
-
-                // Save scan result to backend
-                // scanResponse.data contains the array of page results
-                const scanResultData = {
-                  pages: scanResponse.data.map((page, index) => ({
-                    index: page.index ?? index,
-                    text: page.text,
-                    confidence: page.confidence,
-                  })),
-                  backend: scanResponse.model || datasetScanSettings.backend,
-                }
-
-                console.log(`[DatasetView] Saving scan result for ${result.fileName}`)
-                await saveFileScanResult(
-                  activeProject!.namespace!,
-                  activeProject!.project!,
-                  datasetId!,
-                  result.fileHash!,
-                  scanResultData
-                )
-                console.log(`[DatasetView] Saved scan result for ${result.fileName}`)
-              } catch (error) {
-                console.error(`[DatasetView] Failed to scan ${result.fileName}:`, error)
-              }
-            })
-          )
-
-          setAutoScanningFiles(new Set())
-          toast({
-            message: `Completed scanning ${scannableResults.length} document(s)`,
-            variant: 'default',
-          })
-        }
-      }
-
       // Auto-trigger processing if at least one file was successfully uploaded
       if (successCount > 0) {
         // Check if processing is currently running
@@ -943,7 +823,6 @@ function DatasetView() {
       refetchDatasets,
       startProcessingAndSaveTask,
       currentTaskId,
-      datasetScanSettings,
     ]
   )
 
@@ -1321,7 +1200,7 @@ function DatasetView() {
 
   // Handle opening the scan panel for a file
   const handleViewScan = useCallback(
-    async (file: { hash: string; name: string; mimeType: string }) => {
+    (file: { hash: string; name: string; mimeType: string }) => {
       setSelectedFileForScan({
         hash: file.hash,
         name: file.name,
@@ -1329,26 +1208,10 @@ function DatasetView() {
       })
       setScanResult(null)
       setScanError(null)
-      setScanLoading(true)
-      setScanPanelOpen(true)
-
-      // Try to load existing scan result from backend
-      if (activeProject?.namespace && activeProject?.project && datasetId) {
-        try {
-          const existingResult = await getFileScanResult(
-            activeProject.namespace,
-            activeProject.project,
-            datasetId,
-            file.hash
-          )
-          setScanResult(existingResult)
-        } catch {
-          // No existing scan result - that's fine, user can scan
-        }
-      }
       setScanLoading(false)
+      setScanPanelOpen(true)
     },
-    [activeProject, datasetId]
+    []
   )
 
   // Handle closing the scan panel
@@ -1360,74 +1223,10 @@ function DatasetView() {
     setScanLoading(false)
   }, [])
 
-  // Handle scan document
-  const handleRetryScan = useCallback(async () => {
-    if (!selectedFileForScan || !activeProject?.namespace || !activeProject?.project || !datasetId) {
-      return
-    }
-
-    setScanLoading(true)
-    setScanError(null)
-    setScanResult(null)
-
-    try {
-      // Download the raw file from the dataset
-      const blob = await downloadRawFile(
-        activeProject.namespace,
-        activeProject.project,
-        datasetId,
-        selectedFileForScan.hash
-      )
-
-      // Convert blob to File object for the scan API
-      const file = new File([blob], selectedFileForScan.name, {
-        type: selectedFileForScan.mimeType,
-      })
-
-      // Scan the document using the vision/ocr endpoint
-      const response = await scanDocument(file, {
-        model: 'surya',
-        languages: 'en',
-        parse_by_page: true,
-      })
-
-      // Convert the response to our FileScanResult format
-      const scanResultData: FileScanResult = {
-        pages: response.data.map(item => ({
-          index: item.index,
-          text: item.text,
-          confidence: item.confidence,
-        })),
-        scanned_at: new Date().toISOString(),
-        backend: response.model,
-      }
-
-      // Save scan result to backend for persistence
-      try {
-        await saveFileScanResult(
-          activeProject.namespace,
-          activeProject.project,
-          datasetId,
-          selectedFileForScan.hash,
-          {
-            pages: scanResultData.pages,
-            backend: scanResultData.backend,
-          }
-        )
-      } catch (saveError) {
-        // Log but don't fail - the scan itself succeeded
-        console.warn('Failed to save scan result to backend:', saveError)
-      }
-
-      setScanResult(scanResultData)
-    } catch (error) {
-      console.error('Scan failed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to scan document'
-      setScanError(errorMessage)
-    } finally {
-      setScanLoading(false)
-    }
-  }, [selectedFileForScan, activeProject, datasetId])
+  // Handle scan document - placeholder until backend endpoint is implemented
+  const handleRetryScan = useCallback(() => {
+    setScanError('Document scanning requires backend support. This feature is coming soon.')
+  }, [])
 
   const handleDeleteFile = (fileHash: string) => {
     if (!activeProject?.namespace || !activeProject?.project || !datasetId)
@@ -1776,19 +1575,6 @@ function DatasetView() {
                         </Badge>
                       </div>
 
-                      {/* Document Scanning Indicator */}
-                      {datasetScanSettings?.enabled && (
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="default"
-                            size="sm"
-                            className="rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
-                          >
-                            <FontIcon type="eye" className="w-3 h-3 mr-1" />
-                            OCR Enabled
-                          </Badge>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

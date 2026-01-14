@@ -4,7 +4,6 @@ import {
   CreateDatasetRequest,
   DatasetActionRequest,
   FileDeleteParams,
-  type DatasetScanSettings,
 } from '../types/datasets'
 import { projectKeys } from './useProjects'
 
@@ -486,94 +485,6 @@ export function useCancelTask() {
   })
 }
 
-// =============================================================================
-// Document Scanning Hooks
-// =============================================================================
-
-/**
- * Query keys for document scanning
- */
-export const scanKeys = {
-  all: ['scans'] as const,
-  result: (namespace: string, project: string, dataset: string, fileHash: string) =>
-    [...scanKeys.all, 'result', namespace, project, dataset, fileHash] as const,
-}
-
-/**
- * Hook to scan a file in a dataset using OCR
- * Note: Backend endpoint not yet implemented
- * @returns Mutation for scanning files
- */
-export function useScanDatasetFile() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (data: {
-      namespace: string
-      project: string
-      dataset: string
-      fileHash: string
-      settings?: DatasetScanSettings
-    }) =>
-      datasetService.scanDatasetFile(
-        data.namespace,
-        data.project,
-        data.dataset,
-        data.fileHash,
-        data.settings
-      ),
-    onSuccess: (_, variables) => {
-      // Invalidate the scan result cache for this file
-      queryClient.invalidateQueries({
-        queryKey: scanKeys.result(
-          variables.namespace,
-          variables.project,
-          variables.dataset,
-          variables.fileHash
-        ),
-      })
-      // Also invalidate datasets list to refresh file status
-      queryClient.invalidateQueries({
-        queryKey: datasetKeys.list(variables.namespace, variables.project),
-      })
-    },
-  })
-}
-
-/**
- * Hook to fetch the scan result for a file
- * Note: Backend endpoint not yet implemented
- * @param namespace - The project namespace
- * @param project - The project identifier
- * @param dataset - The dataset name
- * @param fileHash - The file hash
- * @param options - Additional query options
- * @returns Query result with scan result
- */
-export function useFileScanResult(
-  namespace: string,
-  project: string,
-  dataset: string,
-  fileHash: string,
-  options?: {
-    enabled?: boolean
-  }
-) {
-  return useQuery({
-    queryKey: scanKeys.result(namespace, project, dataset, fileHash),
-    queryFn: () =>
-      datasetService.getFileScanResult(namespace, project, dataset, fileHash),
-    enabled:
-      options?.enabled !== false &&
-      !!namespace &&
-      !!project &&
-      !!dataset &&
-      !!fileHash,
-    staleTime: 5 * 60 * 1000, // 5 minutes - scan results don't change often
-    retry: false, // Don't retry if endpoint doesn't exist yet
-  })
-}
-
 /**
  * Default export with all dataset hooks
  */
@@ -593,9 +504,5 @@ export default {
   useDeleteFileChunks,
   useDeleteAllChunks,
   useCancelTask,
-  // Document scanning
-  useScanDatasetFile,
-  useFileScanResult,
   datasetKeys,
-  scanKeys,
 }

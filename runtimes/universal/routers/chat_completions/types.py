@@ -32,7 +32,16 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: float | None = 0.0
     frequency_penalty: float | None = 0.0
     user: str | None = None
-    n_ctx: int | None = None  # Context window size for GGUF models
+    # GGUF model parameters (llama.cpp specific)
+    n_ctx: int | None = None  # Context window size (affects KV cache memory)
+    n_batch: int | None = None  # Batch size for prompt processing (affects compute buffer)
+    n_gpu_layers: int | None = None  # Number of layers to offload to GPU (-1 = all)
+    n_threads: int | None = None  # CPU thread count (None = auto)
+    flash_attn: bool | None = None  # Enable flash attention for faster inference
+    use_mmap: bool | None = None  # Memory-map model file (True = efficient swapping)
+    use_mlock: bool | None = None  # Lock model in RAM (False = allow OS memory management)
+    cache_type_k: str | None = None  # KV cache key quantization (q4_0, q8_0, f16)
+    cache_type_v: str | None = None  # KV cache value quantization (q4_0, q8_0, f16)
     extra_body: dict | None = None
 
     # Tool/function calling parameters

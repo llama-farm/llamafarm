@@ -1,14 +1,15 @@
+# pyright: reportMissingImports=false
+
 import contextlib
 import os
 import uuid
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 
-from celery import group  # type: ignore[import-untyped]
+from celery import group  # type: ignore[import-not-found,import-untyped]
 from config.datamodel import Dataset
 from fastapi import UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from api.errors import DatasetNotFoundError
 from core.celery import app
@@ -18,51 +19,6 @@ from services.data_service import DataService, MetadataFileContent
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
-
-
-class DocumentScanningBackend(str, Enum):
-    """OCR backend options for document scanning"""
-
-    SURYA = "surya"
-    EASYOCR = "easyocr"
-    TESSERACT = "tesseract"
-
-
-class DocumentScanningSettings(BaseModel):
-    """Document scanning (OCR) settings for a dataset"""
-
-    enabled: bool = Field(
-        default=False, description="Whether document scanning is enabled"
-    )
-    backend: DocumentScanningBackend = Field(
-        default=DocumentScanningBackend.SURYA,
-        description="OCR backend to use (surya recommended for best quality)",
-    )
-    language: str = Field(default="en", description="Language code for OCR")
-    parse_by_page: bool = Field(
-        default=True, description="Whether to return separate results per page"
-    )
-
-
-class ScanPageResult(BaseModel):
-    """Result of scanning a single page"""
-
-    index: int = Field(..., description="Page index (0-based)")
-    text: str = Field(..., description="Extracted text content")
-    confidence: float = Field(..., description="OCR confidence score (0-1)")
-
-
-class FileScanResult(BaseModel):
-    """Complete scan result for a file"""
-
-    pages: list[ScanPageResult] = Field(
-        default_factory=list, description="Array of page results"
-    )
-    error: str | None = Field(None, description="Error message if scan failed")
-    scanned_at: str | None = Field(
-        None, description="Timestamp when scan was performed"
-    )
-    backend: str | None = Field(None, description="Backend used for scanning")
 
 
 @dataclass
@@ -108,6 +64,7 @@ class DatasetService:
 
             dataset_with_details = DatasetWithFileDetails(
                 name=dataset.name,
+                auto_process=dataset.auto_process,
                 data_processing_strategy=dataset.data_processing_strategy,
                 database=dataset.database,
                 details=DatasetDetails(files_metadata=files_with_details),
@@ -178,6 +135,21 @@ class DatasetService:
         return files
 
     @classmethod
+    def get_dataset_config(cls, namespace: str, project: str, dataset: str) -> Dataset:
+        """
+        Load a dataset configuration from the project config.
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        existing_datasets = project_config.datasets or []
+        dataset_obj = next(
+            (ds for ds in existing_datasets if ds.name == dataset),
+            None,
+        )
+        if dataset_obj is None:
+            raise DatasetNotFoundError(dataset)
+        return dataset_obj
+
+    @classmethod
     def create_dataset(
         cls,
         namespace: str,
@@ -185,6 +157,7 @@ class DatasetService:
         name: str,
         data_processing_strategy: str,
         database: str,
+        auto_process: bool | None = True,
     ) -> Dataset:
         """
         Create a new dataset in the project
@@ -221,6 +194,7 @@ class DatasetService:
 
         new_dataset = Dataset(
             name=name,
+            auto_process=auto_process,
             data_processing_strategy=data_processing_strategy,
             database=database,
         )
@@ -545,56 +519,78 @@ class DatasetService:
         }
 
     @classmethod
+    def _build_ingest_tasks(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file_hashes: list[str] | None = None,
+        parser_overrides: dict | None = None,
+    ) -> tuple[Dataset, list[str], list]:
+        dataset_config = cls.get_dataset_config(namespace, project, dataset)
+        dataset_file_hashes: list[str] = []
+
+        if file_hashes is None:
+            dataset_files = cls.list_dataset_files(namespace, project, dataset)
+            dataset_file_hashes = [file.hash for file in dataset_files if file.hash]
+        else:
+            dataset_file_hashes = [file_hash for file_hash in file_hashes if file_hash]
+
+        project_dir = ProjectService.get_project_dir(namespace, project)
+        raw_dir = Path(DataService.ensure_data_dir(namespace, project, dataset)) / "raw"
+        ingest_tasks = []
+
+        for file_hash in dataset_file_hashes:
+            file_path = raw_dir / file_hash
+            if not file_path.exists():
+                raise FileNotFoundError(f"Raw file not found: {file_path}")
+
+            metadata = DataService.get_data_file_metadata_by_hash(
+                namespace, project, dataset, file_hash
+            )
+            original_filename = metadata.original_file_name if metadata else file_hash
+
+            ingest_tasks.append(
+                build_ingest_signature(
+                    project_dir=project_dir,
+                    data_processing_strategy_name=dataset_config.data_processing_strategy,
+                    database_name=dataset_config.database,
+                    source_path=str(file_path),
+                    filename=original_filename,
+                    dataset_name=dataset,
+                    parser_overrides=parser_overrides,
+                )
+            )
+
+        return dataset_config, dataset_file_hashes, ingest_tasks
+
+    @classmethod
     def start_dataset_ingestion(
         cls, namespace: str, project: str, dataset: str
     ) -> DatasetIngestLaunchResult:
         """
         Kick off ingestion tasks for all files in a dataset and return the tracking task id.
         """
-        project_config = ProjectService.get_project(namespace, project).config
-        dataset_config = next(
-            (ds for ds in (project_config.datasets or []) if ds.name == dataset), None
+        dataset_config, dataset_file_hashes, ingest_tasks = cls._build_ingest_tasks(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
         )
-        if dataset_config is None:
-            raise ValueError(f"Dataset {dataset} not found")
 
-        dataset_files = cls.list_dataset_files(namespace, project, dataset)
-        dataset_file_hashes = [file.hash for file in dataset_files]
-        strategy_name = dataset_config.data_processing_strategy
-
-        if not dataset_files:
+        if not ingest_tasks:
             task_id = str(uuid.uuid4())
             payload = {
                 "message": "Dataset processed successfully",
                 "namespace": namespace,
                 "project": project,
                 "dataset": dataset,
-                "strategy": strategy_name,
+                "strategy": dataset_config.data_processing_strategy,
                 "files": [],
                 "total_files": 0,
             }
             app.backend.store_result(task_id, payload, "SUCCESS")
             return DatasetIngestLaunchResult(
                 task_id=task_id, message=str(payload["message"]), files=[]
-            )
-
-        project_dir = ProjectService.get_project_dir(namespace, project)
-        raw_dir = Path(DataService.ensure_data_dir(namespace, project, dataset)) / "raw"
-        ingest_tasks = []
-        for file_metadata in dataset_files:
-            file_path = raw_dir / file_metadata.hash
-            if not file_path.exists():
-                raise FileNotFoundError(f"Raw file not found: {file_path}")
-
-            ingest_tasks.append(
-                build_ingest_signature(
-                    project_dir=project_dir,
-                    data_processing_strategy_name=strategy_name,
-                    database_name=dataset_config.database,
-                    source_path=str(file_path),
-                    filename=file_metadata.original_file_name,
-                    dataset_name=dataset,
-                )
             )
 
         job = group(*ingest_tasks)
@@ -614,7 +610,7 @@ class DatasetService:
                 "namespace": namespace,
                 "project": project,
                 "dataset": dataset,
-                "strategy": strategy_name,
+                "strategy": dataset_config.data_processing_strategy,
             },
             "PENDING",
         )
@@ -634,144 +630,75 @@ class DatasetService:
             files=dataset_file_hashes,
         )
 
-    # =========================================================================
-    # Document Scanning Methods
-    # =========================================================================
-
     @classmethod
-    def get_scan_settings_path(cls, namespace: str, project: str, dataset: str) -> Path:
-        """Get the path to the scan settings file for a dataset"""
-        data_dir = DataService.ensure_data_dir(namespace, project, dataset)
-        return Path(data_dir) / "scan_settings.json"
-
-    @classmethod
-    def get_scans_dir(cls, namespace: str, project: str, dataset: str) -> Path:
-        """Get the path to the scans directory for a dataset"""
-        data_dir = DataService.ensure_data_dir(namespace, project, dataset)
-        scans_dir = Path(data_dir) / "scans"
-        scans_dir.mkdir(exist_ok=True)
-        return scans_dir
-
-    @classmethod
-    def save_scan_settings(
+    def start_ingestion_for_hashes(
         cls,
         namespace: str,
         project: str,
         dataset: str,
-        settings: DocumentScanningSettings,
-    ) -> None:
-        """Save document scanning settings for a dataset"""
-        settings_path = cls.get_scan_settings_path(namespace, project, dataset)
-        with open(settings_path, "w") as f:
-            f.write(settings.model_dump_json(indent=2))
-        logger.info(
-            "Saved scan settings",
+        file_hashes: list[str],
+        parser_overrides: dict | None = None,
+    ) -> DatasetIngestLaunchResult:
+        """
+        Kick off ingestion tasks for a subset of dataset files.
+        """
+        dataset_config, dataset_file_hashes, ingest_tasks = cls._build_ingest_tasks(
             namespace=namespace,
             project=project,
             dataset=dataset,
-            enabled=settings.enabled,
+            file_hashes=file_hashes,
+            parser_overrides=parser_overrides,
         )
 
-    @classmethod
-    def get_scan_settings(
-        cls, namespace: str, project: str, dataset: str
-    ) -> DocumentScanningSettings | None:
-        """Get document scanning settings for a dataset"""
-        settings_path = cls.get_scan_settings_path(namespace, project, dataset)
-        if not settings_path.exists():
-            return None
-        try:
-            with open(settings_path) as f:
-                return DocumentScanningSettings.model_validate_json(f.read())
-        except Exception as e:
-            logger.warning(
-                "Failed to load scan settings",
-                namespace=namespace,
-                project=project,
-                dataset=dataset,
-                error=str(e),
+        if not ingest_tasks:
+            task_id = str(uuid.uuid4())
+            payload = {
+                "message": "Dataset processed successfully",
+                "namespace": namespace,
+                "project": project,
+                "dataset": dataset,
+                "strategy": dataset_config.data_processing_strategy,
+                "files": [],
+                "total_files": 0,
+            }
+            app.backend.store_result(task_id, payload, "SUCCESS")
+            return DatasetIngestLaunchResult(
+                task_id=task_id, message=str(payload["message"]), files=[]
             )
-            return None
 
-    @classmethod
-    def save_file_scan_result(
-        cls,
-        namespace: str,
-        project: str,
-        dataset: str,
-        file_hash: str,
-        result: FileScanResult,
-    ) -> None:
-        """Save scan result for a file"""
-        scans_dir = cls.get_scans_dir(namespace, project, dataset)
-        scan_path = scans_dir / f"{file_hash}.json"
-        with open(scan_path, "w") as f:
-            f.write(result.model_dump_json(indent=2))
+        job = group(*ingest_tasks)
+        result = job.apply_async()
+        child_task_ids = []
+        if result.results:
+            child_task_ids = [
+                child.id for child in result.results if hasattr(child, "id")
+            ]
+
+        app.backend.store_result(
+            result.id,
+            {
+                "type": "group",
+                "children": child_task_ids,
+                "file_hashes": dataset_file_hashes,
+                "namespace": namespace,
+                "project": project,
+                "dataset": dataset,
+                "strategy": dataset_config.data_processing_strategy,
+            },
+            "PENDING",
+        )
+
         logger.info(
-            "Saved file scan result",
+            "Started dataset ingestion for subset",
+            dataset=dataset,
             namespace=namespace,
             project=project,
-            dataset=dataset,
-            file_hash=file_hash,
-            pages=len(result.pages),
+            task_id=result.id,
+            file_count=len(dataset_file_hashes),
         )
 
-    @classmethod
-    def get_file_scan_result(
-        cls, namespace: str, project: str, dataset: str, file_hash: str
-    ) -> FileScanResult | None:
-        """Get scan result for a file"""
-        scans_dir = cls.get_scans_dir(namespace, project, dataset)
-        scan_path = scans_dir / f"{file_hash}.json"
-        if not scan_path.exists():
-            return None
-        try:
-            with open(scan_path) as f:
-                return FileScanResult.model_validate_json(f.read())
-        except Exception as e:
-            logger.warning(
-                "Failed to load file scan result",
-                namespace=namespace,
-                project=project,
-                dataset=dataset,
-                file_hash=file_hash,
-                error=str(e),
-            )
-            return None
-
-    @classmethod
-    def delete_file_scan_result(
-        cls, namespace: str, project: str, dataset: str, file_hash: str
-    ) -> bool:
-        """Delete scan result for a file. Returns True if deleted, False if not found."""
-        scans_dir = cls.get_scans_dir(namespace, project, dataset)
-        scan_path = scans_dir / f"{file_hash}.json"
-        if scan_path.exists():
-            scan_path.unlink()
-            logger.info(
-                "Deleted file scan result",
-                namespace=namespace,
-                project=project,
-                dataset=dataset,
-                file_hash=file_hash,
-            )
-            return True
-        return False
-
-    @classmethod
-    def delete_all_scan_results(cls, namespace: str, project: str, dataset: str) -> int:
-        """Delete all scan results for a dataset. Returns count of deleted files."""
-        scans_dir = cls.get_scans_dir(namespace, project, dataset)
-        deleted = 0
-        for scan_file in scans_dir.glob("*.json"):
-            scan_file.unlink()
-            deleted += 1
-        if deleted > 0:
-            logger.info(
-                "Deleted all scan results",
-                namespace=namespace,
-                project=project,
-                dataset=dataset,
-                count=deleted,
-            )
-        return deleted
+        return DatasetIngestLaunchResult(
+            task_id=result.id,
+            message="Dataset ingestion started",
+            files=dataset_file_hashes,
+        )

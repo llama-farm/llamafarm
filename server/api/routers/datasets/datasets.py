@@ -1,24 +1,15 @@
+import json
 from enum import Enum
+from typing import Any
 
 from config.datamodel import Dataset
-from fastapi import APIRouter, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from api.routers.datasets._models import ListDatasetsResponse
 from core.logging import FastAPIStructLogger
-from services.data_service import DataService
-from services.dataset_service import (
-    DatasetService,
-    FileScanResult,
-    ScanPageResult,
-)
-from services.dataset_service import (
-    DocumentScanningBackend as ServiceDocumentScanningBackend,
-)
-from services.dataset_service import (
-    DocumentScanningSettings as ServiceDocumentScanningSettings,
-)
+from services.dataset_service import DatasetIngestLaunchResult, DatasetService
+from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
 
@@ -26,6 +17,9 @@ router = APIRouter(
     prefix="/projects/{namespace}/{project}/datasets",
     tags=["datasets"],
 )
+
+# Reusable FastAPI defaults to satisfy lint rule B008 (no call in defaults)
+FILES_REQUIRED = File(...)
 
 
 # Support both with and without trailing slash to avoid proxy redirect issues
@@ -81,33 +75,10 @@ async def get_available_strategies(namespace: str, project: str):
     )
 
 
-class DocumentScanningBackend(str, Enum):
-    SURYA = "surya"
-    EASYOCR = "easyocr"
-    TESSERACT = "tesseract"
-
-
-class DocumentScanningSettings(BaseModel):
-    """Document scanning (OCR) settings for a dataset"""
-
-    enabled: bool = Field(
-        default=False, description="Whether document scanning is enabled"
-    )
-    backend: DocumentScanningBackend = Field(
-        default=DocumentScanningBackend.SURYA,
-        description="OCR backend to use (surya recommended for best quality)",
-    )
-    language: str = Field(default="en", description="Language code for OCR")
-    parse_by_page: bool = Field(
-        default=True, description="Whether to return separate results per page"
-    )
-
-
 class CreateDatasetRequest(BaseModel):
     name: str
     data_processing_strategy: str
     database: str
-    document_scanning: DocumentScanningSettings | None = None
 
 
 class CreateDatasetResponse(BaseModel):
@@ -122,7 +93,6 @@ class CreateDatasetResponse(BaseModel):
 )
 async def create_dataset(namespace: str, project: str, request: CreateDatasetRequest):
     logger.bind(namespace=namespace, project=project)
-    logger.info(f"Creating dataset with request: {request.model_dump()}")
     try:
         dataset = DatasetService.create_dataset(
             namespace=namespace,
@@ -131,24 +101,6 @@ async def create_dataset(namespace: str, project: str, request: CreateDatasetReq
             data_processing_strategy=request.data_processing_strategy,
             database=request.database,
         )
-        # Save document scanning settings if provided
-        logger.info(f"Document scanning settings: {request.document_scanning}")
-        if request.document_scanning and request.document_scanning.enabled:
-            # Convert router model to service model
-            logger.info(f"Saving scan settings for dataset: {request.name}")
-            service_settings = ServiceDocumentScanningSettings(
-                enabled=request.document_scanning.enabled,
-                backend=ServiceDocumentScanningBackend(
-                    request.document_scanning.backend.value
-                ),
-                language=request.document_scanning.language,
-                parse_by_page=request.document_scanning.parse_by_page,
-            )
-            logger.info(f"Service settings: {service_settings}")
-            DatasetService.save_scan_settings(
-                namespace, project, request.name, service_settings
-            )
-            logger.info("Scan settings saved successfully")
         return CreateDatasetResponse(dataset=dataset)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -279,6 +231,184 @@ class DatasetDataUploadResponse(BaseModel):
     skipped: bool = Field(
         default=False, description="Whether the file was skipped (duplicate)"
     )
+    task_id: str | None = Field(
+        default=None, description="Celery task ID if processing was started"
+    )
+    status: str | None = Field(
+        default=None,
+        description="Upload status (processing, uploaded, skipped, or error)",
+    )
+
+
+class BulkDatasetDataUploadResponse(BaseModel):
+    uploaded: int = Field(..., description="Number of files uploaded")
+    skipped: int = Field(default=0, description="Number of files skipped (duplicates)")
+    failed: int = Field(default=0, description="Number of files that failed to upload")
+    task_id: str | None = Field(
+        default=None, description="Celery task ID if processing was started"
+    )
+    status: str = Field(
+        default="uploaded",
+        description="Bulk upload status (processing when auto-process triggered)",
+    )
+
+
+def _parse_parser_overrides(raw_overrides: str | None):
+    if not raw_overrides:
+        return None
+    if len(raw_overrides) > 10240:
+        raise HTTPException(
+            status_code=400,
+            detail="parser_overrides payload too large (max 10KB)",
+        )
+    try:
+        parsed = json.loads(raw_overrides)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid parser_overrides JSON: {exc}",
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="parser_overrides must be a JSON object mapping parser type to config",
+        )
+
+    # Basic safety validation for chunk settings
+    CHUNK_SIZE_MAX = 100000
+
+    def _validate_chunk_field(name: str, value: object, allow_zero: bool):
+        if not isinstance(value, int | float):
+            raise HTTPException(status_code=400, detail=f"{name} must be a number")
+        if allow_zero:
+            if value < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{name} must be greater than or equal to 0",
+                )
+        else:
+            if value <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{name} must be greater than 0",
+                )
+        if name == "chunk_size" and value > CHUNK_SIZE_MAX:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{name} must be less than or equal to {CHUNK_SIZE_MAX}",
+            )
+
+    for parser_type, override in parsed.items():
+        if not isinstance(override, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Override for {parser_type or 'parser'} must be an object",
+            )
+        if "chunk_size" in override:
+            _validate_chunk_field(
+                "chunk_size", override["chunk_size"], allow_zero=False
+            )
+        if "chunk_overlap" in override:
+            _validate_chunk_field(
+                "chunk_overlap", override["chunk_overlap"], allow_zero=True
+            )
+        if "chunk_size" in override and "chunk_overlap" in override:
+            try:
+                if override["chunk_overlap"] >= override["chunk_size"]:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="chunk_overlap must be less than chunk_size",
+                    )
+            except TypeError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="chunk_size and chunk_overlap must be numbers",
+                ) from None
+
+    return parsed
+
+
+def _validate_overrides_against_default_chunking(
+    namespace: str,
+    project: str,
+    strategy_name: str | None,
+    parser_overrides: dict | None,
+):
+    """
+    Validate merged chunk_size/chunk_overlap using default parser configs.
+
+    Ensures that providing only chunk_overlap does not exceed the default chunk_size.
+    """
+    if not parser_overrides or not strategy_name:
+        return
+
+    try:
+        project_config = ProjectService.load_config(namespace, project)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.warning(
+            "Failed to load project config for parser override validation",
+            namespace=namespace,
+            project=project,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to load project config for parser override validation",
+        ) from exc
+
+    rag_config = getattr(project_config, "rag", None)
+    strategies = getattr(rag_config, "data_processing_strategies", None) or []
+    strategy = next(
+        (s for s in strategies if getattr(s, "name", None) == strategy_name), None
+    )
+    if not strategy or not getattr(strategy, "parsers", None):
+        return
+
+    wildcard_override = parser_overrides.get("*") or parser_overrides.get("__all__")
+
+    for parser in strategy.parsers or []:
+        parser_type = getattr(parser, "type", None)
+        merged_config: dict[str, Any] = {}
+        base_config = getattr(parser, "config", None) or {}
+        merged_config.update(base_config)
+        if wildcard_override:
+            merged_config.update(wildcard_override)
+        if parser_type:
+            merged_config.update(parser_overrides.get(parser_type, {}) or {})
+
+        chunk_size = merged_config.get("chunk_size")
+        chunk_overlap = merged_config.get("chunk_overlap")
+        if chunk_size is None or chunk_overlap is None:
+            continue
+
+        if not isinstance(chunk_size, int | float) or not isinstance(
+            chunk_overlap, int | float
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="chunk_size and chunk_overlap must be numbers after applying overrides",
+            )
+
+        if chunk_size <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="chunk_size must be greater than 0 after applying overrides",
+            )
+
+        if chunk_overlap < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="chunk_overlap must be greater than or equal to 0 after applying overrides",
+            )
+
+        if chunk_overlap >= chunk_size:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"chunk_overlap ({chunk_overlap}) must be less than chunk_size "
+                    f"({chunk_size}) for parser {parser_type or 'unknown'}"
+                ),
+            )
 
 
 @router.post(
@@ -286,8 +416,7 @@ class DatasetDataUploadResponse(BaseModel):
     operation_id="dataset_data_upload",
     summary="Upload a file to the dataset",
     description=(
-        "Upload a file to the dataset (stores it but does NOT process into vector database. "
-        "Use the dataset actions endpoint with the 'process' action_type to process the file into the vector database)"
+        "Upload a file to the dataset. Processing is triggered automatically based on dataset configuration or the auto_process flag."
     ),
     responses={200: {"model": DatasetDataUploadResponse}},
 )
@@ -296,9 +425,32 @@ async def upload_data(
     project: str,
     dataset: str,
     file: UploadFile,
+    auto_process: bool | None = Query(
+        default=None,
+        description="Automatically process the file into the vector database. Defaults to dataset config (true if unspecified in config).",
+    ),
+    parser_overrides: str | None = Form(
+        default=None,
+        description="JSON object mapping parser type to override config, e.g. {'PDFParser_LlamaIndex': {'chunk_size': 1024}}",
+    ),
 ):
-    """Upload a file to the dataset (stores it but does NOT process into vector database)"""
+    """Upload a file to the dataset. Processing triggered based on dataset config or auto_process parameter."""
     logger.bind(namespace=namespace, project=project, dataset=dataset)
+
+    dataset_config = DatasetService.get_dataset_config(namespace, project, dataset)
+    dataset_auto_process = (
+        dataset_config.auto_process if dataset_config.auto_process is not None else True
+    )
+    effective_auto_process = (
+        auto_process if auto_process is not None else dataset_auto_process
+    )
+    parsed_overrides = _parse_parser_overrides(parser_overrides)
+    _validate_overrides_against_default_chunking(
+        namespace=namespace,
+        project=project,
+        strategy_name=getattr(dataset_config, "data_processing_strategy", None),
+        parser_overrides=parsed_overrides,
+    )
 
     was_added, metadata_file_content = await DatasetService.add_file_to_dataset(
         namespace=namespace,
@@ -307,26 +459,149 @@ async def upload_data(
         file=file,
     )
 
-    if was_added:
-        logger.info(
-            "File uploaded to dataset",
-            dataset=dataset,
-            filename=file.filename,
-            hash=metadata_file_content.hash,
-        )
-    else:
+    if not was_added:
         logger.info(
             "File skipped (duplicate)",
             dataset=dataset,
             filename=file.filename,
             hash=metadata_file_content.hash,
         )
+        return DatasetDataUploadResponse(
+            filename=file.filename,
+            hash=metadata_file_content.hash,
+            processed=False,
+            skipped=True,
+            status="skipped",
+        )
+
+    logger.info(
+        "File uploaded to dataset",
+        dataset=dataset,
+        filename=file.filename,
+        hash=metadata_file_content.hash,
+    )
+
+    launch: DatasetIngestLaunchResult | None = None
+    if effective_auto_process:
+        launch = DatasetService.start_ingestion_for_hashes(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hashes=[metadata_file_content.hash],
+            parser_overrides=parsed_overrides,
+        )
+        status = "processing"
+        processed = True
+    else:
+        status = "uploaded"
+        processed = False
 
     return DatasetDataUploadResponse(
         filename=file.filename,
         hash=metadata_file_content.hash,
-        processed=False,
-        skipped=not was_added,
+        processed=processed,
+        skipped=False,
+        task_id=launch.task_id if launch else None,
+        status=status,
+    )
+
+
+@router.post(
+    "/{dataset}/data/bulk",
+    operation_id="dataset_data_bulk_upload",
+    summary="Upload multiple files to the dataset",
+    description=(
+        "Bulk upload files to the dataset. Defaults to storing files without processing. "
+        "Set auto_process=true to process immediately."
+    ),
+    responses={200: {"model": BulkDatasetDataUploadResponse}},
+)
+async def upload_data_bulk(
+    namespace: str,
+    project: str,
+    dataset: str,
+    files: list[UploadFile] = FILES_REQUIRED,
+    auto_process: bool | None = Query(
+        default=None,
+        description="Process all uploaded files immediately (default: false for bulk)",
+    ),
+    parser_overrides: str | None = Form(
+        default=None,
+        description="JSON object mapping parser type to override config",
+    ),
+):
+    logger.bind(namespace=namespace, project=project, dataset=dataset)
+    dataset_config = DatasetService.get_dataset_config(namespace, project, dataset)
+    parsed_overrides = _parse_parser_overrides(parser_overrides)
+    _validate_overrides_against_default_chunking(
+        namespace=namespace,
+        project=project,
+        strategy_name=getattr(dataset_config, "data_processing_strategy", None),
+        parser_overrides=parsed_overrides,
+    )
+
+    if len(files) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Bulk upload limited to 100 files",
+        )
+
+    # Bulk defaults to not processing unless explicitly requested
+    dataset_auto_process = (
+        dataset_config.auto_process if dataset_config.auto_process is not None else True
+    )
+    effective_auto_process = auto_process if auto_process is not None else False
+    if auto_process is None and dataset_auto_process is False:
+        effective_auto_process = False
+
+    uploaded = 0
+    skipped = 0
+    failed = 0
+    added_hashes: list[str] = []
+
+    for file in files:
+        try:
+            was_added, metadata_file_content = await DatasetService.add_file_to_dataset(
+                namespace=namespace,
+                project=project,
+                dataset=dataset,
+                file=file,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to upload file",
+                dataset=dataset,
+                filename=file.filename,
+                error=str(exc),
+            )
+            failed += 1
+            continue
+
+        if was_added:
+            uploaded += 1
+            added_hashes.append(metadata_file_content.hash)
+        else:
+            skipped += 1
+
+    task_id = None
+    status = "uploaded"
+    if effective_auto_process and added_hashes:
+        launch = DatasetService.start_ingestion_for_hashes(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hashes=added_hashes,
+            parser_overrides=parsed_overrides,
+        )
+        task_id = launch.task_id
+        status = "processing"
+
+    return BulkDatasetDataUploadResponse(
+        uploaded=uploaded,
+        skipped=skipped,
+        failed=failed,
+        task_id=task_id,
+        status=status,
     )
 
 
@@ -367,230 +642,3 @@ async def delete_data(
         file_hash=file_hash,
         deleted_chunks=result.get("deleted_count", 0),
     )
-
-
-@router.get(
-    "/{dataset}/data/{file_hash}/raw",
-    operation_id="dataset_data_download",
-    summary="Download raw file from dataset",
-    description="Download the raw file content from the dataset by file hash.",
-    responses={
-        200: {"description": "Raw file content"},
-        404: {"description": "File not found"},
-    },
-)
-async def download_raw_file(
-    namespace: str,
-    project: str,
-    dataset: str,
-    file_hash: str,
-):
-    """Download raw file from dataset storage."""
-    logger.bind(
-        namespace=namespace,
-        project=project,
-        dataset=dataset,
-        file_hash=file_hash,
-    )
-
-    # Get dataset to find data directory
-    ds = DatasetService.get_dataset(namespace, project, dataset)
-    if ds is None:
-        raise HTTPException(status_code=404, detail=f"Dataset '{dataset}' not found")
-
-    # Get file metadata to find the file path and mime type
-    metadata = DataService.get_data_file_metadata_by_hash(
-        namespace, project, dataset, file_hash
-    )
-    if metadata is None:
-        raise HTTPException(
-            status_code=404, detail=f"File '{file_hash}' not found in dataset"
-        )
-
-    # Construct path to raw file
-    import os
-
-    from core.settings import settings
-
-    data_dir = os.path.join(settings.project_dir, "lf_data", "datasets", dataset)
-    raw_file_path = os.path.join(data_dir, "raw", file_hash)
-
-    if not os.path.exists(raw_file_path):
-        raise HTTPException(status_code=404, detail="Raw file not found on disk")
-
-    return FileResponse(
-        path=raw_file_path,
-        filename=metadata.original_file_name,
-        media_type=metadata.mime_type,
-    )
-
-
-# =============================================================================
-# Document Scanning Endpoints
-# =============================================================================
-
-
-class ScanSettingsResponse(BaseModel):
-    """Response with document scanning settings for a dataset"""
-
-    enabled: bool = Field(..., description="Whether document scanning is enabled")
-    backend: str = Field(..., description="OCR backend")
-    language: str = Field(..., description="Language code")
-    parse_by_page: bool = Field(..., description="Whether to parse by page")
-
-
-@router.get(
-    "/{dataset}/scan-settings",
-    operation_id="dataset_scan_settings_get",
-    summary="Get document scanning settings for a dataset",
-    description="Get the document scanning (OCR) settings configured for this dataset.",
-    responses={
-        200: {"model": ScanSettingsResponse},
-        404: {"description": "Dataset not found or scanning not enabled"},
-    },
-)
-async def get_scan_settings(namespace: str, project: str, dataset: str):
-    """Get document scanning settings for a dataset."""
-    logger.bind(namespace=namespace, project=project, dataset=dataset)
-
-    settings = DatasetService.get_scan_settings(namespace, project, dataset)
-    if settings is None:
-        raise HTTPException(
-            status_code=404, detail="Document scanning not enabled for this dataset"
-        )
-
-    return ScanSettingsResponse(
-        enabled=settings.enabled,
-        backend=settings.backend.value,
-        language=settings.language,
-        parse_by_page=settings.parse_by_page,
-    )
-
-
-class FileScanResultResponse(BaseModel):
-    """Response with scan result for a file"""
-
-    pages: list[dict] = Field(..., description="Array of page results")
-    error: str | None = Field(None, description="Error message if scan failed")
-    scanned_at: str | None = Field(None, description="Timestamp when scanned")
-    backend: str | None = Field(None, description="Backend used for scanning")
-
-
-@router.get(
-    "/{dataset}/data/{file_hash}/scan",
-    operation_id="dataset_file_scan_get",
-    summary="Get scan result for a file",
-    description="Get the OCR scan result for a file in the dataset.",
-    responses={
-        200: {"model": FileScanResultResponse},
-        404: {"description": "File or scan result not found"},
-    },
-)
-async def get_file_scan(namespace: str, project: str, dataset: str, file_hash: str):
-    """Get scan result for a file in a dataset."""
-    logger.bind(
-        namespace=namespace,
-        project=project,
-        dataset=dataset,
-        file_hash=file_hash,
-    )
-
-    result = DatasetService.get_file_scan_result(namespace, project, dataset, file_hash)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Scan result not found")
-
-    return FileScanResultResponse(
-        pages=[page.model_dump() for page in result.pages],
-        error=result.error,
-        scanned_at=result.scanned_at,
-        backend=result.backend,
-    )
-
-
-class SaveScanResultRequest(BaseModel):
-    """Request to save a scan result for a file"""
-
-    pages: list[dict] = Field(
-        ..., description="Array of page results with index, text, confidence"
-    )
-    backend: str | None = Field(None, description="Backend used for scanning")
-
-
-class SaveScanResultResponse(BaseModel):
-    """Response after saving a scan result"""
-
-    file_hash: str = Field(..., description="The file hash")
-    pages_saved: int = Field(..., description="Number of pages saved")
-
-
-@router.post(
-    "/{dataset}/data/{file_hash}/scan",
-    operation_id="dataset_file_scan_save",
-    summary="Save scan result for a file",
-    description="Save the OCR scan result for a file in the dataset.",
-    responses={200: {"model": SaveScanResultResponse}},
-)
-async def save_file_scan(
-    namespace: str,
-    project: str,
-    dataset: str,
-    file_hash: str,
-    request: SaveScanResultRequest,
-):
-    """Save scan result for a file in a dataset."""
-    logger.bind(
-        namespace=namespace,
-        project=project,
-        dataset=dataset,
-        file_hash=file_hash,
-    )
-
-    from datetime import datetime
-
-    # Convert request to FileScanResult
-    pages = [
-        ScanPageResult(
-            index=page.get("index", i),
-            text=page.get("text", ""),
-            confidence=page.get("confidence", 0.0),
-        )
-        for i, page in enumerate(request.pages)
-    ]
-
-    result = FileScanResult(
-        pages=pages,
-        scanned_at=datetime.utcnow().isoformat(),
-        backend=request.backend,
-    )
-
-    DatasetService.save_file_scan_result(namespace, project, dataset, file_hash, result)
-
-    return SaveScanResultResponse(
-        file_hash=file_hash,
-        pages_saved=len(pages),
-    )
-
-
-@router.delete(
-    "/{dataset}/data/{file_hash}/scan",
-    operation_id="dataset_file_scan_delete",
-    summary="Delete scan result for a file",
-    description="Delete the OCR scan result for a file in the dataset.",
-    responses={200: {"description": "Scan result deleted"}},
-)
-async def delete_file_scan(namespace: str, project: str, dataset: str, file_hash: str):
-    """Delete scan result for a file in a dataset."""
-    logger.bind(
-        namespace=namespace,
-        project=project,
-        dataset=dataset,
-        file_hash=file_hash,
-    )
-
-    deleted = DatasetService.delete_file_scan_result(
-        namespace, project, dataset, file_hash
-    )
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Scan result not found")
-
-    return {"message": "Scan result deleted", "file_hash": file_hash}

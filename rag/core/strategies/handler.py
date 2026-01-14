@@ -126,7 +126,9 @@ class SchemaHandler:
 
         for strategy in self.rag_config.data_processing_strategies or []:
             if strategy.name == strategy_name:
-                return strategy
+                # Return a deep copy so downstream mutations (e.g., parser overrides)
+                # do not affect the cached configuration on the handler
+                return strategy.model_copy(deep=True)
         raise ValueError(f"Data processing strategy '{strategy_name}' not found")
 
     def parse_strategy_name(self, strategy_name: str) -> tuple[str | None, str | None]:

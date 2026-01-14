@@ -7,6 +7,9 @@ from unittest.mock import Mock, patch
 import pytest
 from llamafarm_common.model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
+    _get_cached_gguf_files,
+    _get_cached_gguf_path,
+    _validate_model_id,
     get_gguf_file_path,
     list_gguf_files,
     parse_model_with_quantization,
@@ -172,6 +175,41 @@ class TestSelectGGUFFile:
         result = select_gguf_file([])
         assert result is None
 
+    def test_select_prefers_non_split_files(self):
+        """Test that non-split files are preferred over split files."""
+        files = [
+            "model-00001-of-00002.Q4_K_M.gguf",  # split Q4_K_M
+            "model-00002-of-00002.Q4_K_M.gguf",  # split Q4_K_M
+            "model.Q4_K_M.gguf",  # non-split Q4_K_M
+            "model.Q8_0.gguf",  # non-split Q8_0
+        ]
+        result = select_gguf_file(files)
+        assert result == "model.Q4_K_M.gguf"
+
+    def test_select_uses_split_when_only_option(self):
+        """Test that split files are used when no non-split version exists for requested quant."""
+        files = [
+            "model-00001-of-00002.F16.gguf",  # split F16
+            "model-00002-of-00002.F16.gguf",  # split F16
+            "model.Q4_K_M.gguf",  # non-split Q4_K_M
+        ]
+        result = select_gguf_file(files, preferred_quantization="F16")
+        assert result == "model-00001-of-00002.F16.gguf"
+
+    def test_select_split_file_pattern_variants(self):
+        """Test that various split file patterns are detected correctly."""
+        from llamafarm_common.model_utils import is_split_gguf_file
+
+        # These should be detected as split files
+        assert is_split_gguf_file("model-00001-of-00002.gguf")
+        assert is_split_gguf_file("model-00001-of-00002.Q4_K_M.gguf")
+        assert is_split_gguf_file("qwen2.5-coder-7b-instruct-q4_k_m-00001-of-00002.gguf")
+
+        # These should NOT be detected as split files
+        assert not is_split_gguf_file("model.Q4_K_M.gguf")
+        assert not is_split_gguf_file("model-v2.Q4_K_M.gguf")
+        assert not is_split_gguf_file("model.gguf")
+
     def test_preference_order_defined(self):
         """Test that GGUF_QUANTIZATION_PREFERENCE_ORDER is defined correctly."""
         assert GGUF_QUANTIZATION_PREFERENCE_ORDER[0] == "Q4_K_M"
@@ -303,10 +341,11 @@ class TestSelectGGUFFileWithLogging:
 class TestGetGGUFFilePath:
     """Test getting GGUF file path with download."""
 
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
     @patch("llamafarm_common.model_utils.snapshot_download")
     @patch("llamafarm_common.model_utils.HfApi")
     def test_get_gguf_file_path_strips_quantization_suffix(
-        self, mock_hf_api_class, mock_snapshot_download
+        self, mock_hf_api_class, mock_snapshot_download, mock_get_cached
     ):
         """
         Test that get_gguf_file_path() strips quantization suffix before calling HF APIs.
@@ -314,6 +353,9 @@ class TestGetGGUFFilePath:
         This test ensures both list_repo_files() and snapshot_download() receive
         clean model IDs without quantization suffixes.
         """
+        # Mock cache check to return empty (force network path)
+        mock_get_cached.return_value = []
+
         # Setup mocks
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
@@ -352,12 +394,16 @@ class TestGetGGUFFilePath:
             # Verify correct path was returned
             assert result == gguf_file
 
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
     @patch("llamafarm_common.model_utils.snapshot_download")
     @patch("llamafarm_common.model_utils.HfApi")
     def test_get_gguf_file_path_explicit_quantization(
-        self, mock_hf_api_class, mock_snapshot_download
+        self, mock_hf_api_class, mock_snapshot_download, mock_get_cached
     ):
         """Test that explicit preferred_quantization is used when provided."""
+        # Mock cache check to return empty (force network path)
+        mock_get_cached.return_value = []
+
         # Setup mocks
         mock_api = Mock()
         mock_api.list_repo_files.return_value = [
@@ -386,9 +432,15 @@ class TestGetGGUFFilePath:
             # Verify correct path was returned
             assert result == gguf_file
 
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
     @patch("llamafarm_common.model_utils.HfApi")
-    def test_get_gguf_file_path_no_files_raises(self, mock_hf_api_class):
+    def test_get_gguf_file_path_no_files_raises(
+        self, mock_hf_api_class, mock_get_cached
+    ):
         """Test that FileNotFoundError is raised when no GGUF files exist."""
+        # Mock cache check to return empty
+        mock_get_cached.return_value = []
+
         # Setup mock
         mock_api = Mock()
         mock_api.list_repo_files.return_value = ["README.md", "config.json"]
@@ -397,6 +449,123 @@ class TestGetGGUFFilePath:
         # Test
         with pytest.raises(FileNotFoundError, match="No GGUF files found"):
             get_gguf_file_path("test/model")
+
+    @patch("llamafarm_common.model_utils._get_cached_gguf_path")
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
+    def test_get_gguf_file_path_uses_cache(
+        self, mock_get_cached_files, mock_get_cached_path
+    ):
+        """Test that cached GGUF files are used without network calls."""
+        # Mock cache to return files
+        mock_get_cached_files.return_value = [
+            "qwen3-1.7b.Q4_K_M.gguf",
+            "qwen3-1.7b.Q8_0.gguf",
+        ]
+        mock_get_cached_path.return_value = "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+        # Test - should use cache without network
+        result = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
+
+        # Verify cache was checked
+        mock_get_cached_files.assert_called_once_with("unsloth/Qwen3-1.7B-GGUF")
+        mock_get_cached_path.assert_called_once_with(
+            "unsloth/Qwen3-1.7B-GGUF", "qwen3-1.7b.Q4_K_M.gguf"
+        )
+
+        # Verify correct path was returned
+        assert result == "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+    @patch("llamafarm_common.model_utils._get_cached_gguf_path")
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
+    @patch("llamafarm_common.model_utils.HfApi")
+    def test_get_gguf_file_path_fallback_to_cache_on_network_error(
+        self, mock_hf_api_class, mock_get_cached_files, mock_get_cached_path
+    ):
+        """Test that cache is used as fallback when network fails.
+
+        This tests the scenario where:
+        1. Cache has files but _get_cached_gguf_path fails initially (forcing network path)
+        2. Network call fails
+        3. Fallback to cache succeeds on retry
+        """
+        # Mock cache to return files
+        mock_get_cached_files.return_value = ["qwen3-1.7b.Q4_K_M.gguf"]
+
+        # First call returns None (forcing network path), second call succeeds (fallback)
+        mock_get_cached_path.side_effect = [None, "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"]
+
+        # Mock HfApi to raise network error
+        mock_api = Mock()
+        mock_api.list_repo_files.side_effect = Exception("Network error")
+        mock_hf_api_class.return_value = mock_api
+
+        # Test - should fall back to cache after network failure
+        result = get_gguf_file_path("unsloth/Qwen3-1.7B-GGUF:Q4_K_M")
+
+        # Verify _get_cached_gguf_path was called twice:
+        # 1. First in Step 1 (returns None, forcing network path)
+        # 2. Second in fallback after network error (returns path)
+        assert mock_get_cached_path.call_count == 2
+
+        # Verify correct path was returned from cache fallback
+        assert result == "/fake/cache/path/qwen3-1.7b.Q4_K_M.gguf"
+
+
+class TestPathTraversalValidation:
+    """Test path traversal protection in cache functions."""
+
+    def test_validate_model_id_valid(self):
+        """Test that valid model IDs pass validation."""
+        # Standard org/repo format
+        assert _validate_model_id("unsloth/Qwen3-1.7B-GGUF") == "unsloth/Qwen3-1.7B-GGUF"
+        # Repo only format
+        assert _validate_model_id("gpt2") == "gpt2"
+        # With hyphens, underscores, and dots
+        assert _validate_model_id("org_name/model-v1.2") == "org_name/model-v1.2"
+
+    def test_validate_model_id_rejects_path_traversal(self):
+        """Test that path traversal attempts are rejected."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("../../../etc/passwd")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("org/../repo")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("org/repo/..")
+
+    def test_validate_model_id_rejects_absolute_paths(self):
+        """Test that absolute paths are rejected."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("/etc/passwd")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _validate_model_id("\\windows\\system32")
+
+    def test_validate_model_id_rejects_invalid_format(self):
+        """Test that invalid model ID formats are rejected."""
+        with pytest.raises(ValueError, match="Invalid model_id format"):
+            _validate_model_id("org/repo/extra")  # Too many slashes
+        with pytest.raises(ValueError, match="Invalid model_id format"):
+            _validate_model_id("org//repo")  # Double slash
+        with pytest.raises(ValueError, match="Invalid model_id format"):
+            _validate_model_id("org/repo:tag")  # Colon not allowed in model_id
+
+    def test_get_cached_gguf_files_validates_model_id(self):
+        """Test that _get_cached_gguf_files validates model_id."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_files("../malicious")
+
+    def test_get_cached_gguf_path_validates_model_id(self):
+        """Test that _get_cached_gguf_path validates model_id."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("../malicious", "model.gguf")
+
+    def test_get_cached_gguf_path_validates_filename(self):
+        """Test that _get_cached_gguf_path validates filename for path traversal."""
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("valid/model", "../../../etc/passwd")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("valid/model", "path/to/file.gguf")
+        with pytest.raises(ValueError, match="path traversal not allowed"):
+            _get_cached_gguf_path("valid/model", "..\\windows\\file.gguf")
 
 
 if __name__ == "__main__":
