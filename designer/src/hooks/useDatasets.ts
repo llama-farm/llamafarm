@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import datasetService from '../api/datasets'
 import {
+  BulkFileUploadResponse,
   CreateDatasetRequest,
   DatasetActionRequest,
   FileDeleteParams,
@@ -248,37 +249,31 @@ export function useDeleteFileFromDataset() {
 }
 
 /**
- * Hook to upload multiple files to a dataset sequentially
+ * Hook to upload multiple files to a dataset using the bulk endpoint
  * @returns Mutation for uploading multiple files
  */
 export function useUploadMultipleFiles() {
   const queryClient = useQueryClient()
 
-  return useMutation({
-    mutationFn: async (data: {
-      namespace: string
-      project: string
-      dataset: string
-      files: File[]
-      autoProcess?: boolean
-      parserOverrides?: Record<string, any>
-    }) => {
-      const results = []
-      for (const file of data.files) {
-        const result = await datasetService.uploadFileToDataset(
-          data.namespace,
-          data.project,
-          data.dataset,
-          file,
-          {
-            autoProcess: data.autoProcess,
-            parserOverrides: data.parserOverrides,
-          }
-        )
-        results.push(result)
-      }
-      return results
-    },
+  return useMutation<BulkFileUploadResponse, unknown, {
+    namespace: string
+    project: string
+    dataset: string
+    files: File[]
+    autoProcess?: boolean
+    parserOverrides?: Record<string, any>
+  }>({
+    mutationFn: data =>
+      datasetService.uploadFilesBulk(
+        data.namespace,
+        data.project,
+        data.dataset,
+        data.files,
+        {
+          autoProcess: data.autoProcess,
+          parserOverrides: data.parserOverrides,
+        }
+      ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh file counts
       queryClient.invalidateQueries({
