@@ -25,6 +25,13 @@ import type {
   AnomalyLoadRequest,
   AnomalyLoadResponse,
   AnomalyListModelsResponse,
+  // Document Scanning types
+  DocumentScanningResponse,
+  // Encoder types
+  EmbeddingRequest,
+  EmbeddingResponse,
+  RerankRequest,
+  RerankResponse,
   // Shared types
   MLHealthResponse,
   MLDeleteResponse,
@@ -208,6 +215,86 @@ export async function deleteAnomalyModel(
 }
 
 // =============================================================================
+// Document Scanning Endpoints
+// =============================================================================
+
+/**
+ * Scan a document (image or PDF) and extract text using OCR
+ * Uses the existing /v1/vision/ocr endpoint
+ */
+export async function scanDocument(
+  file: File,
+  options: {
+    model?: string
+    languages?: string
+    return_boxes?: boolean
+  } = {}
+): Promise<DocumentScanningResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('model', options.model || 'surya')
+  formData.append('languages', options.languages || 'en')
+  formData.append('return_boxes', String(options.return_boxes || false))
+
+  const response = await apiClient.post<DocumentScanningResponse>(
+    '/vision/ocr',
+    formData,
+    {
+      // Don't set Content-Type header - axios will set it automatically with the correct boundary
+      // OCR can take a while, especially first time when loading models
+      timeout: 300000, // 5 minutes
+    }
+  )
+  return response.data
+}
+
+// =============================================================================
+// Encoder Endpoints (Embeddings & Reranking)
+// =============================================================================
+
+// Universal Runtime URL - calls directly to runtime for encoder operations
+const UNIVERSAL_RUNTIME_URL =
+  import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://localhost:11540'
+
+/**
+ * Generate embeddings for texts
+ * Calls Universal Runtime directly at /v1/embeddings
+ */
+export async function createEmbeddings(
+  request: EmbeddingRequest
+): Promise<EmbeddingResponse> {
+  const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/v1/embeddings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+/**
+ * Rerank documents based on query relevance
+ * Calls Universal Runtime directly at /v1/rerank
+ */
+export async function rerankDocuments(
+  request: RerankRequest
+): Promise<RerankResponse> {
+  const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/v1/rerank`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -229,4 +316,9 @@ export default {
   loadAnomaly,
   listAnomalyModels,
   deleteAnomalyModel,
+  // Document Scanning
+  scanDocument,
+  // Encoder
+  createEmbeddings,
+  rerankDocuments,
 }

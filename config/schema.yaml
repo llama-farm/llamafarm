@@ -135,6 +135,9 @@ properties:
 
                 Note: For GGUF quantization, specify it in the model name using the format
                 "model_id:quantization" (e.g., "unsloth/Qwen3-4B-GGUF:Q4_K_M").
+
+                The properties below document common GGUF/llama.cpp parameters, but any
+                additional parameters will be passed through to the provider.
               properties:
                 n_ctx:
                   type: integer
@@ -143,6 +146,53 @@ properties:
                     If not specified, automatically computed based on available memory,
                     model training context, and pattern-based defaults.
                     See Universal runtime documentation for auto-detection behavior.
+                n_batch:
+                  type: integer
+                  minimum: 1
+                  description: |
+                    Batch size for prompt processing. Controls compute buffer memory usage.
+                    Lower values (e.g., 512) reduce memory significantly at slight speed cost.
+                    Critical for memory-constrained devices like Jetson (8GB shared memory).
+                n_gpu_layers:
+                  type: integer
+                  minimum: -1
+                  description: |
+                    Number of layers to offload to GPU. Use -1 to offload all layers.
+                    For models like Qwen3-1.7B with 29 layers, use 29 for full GPU offload.
+                n_threads:
+                  type: integer
+                  minimum: 1
+                  description: |
+                    Number of CPU threads to use. If not specified, auto-detected.
+                    For Jetson Orin Nano, use 6 (number of CPU cores).
+                flash_attn:
+                  type: boolean
+                  description: |
+                    Enable flash attention for faster inference. Requires GPU support.
+                    Recommended for Ampere+ GPUs (RTX 30xx, A100, Jetson Orin).
+                use_mmap:
+                  type: boolean
+                  description: |
+                    Memory-map model file for efficient memory usage. Default: true.
+                    Enables OS to swap model pages efficiently on memory-constrained devices.
+                use_mlock:
+                  type: boolean
+                  description: |
+                    Lock model in RAM to prevent swapping. Default: false.
+                    Set to false on memory-constrained devices (e.g., 8GB Jetson) to allow
+                    OS memory management.
+                cache_type_k:
+                  type: string
+                  description: |
+                    KV cache key quantization type. Lower precision reduces memory usage.
+                    Common values: f32 (full), f16 (half), q8_0, q5_1, q5_0, q4_1, q4_0.
+                    Using q4_0 can reduce KV cache memory by ~4x vs f16.
+                cache_type_v:
+                  type: string
+                  description: |
+                    KV cache value quantization type. Lower precision reduces memory usage.
+                    Common values: f32 (full), f16 (half), q8_0, q5_1, q5_0, q4_1, q4_0.
+                    Using q4_0 can reduce KV cache memory by ~4x vs f16.
               additionalProperties: true
             encoder_config:
               type: object

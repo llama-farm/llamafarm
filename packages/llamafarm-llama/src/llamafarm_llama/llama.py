@@ -41,6 +41,27 @@ class Llama:
         >>> print(response["choices"][0]["message"]["content"])
     """
 
+    # GGML type enum values for KV cache quantization
+    # These reduce memory usage at the cost of some precision
+    GGML_TYPE_F32 = 0
+    GGML_TYPE_F16 = 1    # Default - full precision
+    GGML_TYPE_Q4_0 = 2   # 4-bit quantization - significant memory savings
+    GGML_TYPE_Q4_1 = 3
+    GGML_TYPE_Q5_0 = 6
+    GGML_TYPE_Q5_1 = 7
+    GGML_TYPE_Q8_0 = 8   # 8-bit quantization - balanced
+
+    # Map string names to enum values
+    GGML_TYPE_MAP = {
+        "f32": GGML_TYPE_F32,
+        "f16": GGML_TYPE_F16,
+        "q4_0": GGML_TYPE_Q4_0,
+        "q4_1": GGML_TYPE_Q4_1,
+        "q5_0": GGML_TYPE_Q5_0,
+        "q5_1": GGML_TYPE_Q5_1,
+        "q8_0": GGML_TYPE_Q8_0,
+    }
+
     def __init__(
         self,
         model_path: str,
@@ -60,6 +81,8 @@ class Llama:
         rope_freq_scale: float = 0.0,
         embedding: bool = False,
         flash_attn: bool = True,  # Enable by default for faster inference
+        cache_type_k: Optional[str] = None,  # KV cache key quantization (e.g., "q4_0", "q8_0", "f16")
+        cache_type_v: Optional[str] = None,  # KV cache value quantization (e.g., "q4_0", "q8_0", "f16")
         verbose: bool = True,
         warmup: bool = True,  # Run warmup inference to compile shaders
         **kwargs,
@@ -84,6 +107,12 @@ class Llama:
             rope_freq_scale: RoPE frequency scale.
             embedding: Enable embedding mode.
             flash_attn: Use flash attention for faster inference.
+            cache_type_k: KV cache key quantization type. Options: "f32", "f16" (default),
+                          "q8_0", "q4_0". Lower precision = less memory but slightly
+                          reduced quality. "q4_0" can reduce KV cache memory by ~4x.
+            cache_type_v: KV cache value quantization type. Same options as cache_type_k.
+                          Setting both to "q4_0" significantly reduces memory on devices
+                          like Jetson Orin Nano (8GB shared memory).
             verbose: Print verbose output.
             warmup: Run warmup inference to pre-compile GPU shaders.
                     This moves shader compilation cost to load time,
@@ -160,6 +189,33 @@ class Llama:
         ctx_params.offload_kqv = True
         # Offload operations to GPU
         ctx_params.op_offload = True
+
+        # KV cache quantization for memory savings
+        # Setting type_k and type_v to q4_0 can reduce KV cache memory by ~4x
+        # This is critical for memory-constrained devices like Jetson Orin Nano
+        if cache_type_k is not None:
+            type_k_lower = cache_type_k.lower()
+            if type_k_lower in self.GGML_TYPE_MAP:
+                ctx_params.type_k = self.GGML_TYPE_MAP[type_k_lower]
+                if verbose:
+                    logger.info(f"Using cache_type_k: {cache_type_k}")
+            else:
+                logger.warning(
+                    f"Unknown cache_type_k '{cache_type_k}', using default. "
+                    f"Valid options: {list(self.GGML_TYPE_MAP.keys())}"
+                )
+
+        if cache_type_v is not None:
+            type_v_lower = cache_type_v.lower()
+            if type_v_lower in self.GGML_TYPE_MAP:
+                ctx_params.type_v = self.GGML_TYPE_MAP[type_v_lower]
+                if verbose:
+                    logger.info(f"Using cache_type_v: {cache_type_v}")
+            else:
+                logger.warning(
+                    f"Unknown cache_type_v '{cache_type_v}', using default. "
+                    f"Valid options: {list(self.GGML_TYPE_MAP.keys())}"
+                )
 
         if rope_freq_base > 0:
             ctx_params.rope_freq_base = rope_freq_base
