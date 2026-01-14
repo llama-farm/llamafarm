@@ -1,10 +1,12 @@
+# pyright: reportMissingImports=false
+
 import contextlib
 import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from celery import group  # type: ignore[import-untyped]
+from celery import group  # type: ignore[import-not-found,import-untyped]
 from config.datamodel import Dataset
 from fastapi import UploadFile
 from pydantic import BaseModel
@@ -62,6 +64,7 @@ class DatasetService:
 
             dataset_with_details = DatasetWithFileDetails(
                 name=dataset.name,
+                auto_process=dataset.auto_process,
                 data_processing_strategy=dataset.data_processing_strategy,
                 database=dataset.database,
                 details=DatasetDetails(files_metadata=files_with_details),
@@ -132,6 +135,21 @@ class DatasetService:
         return files
 
     @classmethod
+    def get_dataset_config(cls, namespace: str, project: str, dataset: str) -> Dataset:
+        """
+        Load a dataset configuration from the project config.
+        """
+        project_config = ProjectService.load_config(namespace, project)
+        existing_datasets = project_config.datasets or []
+        dataset_obj = next(
+            (ds for ds in existing_datasets if ds.name == dataset),
+            None,
+        )
+        if dataset_obj is None:
+            raise DatasetNotFoundError(dataset)
+        return dataset_obj
+
+    @classmethod
     def create_dataset(
         cls,
         namespace: str,
@@ -139,6 +157,7 @@ class DatasetService:
         name: str,
         data_processing_strategy: str,
         database: str,
+        auto_process: bool | None = True,
     ) -> Dataset:
         """
         Create a new dataset in the project
@@ -175,6 +194,7 @@ class DatasetService:
 
         new_dataset = Dataset(
             name=name,
+            auto_process=auto_process,
             data_processing_strategy=data_processing_strategy,
             database=database,
         )
@@ -499,56 +519,80 @@ class DatasetService:
         }
 
     @classmethod
+    def _build_ingest_tasks(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file_hashes: list[str] | None = None,
+        parser_overrides: dict | None = None,
+    ) -> tuple[Dataset, list[str], list]:
+        dataset_config = cls.get_dataset_config(namespace, project, dataset)
+        dataset_file_hashes: list[str] = []
+
+        if file_hashes is None:
+            dataset_files = cls.list_dataset_files(namespace, project, dataset)
+            dataset_file_hashes = [file.hash for file in dataset_files if file.hash]
+        else:
+            dataset_file_hashes = [file_hash for file_hash in file_hashes if file_hash]
+
+        project_dir = ProjectService.get_project_dir(namespace, project)
+        raw_dir = Path(DataService.ensure_data_dir(namespace, project, dataset)) / "raw"
+        ingest_tasks = []
+
+        for file_hash in dataset_file_hashes:
+            file_path = raw_dir / file_hash
+            if not file_path.exists():
+                raise FileNotFoundError(f"Raw file not found: {file_path}")
+
+            metadata = DataService.get_data_file_metadata_by_hash(
+                namespace, project, dataset, file_hash
+            )
+            original_filename = (
+                metadata.original_file_name if metadata else file_hash
+            )
+
+            ingest_tasks.append(
+                build_ingest_signature(
+                    project_dir=project_dir,
+                    data_processing_strategy_name=dataset_config.data_processing_strategy,
+                    database_name=dataset_config.database,
+                    source_path=str(file_path),
+                    filename=original_filename,
+                    dataset_name=dataset,
+                    parser_overrides=parser_overrides,
+                )
+            )
+
+        return dataset_config, dataset_file_hashes, ingest_tasks
+
+    @classmethod
     def start_dataset_ingestion(
         cls, namespace: str, project: str, dataset: str
     ) -> DatasetIngestLaunchResult:
         """
         Kick off ingestion tasks for all files in a dataset and return the tracking task id.
         """
-        project_config = ProjectService.get_project(namespace, project).config
-        dataset_config = next(
-            (ds for ds in (project_config.datasets or []) if ds.name == dataset), None
+        dataset_config, dataset_file_hashes, ingest_tasks = cls._build_ingest_tasks(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
         )
-        if dataset_config is None:
-            raise ValueError(f"Dataset {dataset} not found")
 
-        dataset_files = cls.list_dataset_files(namespace, project, dataset)
-        dataset_file_hashes = [file.hash for file in dataset_files]
-        strategy_name = dataset_config.data_processing_strategy
-
-        if not dataset_files:
+        if not ingest_tasks:
             task_id = str(uuid.uuid4())
             payload = {
                 "message": "Dataset processed successfully",
                 "namespace": namespace,
                 "project": project,
                 "dataset": dataset,
-                "strategy": strategy_name,
+                "strategy": dataset_config.data_processing_strategy,
                 "files": [],
                 "total_files": 0,
             }
             app.backend.store_result(task_id, payload, "SUCCESS")
             return DatasetIngestLaunchResult(
                 task_id=task_id, message=str(payload["message"]), files=[]
-            )
-
-        project_dir = ProjectService.get_project_dir(namespace, project)
-        raw_dir = Path(DataService.ensure_data_dir(namespace, project, dataset)) / "raw"
-        ingest_tasks = []
-        for file_metadata in dataset_files:
-            file_path = raw_dir / file_metadata.hash
-            if not file_path.exists():
-                raise FileNotFoundError(f"Raw file not found: {file_path}")
-
-            ingest_tasks.append(
-                build_ingest_signature(
-                    project_dir=project_dir,
-                    data_processing_strategy_name=strategy_name,
-                    database_name=dataset_config.database,
-                    source_path=str(file_path),
-                    filename=file_metadata.original_file_name,
-                    dataset_name=dataset,
-                )
             )
 
         job = group(*ingest_tasks)
@@ -568,13 +612,86 @@ class DatasetService:
                 "namespace": namespace,
                 "project": project,
                 "dataset": dataset,
-                "strategy": strategy_name,
+                "strategy": dataset_config.data_processing_strategy,
             },
             "PENDING",
         )
 
         logger.info(
             "Started dataset ingestion",
+            dataset=dataset,
+            namespace=namespace,
+            project=project,
+            task_id=result.id,
+            file_count=len(dataset_file_hashes),
+        )
+
+        return DatasetIngestLaunchResult(
+            task_id=result.id,
+            message="Dataset ingestion started",
+            files=dataset_file_hashes,
+        )
+
+    @classmethod
+    def start_ingestion_for_hashes(
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        file_hashes: list[str],
+        parser_overrides: dict | None = None,
+    ) -> DatasetIngestLaunchResult:
+        """
+        Kick off ingestion tasks for a subset of dataset files.
+        """
+        dataset_config, dataset_file_hashes, ingest_tasks = cls._build_ingest_tasks(
+            namespace=namespace,
+            project=project,
+            dataset=dataset,
+            file_hashes=file_hashes,
+            parser_overrides=parser_overrides,
+        )
+
+        if not ingest_tasks:
+            task_id = str(uuid.uuid4())
+            payload = {
+                "message": "Dataset processed successfully",
+                "namespace": namespace,
+                "project": project,
+                "dataset": dataset,
+                "strategy": dataset_config.data_processing_strategy,
+                "files": [],
+                "total_files": 0,
+            }
+            app.backend.store_result(task_id, payload, "SUCCESS")
+            return DatasetIngestLaunchResult(
+                task_id=task_id, message=str(payload["message"]), files=[]
+            )
+
+        job = group(*ingest_tasks)
+        result = job.apply_async()
+        child_task_ids = []
+        if result.results:
+            child_task_ids = [
+                child.id for child in result.results if hasattr(child, "id")
+            ]
+
+        app.backend.store_result(
+            result.id,
+            {
+                "type": "group",
+                "children": child_task_ids,
+                "file_hashes": dataset_file_hashes,
+                "namespace": namespace,
+                "project": project,
+                "dataset": dataset,
+                "strategy": dataset_config.data_processing_strategy,
+            },
+            "PENDING",
+        )
+
+        logger.info(
+            "Started dataset ingestion for subset",
             dataset=dataset,
             namespace=namespace,
             project=project,

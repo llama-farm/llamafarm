@@ -179,22 +179,24 @@ runtime:
 | List models | `lf models list` |
 | Use specific model | `lf chat --model powerful "Question"` |
 | Create dataset | `lf datasets create -s pdf_ingest -b main_db research` |
-| Upload files | `lf datasets upload research ./docs/*.pdf` |
-| Process dataset | `lf datasets process research` |
+| Upload files (auto-process by default) | `lf datasets upload research ./docs/*.pdf` |
+| Process dataset (if you skipped auto-process) | `lf datasets process research` |
 | Query RAG | `lf rag query --database main_db "Your query"` |
 | Check RAG health | `lf rag health` |
 
 ### RAG Pipeline
 
 1. **Create a dataset** linked to a processing strategy and database
-2. **Upload files** (PDF, DOCX, Markdown, TXT)
-3. **Process** to parse, chunk, and embed documents
+2. **Upload files** (PDF, DOCX, Markdown, TXT) — processing runs automatically unless you pass `--no-process`
+3. **Process manually** only when you intentionally skipped auto-processing (e.g., large batches)
 4. **Query** using semantic search with optional metadata filtering
 
 ```bash
 lf datasets create -s default -b main_db research
-lf datasets upload research ./papers/*.pdf
-lf datasets process research
+lf datasets upload research ./papers/*.pdf                 # auto-processes by default
+# For large batches:
+# lf datasets upload research ./papers/*.pdf --no-process
+# lf datasets process research
 lf rag query --database main_db "What are the key findings?"
 ```
 

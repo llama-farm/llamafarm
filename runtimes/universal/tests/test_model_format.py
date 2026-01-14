@@ -8,13 +8,17 @@ import pytest
 class TestDetectModelFormat:
     """Test model format detection (runtime-specific)."""
 
+    @patch("utils.model_format._check_local_cache_for_model")
     @patch("utils.model_format.HfApi")
-    def test_detect_model_format_gguf(self, mock_hf_api_class):
+    def test_detect_model_format_gguf(self, mock_hf_api_class, mock_check_local_cache):
         """Test detecting GGUF format."""
         from utils.model_format import clear_format_cache, detect_model_format
 
         # Clear cache for fresh test
         clear_format_cache()
+
+        # Mock local cache to return None (not found), forcing API call
+        mock_check_local_cache.return_value = None
 
         # Setup mock
         mock_api = Mock()
@@ -31,13 +35,19 @@ class TestDetectModelFormat:
         # Verify
         assert result == "gguf"
 
+    @patch("utils.model_format._check_local_cache_for_model")
     @patch("utils.model_format.HfApi")
-    def test_detect_model_format_transformers(self, mock_hf_api_class):
+    def test_detect_model_format_transformers(
+        self, mock_hf_api_class, mock_check_local_cache
+    ):
         """Test detecting transformers format."""
         from utils.model_format import clear_format_cache, detect_model_format
 
         # Clear cache for fresh test
         clear_format_cache()
+
+        # Mock local cache to return None (not found), forcing API call
+        mock_check_local_cache.return_value = None
 
         # Setup mock
         mock_api = Mock()
@@ -54,8 +64,11 @@ class TestDetectModelFormat:
         # Verify
         assert result == "transformers"
 
+    @patch("utils.model_format._check_local_cache_for_model")
     @patch("utils.model_format.HfApi")
-    def test_detect_model_format_strips_quantization_suffix(self, mock_hf_api_class):
+    def test_detect_model_format_strips_quantization_suffix(
+        self, mock_hf_api_class, mock_check_local_cache
+    ):
         """
         Test that detect_model_format() strips quantization suffix before calling HF API.
 
@@ -66,6 +79,9 @@ class TestDetectModelFormat:
 
         # Clear cache to ensure fresh API call
         clear_format_cache()
+
+        # Mock local cache to return None (not found), forcing API call
+        mock_check_local_cache.return_value = None
 
         # Setup mock
         mock_api = Mock()
@@ -84,8 +100,11 @@ class TestDetectModelFormat:
         # Verify correct format was detected
         assert result == "gguf"
 
+    @patch("utils.model_format._check_local_cache_for_model")
     @patch("utils.model_format.HfApi")
-    def test_caching_with_quantization_suffix(self, mock_hf_api_class):
+    def test_caching_with_quantization_suffix(
+        self, mock_hf_api_class, mock_check_local_cache
+    ):
         """
         Test that format detection cache works correctly with quantization suffixes.
 
@@ -96,6 +115,9 @@ class TestDetectModelFormat:
 
         # Clear cache for fresh test
         clear_format_cache()
+
+        # Mock local cache to return None (not found), forcing API call
+        mock_check_local_cache.return_value = None
 
         # Setup mock
         mock_api = Mock()
@@ -116,6 +138,75 @@ class TestDetectModelFormat:
         result3 = detect_model_format("test/model")
         assert result3 == "gguf"
         assert mock_api.list_repo_files.call_count == 1  # Still 1, cache was used
+
+    @patch("utils.model_format._check_local_cache_for_model")
+    @patch("utils.model_format.HfApi")
+    def test_detect_model_format_uses_local_cache(
+        self, mock_hf_api_class, mock_check_local_cache
+    ):
+        """
+        Test that detect_model_format() uses local HF cache before making API calls.
+
+        This is the key offline functionality - if files are in local cache,
+        no network request is made.
+        """
+        from utils.model_format import clear_format_cache, detect_model_format
+
+        # Clear cache for fresh test
+        clear_format_cache()
+
+        # Mock local cache to return GGUF files
+        mock_check_local_cache.return_value = [
+            "README.md",
+            "model.Q4_K_M.gguf",
+            "model.Q8_0.gguf",
+        ]
+
+        # Setup mock - should NOT be called
+        mock_api = Mock()
+        mock_hf_api_class.return_value = mock_api
+
+        # Test
+        result = detect_model_format("test/model")
+
+        # Verify format was detected from local cache
+        assert result == "gguf"
+
+        # Verify HF API was NOT called (used local cache instead)
+        mock_api.list_repo_files.assert_not_called()
+
+    @patch("utils.model_format._check_local_cache_for_model")
+    @patch("utils.model_format.HfApi")
+    def test_detect_model_format_local_cache_transformers(
+        self, mock_hf_api_class, mock_check_local_cache
+    ):
+        """
+        Test that detect_model_format() detects transformers format from local cache.
+        """
+        from utils.model_format import clear_format_cache, detect_model_format
+
+        # Clear cache for fresh test
+        clear_format_cache()
+
+        # Mock local cache to return transformers files (no .gguf)
+        mock_check_local_cache.return_value = [
+            "config.json",
+            "model.safetensors",
+            "tokenizer.json",
+        ]
+
+        # Setup mock - should NOT be called
+        mock_api = Mock()
+        mock_hf_api_class.return_value = mock_api
+
+        # Test
+        result = detect_model_format("test/model")
+
+        # Verify format was detected from local cache
+        assert result == "transformers"
+
+        # Verify HF API was NOT called (used local cache instead)
+        mock_api.list_repo_files.assert_not_called()
 
 
 if __name__ == "__main__":

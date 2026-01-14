@@ -205,8 +205,9 @@ async def test_load_language_tracks_access(reset_server_globals):
         model_id = "test/model"
         await server.load_language(model_id)
 
-        # Verify model is tracked (new cache key includes quantization)
-        cache_key = f"language:{model_id}:ctxauto:quantdefault"
+        # Verify model is tracked - cache key includes all parameters with defaults
+        # Format: language:{model_id}:ctx{ctx}:batch{batch}:gpu{gpu}:threads{threads}:flash{flash}:mmap{mmap}:mlock{mlock}:cachek{k}:cachev{v}:quant{quant}
+        cache_key = f"language:{model_id}:ctxauto:batchauto:gpuauto:threadsauto:flashdefault:mmapdefault:mlockdefault:cachekdefault:cachevdefault:quantdefault"
         assert cache_key in server._models
 
 
@@ -252,8 +253,8 @@ async def test_model_reaccess_updates_timestamp(reset_server_globals):
         # Load model first time
         model_id = "test/model"
         await server.load_language(model_id)
-        # New cache key includes quantization
-        cache_key = f"language:{model_id}:ctxauto:quantdefault"
+        # Cache key includes all parameters with defaults
+        cache_key = f"language:{model_id}:ctxauto:batchauto:gpuauto:threadsauto:flashdefault:mmapdefault:mlockdefault:cachekdefault:cachevdefault:quantdefault"
         first_idle = server._models.get_idle_time(cache_key)
 
         # Wait a bit
