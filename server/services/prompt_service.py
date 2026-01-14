@@ -5,19 +5,12 @@ supporting named prompt sets with per-model selection and dynamic variable
 substitution using {{variable}} syntax.
 """
 
-import sys
-from pathlib import Path
 from typing import Any
 
+from config.datamodel import LlamaFarmConfig, Model, PromptMessage
+
 from core.logging import FastAPIStructLogger
-
-# Add repo root to path for config imports
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-from config.datamodel import LlamaFarmConfig, Model, PromptMessage  # noqa: E402
-
-from services.template_service import TemplateService  # noqa: E402
+from services.template_service import TemplateService
 
 logger = FastAPIStructLogger(__name__)
 

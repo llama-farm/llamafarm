@@ -37,6 +37,7 @@ from services.project_chat_service import (
     project_chat_service,
 )
 from services.project_service import ProjectService
+from services.template_service import TemplateError, TemplateService
 
 
 class Project(BaseModel):
@@ -542,48 +543,21 @@ async def chat(
         agent.docs_context_provider.set_docs(matched_docs)
 
     # Resolve template variables in prompts, config tools, and request tools
-    # Always resolve to apply defaults even when variables is empty/None
-    from core.logging import FastAPIStructLogger
-    from services.template_service import TemplateError, TemplateService
-
-    template_logger = FastAPIStructLogger(__name__)
-
-    # Resolve prompts and config tools via agent methods
-    has_prompt_support = hasattr(agent, "update_prompts_with_variables")
-    has_tool_support = hasattr(agent, "update_config_tools_with_variables")
     try:
-        if has_prompt_support:
-            agent.update_prompts_with_variables(request.variables)
-        if has_tool_support:
-            agent.update_config_tools_with_variables(request.variables)
+        # Resolve agent prompts and config tools via single method
+        if hasattr(agent, "set_request_variables"):
+            agent.set_request_variables(request.variables)
+
+        # Resolve request tools separately (they're not part of agent config)
+        request_tools = TemplateService.resolve_object(
+            request.tools or [], request.variables or {}
+        )
+        tools = [ToolDefinition.from_openai_tool_dict(t) for t in request_tools]
     except TemplateError as e:
         raise HTTPException(
             status_code=400,
             detail=f"Template resolution failed: {e}",
         ) from e
-
-    # Warn if variables provided but agent doesn't support substitution
-    if request.variables and not has_prompt_support and not has_tool_support:
-        template_logger.warning(
-            "Variables provided but agent doesn't support variable substitution",
-            agent_type=type(agent).__name__,
-            variable_count=len(request.variables),
-        )
-
-    # Tools from request body (config tools are added by the agent via config_tools property)
-    # Always resolve templates to apply defaults
-    request_tools = request.tools or []
-    if request_tools:
-        try:
-            request_tools = TemplateService.resolve_object(
-                request_tools, request.variables or {}
-            )
-        except TemplateError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Template resolution failed in request tools: {e}",
-            ) from e
-    tools = [ToolDefinition.from_openai_tool_dict(t) for t in request_tools]
 
     if request.stream:
         return create_streaming_response_from_iterator(

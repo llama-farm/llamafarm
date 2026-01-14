@@ -32,7 +32,10 @@ from agents.base.history import (
     LFChatCompletionMessageParam,
     LFChatCompletionToolMessageParam,
 )
-from agents.base.system_prompt_generator import LFAgentSystemPromptGenerator
+from agents.base.system_prompt_generator import (
+    LFAgentPrompt,
+    LFAgentSystemPromptGenerator,
+)
 from agents.base.types import ToolDefinition
 from context_providers.project_context_provider import ProjectContextProvider
 from core.logging import FastAPIStructLogger
@@ -41,6 +44,7 @@ from services.mcp_service import MCPService
 from services.model_service import ModelService
 from services.prompt_service import PromptService  # type: ignore  # type: ignore
 from services.runtime_service.runtime_service import RuntimeService
+from services.template_service import TemplateService
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
 logger = FastAPIStructLogger(__name__)
@@ -62,8 +66,8 @@ class ChatOrchestratorAgent(LFAgent):
     _mcp_service: MCPService | None = None
     _mcp_tool_factory: MCPToolFactory | None = None
     _mcp_tools: list[type[BaseTool]] = []
-    _model_config: "Model"  # Store for later variable resolution
-    _resolved_config_tools: list["ToolDefinition"] | None = None  # Cache resolved tools
+    _model_config_template: "Model"  # Raw model config with unresolved templates
+    _resolved_config_tools: list["ToolDefinition"] | None = None
 
     def __init__(
         self,
@@ -79,7 +83,7 @@ class ChatOrchestratorAgent(LFAgent):
 
         # Get the model config - if model_name is None, get_model returns the default
         model_config = ModelService.get_model(project_config, model_name)
-        self._model_config = model_config  # Store for variable resolution
+        self._model_config_template = model_config
         # Store the model name (the config name), not the model string
         # This allows lookup by name in the config
         self.model_name = model_config.name
@@ -100,33 +104,62 @@ class ChatOrchestratorAgent(LFAgent):
         )
 
         super().__init__(config=config)
-        self._resolved_config_tools = None  # Initialize
 
     @property
     def config_tools(self) -> list["ToolDefinition"]:
         """Get config tools, using resolved version if available."""
-        from agents.base.types import ToolDefinition
-
         if self._resolved_config_tools is not None:
             return self._resolved_config_tools
         return [
             ToolDefinition.from_datamodel_tool(t)
-            for t in self._model_config.tools or []
+            for t in self._model_config_template.tools or []
         ]
+
+    def set_request_variables(self, variables: dict[str, Any] | None) -> None:
+        """Set variables for the current request and resolve prompts/tools.
+
+        Call this at the start of each request before run_async().
+        Variables are request-scoped, not session-scoped - they are applied
+        fresh on each request even when the agent is cached.
+
+        This method resolves template variables in both prompts and config tools,
+        applying default values even when variables is None or empty.
+
+        Args:
+            variables: Dict of variable name -> value for template substitution.
+                       Use {{name}} or {{name | default}} syntax in templates.
+        """
+        # Re-resolve prompts with new variables
+        resolved_prompts = self._get_prompt_messages_for_model(
+            self.model_name, variables=variables
+        )
+        self._system_prompt_generator.system_prompts = [
+            LFAgentPrompt(role="system", content=str(prompt.get("content", "")))
+            for prompt in resolved_prompts
+            if prompt.get("role", None) == "system"
+        ]
+
+        # Re-resolve config tools with new variables
+        self._resolved_config_tools = self.get_resolved_config_tools(variables)
+
+        logger.debug(
+            "Set request variables",
+            variable_count=len(variables) if variables else 0,
+            prompt_count=len(self._system_prompt_generator.system_prompts),
+            tool_count=len(self._resolved_config_tools),
+        )
 
     def update_config_tools_with_variables(
         self, variables: dict[str, Any] | None
     ) -> None:
         """Update config tools with resolved template variables.
 
-        Call this before run_async() when using dynamic tool templates.
-        Always resolves templates to apply default values even when variables
-        is None or empty.
+        Deprecated: Use set_request_variables() instead, which updates both
+        prompts and tools in a single call.
 
         Args:
             variables: Dict of variable name -> value for template substitution.
         """
-        # Always resolve to apply defaults (even with empty variables)
         self._resolved_config_tools = self.get_resolved_config_tools(variables)
         logger.debug(
             "Updated config tools with variables",
@@ -616,31 +649,21 @@ class ChatOrchestratorAgent(LFAgent):
     def update_prompts_with_variables(self, variables: dict[str, Any] | None) -> None:
         """Update the system prompts with resolved template variables.
 
-        Call this before run_async() when using dynamic prompt templates.
-        This re-resolves the prompts with the given variables and updates
-        the system prompt generator.
-
-        Always resolves templates to apply default values even when variables
-        is None or empty.
+        Deprecated: Use set_request_variables() instead, which updates both
+        prompts and tools in a single call.
 
         Args:
             variables: Dict of variable name -> value for template substitution.
                        Use {{name}} or {{name | default}} syntax in prompts.
         """
-        # Always resolve prompts to apply defaults (even with empty variables)
         resolved_prompts = self._get_prompt_messages_for_model(
             self.model_name, variables=variables
         )
-
-        # Update the system prompt generator
-        from agents.base.system_prompt_generator import LFAgentPrompt
-
         self._system_prompt_generator.system_prompts = [
             LFAgentPrompt(role="system", content=str(prompt.get("content", "")))
             for prompt in resolved_prompts
             if prompt.get("role", None) == "system"
         ]
-
         logger.debug(
             "Updated prompts with variables",
             variable_count=len(variables) if variables else 0,
@@ -658,11 +681,8 @@ class ChatOrchestratorAgent(LFAgent):
         Returns:
             List of ToolDefinition with resolved templates.
         """
-        from agents.base.types import ToolDefinition
-        from services.template_service import TemplateService
-
         # Get raw config tools
-        raw_tools = self._model_config.tools or []
+        raw_tools = self._model_config_template.tools or []
         if not raw_tools:
             return []
 
