@@ -819,6 +819,11 @@ const Data = () => {
       const { namespace, project } = activeProject
 
       try {
+        const batchSize =
+          autoProcessUploads && pendingFiles.length > 0
+            ? Math.min(pendingFiles.length, 100)
+            : UPLOAD_BATCH_SIZE
+
         // Upload all files to the selected dataset in batches
         const results = await uploadFilesInBatches(
           pendingFiles,
@@ -826,7 +831,7 @@ const Data = () => {
           namespace,
           project,
           autoProcessUploads,
-          autoProcessUploads ? pendingFiles.length : UPLOAD_BATCH_SIZE
+          batchSize
         )
 
         const cancelled = results.some(r => r.cancelled)
