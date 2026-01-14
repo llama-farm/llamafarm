@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { Select } from '../ui/select'
+import { Selector } from '../ui/selector'
 import { Textarea } from '../ui/textarea'
 import { Badge } from '../ui/badge'
 import { Checkbox } from '../ui/checkbox'
@@ -1321,23 +1321,16 @@ function AnomalyModel() {
             <>
               {/* Settings row - horizontal across top */}
               <div className="flex flex-wrap items-end gap-4 pb-3 border-b border-border">
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="backend" className="text-xs text-muted-foreground">
-                    Algorithm
-                  </Label>
-                  <Select
-                    id="backend"
-                    value={backend}
-                    onChange={e => setBackend(e.target.value as AnomalyBackend)}
-                    className="w-48"
-                  >
-                    {BACKEND_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.apiValue}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                <Selector
+                  value={backend}
+                  options={BACKEND_OPTIONS.map(opt => ({
+                    value: opt.apiValue,
+                    label: opt.label,
+                  }))}
+                  onChange={v => setBackend(v as AnomalyBackend)}
+                  label="Algorithm"
+                  className="w-48"
+                />
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="contamination" className="text-xs text-muted-foreground">
                     Contamination
@@ -1356,28 +1349,22 @@ function AnomalyModel() {
                     className="w-24"
                   />
                 </div>
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="normalization" className="text-xs text-muted-foreground">
-                    Score normalization
-                  </Label>
-                  <Select
-                    id="normalization"
-                    value={normalization}
-                    onChange={e => {
-                      const newNorm = e.target.value as NormalizationMethod
-                      setNormalization(newNorm)
-                      // Update threshold to the default for this normalization method
-                      setThreshold(getDefaultThreshold(newNorm))
-                    }}
-                    className="w-44"
-                  >
-                    {NORMALIZATION_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value} title={opt.description}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                <Selector
+                  value={normalization}
+                  options={NORMALIZATION_OPTIONS.map(opt => ({
+                    value: opt.value,
+                    label: opt.label,
+                    description: opt.description,
+                  }))}
+                  onChange={v => {
+                    const newNorm = v as NormalizationMethod
+                    setNormalization(newNorm)
+                    // Update threshold to the default for this normalization method
+                    setThreshold(getDefaultThreshold(newNorm))
+                  }}
+                  label="Score normalization"
+                  className="w-48"
+                />
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="threshold" className="text-xs text-muted-foreground">
                     Threshold

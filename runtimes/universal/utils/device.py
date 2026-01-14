@@ -90,3 +90,36 @@ def get_device_info() -> dict:
         )
 
     return info
+
+
+def get_gguf_gpu_layers() -> int:
+    """
+    Get the number of GPU layers to use for GGUF models.
+
+    IMPORTANT: llama.cpp has its own GPU detection (CUDA, Metal, Vulkan, etc.)
+    that is independent of PyTorch. We should always try to use GPU layers (-1)
+    and let llama.cpp fall back to CPU if no GPU backend is available.
+    This allows users with CPU-only PyTorch but GPU llama.cpp to get acceleration.
+
+    Returns:
+        int: Number of GPU layers (-1 for all layers on GPU, 0 for CPU only)
+    """
+    import os
+
+    force_cpu = os.environ.get("LLAMAFARM_GGUF_FORCE_CPU", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    if force_cpu:
+        logger.info("Configuring for CPU-only inference (LLAMAFARM_GGUF_FORCE_CPU=1)")
+        return 0
+
+    # Use all layers on GPU - llama.cpp will use whatever backend is available
+    # (CUDA, Metal, Vulkan, etc.) and fall back to CPU if none are available
+    logger.info(
+        "Configuring for GPU acceleration (all layers on GPU, llama.cpp will "
+        "auto-detect available backends)"
+    )
+    return -1

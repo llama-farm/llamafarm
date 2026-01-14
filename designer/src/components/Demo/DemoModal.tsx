@@ -184,6 +184,7 @@ function WorkflowProgress({
   const stepLabels: Record<DemoStep, string> = {
     idle: 'Ready',
     fetching_config: 'Fetching Configuration',
+    downloading_model: 'Downloading AI Model',
     creating_project: 'Creating Project',
     uploading_files: 'Uploading Files',
     processing_dataset: 'Processing Dataset',

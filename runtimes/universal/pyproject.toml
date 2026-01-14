@@ -29,6 +29,16 @@ dependencies = [
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",  # TTL-based model caching
   "jinja2>=3.0.0",  # For tool-aware chat template rendering
+  # Anomaly detection
+  "scikit-learn>=1.3.0",
+  # Text classification (few-shot learning with SetFit)
+  "setfit>=1.1.0",
+  "sentence-transformers>=3.0.0",
+  # OCR backends
+  "surya-ocr>=0.6.0",
+  "easyocr>=1.7.0",
+  "opencv-python-headless>=4.8.0",
+  "pytesseract>=0.3.10",
 ]
 
 [dependency-groups]
@@ -53,6 +63,10 @@ gpu = ["torch>=2.0.0"]
 #   uv pip install xformers
 # (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
 
+# DEPRECATED: OCR, anomaly, and classification dependencies are now in main dependencies.
+# These extras are kept for backwards compatibility but are no longer needed.
+# All ML features are available by default without installing extras.
+
 # OCR backends - install the one(s) you need
 # Usage: uv pip install "universal-runtime[ocr-surya]"
 ocr-surya = ["surya-ocr>=0.6.0"]
@@ -70,10 +84,10 @@ ocr = [
 # Document understanding models
 document = ["transformers>=4.35.0", "sentencepiece>=0.1.99"]
 
-# Anomaly detection
+# Anomaly detection (now in main deps, kept for backwards compatibility)
 anomaly = ["scikit-learn>=1.3.0"]
 
-# Text classification (few-shot learning with SetFit)
+# Text classification (now in main deps, kept for backwards compatibility)
 classification = ["setfit>=1.1.0", "sentence-transformers>=3.0.0"]
 
 [build-system]

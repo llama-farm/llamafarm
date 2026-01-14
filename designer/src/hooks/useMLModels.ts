@@ -13,6 +13,8 @@ import type {
   AnomalyScoreRequest,
   AnomalySaveRequest,
   AnomalyLoadRequest,
+  EmbeddingRequest,
+  RerankRequest,
 } from '../types/ml'
 
 // =============================================================================
@@ -299,6 +301,59 @@ export function useTrainAndSaveAnomaly() {
 }
 
 // =============================================================================
+// Document Scanning Mutations
+// =============================================================================
+
+/**
+ * Scan a document (image or PDF) and extract text using OCR
+ */
+export function useScanDocument() {
+  return useMutation({
+    mutationFn: ({
+      file,
+      model,
+      languages,
+      returnBoxes,
+      parseByPage,
+    }: {
+      file: File
+      model?: string
+      languages?: string
+      returnBoxes?: boolean
+      parseByPage?: boolean
+    }) =>
+      mlService.scanDocument(file, {
+        model,
+        languages,
+        return_boxes: returnBoxes,
+        parse_by_page: parseByPage,
+      }),
+  })
+}
+
+// =============================================================================
+// Encoder Mutations (Embeddings & Reranking)
+// =============================================================================
+
+/**
+ * Generate embeddings for texts
+ */
+export function useCreateEmbeddings() {
+  return useMutation({
+    mutationFn: (request: EmbeddingRequest) => mlService.createEmbeddings(request),
+  })
+}
+
+/**
+ * Rerank documents based on query relevance
+ */
+export function useRerankDocuments() {
+  return useMutation({
+    mutationFn: (request: RerankRequest) => mlService.rerankDocuments(request),
+  })
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -325,4 +380,9 @@ export default {
   useLoadAnomaly,
   useDeleteAnomalyModel,
   useTrainAndSaveAnomaly,
+  // Document Scanning mutations
+  useScanDocument,
+  // Encoder mutations
+  useCreateEmbeddings,
+  useRerankDocuments,
 }

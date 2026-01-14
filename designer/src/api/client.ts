@@ -1,5 +1,15 @@
-import axios, { AxiosInstance, AxiosError } from 'axios'
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { ChatApiError, NetworkError, ValidationError } from '../types/chat'
+import { devToolsEmitter } from '../utils/devToolsEmitter'
+import type { CapturedRequest } from '../contexts/DevToolsContext'
+
+// Extend axios config to include our DevTools tracking ID
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _devToolsId?: string
+    _devToolsTimestamp?: number
+  }
+}
 
 // Prefer explicit API host via env; fall back to Vite proxy '/api'
 const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
@@ -61,6 +71,61 @@ function formatValidationError(errorData: any): string {
 }
 
 /**
+ * Generate a unique ID for DevTools request tracking
+ */
+function generateDevToolsId(): string {
+  return crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+/**
+ * Extract headers from axios config as a plain Record
+ */
+function extractRequestHeaders(
+  config: InternalAxiosRequestConfig
+): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (config.headers) {
+    // AxiosHeaders can be iterated or accessed via toJSON
+    const headerObj =
+      typeof config.headers.toJSON === 'function'
+        ? config.headers.toJSON()
+        : config.headers
+    for (const [key, value] of Object.entries(headerObj)) {
+      if (typeof value === 'string') {
+        headers[key] = value
+      } else if (value !== undefined && value !== null) {
+        headers[key] = String(value)
+      }
+    }
+  }
+  return headers
+}
+
+/**
+ * Get the request body, handling FormData specially
+ */
+function extractRequestBody(config: InternalAxiosRequestConfig): unknown {
+  if (!config.data) return null
+
+  // FormData can't be serialized - return a placeholder
+  if (config.data instanceof FormData) {
+    const fields: Record<string, string> = {}
+    config.data.forEach((value, key) => {
+      if (value instanceof File) {
+        fields[key] = `[File: ${value.name}, ${value.size} bytes]`
+      } else {
+        fields[key] = String(value)
+      }
+    })
+    return { _formData: true, fields }
+  }
+
+  return config.data
+}
+
+/**
  * Shared API client instance with common configuration
  * Can be imported and used by all service modules
  */
@@ -72,7 +137,134 @@ export const apiClient: AxiosInstance = axios.create({
   timeout: 60000, // Timeout for API operations (60 seconds)
 })
 
-// Response interceptor for consistent error handling across all services
+// =============================================================================
+// DevTools Request Interceptor - Captures outgoing requests
+// =============================================================================
+apiClient.interceptors.request.use(
+  config => {
+    // Only capture if DevTools has subscribers (context is mounted)
+    if (!devToolsEmitter.hasSubscribers()) {
+      return config
+    }
+
+    // Generate tracking ID and timestamp
+    const id = generateDevToolsId()
+    config._devToolsId = id
+    config._devToolsTimestamp = Date.now()
+
+    // Build full URL
+    const baseURL = config.baseURL || ''
+    const url = config.url || ''
+    const fullUrl = url.startsWith('http') ? url : `${baseURL}${url}`
+
+    // Determine HTTP method
+    const method = (config.method?.toUpperCase() || 'GET') as CapturedRequest['method']
+
+    // Emit request event
+    devToolsEmitter.emit({
+      type: 'request',
+      request: {
+        id,
+        requestId: null,
+        method,
+        url,
+        fullUrl,
+        headers: extractRequestHeaders(config),
+        body: extractRequestBody(config),
+        timestamp: config._devToolsTimestamp,
+        isStreaming: false, // Axios requests are not streaming (fetch is used for streaming)
+      },
+    })
+
+    return config
+  },
+  error => {
+    // Request setup errors are rare but possible
+    return Promise.reject(error)
+  }
+)
+
+// =============================================================================
+// DevTools Response Interceptor - Captures responses (runs BEFORE error handler)
+// =============================================================================
+apiClient.interceptors.response.use(
+  response => {
+    const config = response.config
+    const id = config._devToolsId
+
+    // Only capture if we have a tracking ID
+    if (id && devToolsEmitter.hasSubscribers()) {
+      // Extract response headers
+      const headers: Record<string, string> = {}
+      if (response.headers) {
+        for (const [key, value] of Object.entries(response.headers)) {
+          if (typeof value === 'string') {
+            headers[key] = value
+          }
+        }
+      }
+
+      devToolsEmitter.emit({
+        type: 'response',
+        id,
+        response: {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+          body: response.data,
+          requestId: headers['x-request-id'] || headers['X-Request-ID'] || null,
+        },
+      })
+    }
+
+    return response
+  },
+  (error: AxiosError) => {
+    // Capture error in DevTools before transforming it
+    const config = error.config
+    const id = config?._devToolsId
+
+    if (id && devToolsEmitter.hasSubscribers()) {
+      // If there's a response, capture it as an error response
+      if (error.response) {
+        const headers: Record<string, string> = {}
+        if (error.response.headers) {
+          for (const [key, value] of Object.entries(error.response.headers)) {
+            if (typeof value === 'string') {
+              headers[key] = value
+            }
+          }
+        }
+
+        devToolsEmitter.emit({
+          type: 'response',
+          id,
+          response: {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            headers,
+            body: error.response.data,
+            requestId: headers['x-request-id'] || headers['X-Request-ID'] || null,
+          },
+        })
+      } else {
+        // Network error or timeout - no response
+        devToolsEmitter.emit({
+          type: 'error',
+          id,
+          error: error.message || 'Network error',
+        })
+      }
+    }
+
+    // Pass through to the next error handler
+    return Promise.reject(error)
+  }
+)
+
+// =============================================================================
+// Error Transformation Interceptor - Converts errors to typed exceptions
+// =============================================================================
 apiClient.interceptors.response.use(
   response => response,
   (error: AxiosError) => {

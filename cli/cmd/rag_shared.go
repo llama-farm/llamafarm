@@ -32,8 +32,9 @@ type DatabasesResponse struct {
 	DefaultDatabase *string        `json:"default_database"`
 }
 
-// fetchAvailableDatabases fetches the list of RAG databases and their strategies
-func fetchAvailableDatabases(serverURL, namespace, projectID string) *DatabasesResponse {
+// fetchAvailableDatabases fetches the list of RAG databases and their strategies.
+// Returns the response and an optional warning message for display in the TUI.
+func fetchAvailableDatabases(serverURL, namespace, projectID string) (*DatabasesResponse, string) {
 	url := fmt.Sprintf("%s/v1/projects/%s/%s/rag/databases",
 		strings.TrimSuffix(serverURL, "/"),
 		namespace,
@@ -44,29 +45,25 @@ func fetchAvailableDatabases(serverURL, namespace, projectID string) *DatabasesR
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		utils.OutputWarning("Failed to build request for databases endpoint: %v", err)
-		return nil
+		return nil, fmt.Sprintf("Failed to build request for databases endpoint: %v", err)
 	}
 
 	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
-		utils.OutputWarning("Unable to fetch databases from server: %v", err)
-		return nil
+		return nil, fmt.Sprintf("Unable to fetch databases from server: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		utils.OutputWarning("Databases endpoint returned status %d", resp.StatusCode)
-		return nil
+		return nil, fmt.Sprintf("RAG databases unavailable (status %d)", resp.StatusCode)
 	}
 
 	var result DatabasesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		utils.OutputWarning("Failed to decode databases response: %v", err)
-		return nil
+		return nil, fmt.Sprintf("Failed to decode databases response: %v", err)
 	}
 
-	return &result
+	return &result, ""
 }
 
 // DatasetsResponse represents a simplified datasets list response
@@ -91,8 +88,9 @@ type DatasetBrief struct {
 	FileCount int
 }
 
-// fetchAvailableDatasets fetches datasets for a project
-func fetchAvailableDatasets(serverURL, namespace, projectID string) []DatasetBrief {
+// fetchAvailableDatasets fetches datasets for a project.
+// Returns the datasets and an optional warning message for display in the TUI.
+func fetchAvailableDatasets(serverURL, namespace, projectID string) ([]DatasetBrief, string) {
 	url := fmt.Sprintf("%s/v1/projects/%s/%s/datasets?include_extra_details=false",
 		strings.TrimSuffix(serverURL, "/"),
 		namespace,
@@ -103,26 +101,22 @@ func fetchAvailableDatasets(serverURL, namespace, projectID string) []DatasetBri
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		utils.OutputWarning("Failed to build request for datasets endpoint: %v", err)
-		return nil
+		return nil, fmt.Sprintf("Failed to build request for datasets endpoint: %v", err)
 	}
 
 	resp, err := utils.GetHTTPClient().Do(req)
 	if err != nil {
-		utils.OutputWarning("Unable to fetch datasets from server: %v", err)
-		return nil
+		return nil, fmt.Sprintf("Unable to fetch datasets from server: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		utils.OutputWarning("Datasets endpoint returned status %d", resp.StatusCode)
-		return nil
+		return nil, fmt.Sprintf("Datasets unavailable (status %d)", resp.StatusCode)
 	}
 
 	var result DatasetsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		utils.OutputWarning("Failed to decode datasets response: %v", err)
-		return nil
+		return nil, fmt.Sprintf("Failed to decode datasets response: %v", err)
 	}
 
 	out := make([]DatasetBrief, 0, len(result.Datasets))
@@ -134,5 +128,5 @@ func fetchAvailableDatasets(serverURL, namespace, projectID string) []DatasetBri
 			FileCount: len(ds.Files),
 		})
 	}
-	return out
+	return out, ""
 }

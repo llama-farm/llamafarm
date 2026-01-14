@@ -46,9 +46,10 @@ export async function* downloadModel(
   // Get base URL from apiClient config
   const baseURL = apiClient.defaults.baseURL || '/api/v1'
 
-  // Set up AbortController for timeout
+  // Use a connection timeout to detect if the server is unavailable or hanging.
+  // Once connected, we clear the timeout since downloads can take a long time.
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
+  const timeout = setTimeout(() => controller.abort(), 120000) // 2 min for connection
 
   let response: Response
   try {
@@ -62,7 +63,7 @@ export async function* downloadModel(
     })
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      throw new Error('Request timed out while downloading model')
+      throw new Error('Model download request timed out - server may be unavailable')
     }
     throw new Error(
       `Network error while downloading model: ${error.message || error}`
@@ -84,27 +85,46 @@ export async function* downloadModel(
 
   let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || '' // Keep incomplete line in buffer
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // Keep incomplete line in buffer
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6)
-        if (data.trim()) {
-          try {
-            const event = JSON.parse(data) as DownloadEvent
-            yield event
-          } catch (e) {
-            console.error('Failed to parse SSE data:', data, e)
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6)
+          if (data.trim()) {
+            try {
+              const event = JSON.parse(data) as DownloadEvent
+              yield event
+            } catch (e) {
+              console.error('Failed to parse SSE data:', data, e)
+              yield { event: 'error', message: 'Failed to parse server response' }
+              return // Stop processing malformed stream
+            }
           }
         }
       }
     }
+
+    // Flush any remaining buffer after stream ends
+    if (buffer.trim() && buffer.startsWith('data: ')) {
+      const data = buffer.slice(6)
+      if (data.trim()) {
+        try {
+          const event = JSON.parse(data) as DownloadEvent
+          yield event
+        } catch {
+          // Ignore parse errors in final buffer - stream already ended normally
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
   }
 }
 
