@@ -270,7 +270,17 @@ export async function uploadFilesBulk(
   }
 ): Promise<BulkFileUploadResponse> {
   const formData = new FormData()
-  files.forEach(file => formData.append('files', file))
+  files.forEach(file => {
+    const cleanFileName = file.name.split('/').pop() || file.name
+    const fileToUpload =
+      file.name !== cleanFileName
+        ? new File([file], cleanFileName, {
+            type: file.type,
+            lastModified: file.lastModified,
+          })
+        : file
+    formData.append('files', fileToUpload)
+  })
 
   const response = await apiClient.post<BulkFileUploadResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/bulk`,
