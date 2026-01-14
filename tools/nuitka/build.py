@@ -240,7 +240,6 @@ def build_rag(output_dir: Path, python: str) -> Path:
         "--include-package=tasks",
         "--include-package=utils",
         "--include-package=cli",
-        "--include-package=control",
         # Shared packages
         "--include-package=config",
         "--include-package=llamafarm_common",
