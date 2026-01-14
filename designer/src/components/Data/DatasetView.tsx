@@ -175,16 +175,10 @@ function DatasetView() {
       setPendingProcessing(true)
     }
 
-    // Clear the navigation state once consumed to avoid re-processing on re-render
+    // Clear the navigation state once consumed to avoid re-processing
     navigate('.', { replace: true, state: null })
     initialNavigationStateRef.current = null
-  }, [
-    currentTaskId,
-    activeProject?.namespace,
-    activeProject?.project,
-    datasetId,
-    navigate,
-  ])
+  }, [])
 
   // Transform async task result from [bool, {...}] format to normalized structure
   const normalizeTaskResult = (rawResult: any): ProcessDatasetResponse => {
