@@ -50,6 +50,7 @@ import { MobileViewProvider } from './contexts/MobileViewContext'
 import NotFound from './components/NotFound'
 import { DemoModalProvider, useDemoModal } from './contexts/DemoModalContext'
 import { DemoModal } from './components/Demo/DemoModal'
+import { OnboardingProvider } from './contexts/OnboardingContext'
 import { getCurrentNamespace } from './utils/namespaceUtils'
 
 // Redirect component for dynamic routes from /rag to /databases
@@ -276,13 +277,15 @@ function App() {
         <UpgradeAvailabilityProvider>
           <ProjectModalProvider>
             <DemoModalProvider>
-              <ModeResetProvider>
-                <MobileViewProvider>
-                  <UnsavedChangesProvider>
-                    <AppContent />
-                  </UnsavedChangesProvider>
-                </MobileViewProvider>
-              </ModeResetProvider>
+              <OnboardingProvider>
+                <ModeResetProvider>
+                  <MobileViewProvider>
+                    <UnsavedChangesProvider>
+                      <AppContent />
+                    </UnsavedChangesProvider>
+                  </MobileViewProvider>
+                </ModeResetProvider>
+              </OnboardingProvider>
             </DemoModalProvider>
           </ProjectModalProvider>
         </UpgradeAvailabilityProvider>

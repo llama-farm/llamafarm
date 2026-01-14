@@ -5,6 +5,7 @@ import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useProjectModalContext } from '../../contexts/ProjectModalContext'
+import { useOnboardingContext } from '../../contexts/OnboardingContext'
 import { useProject } from '../../hooks/useProjects'
 // import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -12,6 +13,11 @@ import { useListDatasets } from '../../hooks/useDatasets'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import {
+  GettingStartedChecklist,
+  OnboardingWizard,
+  RestartOnboardingBanner,
+} from '../Onboarding'
 
 const Dashboard = () => {
   const navigate = useNavigate()
@@ -47,18 +53,6 @@ const Dashboard = () => {
     getLocation: getRootLocation,
   })
 
-  const { brief } = useMemo(() => {
-    const cfg = (projectDetail?.project?.config || {}) as Record<string, any>
-    const project_brief = (cfg?.project_brief || {}) as Record<string, any>
-    return {
-      brief: {
-        what: project_brief?.what || '',
-        goals: project_brief?.goals || '',
-        audience: project_brief?.audience || '',
-      },
-    }
-  }, [projectDetail])
-
   const datasets = useMemo(() => {
     // Only return datasets from the API, no localStorage fallback
     if (apiDatasets?.datasets && apiDatasets.datasets.length > 0) {
@@ -93,6 +87,48 @@ const Dashboard = () => {
 
   // Shared modal hook
   const projectModal = useProjectModalContext()
+
+  // Onboarding state
+  const onboarding = useOnboardingContext()
+
+  // Determine if we should show onboarding components
+  const showWizard = onboarding.state.wizardOpen
+  const showChecklist =
+    onboarding.state.onboardingCompleted && !onboarding.state.checklistDismissed
+  // Show restart banner when onboarding was skipped/dismissed (no wizard, no checklist)
+  const showRestartBanner =
+    !onboarding.state.wizardOpen &&
+    (onboarding.state.checklistDismissed || !onboarding.state.onboardingCompleted) &&
+    !showChecklist
+
+  // Auto-open wizard on first visit to an empty project
+  useEffect(() => {
+    // Only auto-open if:
+    // 1. Onboarding not completed
+    // 2. Wizard not already open
+    // 3. No datasets loaded (empty project)
+    // 4. Datasets finished loading
+    if (
+      !onboarding.state.onboardingCompleted &&
+      !onboarding.state.wizardOpen &&
+      !onboarding.state.checklistDismissed &&
+      filesProcessed === 0 &&
+      !isDatasetsLoading
+    ) {
+      // Small delay to prevent flash
+      const timer = setTimeout(() => {
+        onboarding.openWizard()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [
+    onboarding.state.onboardingCompleted,
+    onboarding.state.wizardOpen,
+    onboarding.state.checklistDismissed,
+    filesProcessed,
+    isDatasetsLoading,
+    onboarding.openWizard,
+  ])
 
   useEffect(() => {
     const refresh = () => {
@@ -147,27 +183,30 @@ const Dashboard = () => {
   return (
     <>
       <div className="w-full h-full flex flex-col">
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl break-words ">
-              {mode === 'designer' ? projectName : 'Config editor'}
-            </h2>
-            {mode === 'designer' && (
-              <button
-                className="rounded-sm hover:opacity-80"
-                onClick={() => {
-                  projectModal.openEditModal(projectName)
-                }}
-              >
-                <FontIcon type="edit" className="w-5 h-5 text-primary" />
-              </button>
-            )}
+        {/* Hide header when wizard is open */}
+        {!showWizard && (
+          <div className="flex items-center justify-between mb-4 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl break-words ">
+                {mode === 'designer' ? projectName : 'Config editor'}
+              </h2>
+              {mode === 'designer' && (
+                <button
+                  className="rounded-sm hover:opacity-80"
+                  onClick={() => {
+                    projectModal.openEditModal(projectName)
+                  }}
+                >
+                  <FontIcon type="edit" className="w-5 h-5 text-primary" />
+                </button>
+              )}
+            </div>
+            <PageActions mode={mode} onModeChange={handleModeChange} />
           </div>
-          <PageActions mode={mode} onModeChange={handleModeChange} />
-        </div>
+        )}
 
-        {/* Validation Error Banner */}
-        {projectDetail?.project?.validation_error &&
+        {/* Validation Error Banner - also hide when wizard is open */}
+        {!showWizard && projectDetail?.project?.validation_error &&
           (() => {
             // Parse actual error count from validation messages
             const errorText = projectDetail.project.validation_error
@@ -233,61 +272,27 @@ const Dashboard = () => {
             )
           })()}
 
-        {mode !== 'designer' ? (
+        {/* Onboarding Wizard - takes over entire dashboard area */}
+        {showWizard ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <OnboardingWizard className="h-full" />
+          </div>
+        ) : mode !== 'designer' ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-6">
             <ConfigEditor className="h-full" initialPointer={configPointer} />
           </div>
         ) : (
           <>
-            {/* Project details card */}
-            <div className="w-full flex flex-col mb-4">
-              <div className="h-[40px] px-2 flex items-center justify-between rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
-                <div className="flex flex-row gap-2 items-center text-foreground pl-2">
-                  Project details
-                </div>
-                <button
-                  className="text-xs text-primary flex flex-row gap-1 items-center pr-3"
-                  onClick={() => projectModal.openEditModal(projectName)}
-                >
-                  <FontIcon type="edit" className="w-4 h-4" />
-                  Edit
-                </button>
-              </div>
-              <div className="p-6 flex flex-col gap-4 rounded-b-lg bg-card">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <div className="text-xs text-muted-foreground">
-                      What are you building?
-                    </div>
-                    <div className="text-foreground break-words">
-                      {brief.what && brief.what.trim().length > 0
-                        ? brief.what
-                        : '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">
-                      What do you hope to achieve?
-                    </div>
-                    <div className="text-foreground break-words">
-                      {brief.goals && brief.goals.trim().length > 0
-                        ? brief.goals
-                        : '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">
-                      Who will use this?
-                    </div>
-                    <div className="text-foreground break-words">
-                      {brief.audience && brief.audience.trim().length > 0
-                        ? brief.audience
-                        : '—'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Onboarding: Getting Started Checklist - full width top */}
+            {showChecklist && (
+              <GettingStartedChecklist className="mb-4" />
+            )}
+
+            {/* Onboarding: Restart banner when skipped/dismissed */}
+            {showRestartBanner && (
+              <RestartOnboardingBanner className="mb-4" />
+            )}
+
             <DataCards
               filesProcessed={filesProcessed}
               databaseCount={databaseCount}

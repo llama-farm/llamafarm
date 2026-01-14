@@ -16,6 +16,7 @@ import {
   parseTimestamp,
 } from './utils/projectHelpers'
 import { getCurrentNamespace } from './utils/namespaceUtils'
+import { setActiveProject } from './utils/projectUtils'
 import projectService from './api/projectService'
 import { mergeProjectConfig } from './utils/projectConfigUtils'
 import {
@@ -235,7 +236,7 @@ function Home() {
       }
 
       // 3) Activate and navigate to dashboard
-      localStorage.setItem('activeProject', sanitizedName)
+      setActiveProject(sanitizedName)
 
       // Optimistically update caches
       try {
@@ -274,7 +275,7 @@ function Home() {
   }
 
   const openProject = (name: string) => {
-    localStorage.setItem('activeProject', name)
+    setActiveProject(name)
     navigate('/chat/dashboard')
   }
 
