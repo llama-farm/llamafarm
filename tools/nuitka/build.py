@@ -234,13 +234,13 @@ def build_rag(output_dir: Path, python: str) -> Path:
         # Output configuration
         f"--output-dir={output_dir}",
         f"--output-filename={output_name}",
-        # Include all RAG subpackages
+        # Include all RAG subpackages (modules are under components/)
         "--include-package=core",
         "--include-package=components",
-        "--include-package=embedders",
-        "--include-package=stores",
+        "--include-package=tasks",
         "--include-package=utils",
-        "--include-package=retrieval",
+        "--include-package=cli",
+        "--include-package=control",
         # Shared packages
         "--include-package=config",
         "--include-package=llamafarm_common",

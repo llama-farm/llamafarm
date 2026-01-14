@@ -155,16 +155,16 @@ jobs:
         run: |
           ccache --max-size=500M
           ccache --set-config=compiler_check=content
-          echo "CC=ccache gcc" >> $GITHUB_ENV
-          echo "CXX=ccache g++" >> $GITHUB_ENV
+          # Use ccache symlinks in PATH instead of CC/CXX variables
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
 
       - name: Configure ccache (macOS)
         if: runner.os == 'macOS'
         run: |
           ccache --max-size=500M
           ccache --set-config=compiler_check=content
-          echo "CC=ccache clang" >> $GITHUB_ENV
-          echo "CXX=ccache clang++" >> $GITHUB_ENV
+          # Use ccache symlinks in PATH instead of CC/CXX variables
+          echo "$(brew --prefix ccache)/libexec" >> $GITHUB_PATH
 
       - name: Install build dependencies
         run: |
@@ -186,7 +186,7 @@ jobs:
           # Use CPU-only PyTorch for CI builds to reduce size
           UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
         run: |
-          uv pip install --system -e ./config -e ./common -e ./packages/llamafarm-llama -e ./runtimes/universal
+          uv pip install --system --index-strategy unsafe-best-match -e ./config -e ./common -e ./packages/llamafarm-llama -e ./runtimes/universal
 
       - name: Generate config types
         run: |
