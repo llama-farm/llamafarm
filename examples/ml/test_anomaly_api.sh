@@ -13,6 +13,13 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load port from .env file
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    source "$SCRIPT_DIR/../../.env"
+fi
+
+
 PORT=${1:-8000}
 BASE_URL="http://localhost:${PORT}/v1/ml"
 

@@ -2,7 +2,7 @@
 # Run All ML Example Scripts
 #
 # This script runs all ML example scripts sequentially and reports results.
-# Requires the Universal Runtime to be running on port 11540.
+# Requires the Universal Runtime to be running (uses LF_RUNTIME_PORT from .env).
 #
 # Usage: ./run_all_ml_examples.sh [--skip-api]
 #   --skip-api: Skip LlamaFarm API tests (port 8000)
@@ -10,6 +10,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load port from .env file
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    source "$SCRIPT_DIR/../../.env"
+fi
+RUNTIME_PORT="${LF_RUNTIME_PORT:-11540}"
+API_PORT="${PORT:-8000}"
+
 SKIP_API=false
 
 if [ "$1" = "--skip-api" ]; then
@@ -30,9 +37,9 @@ echo -e "${BLUE}================================================${NC}"
 echo ""
 
 # Check if Universal Runtime is running
-echo -e "${YELLOW}Checking Universal Runtime (port 11540)...${NC}"
-if ! curl -s "http://localhost:11540/health" > /dev/null 2>&1; then
-    echo -e "${RED}Error: Universal Runtime not running on port 11540${NC}"
+echo -e "${YELLOW}Checking Universal Runtime (port $RUNTIME_PORT)...${NC}"
+if ! curl -s "http://localhost:$RUNTIME_PORT/health" > /dev/null 2>&1; then
+    echo -e "${RED}Error: Universal Runtime not running on port $RUNTIME_PORT${NC}"
     echo "Start it with: cd runtimes/universal && uv run python server.py"
     exit 1
 fi
@@ -41,8 +48,8 @@ echo ""
 
 # Check if LlamaFarm API is running (if not skipping)
 if [ "$SKIP_API" = false ]; then
-    echo -e "${YELLOW}Checking LlamaFarm API (port 8000)...${NC}"
-    if ! curl -s "http://localhost:8000/health" > /dev/null 2>&1; then
+    echo -e "${YELLOW}Checking LlamaFarm API (port $API_PORT)...${NC}"
+    if ! curl -s "http://localhost:$API_PORT/health" > /dev/null 2>&1; then
         echo -e "${YELLOW}⚠ LlamaFarm API not running - skipping API tests${NC}"
         SKIP_API=true
     else

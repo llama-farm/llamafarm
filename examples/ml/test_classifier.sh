@@ -4,7 +4,13 @@
 
 set -e
 
-BASE_URL="${UNIVERSAL_RUNTIME_URL:-http://localhost:11540}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load port from .env file
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    source "$SCRIPT_DIR/../../.env"
+fi
+
+BASE_URL="${UNIVERSAL_RUNTIME_URL:-http://localhost:${LF_RUNTIME_PORT:-11540}}"
 MODEL_NAME="intent-classifier-test"
 
 echo "========================================"

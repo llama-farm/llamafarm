@@ -6,13 +6,18 @@
 # 2. Saving results with alpha channel
 #
 # Usage: ./test_background_removal.sh [PORT]
-#   PORT defaults to 11540 (Universal Runtime)
+#   PORT defaults to LF_RUNTIME_PORT from .env (fallback: 11540)
 
 set -e
 
-PORT=${1:-11540}
-BASE_URL="http://localhost:${PORT}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load port from .env file
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    source "$SCRIPT_DIR/../../.env"
+fi
+
+PORT=${1:-${LF_RUNTIME_PORT:-11540}}
+BASE_URL="http://localhost:${PORT}"
 FILES_DIR="${SCRIPT_DIR}/../files"
 OUTPUT_DIR="/tmp/rmbg_test_output"
 

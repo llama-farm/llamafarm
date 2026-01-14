@@ -7,7 +7,11 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:11540}"
+# Load port from .env file
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    source "$SCRIPT_DIR/../../.env"
+fi
+RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:${LF_RUNTIME_PORT:-11540}}"
 
 echo "=========================================="
 echo "SHAP Anomaly Explanation Demo"

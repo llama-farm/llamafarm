@@ -7,12 +7,19 @@
 # 3. Cleaning up the file
 #
 # Usage: ./test_document.sh [PORT] [IMAGE_FILE]
-#   PORT defaults to 11540 (Universal Runtime)
+#   PORT defaults to LF_RUNTIME_PORT from .env (fallback: 11540)
 #   IMAGE_FILE defaults to the sample receipt in this directory
 
 set -e
 
-PORT=${1:-11540}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Load port from .env file
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    source "$SCRIPT_DIR/../../.env"
+fi
+
+
+PORT=${1:-${LF_RUNTIME_PORT:-11540}}
 IMAGE_FILE=${2:-"$(dirname "$0")/receipt.png"}
 BASE_URL="http://localhost:${PORT}"
 
