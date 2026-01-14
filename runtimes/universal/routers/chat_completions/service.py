@@ -62,8 +62,37 @@ class ChatCompletionsService:
             # Import parsing utility
             from utils.model_format import parse_model_with_quantization
 
-            # Get context window size from request
+            # Get GGUF-specific parameters from request
             n_ctx = chat_request.n_ctx
+            n_batch = chat_request.n_batch
+            n_gpu_layers = chat_request.n_gpu_layers
+            n_threads = chat_request.n_threads
+            flash_attn = chat_request.flash_attn
+            use_mmap = chat_request.use_mmap
+            use_mlock = chat_request.use_mlock
+            cache_type_k = chat_request.cache_type_k
+            cache_type_v = chat_request.cache_type_v
+
+            # Also check extra_body for these parameters (OpenAI SDK sends custom params there)
+            if chat_request.extra_body:
+                if n_ctx is None and "n_ctx" in chat_request.extra_body:
+                    n_ctx = chat_request.extra_body.get("n_ctx")
+                if n_batch is None and "n_batch" in chat_request.extra_body:
+                    n_batch = chat_request.extra_body.get("n_batch")
+                if n_gpu_layers is None and "n_gpu_layers" in chat_request.extra_body:
+                    n_gpu_layers = chat_request.extra_body.get("n_gpu_layers")
+                if n_threads is None and "n_threads" in chat_request.extra_body:
+                    n_threads = chat_request.extra_body.get("n_threads")
+                if flash_attn is None and "flash_attn" in chat_request.extra_body:
+                    flash_attn = chat_request.extra_body.get("flash_attn")
+                if use_mmap is None and "use_mmap" in chat_request.extra_body:
+                    use_mmap = chat_request.extra_body.get("use_mmap")
+                if use_mlock is None and "use_mlock" in chat_request.extra_body:
+                    use_mlock = chat_request.extra_body.get("use_mlock")
+                if cache_type_k is None and "cache_type_k" in chat_request.extra_body:
+                    cache_type_k = chat_request.extra_body.get("cache_type_k")
+                if cache_type_v is None and "cache_type_v" in chat_request.extra_body:
+                    cache_type_v = chat_request.extra_body.get("cache_type_v")
 
             # Parse model name to extract quantization if present
             model_id, gguf_quantization = parse_model_with_quantization(
@@ -73,6 +102,14 @@ class ChatCompletionsService:
             model = await self.load_language(
                 model_id,
                 n_ctx=n_ctx,
+                n_batch=n_batch,
+                n_gpu_layers=n_gpu_layers,
+                n_threads=n_threads,
+                flash_attn=flash_attn,
+                use_mmap=use_mmap,
+                use_mlock=use_mlock,
+                cache_type_k=cache_type_k,
+                cache_type_v=cache_type_v,
                 preferred_quantization=gguf_quantization,
             )
 

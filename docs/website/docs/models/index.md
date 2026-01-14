@@ -174,11 +174,90 @@ The Universal Runtime is LlamaFarm's most versatile runtime provider, supporting
 **Current Support (Production):**
 - **HuggingFace Transformers** – All PyTorch text models (GPT-2, Llama, Mistral, Qwen, Phi, BERT, etc.)
 - **HuggingFace Diffusers** – All PyTorch diffusion models (Stable Diffusion, SDXL, FLUX)
+- **GGUF Models** – Quantized models via llama.cpp (supports offline loading from HuggingFace cache)
 - **Model Types**: Text Generation, Embeddings, Image Generation, Vision Classification, Audio Processing, Multimodal
 
 **Coming Soon:**
 - **ONNX Runtime** – 2-5x faster inference with automatic model conversion
 - **TensorRT** – GPU-optimized inference for NVIDIA hardware
+
+### GGUF Model Configuration
+
+Universal Runtime supports GGUF models via llama.cpp with full parameter control. This is especially useful for **memory-constrained devices** like Jetson Orin Nano (8GB shared memory).
+
+**Key Features:**
+- **Offline Loading**: Models cached locally are used without network calls
+- **Memory Guard**: Automatic batch size reduction when available memory is low
+- **Full Parameter Passthrough**: Configure all llama.cpp parameters via `extra_body`
+
+#### GGUF Parameters Reference
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `n_ctx` | int | Context window size. Lower = less memory. Auto-detected if not set. |
+| `n_batch` | int | Batch size for prompt processing. Lower values (512) reduce memory. |
+| `n_gpu_layers` | int | GPU layer count. `-1` = all layers on GPU. |
+| `n_threads` | int | CPU thread count. Auto-detected if not set. |
+| `flash_attn` | bool | Enable flash attention for faster inference. |
+| `use_mmap` | bool | Memory-map model file. Recommended for large models. |
+| `use_mlock` | bool | Lock model in RAM. Set `false` on constrained devices. |
+| `cache_type_k` | string | KV cache key quantization: `f32`, `f16`, `q8_0`, `q4_0`, etc. |
+| `cache_type_v` | string | KV cache value quantization. `q4_0` reduces cache by ~4x. |
+
+#### Example: Jetson Orin Nano Configuration
+
+```yaml
+runtime:
+  models:
+    - name: qwen3-8b
+      provider: universal
+      model: unsloth/Qwen3-8B-GGUF:Q4_K_M
+      base_url: http://127.0.0.1:11540
+      extra_body:
+        n_ctx: 2048          # Small context to save KV cache memory
+        n_batch: 512         # Reduced batch for smaller compute buffer
+        n_gpu_layers: -1     # Full GPU offload
+        flash_attn: true     # Enable flash attention
+        use_mmap: true       # Memory-map for efficient swapping
+        use_mlock: false     # Allow OS memory management
+        cache_type_k: q4_0   # Quantize KV cache keys
+        cache_type_v: q4_0   # Quantize KV cache values
+```
+
+#### Memory Estimation
+
+| Parameter | Memory Impact |
+|-----------|--------------|
+| `n_ctx: 2048` | ~256MB KV cache |
+| `n_ctx: 8192` | ~1GB KV cache |
+| `n_batch: 2048` | ~1.2GB compute buffer |
+| `n_batch: 512` | ~300MB compute buffer |
+| `cache_type: q4_0` | ~4x reduction vs f16 |
+
+#### Memory Guard (Automatic)
+
+When available memory drops below 3GB, Universal Runtime automatically:
+1. Reduces `n_batch` from 2048 to 512
+2. Logs a warning with the adjustment
+
+This prevents out-of-memory crashes on constrained devices.
+
+#### Offline Operation
+
+GGUF models support fully offline operation:
+1. Download model once (requires network)
+2. Model is cached in `~/.cache/huggingface/hub/`
+3. Subsequent loads use cache without network
+4. Works on air-gapped systems
+
+```bash
+# First run downloads the model
+curl -X POST http://localhost:11540/v1/chat/completions \
+  -d '{"model": "unsloth/Qwen3-1.7B-GGUF:Q4_K_M", "messages": [...]}'
+
+# Subsequent runs work offline
+# (disconnect network and it still works)
+```
 
 ### Quick Setup
 

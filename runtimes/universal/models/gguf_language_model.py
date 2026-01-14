@@ -48,6 +48,14 @@ class GGUFLanguageModel(BaseModel):
         device: str,
         token: str | None = None,
         n_ctx: int | None = None,
+        n_batch: int | None = None,
+        n_gpu_layers: int | None = None,
+        n_threads: int | None = None,
+        flash_attn: bool | None = None,
+        use_mmap: bool | None = None,
+        use_mlock: bool | None = None,
+        cache_type_k: str | None = None,
+        cache_type_v: str | None = None,
         preferred_quantization: str | None = None,
     ):
         """Initialize GGUF language model.
@@ -58,6 +66,23 @@ class GGUFLanguageModel(BaseModel):
             token: Optional HuggingFace authentication token for gated models
             n_ctx: Optional context window size. If None, will be computed automatically
                    based on available memory and model defaults.
+            n_batch: Optional batch size for prompt processing. If None, defaults to 2048.
+                     Critical for memory: lower values (e.g., 512) reduce compute buffer size.
+            n_gpu_layers: Optional number of layers to offload to GPU. If None, will be
+                          auto-detected based on device. Use -1 for all layers.
+            n_threads: Optional number of CPU threads. If None, auto-detected.
+                       Set to match CPU core count (e.g., 6 for Jetson Orin Nano).
+            flash_attn: Optional flag to enable/disable flash attention. If None,
+                        defaults to True for faster inference on supported hardware.
+            use_mmap: Optional flag for memory-mapped file loading. If None, defaults to True.
+                      Recommended True on memory-constrained devices for efficient swapping.
+            use_mlock: Optional flag to lock model in RAM. If None, defaults to False.
+                       Set False on 8GB devices to allow OS memory management.
+            cache_type_k: Optional KV cache key quantization type (e.g., "q4_0", "q8_0", "f16").
+                          Using "q4_0" can reduce KV cache memory by ~4x. Critical for
+                          memory-constrained devices like Jetson Orin Nano (8GB shared).
+            cache_type_v: Optional KV cache value quantization type. Same options as cache_type_k.
+                          Setting both to "q4_0" provides maximum memory savings.
             preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0").
                                     If None, defaults to Q4_K_M. Only downloads the specified
                                     quantization to save disk space.
@@ -68,6 +93,14 @@ class GGUFLanguageModel(BaseModel):
         self.llama: Llama | None = None
         self.requested_n_ctx = self.n_ctx = n_ctx  # Store requested value
         self.actual_n_ctx: int | None = None  # Will be computed during load()
+        self.requested_n_batch = n_batch  # Store requested value (None = default 2048)
+        self.requested_n_gpu_layers = n_gpu_layers  # Store requested value (None = auto)
+        self.requested_n_threads = n_threads  # Store requested value (None = auto)
+        self.requested_flash_attn = flash_attn  # Store requested value (None = default True)
+        self.requested_use_mmap = use_mmap  # Store requested value (None = default True)
+        self.requested_use_mlock = use_mlock  # Store requested value (None = default False)
+        self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
+        self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
         self.preferred_quantization = preferred_quantization
         self._executor = ThreadPoolExecutor(max_workers=1)
 
@@ -78,6 +111,36 @@ class GGUFLanguageModel(BaseModel):
         # Cached GGUF metadata (extracted once during load())
         self._chat_template: str | None = None
         self._special_tokens: dict[str, str] | None = None
+
+    def _get_available_memory_mb(self) -> int | None:
+        """Get available system memory in MB for Memory Guard check.
+
+        This helps prevent OOM errors on memory-constrained devices like Jetson
+        by detecting low memory conditions before attempting to allocate large buffers.
+
+        Returns:
+            Available memory in MB, or None if unable to determine.
+        """
+        try:
+            # Try Linux /proc/meminfo first (works on Jetson and most Linux)
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if "MemAvailable" in line:
+                        # Format: "MemAvailable:   1234567 kB"
+                        return int(line.split()[1]) // 1024
+        except (FileNotFoundError, PermissionError, OSError):
+            pass
+
+        # Fallback: try psutil if available
+        try:
+            import psutil
+
+            return int(psutil.virtual_memory().available / (1024 * 1024))
+        except ImportError:
+            pass
+
+        # Unable to determine available memory
+        return None
 
     async def load(self) -> None:
         """Load the GGUF model using llama-cpp.
@@ -128,10 +191,57 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(f"Using context size: {self.actual_n_ctx}")
 
-        # Configure GPU layers for llama.cpp (uses its own GPU detection, not PyTorch's)
+        # Configure GPU layers for llama.cpp
+        # Use explicitly requested value if provided, otherwise auto-detect
         from utils.device import get_gguf_gpu_layers
 
-        n_gpu_layers = get_gguf_gpu_layers()
+        if self.requested_n_gpu_layers is not None:
+            n_gpu_layers = self.requested_n_gpu_layers
+            logger.info(f"Using configured n_gpu_layers: {n_gpu_layers}")
+        else:
+            n_gpu_layers = get_gguf_gpu_layers()
+            logger.info(f"Auto-detected n_gpu_layers: {n_gpu_layers}")
+
+        # Configure batch size (critical for memory on constrained devices)
+        # Default 2048 for fast prompt processing, but lower values reduce memory
+        n_batch = self.requested_n_batch if self.requested_n_batch is not None else 2048
+
+        # Memory Guard: Check available memory and reduce n_batch if needed
+        # This prevents "Error 12" (CUDA OOM) on memory-constrained devices like Jetson
+        available_mb = self._get_available_memory_mb()
+        if available_mb is not None and available_mb < 3000 and n_batch > 512:
+            logger.warning(
+                f"Low memory detected ({available_mb}MB available). "
+                f"Reducing n_batch from {n_batch} to 512 to prevent OOM."
+            )
+            n_batch = 512
+
+        logger.info(f"Using n_batch: {n_batch}")
+
+        # Configure thread count (None = auto-detect in Llama class)
+        n_threads = self.requested_n_threads
+        if n_threads is not None:
+            logger.info(f"Using configured n_threads: {n_threads}")
+
+        # Configure flash attention (default True for faster inference)
+        flash_attn = self.requested_flash_attn if self.requested_flash_attn is not None else True
+        logger.info(f"Using flash_attn: {flash_attn}")
+
+        # Configure memory mapping (default True for efficient memory management)
+        use_mmap = self.requested_use_mmap if self.requested_use_mmap is not None else True
+        logger.info(f"Using use_mmap: {use_mmap}")
+
+        # Configure memory locking (default False to allow OS memory management)
+        use_mlock = self.requested_use_mlock if self.requested_use_mlock is not None else False
+        logger.info(f"Using use_mlock: {use_mlock}")
+
+        # Configure KV cache quantization (None = default f16, use q4_0 for memory savings)
+        cache_type_k = self.requested_cache_type_k
+        cache_type_v = self.requested_cache_type_v
+        if cache_type_k is not None:
+            logger.info(f"Using cache_type_k: {cache_type_k}")
+        if cache_type_v is not None:
+            logger.info(f"Using cache_type_v: {cache_type_v}")
 
         # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking
@@ -161,8 +271,14 @@ class GGUFLanguageModel(BaseModel):
                 return Llama(
                     model_path=gguf_path,
                     n_ctx=self.actual_n_ctx,  # Use computed context size
-                    n_gpu_layers=n_gpu_layers,
-                    n_threads=None,  # Auto-detect optimal threads
+                    n_batch=n_batch,  # Batch size for prompt processing
+                    n_gpu_layers=n_gpu_layers,  # GPU layer offloading
+                    n_threads=n_threads,  # CPU threads (None = auto)
+                    flash_attn=flash_attn,  # Flash attention optimization
+                    use_mmap=use_mmap,  # Memory-mapped file loading
+                    use_mlock=use_mlock,  # Lock model in RAM
+                    cache_type_k=cache_type_k,  # KV cache key quantization
+                    cache_type_v=cache_type_v,  # KV cache value quantization
                     verbose=False,  # Disable verbose logging (managed by ggml_logging)
                     seed=-1,  # Random seed (-1 = random)
                 )

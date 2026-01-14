@@ -85,7 +85,15 @@ func (h *DatasetUploadHandler) Execute(args map[string]interface{}, ctx *ChatSes
 	}
 
 	// Upload the file using existing function
-	result := uploadFileToDataset(ctx.ServerURL, namespace, project, dataset, filepath)
+	result := uploadFileToDataset(
+		ctx.ServerURL,
+		namespace,
+		project,
+		dataset,
+		filepath,
+		true,
+		map[string]map[string]interface{}{},
+	)
 	if result.err != nil {
 		return "", fmt.Errorf("failed to upload file: %w", result.err)
 	}

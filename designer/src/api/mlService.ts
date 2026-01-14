@@ -228,6 +228,7 @@ export async function scanDocument(
     model?: string
     languages?: string
     return_boxes?: boolean
+    parse_by_page?: boolean
   } = {}
 ): Promise<DocumentScanningResponse> {
   const formData = new FormData()
@@ -235,12 +236,17 @@ export async function scanDocument(
   formData.append('model', options.model || 'surya')
   formData.append('languages', options.languages || 'en')
   formData.append('return_boxes', String(options.return_boxes || false))
+  formData.append('parse_by_page', String(options.parse_by_page || false))
 
   const response = await apiClient.post<DocumentScanningResponse>(
     '/vision/ocr',
     formData,
     {
-      // Don't set Content-Type header - axios will set it automatically with the correct boundary
+      // Must explicitly clear Content-Type so axios sets multipart/form-data with correct boundary
+      // The apiClient default 'application/json' header would otherwise interfere
+      headers: {
+        'Content-Type': undefined,
+      },
       // OCR can take a while, especially first time when loading models
       timeout: 300000, // 5 minutes
     }

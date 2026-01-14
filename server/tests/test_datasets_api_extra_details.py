@@ -380,7 +380,13 @@ class TestDatasetsAPIExtraDetails:
         # Verify dataset structure with details
         if len(data["datasets"]) > 0:
             dataset = data["datasets"][0]
-            expected_keys = {"name", "data_processing_strategy", "database", "details"}
+            expected_keys = {
+                "name",
+                "data_processing_strategy",
+                "database",
+                "auto_process",
+                "details",
+            }
             assert set(dataset.keys()) == expected_keys
 
             # Verify details structure
@@ -424,7 +430,12 @@ class TestDatasetsAPIExtraDetails:
         # Verify dataset structure without details
         if len(data["datasets"]) > 0:
             dataset = data["datasets"][0]
-            expected_keys = {"name", "data_processing_strategy", "database"}
+            expected_keys = {
+                "name",
+                "data_processing_strategy",
+                "database",
+                "auto_process",
+            }
             assert set(dataset.keys()) == expected_keys
             assert "details" not in dataset
 
@@ -736,4 +747,5 @@ class TestDatasetsAPIExtraDetailsIntegration:
                 "name",
                 "data_processing_strategy",
                 "database",
+                "auto_process",
             }

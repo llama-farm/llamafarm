@@ -27,6 +27,11 @@ var (
 	dataProcessingStrategy string
 	database               string
 	verbose                bool
+	skipProcess            bool
+	forceProcess           bool
+	bulkUpload             bool
+	chunkSizeOverride      int
+	chunkOverlapOverride   int
 )
 
 // datasetsCmd represents the datasets command
@@ -259,7 +264,15 @@ Examples:
 		skipped := 0
 		failed := 0
 		for _, fp := range filesToUpload {
-			result := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, fp)
+			result := uploadFileToDataset(
+				serverCfg.URL,
+				serverCfg.Namespace,
+				serverCfg.Project,
+				datasetName,
+				fp,
+				true,                                // default to processing on create uploads
+				map[string]map[string]interface{}{}, // no overrides
+			)
 			if result.err != nil {
 				fmt.Fprintf(os.Stderr, "   ⚠️  Failed to upload '%s': %v\n", fp, result.err)
 				failed++
@@ -353,9 +366,18 @@ Examples:
   lf datasets upload my-docs ./documents/              # All files in directory only
   lf datasets upload my-docs ./documents/**/*          # Include all files in subdirectories
   lf datasets upload my-docs ./docs/**/*.pdf           # All PDFs in docs and subdirectories
-  lf datasets upload my-docs ./docs/ *.pdf README.md   # Mixed sources`,
+  lf datasets upload my-docs ./docs/ *.pdf README.md   # Mixed sources
+
+Auto-processing uses the dataset's auto_process setting (default: true).
+Use --no-process to skip processing or --process to force it. The --bulk flag
+sends all files in one request and defaults to no processing (use --process to override).`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		if forceProcess && skipProcess {
+			fmt.Fprintln(os.Stderr, "Error: --process and --no-process cannot be used together.")
+			os.Exit(1)
+		}
+
 		// Load config first to ensure it's valid before starting watcher
 		serverCfg, err := config.GetServerConfig(utils.GetEffectiveCWD(), serverURL, namespace, projectID)
 		if err != nil {
@@ -369,6 +391,67 @@ Examples:
 
 		datasetName := args[0]
 		inPaths := args[1:]
+
+		// Resolve dataset auto_process default from config (fallback true)
+		autoProcessDefault := true
+		if projectCfg, cfgErr := config.LoadConfig(utils.GetEffectiveCWD()); cfgErr == nil && projectCfg != nil {
+			for _, ds := range projectCfg.Datasets {
+				if ds.Name == datasetName {
+					switch v := any(ds.AutoProcess).(type) {
+					case bool:
+						autoProcessDefault = v
+					case *bool:
+						if v != nil {
+							autoProcessDefault = *v
+						}
+					}
+					break
+				}
+			}
+		}
+
+		// Determine effective auto-process behavior
+		autoProcess := autoProcessDefault
+		if bulkUpload && !forceProcess && !skipProcess {
+			autoProcess = false
+		}
+		if forceProcess {
+			autoProcess = true
+		}
+		if skipProcess {
+			autoProcess = false
+		}
+
+		// Validate chunk overrides
+		if cmd.Flags().Changed("chunk-size") {
+			if chunkSizeOverride <= 0 || chunkSizeOverride > 100000 {
+				fmt.Fprintln(os.Stderr, "Error: --chunk-size must be > 0 and <= 100000")
+				os.Exit(1)
+			}
+		}
+		if cmd.Flags().Changed("chunk-overlap") {
+			if chunkOverlapOverride < 0 {
+				fmt.Fprintln(os.Stderr, "Error: --chunk-overlap must be >= 0")
+				os.Exit(1)
+			}
+			if cmd.Flags().Changed("chunk-size") && chunkOverlapOverride >= chunkSizeOverride {
+				fmt.Fprintln(os.Stderr, "Error: --chunk-overlap must be less than --chunk-size")
+				os.Exit(1)
+			}
+		}
+
+		// Build parser overrides if requested
+		parserOverrides := map[string]map[string]interface{}{}
+		wildcardOverride := map[string]interface{}{}
+		if cmd.Flags().Changed("chunk-size") && chunkSizeOverride > 0 {
+			wildcardOverride["chunk_size"] = chunkSizeOverride
+		}
+		if cmd.Flags().Changed("chunk-overlap") && chunkOverlapOverride >= 0 {
+			wildcardOverride["chunk_overlap"] = chunkOverlapOverride
+		}
+		if len(wildcardOverride) > 0 {
+			parserOverrides["*"] = wildcardOverride
+		}
 
 		// Expand all paths to get actual files
 		fmt.Println("Expanding paths to find files...")
@@ -390,13 +473,42 @@ Examples:
 		config := factory.ServerOnly(serverCfg.URL)
 		orchestrator.EnsureServicesOrExitWithConfig(config, "server")
 
-		// Upload in batches with progress display
+		// If bulk flag set, send all files in one request
+		if bulkUpload {
+			fmt.Printf("\n📦 Uploading %d files via bulk endpoint (auto_process=%t)\n", len(files), autoProcess)
+			bulkResult := uploadFilesBulk(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, files, autoProcess, parserOverrides)
+			if bulkResult.err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Bulk upload failed: %v\n", bulkResult.err)
+				os.Exit(1)
+			}
+
+			fmt.Printf("   ✅ Uploaded: %d\n", bulkResult.uploaded)
+			if bulkResult.skipped > 0 {
+				fmt.Printf("   ⏭️  Skipped (duplicates): %d\n", bulkResult.skipped)
+			}
+			if bulkResult.failed > 0 {
+				fmt.Printf("   ❌ Failed: %d\n", bulkResult.failed)
+			}
+			if bulkResult.taskID != "" {
+				fmt.Printf("   🧠 Processing task: %s (%s)\n", bulkResult.taskID, bulkResult.status)
+			} else {
+				fmt.Printf("   Status: %s\n", bulkResult.status)
+			}
+
+			if err := EnsureConfigSynced(serverCfg.Namespace, serverCfg.Project); err != nil {
+				utils.LogDebug(fmt.Sprintf("Warning: Failed to sync config after uploads: %v", err))
+			}
+			return
+		}
+
+		// Upload in batches with progress display (single-file endpoint)
 		const batchSize = 10
 		totalBatches := (len(files) + batchSize - 1) / batchSize
 
 		uploaded := 0
 		skipped := 0
 		failed := 0
+		processingTasks := 0
 
 		for batchNum := 0; batchNum < totalBatches; batchNum++ {
 			start := batchNum * batchSize
@@ -417,7 +529,7 @@ Examples:
 					}
 				}
 
-				result := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f)
+				result := uploadFileToDataset(serverCfg.URL, serverCfg.Namespace, serverCfg.Project, datasetName, f, autoProcess, parserOverrides)
 				if result.err != nil {
 					fmt.Fprintf(os.Stderr, "   ❌ Failed: %s (%v)\n", relPath, result.err)
 					failed++
@@ -429,6 +541,12 @@ Examples:
 				} else {
 					fmt.Printf("   ✅ Uploaded: %s\n", relPath)
 					uploaded++
+					if result.taskID != "" {
+						fmt.Printf("      🧠 Processing task: %s (%s)\n", result.taskID, result.status)
+						processingTasks++
+					} else if result.status != "" {
+						fmt.Printf("      Status: %s\n", result.status)
+					}
 				}
 			}
 		}
@@ -442,6 +560,9 @@ Examples:
 		}
 		if failed > 0 {
 			fmt.Printf("   ❌ Failed: %d\n", failed)
+		}
+		if processingTasks > 0 {
+			fmt.Printf("   🧠 Processing tasks started: %d\n", processingTasks)
 		}
 
 		// Ensure config is synced after uploads (server updates file list in config)
@@ -874,6 +995,13 @@ func init() {
 	datasetsCreateCmd.MarkFlagRequired("data-processing-strategy")
 	datasetsCreateCmd.MarkFlagRequired("database")
 
+	// Upload flags
+	datasetsUploadCmd.Flags().BoolVar(&skipProcess, "no-process", false, "Upload without processing (overrides dataset default)")
+	datasetsUploadCmd.Flags().BoolVar(&forceProcess, "process", false, "Force processing after upload (overrides dataset default)")
+	datasetsUploadCmd.Flags().BoolVar(&bulkUpload, "bulk", false, "Upload all files in one request (default: no processing)")
+	datasetsUploadCmd.Flags().IntVar(&chunkSizeOverride, "chunk-size", 0, "Override parser chunk size for this upload (applies to all parsers)")
+	datasetsUploadCmd.Flags().IntVar(&chunkOverlapOverride, "chunk-overlap", 0, "Override parser chunk overlap for this upload (applies to all parsers)")
+
 	// Add subcommands to datasets
 	datasetsCmd.AddCommand(datasetsListCmd)
 	datasetsCmd.AddCommand(datasetsCreateCmd)
@@ -1154,11 +1282,23 @@ func expandPathsToFiles(paths []string) ([]string, error) {
 }
 
 type uploadResult struct {
-	skipped bool
-	err     error
+	skipped   bool
+	processed bool
+	status    string
+	taskID    string
+	err       error
 }
 
-func uploadFileToDataset(server string, namespace string, project string, dataset string, path string) uploadResult {
+type bulkUploadResult struct {
+	uploaded int
+	skipped  int
+	failed   int
+	status   string
+	taskID   string
+	err      error
+}
+
+func uploadFileToDataset(server string, namespace string, project string, dataset string, path string, autoProcess bool, parserOverrides map[string]map[string]interface{}) uploadResult {
 	// Open file
 	file, err := os.Open(path)
 	if err != nil {
@@ -1176,12 +1316,29 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 	if _, err := io.Copy(part, file); err != nil {
 		return uploadResult{err: err}
 	}
+
+	if len(parserOverrides) > 0 {
+		overridesBytes, err := json.Marshal(parserOverrides)
+		if err != nil {
+			return uploadResult{err: fmt.Errorf("failed to encode parser overrides: %w", err)}
+		}
+		if len(overridesBytes) > 10240 {
+			return uploadResult{err: fmt.Errorf("parser overrides too large (max 10KB)")}
+		}
+		field, err := writer.CreateFormField("parser_overrides")
+		if err != nil {
+			return uploadResult{err: err}
+		}
+		if _, err := field.Write(overridesBytes); err != nil {
+			return uploadResult{err: err}
+		}
+	}
 	if err := writer.Close(); err != nil {
 		return uploadResult{err: err}
 	}
 
 	// Build request
-	url := buildServerURL(server, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/data", namespace, project, dataset))
+	url := buildServerURL(server, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/data?auto_process=%t", namespace, project, dataset, autoProcess))
 	req, err := http.NewRequest("POST", url, &buf)
 	if err != nil {
 		return uploadResult{err: err}
@@ -1203,12 +1360,125 @@ func uploadFileToDataset(server string, namespace string, project string, datase
 
 	// Parse response to check if file was skipped
 	var uploadResp struct {
-		Skipped bool `json:"skipped"`
+		Skipped   bool   `json:"skipped"`
+		Status    string `json:"status"`
+		TaskID    string `json:"task_id"`
+		Processed bool   `json:"processed"`
 	}
 	if err := json.Unmarshal(body, &uploadResp); err != nil {
 		// If we can't parse the response, assume it was successful (backwards compatibility)
-		return uploadResult{skipped: false, err: nil}
+		return uploadResult{skipped: false, status: "uploaded", err: nil}
 	}
 
-	return uploadResult{skipped: uploadResp.Skipped, err: nil}
+	status := uploadResp.Status
+	if status == "" {
+		if autoProcess {
+			status = "processing"
+		} else {
+			status = "uploaded"
+		}
+	}
+
+	return uploadResult{
+		skipped:   uploadResp.Skipped,
+		processed: uploadResp.Processed,
+		status:    status,
+		taskID:    uploadResp.TaskID,
+		err:       nil,
+	}
+}
+
+func uploadFilesBulk(server string, namespace string, project string, dataset string, paths []string, autoProcess bool, parserOverrides map[string]map[string]interface{}) bulkUploadResult {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	for _, path := range paths {
+		if err := func() error {
+			file, err := os.Open(path)
+			if err != nil {
+				return fmt.Errorf("failed to open %s: %w", path, err)
+			}
+			defer file.Close()
+
+			part, err := writer.CreateFormFile("files", filepath.Base(path))
+			if err != nil {
+				return fmt.Errorf("failed to create form file for %s: %w", path, err)
+			}
+			if _, err := io.Copy(part, file); err != nil {
+				return fmt.Errorf("failed to copy %s: %w", path, err)
+			}
+			return nil
+		}(); err != nil {
+			return bulkUploadResult{err: err}
+		}
+	}
+
+	if len(parserOverrides) > 0 {
+		overridesBytes, err := json.Marshal(parserOverrides)
+		if err != nil {
+			return bulkUploadResult{err: fmt.Errorf("failed to encode parser overrides: %w", err)}
+		}
+		if len(overridesBytes) > 10240 {
+			return bulkUploadResult{err: fmt.Errorf("parser overrides too large (max 10KB)")}
+		}
+		field, err := writer.CreateFormField("parser_overrides")
+		if err != nil {
+			return bulkUploadResult{err: err}
+		}
+		if _, err := field.Write(overridesBytes); err != nil {
+			return bulkUploadResult{err: err}
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return bulkUploadResult{err: err}
+	}
+
+	url := buildServerURL(server, fmt.Sprintf("/v1/projects/%s/%s/datasets/%s/data/bulk?auto_process=%t", namespace, project, dataset, autoProcess))
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		return bulkUploadResult{err: err}
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
+	if err != nil {
+		return bulkUploadResult{err: err}
+	}
+	defer resp.Body.Close()
+	body, readErr := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		if readErr != nil {
+			return bulkUploadResult{err: fmt.Errorf("%s", readErr.Error())}
+		}
+		return bulkUploadResult{err: fmt.Errorf("%s", utils.PrettyServerError(resp, body))}
+	}
+
+	var bulkResp struct {
+		Uploaded int    `json:"uploaded"`
+		Skipped  int    `json:"skipped"`
+		Failed   int    `json:"failed"`
+		TaskID   string `json:"task_id"`
+		Status   string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &bulkResp); err != nil {
+		return bulkUploadResult{err: fmt.Errorf("failed to parse response: %w", err)}
+	}
+
+	if bulkResp.Status == "" {
+		if autoProcess {
+			bulkResp.Status = "processing"
+		} else {
+			bulkResp.Status = "uploaded"
+		}
+	}
+
+	return bulkUploadResult{
+		uploaded: bulkResp.Uploaded,
+		skipped:  bulkResp.Skipped,
+		failed:   bulkResp.Failed,
+		status:   bulkResp.Status,
+		taskID:   bulkResp.TaskID,
+		err:      nil,
+	}
 }
