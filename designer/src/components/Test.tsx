@@ -15,6 +15,8 @@ import { useProject } from '../hooks/useProjects'
 import { useActiveProject } from '../hooks/useActiveProject'
 import { useOnboardingContext } from '../contexts/OnboardingContext'
 import type { ProjectConfig } from '../types/config'
+import { DevToolsProvider } from '../contexts/DevToolsContext'
+import { DevToolsDrawer } from './DevTools'
 
 // Sample test inputs for each sample dataset
 const SAMPLE_TEST_INPUTS: Record<string, string> = {
@@ -249,8 +251,9 @@ const Test = () => {
   }, [mode, modelType])
 
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="mb-3 flex-shrink-0">
+    <DevToolsProvider>
+      <div className="w-full h-full flex flex-col pb-10 relative">
+        <div className="mb-3 flex-shrink-0">
         {/* First row: Title + switcher + Package button */}
         <div className="flex items-center justify-between">
           <h2 className="text-2xl">
@@ -511,18 +514,12 @@ const Test = () => {
             </div>
           )}
         </div>
-        {/* Helper text below chat window, on dark background */}
-        {mode === 'designer' && (
-          <div className="px-1 pb-3">
-            <div className="text-[11px] text-muted-foreground">
-              Not sure where to start? Think about the questions people will
-              actually ask to test model reliability.
-            </div>
-          </div>
-        )}
       </div>
 
-    </div>
+      {/* Dev Tools Drawer - fixed to bottom, only in designer mode */}
+      {mode === 'designer' && <DevToolsDrawer />}
+      </div>
+    </DevToolsProvider>
   )
 }
 

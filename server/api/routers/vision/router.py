@@ -146,6 +146,10 @@ async def extract_text(
         default=False,
         description="Return bounding boxes for detected text",
     ),
+    parse_by_page: bool = Form(
+        default=False,
+        description="If true, return separate results per page. If false (default), combine all text into single result.",
+    ),
 ) -> dict[str, Any]:
     """OCR endpoint for text extraction from images.
 
@@ -195,12 +199,29 @@ async def extract_text(
     # Parse languages
     lang_list = [lang.strip() for lang in languages.split(",") if lang.strip()]
 
-    return await UniversalRuntimeService.ocr(
+    result = await UniversalRuntimeService.ocr(
         model=model,
         images=image_list,
         languages=lang_list if lang_list else None,
         return_boxes=return_boxes,
     )
+
+    # If not parsing by page and we have multiple results, combine them
+    if not parse_by_page and len(result.get("data", [])) > 1:
+        data = result["data"]
+        combined_text = "\n\n".join(item["text"] for item in data)
+        avg_confidence = sum(item["confidence"] for item in data) / len(data)
+        original_page_count = len(data)
+        result["data"] = [
+            {
+                "index": 0,
+                "text": combined_text,
+                "confidence": avg_confidence,
+            }
+        ]
+        result["usage"]["pages_combined"] = original_page_count
+
+    return result
 
 
 # =============================================================================

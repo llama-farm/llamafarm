@@ -101,6 +101,7 @@ model = "custom-fine-tuned-model-v1"
 name = "sample_dataset"
 data_processing_strategy = "default"
 database = "support_db"
+auto_process = true
 
 [runtime]
 provider = "openai"

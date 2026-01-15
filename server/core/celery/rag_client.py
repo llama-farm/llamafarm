@@ -24,6 +24,7 @@ def build_ingest_signature(
     source_path: str,
     filename: str | None = None,
     dataset_name: str | None = None,
+    parser_overrides: dict[str, Any] | None = None,
 ):
     """
     Build a Celery signature for the rag.ingest_file task.
@@ -40,6 +41,7 @@ def build_ingest_signature(
             source_path,
             filename,
             dataset_name,
+            parser_overrides or {},
         ],
         app=app,
     )
@@ -153,6 +155,7 @@ async def ingest_file_with_rag(
     source_path: str,
     filename: str | None = None,
     dataset_name: str | None = None,
+    parser_overrides: dict[str, Any] | None = None,
     timeout: int = 300,
     poll_interval: float = 2.0,
 ) -> tuple[bool, dict[str, Any]]:
@@ -167,6 +170,7 @@ async def ingest_file_with_rag(
         source_path=source_path,
         filename=filename,
         dataset_name=dataset_name,
+        parser_overrides=parser_overrides,
     )
     result = sig.apply_async()
 

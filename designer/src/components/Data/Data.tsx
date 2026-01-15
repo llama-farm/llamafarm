@@ -2065,6 +2065,11 @@ const Data = () => {
                 )
               }
 
+              // Navigate to dataset view immediately after files are uploaded
+              // Processing will continue in the background
+              await refetchDatasets()
+              navigate(`/chat/data/${name}`)
+
               // Step 4.5: Check and setup Ollama embedding model
               toast({
                 message: 'Checking Ollama setup...',
@@ -2260,11 +2265,8 @@ const Data = () => {
                 })
               }
 
-              // Refetch datasets and wait a moment for localStorage to persist
+              // Processing complete - user is already on the dataset page
               await refetchDatasets()
-              await new Promise(resolve => setTimeout(resolve, 100))
-
-              navigate(`/chat/data/${name}`)
             } else {
               // Handle example import (old flow)
               await importExampleDataset.mutateAsync({
