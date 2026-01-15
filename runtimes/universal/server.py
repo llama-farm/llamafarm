@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import (
+    BackgroundTasks,
     FastAPI,
     Form,
     HTTPException,
@@ -2622,6 +2623,14 @@ async def delete_classifier_model(model_name: str):
 # Speech-to-Text Endpoints (Whisper-based transcription)
 # ============================================================================
 
+# Safe audio file extensions (whitelist for security)
+SAFE_AUDIO_EXTENSIONS = frozenset({
+    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus",
+})
+
+# Silence detection threshold for decoded Opus audio (higher due to noise floor)
+SILENCE_THRESHOLD_OPUS = 0.03
+
 
 def _make_speech_cache_key(model_id: str, compute_type: str | None = None) -> str:
     """Generate a cache key for a speech model.
@@ -2673,6 +2682,7 @@ async def load_speech(
 
 @app.post("/v1/audio/transcriptions")
 async def create_transcription(
+    background_tasks: BackgroundTasks,
     file: UploadFile | None = None,
     model: str = Form(default="distil-large-v3"),
     language: str | None = Form(default=None),
@@ -2730,7 +2740,9 @@ async def create_transcription(
         if file is not None:
             audio_bytes = await file.read()
             if file.filename:
-                file_extension = Path(file.filename).suffix or ".wav"
+                # Sanitize file extension against whitelist
+                ext = Path(file.filename).suffix.lower()
+                file_extension = ext if ext in SAFE_AUDIO_EXTENSIONS else ".wav"
         else:
             raise HTTPException(
                 status_code=400,
@@ -2742,6 +2754,27 @@ async def create_transcription(
                 status_code=400,
                 detail="Empty audio file",
             )
+
+        # Detect actual audio format from content (don't trust file extension)
+        from utils.audio_buffer import (
+            decode_audio_bytes,
+            detect_audio_format,
+            pcm_to_wav,
+        )
+
+        format_name, is_compressed = detect_audio_format(audio_bytes)
+        logger.debug(f"Detected audio format: {format_name} (compressed={is_compressed})")
+
+        # If audio is compressed, decode to WAV for reliable processing
+        if is_compressed:
+            try:
+                pcm_data = decode_audio_bytes(audio_bytes)
+                audio_bytes = pcm_to_wav(pcm_data)
+                file_extension = ".wav"
+                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
+                # Fall back to original data - faster-whisper might handle it
 
         # Load speech model
         speech_model = await load_speech(model_id=model)
@@ -2768,28 +2801,27 @@ async def create_transcription(
             if stream:
                 # Streaming response - yield segments as they're transcribed
                 async def generate_sse():
-                    try:
-                        async for segment in speech_model.transcribe_stream(
-                            audio_path=tmp_path,
-                            language=language,
-                            word_timestamps=word_timestamps,
-                            initial_prompt=prompt,
-                        ):
-                            segment_data = {
-                                "id": segment.id,
-                                "start": segment.start,
-                                "end": segment.end,
-                                "text": segment.text,
-                            }
-                            if segment.words:
-                                segment_data["words"] = segment.words
+                    async for segment in speech_model.transcribe_stream(
+                        audio_path=tmp_path,
+                        language=language,
+                        word_timestamps=word_timestamps,
+                        initial_prompt=prompt,
+                    ):
+                        segment_data = {
+                            "id": segment.id,
+                            "start": segment.start,
+                            "end": segment.end,
+                            "text": segment.text,
+                        }
+                        if segment.words:
+                            segment_data["words"] = segment.words
 
-                            yield f"data: {json.dumps(segment_data)}\n\n"
+                        yield f"data: {json.dumps(segment_data)}\n\n"
 
-                        yield "data: [DONE]\n\n"
-                    finally:
-                        # Clean up temp file
-                        Path(tmp_path).unlink(missing_ok=True)
+                    yield "data: [DONE]\n\n"
+
+                # Use BackgroundTasks to ensure temp file cleanup even on client disconnect
+                background_tasks.add_task(Path(tmp_path).unlink, missing_ok=True)
 
                 return StreamingResponse(
                     generate_sse(),
@@ -2799,6 +2831,7 @@ async def create_transcription(
                         "Connection": "keep-alive",
                         "X-Accel-Buffering": "no",
                     },
+                    background=background_tasks,
                 )
 
             # Non-streaming response
@@ -2921,12 +2954,28 @@ async def create_translation(
     import tempfile
     from pathlib import Path
 
+    from utils.audio_buffer import decode_audio_bytes, detect_audio_format, pcm_to_wav
+
     try:
         audio_bytes = await file.read()
         if not audio_bytes:
             raise HTTPException(status_code=400, detail="Empty audio file")
 
         file_extension = Path(file.filename).suffix if file.filename else ".wav"
+
+        # Detect actual audio format from content (don't trust file extension)
+        format_name, is_compressed = detect_audio_format(audio_bytes)
+        logger.debug(f"Detected audio format: {format_name} (compressed={is_compressed})")
+
+        # If audio is compressed, decode to WAV for reliable processing
+        if is_compressed:
+            try:
+                pcm_data = decode_audio_bytes(audio_bytes)
+                audio_bytes = pcm_to_wav(pcm_data)
+                file_extension = ".wav"
+                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
 
         # Load speech model
         speech_model = await load_speech(model_id=model)
@@ -3222,8 +3271,7 @@ async def websocket_transcription(
                     # Skip transcription if audio is silence (prevents Whisper hallucinations)
                     # Extract PCM from WAV for silence check (skip 44-byte header)
                     pcm_data = wav_bytes[44:] if wav_bytes[:4] == b"RIFF" else wav_bytes
-                    # Higher threshold (0.03) for decoded Opus audio which has more noise floor
-                    if is_silence(pcm_data, threshold=0.03):
+                    if is_silence(pcm_data, threshold=SILENCE_THRESHOLD_OPUS):
                         logger.debug("Skipping silent audio chunk")
                         # Still update cumulative offset to maintain timing
                         cumulative_offset += chunk_interval
@@ -3235,7 +3283,8 @@ async def websocket_transcription(
         logger.info("WebSocket client disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
-        with suppress(Exception):
+        # Only suppress connection-related errors when sending error response
+        with suppress(WebSocketDisconnect, RuntimeError):
             await websocket.send_json({
                 "type": "error",
                 "message": str(e),

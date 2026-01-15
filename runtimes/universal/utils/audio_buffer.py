@@ -245,6 +245,7 @@ def _decode_with_ffmpeg(
     input_format: str | None = None,
     sample_rate: int = SAMPLE_RATE,
     channels: int = CHANNELS,
+    timeout: float | None = None,
 ) -> bytes:
     """Decode compressed audio using FFmpeg subprocess (fallback).
 
@@ -253,6 +254,7 @@ def _decode_with_ffmpeg(
         input_format: Input format hint for FFmpeg (must be in ALLOWED_FFMPEG_FORMATS)
         sample_rate: Output sample rate
         channels: Output channels
+        timeout: Timeout in seconds. If None, calculated as 30s + 2s per MB of input.
 
     Returns:
         Raw PCM audio bytes (signed 16-bit little-endian)
@@ -261,6 +263,10 @@ def _decode_with_ffmpeg(
         ValueError: If input_format is not in the allowed formats whitelist
         RuntimeError: If FFmpeg decoding fails
     """
+    # Calculate timeout based on input size if not specified
+    if timeout is None:
+        input_size_mb = len(audio_data) / (1024 * 1024)
+        timeout = 30.0 + (input_size_mb * 2.0)  # 30s base + 2s per MB
     # Validate input_format against whitelist to prevent command injection
     if input_format is not None and input_format not in ALLOWED_FFMPEG_FORMATS:
         raise ValueError(
@@ -294,7 +300,7 @@ def _decode_with_ffmpeg(
             "pipe:1",
         ])
 
-        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout)
 
         if result.returncode != 0:
             error_msg = result.stderr.decode("utf-8", errors="replace")
@@ -690,8 +696,13 @@ class StreamingAudioBuffer:
         which translates to approximately 6-16 KB/second.
         We use a conservative estimate of 8 KB/second to trigger
         decoding slightly early rather than accumulating too much.
+
+        Returns:
+            Estimated duration in seconds. Returns 0.0 if no bytes accumulated.
         """
-        return self._compressed_bytes_count / 8000.0
+        # Estimate 8 KB/second for compressed audio (conservative for Opus)
+        COMPRESSED_BYTES_PER_SECOND = 8000.0
+        return self._compressed_bytes_count / COMPRESSED_BYTES_PER_SECOND
 
     def add(self, audio_data: bytes) -> tuple[bool, bytes | None]:
         """Add audio data and check if transcription should be triggered.
@@ -908,12 +919,20 @@ def convert_audio_format(
             ):
                 return pcm_data
 
-            # Need resampling - for now, log warning
-            # Full resampling would require scipy or similar
+            # Resampling required but not implemented - raise error
+            # to avoid silent quality degradation
             if actual_rate != SAMPLE_RATE:
-                logger.warning(
-                    f"Audio resampling not implemented: "
-                    f"{actual_rate}Hz -> {SAMPLE_RATE}Hz"
+                raise ValueError(
+                    f"Audio sample rate mismatch: got {actual_rate}Hz, "
+                    f"expected {SAMPLE_RATE}Hz. Use FFmpeg or PyAV to resample: "
+                    f"ffmpeg -i input.wav -ar {SAMPLE_RATE} output.wav"
+                )
+
+            # Channel/width mismatch
+            if actual_channels != CHANNELS or actual_width != SAMPLE_WIDTH:
+                raise ValueError(
+                    f"Audio format mismatch: got {actual_channels}ch/{actual_width*8}bit, "
+                    f"expected {CHANNELS}ch/{SAMPLE_WIDTH*8}bit. Convert audio format first."
                 )
 
             return pcm_data
