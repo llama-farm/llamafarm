@@ -10,9 +10,11 @@ Supports:
 - Multiple output formats (text, json, srt, vtt, verbose_json)
 """
 
+import asyncio
 import logging
 import tempfile
 from collections.abc import AsyncGenerator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -185,48 +187,58 @@ class SpeechModel(BaseModel):
         if temperature is None:
             temperature = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 
-        # Run transcription
-        segments_generator, info = self._whisper_model.transcribe(
-            str(audio_path),
-            language=language,
-            task=task,
-            word_timestamps=word_timestamps,
-            initial_prompt=initial_prompt,
-            vad_filter=vad_filter,
-            beam_size=beam_size,
-            best_of=best_of,
-            temperature=temperature,
-        )
-
-        # Collect all segments
-        segments = []
-        full_text_parts = []
-
-        for segment in segments_generator:
-            words = None
-            if word_timestamps and segment.words:
-                words = [
-                    {
-                        "word": w.word,
-                        "start": w.start,
-                        "end": w.end,
-                        "probability": w.probability,
-                    }
-                    for w in segment.words
-                ]
-
-            segments.append(
-                TranscriptionSegment(
-                    id=segment.id,
-                    start=segment.start,
-                    end=segment.end,
-                    text=segment.text,
-                    words=words,
-                    avg_logprob=segment.avg_logprob,
-                    no_speech_prob=segment.no_speech_prob,
-                )
+        def _sync_transcribe():
+            """Run transcription synchronously in thread pool."""
+            segments_generator, info = self._whisper_model.transcribe(
+                str(audio_path),
+                language=language,
+                task=task,
+                word_timestamps=word_timestamps,
+                initial_prompt=initial_prompt,
+                vad_filter=vad_filter,
+                beam_size=beam_size,
+                best_of=best_of,
+                temperature=temperature,
             )
-            full_text_parts.append(segment.text)
+
+            # Collect all segments
+            segments = []
+            full_text_parts = []
+
+            for segment in segments_generator:
+                words = None
+                if word_timestamps and segment.words:
+                    words = [
+                        {
+                            "word": w.word,
+                            "start": w.start,
+                            "end": w.end,
+                            "probability": w.probability,
+                        }
+                        for w in segment.words
+                    ]
+
+                segments.append(
+                    TranscriptionSegment(
+                        id=segment.id,
+                        start=segment.start,
+                        end=segment.end,
+                        text=segment.text,
+                        words=words,
+                        avg_logprob=segment.avg_logprob,
+                        no_speech_prob=segment.no_speech_prob,
+                    )
+                )
+                full_text_parts.append(segment.text)
+
+            return segments, full_text_parts, info
+
+        # Run transcription in thread pool to avoid blocking the event loop
+        loop = asyncio.get_running_loop()
+        with ThreadPoolExecutor() as pool:
+            segments, full_text_parts, info = await loop.run_in_executor(
+                pool, _sync_transcribe
+            )
 
         return TranscriptionResult(
             text="".join(full_text_parts).strip(),
@@ -251,6 +263,9 @@ class SpeechModel(BaseModel):
         This is useful for streaming responses - segments are yielded
         as soon as they're transcribed rather than waiting for completion.
 
+        Note: Transcription runs in a thread pool to avoid blocking the event loop.
+        Segments are collected from the thread and then yielded asynchronously.
+
         Args:
             audio_path: Path to audio file
             language: Language code (if None, auto-detected)
@@ -266,40 +281,54 @@ class SpeechModel(BaseModel):
         if self._whisper_model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        # Start transcription - segments_generator yields as it processes
-        segments_generator, info = self._whisper_model.transcribe(
-            str(audio_path),
-            language=language,
-            task=task,
-            word_timestamps=word_timestamps,
-            initial_prompt=initial_prompt,
-            vad_filter=vad_filter,
-            beam_size=beam_size,
-        )
-
-        # Yield segments as they're produced
-        for segment in segments_generator:
-            words = None
-            if word_timestamps and segment.words:
-                words = [
-                    {
-                        "word": w.word,
-                        "start": w.start,
-                        "end": w.end,
-                        "probability": w.probability,
-                    }
-                    for w in segment.words
-                ]
-
-            yield TranscriptionSegment(
-                id=segment.id,
-                start=segment.start,
-                end=segment.end,
-                text=segment.text,
-                words=words,
-                avg_logprob=segment.avg_logprob,
-                no_speech_prob=segment.no_speech_prob,
+        def _sync_transcribe_stream():
+            """Run transcription synchronously and collect segments."""
+            segments_generator, _info = self._whisper_model.transcribe(
+                str(audio_path),
+                language=language,
+                task=task,
+                word_timestamps=word_timestamps,
+                initial_prompt=initial_prompt,
+                vad_filter=vad_filter,
+                beam_size=beam_size,
             )
+
+            # Collect segments
+            segments = []
+            for segment in segments_generator:
+                words = None
+                if word_timestamps and segment.words:
+                    words = [
+                        {
+                            "word": w.word,
+                            "start": w.start,
+                            "end": w.end,
+                            "probability": w.probability,
+                        }
+                        for w in segment.words
+                    ]
+
+                segments.append(
+                    TranscriptionSegment(
+                        id=segment.id,
+                        start=segment.start,
+                        end=segment.end,
+                        text=segment.text,
+                        words=words,
+                        avg_logprob=segment.avg_logprob,
+                        no_speech_prob=segment.no_speech_prob,
+                    )
+                )
+            return segments
+
+        # Run transcription in thread pool to avoid blocking the event loop
+        loop = asyncio.get_running_loop()
+        with ThreadPoolExecutor() as pool:
+            segments = await loop.run_in_executor(pool, _sync_transcribe_stream)
+
+        # Yield segments asynchronously
+        for segment in segments:
+            yield segment
 
     async def transcribe_bytes(
         self,
@@ -318,17 +347,20 @@ class SpeechModel(BaseModel):
             TranscriptionResult
         """
         # Write to temporary file (faster-whisper requires file path)
-        with tempfile.NamedTemporaryFile(
-            suffix=file_extension, delete=False
-        ) as tmp_file:
-            tmp_file.write(audio_bytes)
-            tmp_path = tmp_file.name
-
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
         try:
+            with tempfile.NamedTemporaryFile(
+                suffix=file_extension, delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(audio_bytes)
+
             return await self.transcribe(tmp_path, **kwargs)
         finally:
             # Clean up temp file
-            Path(tmp_path).unlink(missing_ok=True)
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
 
     async def transcribe_bytes_stream(
         self,
@@ -347,17 +379,20 @@ class SpeechModel(BaseModel):
             TranscriptionSegment objects
         """
         # Write to temporary file
-        with tempfile.NamedTemporaryFile(
-            suffix=file_extension, delete=False
-        ) as tmp_file:
-            tmp_file.write(audio_bytes)
-            tmp_path = tmp_file.name
-
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
         try:
+            with tempfile.NamedTemporaryFile(
+                suffix=file_extension, delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(audio_bytes)
+
             async for segment in self.transcribe_stream(tmp_path, **kwargs):
                 yield segment
         finally:
-            Path(tmp_path).unlink(missing_ok=True)
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
 
     def get_model_info(self) -> dict:
         """Get information about the loaded model."""

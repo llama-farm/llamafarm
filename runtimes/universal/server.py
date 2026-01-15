@@ -2791,13 +2791,14 @@ async def create_transcription(
             word_timestamps = "word" in granularities
 
         # Write audio to temp file (faster-whisper requires file path)
-        with tempfile.NamedTemporaryFile(
-            suffix=file_extension, delete=False
-        ) as tmp_file:
-            tmp_file.write(audio_bytes)
-            tmp_path = tmp_file.name
-
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
         try:
+            with tempfile.NamedTemporaryFile(
+                suffix=file_extension, delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(audio_bytes)
             if stream:
                 # Streaming response - yield segments as they're transcribed
                 async def generate_sse():
@@ -2898,7 +2899,7 @@ async def create_transcription(
 
         finally:
             # Clean up temp file (if not streaming)
-            if not stream:
+            if not stream and tmp_path:
                 Path(tmp_path).unlink(missing_ok=True)
 
     except ImportError as e:
@@ -2986,13 +2987,15 @@ async def create_translation(
             )
 
         # Write to temp file
-        with tempfile.NamedTemporaryFile(
-            suffix=file_extension, delete=False
-        ) as tmp_file:
-            tmp_file.write(audio_bytes)
-            tmp_path = tmp_file.name
-
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
         try:
+            with tempfile.NamedTemporaryFile(
+                suffix=file_extension, delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(audio_bytes)
+
             # Transcribe with translation task
             result = await speech_model.transcribe(
                 audio_path=tmp_path,
@@ -3009,7 +3012,8 @@ async def create_translation(
             }
 
         finally:
-            Path(tmp_path).unlink(missing_ok=True)
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
 
     except ImportError as e:
         logger.error(f"Speech model dependencies not installed: {e}")
@@ -3136,31 +3140,33 @@ async def websocket_transcription(
         import concurrent.futures
 
         # Write to temp file
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-            tmp_file.write(wav_bytes)
-            tmp_path = tmp_file.name
-
-        def sync_transcribe():
-            """Run transcription synchronously in thread pool."""
-            # Use faster settings for real-time streaming:
-            # - vad_filter=False: We handle chunking, don't filter our chunks
-            # - beam_size=1: Greedy decoding for speed
-            # - best_of=1: No multiple candidates
-            segments, info = speech_model._whisper_model.transcribe(
-                tmp_path,
-                language=language,
-                word_timestamps=word_timestamps,
-                vad_filter=False,  # Critical: don't filter our pre-chunked audio
-                beam_size=1,  # Greedy decoding for speed
-                best_of=1,
-                temperature=0.0,  # Deterministic
-                no_speech_threshold=1.0,  # Don't skip segments marked as "no speech"
-                log_prob_threshold=-2.0,  # Lower threshold to avoid skipping low-confidence
-                compression_ratio_threshold=3.0,  # Higher threshold for repetitive text
-            )
-            return list(segments), info
-
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
         try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(wav_bytes)
+
+            def sync_transcribe():
+                """Run transcription synchronously in thread pool."""
+                # Use faster settings for real-time streaming:
+                # - vad_filter=False: We handle chunking, don't filter our chunks
+                # - beam_size=1: Greedy decoding for speed
+                # - best_of=1: No multiple candidates
+                segments, info = speech_model._whisper_model.transcribe(
+                    tmp_path,
+                    language=language,
+                    word_timestamps=word_timestamps,
+                    vad_filter=False,  # Critical: don't filter our pre-chunked audio
+                    beam_size=1,  # Greedy decoding for speed
+                    best_of=1,
+                    temperature=0.0,  # Deterministic
+                    no_speech_threshold=1.0,  # Don't skip segments marked as "no speech"
+                    log_prob_threshold=-2.0,  # Lower threshold to avoid skipping low-confidence
+                    compression_ratio_threshold=3.0,  # Higher threshold for repetitive text
+                )
+                return list(segments), info
+
             # Run transcription in thread pool to avoid blocking event loop
             loop = asyncio.get_running_loop()
             with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -3209,7 +3215,8 @@ async def websocket_transcription(
             cumulative_offset += chunk_interval
 
         finally:
-            Path(tmp_path).unlink(missing_ok=True)
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
 
     try:
         while True:
