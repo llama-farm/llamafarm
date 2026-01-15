@@ -6,7 +6,8 @@ type: object
 additionalProperties: false
 properties:
   components:
-    $ref: "#/definitions/componentsDefinition"
+    allOf:
+      - $ref: "#/definitions/componentsDefinition"
     description: Reusable component definitions
   default_database:
     type: string
@@ -2318,6 +2319,7 @@ definitions:
 
   componentsDefinition:
     type: object
+    description: Reusable component definitions
     additionalProperties: false
     properties:
       embedding_strategies:
