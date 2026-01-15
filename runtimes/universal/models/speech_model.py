@@ -160,7 +160,7 @@ class SpeechModel(BaseModel):
         vad_filter: bool = True,
         beam_size: int = 5,
         best_of: int = 5,
-        temperature: float | list[float] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        temperature: float | list[float] | None = None,
     ) -> TranscriptionResult:
         """Transcribe an audio file.
 
@@ -174,12 +174,16 @@ class SpeechModel(BaseModel):
             beam_size: Beam size for decoding (higher = more accurate, slower)
             best_of: Number of candidates to consider (higher = more accurate, slower)
             temperature: Temperature(s) for sampling. List enables fallback on failure.
+                        Defaults to [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if None.
 
         Returns:
             TranscriptionResult with full text, segments, and metadata
         """
         if self._whisper_model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
+
+        if temperature is None:
+            temperature = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 
         # Run transcription
         segments_generator, info = self._whisper_model.transcribe(
