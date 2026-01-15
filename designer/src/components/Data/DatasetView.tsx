@@ -543,8 +543,6 @@ function DatasetView() {
   const [scanLoading, setScanLoading] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
 
-  // Track files being auto-scanned
-  const [autoScanningFiles, setAutoScanningFiles] = useState<Set<string>>(new Set())
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const filteredFileInputRef = useRef<HTMLInputElement>(null)
@@ -2945,18 +2943,6 @@ function DatasetView() {
                                         type="checkmark-outline"
                                         className="w-4 h-4 text-teal-600 dark:text-teal-400"
                                       />
-                                    )}
-                                    {/* Scanning indicator for files being auto-scanned */}
-                                    {f.fullHash && autoScanningFiles.has(f.fullHash) && (
-                                      <div className="flex items-center gap-1 text-blue-500">
-                                        <FontIcon
-                                          type="fade"
-                                          className="w-4 h-4 animate-pulse"
-                                        />
-                                        <span className="text-xs">
-                                          Scanning...
-                                        </span>
-                                      </div>
                                     )}
                                     {/* View Scan button for scannable files */}
                                     {f.type && isScannableFile(f.type) && (

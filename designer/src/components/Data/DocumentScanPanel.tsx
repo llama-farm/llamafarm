@@ -71,14 +71,19 @@ export default function DocumentScanPanel({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen, onClose])
 
-  const handleCopyAll = useCallback(() => {
+  const handleCopyAll = useCallback(async () => {
     if (!scanResult?.pages) return
     const fullText = scanResult.pages
       .map(p => p.text)
       .join('\n\n--- Page Break ---\n\n')
-    navigator.clipboard.writeText(fullText)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(fullText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API may fail due to permissions or insecure context
+      // Silently fail - user can manually select and copy text
+    }
   }, [scanResult])
 
   if (!isOpen) return null

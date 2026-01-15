@@ -108,8 +108,6 @@ export async function createDataset(
     serverPayload.document_scanning = request.document_scanning
   }
 
-  console.log('[datasets.ts] Creating dataset with payload:', JSON.stringify(serverPayload, null, 2))
-
   const response = await apiClient.post<CreateDatasetResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/`,
     serverPayload
