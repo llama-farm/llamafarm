@@ -50,26 +50,27 @@ const Test = () => {
 
     const { projectType, dataStatus, selectedSampleDataset, trainedModelName, trainedModelType } = onboarding.state.answers
 
-    // Only apply if user has completed onboarding with a sample model
+    // Only apply if user has completed onboarding
     if (!onboarding.state.onboardingCompleted) return
-    if (dataStatus !== 'sample-data') return
-    if (!trainedModelName) return
 
     appliedOnboardingDefaultsRef.current = true
 
     // Set model type based on project type
-    if (projectType === 'classifier' && trainedModelType === 'classifier') {
+    if (projectType === 'classifier' && trainedModelType === 'classifier' && trainedModelName) {
       setModelType('classifier')
       // Set as one-time override that TestChat will consume and clear
       localStorage.setItem('lf_test_classifierModel_override', trainedModelName)
-    } else if (projectType === 'anomaly' && trainedModelType === 'anomaly') {
+    } else if (projectType === 'anomaly' && trainedModelType === 'anomaly' && trainedModelName) {
       setModelType('anomaly')
       // Set as one-time override that TestChat will consume and clear
       localStorage.setItem('lf_test_anomalyModel_override', trainedModelName)
+    } else if (projectType === 'doc-qa' || projectType === 'exploring') {
+      // Doc-QA and exploring projects should always use inference (text generation) mode
+      setModelType('inference')
     }
 
-    // Set sample input if available
-    if (selectedSampleDataset && SAMPLE_TEST_INPUTS[selectedSampleDataset]) {
+    // Set sample input if available (for classifier/anomaly sample data)
+    if (dataStatus === 'sample-data' && selectedSampleDataset && SAMPLE_TEST_INPUTS[selectedSampleDataset]) {
       const sampleInput = SAMPLE_TEST_INPUTS[selectedSampleDataset]
       if (projectType === 'classifier') {
         localStorage.setItem('lf_test_classifierInput', sampleInput)

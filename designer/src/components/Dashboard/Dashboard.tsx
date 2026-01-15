@@ -126,6 +126,14 @@ const Dashboard = () => {
     !onboarding.state.onboardingCompleted &&
     !showChecklist
 
+  // Show loading state while we're about to open the wizard (prevents dashboard flash)
+  const isWaitingForWizard =
+    !onboarding.state.onboardingCompleted &&
+    !onboarding.state.wizardOpen &&
+    !onboarding.state.checklistDismissed &&
+    !onboarding.isDemo &&
+    (isDatasetsLoading || filesProcessed === 0)
+
   // Auto-open wizard on first visit to an empty project (but NOT for demo projects)
   useEffect(() => {
     // Only auto-open if:
@@ -629,6 +637,19 @@ const Dashboard = () => {
     }
     return def
   }, [projectDetail])
+
+  // Show loading screen while waiting for wizard to open
+  if (isWaitingForWizard) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center">
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="text-4xl">🦙</div>
+          <div className="text-lg font-medium text-foreground">Setting up your project...</div>
+          <div className="text-sm text-muted-foreground">Just a moment</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

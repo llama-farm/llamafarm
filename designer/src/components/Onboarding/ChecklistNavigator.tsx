@@ -3,12 +3,13 @@
  * via a checklist link. Shows current step progress and allows quick return to guide.
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { X, ArrowLeft, Sparkles } from 'lucide-react'
+import { X, ArrowLeft, ArrowRight, Sparkles, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOnboardingContext } from '../../contexts/OnboardingContext'
 import { useUpgradeAvailability } from '../../hooks/useUpgradeAvailability'
+import { generateNavigatorTip } from '../../utils/navigatorTips'
 
 interface ChecklistNavigatorProps {
   className?: string
@@ -18,7 +19,7 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { checklist, state, isStepCompleted } = useOnboardingContext()
+  const { checklist, state, isStepCompleted, completeChecklistStep } = useOnboardingContext()
   const { upgradeAvailable, isDismissedFor } = useUpgradeAvailability()
 
   // Check if upgrade banner is visible (affects our positioning)
@@ -31,10 +32,11 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
   useEffect(() => {
     const fromChecklist = searchParams.get('from') === 'checklist'
 
-    // Don't show on dashboard
+    // Only show on project-specific pages (not home, not dashboard)
+    const isProjectPage = location.pathname.startsWith('/chat/')
     const isDashboard = location.pathname === '/chat/dashboard'
 
-    if (fromChecklist && !isDashboard) {
+    if (fromChecklist && isProjectPage && !isDashboard) {
       setShowNavigator(true)
       // Clean up the URL param without triggering navigation
       const newParams = new URLSearchParams(searchParams)
@@ -43,9 +45,12 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
     }
   }, [location.pathname, searchParams, setSearchParams])
 
-  // Hide when navigating back to dashboard
+  // Hide when navigating back to dashboard or leaving project context
   useEffect(() => {
-    if (location.pathname === '/chat/dashboard') {
+    const isProjectPage = location.pathname.startsWith('/chat/')
+    const isDashboard = location.pathname === '/chat/dashboard'
+
+    if (isDashboard || !isProjectPage) {
       setShowNavigator(false)
     }
   }, [location.pathname])
@@ -56,8 +61,25 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
   )
   const currentStep = currentStepIndex >= 0 ? checklist[currentStepIndex] : null
 
+  // Generate contextual tip based on current step and user's answers
+  const tip = useMemo(
+    () => generateNavigatorTip(currentStep, state.answers, location.pathname),
+    [currentStep, state.answers, location.pathname]
+  )
+
   // Count completed steps
   const completedCount = checklist.filter(step => isStepCompleted(step.id)).length
+
+  // Determine next step (if any)
+  const nextStep = currentStepIndex >= 0 && currentStepIndex < checklist.length - 1
+    ? checklist[currentStepIndex + 1]
+    : null
+
+  // Check if current step is already completed
+  const isCurrentStepCompleted = currentStep ? isStepCompleted(currentStep.id) : false
+
+  // Check if this is the last step
+  const isLastStep = currentStepIndex === checklist.length - 1
 
   const handleDismiss = useCallback(() => {
     setShowNavigator(false)
@@ -73,6 +95,41 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
     handleDismiss()
   }, [handleDismiss])
 
+  // Handle "Next step" button - completes current step and navigates to next
+  const handleNextStep = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent triggering the parent click (back to guide)
+
+    // Complete current step if not already completed
+    if (currentStep && !isCurrentStepCompleted) {
+      completeChecklistStep(currentStep.id)
+    }
+
+    // Navigate to next step if available
+    if (nextStep?.linkPath) {
+      const separator = nextStep.linkPath.includes('?') ? '&' : '?'
+      const pathWithParam = `${nextStep.linkPath}${separator}from=checklist`
+      navigate(pathWithParam)
+    } else {
+      // No next step - go back to dashboard
+      setShowNavigator(false)
+      navigate('/chat/dashboard')
+    }
+  }, [currentStep, isCurrentStepCompleted, nextStep, completeChecklistStep, navigate])
+
+  // Handle "Done" button for last step - completes step and goes back to dashboard
+  const handleDone = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    // Complete current step if not already completed
+    if (currentStep && !isCurrentStepCompleted) {
+      completeChecklistStep(currentStep.id)
+    }
+
+    // Go back to dashboard
+    setShowNavigator(false)
+    navigate('/chat/dashboard')
+  }, [currentStep, isCurrentStepCompleted, completeChecklistStep, navigate])
+
   // Don't render if not showing or no checklist
   if (!showNavigator || checklist.length === 0) {
     return null
@@ -86,22 +143,19 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
   const stepNum = currentStep ? currentStep.stepNumber : completedCount + 1
 
   return (
-    <button
-      onClick={handleBackToGuide}
+    <div
       className={cn(
         // Position: fixed bottom-right
         // If upgrade banner is visible, position higher to avoid overlap
         'fixed right-4 z-40 transition-all duration-300',
         upgradeBannerVisible ? 'bottom-20' : 'bottom-4',
         // Sizing: larger card
-        'w-[300px]',
+        'w-[320px]',
         // Styling: colorful gradient border with glow (teal to sky blue)
         'rounded-xl shadow-xl',
         'bg-gradient-to-r from-teal-500/30 via-cyan-500/30 to-sky-500/30',
         'p-[2px]', // Gradient border effect
         'animate-in fade-in slide-in-from-bottom-3 duration-300',
-        'cursor-pointer hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98]',
-        'text-left', // Reset button text alignment
         className
       )}
     >
@@ -134,25 +188,61 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-1 text-xs text-primary mt-0.5">
-              <ArrowLeft className="h-3 w-3" />
-              <span>Back to guide</span>
-            </div>
+            {currentStep && (
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                {currentStep.title}
+              </p>
+            )}
           </div>
 
           {/* Dismiss button */}
-          <div
-            role="button"
-            tabIndex={0}
+          <button
             onClick={handleDismissClick}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleDismissClick(e as any) }}
             className="flex-shrink-0 p-1.5 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Dismiss navigator"
           >
             <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Contextual tip */}
+        {tip && (
+          <div className="px-4 pb-2 pt-0">
+            <p className="text-xs text-muted-foreground dark:text-gray-400 leading-relaxed">
+              {tip.text}
+            </p>
           </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="px-4 pb-3 pt-1 flex items-center gap-2">
+          <button
+            onClick={handleBackToGuide}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-muted/50 transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to guide
+          </button>
+
+          {isLastStep ? (
+            <button
+              onClick={handleDone}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-gradient-to-r from-teal-500 to-sky-500 text-white hover:from-teal-600 hover:to-sky-600 transition-colors shadow-sm"
+            >
+              <Check className="h-3.5 w-3.5" />
+              {isCurrentStepCompleted ? 'Done' : 'Complete & finish'}
+            </button>
+          ) : (
+            <button
+              onClick={handleNextStep}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-gradient-to-r from-teal-500 to-sky-500 text-white hover:from-teal-600 hover:to-sky-600 transition-colors shadow-sm"
+            >
+              {isCurrentStepCompleted ? 'Next step' : 'Done, next'}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
-    </button>
+    </div>
   )
 }

@@ -111,13 +111,7 @@ export function GettingStartedChecklist({
     if (step.linkLabel === 'Start over') {
       resetOnboarding()
     } else if (step.linkPath) {
-      // Mark step as complete when user clicks to view/do it
-      const element = checkboxRefs.current.get(step.id)
-      completeChecklistStep(step.id)
-      if (element) {
-        fireConfettiAt(element)
-      }
-      // Append ?from=checklist to show the floating navigator on destination pages
+      // Navigate to the step - completion happens via the floating navigator's "Next step" button
       const separator = step.linkPath.includes('?') ? '&' : '?'
       const pathWithParam = `${step.linkPath}${separator}from=checklist`
       console.log('[GettingStartedChecklist] Navigating to:', pathWithParam)

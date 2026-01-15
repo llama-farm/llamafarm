@@ -12,6 +12,7 @@ import datasetService from '../api/datasets'
 import modelService from '../api/modelService'
 import { type FileBasedDemo } from '../config/demos'
 import { projectKeys } from './useProjects'
+import { setActiveProject } from '../utils/projectUtils'
 
 export type DemoStep =
   | 'idle'
@@ -468,8 +469,8 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Mark as completed
         updateStep('completed')
 
-        // Set as active project
-        localStorage.setItem('activeProject', newProjectName)
+        // Set as active project (dispatches lf-active-project event)
+        setActiveProject(newProjectName)
 
         // Mark this project as a demo project (for checklist and onboarding logic)
         const storedDemoProjects = JSON.parse(localStorage.getItem('lf_demo_projects') || '[]')
