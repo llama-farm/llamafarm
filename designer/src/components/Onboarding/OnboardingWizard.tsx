@@ -157,7 +157,11 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
 
         {/* Content area - scrollable */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto px-6 py-8">
+          {/* Wider container for project type selector (5 cards), narrower for other steps */}
+          <div className={cn(
+            'mx-auto px-6 py-8',
+            currentStep === 1 ? 'max-w-4xl' : 'max-w-2xl'
+          )}>
             {currentStep === 1 && (
               <ProjectTypeSelector
                 selected={answers.projectType}

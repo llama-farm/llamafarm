@@ -257,6 +257,21 @@ export function isDemoProject(projectName: string | null): boolean {
 }
 
 /**
+ * Remove a project from the demo projects list
+ * Used when "Build your own" is clicked to convert a demo project to a regular project
+ */
+export function removeDemoProject(projectName: string | null): void {
+  if (!projectName) return
+  try {
+    const demoProjects = JSON.parse(localStorage.getItem('lf_demo_projects') || '[]')
+    const filtered = demoProjects.filter((name: string) => name !== projectName)
+    localStorage.setItem('lf_demo_projects', JSON.stringify(filtered))
+  } catch {
+    // Ignore errors
+  }
+}
+
+/**
  * Get the demo config for a demo project by matching project name pattern
  * Demo projects are named like "llama-expert-1", "santa-helper-2", etc.
  */

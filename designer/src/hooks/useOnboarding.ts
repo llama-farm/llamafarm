@@ -26,7 +26,7 @@ import {
   generateDemoChecklist,
   getDescriptionForLevel,
 } from '../utils/checklistGenerator'
-import { isDemoProject, getDemoConfigForProject } from '../config/demos'
+import { isDemoProject, getDemoConfigForProject, removeDemoProject } from '../config/demos'
 
 const STORAGE_KEY_PREFIX = 'lf_onboarding_'
 
@@ -426,6 +426,12 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
   }, [])
 
   const resetOnboarding = useCallback(() => {
+    // If this was a demo project, remove it from the demo list so it becomes a regular project
+    // This allows the user to "Build your own" from a demo and get a fresh onboarding experience
+    if (isDemo) {
+      removeDemoProject(projectId)
+    }
+
     setState({
       ...DEFAULT_ONBOARDING_STATE,
       wizardOpen: true,
@@ -433,7 +439,7 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     })
     // Dispatch event to close chat panel during onboarding
     window.dispatchEvent(new CustomEvent('lf-onboarding-reset'))
-  }, [])
+  }, [isDemo, projectId])
 
   // Derived helpers
   const isStepCompleted = useCallback(
