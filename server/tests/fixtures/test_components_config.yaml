@@ -34,11 +34,6 @@ rag:
       type: ChromaStore
       embedding_strategy: default_embeddings
       retrieval_strategy: semantic_search
-  data_processing_strategies:
-    - name: default_processing
-      parsers:
-        - pdf_parser
-    
     - name: inline_db
       type: ChromaStore
       embedding_strategies:
@@ -50,6 +45,11 @@ rag:
         - type: BasicSimilarityStrategy
           config:
             top_k: 10
+
+  data_processing_strategies:
+    - name: default_processing
+      parsers:
+        - pdf_parser
 
 runtime:
   models:
