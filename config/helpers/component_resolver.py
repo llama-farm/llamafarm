@@ -43,18 +43,13 @@ class ComponentResolver:
         retrieval_sources = _get_component_collection("retrieval_strategies")
         parser_sources = _get_component_collection("parsers")
 
-        self._embedding_map = {
-            c.get("name") if isinstance(c, dict) else getattr(c, "name", None): c
-            for c in embedding_sources
-        }
-        self._retrieval_map = {
-            c.get("name") if isinstance(c, dict) else getattr(c, "name", None): c
-            for c in retrieval_sources
-        }
-        self._parser_map = {
-            c.get("name") if isinstance(c, dict) else getattr(c, "name", None): c
-            for c in parser_sources
-        }
+        self._embedding_map = self._build_component_map(
+            embedding_sources, "embedding_strategies"
+        )
+        self._retrieval_map = self._build_component_map(
+            retrieval_sources, "retrieval_strategies"
+        )
+        self._parser_map = self._build_component_map(parser_sources, "parsers")
 
         defaults_source = (
             components.get("defaults", {})
@@ -62,6 +57,32 @@ class ComponentResolver:
             else getattr(components, "defaults", {}) or {}
         )
         self._defaults = defaults_source if isinstance(defaults_source, dict) else {}
+
+    @staticmethod
+    def _build_component_map(
+        components: list[Any], component_type: str
+    ) -> Dict[str, Any]:
+        """
+        Validate that each component has a unique, non-empty name and build a map.
+        Raises ValueError when validation fails to avoid None keys masking lookups.
+        """
+        mapping: Dict[str, Any] = {}
+        for component in components:
+            name = (
+                component.get("name")
+                if isinstance(component, dict)
+                else getattr(component, "name", None)
+            )
+            if not name:
+                raise ValueError(
+                    f"All {component_type} entries must include a 'name' field"
+                )
+            if name in mapping:
+                raise ValueError(
+                    f"Duplicate {component_type} name '{name}' detected; names must be unique"
+                )
+            mapping[name] = component
+        return mapping
 
     def resolve_config(self, config: LlamaFarmConfig) -> LlamaFarmConfig:
         """Return a deep-copied config with all component references expanded."""
