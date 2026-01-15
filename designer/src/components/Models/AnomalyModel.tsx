@@ -371,6 +371,16 @@ function AnomalyModel() {
     }
   }, [searchParams, setSearchParams, isNewModel])
 
+  // Show sample data modal from URL parameter (from onboarding checklist)
+  useEffect(() => {
+    const showModal = searchParams.get('showSampleModal')
+    if (showModal === 'true' && isNewModel) {
+      setShowSampleDataModal(true)
+      // Clear the URL parameter so it doesn't re-trigger
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams, isNewModel])
+
   // Check if model name already exists
   useEffect(() => {
     if (isNewModel && modelName) {
@@ -1152,11 +1162,22 @@ function AnomalyModel() {
         setTrainingData(dataset.data)
         setInputMode('text')
       }
+
+      // Auto-set model name based on the sample dataset (if model name is empty or auto-generated default)
+      if (!modelName || modelName.startsWith('new-anomaly-model')) {
+        // Convert dataset name to a valid model name (lowercase, replace spaces with hyphens)
+        const suggestedName = dataset.name
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^a-z0-9-]/g, '')
+        setModelName(suggestedName)
+      }
+
       setShowSampleDataModal(false)
       setSelectedSampleDataset(null)
       setIsImportingSampleData(false)
     }, 600)
-  }, [selectedSampleDataset, toast])
+  }, [selectedSampleDataset, toast, modelName])
 
   // Training area drag handlers
   const handleTrainingAreaDragEnter = useCallback(

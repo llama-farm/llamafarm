@@ -27,6 +27,7 @@ import {
   getDescriptionForLevel,
 } from '../utils/checklistGenerator'
 import { isDemoProject, getDemoConfigForProject, removeDemoProject } from '../config/demos'
+import { validateDatasetName } from '../utils/datasetValidation'
 
 const STORAGE_KEY_PREFIX = 'lf_onboarding_'
 
@@ -153,6 +154,13 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
         // If sample-data is selected, must also pick a sample dataset
         if (answers.dataStatus === 'sample-data') {
           return answers.selectedSampleDataset !== null
+        }
+        // If has-data is selected and dataset name is provided, validate it
+        if (answers.dataStatus === 'has-data' && answers.datasetName) {
+          const validation = validateDatasetName(answers.datasetName)
+          if (!validation.isValid) {
+            return false
+          }
         }
         // If need-data is selected, HF dataset is optional - can proceed without it
         return answers.dataStatus !== null

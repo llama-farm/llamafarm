@@ -44,6 +44,9 @@ export interface ChecklistStep {
   descriptionMinimal: string // For advanced
   linkPath: string
   linkLabel: string
+  // Optional secondary link (e.g., external HuggingFace link alongside primary action)
+  secondaryLinkPath?: string
+  secondaryLinkLabel?: string
 }
 
 // Uploaded file info for onboarding (stored without actual file data)

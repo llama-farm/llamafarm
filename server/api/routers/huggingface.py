@@ -24,6 +24,122 @@ router = APIRouter(prefix="/huggingface", tags=["huggingface"])
 
 HF_DATASETS_SERVER = "https://datasets-server.huggingface.co"
 
+# Common field names for text content in HF datasets
+# Ordered by priority - first match wins
+TEXT_FIELD_NAMES = [
+    "text",
+    "content",
+    "document",
+    "input",
+    "question",
+    "sentence",
+    "passage",
+    "body",
+    "message",
+    "article",
+    "description",
+    "review",
+    "comment",
+    "title",
+    "summary",
+    # Nested field patterns (use dot notation)
+    "reviews.text",
+    "review.text",
+    "data.text",
+    "data.content",
+]
+
+# Common field names for labels (for classifier datasets)
+LABEL_FIELD_NAMES = [
+    "label",
+    "labels",
+    "category",
+    "class",
+    "sentiment",
+    "rating",
+    "target",
+    "output",
+    "tag",
+    "tags",
+]
+
+
+def _get_nested_value(obj: dict, path: str) -> str | None:
+    """Get a value from a nested dict using dot notation."""
+    parts = path.split(".")
+    current = obj
+    for part in parts:
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            return None
+    return str(current) if current is not None else None
+
+
+def _detect_text_field(rows: list[dict]) -> str | None:
+    """Auto-detect the text field from a sample of rows."""
+    if not rows:
+        return None
+
+    # Check first row for field presence
+    first_row = rows[0]
+
+    # Try common text field names in order of priority
+    for field in TEXT_FIELD_NAMES:
+        if "." in field:
+            # Nested field
+            value = _get_nested_value(first_row, field)
+            if value and len(value) > 10:  # Require some minimum length
+                return field
+        elif field in first_row:
+            value = first_row[field]
+            if isinstance(value, str) and len(value) > 10:
+                return field
+
+    # Fallback: find the longest string field
+    longest_field = None
+    longest_len = 0
+    for key, value in first_row.items():
+        if isinstance(value, str) and len(value) > longest_len:
+            longest_len = len(value)
+            longest_field = key
+
+    return longest_field if longest_len > 20 else None
+
+
+def _detect_label_field(rows: list[dict]) -> str | None:
+    """Auto-detect the label field from a sample of rows."""
+    if not rows:
+        return None
+
+    first_row = rows[0]
+
+    for field in LABEL_FIELD_NAMES:
+        if field in first_row:
+            return field
+
+    return None
+
+
+def _extract_text_from_row(row: dict, text_field: str | None) -> str:
+    """Extract text content from a row using the detected text field."""
+    if text_field:
+        if "." in text_field:
+            value = _get_nested_value(row, text_field)
+            if value:
+                return value
+        elif text_field in row:
+            value = row[text_field]
+            if isinstance(value, str):
+                return value
+
+    # Fallback: concatenate all string fields
+    parts = []
+    for key, value in row.items():
+        if isinstance(value, str) and len(value) > 5:
+            parts.append(f"{key}: {value}")
+    return "\n".join(parts) if parts else json.dumps(row)
+
 
 class HFDatasetImportRequest(BaseModel):
     """Request to import a HF dataset into a project."""
@@ -49,6 +165,10 @@ class HFDatasetImportResponse(BaseModel):
     file_count: int
     row_count: int
     task_id: str | None = None
+    # Auto-detected schema info
+    detected_text_field: str | None = None
+    detected_label_field: str | None = None
+    available_fields: list[str] = []
 
 
 def _add_file_from_bytes(
@@ -231,12 +351,37 @@ async def import_hf_dataset(request: HFDatasetImportRequest) -> HFDatasetImportR
     # 2. Extract actual row data (HF returns {row_idx, row, truncated_cells})
     row_data = [r["row"] for r in rows]
 
-    # 3. Convert rows to file format
+    # 3. Auto-detect text and label fields
+    detected_text_field = _detect_text_field(row_data)
+    detected_label_field = _detect_label_field(row_data)
+    available_fields = list(row_data[0].keys()) if row_data else []
+
+    logger.info(
+        "Detected schema",
+        text_field=detected_text_field,
+        label_field=detected_label_field,
+        available_fields=available_fields,
+    )
+
+    # 4. Convert rows to file format
+    # For RAG/doc-qa: extract text content to make chunking work better
+    # For classifier: keep original structure (text_field + label_field)
     safe_name = request.hf_dataset_id.replace("/", "_")
-    filename = f"hf_{safe_name}_{request.split}.{request.format}"
+    filename = f"hf_{safe_name}_{split_to_use}.{request.format}"
 
     if request.format == "jsonl":
-        file_content = "\n".join(json.dumps(row) for row in row_data)
+        # Create simplified JSONL with extracted text for better RAG processing
+        processed_rows = []
+        for row in row_data:
+            text_content = _extract_text_from_row(row, detected_text_field)
+            processed_row = {"text": text_content}
+            # Preserve label if detected (for classifier use)
+            if detected_label_field and detected_label_field in row:
+                processed_row["label"] = row[detected_label_field]
+            # Keep original fields as metadata
+            processed_row["_original"] = row
+            processed_rows.append(processed_row)
+        file_content = "\n".join(json.dumps(row) for row in processed_rows)
     else:  # csv
         import csv
         import io
@@ -305,4 +450,7 @@ async def import_hf_dataset(request: HFDatasetImportRequest) -> HFDatasetImportR
         file_count=1,
         row_count=len(row_data),
         task_id=task_id,
+        detected_text_field=detected_text_field,
+        detected_label_field=detected_label_field,
+        available_fields=available_fields,
     )

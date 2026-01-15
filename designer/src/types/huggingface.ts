@@ -40,6 +40,10 @@ export interface HFDatasetImportResponse {
   file_count: number
   row_count: number
   task_id?: string
+  // Auto-detected schema info
+  detected_text_field?: string
+  detected_label_field?: string
+  available_fields?: string[]
 }
 
 /** Selected HF dataset for onboarding state */

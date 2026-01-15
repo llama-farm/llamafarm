@@ -238,6 +238,83 @@ const ANOMALY_SAMPLE_CHECKLIST: ChecklistStep[] = [
   },
 ]
 
+// Shortened checklists for need-data flows (step 1 goes to training page with sample modal)
+const CLASSIFIER_NEED_DATA_CHECKLIST: ChecklistStep[] = [
+  {
+    id: 'classifier-data',
+    stepNumber: 1,
+    title: 'Add training data',
+    descriptionFull:
+      "Browse [Hugging Face](https://huggingface.co/datasets?task_categories=task_categories%3Atext-classification&sort=downloads) for text classification datasets, or use our sample data to get started quickly.",
+    descriptionShort:
+      'Browse [HF datasets](https://huggingface.co/datasets?task_categories=task_categories%3Atext-classification&sort=downloads) or use sample data.',
+    descriptionMinimal: 'Find training data.',
+    linkPath: '/chat/models/train/classifier/new?showSampleModal=true',
+    linkLabel: 'Use sample data',
+  },
+  {
+    id: 'classifier-train',
+    stepNumber: 2,
+    title: 'Train & test',
+    descriptionFull:
+      'Hit Train to create your classifier, then test it out briefly with some sample content.',
+    descriptionShort:
+      'Train your model and test it briefly.',
+    descriptionMinimal: 'Train and test.',
+    linkPath: '/chat/models/train/classifier/new',
+    linkLabel: 'Train model',
+  },
+  {
+    id: 'classifier-ship',
+    stepNumber: 3,
+    title: 'Ship it',
+    descriptionFull:
+      'Package your project for deployment. This includes your trained classifier model.',
+    descriptionShort: 'Package your project for deployment.',
+    descriptionMinimal: 'Package for deployment.',
+    linkPath: '/chat/dashboard',
+    linkLabel: 'Package',
+  },
+]
+
+const ANOMALY_NEED_DATA_CHECKLIST: ChecklistStep[] = [
+  {
+    id: 'anomaly-data',
+    stepNumber: 1,
+    title: 'Add baseline data',
+    descriptionFull:
+      "Browse [Hugging Face](https://huggingface.co/datasets?search=anomaly+detection&sort=downloads) for anomaly detection datasets, or use our sample data to get started quickly.",
+    descriptionShort:
+      'Browse [HF datasets](https://huggingface.co/datasets?search=anomaly+detection&sort=downloads) or use sample data.',
+    descriptionMinimal: 'Find baseline data.',
+    linkPath: '/chat/models/train/anomaly/new?showSampleModal=true',
+    linkLabel: 'Use sample data',
+  },
+  {
+    id: 'anomaly-train',
+    stepNumber: 2,
+    title: 'Train & test',
+    descriptionFull:
+      'Hit Train to create your detector, then test it with normal and unusual inputs.',
+    descriptionShort:
+      'Train your model and test it briefly.',
+    descriptionMinimal: 'Train and test.',
+    linkPath: '/chat/models/train/anomaly/new',
+    linkLabel: 'Train model',
+  },
+  {
+    id: 'anomaly-ship',
+    stepNumber: 3,
+    title: 'Ship it',
+    descriptionFull:
+      'Package your project for deployment. This includes your trained anomaly detection model.',
+    descriptionShort: 'Package your project for deployment.',
+    descriptionMinimal: 'Package for deployment.',
+    linkPath: '/chat/dashboard',
+    linkLabel: 'Package',
+  },
+]
+
 const DOC_SCAN_CHECKLIST: ChecklistStep[] = [
   {
     id: 'doc-scan-data',
@@ -364,16 +441,25 @@ function createDemoChecklist(demo: FileBasedDemo): ChecklistStep[] {
 
 /**
  * Get the base checklist for a project type
- * For sample-data flows with classifier/anomaly, use shortened checklists (no "Create" step)
+ * For sample-data and need-data flows with classifier/anomaly, use shortened checklists (no "Create" step)
  */
 function getBaseChecklist(projectType: ProjectType, dataStatus?: DataStatus | null): ChecklistStep[] {
-  // Use shortened sample checklists for classifier/anomaly with sample-data
+  // Use shortened checklists for classifier/anomaly with sample-data or need-data
   if (dataStatus === 'sample-data') {
     if (projectType === 'classifier') {
       return CLASSIFIER_SAMPLE_CHECKLIST.map(step => ({ ...step }))
     }
     if (projectType === 'anomaly') {
       return ANOMALY_SAMPLE_CHECKLIST.map(step => ({ ...step }))
+    }
+  }
+
+  if (dataStatus === 'need-data') {
+    if (projectType === 'classifier') {
+      return CLASSIFIER_NEED_DATA_CHECKLIST.map(step => ({ ...step }))
+    }
+    if (projectType === 'anomaly') {
+      return ANOMALY_NEED_DATA_CHECKLIST.map(step => ({ ...step }))
     }
   }
 
@@ -452,7 +538,9 @@ function applyDataStatusModifications(
       firstStep.descriptionMinimal = 'View your imported HF dataset.'
       firstStep.linkPath = `/chat/data/${encodeURIComponent(datasetName)}`
       firstStep.linkLabel = 'View dataset'
-    } else {
+    } else if (projectType !== 'classifier' && projectType !== 'anomaly') {
+      // For non-classifier/anomaly types, show generic "find data" step
+      // (classifier/anomaly use pre-defined NEED_DATA checklists)
       firstStep.title = 'Find & import data'
       firstStep.descriptionFull =
         "Check out Hugging Face datasets or synthetic data generators to find data for your project. Once you have files, come back and create a dataset."

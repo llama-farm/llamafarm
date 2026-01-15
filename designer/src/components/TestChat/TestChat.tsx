@@ -1422,6 +1422,20 @@ export default function TestChat({
       return
     }
 
+    // Check if selected model matches by base_name (for onboarding-trained models)
+    // e.g., "sample-support-ticket_20260115_123456" should match model with base_name "sample-support-ticket"
+    if (selectedAnomalyModel) {
+      const matchingModel = sortedAnomalyModels.find(m => {
+        const baseName = m.base_name || m.name
+        return selectedAnomalyModel.startsWith(baseName)
+      })
+      if (matchingModel) {
+        // Update to the actual model name
+        setSelectedAnomalyModel(matchingModel.name)
+        return
+      }
+    }
+
     // Selected model is invalid or doesn't exist - fall back to first available
     if (validModelNames.length > 0) {
       setSelectedAnomalyModel(validModelNames[0])
@@ -1535,6 +1549,20 @@ export default function TestChat({
 
     if (selectedClassifierModel && validModelNames.includes(selectedClassifierModel)) {
       return
+    }
+
+    // Check if selected model matches by base_name (for onboarding-trained models)
+    // e.g., "sample-sentiment_20260115_123456" should match model with base_name "sample-sentiment"
+    if (selectedClassifierModel) {
+      const matchingModel = sortedClassifierModels.find(m => {
+        const baseName = m.base_name || m.name
+        return selectedClassifierModel.startsWith(baseName)
+      })
+      if (matchingModel) {
+        // Update to the actual model name
+        setSelectedClassifierModel(matchingModel.name)
+        return
+      }
     }
 
     if (validModelNames.length > 0) {

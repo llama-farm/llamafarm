@@ -56,9 +56,26 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
   }, [location.pathname])
 
   // Find current step based on path
-  const currentStepIndex = checklist.findIndex(step =>
-    step.linkPath && location.pathname.includes(step.linkPath.split('?')[0])
-  )
+  // We look for the step whose linkPath (without query params) matches the current pathname
+  // When multiple steps have similar paths, prefer exact match over partial match
+  const currentStepIndex = (() => {
+    const pathname = location.pathname
+
+    // First, try to find an exact match
+    const exactMatchIndex = checklist.findIndex(step => {
+      if (!step.linkPath) return false
+      const stepPath = step.linkPath.split('?')[0]
+      return stepPath === pathname
+    })
+    if (exactMatchIndex >= 0) return exactMatchIndex
+
+    // Fall back to partial match (pathname includes step path)
+    return checklist.findIndex(step => {
+      if (!step.linkPath) return false
+      const stepPath = step.linkPath.split('?')[0]
+      return pathname.includes(stepPath)
+    })
+  })()
   const currentStep = currentStepIndex >= 0 ? checklist[currentStepIndex] : null
 
   // Generate contextual tip based on current step and user's answers
@@ -137,6 +154,11 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
 
   // Don't render if onboarding not completed or checklist dismissed
   if (!state.onboardingCompleted || state.checklistDismissed) {
+    return null
+  }
+
+  // Don't render for advanced users ("get out of my way")
+  if (state.answers.experienceLevel === 'advanced') {
     return null
   }
 

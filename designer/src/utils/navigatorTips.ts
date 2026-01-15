@@ -31,6 +31,7 @@ export function generateNavigatorTip(
   const isDataStep = currentStep.id.includes('data') || currentStep.id.includes('sample')
   const isPromptStep = currentStep.id.includes('prompt')
   const isTestStep = currentStep.id.includes('test')
+  const isTrainStep = currentStep.id.includes('train')
   const isShipStep = currentStep.id.includes('ship') || currentStep.id.includes('build') || currentStep.id.includes('decide')
   const isCreateStep = currentStep.id.includes('create')
 
@@ -42,6 +43,11 @@ export function generateNavigatorTip(
   // Create model step (classifier/anomaly step 2)
   if (isCreateStep) {
     return getCreateStepTip(projectType)
+  }
+
+  // Train & test step (classifier/anomaly need-data flow step 2)
+  if (isTrainStep) {
+    return getTrainStepTip(projectType)
   }
 
   // Prompt page tips (step 2 for doc-qa)
@@ -83,7 +89,7 @@ function getDataPageTip(
         return { text: `${demoName} data is loading. Once processed, you can ask questions about it.` }
       }
       if (dataStatus === 'need-data' && hfDatasetName) {
-        return { text: `"${hfDatasetName}" is importing. This will be your AI's knowledge base.` }
+        return { text: `Your "${hfDatasetName}" dataset is here. Hit Process to prepare it for your AI.` }
       }
       return { text: 'Add documents to create a knowledge base for your AI assistant.' }
 
@@ -91,11 +97,17 @@ function getDataPageTip(
       if (dataStatus === 'sample-data') {
         return { text: 'Sample classifier is training! Check progress, then test it with new content.' }
       }
+      if (dataStatus === 'need-data') {
+        return { text: 'Add training data or use sample data, then tap Train to create your classifier.' }
+      }
       return { text: 'Upload labeled examples so your classifier can learn to categorize content.' }
 
     case 'anomaly':
       if (dataStatus === 'sample-data') {
         return { text: 'Sample detector is training! Once ready, test it with normal and unusual inputs.' }
+      }
+      if (dataStatus === 'need-data') {
+        return { text: 'Add baseline data or use sample data, then tap Train to create your detector.' }
       }
       return { text: "Upload examples of 'normal' so your detector can learn what's unusual." }
 
@@ -113,9 +125,20 @@ function getDataPageTip(
 function getCreateStepTip(projectType: string | null): NavigatorTip | null {
   switch (projectType) {
     case 'classifier':
-      return { text: 'Define your categories and upload training data. More examples = better accuracy.' }
+      return { text: 'Add training data or use sample data, then hit Train to create your classifier.' }
     case 'anomaly':
-      return { text: 'Train on normal data so your detector knows what patterns to expect.' }
+      return { text: 'Add baseline data or use sample data, then hit Train to create your detector.' }
+    default:
+      return null
+  }
+}
+
+function getTrainStepTip(projectType: string | null): NavigatorTip | null {
+  switch (projectType) {
+    case 'classifier':
+      return { text: 'Tap Train to build your classifier, then test it with a few examples.' }
+    case 'anomaly':
+      return { text: 'Tap Train to build your detector, then test it with normal and unusual inputs.' }
     default:
       return null
   }
