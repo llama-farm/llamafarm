@@ -1,0 +1,162 @@
+version: v1
+name: gardening-guide
+namespace: default
+
+# =============================================================================
+# RUNTIME CONFIGURATION - Universal Runtime with fast, lightweight model
+# =============================================================================
+runtime:
+  models:
+    - name: default
+      description: "Qwen3 1.7B (GGUF Q4_K_M quantized) - Fast, efficient model optimized for Apple Silicon and local inference"
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
+      base_url: http://127.0.0.1:11540/v1
+      default: true
+      prompt_format: unstructured
+      prompts: ["default"]
+
+# =============================================================================
+# PROMPTS CONFIGURATION - US Gardening Guide Expert
+# =============================================================================
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a friendly, knowledgeable gardening expert helping home gardeners across the United States. You have deep expertise in:
+
+          - USDA hardiness zones and regional growing conditions
+          - Vegetable gardening (planting times, growing guides, troubleshooting)
+          - Flower gardening (annuals, perennials, design)
+          - Soil preparation, composting, and amendments
+          - Pest and disease identification and organic management
+          - Watering, irrigation, and water conservation
+          - Container and small-space gardening
+
+          When answering questions:
+          1. Ask clarifying questions if the user's location/zone isn't clear - it matters a lot!
+          2. Give specific, actionable advice rather than generic tips
+          3. Consider the time of year when giving planting recommendations
+          4. Mention common mistakes to avoid
+          5. If discussing pests or diseases, focus on organic/IPM solutions first
+
+          Be encouraging! Gardening has a learning curve and mistakes are part of the process.
+
+          If you don't have specific information in your knowledge base, say so rather than guessing.
+          Always base your answers on the documents provided.
+
+# =============================================================================
+# DATASETS CONFIGURATION - Gardening knowledge demo dataset
+# =============================================================================
+datasets:
+  - name: gardening_knowledge
+    database: gardening_knowledge_db
+    data_processing_strategy: default
+
+# =============================================================================
+# RAG CONFIGURATION - Optimized for gardening documentation
+# =============================================================================
+rag:
+  default_database: gardening_knowledge_db
+
+  # =============================================================================
+  # DATABASE CONFIGURATION - ChromaDB optimized for gardening content
+  # =============================================================================
+  databases:
+    - name: "gardening_knowledge_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/chroma/gardening_knowledge_db"
+        distance_function: "cosine"
+        collection_name: "gardening_knowledge"
+
+      # Embedding configuration - high quality embeddings
+      default_embedding_strategy: "semantic_embeddings"
+      embedding_strategies:
+        - name: "semantic_embeddings"
+          type: "UniversalEmbedder"
+          priority: 0
+          config:
+            model: sentence-transformers/all-MiniLM-L6-v2
+            base_url: http://127.0.0.1:11540/v1
+            batch_size: 32
+            timeout: 120
+            normalize: true
+
+      # Retrieval configuration - semantic search with high recall
+      default_retrieval_strategy: "comprehensive_search"
+      retrieval_strategies:
+        - name: "comprehensive_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 12
+          default: true
+
+        - name: "precise_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 5
+
+  # Processing strategy - supports markdown, PDF, TXT, and DOCX
+  data_processing_strategies:
+    - name: "default"
+      description: "Universal processor for gardening content"
+      parsers:
+        # PDF Parser with robust fallback
+        - type: "PDFParser_LlamaIndex"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 10
+          config:
+            chunk_strategy: "semantic"
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        - type: "PDFParser_PyPDF2"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 50
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "paragraphs"
+            extract_metadata: true
+            combine_pages: false
+
+        # Word Document Parser
+        - type: "DocxParser_LlamaIndex"
+          file_include_patterns: ["*.docx", "*.DOCX"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        # Markdown Parser
+        - type: "MarkdownParser_Python"
+          file_include_patterns: ["*.md", "*.markdown"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sections"
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+
+        # Plain Text Parser (catch-all)
+        - type: "TextParser_Python"
+          file_include_patterns: ["*.txt", "*.text"]
+          priority: 50
+          config:
+            encoding: "utf-8"
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sentences"
+            clean_text: true
+            extract_metadata: true
+      extractors: []
