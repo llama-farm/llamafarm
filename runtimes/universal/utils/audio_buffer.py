@@ -142,6 +142,11 @@ COMPRESSED_AUDIO_SIGNATURES = {
 # WebM Cluster element ID (seen when streaming WebM chunks)
 WEBM_CLUSTER_ID = b"\x1f\x43\xb6\x75"
 
+# Allowed audio formats for FFmpeg input (whitelist for security)
+ALLOWED_FFMPEG_FORMATS = frozenset({
+    "webm", "ogg", "mp3", "flac", "aiff", "wav", "m4a", "mp4", "opus",
+})
+
 
 def detect_audio_format(audio_data: bytes) -> tuple[str, bool]:
     """Detect the format of audio data.
@@ -209,32 +214,30 @@ def _decode_with_pyav(
     """
     import av
 
-    # Open container from bytes
-    container = av.open(io.BytesIO(audio_data))
+    # Open container from bytes using context manager to ensure cleanup
+    with av.open(io.BytesIO(audio_data)) as container:
+        # Find audio stream
+        audio_stream = next((s for s in container.streams if s.type == "audio"), None)
+        if audio_stream is None:
+            raise RuntimeError("No audio stream found in container")
 
-    # Find audio stream
-    audio_stream = next((s for s in container.streams if s.type == "audio"), None)
-    if audio_stream is None:
-        raise RuntimeError("No audio stream found in container")
+        # Set up resampler for 16kHz mono s16
+        resampler = av.AudioResampler(
+            format="s16",
+            layout="mono" if channels == 1 else "stereo",
+            rate=sample_rate,
+        )
 
-    # Set up resampler for 16kHz mono s16
-    resampler = av.AudioResampler(
-        format="s16",
-        layout="mono" if channels == 1 else "stereo",
-        rate=sample_rate,
-    )
+        # Decode and resample
+        pcm_chunks = []
+        for frame in container.decode(audio_stream):
+            # Resample to target format
+            resampled_frames = resampler.resample(frame)
+            for resampled in resampled_frames:
+                # Get raw bytes from plane
+                pcm_chunks.append(bytes(resampled.planes[0]))
 
-    # Decode and resample
-    pcm_chunks = []
-    for frame in container.decode(audio_stream):
-        # Resample to target format
-        resampled_frames = resampler.resample(frame)
-        for resampled in resampled_frames:
-            # Get raw bytes from plane
-            pcm_chunks.append(bytes(resampled.planes[0]))
-
-    container.close()
-    return b"".join(pcm_chunks)
+        return b"".join(pcm_chunks)
 
 
 def _decode_with_ffmpeg(
@@ -247,13 +250,24 @@ def _decode_with_ffmpeg(
 
     Args:
         audio_data: Compressed audio bytes
-        input_format: Input format hint for FFmpeg
+        input_format: Input format hint for FFmpeg (must be in ALLOWED_FFMPEG_FORMATS)
         sample_rate: Output sample rate
         channels: Output channels
 
     Returns:
         Raw PCM audio bytes (signed 16-bit little-endian)
+
+    Raises:
+        ValueError: If input_format is not in the allowed formats whitelist
+        RuntimeError: If FFmpeg decoding fails
     """
+    # Validate input_format against whitelist to prevent command injection
+    if input_format is not None and input_format not in ALLOWED_FFMPEG_FORMATS:
+        raise ValueError(
+            f"Unsupported audio format: {input_format}. "
+            f"Allowed formats: {', '.join(sorted(ALLOWED_FFMPEG_FORMATS))}"
+        )
+
     # Write input to temp file (FFmpeg needs seekable input for some formats)
     input_suffix = f".{input_format}" if input_format else ".webm"
     with tempfile.NamedTemporaryFile(suffix=input_suffix, delete=False) as tmp_in:

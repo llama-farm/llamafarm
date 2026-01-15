@@ -2671,18 +2671,6 @@ async def load_speech(
     return _models.get(cache_key)
 
 
-class TranscriptionRequest(PydanticBaseModel):
-    """OpenAI-compatible audio transcription request (JSON variant)."""
-
-    model: str = "distil-large-v3"  # Model size: tiny, base, small, medium, large-v3, distil-large-v3
-    language: str | None = None  # ISO language code (e.g., "en", "es"). Auto-detected if None.
-    prompt: str | None = None  # Optional text to condition the model
-    response_format: Literal["json", "text", "srt", "vtt", "verbose_json"] = "json"
-    temperature: float = 0.0  # Sampling temperature (0.0 = deterministic)
-    timestamp_granularities: list[Literal["word", "segment"]] | None = None
-    file_id: str | None = None  # File ID from /v1/files upload (alternative to multipart)
-
-
 @app.post("/v1/audio/transcriptions")
 async def create_transcription(
     file: UploadFile | None = None,

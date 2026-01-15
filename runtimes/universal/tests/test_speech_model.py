@@ -341,39 +341,25 @@ class TestAudioConversion:
 
 
 class TestTimestampFormatting:
-    """Tests for timestamp formatting utilities."""
-
-    @staticmethod
-    def _format_timestamp_srt(seconds: float) -> str:
-        """Format seconds as SRT timestamp (HH:MM:SS,mmm)."""
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        millis = int((seconds % 1) * 1000)
-        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
-
-    @staticmethod
-    def _format_timestamp_vtt(seconds: float) -> str:
-        """Format seconds as VTT timestamp (HH:MM:SS.mmm)."""
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        millis = int((seconds % 1) * 1000)
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+    """Tests for timestamp formatting utilities from server.py."""
 
     def test_format_timestamp_srt(self):
-        """Test SRT timestamp formatting."""
-        assert self._format_timestamp_srt(0.0) == "00:00:00,000"
-        assert self._format_timestamp_srt(1.5) == "00:00:01,500"
-        assert self._format_timestamp_srt(65.123) == "00:01:05,123"
+        """Test SRT timestamp formatting using production function."""
+        from server import _format_timestamp_srt
+
+        assert _format_timestamp_srt(0.0) == "00:00:00,000"
+        assert _format_timestamp_srt(1.5) == "00:00:01,500"
+        assert _format_timestamp_srt(65.123) == "00:01:05,123"
         # Use exact decimal to avoid floating point precision issues
-        assert self._format_timestamp_srt(3662.0) == "01:01:02,000"
+        assert _format_timestamp_srt(3662.0) == "01:01:02,000"
 
     def test_format_timestamp_vtt(self):
-        """Test VTT timestamp formatting."""
-        assert self._format_timestamp_vtt(0.0) == "00:00:00.000"
-        assert self._format_timestamp_vtt(1.5) == "00:00:01.500"
-        assert self._format_timestamp_vtt(65.123) == "00:01:05.123"
+        """Test VTT timestamp formatting using production function."""
+        from server import _format_timestamp_vtt
+
+        assert _format_timestamp_vtt(0.0) == "00:00:00.000"
+        assert _format_timestamp_vtt(1.5) == "00:00:01.500"
+        assert _format_timestamp_vtt(65.123) == "00:01:05.123"
 
 
 class TestSilenceDetection:
