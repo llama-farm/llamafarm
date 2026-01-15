@@ -3,6 +3,8 @@
  * Each demo is fully self-contained with config and files
  */
 
+import type { ProjectType } from '../types/onboarding'
+
 export interface DemoFile {
   path: string
   filename: string
@@ -18,15 +20,22 @@ export interface DemoConfig {
   category: string
   estimatedTime: string
 
-  // Paths relative to /demo-files/
-  configPath: string
-  files: DemoFile[]
+  // Which project types this demo is suitable for
+  projectTypes: ProjectType[]
 
-  // Dataset info from config
-  datasetName: string
+  // Paths relative to /demo-files/ (optional for inline data demos like classifier/anomaly)
+  configPath?: string
+  files?: DemoFile[]
 
-  // Sample questions to try
-  sampleQuestions: string[]
+  // Dataset info from config (optional for model-based demos)
+  datasetName?: string
+
+  // Sample questions to try (optional)
+  sampleQuestions?: string[]
+
+  // For model-based demos (classifier, anomaly) - links directly to model page with sample data
+  modelType?: 'classifier' | 'anomaly'
+  sampleDataId?: string // ID to pass to the model page to load sample data
 }
 
 export const AVAILABLE_DEMOS: DemoConfig[] = [
@@ -38,6 +47,7 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     icon: '🦙',
     category: 'Agriculture & Animal Husbandry',
     estimatedTime: '~30 seconds',
+    projectTypes: ['doc-qa', 'exploring'],
 
     configPath: '/demo-files/llama/llamafarm.yaml',
     files: [
@@ -68,6 +78,7 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     icon: '🎅',
     category: 'Holiday & Seasonal',
     estimatedTime: '~30 seconds',
+    projectTypes: ['doc-qa', 'exploring'],
 
     configPath: '/demo-files/santa/llamafarm.yaml',
     files: [
@@ -88,6 +99,82 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
       'How do I keep my Christmas tree fresh all season?',
       'What are some easy holiday cookies kids can help bake?'
     ]
+  },
+
+  // Classifier sample datasets
+  {
+    id: 'sentiment-classifier',
+    name: 'sentiment',
+    displayName: 'Sentiment Analysis',
+    description: '3 classes, 200 examples - Classify text as positive, negative, or neutral',
+    icon: '😊',
+    category: 'Text Classification',
+    estimatedTime: '~2 minutes',
+    projectTypes: ['classifier'],
+    modelType: 'classifier',
+    sampleDataId: 'sentiment',
+  },
+  {
+    id: 'expense-classifier',
+    name: 'expense',
+    displayName: 'Expense Reports',
+    description: '5 classes, 200 examples - Categorize expense descriptions',
+    icon: '💰',
+    category: 'Text Classification',
+    estimatedTime: '~2 minutes',
+    projectTypes: ['classifier'],
+    modelType: 'classifier',
+    sampleDataId: 'expense',
+  },
+
+  // Anomaly detection sample datasets
+  {
+    id: 'fridge-temp-anomaly',
+    name: 'fridge-temp',
+    displayName: 'Fridge Temperature Data',
+    description: 'Numeric, 1 column - Detect temperature anomalies',
+    icon: '🌡️',
+    category: 'Anomaly Detection',
+    estimatedTime: '~1 minute',
+    projectTypes: ['anomaly'],
+    modelType: 'anomaly',
+    sampleDataId: 'fridge-temp',
+  },
+  {
+    id: 'biometric-anomaly',
+    name: 'biometric',
+    displayName: 'Biometric Data',
+    description: 'Numeric, 5 columns - Monitor health metrics for outliers',
+    icon: '❤️',
+    category: 'Anomaly Detection',
+    estimatedTime: '~1 minute',
+    projectTypes: ['anomaly'],
+    modelType: 'anomaly',
+    sampleDataId: 'biometric',
+  },
+  {
+    id: 'build-status-anomaly',
+    name: 'build-status',
+    displayName: 'Build Statuses',
+    description: 'Text, 1 column - Detect unusual CI/CD patterns',
+    icon: '🔧',
+    category: 'Anomaly Detection',
+    estimatedTime: '~1 minute',
+    projectTypes: ['anomaly'],
+    modelType: 'anomaly',
+    sampleDataId: 'build-status',
+  },
+  {
+    id: 'support-ticket-anomaly',
+    name: 'support-ticket',
+    displayName: 'Support Ticket Data',
+    description: 'Text, 5 columns - Find unusual support patterns',
+    icon: '🎫',
+    category: 'Anomaly Detection',
+    estimatedTime: '~1 minute',
+    projectTypes: ['anomaly'],
+    modelType: 'anomaly',
+    sampleDataId: 'support-ticket',
   },
 
   // Easy to add more demos:
@@ -113,4 +200,44 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
 
 export function getDemoById(id: string): DemoConfig | undefined {
   return AVAILABLE_DEMOS.find(demo => demo.id === id)
+}
+
+export function getDemosByProjectType(projectType: ProjectType | null): DemoConfig[] {
+  if (!projectType) return AVAILABLE_DEMOS
+  return AVAILABLE_DEMOS.filter(demo => demo.projectTypes.includes(projectType))
+}
+
+/**
+ * Type guard to check if a demo is a file-based demo (RAG/doc-qa)
+ * These demos have configPath, files, and datasetName
+ */
+export interface FileBasedDemo extends DemoConfig {
+  configPath: string
+  files: DemoFile[]
+  datasetName: string
+  sampleQuestions: string[]
+}
+
+export function isFileBasedDemo(demo: DemoConfig): demo is FileBasedDemo {
+  return !!demo.configPath && !!demo.files && !!demo.datasetName
+}
+
+/**
+ * Get only file-based demos (for Data page import)
+ */
+export function getFileBasedDemos(): FileBasedDemo[] {
+  return AVAILABLE_DEMOS.filter(isFileBasedDemo)
+}
+
+/**
+ * Type guard to check if a demo is a model-based demo (classifier/anomaly)
+ * These demos have modelType and sampleDataId
+ */
+export interface ModelBasedDemo extends DemoConfig {
+  modelType: 'classifier' | 'anomaly'
+  sampleDataId: string
+}
+
+export function isModelBasedDemo(demo: DemoConfig): demo is ModelBasedDemo {
+  return !!demo.modelType && !!demo.sampleDataId
 }

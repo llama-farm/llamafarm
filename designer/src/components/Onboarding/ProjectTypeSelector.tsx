@@ -26,42 +26,42 @@ const projectTypes: ProjectTypeOption[] = [
   {
     id: 'doc-qa',
     icon: <MessageSquare className="w-7 h-7" />,
-    title: 'Chat with my documents',
-    subtitle: 'Ask questions, get answers from your files',
+    title: 'Chat with documents',
+    subtitle: 'Good for: customer support bots, knowledge bases, FAQ assistants',
     gradient: 'from-blue-500/20 to-cyan-500/20',
-    iconBg: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+    iconBg: 'bg-blue-500/20 text-blue-400 dark:bg-blue-500/25 dark:text-blue-300',
   },
   {
     id: 'classifier',
     icon: <Tag className="w-7 h-7" />,
     title: 'Sort & label content',
-    subtitle: 'Teach AI to categorize like you do',
+    subtitle: 'Good for: ticket routing, content tagging, sentiment analysis',
     gradient: 'from-purple-500/20 to-pink-500/20',
-    iconBg: 'bg-purple-500/15 text-purple-600 dark:text-purple-400',
+    iconBg: 'bg-purple-500/20 text-purple-400 dark:bg-purple-500/25 dark:text-purple-300',
   },
   {
     id: 'anomaly',
     icon: <AlertTriangle className="w-7 h-7" />,
     title: 'Spot the odd ones out',
-    subtitle: 'Find what doesn\'t belong',
+    subtitle: 'Good for: fraud detection, quality control, outlier analysis',
     gradient: 'from-amber-500/20 to-orange-500/20',
-    iconBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+    iconBg: 'bg-amber-500/20 text-amber-400 dark:bg-amber-500/25 dark:text-amber-300',
   },
   {
     id: 'doc-scan',
     icon: <FileText className="w-7 h-7" />,
     title: 'Extract info from docs',
-    subtitle: 'Pull structured data from messy files',
+    subtitle: 'Good for: invoice processing, resume parsing, form extraction',
     gradient: 'from-emerald-500/20 to-teal-500/20',
-    iconBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+    iconBg: 'bg-emerald-500/20 text-emerald-400 dark:bg-emerald-500/25 dark:text-emerald-300',
   },
   {
     id: 'exploring',
     icon: <FlaskConical className="w-7 h-7" />,
     title: 'Just poking around',
-    subtitle: 'Show me what this thing can do!',
+    subtitle: 'Good for: learning the platform and experimenting with AI',
     gradient: 'from-rose-500/20 to-violet-500/20',
-    iconBg: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+    iconBg: 'bg-rose-500/20 text-rose-400 dark:bg-rose-500/25 dark:text-rose-300',
   },
 ]
 
@@ -116,9 +116,9 @@ export function ProjectTypeSelector({
               {option.subtitle}
             </div>
 
-            {/* Selection indicator */}
+            {/* Selection indicator - inside card */}
             {selected === option.id && (
-              <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+              <div className="absolute top-3 right-3 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
                 <svg className="w-3 h-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                 </svg>

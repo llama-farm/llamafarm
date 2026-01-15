@@ -10,7 +10,7 @@ import YAML from 'yaml'
 import projectService from '../api/projectService'
 import datasetService from '../api/datasets'
 import modelService from '../api/modelService'
-import { DemoConfig } from '../config/demos'
+import { type FileBasedDemo } from '../config/demos'
 import { projectKeys } from './useProjects'
 
 export type DemoStep =
@@ -52,7 +52,7 @@ export interface UseDemoWorkflowReturn {
   processingResult: ProcessingResult | null
 
   // Actions
-  startDemo: (demo: DemoConfig, namespace: string) => Promise<void>
+  startDemo: (demo: FileBasedDemo, namespace: string) => Promise<void>
   reset: () => void
   navigateToChat: () => void
 }
@@ -111,7 +111,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
   }, [navigate, projectName])
 
   const startDemo = useCallback(
-    async (demo: DemoConfig, namespace: string) => {
+    async (demo: FileBasedDemo, namespace: string) => {
       // Always reset state completely before starting
       reset()
 

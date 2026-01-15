@@ -14,6 +14,7 @@ import type {
   UseOnboardingReturn,
   ChecklistStep,
 } from '../types/onboarding'
+import type { SelectedHFDataset } from '../types/huggingface'
 import {
   DEFAULT_ONBOARDING_STATE,
   PROJECT_TYPE_LABELS,
@@ -86,8 +87,8 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
 
   // Generate checklist based on current answers
   const checklist = useMemo<ChecklistStep[]>(() => {
-    const { projectType, dataStatus } = state.answers
-    return generateChecklist(projectType, dataStatus)
+    const { projectType, dataStatus, selectedHFDataset } = state.answers
+    return generateChecklist(projectType, dataStatus, selectedHFDataset)
   }, [state.answers])
 
   // Check if current step has a valid selection to proceed
@@ -103,6 +104,7 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
         if (answers.dataStatus === 'sample-data') {
           return answers.selectedSampleDataset !== null
         }
+        // If need-data is selected, HF dataset is optional - can proceed without it
         return answers.dataStatus !== null
       case 3:
         return answers.deployTarget !== null
@@ -120,6 +122,8 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
       wizardOpen: true,
       currentStep: 0,
     }))
+    // Dispatch event to close chat panel during onboarding
+    window.dispatchEvent(new CustomEvent('lf-onboarding-started'))
   }, [])
 
   const closeWizard = useCallback(() => {
@@ -188,6 +192,16 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
         )
       }
 
+      // If HF dataset was selected, dispatch event to trigger background import
+      // (but DON'T navigate away - let user see their checklist first)
+      if (prev.answers.dataStatus === 'need-data' && prev.answers.selectedHFDataset) {
+        window.dispatchEvent(
+          new CustomEvent('lf-onboarding-import-hf-background', {
+            detail: { hfDataset: prev.answers.selectedHFDataset },
+          })
+        )
+      }
+
       return {
         ...prev,
         wizardOpen: false,
@@ -215,6 +229,8 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
         dataStatus: status,
         // Clear sample dataset selection if not using sample-data
         selectedSampleDataset: status === 'sample-data' ? prev.answers.selectedSampleDataset : null,
+        // Clear HF dataset selection if not using need-data
+        selectedHFDataset: status === 'need-data' ? prev.answers.selectedHFDataset : null,
       },
     }))
   }, [])
@@ -223,6 +239,13 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setState(prev => ({
       ...prev,
       answers: { ...prev.answers, selectedSampleDataset: demoId },
+    }))
+  }, [])
+
+  const setSelectedHFDataset = useCallback((dataset: SelectedHFDataset | null) => {
+    setState(prev => ({
+      ...prev,
+      answers: { ...prev.answers, selectedHFDataset: dataset },
     }))
   }, [])
 
@@ -287,7 +310,10 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setState({
       ...DEFAULT_ONBOARDING_STATE,
       wizardOpen: true,
+      currentStep: 1, // Skip welcome, go straight to "what are you building"
     })
+    // Dispatch event to close chat panel during onboarding
+    window.dispatchEvent(new CustomEvent('lf-onboarding-reset'))
   }, [])
 
   // Derived helpers
@@ -336,6 +362,7 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setProjectType,
     setDataStatus,
     setSelectedSampleDataset,
+    setSelectedHFDataset,
     setDeployTarget,
     setExperienceLevel,
 

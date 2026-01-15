@@ -4,7 +4,7 @@ import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
-import { AVAILABLE_DEMOS } from '../../config/demos'
+import { getFileBasedDemos } from '../../config/demos'
 import * as YAML from 'yaml'
 import {
   saveDatasetTaskId,
@@ -48,6 +48,8 @@ import datasetService from '../../api/datasets'
 import projectService from '../../api/projectService'
 import { useProject } from '../../hooks/useProjects'
 import { useDataProcessingStrategies } from '../../hooks/useDataProcessingStrategies'
+import { useImportHFDataset } from '../../hooks/useHFDatasets'
+import type { SelectedHFDataset } from '../../types/huggingface'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
 import { isValidFile } from '../../utils/fileValidation'
@@ -451,6 +453,11 @@ const Data = () => {
 
   // Ref for auto-import demo handling
   const autoImportDemoRef = useRef<string | null>(null)
+  // Ref for auto-import HF dataset handling
+  const autoImportHFRef = useRef<SelectedHFDataset | null>(null)
+
+  // HF import mutation
+  const importHFMutation = useImportHFDataset()
 
   // Handle URL query params for modal triggers and redirects
   const hasHandledQueryParams = useRef(false)
@@ -463,6 +470,20 @@ const Data = () => {
     if (autoImportDemo) {
       hasHandledQueryParams.current = true
       autoImportDemoRef.current = autoImportDemo
+      // Clear the query param from URL
+      navigate('/chat/data', { replace: true })
+      return
+    }
+
+    // Check for auto-import HF dataset (from onboarding wizard)
+    const autoImportHF = params.get('autoImportHF')
+    if (autoImportHF) {
+      hasHandledQueryParams.current = true
+      try {
+        autoImportHFRef.current = JSON.parse(autoImportHF) as SelectedHFDataset
+      } catch {
+        console.error('Failed to parse HF dataset from URL')
+      }
       // Clear the query param from URL
       navigate('/chat/data', { replace: true })
       return
@@ -501,7 +522,8 @@ const Data = () => {
     if (!activeProject?.namespace || !activeProject?.project) return
 
     const demoId = autoImportDemoRef.current
-    const demo = AVAILABLE_DEMOS.find(d => d.id === demoId)
+    const fileBasedDemos = getFileBasedDemos()
+    const demo = fileBasedDemos.find(d => d.id === demoId)
     if (!demo) {
       autoImportDemoRef.current = null
       return
@@ -646,7 +668,7 @@ const Data = () => {
           await processMutation.mutateAsync({
             namespace: activeProject.namespace,
             project: activeProject.project,
-            datasetName: demo.datasetName,
+            dataset: demo.datasetName,
           })
 
           toast({
@@ -670,6 +692,65 @@ const Data = () => {
 
     return () => clearTimeout(timer)
   }, [activeProject, projectResp, navigate, toast, createDatasetMutation, processMutation, refetchDatasets])
+
+  // Auto-import HF dataset when triggered from onboarding
+  useEffect(() => {
+    if (!autoImportHFRef.current) return
+    if (!activeProject?.namespace || !activeProject?.project) return
+
+    const hfDataset = autoImportHFRef.current
+    autoImportHFRef.current = null
+
+    // Use a small delay to ensure the component is fully mounted
+    const timer = setTimeout(() => {
+      const handleHFImport = async () => {
+        try {
+          // Generate a safe dataset name from the HF ID
+          const datasetName = `hf_${hfDataset.id.replace(/\//g, '_')}`
+
+          toast({
+            message: `Importing dataset "${hfDataset.name}" from Hugging Face...`,
+            variant: 'default',
+          })
+
+          // Call the backend import endpoint
+          const result = await importHFMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            dataset: datasetName,
+            hf_dataset_id: hfDataset.id,
+            config: hfDataset.config,
+            split: hfDataset.split,
+            max_rows: hfDataset.rowCount,
+            format: 'jsonl',
+            data_processing_strategy: 'default',
+            database: 'default',
+          })
+
+          toast({
+            message: `Dataset "${hfDataset.name}" imported successfully (${result.row_count} rows)!`,
+            variant: 'default',
+          })
+
+          // Refresh datasets list
+          await refetchDatasets()
+
+          // Navigate to the new dataset
+          navigate(`/chat/data/${datasetName}`)
+        } catch (error) {
+          console.error('HF import failed:', error)
+          toast({
+            message: `Failed to import dataset: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            variant: 'destructive',
+          })
+        }
+      }
+
+      handleHFImport()
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [activeProject, navigate, toast, importHFMutation, refetchDatasets])
 
   // Map of fileKey -> array of dataset ids (transient UI state)
   // const [fileAssignments] = useState<Record<string, string[]>>({})
@@ -1834,8 +1915,9 @@ const Data = () => {
               return
             }
 
-            // Check if this is a demo import
-            const demo = AVAILABLE_DEMOS.find(d => d.id === sourceProjectId)
+            // Check if this is a demo import (only file-based demos can be imported here)
+            const fileBasedDemos = getFileBasedDemos()
+            const demo = fileBasedDemos.find(d => d.id === sourceProjectId)
 
             if (demo) {
               // Handle demo import
@@ -2202,6 +2284,62 @@ const Data = () => {
             }
           } catch (error: any) {
             console.error('Import failed', error)
+            const serverMessage =
+              (error?.response?.data?.detail as string) ||
+              (error?.message as string) ||
+              'Unknown error'
+            toast({
+              message: `Failed to import dataset: ${serverMessage}`,
+              variant: 'destructive',
+            })
+          }
+        }}
+        onImportHF={async hfDataset => {
+          try {
+            if (!activeProject?.namespace || !activeProject?.project) {
+              toast({
+                message: 'No active project selected',
+                variant: 'destructive',
+              })
+              return
+            }
+
+            setIsImportOpen(false)
+
+            // Generate a safe dataset name from the HF ID
+            const datasetName = `hf_${hfDataset.id.replace(/\//g, '_')}`
+
+            toast({
+              message: `Importing dataset "${hfDataset.name}" from Hugging Face...`,
+              variant: 'default',
+            })
+
+            // Call the backend import endpoint
+            const result = await importHFMutation.mutateAsync({
+              namespace: activeProject.namespace,
+              project: activeProject.project,
+              dataset: datasetName,
+              hf_dataset_id: hfDataset.id,
+              config: hfDataset.config,
+              split: hfDataset.split,
+              max_rows: hfDataset.rowCount,
+              format: 'jsonl',
+              data_processing_strategy: 'default',
+              database: 'default',
+            })
+
+            toast({
+              message: `Dataset "${hfDataset.name}" imported successfully (${result.row_count} rows)!`,
+              variant: 'default',
+            })
+
+            // Refresh datasets list
+            await refetchDatasets()
+
+            // Navigate to the new dataset
+            navigate(`/chat/data/${datasetName}`)
+          } catch (error: any) {
+            console.error('HF import failed:', error)
             const serverMessage =
               (error?.response?.data?.detail as string) ||
               (error?.message as string) ||

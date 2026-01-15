@@ -1,5 +1,5 @@
 import FontIcon from '../../common/FontIcon'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
@@ -10,18 +10,23 @@ import { useProject } from '../../hooks/useProjects'
 // import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets } from '../../hooks/useDatasets'
+import { useImportHFDataset } from '../../hooks/useHFDatasets'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import type { SelectedHFDataset } from '../../types/huggingface'
 import {
   GettingStartedChecklist,
   OnboardingWizard,
   RestartOnboardingBanner,
   CollapsedChecklist,
 } from '../Onboarding'
+import { useToast } from '../ui/toast'
+import { getDemoById } from '../../config/demos'
 
 const Dashboard = () => {
   const navigate = useNavigate()
+  const { toast } = useToast()
   // const namespace = getCurrentNamespace()
   const activeProject = useActiveProject()
 
@@ -134,13 +139,20 @@ const Dashboard = () => {
     onboarding.openWizard,
   ])
 
-  // Listen for onboarding sample import event and navigate to Data page
+  // Listen for onboarding sample import event and navigate appropriately
   useEffect(() => {
     const handleImportSample = (event: Event) => {
       const demoId = (event as CustomEvent<{ demoId: string }>).detail?.demoId
       if (demoId) {
-        // Navigate to Data page with auto-import param
-        navigate(`/chat/data?autoImportDemo=${encodeURIComponent(demoId)}`)
+        const demo = getDemoById(demoId)
+        if (demo?.modelType && demo?.sampleDataId) {
+          // For classifier/anomaly demos, navigate to model page with sample data
+          const modelPath = demo.modelType === 'classifier' ? 'classifier' : 'anomaly'
+          navigate(`/chat/models/${modelPath}?sampleData=${encodeURIComponent(demo.sampleDataId)}`)
+        } else {
+          // For RAG/doc-qa demos, navigate to Data page with auto-import param
+          navigate(`/chat/data?autoImportDemo=${encodeURIComponent(demoId)}`)
+        }
       }
     }
 
@@ -149,6 +161,104 @@ const Dashboard = () => {
       window.removeEventListener('lf-onboarding-import-sample', handleImportSample)
     }
   }, [navigate])
+
+  // Listen for onboarding HF dataset import event and navigate to Data page
+  useEffect(() => {
+    const handleImportHF = (event: Event) => {
+      const hfDataset = (event as CustomEvent<{ hfDataset: { id: string; name: string; rowCount: number; config: string; split: string } }>).detail?.hfDataset
+      if (hfDataset) {
+        // Navigate to Data page with auto-import HF param
+        navigate(`/chat/data?autoImportHF=${encodeURIComponent(JSON.stringify(hfDataset))}`)
+      }
+    }
+
+    window.addEventListener('lf-onboarding-import-hf', handleImportHF)
+    return () => {
+      window.removeEventListener('lf-onboarding-import-hf', handleImportHF)
+    }
+  }, [navigate])
+
+  // HF import mutation for background import
+  const importHFMutation = useImportHFDataset()
+  const importHFMutationRef = useRef(importHFMutation)
+  importHFMutationRef.current = importHFMutation
+
+  const [pendingHFImport, setPendingHFImport] = useState<SelectedHFDataset | null>(null)
+
+  // Listen for background HF import event (doesn't navigate away - lets user see checklist)
+  useEffect(() => {
+    const handleBackgroundImportHF = (event: Event) => {
+      const hfDataset = (event as CustomEvent<{ hfDataset: SelectedHFDataset }>).detail?.hfDataset
+      if (hfDataset) {
+        console.log('[Dashboard] Received HF import event:', hfDataset)
+        setPendingHFImport(hfDataset)
+      }
+    }
+
+    window.addEventListener('lf-onboarding-import-hf-background', handleBackgroundImportHF)
+    return () => {
+      window.removeEventListener('lf-onboarding-import-hf-background', handleBackgroundImportHF)
+    }
+  }, [])
+
+  // Process pending HF import when we have active project
+  useEffect(() => {
+    if (!pendingHFImport) {
+      return
+    }
+    if (!activeProject?.namespace || !activeProject?.project) {
+      console.log('[Dashboard] No active project yet, waiting...', activeProject)
+      return
+    }
+
+    const hfDataset = pendingHFImport
+    setPendingHFImport(null)
+
+    // Generate a safe dataset name from the HF ID
+    const datasetName = `hf_${hfDataset.id.replace(/\//g, '_')}`
+
+    console.log('[Dashboard] Starting HF import:', {
+      namespace: activeProject.namespace,
+      project: activeProject.project,
+      dataset: datasetName,
+      hf_dataset_id: hfDataset.id,
+      config: hfDataset.config,
+      split: hfDataset.split,
+    })
+
+    // Import in background
+    importHFMutationRef.current.mutate(
+      {
+        namespace: activeProject.namespace,
+        project: activeProject.project,
+        dataset: datasetName,
+        hf_dataset_id: hfDataset.id,
+        config: hfDataset.config,
+        split: hfDataset.split,
+        max_rows: hfDataset.rowCount,
+        format: 'jsonl',
+        data_processing_strategy: 'default',
+        database: 'default',
+      },
+      {
+        onSuccess: data => {
+          console.log('[Dashboard] HF import completed successfully:', data)
+          toast({
+            message: `Successfully imported ${data.row_count} rows from Hugging Face.`,
+            icon: 'checkmark-filled',
+          })
+        },
+        onError: (error: Error) => {
+          console.error('[Dashboard] HF import failed:', error)
+          toast({
+            message: error.message || 'Failed to import dataset from Hugging Face.',
+            variant: 'destructive',
+            icon: 'alert-triangle',
+          })
+        },
+      }
+    )
+  }, [pendingHFImport, activeProject, toast])
 
   useEffect(() => {
     const refresh = () => {

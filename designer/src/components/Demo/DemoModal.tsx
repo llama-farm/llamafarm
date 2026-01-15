@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogDescription
 } from '../ui/dialog'
-import { AVAILABLE_DEMOS, DemoConfig } from '../../config/demos'
+import { getFileBasedDemos, type FileBasedDemo } from '../../config/demos'
 import { useDemoWorkflow, DemoStep, ApiCall, ProcessingResult } from '../../hooks/useDemoWorkflow'
 import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 
@@ -21,12 +21,13 @@ interface DemoModalProps {
   namespace: string
 }
 
-function DemoSelector({ onSelect }: { onSelect: (demo: DemoConfig) => void }) {
+function DemoSelector({ onSelect }: { onSelect: (demo: FileBasedDemo) => void }) {
+  const fileBasedDemos = getFileBasedDemos()
   return (
     <div className="space-y-4">
 
       <div className="grid gap-3">
-        {AVAILABLE_DEMOS.map(demo => (
+        {fileBasedDemos.map(demo => (
           <button
             key={demo.id}
             onClick={() => onSelect(demo)}
@@ -169,7 +170,7 @@ function WorkflowProgress({
   onStartChat,
   onRetry
 }: {
-  demo: DemoConfig
+  demo: FileBasedDemo
   currentStep: DemoStep
   progress: number
   error: string | null
@@ -387,14 +388,15 @@ function WorkflowProgress({
 }
 
 export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoModalProps & { autoStartDemoId?: string | null }) {
-  const [selectedDemo, setSelectedDemo] = useState<DemoConfig | null>(null)
+  const [selectedDemo, setSelectedDemo] = useState<FileBasedDemo | null>(null)
   const { currentStep, progress, error, apiCalls, projectName, processingResult, startDemo, reset } =
     useDemoWorkflow()
 
   // Auto-start demo if provided
   React.useEffect(() => {
     if (isOpen && autoStartDemoId && !selectedDemo && currentStep === 'idle') {
-      const demo = AVAILABLE_DEMOS.find(d => d.id === autoStartDemoId)
+      const fileBasedDemos = getFileBasedDemos()
+      const demo = fileBasedDemos.find(d => d.id === autoStartDemoId)
       if (demo) {
         handleSelectDemo(demo)
       }
@@ -402,7 +404,7 @@ export function DemoModal({ isOpen, onClose, namespace, autoStartDemoId }: DemoM
   }, [isOpen, autoStartDemoId, selectedDemo, currentStep])
 
 
-  const handleSelectDemo = (demo: DemoConfig) => {
+  const handleSelectDemo = (demo: FileBasedDemo) => {
     setSelectedDemo(demo)
     startDemo(demo, namespace)
   }

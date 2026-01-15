@@ -2,6 +2,8 @@
  * TypeScript types for the onboarding wizard and checklist
  */
 
+import type { SelectedHFDataset } from './huggingface'
+
 // Project type options (Screen 1)
 export type ProjectType =
   | 'doc-qa' // Chat with my documents
@@ -48,6 +50,7 @@ export interface OnboardingAnswers {
   projectType: ProjectType | null
   dataStatus: DataStatus | null
   selectedSampleDataset: string | null // Demo ID when sample-data is selected
+  selectedHFDataset: SelectedHFDataset | null // HF dataset when need-data is selected
   deployTarget: DeployTarget | null
   experienceLevel: ExperienceLevel | null
 }
@@ -104,6 +107,7 @@ export interface UseOnboardingReturn {
   setProjectType: (type: ProjectType) => void
   setDataStatus: (status: DataStatus) => void
   setSelectedSampleDataset: (demoId: string | null) => void
+  setSelectedHFDataset: (dataset: SelectedHFDataset | null) => void
   setDeployTarget: (target: DeployTarget) => void
   setExperienceLevel: (level: ExperienceLevel) => void
 
@@ -131,6 +135,7 @@ export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
     projectType: null,
     dataStatus: null,
     selectedSampleDataset: null,
+    selectedHFDataset: null,
     deployTarget: null,
     experienceLevel: null,
   },
@@ -144,7 +149,7 @@ export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
 
 // Labels for display
 export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
-  'doc-qa': 'Chat with my documents',
+  'doc-qa': 'Chat with documents',
   classifier: 'Sort & label content',
   anomaly: 'Spot outliers',
   'doc-scan': 'Extract info from docs',

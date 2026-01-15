@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -503,6 +503,7 @@ interface ClassifierTableRow {
 function ClassifierModel() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const isNewModel = !id || id === 'new'
 
   // Form state - modelName will be set after loading existing models
@@ -608,6 +609,51 @@ function ClassifierModel() {
       setModelName(uniqueName)
     }
   }, [isNewModel, modelName, isLoadingModels, existingBaseNames])
+
+  // Auto-import sample data from URL parameter (from onboarding flow)
+  useEffect(() => {
+    const sampleDataId = searchParams.get('sampleData')
+    if (sampleDataId && isNewModel) {
+      const dataset = CLASSIFIER_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
+      if (dataset?.data) {
+        // Group data by label to create class labels
+        const classMap = new Map<string, string[]>()
+        for (const item of dataset.data) {
+          const existing = classMap.get(item.label) || []
+          existing.push(item.text)
+          classMap.set(item.label, existing)
+        }
+
+        // Create class labels from the sample data
+        const newClassLabels: ClassLabel[] = Array.from(classMap.entries()).map(([name, examples], idx) => ({
+          id: String(Date.now()) + idx,
+          name,
+          examples,
+        }))
+
+        // Update state
+        setClassLabels(newClassLabels)
+        if (newClassLabels.length > 0) {
+          setActiveClassId(newClassLabels[0].id)
+          setTrainingDataInput(newClassLabels[0].examples.join('\n'))
+        }
+
+        // Also update table rows for table view
+        const newTableRows: ClassifierTableRow[] = dataset.data.map((item, idx) => ({
+          id: String(Date.now()) + idx + Math.random(),
+          example: item.text,
+          className: item.label,
+        }))
+        setTableRows(newTableRows)
+
+        // Switch to table view after importing sample data
+        setInputMode('table')
+
+        // Clear the URL parameter so it doesn't re-trigger
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [searchParams, setSearchParams, isNewModel])
 
   // Check if model name already exists (for warning display)
   useEffect(() => {

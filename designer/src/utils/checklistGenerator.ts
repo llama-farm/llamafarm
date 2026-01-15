@@ -7,6 +7,7 @@ import type {
   DataStatus,
   ChecklistStep,
 } from '../types/onboarding'
+import type { SelectedHFDataset } from '../types/huggingface'
 
 // Base checklist definitions for each project type
 const DOC_QA_CHECKLIST: ChecklistStep[] = [
@@ -257,12 +258,13 @@ function getBaseChecklist(projectType: ProjectType): ChecklistStep[] {
 }
 
 /**
- * Modify the first step based on data status
+ * Modify the first step based on data status and selected HF dataset
  */
 function applyDataStatusModifications(
   checklist: ChecklistStep[],
   dataStatus: DataStatus,
-  projectType: ProjectType
+  projectType: ProjectType,
+  selectedHFDataset?: SelectedHFDataset | null
 ): ChecklistStep[] {
   if (checklist.length === 0) return checklist
 
@@ -279,14 +281,28 @@ function applyDataStatusModifications(
     firstStep.linkPath = '/chat/data?modal=import'
     firstStep.linkLabel = 'Import sample'
   } else if (dataStatus === 'need-data') {
-    firstStep.title = 'Find & import data'
-    firstStep.descriptionFull =
-      "Check out Hugging Face datasets or synthetic data generators to find data for your project. Once you have files, come back and create a dataset."
-    firstStep.descriptionShort =
-      'Find data on Hugging Face or generate synthetic data, then import it.'
-    firstStep.descriptionMinimal = 'Find and import data.'
-    firstStep.linkPath = '/chat/data?modal=import'
-    firstStep.linkLabel = 'Import sample'
+    // If a HF dataset was selected, customize the first step to show they're importing it
+    if (selectedHFDataset) {
+      // Generate the same dataset name that Dashboard uses for the import
+      const datasetName = `hf_${selectedHFDataset.id.replace(/\//g, '_')}`
+      firstStep.title = 'Check out your imported dataset'
+      firstStep.descriptionFull =
+        `We're importing "${selectedHFDataset.name}" from Hugging Face in the background. Head to your dataset to see the import progress and explore your new data.`
+      firstStep.descriptionShort =
+        `Your "${selectedHFDataset.name}" dataset is being imported. Check its status.`
+      firstStep.descriptionMinimal = 'View your imported HF dataset.'
+      firstStep.linkPath = `/chat/data/${encodeURIComponent(datasetName)}`
+      firstStep.linkLabel = 'View dataset'
+    } else {
+      firstStep.title = 'Find & import data'
+      firstStep.descriptionFull =
+        "Check out Hugging Face datasets or synthetic data generators to find data for your project. Once you have files, come back and create a dataset."
+      firstStep.descriptionShort =
+        'Find data on Hugging Face or generate synthetic data, then import it.'
+      firstStep.descriptionMinimal = 'Find and import data.'
+      firstStep.linkPath = '/chat/data?modal=import'
+      firstStep.linkLabel = 'Import sample'
+    }
   }
 
   // For classifier and anomaly, the first step points to the training page if they have data
@@ -307,7 +323,8 @@ function applyDataStatusModifications(
  */
 export function generateChecklist(
   projectType: ProjectType | null,
-  dataStatus: DataStatus | null
+  dataStatus: DataStatus | null,
+  selectedHFDataset?: SelectedHFDataset | null
 ): ChecklistStep[] {
   if (!projectType) {
     return []
@@ -316,7 +333,7 @@ export function generateChecklist(
   let checklist = getBaseChecklist(projectType)
 
   if (dataStatus) {
-    checklist = applyDataStatusModifications(checklist, dataStatus, projectType)
+    checklist = applyDataStatusModifications(checklist, dataStatus, projectType, selectedHFDataset)
   }
 
   return checklist

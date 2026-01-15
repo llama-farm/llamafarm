@@ -21,6 +21,8 @@ export interface DatasetFile {
   mime_type: string
   /** Upload timestamp */
   timestamp: number
+  /** Number of chunks in vector database (0 = not processed, >0 = processed) */
+  chunk_count?: number | null
 }
 
 /**

@@ -42,7 +42,8 @@ export async function listDatasets(
   project: string
 ): Promise<ListDatasetsResponse> {
   const response = await apiClient.get<ListDatasetsResponse>(
-    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/`
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/`,
+    { params: { include_extra_details: true } }
   )
   return response.data
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { SAMPLE_DATASETS } from './sampleData'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -253,6 +253,7 @@ function formatPastedText(input: string): string {
 function AnomalyModel() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const isNewModel = !id || id === 'new'
 
   // Form state
@@ -342,6 +343,33 @@ function AnomalyModel() {
       setModelName(uniqueName)
     }
   }, [isNewModel, modelName, isLoadingModels, existingBaseNames])
+
+  // Auto-import sample data from URL parameter (from onboarding flow)
+  useEffect(() => {
+    const sampleDataId = searchParams.get('sampleData')
+    if (sampleDataId && isNewModel) {
+      const dataset = SAMPLE_DATASETS.find(d => d.id === sampleDataId)
+      if (dataset?.data) {
+        // Import the sample data
+        if (dataset.columns > 1) {
+          const result = textToTable(dataset.data)
+          if (result) {
+            setColumns(result.columns)
+            setTableRows(result.rows)
+            setInputMode('table')
+          } else {
+            setTrainingData(dataset.data)
+            setInputMode('text')
+          }
+        } else {
+          setTrainingData(dataset.data)
+          setInputMode('text')
+        }
+        // Clear the URL parameter so it doesn't re-trigger
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [searchParams, setSearchParams, isNewModel])
 
   // Check if model name already exists
   useEffect(() => {

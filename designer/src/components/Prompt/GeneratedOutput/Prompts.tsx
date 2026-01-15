@@ -422,27 +422,40 @@ const Prompts = () => {
             {set.items.map((prompt, index) => (
               <li
                 key={index}
-                className="flex items-center justify-between px-3 py-3 text-sm font-mono leading-4 tracking-[0.32px] border-b border-border last:border-b-0"
+                className="relative px-4 py-4 text-sm font-mono leading-4 tracking-[0.32px] border-b border-border last:border-b-0"
               >
-                <div className="font-mono text-xs text-muted-foreground truncate max-w-[60%] flex flex-col gap-1">
+                {/* Actions - top right corner */}
+                <div className="absolute top-3 right-4 flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2.5 text-xs font-sans font-normal"
+                    onClick={() => openEditPrompt(index, sIdx)}
+                  >
+                    <FontIcon
+                      type="edit"
+                      className="w-3.5 h-3.5 mr-1.5"
+                    />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => openDeletePrompt(index, sIdx)}
+                  >
+                    <FontIcon
+                      type="trashcan"
+                      className="w-4 h-4"
+                    />
+                  </Button>
+                </div>
+                {/* Content */}
+                <div className="font-mono text-xs text-muted-foreground flex flex-col gap-1 pr-28">
                   <span>{prompt.role || '—'}</span>
                   <div className="whitespace-pre-line break-words line-clamp-6 text-foreground">
                     {prompt.content}
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <FontIcon
-                    type="edit"
-                    isButton
-                    className="w-4 h-4 text-muted-foreground"
-                    handleOnClick={() => openEditPrompt(index, sIdx)}
-                  />
-                  <FontIcon
-                    type="trashcan"
-                    isButton
-                    className="w-4 h-4 text-muted-foreground"
-                    handleOnClick={() => openDeletePrompt(index, sIdx)}
-                  />
                 </div>
               </li>
             ))}
