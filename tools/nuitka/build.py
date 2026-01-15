@@ -204,6 +204,14 @@ def build_server(output_dir: Path, python: str) -> Path:
         "--include-package-data=celery",
         # FastAPI/uvicorn plugins
         "--enable-plugin=no-qt",
+        # Exclude unused SQLAlchemy dialects (server uses SQLite only)
+        # These cause MSVC heap exhaustion on Windows x86_64
+        "--nofollow-import-to=sqlalchemy.dialects.postgresql",
+        "--nofollow-import-to=sqlalchemy.dialects.oracle",
+        "--nofollow-import-to=sqlalchemy.dialects.mysql",
+        "--nofollow-import-to=sqlalchemy.dialects.mssql",
+        "--nofollow-import-to=sqlalchemy.dialects.sybase",
+        "--nofollow-import-to=sqlalchemy.dialects.firebird",
         # Entry point
         str(server_dir / "main.py"),
     ]
@@ -264,6 +272,14 @@ def build_rag(output_dir: Path, python: str) -> Path:
         "--include-package-data=celery",
         # No Qt needed
         "--enable-plugin=no-qt",
+        # Exclude unused SQLAlchemy dialects (RAG uses SQLite only)
+        # These cause MSVC heap exhaustion on Windows x86_64
+        "--nofollow-import-to=sqlalchemy.dialects.postgresql",
+        "--nofollow-import-to=sqlalchemy.dialects.oracle",
+        "--nofollow-import-to=sqlalchemy.dialects.mysql",
+        "--nofollow-import-to=sqlalchemy.dialects.mssql",
+        "--nofollow-import-to=sqlalchemy.dialects.sybase",
+        "--nofollow-import-to=sqlalchemy.dialects.firebird",
         # Entry point
         str(rag_dir / "main.py"),
     ]

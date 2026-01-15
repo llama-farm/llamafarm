@@ -29,24 +29,24 @@ def mock_model():
 def reset_server_globals():
     """Reset server global variables before each test."""
     # Import here to avoid circular imports
-    import server
+    import state
 
     # Store original caches
-    original_models = server._models
-    original_classifiers = server._classifiers
-    original_task = server._cleanup_task
+    original_models = state._models
+    original_classifiers = state._classifiers
+    original_task = state._cleanup_task
 
     # Replace with fresh caches for test
-    server._models = ModelCache(ttl=server.MODEL_UNLOAD_TIMEOUT)
-    server._classifiers = ModelCache(ttl=server.MODEL_UNLOAD_TIMEOUT)
-    server._cleanup_task = None
+    state._models = ModelCache(ttl=state.MODEL_UNLOAD_TIMEOUT)
+    state._classifiers = ModelCache(ttl=state.MODEL_UNLOAD_TIMEOUT)
+    state._cleanup_task = None
 
     yield
 
     # Restore original caches
-    server._models = original_models
-    server._classifiers = original_classifiers
-    server._cleanup_task = original_task
+    state._models = original_models
+    state._classifiers = original_classifiers
+    state._cleanup_task = original_task
 
 
 class TestModelCache:
@@ -144,23 +144,23 @@ class TestModelCache:
 @pytest.mark.asyncio
 async def test_cleanup_idle_models(reset_server_globals, mock_model):
     """Test that idle models are unloaded after timeout."""
-    import server
+    import state
 
     cache_key = "test:model"
 
     # Add model to cache
-    server._models[cache_key] = mock_model
+    state._models[cache_key] = mock_model
 
     # Manually set access time to old time by manipulating internal state
     # Since ModelCache uses time.monotonic(), we need to mock the TTL behavior
-    old_ttl = server._models._ttl
-    server._models._ttl = 0  # Make everything appear expired
+    old_ttl = state._models._ttl
+    state._models._ttl = 0  # Make everything appear expired
 
     # Pop expired items (simulates cleanup task)
-    expired = server._models.pop_expired()
+    expired = state._models.pop_expired()
 
     # Restore TTL
-    server._models._ttl = old_ttl
+    state._models._ttl = old_ttl
 
     # Verify model was returned as expired
     assert len(expired) == 1
@@ -171,25 +171,26 @@ async def test_cleanup_idle_models(reset_server_globals, mock_model):
 @pytest.mark.asyncio
 async def test_cleanup_does_not_unload_recent_models(reset_server_globals, mock_model):
     """Test that recently-accessed models are not unloaded."""
-    import server
+    import state
 
     cache_key = "test:model"
 
     # Add model to cache
-    server._models[cache_key] = mock_model
+    state._models[cache_key] = mock_model
 
     # Immediately check for expired (nothing should be expired)
-    expired = server._models.pop_expired()
+    expired = state._models.pop_expired()
 
     # Verify no models were expired
     assert len(expired) == 0
-    assert cache_key in server._models
+    assert cache_key in state._models
 
 
 @pytest.mark.asyncio
 async def test_load_language_tracks_access(reset_server_globals):
     """Test that loading a language model tracks access."""
     import server
+    import state
 
     with (
         patch("server.get_device", return_value="cpu"),
@@ -208,18 +209,19 @@ async def test_load_language_tracks_access(reset_server_globals):
         # Verify model is tracked - cache key includes all parameters with defaults
         # Format: language:{model_id}:ctx{ctx}:batch{batch}:gpu{gpu}:threads{threads}:flash{flash}:mmap{mmap}:mlock{mlock}:cachek{k}:cachev{v}:quant{quant}
         cache_key = f"language:{model_id}:ctxauto:batchauto:gpuauto:threadsauto:flashdefault:mmapdefault:mlockdefault:cachekdefault:cachevdefault:quantdefault"
-        assert cache_key in server._models
+        assert cache_key in state._models
 
 
 @pytest.mark.asyncio
 async def test_load_encoder_tracks_access(reset_server_globals):
     """Test that loading an encoder model tracks access."""
-    import server
+    import state
+    from routers.embeddings.service import load_encoder
 
     with (
-        patch("server.get_device", return_value="cpu"),
-        patch("server.detect_model_format", return_value="transformers"),
-        patch("server.EncoderModel") as MockEncoderModel,
+        patch("routers.embeddings.service.get_device", return_value="cpu"),
+        patch("routers.embeddings.service.detect_model_format", return_value="transformers"),
+        patch("routers.embeddings.service.EncoderModel") as MockEncoderModel,
     ):
         # Create mock model instance
         mock_instance = MagicMock()
@@ -228,17 +230,18 @@ async def test_load_encoder_tracks_access(reset_server_globals):
 
         # Load model
         model_id = "test/embedding-model"
-        await server.load_encoder(model_id, task="embedding")
+        await load_encoder(model_id, task="embedding")
 
         # Verify model is tracked (new cache key includes quantization and max_length)
         cache_key = "encoder:embedding:transformers:test/embedding-model:quantdefault:lenauto"
-        assert cache_key in server._models
+        assert cache_key in state._models
 
 
 @pytest.mark.asyncio
 async def test_model_reaccess_updates_timestamp(reset_server_globals):
     """Test that re-accessing a cached model updates the timestamp."""
     import server
+    import state
 
     with (
         patch("server.get_device", return_value="cpu"),
@@ -255,14 +258,14 @@ async def test_model_reaccess_updates_timestamp(reset_server_globals):
         await server.load_language(model_id)
         # Cache key includes all parameters with defaults
         cache_key = f"language:{model_id}:ctxauto:batchauto:gpuauto:threadsauto:flashdefault:mmapdefault:mlockdefault:cachekdefault:cachevdefault:quantdefault"
-        first_idle = server._models.get_idle_time(cache_key)
+        first_idle = state._models.get_idle_time(cache_key)
 
         # Wait a bit
         await asyncio.sleep(0.1)
 
         # Load model second time (should use cache)
         await server.load_language(model_id)
-        second_idle = server._models.get_idle_time(cache_key)
+        second_idle = state._models.get_idle_time(cache_key)
 
         # Verify idle time was reset (second access should have lower idle time)
         assert second_idle < first_idle + 0.1  # Should be close to 0
@@ -274,22 +277,22 @@ async def test_environment_variables_override_defaults():
     with patch.dict(
         os.environ, {"MODEL_UNLOAD_TIMEOUT": "600", "CLEANUP_CHECK_INTERVAL": "60"}
     ):
-        # Reload server module to pick up new env vars
+        # Reload state module to pick up new env vars
         import importlib
 
-        import server
+        import state
 
-        importlib.reload(server)
+        importlib.reload(state)
 
         # Verify new values
-        assert server.MODEL_UNLOAD_TIMEOUT == 600
-        assert server.CLEANUP_CHECK_INTERVAL == 60
+        assert state.MODEL_UNLOAD_TIMEOUT == 600
+        assert state.CLEANUP_CHECK_INTERVAL == 60
 
 
 @pytest.mark.asyncio
 async def test_cleanup_handles_unload_errors(reset_server_globals):
     """Test that cleanup continues even if a model unload fails."""
-    import server
+    import state
 
     # Create two models
     cache_key1 = "test:model1"
@@ -302,18 +305,18 @@ async def test_cleanup_handles_unload_errors(reset_server_globals):
     mock_model2.unload = AsyncMock()
 
     # Add both models to cache
-    server._models[cache_key1] = mock_model1
-    server._models[cache_key2] = mock_model2
+    state._models[cache_key1] = mock_model1
+    state._models[cache_key2] = mock_model2
 
     # Set TTL to 0 to make everything appear expired
-    original_ttl = server._models._ttl
-    server._models._ttl = 0
+    original_ttl = state._models._ttl
+    state._models._ttl = 0
 
     # Pop expired items
-    expired = server._models.pop_expired()
+    expired = state._models.pop_expired()
 
     # Restore TTL
-    server._models._ttl = original_ttl
+    state._models._ttl = original_ttl
 
     # Simulate cleanup task unloading expired models
     for _key, model in expired:
