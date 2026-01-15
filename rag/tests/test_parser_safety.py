@@ -121,6 +121,7 @@ class TestParserRequirement:
             description="Only has text parser for txt files",
             parsers=[
                 Parser(
+                    name="text_parser",
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],  # Only matches txt files
@@ -145,6 +146,7 @@ class TestParserRequirement:
             description="Only has PDF parser for pdf files",
             parsers=[
                 Parser(
+                    name="pdf_parser",
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -168,6 +170,7 @@ class TestParserRequirement:
             description="Has text parser that matches all files",
             parsers=[
                 Parser(
+                    name="text_parser",
                     type="TextParser_Python",
                     config={},
                     # No file_include_patterns = matches all files
@@ -189,6 +192,7 @@ class TestParserRequirement:
             description="Only has text parser for txt files",
             parsers=[
                 Parser(
+                    name="text_parser",
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],
@@ -212,6 +216,7 @@ class TestParserRequirement:
             description="Parser only matches specific patterns",
             parsers=[
                 Parser(
+                    name="text_md_parser",
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt", "*.md"],
@@ -250,6 +255,7 @@ class TestParserFailure:
             description="Strategy with parser that always fails",
             parsers=[
                 Parser(
+                    name="pdf_parser",
                     type="PDFParser_PyPDF2",
                     config={},
                     file_include_patterns=["*.pdf"],
@@ -284,6 +290,7 @@ class TestParserFailure:
             description="Strategy with parser that always fails",
             parsers=[
                 Parser(
+                    name="pdf_parser",
                     type="PDFParser_PyPDF2",
                     config={},
                     file_include_patterns=["*.pdf"],
@@ -319,6 +326,7 @@ class TestBatchProcessingContinuesOnFailure:
             description="Only handles PDF files for testing",
             parsers=[
                 Parser(
+                    name="pdf_parser",
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -342,6 +350,7 @@ class TestBatchProcessingContinuesOnFailure:
             description="Only handles PDF files for testing",
             parsers=[
                 Parser(
+                    name="pdf_parser",
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -402,6 +411,7 @@ class TestExplicitConfiguration:
             description="Text parser matching txt files",
             parsers=[
                 Parser(
+                    name="text_parser",
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],
@@ -422,6 +432,7 @@ class TestExplicitConfiguration:
             description="Text parser without patterns matches all",
             parsers=[
                 Parser(
+                    name="text_parser",
                     type="TextParser_Python",
                     config={},
                     # No file_include_patterns = matches all
@@ -480,11 +491,13 @@ class TestExplicitConfiguration:
             description="Multiple parsers with different priorities",
             parsers=[
                 Parser(
+                    name="low_priority_parser",
                     type="MockLowPriorityParser",
                     config={},
                     priority=10,  # Lower priority (higher number)
                 ),
                 Parser(
+                    name="high_priority_parser",
                     type="MockHighPriorityParser",
                     config={},
                     priority=1,  # Higher priority (lower number = tried first)
