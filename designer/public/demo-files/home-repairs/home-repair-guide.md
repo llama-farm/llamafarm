@@ -384,9 +384,10 @@ Call a professional immediately if you notice:
 
 1. Identify the tripped breaker (usually in middle position, not fully off)
 2. Unplug devices on that circuit
-3. Push breaker firmly to OFF position
-4. Then push to ON position
-5. If it trips again immediately, you have a short - call electrician
+3. **Safety:** Stand to the side of the panel (not directly in front) and look away when flipping breakers
+4. Push breaker firmly to OFF position
+5. Then push to ON position
+6. If it trips again immediately, you have a short - do not reset again, call electrician
 
 ### When Breakers Trip Frequently
 
@@ -475,6 +476,7 @@ Controls light from one location.
 - Unscrew switch from box
 - Note wire connections (take photo if helpful)
 - Usually two black wires and one ground
+- **Note:** In older homes, a white wire may be used as hot (called a "switch loop") - it should be marked with black tape. If you see this, connect it like a black wire.
 - Disconnect wires
 
 **Step 3: Connect new switch**
@@ -1566,9 +1568,11 @@ Consider replacement if:
 - Check thermal fuse (requires meter to test)
 
 **Gas dryer:**
+- **SAFETY WARNING:** If you smell gas, do not operate any switches or appliances. Leave immediately and call your gas company from outside.
 - Verify gas valve is open
 - Check igniter (should glow when dryer runs)
 - Check thermal fuse
+- If uncomfortable with gas appliances, call a professional
 
 ### Taking Too Long to Dry
 
