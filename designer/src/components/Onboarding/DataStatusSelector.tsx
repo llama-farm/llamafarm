@@ -4,9 +4,11 @@
  * Adapts options based on project type (HF finder only for doc-qa/exploring)
  */
 
+import { useState, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Check, Gamepad2, FolderOpen, Search } from 'lucide-react'
-import type { DataStatus, ProjectType } from '../../types/onboarding'
+import { Check, Gamepad2, FolderOpen, Search, Upload, X, FileText } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import type { DataStatus, ProjectType, OnboardingUploadedFile } from '../../types/onboarding'
 import type { SelectedHFDataset } from '../../types/huggingface'
 import { getDemosByProjectType } from '../../config/demos'
 import { HFDatasetFinder } from './HFDatasetFinder'
@@ -19,7 +21,18 @@ interface DataStatusSelectorProps {
   selectedHFDataset: SelectedHFDataset | null
   onSelectHFDataset: (dataset: SelectedHFDataset | null) => void
   projectType: ProjectType | null
+  uploadedFiles: OnboardingUploadedFile[]
+  onUploadedFilesChange: (files: OnboardingUploadedFile[]) => void
+  datasetName: string | null
+  onDatasetNameChange: (name: string | null) => void
   className?: string
+}
+
+// Format file size for display
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 const dataStatusOptions = [
@@ -75,11 +88,107 @@ export function DataStatusSelector({
   selectedHFDataset,
   onSelectHFDataset,
   projectType,
+  uploadedFiles,
+  onUploadedFilesChange,
+  datasetName,
+  onDatasetNameChange,
   className,
 }: DataStatusSelectorProps) {
+  // Drag-and-drop state
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
+
+  // Initialize file storage if not present
+  if (!(window as any).__onboardingFiles) {
+    ;(window as any).__onboardingFiles = []
+  }
+
+  // Debug: Log current state of file storage on each render
+  console.log('[DataStatusSelector] Render - uploadedFiles:', uploadedFiles.length, 'window.__onboardingFiles:', (window as any).__onboardingFiles?.length || 0)
+
   // Show inline HF finder for RAG/chatbot use cases, external links for others
   const supportsHFImport = projectType && HF_IMPORT_PROJECT_TYPES.includes(projectType)
   const hfTaskInfo = projectType ? HF_TASK_URLS[projectType] : null
+
+  // Drag-and-drop handlers
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = dropZoneRef.current?.getBoundingClientRect()
+    const isLeavingZone =
+      rect &&
+      (e.clientX <= rect.left ||
+        e.clientX >= rect.right ||
+        e.clientY <= rect.top ||
+        e.clientY >= rect.bottom)
+    if (isLeavingZone) {
+      setIsDragging(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) {
+      const fileInfos: OnboardingUploadedFile[] = files.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+      }))
+      onUploadedFilesChange([...uploadedFiles, ...fileInfos])
+      // Store actual files in a temporary location for later upload
+      const existingFiles = (window as any).__onboardingFiles || []
+      ;(window as any).__onboardingFiles = [...existingFiles, ...files]
+      console.log('[DataStatusSelector] Files dropped and stored:', {
+        newFiles: files.map(f => f.name),
+        totalStored: (window as any).__onboardingFiles.length,
+      })
+    }
+  }, [uploadedFiles, onUploadedFilesChange])
+
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      const fileInfos: OnboardingUploadedFile[] = files.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+      }))
+      onUploadedFilesChange([...uploadedFiles, ...fileInfos])
+      // Store actual files in a temporary location for later upload
+      const existingFiles = (window as any).__onboardingFiles || []
+      ;(window as any).__onboardingFiles = [...existingFiles, ...files]
+      console.log('[DataStatusSelector] Files selected via input and stored:', {
+        newFiles: files.map(f => f.name),
+        totalStored: (window as any).__onboardingFiles.length,
+      })
+    }
+    // Reset input so same file can be selected again
+    e.target.value = ''
+  }, [uploadedFiles, onUploadedFilesChange])
+
+  const removeFile = useCallback((index: number) => {
+    const newFiles = uploadedFiles.filter((_, i) => i !== index)
+    onUploadedFilesChange(newFiles)
+    // Also remove from temporary storage
+    const existingFiles = (window as any).__onboardingFiles || []
+    ;(window as any).__onboardingFiles = existingFiles.filter((_: File, i: number) => i !== index)
+  }, [uploadedFiles, onUploadedFilesChange])
   return (
     <div className={cn('space-y-6', className)}>
       <div className="text-center">
@@ -185,7 +294,7 @@ export function DataStatusSelector({
                                 <div className="font-medium text-sm text-foreground">
                                   {demo.displayName}
                                 </div>
-                                <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                                <div className="text-xs text-muted-foreground mt-0.5">
                                   {demo.description}
                                 </div>
                               </div>
@@ -323,7 +432,152 @@ export function DataStatusSelector({
             )
           }
 
-          // Standard option card for has-data
+          // has-data option with expandable drop zone
+          if (option.id === 'has-data') {
+            return (
+              <div
+                key={option.id}
+                className={cn(
+                  'rounded-xl border-2 transition-all duration-200',
+                  isSelected
+                    ? 'border-primary bg-card shadow-md ring-1 ring-primary/20'
+                    : 'border-border bg-card hover:bg-white dark:hover:bg-card hover:border-primary/40'
+                )}
+              >
+                <button
+                  onClick={() => {
+                    onSelect(option.id)
+                    onSelectSampleDataset(null)
+                    onSelectHFDataset(null)
+                  }}
+                  className={cn(
+                    'group w-full flex items-center gap-4 p-4 text-left transition-all duration-200',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl',
+                    !isSelected && 'hover:scale-[1.01]'
+                  )}
+                  role="radio"
+                  aria-checked={isSelected}
+                >
+                  {/* Icon */}
+                  <div
+                    className={cn(
+                      'flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200',
+                      option.iconBg,
+                      isSelected ? 'scale-105' : 'group-hover:scale-105'
+                    )}
+                  >
+                    {option.icon}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground">{option.title}</div>
+                    <div className="text-sm text-muted-foreground mt-0.5">
+                      {option.description}
+                    </div>
+                  </div>
+
+                  {/* Selection indicator */}
+                  <div
+                    className={cn(
+                      'flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200',
+                      isSelected
+                        ? 'border-primary bg-primary'
+                        : 'border-muted-foreground/30 group-hover:border-primary/50'
+                    )}
+                  >
+                    {isSelected && <Check className="w-4 h-4 text-primary-foreground" />}
+                  </div>
+                </button>
+
+                {/* Drop zone - expands inside the card */}
+                {isSelected && (
+                  <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="pt-3 border-t border-primary/20">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Drop files here to get started (optional):
+                      </p>
+
+                      {/* Hidden file input */}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        onChange={handleFileInputChange}
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.txt,.md,.json,.jsonl,.csv,.html,.htm,.xml"
+                      />
+
+                      {/* Drop zone */}
+                      <div
+                        ref={dropZoneRef}
+                        onDragEnter={handleDragEnter}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={cn(
+                          'border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all duration-200',
+                          isDragging
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border hover:border-primary/50 hover:bg-primary/5'
+                        )}
+                      >
+                        <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          {isDragging ? 'Drop files here' : 'Drag & drop or click to browse'}
+                        </p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">
+                          PDF, Word, text, markdown, JSON, CSV
+                        </p>
+                      </div>
+
+                      {/* File list */}
+                      {uploadedFiles.length > 0 && (
+                        <div className="mt-3 space-y-1.5">
+                          {uploadedFiles.map((file, index) => (
+                            <div
+                              key={`${file.name}-${index}`}
+                              className="flex items-center gap-2 p-2 rounded-lg bg-secondary/50 text-sm"
+                            >
+                              <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                              <span className="flex-1 truncate text-foreground">{file.name}</span>
+                              <span className="text-xs text-muted-foreground flex-shrink-0">
+                                {formatFileSize(file.size)}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  removeFile(index)
+                                }}
+                                className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Dataset name input */}
+                      {uploadedFiles.length > 0 && (
+                        <div className="mt-3">
+                          <Input
+                            type="text"
+                            placeholder="Dataset name (optional)"
+                            value={datasetName || ''}
+                            onChange={(e) => onDatasetNameChange(e.target.value || null)}
+                            className="h-9 text-sm"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          // Standard option card (fallback, shouldn't be reached)
           return (
             <button
               key={option.id}

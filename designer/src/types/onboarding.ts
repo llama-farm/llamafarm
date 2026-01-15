@@ -3,6 +3,7 @@
  */
 
 import type { SelectedHFDataset } from './huggingface'
+import type { FileBasedDemo } from '../config/demos'
 
 // Project type options (Screen 1)
 export type ProjectType =
@@ -45,6 +46,13 @@ export interface ChecklistStep {
   linkLabel: string
 }
 
+// Uploaded file info for onboarding (stored without actual file data)
+export interface OnboardingUploadedFile {
+  name: string
+  size: number
+  type: string
+}
+
 // User's wizard answers
 export interface OnboardingAnswers {
   projectType: ProjectType | null
@@ -53,6 +61,14 @@ export interface OnboardingAnswers {
   selectedHFDataset: SelectedHFDataset | null // HF dataset when need-data is selected
   deployTarget: DeployTarget | null
   experienceLevel: ExperienceLevel | null
+  // For classifier/anomaly sample data: the name of the trained model
+  trainedModelName: string | null
+  trainedModelType: 'classifier' | 'anomaly' | null
+  // Whether sample model training is currently in progress
+  isTrainingSampleModel: boolean
+  // For has-data: uploaded files and dataset name
+  uploadedFiles: OnboardingUploadedFile[]
+  datasetName: string | null
 }
 
 // Complete onboarding state
@@ -94,6 +110,10 @@ export interface UseOnboardingReturn {
   state: OnboardingState
   checklist: ChecklistStep[]
 
+  // Demo project info
+  isDemo: boolean
+  demoConfig: FileBasedDemo | undefined
+
   // Wizard actions
   openWizard: () => void
   closeWizard: () => void
@@ -110,6 +130,10 @@ export interface UseOnboardingReturn {
   setSelectedHFDataset: (dataset: SelectedHFDataset | null) => void
   setDeployTarget: (target: DeployTarget) => void
   setExperienceLevel: (level: ExperienceLevel) => void
+  setTrainedModel: (modelName: string, modelType: 'classifier' | 'anomaly') => void
+  setIsTrainingSampleModel: (isTraining: boolean) => void
+  setUploadedFiles: (files: OnboardingUploadedFile[]) => void
+  setDatasetName: (name: string | null) => void
 
   // Checklist actions
   completeChecklistStep: (stepId: string) => void
@@ -136,8 +160,13 @@ export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
     dataStatus: null,
     selectedSampleDataset: null,
     selectedHFDataset: null,
-    deployTarget: null,
-    experienceLevel: null,
+    deployTarget: 'local', // Default to "On my own turf"
+    experienceLevel: 'beginner', // Default to "Hold my hand"
+    trainedModelName: null,
+    trainedModelType: null,
+    isTrainingSampleModel: false,
+    uploadedFiles: [],
+    datasetName: null,
   },
   checklistVisible: true,
   checklistDismissed: false,

@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ChevronUp, ArrowRight, RotateCcw } from 'lucide-react'
+import { ChevronUp, ArrowRight, RotateCcw, Sparkles } from 'lucide-react'
 import { useOnboardingContext } from '../../contexts/OnboardingContext'
 
 // Fire confetti from a specific element position
@@ -82,7 +82,13 @@ export function GettingStartedChecklist({
     uncompleteChecklistStep,
     dismissChecklist,
     resetOnboarding,
+    state,
+    isDemo,
+    demoConfig,
   } = useOnboardingContext()
+
+  // Check if sample model training is in progress
+  const isTrainingSampleModel = state.answers.isTrainingSampleModel
 
   // Count completed steps
   const completedCount = useMemo(() => {
@@ -105,7 +111,17 @@ export function GettingStartedChecklist({
     if (step.linkLabel === 'Start over') {
       resetOnboarding()
     } else if (step.linkPath) {
-      navigate(step.linkPath)
+      // Mark step as complete when user clicks to view/do it
+      const element = checkboxRefs.current.get(step.id)
+      completeChecklistStep(step.id)
+      if (element) {
+        fireConfettiAt(element)
+      }
+      // Append ?from=checklist to show the floating navigator on destination pages
+      const separator = step.linkPath.includes('?') ? '&' : '?'
+      const pathWithParam = `${step.linkPath}${separator}from=checklist`
+      console.log('[GettingStartedChecklist] Navigating to:', pathWithParam)
+      navigate(pathWithParam)
     }
   }
 
@@ -115,10 +131,11 @@ export function GettingStartedChecklist({
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-card',
+        'rounded-xl border border-border',
+        'bg-gradient-to-br from-card via-card to-teal-500/5',
         'animate-in fade-in slide-in-from-top-2 duration-500',
-        'ring-2 ring-primary/20 ring-offset-2 ring-offset-background',
-        'shadow-lg shadow-primary/5',
+        'ring-2 ring-teal-500/10 ring-offset-2 ring-offset-background',
+        'shadow-lg shadow-teal-500/5',
         className
       )}
     >
@@ -126,23 +143,45 @@ export function GettingStartedChecklist({
       <div className="px-5 py-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🦙</span>
-            <div>
-              <h3 className="font-semibold text-foreground">
-                Getting Started
-              </h3>
-              <div className="flex items-center gap-2 mt-0.5">
-                {(projectTypeLabel || deployTargetLabel) && (
+            {isDemo && demoConfig ? (
+              <>
+                <span className="text-2xl">{demoConfig.icon}</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-foreground">
+                      {demoConfig.displayName}
+                    </h3>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-teal-500/20 to-sky-500/20 text-xs font-medium text-teal-700 dark:text-teal-300">
+                      <Sparkles className="h-3 w-3" />
+                      Demo
+                    </span>
+                  </div>
                   <span className="text-xs text-muted-foreground">
-                    {projectTypeLabel}
-                    {deployTargetLabel && ` • ${deployTargetLabel}`}
+                    {completedCount}/{checklist.length} done
                   </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  • {completedCount}/{checklist.length} done
-                </span>
-              </div>
-            </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="text-2xl">🦙</span>
+                <div>
+                  <h3 className="font-semibold text-foreground">
+                    Getting Started
+                  </h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {(projectTypeLabel || deployTargetLabel) && (
+                      <span className="text-xs text-muted-foreground">
+                        {projectTypeLabel}
+                        {deployTargetLabel && ` • ${deployTargetLabel}`}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      • {completedCount}/{checklist.length} done
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -152,7 +191,7 @@ export function GettingStartedChecklist({
               className="text-muted-foreground text-xs gap-1.5"
             >
               <RotateCcw className="h-3 w-3" />
-              Start over
+              {isDemo ? 'Build your own' : 'Start over'}
             </Button>
             <Button
               variant="ghost"
@@ -222,17 +261,26 @@ export function GettingStartedChecklist({
                 </p>
 
                 {/* Action button - real button style */}
-                {!completed && (step.linkPath || step.linkLabel === 'Start over') && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs gap-1.5"
-                    onClick={() => handleAction(step)}
-                  >
-                    {step.linkLabel}
-                    <ArrowRight className="h-3 w-3" />
-                  </Button>
-                )}
+                {!completed && (step.linkPath || step.linkLabel === 'Start over') && (() => {
+                  // Check if this is a training step that should be disabled while training
+                  const isTrainingStep = step.stepNumber === 1 && (
+                    step.id === 'classifier-data' || step.id === 'anomaly-data'
+                  )
+                  const shouldDisable = isTrainingStep && isTrainingSampleModel
+
+                  return (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => handleAction(step)}
+                      disabled={shouldDisable}
+                    >
+                      {shouldDisable ? 'Training...' : step.linkLabel}
+                      {!shouldDisable && <ArrowRight className="h-3 w-3" />}
+                    </Button>
+                  )
+                })()}
               </div>
             )
           })}

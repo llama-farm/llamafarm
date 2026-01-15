@@ -9,8 +9,9 @@ import { useOnboardingContext } from '../../contexts/OnboardingContext'
 import { useProject } from '../../hooks/useProjects'
 // import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import { useListDatasets } from '../../hooks/useDatasets'
+import { useListDatasets, useUploadFileToDataset, useCreateDataset, useAvailableStrategies } from '../../hooks/useDatasets'
 import { useImportHFDataset } from '../../hooks/useHFDatasets'
+import { useTrainAndSaveClassifier, useTrainAndSaveAnomaly } from '../../hooks/useMLModels'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
@@ -22,7 +23,9 @@ import {
   CollapsedChecklist,
 } from '../Onboarding'
 import { useToast } from '../ui/toast'
-import { getDemoById } from '../../config/demos'
+import { getDemoById, isModelBasedDemo } from '../../config/demos'
+import { CLASSIFIER_SAMPLE_DATASETS, ANOMALY_SAMPLE_DATASETS } from '../Models/sampleDatasets'
+import { parseNumericTrainingData } from '../../types/ml'
 
 const Dashboard = () => {
   const navigate = useNavigate()
@@ -35,7 +38,7 @@ const Dashboard = () => {
   const [showValidationDetails, setShowValidationDetails] = useState(false)
   const [projectName, setProjectName] = useState<string>('Dashboard')
   // Datasets list for Data card
-  const { data: apiDatasets, isLoading: isDatasetsLoading } = useListDatasets(
+  const { data: apiDatasets, isLoading: isDatasetsLoading, refetch: refetchDatasets } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
     { enabled: !!activeProject?.namespace && !!activeProject?.project }
@@ -91,11 +94,24 @@ const Dashboard = () => {
     return Array.isArray(models) ? models.length : 0
   }, [projectDetail])
 
+  // Upload mutation for onboarding files
+  const uploadMutation = useUploadFileToDataset()
+  const createDatasetMutation = useCreateDataset()
+
+  // Get available strategies and databases for dataset creation
+  const { data: strategiesData } = useAvailableStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
+
   // Shared modal hook
   const projectModal = useProjectModalContext()
 
   // Onboarding state
   const onboarding = useOnboardingContext()
+  const onboardingRef = useRef(onboarding)
+  onboardingRef.current = onboarding
 
   // Determine if we should show onboarding components
   const showWizard = onboarding.state.wizardOpen
@@ -110,19 +126,21 @@ const Dashboard = () => {
     !onboarding.state.onboardingCompleted &&
     !showChecklist
 
-  // Auto-open wizard on first visit to an empty project
+  // Auto-open wizard on first visit to an empty project (but NOT for demo projects)
   useEffect(() => {
     // Only auto-open if:
     // 1. Onboarding not completed
     // 2. Wizard not already open
     // 3. No datasets loaded (empty project)
     // 4. Datasets finished loading
+    // 5. NOT a demo project (demos skip the wizard entirely)
     if (
       !onboarding.state.onboardingCompleted &&
       !onboarding.state.wizardOpen &&
       !onboarding.state.checklistDismissed &&
       filesProcessed === 0 &&
-      !isDatasetsLoading
+      !isDatasetsLoading &&
+      !onboarding.isDemo
     ) {
       // Small delay to prevent flash
       const timer = setTimeout(() => {
@@ -137,7 +155,23 @@ const Dashboard = () => {
     filesProcessed,
     isDatasetsLoading,
     onboarding.openWizard,
+    onboarding.isDemo,
   ])
+
+  // Training mutations for auto-training classifier/anomaly models
+  const trainClassifierMutation = useTrainAndSaveClassifier()
+  const trainAnomalyMutation = useTrainAndSaveAnomaly()
+  const trainClassifierMutationRef = useRef(trainClassifierMutation)
+  const trainAnomalyMutationRef = useRef(trainAnomalyMutation)
+  trainClassifierMutationRef.current = trainClassifierMutation
+  trainAnomalyMutationRef.current = trainAnomalyMutation
+
+  // State for pending model training
+  const [pendingModelTraining, setPendingModelTraining] = useState<{
+    demoId: string
+    modelType: 'classifier' | 'anomaly'
+    sampleDataId: string
+  } | null>(null)
 
   // Listen for onboarding sample import event and navigate appropriately
   useEffect(() => {
@@ -145,10 +179,14 @@ const Dashboard = () => {
       const demoId = (event as CustomEvent<{ demoId: string }>).detail?.demoId
       if (demoId) {
         const demo = getDemoById(demoId)
-        if (demo?.modelType && demo?.sampleDataId) {
-          // For classifier/anomaly demos, navigate to model page with sample data
-          const modelPath = demo.modelType === 'classifier' ? 'classifier' : 'anomaly'
-          navigate(`/chat/models/${modelPath}?sampleData=${encodeURIComponent(demo.sampleDataId)}`)
+        if (demo && isModelBasedDemo(demo)) {
+          // For classifier/anomaly demos, queue auto-training
+          console.log('[Dashboard] Queuing auto-train for:', demo.modelType, demo.sampleDataId)
+          setPendingModelTraining({
+            demoId,
+            modelType: demo.modelType,
+            sampleDataId: demo.sampleDataId,
+          })
         } else {
           // For RAG/doc-qa demos, navigate to Data page with auto-import param
           navigate(`/chat/data?autoImportDemo=${encodeURIComponent(demoId)}`)
@@ -161,6 +199,159 @@ const Dashboard = () => {
       window.removeEventListener('lf-onboarding-import-sample', handleImportSample)
     }
   }, [navigate])
+
+  // Process pending model training
+  useEffect(() => {
+    if (!pendingModelTraining) return
+
+    const { modelType, sampleDataId } = pendingModelTraining
+    setPendingModelTraining(null)
+
+    console.log('[Dashboard] Auto-training', modelType, 'with sample data:', sampleDataId)
+
+    // Set training flag to disable the checklist button
+    onboardingRef.current.setIsTrainingSampleModel(true)
+
+    if (modelType === 'classifier') {
+      // Find the classifier sample dataset
+      const dataset = CLASSIFIER_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
+      if (!dataset?.data) {
+        console.error('[Dashboard] Classifier sample dataset not found:', sampleDataId)
+        onboardingRef.current.setIsTrainingSampleModel(false)
+        toast({
+          message: 'Sample dataset not found.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+        return
+      }
+
+      // Generate model name from sample ID
+      const modelName = `sample-${sampleDataId}`
+
+      toast({
+        message: `Training ${dataset.name} classifier...`,
+      })
+
+      // Train the classifier
+      trainClassifierMutationRef.current.mutate(
+        {
+          model: modelName,
+          training_data: dataset.data,
+          description: `Sample classifier trained from ${dataset.name} dataset`,
+        },
+        {
+          onSuccess: result => {
+            console.log('[Dashboard] Classifier training completed:', result)
+            toast({
+              message: `${dataset.name} classifier trained successfully!`,
+              icon: 'checkmark-filled',
+            })
+            // Store the trained model name in onboarding state
+            // This updates the checklist link to point to the trained model
+            console.log('[Dashboard] Setting trained model name:', result.fitResult.versioned_name)
+            onboardingRef.current.setTrainedModel(result.fitResult.versioned_name, 'classifier')
+            // Don't auto-complete the step - let user click to view it first
+          },
+          onError: (error: Error) => {
+            console.error('[Dashboard] Classifier training failed:', error)
+            onboardingRef.current.setIsTrainingSampleModel(false)
+            toast({
+              message: error.message || 'Failed to train classifier.',
+              variant: 'destructive',
+              icon: 'alert-triangle',
+            })
+          },
+        }
+      )
+    } else if (modelType === 'anomaly') {
+      // Find the anomaly sample dataset
+      const dataset = ANOMALY_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
+      if (!dataset?.data) {
+        console.error('[Dashboard] Anomaly sample dataset not found:', sampleDataId)
+        onboardingRef.current.setIsTrainingSampleModel(false)
+        toast({
+          message: 'Sample dataset not found.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+        return
+      }
+
+      // Generate model name from sample ID
+      const modelName = `sample-${sampleDataId}`
+
+      toast({
+        message: `Training ${dataset.name} detector...`,
+      })
+
+      // Parse the data based on type
+      let parsedData: number[][] | null = null
+      if (dataset.type === 'numeric') {
+        parsedData = parseNumericTrainingData(dataset.data)
+      } else {
+        // For text data, we need to convert to hash encoding
+        // This matches how AnomalyModel.tsx handles text data
+        const lines = dataset.data.split('\n').map(line => line.trim()).filter(Boolean)
+        // Simple hash function for text -> numeric conversion
+        parsedData = lines.map(line => {
+          const values = line.split(',').map(v => v.trim())
+          return values.map(v => {
+            // Simple hash: sum of char codes
+            let hash = 0
+            for (let i = 0; i < v.length; i++) {
+              hash = ((hash << 5) - hash) + v.charCodeAt(i)
+              hash = hash & hash // Convert to 32-bit integer
+            }
+            return Math.abs(hash) % 10000 // Normalize to reasonable range
+          })
+        })
+      }
+
+      if (!parsedData) {
+        console.error('[Dashboard] Failed to parse anomaly training data')
+        onboardingRef.current.setIsTrainingSampleModel(false)
+        toast({
+          message: 'Failed to parse training data.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+        return
+      }
+
+      // Train the anomaly detector
+      trainAnomalyMutationRef.current.mutate(
+        {
+          model: modelName,
+          data: parsedData,
+          backend: 'isolation_forest',
+          description: `Sample detector trained from ${dataset.name} dataset`,
+        },
+        {
+          onSuccess: result => {
+            console.log('[Dashboard] Anomaly training completed:', result)
+            toast({
+              message: `${dataset.name} detector trained successfully!`,
+              icon: 'checkmark-filled',
+            })
+            // Store the trained model name in onboarding state
+            // This updates the checklist link to point to the trained model
+            onboardingRef.current.setTrainedModel(result.fitResult.versioned_name, 'anomaly')
+            // Don't auto-complete the step - let user click to view it first
+          },
+          onError: (error: Error) => {
+            console.error('[Dashboard] Anomaly training failed:', error)
+            onboardingRef.current.setIsTrainingSampleModel(false)
+            toast({
+              message: error.message || 'Failed to train detector.',
+              variant: 'destructive',
+              icon: 'alert-triangle',
+            })
+          },
+        }
+      )
+    }
+  }, [pendingModelTraining, toast])
 
   // Listen for onboarding HF dataset import event and navigate to Data page
   useEffect(() => {
@@ -259,6 +450,135 @@ const Dashboard = () => {
       }
     )
   }, [pendingHFImport, activeProject, toast])
+
+  // State for pending file upload from onboarding
+  const [pendingFileUpload, setPendingFileUpload] = useState<{
+    files: File[]
+    datasetName: string
+  } | null>(null)
+
+  // Listen for onboarding file upload event
+  useEffect(() => {
+    const handleUploadFiles = (event: Event) => {
+      const detail = (event as CustomEvent<{ files: File[]; datasetName: string }>).detail
+      if (detail?.files && detail.files.length > 0) {
+        console.log('[Dashboard] Received file upload event:', detail.datasetName, detail.files.length, 'files')
+        setPendingFileUpload({
+          files: detail.files,
+          datasetName: detail.datasetName,
+        })
+      }
+    }
+
+    window.addEventListener('lf-onboarding-upload-files', handleUploadFiles)
+    return () => {
+      window.removeEventListener('lf-onboarding-upload-files', handleUploadFiles)
+    }
+  }, [])
+
+  // Process pending file upload when we have active project
+  useEffect(() => {
+    if (!pendingFileUpload) {
+      return
+    }
+    if (!activeProject?.namespace || !activeProject?.project) {
+      console.log('[Dashboard] No active project yet for file upload, waiting...', activeProject)
+      return
+    }
+
+    const { files, datasetName } = pendingFileUpload
+    setPendingFileUpload(null)
+
+    console.log('[Dashboard] Starting file upload:', {
+      namespace: activeProject.namespace,
+      project: activeProject.project,
+      dataset: datasetName,
+      fileCount: files.length,
+    })
+
+    // Create dataset first, then upload files
+    const createAndUploadFiles = async () => {
+      toast({
+        message: `Creating dataset "${datasetName}"...`,
+      })
+
+      // First, create the dataset
+      // Use the first available strategy and database from the project config
+      const strategy = strategiesData?.data_processing_strategies?.[0] || 'universal_processor'
+      const database = strategiesData?.databases?.[0] || 'main_database'
+
+      try {
+        console.log('[Dashboard] Creating dataset:', datasetName, 'with strategy:', strategy, 'database:', database)
+        await createDatasetMutation.mutateAsync({
+          namespace: activeProject.namespace,
+          project: activeProject.project,
+          name: datasetName,
+          data_processing_strategy: strategy,
+          database: database,
+        })
+        console.log('[Dashboard] Dataset created successfully')
+      } catch (error: any) {
+        // If dataset already exists, that's fine - continue with upload
+        if (error?.response?.status === 409 || error?.message?.includes('already exists')) {
+          console.log('[Dashboard] Dataset already exists, continuing with upload')
+        } else {
+          console.error('[Dashboard] Failed to create dataset:', error)
+          toast({
+            message: `Failed to create dataset: ${error?.message || 'Unknown error'}`,
+            variant: 'destructive',
+            icon: 'alert-triangle',
+          })
+          return
+        }
+      }
+
+      // Now upload files
+      toast({
+        message: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`,
+      })
+
+      let successCount = 0
+      for (const file of files) {
+        try {
+          console.log('[Dashboard] Uploading file:', file.name)
+          await uploadMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            dataset: datasetName,
+            file,
+          })
+          successCount++
+          console.log('[Dashboard] File uploaded successfully:', file.name)
+        } catch (error) {
+          console.error('[Dashboard] File upload failed:', file.name, error)
+        }
+      }
+
+      if (successCount === files.length) {
+        toast({
+          message: `Successfully uploaded ${successCount} file${successCount > 1 ? 's' : ''} to "${datasetName}".`,
+          icon: 'checkmark-filled',
+        })
+      } else if (successCount > 0) {
+        toast({
+          message: `Uploaded ${successCount} of ${files.length} files. Some uploads failed.`,
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+      } else {
+        toast({
+          message: 'Failed to upload files.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+      }
+
+      // Refresh datasets list
+      refetchDatasets()
+    }
+
+    createAndUploadFiles()
+  }, [pendingFileUpload, activeProject, toast, uploadMutation, createDatasetMutation, refetchDatasets, strategiesData])
 
   useEffect(() => {
     const refresh = () => {

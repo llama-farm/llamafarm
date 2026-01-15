@@ -241,3 +241,34 @@ export interface ModelBasedDemo extends DemoConfig {
 export function isModelBasedDemo(demo: DemoConfig): demo is ModelBasedDemo {
   return !!demo.modelType && !!demo.sampleDataId
 }
+
+/**
+ * Check if a project is a demo project (created via DemoModal)
+ * Demo projects are stored in localStorage to persist across refreshes
+ */
+export function isDemoProject(projectName: string | null): boolean {
+  if (!projectName) return false
+  try {
+    const demoProjects = JSON.parse(localStorage.getItem('lf_demo_projects') || '[]')
+    return demoProjects.includes(projectName)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the demo config for a demo project by matching project name pattern
+ * Demo projects are named like "llama-expert-1", "santa-helper-2", etc.
+ */
+export function getDemoConfigForProject(projectName: string | null): FileBasedDemo | undefined {
+  if (!projectName) return undefined
+
+  // Check if this is a demo project first
+  if (!isDemoProject(projectName)) return undefined
+
+  // Extract base name (e.g., "llama-expert" from "llama-expert-1")
+  const baseName = projectName.replace(/-\d+$/, '')
+
+  // Find the demo config by name
+  return getFileBasedDemos().find(demo => demo.name === baseName)
+}

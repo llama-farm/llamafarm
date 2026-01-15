@@ -33,6 +33,8 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
     setSelectedHFDataset,
     setDeployTarget,
     setExperienceLevel,
+    setUploadedFiles,
+    setDatasetName,
   } = useOnboardingContext()
 
   const { currentStep, answers } = state
@@ -171,6 +173,10 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
                 selectedHFDataset={answers.selectedHFDataset}
                 onSelectHFDataset={setSelectedHFDataset}
                 projectType={answers.projectType}
+                uploadedFiles={answers.uploadedFiles}
+                onUploadedFilesChange={setUploadedFiles}
+                datasetName={answers.datasetName}
+                onDatasetNameChange={setDatasetName}
               />
             )}
             {currentStep === 3 && (

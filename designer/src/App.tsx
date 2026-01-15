@@ -51,6 +51,7 @@ import NotFound from './components/NotFound'
 import { DemoModalProvider, useDemoModal } from './contexts/DemoModalContext'
 import { DemoModal } from './components/Demo/DemoModal'
 import { OnboardingProvider } from './contexts/OnboardingContext'
+import { ChecklistNavigator } from './components/Onboarding/ChecklistNavigator'
 import { getCurrentNamespace } from './utils/namespaceUtils'
 
 // Redirect component for dynamic routes from /rag to /databases
@@ -266,6 +267,7 @@ function AppContent() {
       </div>
       <ProjectModalRoot />
       <DemoModalRoot />
+      <ChecklistNavigator />
     </>
   )
 }

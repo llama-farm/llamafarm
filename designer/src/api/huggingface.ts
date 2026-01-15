@@ -22,6 +22,40 @@ export interface HFDatasetConfigInfo {
 /** Allowed formats for text-compatible datasets */
 const ALLOWED_FORMATS = ['csv', 'json', 'jsonl', 'text', 'parquet']
 
+/** Task categories that indicate text-based datasets */
+const TEXT_TASK_CATEGORIES = [
+  'text-classification',
+  'question-answering',
+  'summarization',
+  'text-generation',
+  'text2text-generation',
+  'translation',
+  'fill-mask',
+  'token-classification',
+  'table-question-answering',
+  'conversational',
+  'sentence-similarity',
+  'feature-extraction',
+]
+
+/** Task categories to exclude (image, audio, video) */
+const EXCLUDED_TASK_CATEGORIES = [
+  'image-classification',
+  'image-segmentation',
+  'object-detection',
+  'image-to-text',
+  'text-to-image',
+  'image-to-image',
+  'video-classification',
+  'audio-classification',
+  'automatic-speech-recognition',
+  'text-to-speech',
+  'text-to-audio',
+  'voice-activity-detection',
+  'depth-estimation',
+  'image-feature-extraction',
+]
+
 /** Size categories that work well with HF datasets-server (avoid large Parquet files) */
 const SAFE_SIZE_CATEGORIES = [
   'n<1K',
@@ -40,7 +74,7 @@ export async function searchDatasets(
 ): Promise<HFDatasetSearchResult[]> {
   const params = new URLSearchParams({
     search: query,
-    limit: String(limit * 3), // Fetch extra to account for filtering
+    limit: String(limit * 5), // Fetch extra to account for filtering
     full: 'true',
   })
 
@@ -57,13 +91,30 @@ export async function searchDatasets(
       // Skip gated/private datasets
       if (ds.tags?.includes('gated')) return false
 
-      // Check for text-compatible tags
+      // Check for excluded task categories (images, audio, video)
+      const hasExcludedTask = ds.tags?.some(tag => {
+        const tagLower = tag.toLowerCase()
+        return EXCLUDED_TASK_CATEGORIES.some(excluded =>
+          tagLower === `task_categories:${excluded}` || tagLower === excluded
+        )
+      })
+      if (hasExcludedTask) return false
+
+      // Check for text-compatible task categories
+      const hasTextTask = ds.tags?.some(tag => {
+        const tagLower = tag.toLowerCase()
+        return TEXT_TASK_CATEGORIES.some(textTask =>
+          tagLower === `task_categories:${textTask}` || tagLower === textTask
+        )
+      })
+
+      // Check for text-compatible format tags
       const hasTextFormat = ds.tags?.some(tag =>
         ALLOWED_FORMATS.some(fmt => tag.toLowerCase().includes(fmt))
       )
 
-      // Include if has text format or format is unknown (will filter on preview)
-      return hasTextFormat !== false
+      // Include if has text task OR text format, exclude if neither
+      return hasTextTask || hasTextFormat
     })
     // Sort by size category (smaller first) and downloads
     .sort((a, b) => {

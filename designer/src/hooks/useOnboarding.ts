@@ -13,6 +13,7 @@ import type {
   ExperienceLevel,
   UseOnboardingReturn,
   ChecklistStep,
+  OnboardingUploadedFile,
 } from '../types/onboarding'
 import type { SelectedHFDataset } from '../types/huggingface'
 import {
@@ -22,8 +23,10 @@ import {
 } from '../types/onboarding'
 import {
   generateChecklist,
+  generateDemoChecklist,
   getDescriptionForLevel,
 } from '../utils/checklistGenerator'
+import { isDemoProject, getDemoConfigForProject } from '../config/demos'
 
 const STORAGE_KEY_PREFIX = 'lf_onboarding_'
 
@@ -46,8 +49,16 @@ function loadState(projectId: string | null): OnboardingState {
     const stored = localStorage.getItem(storageKey)
     if (stored) {
       const parsed = JSON.parse(stored)
-      // Merge with defaults to handle any missing fields from older versions
-      return { ...DEFAULT_ONBOARDING_STATE, ...parsed }
+      // Deep merge to handle missing fields from older versions
+      return {
+        ...DEFAULT_ONBOARDING_STATE,
+        ...parsed,
+        // Deep merge answers to ensure new fields have defaults
+        answers: {
+          ...DEFAULT_ONBOARDING_STATE.answers,
+          ...(parsed.answers || {}),
+        },
+      }
     }
   } catch (e) {
     console.warn('Failed to load onboarding state from localStorage:', e)
@@ -75,21 +86,60 @@ function saveState(state: OnboardingState, projectId: string | null): void {
 export function useOnboarding(projectId: string | null = null): UseOnboardingReturn {
   const [state, setState] = useState<OnboardingState>(() => loadState(projectId))
 
+  // Check if this is a demo project
+  const demoConfig = useMemo(() => getDemoConfigForProject(projectId), [projectId])
+  const isDemo = useMemo(() => isDemoProject(projectId), [projectId])
+
   // Reload state when project changes
   useEffect(() => {
-    setState(loadState(projectId))
-  }, [projectId])
+    const loadedState = loadState(projectId)
+
+    // For demo projects, auto-complete onboarding (skip wizard, show checklist)
+    if (isDemo && !loadedState.onboardingCompleted) {
+      setState({
+        ...loadedState,
+        wizardOpen: false,
+        onboardingCompleted: true,
+        checklistVisible: true,
+        checklistDismissed: false,
+        currentStep: 'complete',
+        // Set project type to doc-qa for demo projects
+        answers: {
+          ...loadedState.answers,
+          projectType: 'doc-qa',
+          dataStatus: 'has-data',
+        },
+      })
+    } else {
+      setState(loadedState)
+    }
+  }, [projectId, isDemo])
 
   // Persist state changes to localStorage
   useEffect(() => {
     saveState(state, projectId)
   }, [state, projectId])
 
-  // Generate checklist based on current answers
+  // Generate checklist based on current answers (or demo config)
   const checklist = useMemo<ChecklistStep[]>(() => {
-    const { projectType, dataStatus, selectedHFDataset } = state.answers
-    return generateChecklist(projectType, dataStatus, selectedHFDataset)
-  }, [state.answers])
+    // For demo projects, use the simplified demo checklist
+    if (demoConfig) {
+      const demoChecklist = generateDemoChecklist(demoConfig)
+      if (demoChecklist) return demoChecklist
+    }
+
+    // Regular checklist based on user answers
+    const { projectType, dataStatus, selectedHFDataset, trainedModelName, trainedModelType, uploadedFiles, datasetName } = state.answers
+    return generateChecklist(
+      projectType,
+      dataStatus,
+      selectedHFDataset,
+      trainedModelName,
+      trainedModelType,
+      uploadedFiles?.length || 0,
+      datasetName
+    )
+  }, [state.answers, demoConfig])
 
   // Check if current step has a valid selection to proceed
   const canProceed = useMemo(() => {
@@ -202,6 +252,39 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
         )
       }
 
+      // If user uploaded files during onboarding, dispatch event to trigger upload
+      // Only do this once - check if we already dispatched by looking for a flag
+      if (prev.answers.dataStatus === 'has-data' && prev.answers.uploadedFiles.length > 0 && !(window as any).__onboardingFilesDispatched) {
+        // Get actual files from temporary storage
+        const files = (window as any).__onboardingFiles || []
+        console.log('[useOnboarding] completeWizard - checking files:', {
+          dataStatus: prev.answers.dataStatus,
+          uploadedFilesCount: prev.answers.uploadedFiles.length,
+          actualFilesCount: files.length,
+          fileNames: files.map((f: File) => f.name),
+        })
+        if (files.length > 0) {
+          console.log('[useOnboarding] Dispatching lf-onboarding-upload-files event')
+          // Mark as dispatched BEFORE dispatching to prevent duplicate events
+          ;(window as any).__onboardingFilesDispatched = true
+          window.dispatchEvent(
+            new CustomEvent('lf-onboarding-upload-files', {
+              detail: {
+                files: [...files], // Copy the array to preserve files
+                datasetName: prev.answers.datasetName || 'my-data',
+              },
+            })
+          )
+          // Clear temporary storage after a brief delay to ensure event is processed
+          setTimeout(() => {
+            delete (window as any).__onboardingFiles
+            delete (window as any).__onboardingFilesDispatched
+          }, 100)
+        } else {
+          console.warn('[useOnboarding] No actual files found in window.__onboardingFiles!')
+        }
+      }
+
       return {
         ...prev,
         wizardOpen: false,
@@ -260,6 +343,42 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setState(prev => ({
       ...prev,
       answers: { ...prev.answers, experienceLevel: level },
+    }))
+  }, [])
+
+  const setTrainedModel = useCallback((modelName: string, modelType: 'classifier' | 'anomaly') => {
+    setState(prev => ({
+      ...prev,
+      answers: {
+        ...prev.answers,
+        trainedModelName: modelName,
+        trainedModelType: modelType,
+        isTrainingSampleModel: false, // Training complete
+      },
+    }))
+  }, [])
+
+  const setIsTrainingSampleModel = useCallback((isTraining: boolean) => {
+    setState(prev => ({
+      ...prev,
+      answers: {
+        ...prev.answers,
+        isTrainingSampleModel: isTraining,
+      },
+    }))
+  }, [])
+
+  const setUploadedFiles = useCallback((files: OnboardingUploadedFile[]) => {
+    setState(prev => ({
+      ...prev,
+      answers: { ...prev.answers, uploadedFiles: files },
+    }))
+  }, [])
+
+  const setDatasetName = useCallback((name: string | null) => {
+    setState(prev => ({
+      ...prev,
+      answers: { ...prev.answers, datasetName: name },
     }))
   }, [])
 
@@ -349,6 +468,10 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     state,
     checklist,
 
+    // Demo project info
+    isDemo,
+    demoConfig,
+
     // Wizard actions
     openWizard,
     closeWizard,
@@ -365,6 +488,10 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setSelectedHFDataset,
     setDeployTarget,
     setExperienceLevel,
+    setTrainedModel,
+    setIsTrainingSampleModel,
+    setUploadedFiles,
+    setDatasetName,
 
     // Checklist actions
     completeChecklistStep,
