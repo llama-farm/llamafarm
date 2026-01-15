@@ -208,17 +208,26 @@ class ComponentResolver:
     def _to_embedding_strategy(defn: Any) -> EmbeddingStrategy:
         if isinstance(defn, EmbeddingStrategy):
             return defn.model_copy(deep=True)
-        # Assume dict-like
-        return EmbeddingStrategy(**deepcopy(defn))
+        try:
+            # Assume dict-like
+            return EmbeddingStrategy(**deepcopy(defn))
+        except Exception as e:  # pragma: no cover - defensive guardrails
+            raise ValueError(f"Invalid embedding strategy definition: {e}") from e
 
     @staticmethod
     def _to_retrieval_strategy(defn: Any) -> RetrievalStrategy:
         if isinstance(defn, RetrievalStrategy):
             return defn.model_copy(deep=True)
-        return RetrievalStrategy(**deepcopy(defn))
+        try:
+            return RetrievalStrategy(**deepcopy(defn))
+        except Exception as e:  # pragma: no cover - defensive guardrails
+            raise ValueError(f"Invalid retrieval strategy definition: {e}") from e
 
     @staticmethod
     def _to_parser(defn: Any) -> Parser:
         if isinstance(defn, Parser):
             return defn.model_copy(deep=True)
-        return Parser(**deepcopy(defn))
+        try:
+            return Parser(**deepcopy(defn))
+        except Exception as e:  # pragma: no cover - defensive guardrails
+            raise ValueError(f"Invalid parser definition: {e}") from e
