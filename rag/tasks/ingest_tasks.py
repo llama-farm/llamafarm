@@ -181,6 +181,8 @@ def ingest_file_with_rag_task(
             details["stored_count"] = result["stored_count"]
         if "skipped_count" in result:
             details["skipped_count"] = result["skipped_count"]
+        if "filtered_count" in result:
+            details["filtered_count"] = result["filtered_count"]
 
         # Set reason if it's a duplicate
         if (

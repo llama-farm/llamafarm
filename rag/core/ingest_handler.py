@@ -282,6 +282,7 @@ class IngestHandler:
         import time
 
         start_time = time.time()
+        filtered_count = 0
 
         filename = metadata.get("filename", "unknown")
         file_size = len(file_data)
@@ -421,6 +422,59 @@ class IngestHandler:
                 },
             )
 
+            total_chunks = len(documents)
+            valid_documents = [
+                doc for doc in documents if doc.content and doc.content.strip()
+            ]
+            filtered_count = total_chunks - len(valid_documents)
+
+            if filtered_count > 0:
+                logger.info(
+                    f"Filtered {filtered_count} empty chunks from {total_chunks} total chunks",
+                    extra={
+                        "total_chunks": total_chunks,
+                        "valid_chunks": len(valid_documents),
+                        "filtered_chunks": filtered_count,
+                        "filename": filename,
+                    },
+                )
+                event_logger.log_event(
+                    "chunks_filtered",
+                    {
+                        "filtered_count": filtered_count,
+                        "valid_count": len(valid_documents),
+                        "total_count": total_chunks,
+                        "file_hash": file_hash[:16],
+                    },
+                )
+
+            if not valid_documents:
+                event_logger.log_event(
+                    "processing_complete",
+                    {
+                        "status": "success",
+                        "total_chunks": 0,
+                        "stored_chunks": 0,
+                        "skipped_chunks": 0,
+                        "filtered_chunks": filtered_count,
+                        "reason": "all_chunks_empty",
+                    },
+                )
+                event_logger.complete_event()
+                return {
+                    "status": "success",
+                    "filename": filename,
+                    "document_count": 0,
+                    "filtered_count": filtered_count,
+                    "embedded_count": 0,
+                    "stored_count": 0,
+                    "skipped_count": 0,
+                    "reason": "all_chunks_empty",
+                    "message": f"All {filtered_count} chunks were empty or whitespace-only",
+                }
+
+            documents = valid_documents
+
             # Health check: Verify embedder is available before processing batch
             if hasattr(self.embedder, "validate_config") and not self.embedder.validate_config():
                 error_msg = (
@@ -496,6 +550,7 @@ class IngestHandler:
                         "message": str(e),
                         "filename": filename,
                         "document_count": len(documents),
+                        "filtered_count": filtered_count,
                         "embedded_count": len(embedded_documents),
                         "failed_count": failed_embeddings + (len(documents) - i),
                         "reason": "embedder_failure",
@@ -519,6 +574,7 @@ class IngestHandler:
                     "message": error_msg,
                     "filename": filename,
                     "document_count": len(documents),
+                    "filtered_count": filtered_count,
                     "embedded_count": 0,
                     "failed_count": failed_embeddings,
                     "reason": "all_embeddings_invalid",
@@ -718,6 +774,7 @@ class IngestHandler:
                     "total_chunks": len(documents),
                     "stored_chunks": stored_count,
                     "skipped_chunks": skipped_count,
+                    "filtered_chunks": filtered_count,
                     # Note: total_elapsed_time_ms is automatically added by EventLogger
                 },
             )
@@ -727,6 +784,7 @@ class IngestHandler:
                 "status": status,
                 "filename": filename,
                 "document_count": len(documents),
+                "filtered_count": filtered_count,
                 "stored_count": stored_count,
                 "skipped_count": skipped_count,
                 "document_ids": doc_ids,
