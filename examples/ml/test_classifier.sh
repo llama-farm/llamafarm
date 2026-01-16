@@ -1,6 +1,6 @@
 #!/bin/bash
-# Test script for SetFit-based text classifier
-# Tests the /v1/classifier/* endpoints with intent classification
+# Test script for SetFit-based text classifier via LlamaFarm API
+# Tests the /v1/ml/classifier/* endpoints with intent classification
 
 set -e
 
@@ -10,31 +10,44 @@ if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env"
 fi
 
-BASE_URL="${UNIVERSAL_RUNTIME_URL:-http://localhost:${LF_RUNTIME_PORT:-11540}}"
+
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}/v1/ml"
 MODEL_NAME="intent-classifier-test"
 
 echo "========================================"
 echo "Testing SetFit Text Classifier"
+echo "via LlamaFarm API (/v1/ml proxy)"
 echo "Base URL: $BASE_URL"
 echo "Model: $MODEL_NAME"
 echo "========================================"
 
-# Check if server is running
+# Check if LlamaFarm server is running
 echo ""
-echo "1. Checking server health..."
+echo "1. Checking LlamaFarm API health..."
+if ! curl -sf "http://localhost:${PORT}/health" > /dev/null; then
+    echo "   ERROR: LlamaFarm API not responding at port $PORT"
+    echo "   Start with: nx start server"
+    exit 1
+fi
+echo "   LlamaFarm API is healthy"
+
+# Check Universal Runtime via proxy
+echo ""
+echo "2. Checking Universal Runtime health via proxy..."
 if ! curl -sf "$BASE_URL/health" > /dev/null; then
-    echo "   ERROR: Server not responding at $BASE_URL"
+    echo "   ERROR: Universal Runtime not responding"
     echo "   Start with: nx start universal"
     exit 1
 fi
-echo "   Server is healthy"
+echo "   Universal Runtime is healthy"
 
 # Training data: ~40 examples across 4 intents (10 per class)
 # Intent classes: booking, cancellation, inquiry, complaint
 echo ""
-echo "2. Training classifier with 40 examples (10 per class)..."
+echo "3. Training classifier with 40 examples (10 per class)..."
 
-TRAIN_RESPONSE=$(curl -sf -X POST "$BASE_URL/v1/classifier/fit" \
+TRAIN_RESPONSE=$(curl -sf -X POST "$BASE_URL/classifier/fit" \
     -H "Content-Type: application/json" \
     -d '{
         "model": "'"$MODEL_NAME"'",
@@ -99,14 +112,22 @@ else
     exit 1
 fi
 
+# Extract versioned model name from response
+VERSIONED_MODEL=$(echo "$TRAIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('versioned_name', ''))" 2>/dev/null)
+if [ -z "$VERSIONED_MODEL" ]; then
+    VERSIONED_MODEL="$MODEL_NAME"
+fi
+echo "   Versioned model: $VERSIONED_MODEL"
+
 # Test data: 20 examples (5 per class)
 echo ""
-echo "3. Testing classifier with 20 new examples..."
+echo "4. Testing classifier with 20 new examples..."
+echo "   Using: ${MODEL_NAME}-latest (resolves to $VERSIONED_MODEL)"
 
-TEST_RESPONSE=$(curl -sf -X POST "$BASE_URL/v1/classifier/predict" \
+TEST_RESPONSE=$(curl -sf -X POST "$BASE_URL/classifier/predict" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'",
+        "model": "'"$MODEL_NAME"'-latest",
         "texts": [
             "Book me a flight to Paris tomorrow",
             "I need a room for three nights",
@@ -139,7 +160,7 @@ echo "$TEST_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$TEST_RESPONSE
 
 # Analyze results
 echo ""
-echo "4. Analyzing accuracy..."
+echo "5. Analyzing accuracy..."
 
 # Expected labels for the 20 test examples
 EXPECTED_LABELS=("booking" "booking" "booking" "booking" "booking" "cancellation" "cancellation" "cancellation" "cancellation" "cancellation" "inquiry" "inquiry" "inquiry" "inquiry" "inquiry" "complaint" "complaint" "complaint" "complaint" "complaint")
@@ -163,11 +184,11 @@ else
     while IFS= read -r pred; do
         expected="${EXPECTED_LABELS[$i]}"
         if [ "$pred" = "$expected" ]; then
-            ((CORRECT++))
+            CORRECT=$((CORRECT + 1))
         else
             echo "   Mismatch at index $i: expected '$expected', got '$pred'"
         fi
-        ((i++))
+        i=$((i + 1))
     done <<< "$PREDICTED_LABELS"
 
     ACCURACY=$(echo "scale=1; $CORRECT * 100 / $TOTAL" | bc)
@@ -175,20 +196,20 @@ else
     echo "   Correct: $CORRECT / $TOTAL"
     echo "   Accuracy: ${ACCURACY}%"
 
-    if (( CORRECT >= 16 )); then
+    if [ "$CORRECT" -ge 16 ]; then
         echo "   PASSED (>= 80% accuracy)"
     else
         echo "   WARNING: Accuracy below 80% threshold"
     fi
 fi
 
-# Save the model
+# Save the model (use versioned name)
 echo ""
-echo "5. Saving classifier model..."
-SAVE_RESPONSE=$(curl -sf -X POST "$BASE_URL/v1/classifier/save" \
+echo "6. Saving classifier model..."
+SAVE_RESPONSE=$(curl -sf -X POST "$BASE_URL/classifier/save" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'"
+        "model": "'"$VERSIONED_MODEL"'"
     }')
 
 echo "   Save response:"
@@ -196,17 +217,17 @@ echo "$SAVE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$SAVE_RESPONSE
 
 # List saved models
 echo ""
-echo "6. Listing saved classifier models..."
-LIST_RESPONSE=$(curl -sf "$BASE_URL/v1/classifier/models")
+echo "7. Listing saved classifier models..."
+LIST_RESPONSE=$(curl -sf "$BASE_URL/classifier/models")
 echo "$LIST_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LIST_RESPONSE"
 
-# Test loading the model (simulating server restart)
+# Test loading the model using -latest (simulating server restart)
 echo ""
-echo "7. Testing model load (simulating restart)..."
-LOAD_RESPONSE=$(curl -sf -X POST "$BASE_URL/v1/classifier/load" \
+echo "8. Testing model load using -latest suffix..."
+LOAD_RESPONSE=$(curl -sf -X POST "$BASE_URL/classifier/load" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'"
+        "model": "'"$MODEL_NAME"'-latest"
     }')
 
 echo "   Load response:"
@@ -214,21 +235,21 @@ echo "$LOAD_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LOAD_RESPONSE
 
 # Test prediction after load
 echo ""
-echo "8. Testing prediction after reload..."
-RELOAD_TEST=$(curl -sf -X POST "$BASE_URL/v1/classifier/predict" \
+echo "9. Testing prediction after reload..."
+RELOAD_TEST=$(curl -sf -X POST "$BASE_URL/classifier/predict" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "'"$MODEL_NAME"'",
+        "model": "'"$MODEL_NAME"'-latest",
         "texts": ["I want to book a flight", "Cancel my order"]
     }')
 
 echo "   Predictions after reload:"
 echo "$RELOAD_TEST" | python3 -m json.tool 2>/dev/null || echo "$RELOAD_TEST"
 
-# Cleanup - delete the test model
+# Cleanup - delete the test model (use versioned name)
 echo ""
-echo "9. Cleaning up test model..."
-DELETE_RESPONSE=$(curl -sf -X DELETE "$BASE_URL/v1/classifier/models/$MODEL_NAME")
+echo "10. Cleaning up test model ($VERSIONED_MODEL)..."
+DELETE_RESPONSE=$(curl -sf -X DELETE "$BASE_URL/classifier/models/$VERSIONED_MODEL")
 echo "   Delete response:"
 echo "$DELETE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DELETE_RESPONSE"
 

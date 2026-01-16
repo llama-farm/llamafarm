@@ -11,7 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env"
 fi
-RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:${LF_RUNTIME_PORT:-11540}}"
+
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}"
 
 echo "=========================================="
 echo "Concept Drift Detection Demo (River)"
@@ -20,9 +22,9 @@ echo ""
 
 # Check if server is running
 echo "1. Checking server health..."
-if ! curl -s "$RUNTIME_URL/health" > /dev/null 2>&1; then
-    echo "   ERROR: Server not running at $RUNTIME_URL"
-    echo "   Start with: cd runtimes/universal && uv run python server.py"
+if ! curl -s "$BASE_URL/health" > /dev/null 2>&1; then
+    echo "   ERROR: LlamaFarm API not running at $BASE_URL"
+    echo "   Start with: nx start server"
     exit 1
 fi
 echo "   Server is healthy!"
@@ -44,7 +46,7 @@ stream2 = [50 + random.uniform(-1, 1) for _ in range(50)]
 print(str(stream1 + stream2).replace(' ', ''))
 ")
 
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/streaming/drift/detect" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/detect" \
     -H "Content-Type: application/json" \
     -d "{
         \"values\": $STREAM,
@@ -65,7 +67,7 @@ echo ""
 
 for ALGO in adwin page_hinkley kswin; do
     echo "   Algorithm: $ALGO"
-    RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/streaming/drift/detect" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/detect" \
         -H "Content-Type: application/json" \
         -d "{
             \"values\": $STREAM,
@@ -90,7 +92,7 @@ stream = [10 + random.uniform(-0.5, 0.5) for _ in range(100)]
 print(str(stream).replace(' ', ''))
 ")
 
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/streaming/drift/detect" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/detect" \
     -H "Content-Type: application/json" \
     -d "{
         \"values\": $STABLE_STREAM,
@@ -109,7 +111,7 @@ echo "   Creating a drift detector for streaming updates..."
 echo ""
 
 # Create detector
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/streaming/drift/create?algorithm=adwin&detector_id=demo-detector")
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/create?algorithm=adwin&detector_id=demo-detector")
 echo "   Create response:"
 echo "$RESPONSE" | python3 -m json.tool
 echo ""
@@ -120,12 +122,12 @@ DETECTOR_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sy
 echo "   Sending stable values (mean=10)..."
 for i in {1..10}; do
     VALUE=$(python3 -c "import random; print(round(10 + random.uniform(-1, 1), 2))")
-    curl -s -X POST "$RUNTIME_URL/v1/streaming/drift/update/$DETECTOR_ID?value=$VALUE" > /dev/null
+    curl -s -X POST "$BASE_URL/v1/streaming/drift/update/$DETECTOR_ID?value=$VALUE" > /dev/null
 done
 echo "   Sent 10 stable values"
 
 # Get state
-RESPONSE=$(curl -s "$RUNTIME_URL/v1/streaming/drift/state/$DETECTOR_ID")
+RESPONSE=$(curl -s "$BASE_URL/v1/streaming/drift/state/$DETECTOR_ID")
 echo ""
 echo "   Current state after stable values:"
 echo "$RESPONSE" | python3 -m json.tool
@@ -134,7 +136,7 @@ echo ""
 echo "   Sending drifted values (mean=50)..."
 for i in {1..10}; do
     VALUE=$(python3 -c "import random; print(round(50 + random.uniform(-1, 1), 2))")
-    RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/streaming/drift/update/$DETECTOR_ID?value=$VALUE")
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/update/$DETECTOR_ID?value=$VALUE")
     DRIFT=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('drift_detected', False))")
     if [ "$DRIFT" = "True" ]; then
         echo "   ** DRIFT DETECTED at value $VALUE **"
@@ -143,7 +145,7 @@ done
 echo "   Sent 10 drifted values"
 
 # Final state
-RESPONSE=$(curl -s "$RUNTIME_URL/v1/streaming/drift/state/$DETECTOR_ID")
+RESPONSE=$(curl -s "$BASE_URL/v1/streaming/drift/state/$DETECTOR_ID")
 echo ""
 echo "   Final state:"
 echo "$RESPONSE" | python3 -m json.tool
@@ -151,7 +153,7 @@ echo ""
 
 # Delete detector
 echo "6. Cleanup"
-curl -s -X DELETE "$RUNTIME_URL/v1/streaming/drift/$DETECTOR_ID" > /dev/null
+curl -s -X DELETE "$BASE_URL/v1/streaming/drift/$DETECTOR_ID" > /dev/null
 echo "   Deleted detector: $DETECTOR_ID"
 echo ""
 
@@ -172,7 +174,7 @@ recovered = [25 + random.uniform(-5, 5) for _ in range(20)]
 print(str(normal + incident + recovered).replace(' ', ''))
 ")
 
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/streaming/drift/detect" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/detect" \
     -H "Content-Type: application/json" \
     -d "{
         \"values\": $LATENCY_STREAM,

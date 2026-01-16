@@ -3,7 +3,12 @@ ML Router - Endpoints for ML model training and inference.
 
 Provides access to:
 - Custom Text Classification (SetFit few-shot learning)
-- Anomaly Detection (train and detect anomalies)
+- Anomaly Detection (train, detect, explain anomalies)
+- Embeddings (sentence-transformers)
+- NLP: Language detection, keyword extraction, PII detection/redaction
+- Time Series: Forecasting, change point detection
+- Vision: Object detection, background removal
+- Analysis: Table QA, dataset audit, drift detection
 
 Note: OCR and Document extraction have moved to /v1/vision/*
 """
@@ -17,14 +22,30 @@ from server.services.ml_model_service import MLModelService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
 from .types import (
+    AnomalyExplainRequest,
     AnomalyFitRequest,
     AnomalyLoadRequest,
     AnomalySaveRequest,
     AnomalyScoreRequest,
+    BackgroundRemoveRequest,
+    ChangePointRequest,
     ClassifierFitRequest,
     ClassifierLoadRequest,
     ClassifierPredictRequest,
     ClassifierSaveRequest,
+    DatasetAuditRequest,
+    DriftDetectRequest,
+    EmbeddingsRequest,
+    KeywordExtractBatchRequest,
+    KeywordExtractRequest,
+    LanguageDetectBatchRequest,
+    LanguageDetectRequest,
+    ObjectDetectBatchRequest,
+    ObjectDetectRequest,
+    PIIDetectRequest,
+    PIIRedactRequest,
+    TableQARequest,
+    TimeSeriesForecastRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -277,8 +298,13 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         schema=request.schema,
         contamination=request.contamination,
         normalization=request.normalization,
+        scaler_type=request.scaler_type,
         epochs=request.epochs,
         batch_size=request.batch_size,
+        validation_split=request.validation_split,
+        patience=request.patience,
+        min_delta=request.min_delta,
+        training_file=request.training_file,
     )
 
     # Add versioning info to response
@@ -322,6 +348,7 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         backend=request.backend,
         schema=request.schema,
         normalization=request.normalization,
+        scaler_type=request.scaler_type,
         threshold=request.threshold,
     )
 
@@ -354,6 +381,7 @@ async def detect_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         backend=request.backend,
         schema=request.schema,
         normalization=request.normalization,
+        scaler_type=request.scaler_type,
         threshold=request.threshold,
     )
 
@@ -463,3 +491,341 @@ async def delete_anomaly_model(filename: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
 
     return await UniversalRuntimeService.anomaly_delete_model(filename)
+
+
+@router.post("/anomaly/explain")
+async def explain_anomaly(request: AnomalyExplainRequest) -> dict[str, Any]:
+    """Explain why data points are flagged as anomalies using SHAP.
+
+    Returns feature contributions that explain the anomaly score.
+
+    Example request:
+    ```json
+    {
+        "model_id": "sensor-detector",
+        "data": [[95.0, 95.0, 200.0]],
+        "feature_names": ["cpu", "memory", "latency"],
+        "backend": "isolation_forest"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.explain_anomaly(
+        model_id=request.model_id,
+        data=request.data,
+        feature_names=request.feature_names,
+        backend=request.backend,
+        background_samples=request.background_samples,
+        nsamples=request.nsamples,
+    )
+
+
+# =============================================================================
+# Embeddings Endpoints
+# =============================================================================
+
+
+@router.post("/embeddings")
+async def create_embeddings(request: EmbeddingsRequest) -> dict[str, Any]:
+    """Generate embeddings for text.
+
+    Uses sentence-transformers models to generate vector embeddings.
+
+    Example request:
+    ```json
+    {
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "input": ["Hello world", "How are you?"],
+        "encoding_format": "float"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.embeddings(
+        model=request.model,
+        input=request.input,
+        encoding_format=request.encoding_format,
+    )
+
+
+# =============================================================================
+# NLP Endpoints
+# =============================================================================
+
+
+@router.post("/nlp/language")
+async def detect_language(request: LanguageDetectRequest) -> dict[str, Any]:
+    """Detect the language of text.
+
+    Example request:
+    ```json
+    {
+        "text": "Bonjour, comment allez-vous?"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_language(
+        text=request.text,
+        model=request.model,
+    )
+
+
+@router.post("/nlp/language/batch")
+async def detect_language_batch(request: LanguageDetectBatchRequest) -> dict[str, Any]:
+    """Detect the language of multiple texts."""
+    return await UniversalRuntimeService.detect_language_batch(
+        texts=request.texts,
+        model=request.model,
+    )
+
+
+@router.post("/nlp/keywords")
+async def extract_keywords(request: KeywordExtractRequest) -> dict[str, Any]:
+    """Extract keywords and keyphrases from text.
+
+    Example request:
+    ```json
+    {
+        "text": "Machine learning enables computers to learn from data.",
+        "top_k": 5,
+        "diversity": 0.5
+    }
+    ```
+    """
+    return await UniversalRuntimeService.extract_keywords(
+        text=request.text,
+        top_k=request.top_k,
+        diversity=request.diversity,
+        ngram_range=request.ngram_range,
+    )
+
+
+@router.post("/nlp/keywords/batch")
+async def extract_keywords_batch(
+    request: KeywordExtractBatchRequest,
+) -> dict[str, Any]:
+    """Extract keywords from multiple texts."""
+    return await UniversalRuntimeService.extract_keywords_batch(
+        texts=request.texts,
+        top_k=request.top_k,
+        diversity=request.diversity,
+        ngram_range=request.ngram_range,
+    )
+
+
+@router.post("/nlp/pii/detect")
+async def detect_pii(request: PIIDetectRequest) -> dict[str, Any]:
+    """Detect Personally Identifiable Information (PII) in text.
+
+    Example request:
+    ```json
+    {
+        "text": "Contact John Smith at john@email.com or call 555-1234."
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_pii(
+        text=request.text,
+        entity_types=request.entity_types,
+        threshold=request.threshold,
+        use_regex=request.use_regex,
+    )
+
+
+@router.post("/nlp/redact")
+async def redact_pii(request: PIIRedactRequest) -> dict[str, Any]:
+    """Redact PII from text.
+
+    Example request:
+    ```json
+    {
+        "text": "My SSN is 123-45-6789 and email is test@example.com",
+        "replacement": "[REDACTED]"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.redact_pii(
+        text=request.text,
+        entity_types=request.entity_types,
+        replacement=request.replacement,
+        replacement_map=request.replacement_map,
+        threshold=request.threshold,
+        use_regex=request.use_regex,
+    )
+
+
+# =============================================================================
+# Time Series Endpoints
+# =============================================================================
+
+
+@router.post("/timeseries/forecast")
+async def forecast_timeseries(request: TimeSeriesForecastRequest) -> dict[str, Any]:
+    """Forecast future values in a time series.
+
+    Uses Chronos models for probabilistic forecasting.
+
+    Example request:
+    ```json
+    {
+        "data": [100, 102, 105, 103, 107, 110, 108, 112],
+        "horizon": 5
+    }
+    ```
+    """
+    return await UniversalRuntimeService.forecast_timeseries(
+        data=request.data,
+        horizon=request.horizon,
+        model=request.model,
+    )
+
+
+@router.post("/timeseries/changepoints")
+async def detect_changepoints(request: ChangePointRequest) -> dict[str, Any]:
+    """Detect change points in time series data.
+
+    Uses Ruptures library for change point detection.
+
+    Example request:
+    ```json
+    {
+        "data": [10, 11, 10, 12, 25, 26, 24, 27, 15, 16],
+        "algorithm": "binseg",
+        "n_changepoints": 2
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_changepoints(
+        data=request.data,
+        algorithm=request.algorithm,
+        n_changepoints=request.n_changepoints,
+        penalty=request.penalty,
+    )
+
+
+# =============================================================================
+# Vision Endpoints
+# =============================================================================
+
+
+@router.post("/vision/detect")
+async def detect_objects(request: ObjectDetectRequest) -> dict[str, Any]:
+    """Detect objects in an image.
+
+    Uses YOLO models for object detection.
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "threshold": 0.5
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_objects(
+        image=request.image,
+        threshold=request.threshold,
+        labels=request.labels,
+        model=request.model,
+    )
+
+
+@router.post("/vision/detect/batch")
+async def detect_objects_batch(request: ObjectDetectBatchRequest) -> dict[str, Any]:
+    """Detect objects in multiple images."""
+    return await UniversalRuntimeService.detect_objects_batch(
+        images=request.images,
+        threshold=request.threshold,
+        labels=request.labels,
+        model=request.model,
+    )
+
+
+@router.post("/vision/background-remove")
+async def remove_background(request: BackgroundRemoveRequest) -> dict[str, Any]:
+    """Remove background from an image.
+
+    Returns the image with transparent background.
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.remove_background(
+        image=request.image,
+        model=request.model,
+    )
+
+
+# =============================================================================
+# Analysis Endpoints
+# =============================================================================
+
+
+@router.post("/analysis/table-qa")
+async def table_qa(request: TableQARequest) -> dict[str, Any]:
+    """Answer questions about tabular data.
+
+    Uses TAPAS model for table question answering.
+
+    Example request:
+    ```json
+    {
+        "table": [
+            {"name": "Alice", "age": 30},
+            {"name": "Bob", "age": 25}
+        ],
+        "query": "What is the average age?"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.table_qa(
+        table=request.table,
+        query=request.query,
+        model=request.model,
+    )
+
+
+@router.post("/analysis/dataset-audit")
+async def audit_dataset(request: DatasetAuditRequest) -> dict[str, Any]:
+    """Audit dataset for label quality issues.
+
+    Uses Cleanlab to identify potentially mislabeled examples.
+
+    Example request:
+    ```json
+    {
+        "labels": [0, 1, 0, 1, 0],
+        "pred_probs": [[0.9, 0.1], [0.2, 0.8], [0.8, 0.2], [0.3, 0.7], [0.7, 0.3]],
+        "label_names": ["cat", "dog"]
+    }
+    ```
+    """
+    return await UniversalRuntimeService.audit_dataset(
+        labels=request.labels,
+        pred_probs=request.pred_probs,
+        label_names=request.label_names,
+    )
+
+
+@router.post("/analysis/drift")
+async def detect_drift(request: DriftDetectRequest) -> dict[str, Any]:
+    """Detect drift between reference and current data.
+
+    Uses River library for drift detection.
+
+    Example request:
+    ```json
+    {
+        "reference_data": [5.0, 5.1, 4.9, 5.2],
+        "current_data": [10.0, 10.1, 9.9, 10.2],
+        "algorithm": "adwin"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_drift(
+        reference_data=request.reference_data,
+        current_data=request.current_data,
+        algorithm=request.algorithm,
+    )

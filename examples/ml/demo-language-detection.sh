@@ -18,7 +18,7 @@ if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env" 2>/dev/null || true
 fi
 
-PORT=${LF_RUNTIME_PORT:-11545}
+PORT=${1:-8000}
 BASE_URL="http://localhost:${PORT}"
 
 # Colors

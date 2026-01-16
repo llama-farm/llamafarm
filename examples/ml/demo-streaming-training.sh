@@ -11,8 +11,8 @@
 
 set -e
 
-RUNTIME_PORT="${LF_RUNTIME_PORT:-11540}"
-BASE_URL="http://localhost:${RUNTIME_PORT}"
+PORT="${1:-8000}"
+BASE_URL="http://localhost:${PORT}"
 
 echo "=============================================="
 echo "    Streaming Training Demo"
@@ -22,12 +22,12 @@ echo ""
 
 # Check if server is running
 if ! curl -s "${BASE_URL}/health" > /dev/null 2>&1; then
-    echo "ERROR: Universal Runtime not running on port ${RUNTIME_PORT}"
+    echo "ERROR: LlamaFarm API not running on port ${PORT}"
     echo "Start it with: nx start universal-runtime"
     exit 1
 fi
 
-echo "✓ Universal Runtime is running on port ${RUNTIME_PORT}"
+echo "✓ LlamaFarm API is running on port ${PORT}"
 echo ""
 
 # Generate large CSV file

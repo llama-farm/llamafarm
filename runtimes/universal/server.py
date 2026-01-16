@@ -35,6 +35,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel as PydanticBaseModel
+from pydantic import Field
 
 from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
@@ -1500,9 +1501,9 @@ class AnomalyScoreRequest(PydanticBaseModel):
     schema: dict[str, str] | None = (
         None  # Feature encoding schema (required for dict data)
     )
-    threshold: float | None = None  # Override default threshold
-    normalization: str = "standardization"  # standardization, zscore, or raw
-    scaler_type: str = "robust"  # Input data scaler: robust (default) or standard
+    threshold: float | None = Field(default=None, ge=0, le=1, description="Anomaly threshold (0-1)")
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
+    scaler_type: Literal["robust", "standard"] = "robust"
 
 
 class AnomalyFitRequest(PydanticBaseModel):
@@ -1534,15 +1535,22 @@ class AnomalyFitRequest(PydanticBaseModel):
     schema: dict[str, str] | None = (
         None  # Feature encoding schema (required for dict data)
     )
-    contamination: float = 0.1  # Expected proportion of anomalies
-    epochs: int = 100  # Training epochs (autoencoder only)
-    batch_size: int = 32  # Batch size (autoencoder only)
-    normalization: str = "standardization"  # standardization, zscore, or raw
-    scaler_type: str = "robust"  # Input data scaler: robust (default) or standard
-    # VAE / Early Stopping parameters (Phase 3)
-    validation_split: float = 0.1  # Fraction of data for validation (autoencoder/vae)
-    patience: int = 10  # Epochs without improvement before stopping
-    min_delta: float = 1e-4  # Minimum change in validation loss for improvement
+    contamination: float = Field(
+        default=0.1,
+        gt=0,
+        le=0.5,
+        description="Expected proportion of anomalies (0-0.5]",
+    )
+    epochs: int = Field(default=100, ge=1, description="Training epochs (autoencoder only)")
+    batch_size: int = Field(default=32, ge=1, description="Batch size (autoencoder only)")
+    normalization: Literal["standardization", "zscore", "raw"] = "standardization"
+    scaler_type: Literal["robust", "standard"] = "robust"
+    # VAE / Early Stopping parameters
+    validation_split: float = Field(
+        default=0.1, ge=0, le=0.5, description="Fraction of data for validation"
+    )
+    patience: int = Field(default=10, ge=1, description="Epochs without improvement before stopping")
+    min_delta: float = Field(default=1e-4, ge=0, description="Minimum improvement threshold")
 
 
 @app.post("/v1/anomaly/score")
@@ -3681,8 +3689,8 @@ class KeywordExtractRequest(PydanticBaseModel):
     """Keyword extraction request."""
 
     text: str  # Text to extract keywords from
-    top_k: int = 10  # Number of keywords to return
-    diversity: float = 0.5  # Diversity parameter (0-1)
+    top_k: int = Field(default=10, ge=1, le=100, description="Number of keywords to return")
+    diversity: float = Field(default=0.5, ge=0, le=1, description="Diversity parameter (0-1)")
     ngram_range: list[int] = [1, 3]  # Min and max n-gram size
 
 
@@ -3690,8 +3698,8 @@ class KeywordExtractBatchRequest(PydanticBaseModel):
     """Keyword extraction batch request."""
 
     texts: list[str]  # List of texts
-    top_k: int = 10  # Keywords per text
-    diversity: float = 0.5
+    top_k: int = Field(default=10, ge=1, le=100, description="Keywords per text")
+    diversity: float = Field(default=0.5, ge=0, le=1, description="Diversity parameter (0-1)")
     ngram_range: list[int] = [1, 3]
 
 
@@ -3869,7 +3877,7 @@ class PIIDetectRequest(PydanticBaseModel):
 
     text: str  # Text to analyze
     entity_types: list[str] | None = None  # Custom entity types (default: standard PII)
-    threshold: float = 0.5  # Detection confidence threshold
+    threshold: float = Field(default=0.5, ge=0, le=1, description="Detection confidence threshold")
     use_regex: bool = True  # Also use regex patterns
 
 
@@ -3880,7 +3888,7 @@ class PIIRedactRequest(PydanticBaseModel):
     entity_types: list[str] | None = None  # Entity types to redact
     replacement: str = "[REDACTED]"  # Default replacement
     replacement_map: dict[str, str] | None = None  # Per-type replacements
-    threshold: float = 0.5
+    threshold: float = Field(default=0.5, ge=0, le=1, description="Detection confidence threshold")
     use_regex: bool = True
 
 
@@ -4012,7 +4020,7 @@ class ObjectDetectionRequest(PydanticBaseModel):
     """Object detection request."""
 
     image: str  # Base64-encoded image or file path
-    threshold: float = 0.5  # Confidence threshold (0-1)
+    threshold: float = Field(default=0.5, ge=0, le=1, description="Confidence threshold (0-1)")
     labels: list[str] | None = None  # Filter to specific object labels
     model: str = "hustvl/yolos-tiny"  # HuggingFace model name
 
@@ -4021,7 +4029,7 @@ class ObjectDetectionBatchRequest(PydanticBaseModel):
     """Batch object detection request."""
 
     images: list[str]  # List of base64-encoded images or file paths
-    threshold: float = 0.5
+    threshold: float = Field(default=0.5, ge=0, le=1, description="Confidence threshold (0-1)")
     labels: list[str] | None = None
     model: str = "hustvl/yolos-tiny"
 

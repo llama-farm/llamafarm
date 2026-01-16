@@ -10,7 +10,7 @@
 # 3. Compare their ability to detect true anomalies in clean test data
 #
 # Usage: ./demo-robust-scaler.sh [PORT]
-#   PORT defaults to LF_RUNTIME_PORT from .env (or 11545)
+#   PORT defaults to PORT from .env (or 8000)
 
 set -e
 
@@ -19,8 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env" 2>/dev/null || true
 fi
-RUNTIME_PORT=${1:-${LF_RUNTIME_PORT:-11545}}
-BASE_URL="http://localhost:${RUNTIME_PORT}"
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -31,18 +31,18 @@ NC='\033[0m'
 
 echo -e "${BLUE}================================================${NC}"
 echo -e "${BLUE}  RobustScaler vs StandardScaler Demo${NC}"
-echo -e "${BLUE}  Universal Runtime - port ${RUNTIME_PORT}${NC}"
+echo -e "${BLUE}  LlamaFarm API - port ${PORT}${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 
 # Check if server is running
 echo -e "${YELLOW}Checking Universal Runtime health...${NC}"
 if ! curl -sf "${BASE_URL}/health" > /dev/null 2>&1; then
-    echo -e "${RED}Error: Universal Runtime not running on port ${RUNTIME_PORT}${NC}"
+    echo -e "${RED}Error: LlamaFarm API not running on port ${PORT}${NC}"
     echo "Start it with: nx start universal-runtime"
     exit 1
 fi
-echo -e "${GREEN}✓ Universal Runtime is healthy${NC}"
+echo -e "${GREEN}✓ LlamaFarm API is healthy${NC}"
 echo ""
 
 # ============================================================================

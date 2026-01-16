@@ -11,7 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env"
 fi
-RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:${LF_RUNTIME_PORT:-11540}}"
+
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}"
 
 echo "=========================================="
 echo "PyOD Advanced Anomaly Detection Demo"
@@ -20,9 +22,9 @@ echo ""
 
 # Check if server is running
 echo "1. Checking server health..."
-if ! curl -s "$RUNTIME_URL/health" > /dev/null 2>&1; then
-    echo "   ERROR: Server not running at $RUNTIME_URL"
-    echo "   Start with: cd runtimes/universal && uv run python server.py"
+if ! curl -s "$BASE_URL/health" > /dev/null 2>&1; then
+    echo "   ERROR: LlamaFarm API not running at $BASE_URL"
+    echo "   Start with: nx start server"
     exit 1
 fi
 echo "   Server is healthy!"
@@ -73,7 +75,7 @@ for i in "${!BACKENDS[@]}"; do
     echo "   === ${DESC} ==="
 
     # Train model
-    RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/fit" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/fit" \
         -H "Content-Type: application/json" \
         -d "{
             \"model\": \"$MODEL_NAME\",
@@ -86,7 +88,7 @@ for i in "${!BACKENDS[@]}"; do
     echo "   Training time: ${TRAINING_TIME}ms"
 
     # Score test data
-    RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/score" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/score" \
         -H "Content-Type: application/json" \
         -d "{
             \"model\": \"$MODEL_NAME\",
@@ -108,7 +110,7 @@ if 'data' in data:
 "
 
     # Delete model
-    curl -s -X DELETE "$RUNTIME_URL/v1/anomaly/$MODEL_NAME" > /dev/null 2>&1 || true
+    curl -s -X DELETE "$BASE_URL/v1/anomaly/$MODEL_NAME" > /dev/null 2>&1 || true
     echo ""
 done
 

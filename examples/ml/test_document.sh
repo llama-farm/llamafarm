@@ -1,13 +1,11 @@
 #!/bin/bash
-# Test Document Understanding endpoint with image upload
+# Test Document Understanding endpoint via LlamaFarm API
 #
-# This script demonstrates:
-# 1. Uploading a receipt image
-# 2. Running document VQA using Donut DocVQA model
-# 3. Cleaning up the file
+# This script demonstrates running document VQA by uploading files directly
+# to the /v1/vision/documents/extract endpoint.
 #
-# Usage: ./test_document.sh [PORT] [IMAGE_FILE]
-#   PORT defaults to LF_RUNTIME_PORT from .env (fallback: 11540)
+# Usage: ./test_document_api.sh [PORT] [IMAGE_FILE]
+#   PORT defaults to 8000 (LlamaFarm API)
 #   IMAGE_FILE defaults to the sample receipt in this directory
 
 set -e
@@ -19,9 +17,9 @@ if [ -f "$SCRIPT_DIR/../../.env" ]; then
 fi
 
 
-PORT=${1:-${LF_RUNTIME_PORT:-11540}}
+PORT=${1:-8000}
 IMAGE_FILE=${2:-"$(dirname "$0")/receipt.png"}
-BASE_URL="http://localhost:${PORT}"
+BASE_URL="http://localhost:${PORT}/v1/vision"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -31,18 +29,28 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}================================================${NC}"
-echo -e "${BLUE}  Universal Runtime Document Understanding Test${NC}"
+echo -e "${BLUE}  LlamaFarm API Document Understanding Test${NC}"
+echo -e "${BLUE}  (via /v1/vision)${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 
-# Check if server is running
-echo -e "${YELLOW}Checking server health...${NC}"
-if ! curl -s "${BASE_URL}/health" > /dev/null 2>&1; then
-    echo -e "${RED}Error: Universal Runtime not running on port ${PORT}${NC}"
+# Check if LlamaFarm server is running
+echo -e "${YELLOW}Checking LlamaFarm API health...${NC}"
+if ! curl -s "http://localhost:${PORT}/health" > /dev/null 2>&1; then
+    echo -e "${RED}Error: LlamaFarm API not running on port ${PORT}${NC}"
+    echo "Start it with: nx start server"
+    exit 1
+fi
+echo -e "${GREEN}✓ LlamaFarm API is healthy${NC}"
+
+# Check Universal Runtime via ML health endpoint
+echo -e "${YELLOW}Checking Universal Runtime...${NC}"
+if ! curl -s "http://localhost:${PORT}/v1/ml/health" > /dev/null 2>&1; then
+    echo -e "${RED}Error: Universal Runtime not available${NC}"
     echo "Start it with: nx start universal"
     exit 1
 fi
-echo -e "${GREEN}✓ Server is healthy${NC}"
+echo -e "${GREEN}✓ Universal Runtime is healthy${NC}"
 echo ""
 
 # Check if file exists
@@ -51,27 +59,8 @@ if [ ! -f "$IMAGE_FILE" ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}1. Uploading receipt image...${NC}"
+echo -e "${YELLOW}1. Uploading file for Document VQA...${NC}"
 echo "   File: $(basename "$IMAGE_FILE")"
-echo ""
-
-# Upload the file
-UPLOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/files" \
-    -F "file=@${IMAGE_FILE}")
-
-echo "Upload Response:"
-echo "$UPLOAD_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$UPLOAD_RESPONSE"
-echo ""
-
-# Extract file_id from response
-FILE_ID=$(echo "$UPLOAD_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
-
-if [ -z "$FILE_ID" ]; then
-    echo -e "${RED}Error: Failed to get file_id from upload response${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✓ File uploaded: ${FILE_ID}${NC}"
 echo ""
 
 echo -e "${YELLOW}2. Running Document VQA with Donut DocVQA...${NC}"
@@ -81,29 +70,31 @@ echo ""
 echo -e "${YELLOW}   Note: First run downloads the model (~1GB)...${NC}"
 echo ""
 
-# Questions to ask about the receipt
-QUESTIONS=(
-    "What is the store name?"
-    "What is the total amount?"
-    "What items were purchased?"
-    "What is the date?"
-)
+# Questions to ask about the receipt (comma-separated for the API)
+QUESTIONS="What is the store name?,What is the total amount?,What items were purchased?,What is the date?"
 
-for QUESTION in "${QUESTIONS[@]}"; do
-    echo -e "${BLUE}Question: ${QUESTION}${NC}"
+echo -e "${BLUE}Questions: ${NC}"
+echo "  - What is the store name?"
+echo "  - What is the total amount?"
+echo "  - What items were purchased?"
+echo "  - What is the date?"
+echo ""
 
-    DOC_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/documents/extract" \
-        -H "Content-Type: application/json" \
-        --max-time 300 \
-        -d "{
-            \"model\": \"naver-clova-ix/donut-base-finetuned-docvqa\",
-            \"file_id\": \"${FILE_ID}\",
-            \"prompts\": [\"${QUESTION}\"],
-            \"task\": \"vqa\"
-        }")
+DOC_RESPONSE=$(curl -s -X POST "${BASE_URL}/documents/extract" \
+    -F "file=@${IMAGE_FILE}" \
+    -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
+    -F "prompts=${QUESTIONS}" \
+    -F "task=vqa" \
+    --max-time 300)
 
-    # Extract answer
-    ANSWER=$(echo "$DOC_RESPONSE" | python3 -c "
+echo -e "${BLUE}Response:${NC}"
+echo "$DOC_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DOC_RESPONSE"
+echo ""
+
+# Extract answers
+echo -e "${BLUE}Extracted Answers:${NC}"
+echo "---"
+echo "$DOC_RESPONSE" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -124,17 +115,8 @@ try:
             print(f'  Answer: {item[\"answer\"]}')
 except Exception as e:
     print(f'  Error: {e}')
-" 2>/dev/null || echo "  (parsing error)")
-
-    echo "$ANSWER"
-    echo ""
-done
-
-# Clean up - delete the uploaded file
-echo -e "${YELLOW}3. Cleaning up uploaded file...${NC}"
-DELETE_RESPONSE=$(curl -s -X DELETE "${BASE_URL}/v1/files/${FILE_ID}")
-echo "$DELETE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DELETE_RESPONSE"
-echo -e "${GREEN}✓ Cleanup complete${NC}"
+" 2>/dev/null || echo "  (parsing error)"
+echo "---"
 echo ""
 
 echo -e "${BLUE}================================================${NC}"

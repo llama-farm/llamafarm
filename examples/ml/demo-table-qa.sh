@@ -11,7 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env"
 fi
-RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:${LF_RUNTIME_PORT:-11540}}"
+
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}"
 
 echo "=========================================="
 echo "Table Question Answering Demo (TAPAS)"
@@ -20,9 +22,9 @@ echo ""
 
 # Check if server is running
 echo "1. Checking server health..."
-if ! curl -s "$RUNTIME_URL/health" > /dev/null 2>&1; then
-    echo "   ERROR: Server not running at $RUNTIME_URL"
-    echo "   Start with: cd runtimes/universal && uv run python server.py"
+if ! curl -s "$BASE_URL/health" > /dev/null 2>&1; then
+    echo "   ERROR: LlamaFarm API not running at $BASE_URL"
+    echo "   Start with: nx start server"
     exit 1
 fi
 echo "   Server is healthy!"
@@ -32,7 +34,7 @@ echo ""
 echo "2. Basic Question Answering"
 echo "   Table: Employee information"
 echo ""
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -56,7 +58,7 @@ echo ""
 echo "3. Selection Query"
 echo "   Question: Who is the oldest employee?"
 echo ""
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -79,7 +81,7 @@ echo ""
 echo "4. Server Metrics Analysis"
 echo "   Table: Server health metrics"
 echo ""
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -104,7 +106,7 @@ echo ""
 echo "5. Batch Questions (Same Table)"
 echo "   Asking multiple questions about server metrics..."
 echo ""
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/analysis/table-qa/batch" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa/batch" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -136,7 +138,7 @@ echo ""
 echo "6. Product Inventory Query"
 echo "   Table: Product inventory"
 echo ""
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -161,7 +163,7 @@ echo ""
 echo "7. Status Query"
 echo "   Finding items by status..."
 echo ""
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {

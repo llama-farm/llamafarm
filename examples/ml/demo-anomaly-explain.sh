@@ -11,7 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env"
 fi
-RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:${LF_RUNTIME_PORT:-11540}}"
+
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}"
 
 echo "=========================================="
 echo "SHAP Anomaly Explanation Demo"
@@ -20,9 +22,9 @@ echo ""
 
 # Check if server is running
 echo "1. Checking server health..."
-if ! curl -s "$RUNTIME_URL/health" > /dev/null 2>&1; then
-    echo "   ERROR: Server not running at $RUNTIME_URL"
-    echo "   Start with: cd runtimes/universal && uv run python server.py"
+if ! curl -s "$BASE_URL/health" > /dev/null 2>&1; then
+    echo "   ERROR: LlamaFarm API not running at $BASE_URL"
+    echo "   Start with: nx start server"
     exit 1
 fi
 echo "   Server is healthy!"
@@ -48,7 +50,7 @@ print(str(data).replace(' ', ''))
 
 # Train the model
 echo "   Training IsolationForest model..."
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/fit" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"server-metrics-model\",
@@ -63,7 +65,7 @@ echo ""
 
 # Check model status
 echo "3. Checking Model Status"
-RESPONSE=$(curl -s "$RUNTIME_URL/v1/anomaly/server-metrics-model/info")
+RESPONSE=$(curl -s "$BASE_URL/v1/anomaly/server-metrics-model/info")
 echo "   Model info:"
 echo "$RESPONSE" | python3 -m json.tool
 echo ""
@@ -88,7 +90,7 @@ echo "5. Explaining Anomalies with SHAP"
 echo "   Asking WHY each point is anomalous..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/explain" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/explain" \
     -H "Content-Type: application/json" \
     -d "{
         \"model_id\": \"server-metrics-model\",
@@ -131,7 +133,7 @@ echo "7. Anomaly Scores for Reference"
 echo "   Scoring the same anomalous points..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/anomaly/server-metrics-model/score" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/server-metrics-model/score" \
     -H "Content-Type: application/json" \
     -d "{
         \"data\": [$ANOMALY_1, $ANOMALY_2, $ANOMALY_3]
@@ -153,7 +155,7 @@ echo ""
 
 # Clean up
 echo "8. Cleanup"
-curl -s -X DELETE "$RUNTIME_URL/v1/anomaly/server-metrics-model" > /dev/null
+curl -s -X DELETE "$BASE_URL/v1/anomaly/server-metrics-model" > /dev/null
 echo "   Deleted model: server-metrics-model"
 echo ""
 

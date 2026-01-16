@@ -11,7 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env"
 fi
-RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:${LF_RUNTIME_PORT:-11540}}"
+
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}"
 
 echo "=========================================="
 echo "ML Features Overview"
@@ -20,9 +22,9 @@ echo ""
 
 # Check if server is running
 echo "1. Checking server health..."
-if ! curl -s "$RUNTIME_URL/health" > /dev/null 2>&1; then
-    echo "   ERROR: Server not running at $RUNTIME_URL"
-    echo "   Start with: cd runtimes/universal && uv run python server.py"
+if ! curl -s "$BASE_URL/health" > /dev/null 2>&1; then
+    echo "   ERROR: LlamaFarm API not running at $BASE_URL"
+    echo "   Start with: nx start server"
     exit 1
 fi
 echo "   Server is healthy!"
@@ -92,7 +94,7 @@ ENDPOINTS=(
 )
 
 for EP in "${ENDPOINTS[@]}"; do
-    STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$RUNTIME_URL$EP")
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL$EP")
     if [ "$STATUS" = "200" ]; then
         echo "   ✓ $EP"
     else

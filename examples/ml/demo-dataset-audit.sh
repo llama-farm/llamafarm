@@ -11,7 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     source "$SCRIPT_DIR/../../.env"
 fi
-RUNTIME_URL="${RUNTIME_URL:-http://127.0.0.1:${LF_RUNTIME_PORT:-11540}}"
+
+PORT=${1:-8000}
+BASE_URL="http://localhost:${PORT}"
 
 echo "=========================================="
 echo "Dataset Quality Audit Demo (Cleanlab)"
@@ -20,9 +22,9 @@ echo ""
 
 # Check if server is running
 echo "1. Checking server health..."
-if ! curl -s "$RUNTIME_URL/health" > /dev/null 2>&1; then
-    echo "   ERROR: Server not running at $RUNTIME_URL"
-    echo "   Start with: cd runtimes/universal && uv run python server.py"
+if ! curl -s "$BASE_URL/health" > /dev/null 2>&1; then
+    echo "   ERROR: LlamaFarm API not running at $BASE_URL"
+    echo "   Start with: nx start server"
     exit 1
 fi
 echo "   Server is healthy!"
@@ -96,7 +98,7 @@ echo "3. Running Dataset Quality Audit"
 echo "   Analyzing labels with Cleanlab..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/dataset/audit" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/dataset/audit" \
     -H "Content-Type: application/json" \
     -d "{
         \"labels\": $LABELS,
@@ -157,7 +159,7 @@ echo "6. Label Quality Scores (per-sample)"
 echo "   Getting confidence that each label is correct..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$RUNTIME_URL/v1/dataset/quality-scores" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/dataset/quality-scores" \
     -H "Content-Type: application/json" \
     -d "{
         \"labels\": $LABELS,
