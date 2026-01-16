@@ -29,8 +29,8 @@ class PhraseBoundaryDetector:
     speech patterns.
     """
 
-    min_phrase_length: int = 20  # Minimum chars before yielding on clause boundary
-    max_phrase_length: int = 200  # Force yield if accumulated text exceeds this
+    min_phrase_length: int = 10  # Minimum chars before yielding on clause boundary (lower = faster first phrase)
+    max_phrase_length: int = 150  # Force yield if accumulated text exceeds this (lower = more responsive)
     sentence_boundary_only: bool = False  # Only split on . ! ? (not ; : ,)
 
     _buffer: str = field(default="", init=False)
@@ -146,8 +146,8 @@ class PhraseBoundaryDetector:
 
 async def detect_phrases(
     token_stream: AsyncGenerator[str, None],
-    min_phrase_length: int = 20,
-    max_phrase_length: int = 200,
+    min_phrase_length: int = 10,
+    max_phrase_length: int = 150,
 ) -> AsyncGenerator[str, None]:
     """Async generator that yields phrases from a token stream.
 

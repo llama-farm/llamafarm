@@ -2742,7 +2742,7 @@ async def load_tts(
 async def create_transcription(
     background_tasks: BackgroundTasks,
     file: UploadFile | None = None,
-    model: str = Form(default="distil-large-v3"),
+    model: str = Form(default="distil-large-v3-turbo"),
     language: str | None = Form(default=None),
     prompt: str | None = Form(default=None),
     response_format: str = Form(default="json"),
@@ -3063,7 +3063,7 @@ def _format_timestamp_vtt(seconds: float) -> str:
 @app.post("/v1/audio/translations")
 async def create_translation(
     file: UploadFile,
-    model: str = Form(default="distil-large-v3"),
+    model: str = Form(default="distil-large-v3-turbo"),
     prompt: str | None = Form(default=None),
     response_format: str = Form(default="json"),
     temperature: float = Form(default=0.0),

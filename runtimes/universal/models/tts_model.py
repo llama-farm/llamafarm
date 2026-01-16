@@ -88,6 +88,8 @@ class TTSModel(BaseModel):
         self.voice = voice
         self._tts_pipeline = None
         self._backend = "kokoro"  # Only Kokoro supported for now
+        # Persistent thread pool for synthesis (avoids ~50-100ms overhead per request)
+        self._executor = ThreadPoolExecutor(max_workers=2)
 
     async def load(self) -> None:
         """Load the TTS model."""
@@ -146,6 +148,11 @@ class TTSModel(BaseModel):
             del self._tts_pipeline
             self._tts_pipeline = None
 
+        # Shutdown thread pool
+        if self._executor is not None:
+            self._executor.shutdown(wait=False)
+            self._executor = None
+
         # Call parent cleanup for CUDA/MPS cache clearing
         await super().unload()
 
@@ -194,10 +201,9 @@ class TTSModel(BaseModel):
             # Concatenate all chunks
             return np.concatenate(audio_chunks)
 
-        # Run synthesis in thread pool to avoid blocking the event loop
+        # Run synthesis in persistent thread pool to avoid blocking the event loop
         loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor() as pool:
-            audio_array = await loop.run_in_executor(pool, _sync_synthesize)
+        audio_array = await loop.run_in_executor(self._executor, _sync_synthesize)
 
         # Convert float32 audio to 16-bit PCM bytes
         import numpy as np

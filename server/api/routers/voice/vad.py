@@ -34,11 +34,12 @@ class VADConfig:
     speech_threshold: float = 0.01
 
     # How long silence must persist after speech to trigger end (seconds)
-    silence_duration: float = 0.7
+    # Lower = faster response, higher = fewer false positives
+    silence_duration: float = 0.4
 
     # Minimum speech duration before we consider it valid (seconds)
     # Prevents triggering on brief noises
-    min_speech_duration: float = 0.3
+    min_speech_duration: float = 0.25
 
     # Sample rate of incoming audio (Hz)
     sample_rate: int = 16000
