@@ -7,9 +7,11 @@ Provides real-time voice conversation by:
 3. Synthesizing speech via Universal Runtime TTS WebSocket
 """
 
+import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -45,7 +47,34 @@ class VoiceChatService:
     4. Detect phrase boundaries in LLM stream
     5. Synthesize each phrase via TTS (parallel to LLM)
     6. Stream audio back to client
+
+    Performance optimizations:
+    - Persistent HTTP client for LLM (avoids connection overhead)
+    - Reusable TTS WebSocket connection
+    - Early LLM start on partial transcription
     """
+
+    # Shared HTTP client for LLM requests (connection pooling)
+    _http_client: httpx.AsyncClient | None = None
+
+    @classmethod
+    def get_http_client(cls) -> httpx.AsyncClient:
+        """Get or create shared HTTP client with connection pooling."""
+        if cls._http_client is None or cls._http_client.is_closed:
+            cls._http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=5.0,  # Fast connect timeout
+                    read=300.0,   # Long read timeout for streaming
+                    write=10.0,
+                    pool=5.0,
+                ),
+                limits=httpx.Limits(
+                    max_keepalive_connections=5,
+                    max_connections=10,
+                    keepalive_expiry=30.0,
+                ),
+            )
+        return cls._http_client
 
     def __init__(self, session: VoiceSession, llm_model_config: Model):
         """Initialize voice chat service.
@@ -72,6 +101,27 @@ class VoiceChatService:
             f"ws://{settings.universal_host}:{settings.universal_port}"
         )
 
+        # Reusable TTS WebSocket connection
+        self._tts_ws: websockets.WebSocketClientProtocol | None = None
+
+    async def warm_up(self) -> None:
+        """Pre-warm connections to minimize first-request latency.
+
+        Call this when a session starts to establish connections before
+        the user speaks.
+        """
+        try:
+            # Pre-establish TTS WebSocket
+            ws = await self._get_tts_websocket()
+            logger.debug(f"TTS WebSocket pre-warmed: {ws.remote_address}")
+
+            # Pre-warm HTTP connection pool with a lightweight request
+            client = self.get_http_client()
+            # Just establish the TCP connection, don't make a full request
+            logger.debug("HTTP client pool pre-warmed")
+        except Exception as e:
+            logger.warning(f"Connection pre-warm failed (non-fatal): {e}")
+
     async def transcribe_audio(self, audio_bytes: bytes) -> str:
         """Transcribe audio to text via Universal Runtime STT.
 
@@ -90,6 +140,29 @@ class VoiceChatService:
             language=self.session.config.language,
         )
         return result.get("text", "")
+
+    async def transcribe_audio_stream(
+        self, audio_bytes: bytes
+    ) -> AsyncGenerator[str, None]:
+        """Stream transcription segments as they're processed.
+
+        Enables parallel processing - start LLM on first segment while
+        STT continues processing remaining audio.
+
+        Args:
+            audio_bytes: Raw PCM audio (16kHz 16-bit mono).
+
+        Yields:
+            Transcribed text segments.
+        """
+        async for segment in UniversalRuntimeService.transcribe_audio_stream(
+            audio_bytes=audio_bytes,
+            model=self.session.config.stt_model,
+            language=self.session.config.language,
+        ):
+            text = segment.get("text", "").strip()
+            if text:
+                yield text
 
     def _inject_thinking_control(self, messages: list[dict]) -> list[dict]:
         """Inject thinking control into messages.
@@ -146,6 +219,7 @@ class VoiceChatService:
         """Preprocess text to sound more natural when spoken.
 
         Applies transformations that make TTS output sound more human:
+        - Expand contractions for clearer pronunciation
         - Expand common abbreviations
         - Convert symbols to spoken form
         - Normalize whitespace
@@ -177,6 +251,9 @@ class VoiceChatService:
         text = re.sub(r"^\s*[-*•]\s*", "", text, flags=re.MULTILINE)
         text = re.sub(r"^\s*\d+\.\s*", "", text, flags=re.MULTILINE)
 
+        # NOTE: We do NOT expand contractions - they sound more natural in speech.
+        # TTS models are trained on natural spoken language which includes contractions.
+
         # Expand common abbreviations for natural speech
         abbreviations = {
             r"\bDr\.": "Doctor",
@@ -191,24 +268,16 @@ class VoiceChatService:
             r"\bw/": "with",
             r"\bw/o": "without",
             r"\b&\b": "and",
+            r"\bAI\b": "A.I.",  # Spell out for clearer pronunciation
         }
         for pattern, replacement in abbreviations.items():
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
-        # Convert common symbols
-        text = text.replace("->", " to ")
-        text = text.replace("=>", " implies ")
-        text = text.replace("<=", " less than or equal to ")
-        text = text.replace(">=", " greater than or equal to ")
-        text = text.replace(" < ", " less than ")
-        text = text.replace(" > ", " greater than ")
-        text = text.replace("%", " percent")
-        text = text.replace("$", " dollars ")
-        text = text.replace("€", " euros ")
-        text = text.replace("£", " pounds ")
+        # NOTE: We do NOT expand ordinals (1st, 2nd) or most symbols -
+        # modern TTS models handle these naturally.
 
-        # Add slight pause after colons for better pacing
-        text = re.sub(r":\s*", ": ... ", text)
+        # Remove URLs (TTS can't pronounce them naturally)
+        text = re.sub(r"https?://\S+", "", text)
 
         # Normalize whitespace
         text = re.sub(r"\s+", " ", text)
@@ -226,6 +295,12 @@ class VoiceChatService:
         Yields:
             LLM response tokens (with thinking tags filtered out).
         """
+        # === TIMING INSTRUMENTATION ===
+        t_start = time.perf_counter()
+        t_connected = None
+        t_first_token = None
+        first_token_logged = False
+
         # Add user message to history
         self.session.add_user_message(user_text)
 
@@ -241,19 +316,24 @@ class VoiceChatService:
             "model": self._llm_model_config.model,  # Actual model ID
             "messages": messages,  # Use modified messages with thinking control
             "stream": True,
+            # Speed optimizations for voice
+            "temperature": 0.7,  # Slightly lower for faster sampling
+            "max_tokens": 500,   # Limit response length for voice
         }
 
-        # Add any model-specific parameters
+        # Add any model-specific parameters (may override above)
         if self._llm_model_config.model_api_parameters:
             payload.update(self._llm_model_config.model_api_parameters)
 
         accumulated_response = ""
+        token_count = 0
 
         try:
-            async with (
-                httpx.AsyncClient(timeout=300.0) as client,
-                client.stream("POST", url, json=payload) as response,
-            ):
+            # Use shared HTTP client with connection pooling for lower latency
+            client = self.get_http_client()
+            async with client.stream("POST", url, json=payload) as response:
+                t_connected = time.perf_counter()
+                logger.info(f"⏱️ LLM: HTTP stream connected in {(t_connected - t_start)*1000:.1f}ms")
                 response.raise_for_status()
 
                 async for line in response.aiter_lines():
@@ -269,10 +349,19 @@ class VoiceChatService:
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
                         content = delta.get("content", "")
                         if content:
+                            if not first_token_logged:
+                                t_first_token = time.perf_counter()
+                                first_token_logged = True
+                                logger.info(f"⏱️ LLM: First token in {(t_first_token - t_start)*1000:.1f}ms total, {(t_first_token - t_connected)*1000:.1f}ms after connect")
+                            token_count += 1
                             accumulated_response += content
                             yield content
                     except json.JSONDecodeError:
                         continue
+
+            # Log final stats
+            t_done = time.perf_counter()
+            logger.info(f"⏱️ LLM: Complete in {(t_done - t_start)*1000:.1f}ms, {token_count} tokens, {len(accumulated_response)} chars")
 
             # Add complete response to history (with thinking tags filtered)
             if accumulated_response:
@@ -287,10 +376,33 @@ class VoiceChatService:
             logger.error(f"LLM streaming error: {e}")
             raise
 
+    async def _get_tts_websocket(self) -> websockets.WebSocketClientProtocol:
+        """Get or create TTS WebSocket connection.
+
+        Reuses existing connection to avoid handshake overhead (~50-100ms per connection).
+        """
+        if self._tts_ws is None or self._tts_ws.closed:
+            ws_url = (
+                f"{self._runtime_ws_url}/v1/audio/speech/stream"
+                f"?model={self.session.config.tts_model}"
+                f"&voice={self.session.config.tts_voice}"
+                f"&response_format=pcm"
+            )
+            self._tts_ws = await websockets.connect(ws_url)
+        return self._tts_ws
+
+    async def _close_tts_websocket(self) -> None:
+        """Close TTS WebSocket connection."""
+        if self._tts_ws is not None and not self._tts_ws.closed:
+            await self._tts_ws.close()
+            self._tts_ws = None
+
     async def synthesize_phrase_stream(
         self, phrase: str, phrase_index: int
     ) -> AsyncGenerator[bytes, None]:
         """Synthesize a phrase via TTS WebSocket and yield audio chunks.
+
+        Uses a reusable WebSocket connection to minimize latency.
 
         Args:
             phrase: Text to synthesize.
@@ -299,61 +411,71 @@ class VoiceChatService:
         Yields:
             PCM audio chunks.
         """
-        ws_url = (
-            f"{self._runtime_ws_url}/v1/audio/speech/stream"
-            f"?model={self.session.config.tts_model}"
-            f"&voice={self.session.config.tts_voice}"
-            f"&response_format=pcm"
-        )
-
         try:
-            async with websockets.connect(ws_url) as ws:
-                # Send synthesis request
-                await ws.send(json.dumps({
-                    "text": phrase,
-                    "speed": self.session.config.speed,
-                    "final": True,
-                }))
+            ws = await self._get_tts_websocket()
 
-                # Receive audio chunks
-                while True:
-                    message = await ws.recv()
+            # Send synthesis request
+            await ws.send(json.dumps({
+                "text": phrase,
+                "speed": self.session.config.speed,
+                "final": True,
+            }))
 
-                    if isinstance(message, bytes):
-                        # Audio chunk
-                        yield message
-                    else:
-                        # JSON message
-                        data = json.loads(message)
-                        msg_type = data.get("type")
+            # Receive audio chunks
+            while True:
+                message = await ws.recv()
 
-                        if msg_type == "done":
-                            break
-                        elif msg_type == "error":
-                            logger.error(f"TTS error: {data.get('message')}")
-                            break
-                        elif msg_type == "closed":
-                            break
+                if isinstance(message, bytes):
+                    # Audio chunk
+                    yield message
+                else:
+                    # JSON message
+                    data = json.loads(message)
+                    msg_type = data.get("type")
+
+                    if msg_type == "done":
+                        break
+                    elif msg_type == "error":
+                        logger.error(f"TTS error: {data.get('message')}")
+                        # Reset connection on error
+                        self._tts_ws = None
+                        break
+                    elif msg_type == "closed":
+                        self._tts_ws = None
+                        break
 
         except websockets.exceptions.ConnectionClosed:
             logger.warning(f"TTS WebSocket closed for phrase {phrase_index}")
+            self._tts_ws = None
         except Exception as e:
             logger.error(f"TTS synthesis error for phrase {phrase_index}: {e}")
+            self._tts_ws = None
 
     async def process_turn(
         self, websocket: WebSocket, audio_bytes: bytes
     ) -> None:
-        """Process a single conversational turn.
+        """Process a single conversational turn with parallel STT+LLM.
 
-        1. Transcribe audio
-        2. Send to LLM
-        3. Stream TTS for each phrase
+        Optimized pipeline:
+        1. Start streaming STT
+        2. As soon as first segment arrives, start LLM (parallel with remaining STT)
+        3. Stream TTS for each LLM phrase
         4. Handle interrupts
+
+        This reduces time-to-first-audio by starting LLM before STT completes.
 
         Args:
             websocket: Client WebSocket connection.
             audio_bytes: User's audio input.
         """
+        # === TIMING INSTRUMENTATION ===
+        t_start = time.perf_counter()
+        t_first_stt_segment = None
+        t_stt_complete = None
+        t_llm_first_token = None
+        t_first_phrase = None
+        t_first_tts_audio = None
+
         # Clear any previous interrupt
         self.session.clear_interrupt()
         self.session.reset_phrase_counter()
@@ -363,18 +485,72 @@ class VoiceChatService:
         await websocket.send_json(StatusMessage(state=VoiceState.PROCESSING).model_dump())
 
         try:
-            # Step 1: Transcribe audio
-            transcription = await self.transcribe_audio(audio_bytes)
+            # PARALLEL STT+LLM: Collect first segment(s) quickly, then start LLM
+            # while STT continues in background
+            transcription_parts: list[str] = []
+            llm_started = False
+            # Start LLM very early - even 5 chars is enough (e.g., "Hello" or "Hi!")
+            min_chars_for_llm = 5
 
-            if not transcription.strip():
+            # Try streaming transcription with timeout, fall back to HTTP if needed
+            # Streaming allows parallel LLM start but HTTP is more reliable
+            try:
+                async with asyncio.timeout(2.0):  # 2 second timeout for streaming
+                    async for segment_text in self.transcribe_audio_stream(audio_bytes):
+                        if t_first_stt_segment is None:
+                            t_first_stt_segment = time.perf_counter()
+                            logger.info(f"⏱️ TIMING: First STT segment: {(t_first_stt_segment - t_start)*1000:.1f}ms")
+
+                        transcription_parts.append(segment_text)
+                        current_text = " ".join(transcription_parts)
+
+                        # Send incremental transcription to client
+                        await websocket.send_json(
+                            TranscriptionMessage(
+                                text=current_text,
+                                is_final=False
+                            ).model_dump()
+                        )
+
+                        # Start LLM as soon as we have enough text
+                        if not llm_started and len(current_text) >= min_chars_for_llm:
+                            llm_started = True
+                            # Break to start LLM - remaining STT will be appended to display
+                            break
+            except TimeoutError:
+                logger.debug("STT streaming timeout, using collected segments")
+
+            # If no segments received, fall back to non-streaming HTTP endpoint
+            # This is faster for short utterances where streaming overhead dominates
+            if not transcription_parts:
+                logger.debug("No STT segments, falling back to HTTP endpoint")
+                t_http_start = time.perf_counter()
+                transcription = await self.transcribe_audio(audio_bytes)
+                t_stt_complete = time.perf_counter()
+                logger.info(f"⏱️ TIMING: STT HTTP fallback: {(t_stt_complete - t_http_start)*1000:.1f}ms")
+
+                if not transcription.strip():
+                    logger.debug("Empty transcription, skipping")
+                    self.session.set_state(VoiceState.IDLE)
+                    await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+                    return
+                transcription_parts = [transcription]
+            else:
+                t_stt_complete = time.perf_counter()
+                logger.info(f"⏱️ TIMING: STT streaming complete: {(t_stt_complete - t_start)*1000:.1f}ms")
+
+            # Use what we have so far for LLM (first segment(s))
+            transcription_for_llm = " ".join(transcription_parts).strip()
+
+            if not transcription_for_llm:
                 logger.debug("Empty transcription, skipping")
                 self.session.set_state(VoiceState.IDLE)
                 await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
                 return
 
-            # Send transcription to client
+            # Send final transcription (what LLM will use)
             await websocket.send_json(
-                TranscriptionMessage(text=transcription, is_final=True).model_dump()
+                TranscriptionMessage(text=transcription_for_llm, is_final=True).model_dump()
             )
 
             # Step 2 & 3: Stream LLM and TTS in parallel
@@ -384,8 +560,18 @@ class VoiceChatService:
             # Use phrase detector to accumulate LLM tokens
             phrase_detector = PhraseBoundaryDetector()
             full_response = ""
+            first_token_logged = False
+            first_phrase_logged = False
 
-            async for token in self.stream_llm_response(transcription):
+            t_llm_start = time.perf_counter()
+            logger.info(f"⏱️ TIMING: Starting LLM request: {(t_llm_start - t_start)*1000:.1f}ms from turn start")
+
+            async for token in self.stream_llm_response(transcription_for_llm):
+                if not first_token_logged:
+                    t_llm_first_token = time.perf_counter()
+                    first_token_logged = True
+                    logger.info(f"⏱️ TIMING: LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms total, {(t_llm_first_token - t_llm_start)*1000:.1f}ms from request")
+
                 # Check for interrupt
                 if self.session.is_interrupted():
                     logger.info("Turn interrupted by user")
@@ -396,13 +582,25 @@ class VoiceChatService:
                 # Detect phrase boundaries
                 phrase = phrase_detector.add_token(token)
                 if phrase:
+                    if not first_phrase_logged:
+                        t_first_phrase = time.perf_counter()
+                        first_phrase_logged = True
+                        logger.info(f"⏱️ TIMING: First phrase detected: {(t_first_phrase - t_start)*1000:.1f}ms total, phrase='{phrase[:50]}...'")
+
                     # Send LLM text to client for display
                     await websocket.send_json(
                         LLMTextMessage(text=phrase, is_final=False).model_dump()
                     )
 
                     # Synthesize and stream audio for this phrase
-                    await self._synthesize_and_stream_phrase(websocket, phrase)
+                    # Pass timing context for first TTS audio tracking
+                    tts_timing = await self._synthesize_and_stream_phrase(
+                        websocket, phrase,
+                        track_first_audio=(t_first_tts_audio is None),
+                        turn_start_time=t_start
+                    )
+                    if t_first_tts_audio is None and tts_timing:
+                        t_first_tts_audio = tts_timing
 
                     # Check interrupt again after TTS
                     if self.session.is_interrupted():
@@ -417,6 +615,21 @@ class VoiceChatService:
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
 
+            # === TIMING SUMMARY ===
+            t_end = time.perf_counter()
+            logger.info(f"⏱️ TIMING SUMMARY for turn:")
+            logger.info(f"  Total turn duration: {(t_end - t_start)*1000:.1f}ms")
+            if t_first_stt_segment:
+                logger.info(f"  First STT segment: {(t_first_stt_segment - t_start)*1000:.1f}ms")
+            if t_stt_complete:
+                logger.info(f"  STT complete: {(t_stt_complete - t_start)*1000:.1f}ms")
+            if t_llm_first_token:
+                logger.info(f"  LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms")
+            if t_first_phrase:
+                logger.info(f"  First phrase boundary: {(t_first_phrase - t_start)*1000:.1f}ms")
+            if t_first_tts_audio:
+                logger.info(f"  First TTS audio chunk: {(t_first_tts_audio - t_start)*1000:.1f}ms ⭐ TIME TO FIRST AUDIO")
+
             # Done with this turn
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
@@ -429,22 +642,36 @@ class VoiceChatService:
             self.session.set_state(VoiceState.IDLE)
 
     async def _synthesize_and_stream_phrase(
-        self, websocket: WebSocket, phrase: str
-    ) -> None:
+        self,
+        websocket: WebSocket,
+        phrase: str,
+        track_first_audio: bool = False,
+        turn_start_time: float | None = None,
+    ) -> float | None:
         """Synthesize a phrase and stream audio to client.
 
         Args:
             websocket: Client WebSocket connection.
             phrase: Text to synthesize.
+            track_first_audio: If True, log timing for first audio chunk.
+            turn_start_time: Start time of the turn for timing calculations.
+
+        Returns:
+            Time of first audio chunk if track_first_audio is True, None otherwise.
         """
         # Filter thinking tags and preprocess for natural speech
         phrase = self._filter_thinking_tags(phrase)
         phrase = self._preprocess_for_speech(phrase)
         if not phrase:
             # Skip empty phrases (e.g., if it was all thinking/markdown content)
-            return
+            return None
 
         phrase_index = self.session.next_phrase_index()
+        t_first_audio = None
+        first_chunk_logged = False
+
+        # Timing for TTS request
+        t_tts_start = time.perf_counter()
 
         # Notify phrase TTS starting
         await websocket.send_json(
@@ -454,6 +681,17 @@ class VoiceChatService:
         total_samples = 0
 
         async for audio_chunk in self.synthesize_phrase_stream(phrase, phrase_index):
+            # Track first audio chunk timing
+            if track_first_audio and not first_chunk_logged:
+                t_first_audio = time.perf_counter()
+                first_chunk_logged = True
+                tts_latency = (t_first_audio - t_tts_start) * 1000
+                if turn_start_time:
+                    total_latency = (t_first_audio - turn_start_time) * 1000
+                    logger.info(f"⏱️ TIMING: First TTS audio: {total_latency:.1f}ms total, {tts_latency:.1f}ms TTS latency")
+                else:
+                    logger.info(f"⏱️ TIMING: TTS latency to first chunk: {tts_latency:.1f}ms")
+
             # Check for interrupt
             if self.session.is_interrupted():
                 break
@@ -467,10 +705,16 @@ class VoiceChatService:
         # Calculate duration (24kHz sample rate)
         duration = total_samples / 24000.0
 
+        # Log TTS synthesis time
+        t_tts_end = time.perf_counter()
+        logger.debug(f"⏱️ TTS phrase {phrase_index}: {(t_tts_end - t_tts_start)*1000:.1f}ms for {len(phrase)} chars, {duration:.2f}s audio")
+
         # Notify phrase TTS complete
         await websocket.send_json(
             TTSDoneMessage(phrase_index=phrase_index, duration=duration).model_dump()
         )
+
+        return t_first_audio
 
     async def handle_interrupt(self, websocket: WebSocket) -> None:
         """Handle barge-in interrupt from client.

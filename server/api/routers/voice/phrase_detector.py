@@ -3,15 +3,29 @@ Phrase boundary detection for LLM streaming output.
 
 Accumulates LLM tokens and yields complete phrases at natural boundaries,
 enabling low-latency TTS synthesis without choppy playback.
+
+Optimized for natural-sounding TTS by keeping phrases short (under 60 chars).
+Neural TTS models sound more human with shorter utterances.
 """
 
 import re
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 
-# Phrase boundary patterns
+# Phrase boundary patterns (ordered by strength)
+# Sentence endings - strongest boundary, always split
 SENTENCE_ENDS = re.compile(r"[.!?](?:\s|$)")
+
+# Clause endings - split if phrase is long enough
 CLAUSE_ENDS = re.compile(r"[;:,](?:\s|$)")
+
+# Dashes and parentheses - natural breath points
+DASH_BREAKS = re.compile(r"(?:\s[-–—]\s|—)(?=\S)")  # " - ", " – ", "—"
+PAREN_CLOSE = re.compile(r"\)(?:\s|$)")  # End of parenthetical
+
+# Conjunctions - split before them if phrase is getting long
+CONJUNCTIONS = re.compile(r"\s(?:and|or|but|so|yet)\s", re.IGNORECASE)
+
 NEWLINE = re.compile(r"\n")
 
 
@@ -22,25 +36,47 @@ class PhraseBoundaryDetector:
     Accumulates tokens and yields complete phrases when:
     1. A sentence-ending punctuation is found (. ! ?)
     2. A clause-ending punctuation is found (; : ,) if text is long enough
-    3. A newline is found
-    4. Maximum phrase length is reached (force split)
+    3. A dash or parenthetical boundary is found
+    4. A conjunction is found (and/or/but) if phrase is long enough
+    5. A newline is found
+    6. Maximum phrase length is reached (force split)
 
-    This enables TTS to start speaking sooner while maintaining natural
-    speech patterns.
+    Optimized for natural TTS output:
+    - Keeps phrases SHORT (under 60 chars) for better prosody
+    - Neural TTS models sound robotic on long sequences
+    - More frequent splits = more natural breath patterns
+
+    First phrase optimization: Uses a lower threshold for the first phrase
+    to minimize time-to-first-audio (e.g., "Sure," triggers immediately).
     """
 
-    min_phrase_length: int = 10  # Minimum chars before yielding on clause boundary (lower = faster first phrase)
-    max_phrase_length: int = 150  # Force yield if accumulated text exceeds this (lower = more responsive)
+    # Balance: short enough for good TTS prosody, long enough to avoid choppy playback
+    # Too short = gaps between phrases, too long = robotic prosody
+    min_phrase_length: int = 12  # Minimum chars before yielding on weak boundary
+    max_phrase_length: int = 100  # Force yield (~15-20 words) - balanced for natural TTS
+    max_word_count: int = 18  # Alternative limit by word count
+    first_phrase_min_length: int = 5  # First phrase threshold (e.g., "Sure," or "Hello!")
+    conjunction_min_length: int = 40  # Only split on and/or/but if phrase is this long
     sentence_boundary_only: bool = False  # Only split on . ! ? (not ; : ,)
 
     _buffer: str = field(default="", init=False)
+    _first_phrase_emitted: bool = field(default=False, init=False)
 
     def reset(self) -> None:
-        """Clear the buffer."""
+        """Clear the buffer and reset first phrase flag."""
         self._buffer = ""
+        self._first_phrase_emitted = False
+
+    def _word_count(self, text: str) -> int:
+        """Count words in text."""
+        return len(text.split())
 
     def add_token(self, token: str) -> str | None:
         """Add a token and return a phrase if boundary detected.
+
+        Uses a lower threshold for the first phrase to minimize
+        time-to-first-audio. Prioritizes shorter phrases for better
+        TTS prosody.
 
         Args:
             token: New token to add to buffer.
@@ -50,14 +86,25 @@ class PhraseBoundaryDetector:
         """
         self._buffer += token
 
-        # Check for forced split at max length
-        if len(self._buffer) >= self.max_phrase_length:
+        # Determine minimum length based on whether first phrase was emitted
+        effective_min_length = (
+            self.first_phrase_min_length
+            if not self._first_phrase_emitted
+            else self.min_phrase_length
+        )
+
+        buffer_len = len(self._buffer.strip())
+        word_count = self._word_count(self._buffer)
+
+        # Check for forced split at max length or word count
+        if buffer_len >= self.max_phrase_length or word_count >= self.max_word_count:
             # Try to find a good split point
             phrase = self._find_best_split()
             if phrase:
+                self._first_phrase_emitted = True
                 return phrase
 
-        # Check for sentence boundaries (strongest)
+        # Check for sentence boundaries (strongest) - always yield
         match = SENTENCE_ENDS.search(self._buffer)
         if match:
             # Include the punctuation
@@ -65,31 +112,79 @@ class PhraseBoundaryDetector:
             phrase = self._buffer[:end_idx].strip()
             self._buffer = self._buffer[end_idx:].lstrip()
             if phrase:
+                self._first_phrase_emitted = True
                 return phrase
 
         # Check for newlines
         match = NEWLINE.search(self._buffer)
-        if match and len(self._buffer[:match.start()].strip()) >= self.min_phrase_length:
+        if match and len(self._buffer[:match.start()].strip()) >= effective_min_length:
             end_idx = match.end()
             phrase = self._buffer[:end_idx].strip()
             self._buffer = self._buffer[end_idx:].lstrip()
             if phrase:
+                self._first_phrase_emitted = True
                 return phrase
 
-        # Check for clause boundaries (weaker, needs min length)
+        # Check for clause boundaries (semi-strong)
         if not self.sentence_boundary_only:
             match = CLAUSE_ENDS.search(self._buffer)
-            if match and len(self._buffer[:match.end()].strip()) >= self.min_phrase_length:
+            if match and len(self._buffer[:match.end()].strip()) >= effective_min_length:
                 end_idx = match.end()
                 phrase = self._buffer[:end_idx].strip()
                 self._buffer = self._buffer[end_idx:].lstrip()
                 if phrase:
+                    self._first_phrase_emitted = True
+                    return phrase
+
+        # Check for dash breaks (natural breath points)
+        if buffer_len >= effective_min_length:
+            match = DASH_BREAKS.search(self._buffer)
+            if match:
+                # Split before the dash
+                end_idx = match.start()
+                phrase = self._buffer[:end_idx].strip()
+                self._buffer = self._buffer[end_idx:].lstrip()
+                if phrase:
+                    self._first_phrase_emitted = True
+                    return phrase
+
+        # Check for end of parenthetical
+        if buffer_len >= effective_min_length:
+            match = PAREN_CLOSE.search(self._buffer)
+            if match:
+                end_idx = match.end()
+                phrase = self._buffer[:end_idx].strip()
+                self._buffer = self._buffer[end_idx:].lstrip()
+                if phrase:
+                    self._first_phrase_emitted = True
+                    return phrase
+
+        # Check for conjunctions (weakest - only if phrase is getting long)
+        if buffer_len >= self.conjunction_min_length:
+            match = CONJUNCTIONS.search(self._buffer)
+            if match:
+                # Split before the conjunction
+                end_idx = match.start()
+                phrase = self._buffer[:end_idx].strip()
+                # Keep the conjunction for the next phrase
+                self._buffer = self._buffer[end_idx:].lstrip()
+                if phrase:
+                    self._first_phrase_emitted = True
                     return phrase
 
         return None
 
     def _find_best_split(self) -> str | None:
-        """Find the best split point when max length exceeded."""
+        """Find the best split point when max length exceeded.
+
+        Tries boundaries in order of naturalness:
+        1. Sentence end (. ! ?)
+        2. Newline
+        3. Clause boundary (; : ,)
+        4. Dash / parenthetical
+        5. Conjunction (and/or/but)
+        6. Word boundary (last resort)
+        """
         # Try sentence boundary first
         match = SENTENCE_ENDS.search(self._buffer)
         if match:
@@ -115,11 +210,38 @@ class PhraseBoundaryDetector:
                 self._buffer = self._buffer[end_idx:].lstrip()
                 return phrase
 
-        # Last resort: split at word boundary near max length
+        # Try dash break
+        match = DASH_BREAKS.search(self._buffer)
+        if match:
+            end_idx = match.start()
+            phrase = self._buffer[:end_idx].strip()
+            self._buffer = self._buffer[end_idx:].lstrip()
+            if phrase:
+                return phrase
+
+        # Try parenthetical close
+        match = PAREN_CLOSE.search(self._buffer)
+        if match:
+            end_idx = match.end()
+            phrase = self._buffer[:end_idx].strip()
+            self._buffer = self._buffer[end_idx:].lstrip()
+            if phrase:
+                return phrase
+
+        # Try conjunction
+        match = CONJUNCTIONS.search(self._buffer)
+        if match:
+            end_idx = match.start()
+            phrase = self._buffer[:end_idx].strip()
+            self._buffer = self._buffer[end_idx:].lstrip()
+            if phrase:
+                return phrase
+
+        # Last resort: split at word boundary
         words = self._buffer.split()
         if len(words) > 1:
-            # Take roughly 3/4 of words
-            split_idx = max(1, len(words) * 3 // 4)
+            # For shorter, more natural phrases, take half the words
+            split_idx = max(1, len(words) // 2)
             phrase_words = words[:split_idx]
             remaining_words = words[split_idx:]
             phrase = " ".join(phrase_words)
@@ -146,15 +268,22 @@ class PhraseBoundaryDetector:
 
 async def detect_phrases(
     token_stream: AsyncGenerator[str, None],
-    min_phrase_length: int = 10,
-    max_phrase_length: int = 150,
+    min_phrase_length: int = 12,
+    max_phrase_length: int = 100,
+    max_word_count: int = 18,
+    first_phrase_min_length: int = 5,
 ) -> AsyncGenerator[str, None]:
     """Async generator that yields phrases from a token stream.
 
+    Balanced for natural TTS: short enough for good prosody, long enough
+    to avoid choppy playback from gaps between phrases.
+
     Args:
         token_stream: Async generator yielding LLM tokens.
-        min_phrase_length: Minimum chars before clause boundary triggers yield.
-        max_phrase_length: Maximum chars before forced yield.
+        min_phrase_length: Minimum chars before weak boundary triggers yield.
+        max_phrase_length: Maximum chars before forced yield (default 60 for natural TTS).
+        max_word_count: Maximum words before forced yield (default 12).
+        first_phrase_min_length: Lower threshold for first phrase (faster TTFA).
 
     Yields:
         Complete phrases suitable for TTS synthesis.
@@ -162,6 +291,8 @@ async def detect_phrases(
     detector = PhraseBoundaryDetector(
         min_phrase_length=min_phrase_length,
         max_phrase_length=max_phrase_length,
+        max_word_count=max_word_count,
+        first_phrase_min_length=first_phrase_min_length,
     )
 
     async for token in token_stream:

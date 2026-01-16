@@ -12,6 +12,7 @@ Configuration:
 - If no project is specified, hardcoded defaults are used
 """
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -263,6 +264,9 @@ async def voice_chat_websocket(
             logger.info("Appended system_prompt from query param")
 
     service = VoiceChatService(session, llm_model_config)
+
+    # Pre-warm connections in background (don't block session start)
+    asyncio.create_task(service.warm_up())
 
     # Send session info
     await websocket.send_json(

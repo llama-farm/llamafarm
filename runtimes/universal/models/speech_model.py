@@ -345,8 +345,8 @@ class SpeechModel(BaseModel):
         # Yield segments as they arrive (true streaming)
         while True:
             try:
-                # Non-blocking check with small timeout
-                segment = segment_queue.get(timeout=0.01)
+                # Very short timeout for low latency
+                segment = segment_queue.get(timeout=0.005)
                 if segment is None:
                     # Transcription complete
                     break
@@ -457,6 +457,103 @@ class SpeechModel(BaseModel):
             language_probability=info.language_probability,
             duration=info.duration,
         )
+
+    async def transcribe_audio_stream(
+        self,
+        audio: "np.ndarray",
+        language: str | None = None,
+        task: Literal["transcribe", "translate"] = "transcribe",
+        word_timestamps: bool = False,
+        initial_prompt: str | None = None,
+        vad_filter: bool = True,
+        beam_size: int = 1,
+    ) -> AsyncGenerator[TranscriptionSegment, None]:
+        """Stream transcription segments from numpy array.
+
+        Like transcribe_audio but yields segments immediately as they're
+        transcribed, enabling parallel processing downstream.
+
+        Args:
+            audio: Numpy array of audio samples (float32, mono, normalized [-1, 1]).
+            language: Language code (if None, auto-detected)
+            task: "transcribe" or "translate"
+            word_timestamps: Include word-level timestamps
+            initial_prompt: Optional conditioning text
+            vad_filter: Use voice activity detection
+            beam_size: Beam size for decoding
+
+        Yields:
+            TranscriptionSegment objects as they're transcribed
+        """
+        if self._whisper_model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        # Queue for streaming segments from thread to async generator
+        segment_queue: Queue[TranscriptionSegment | None] = Queue()
+
+        def _sync_transcribe_stream():
+            """Run transcription in thread and put segments in queue immediately."""
+            try:
+                segments_generator, _info = self._whisper_model.transcribe(
+                    audio,
+                    language=language,
+                    task=task,
+                    word_timestamps=word_timestamps,
+                    initial_prompt=initial_prompt,
+                    vad_filter=vad_filter,
+                    beam_size=beam_size,
+                )
+
+                for segment in segments_generator:
+                    words = None
+                    if word_timestamps and segment.words:
+                        words = [
+                            {
+                                "word": w.word,
+                                "start": w.start,
+                                "end": w.end,
+                                "probability": w.probability,
+                            }
+                            for w in segment.words
+                        ]
+
+                    # Put segment in queue immediately for streaming
+                    segment_queue.put(
+                        TranscriptionSegment(
+                            id=segment.id,
+                            start=segment.start,
+                            end=segment.end,
+                            text=segment.text,
+                            words=words,
+                            avg_logprob=segment.avg_logprob,
+                            no_speech_prob=segment.no_speech_prob,
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"STT streaming error: {e}")
+            finally:
+                # Signal completion
+                segment_queue.put(None)
+
+        # Start transcription in background thread
+        thread = Thread(target=_sync_transcribe_stream, daemon=True)
+        thread.start()
+
+        # Yield segments as they arrive (true streaming)
+        while True:
+            try:
+                # Very short timeout for low latency
+                segment = segment_queue.get(timeout=0.005)
+                if segment is None:
+                    # Transcription complete
+                    break
+                yield segment
+            except Empty:
+                # No segment ready yet, yield control to event loop
+                await asyncio.sleep(0)
+
+        # Ensure thread completes
+        thread.join(timeout=1.0)
 
     async def transcribe_bytes(
         self,

@@ -4,10 +4,16 @@ UniversalRuntimeService - HTTP client for proxying requests to Universal Runtime
 Provides a one-to-one mapping to Universal Runtime's specialized ML endpoints.
 """
 
+import asyncio
+import json
 import logging
+import time
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import websockets
 from fastapi import HTTPException
 
 from core.settings import settings
@@ -407,8 +413,12 @@ class UniversalRuntimeService:
         Returns:
             Transcription result
         """
+        # === TIMING INSTRUMENTATION ===
+        t_start = time.perf_counter()
+
         url = f"{cls.get_base_url()}/v1/audio/transcriptions"
-        logger.debug(f"Transcribing audio via {url}")
+        audio_kb = len(audio_bytes) / 1024
+        logger.debug(f"Transcribing audio via {url} ({audio_kb:.1f}KB)")
 
         try:
             # Build form data
@@ -427,6 +437,9 @@ class UniversalRuntimeService:
 
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(url, files=files, data=data)
+
+                t_response = time.perf_counter()
+                logger.info(f"⏱️ STT HTTP: Response in {(t_response - t_start)*1000:.1f}ms for {audio_kb:.1f}KB")
 
                 if response.status_code >= 400:
                     try:
@@ -465,6 +478,88 @@ class UniversalRuntimeService:
                 status_code=500,
                 detail=f"Error transcribing audio: {str(e)}",
             ) from e
+
+    @classmethod
+    async def transcribe_audio_stream(
+        cls,
+        audio_bytes: bytes,
+        model: str = "distil-large-v3-turbo",
+        language: str | None = None,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Stream transcription segments as they're processed.
+
+        Uses WebSocket to get segments as they're transcribed, enabling
+        parallel processing (e.g., start LLM on first segment).
+
+        Args:
+            audio_bytes: Raw PCM audio (16kHz, 16-bit, mono)
+            model: Whisper model
+            language: ISO language code (auto-detected if None)
+
+        Yields:
+            Transcription segments with text, timestamps, etc.
+        """
+        # === TIMING INSTRUMENTATION ===
+        t_start = time.perf_counter()
+        t_connected = None
+        t_audio_sent = None
+        t_first_segment = None
+        first_segment_logged = False
+
+        ws_url = f"ws://{settings.universal_host}:{settings.universal_port}/v1/audio/transcriptions/stream"
+        params = [
+            f"model={model}",
+            "chunk_interval=0.5",  # Faster chunking for lower latency
+        ]
+        if language:
+            params.append(f"language={language}")
+        ws_url += "?" + "&".join(params)
+
+        try:
+            async with websockets.connect(ws_url) as ws:
+                t_connected = time.perf_counter()
+                logger.info(f"⏱️ STT WS: Connected in {(t_connected - t_start)*1000:.1f}ms")
+
+                # Send all audio at once (it's already collected by VAD)
+                await ws.send(audio_bytes)
+                # Signal end of audio
+                await ws.send("END")
+                t_audio_sent = time.perf_counter()
+                audio_kb = len(audio_bytes) / 1024
+                logger.info(f"⏱️ STT WS: Audio sent ({audio_kb:.1f}KB) in {(t_audio_sent - t_connected)*1000:.1f}ms")
+
+                # Receive segments as they're transcribed
+                while True:
+                    try:
+                        msg = await asyncio.wait_for(ws.recv(), timeout=30.0)
+                        data = json.loads(msg)
+
+                        msg_type = data.get("type", "")
+                        if msg_type == "segment":
+                            if not first_segment_logged:
+                                t_first_segment = time.perf_counter()
+                                first_segment_logged = True
+                                logger.info(f"⏱️ STT WS: First segment in {(t_first_segment - t_start)*1000:.1f}ms total, {(t_first_segment - t_audio_sent)*1000:.1f}ms processing")
+                            yield data
+                        elif msg_type == "done":
+                            t_done = time.perf_counter()
+                            logger.info(f"⏱️ STT WS: Complete in {(t_done - t_start)*1000:.1f}ms total")
+                            break
+                        elif msg_type == "error":
+                            logger.error(f"STT stream error: {data.get('message')}")
+                            break
+                        elif msg_type == "warning":
+                            logger.warning(f"STT stream warning: {data.get('message')}")
+                        # Ignore other message types
+
+                    except asyncio.TimeoutError:
+                        logger.warning("STT stream timeout")
+                        break
+
+        except websockets.exceptions.ConnectionClosed:
+            logger.warning("STT WebSocket closed unexpectedly")
+        except Exception as e:
+            logger.error(f"STT streaming error: {e}")
 
     @classmethod
     async def translate_audio(

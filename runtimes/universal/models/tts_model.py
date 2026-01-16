@@ -277,8 +277,8 @@ class TTSModel(BaseModel):
         # Yield chunks as they arrive
         while True:
             try:
-                # Non-blocking check with small timeout
-                chunk = audio_queue.get(timeout=0.01)
+                # Very short timeout for low latency
+                chunk = audio_queue.get(timeout=0.005)
                 if chunk is None:
                     # Synthesis complete
                     break
