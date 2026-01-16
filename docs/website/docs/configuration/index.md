@@ -221,6 +221,7 @@ Key points:
 - `databases` map to vector stores; choose from `ChromaStore` or `QdrantStore` by default.
 - `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
 - `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
+- Inline parsers can omit `name` (only `type`/`config` are required); `name` is required only for reusable parsers declared under `components.parsers` so they can be referenced by string or set as defaults. This keeps older inline configs valid while allowing named, reusable components.
 - For a complete field reference, see the [RAG Guide](../rag/index.md).
 
 Defaults and persistence:
