@@ -181,19 +181,24 @@ def _add_file_from_bytes(
     """Add a file to a dataset from bytes."""
     import time
 
+    # Sanitize filename to prevent path traversal attacks
+    safe_filename = os.path.basename(filename)
+    if not safe_filename or safe_filename in (".", ".."):
+        safe_filename = "imported_data"
+
     data_dir = DataService.ensure_data_dir(namespace, project, dataset)
     data_hash = DataService.hash_data(file_data)
-    resolved_file_name = DataService.append_collision_timestamp(filename)
+    resolved_file_name = DataService.append_collision_timestamp(safe_filename)
 
     # Write metadata
     meta_path = os.path.join(data_dir, "meta", f"{data_hash}.json")
     meta = MetadataFileContent(
-        original_file_name=filename,
+        original_file_name=safe_filename,
         resolved_file_name=resolved_file_name,
         timestamp=float(time.time()),
         size=len(file_data),
         mime_type="application/jsonlines"
-        if filename.endswith(".jsonl")
+        if safe_filename.endswith(".jsonl")
         else "text/csv",
         hash=data_hash,
     )
@@ -368,8 +373,12 @@ async def import_hf_dataset(request: HFDatasetImportRequest) -> HFDatasetImportR
     # 4. Convert rows to file format
     # For RAG/doc-qa: extract text content to make chunking work better
     # For classifier: keep original structure (text_field + label_field)
-    safe_name = request.hf_dataset_id.replace("/", "_")
-    filename = f"hf_{safe_name}_{split_to_use}.{request.format}"
+    # Sanitize the dataset name to prevent path traversal
+    import re
+
+    safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", request.hf_dataset_id)
+    safe_split = re.sub(r"[^a-zA-Z0-9_\-]", "_", split_to_use)
+    filename = f"hf_{safe_name}_{safe_split}.{request.format}"
 
     if request.format == "jsonl":
         # Create simplified JSONL with extracted text for better RAG processing

@@ -666,6 +666,9 @@ const Data = () => {
             { action_type: 'process' }
           )
 
+          // Refetch datasets to update the UI
+          await refetchDatasets()
+
           toast({
             message: `Sample dataset "${demo.datasetName}" imported successfully!`,
             variant: 'default',

@@ -103,7 +103,7 @@ class DatasetService:
             # Enrich files with chunk counts from the database
             chunk_map = database_chunk_counts.get(dataset.database, {})
             for file_meta in files_with_details:
-                file_meta.chunk_count = chunk_map.get(file_meta.hash) or None
+                file_meta.chunk_count = chunk_map.get(file_meta.hash)
 
             dataset_with_details = DatasetWithFileDetails(
                 name=dataset.name,
