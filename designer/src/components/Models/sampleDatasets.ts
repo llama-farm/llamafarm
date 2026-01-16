@@ -21,9 +21,9 @@ export const CLASSIFIER_SAMPLE_DATASETS: ClassifierSampleDataset[] = [
   {
     id: 'sentiment',
     name: 'Sentiment analysis',
-    description: '3 classes, 70 examples',
+    description: '3 classes, 72 examples',
     classes: 3,
-    examples: 70,
+    examples: 72,
     data: [
       { text: 'Love this product so much!', label: 'positive' },
       { text: 'Absolutely terrible experience', label: 'negative' },
