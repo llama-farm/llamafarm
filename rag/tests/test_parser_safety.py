@@ -16,7 +16,7 @@ import pytest
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.datamodel import DataProcessingStrategy, Parser
+from config.datamodel import DataProcessingStrategy, Parsers
 
 from core.blob_processor import BlobProcessor
 from utils.parsing_safety import (
@@ -120,8 +120,7 @@ class TestParserRequirement:
             name="text_only_strategy",
             description="Only has text parser for txt files",
             parsers=[
-                Parser(
-                    name="text_parser",
+                Parsers(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],  # Only matches txt files
@@ -145,8 +144,7 @@ class TestParserRequirement:
             name="pdf_only_strategy",
             description="Only has PDF parser for pdf files",
             parsers=[
-                Parser(
-                    name="pdf_parser",
+                Parsers(
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -169,8 +167,7 @@ class TestParserRequirement:
             name="text_strategy",
             description="Has text parser that matches all files",
             parsers=[
-                Parser(
-                    name="text_parser",
+                Parsers(
                     type="TextParser_Python",
                     config={},
                     # No file_include_patterns = matches all files
@@ -191,8 +188,7 @@ class TestParserRequirement:
             name="text_only_strategy",
             description="Only has text parser for txt files",
             parsers=[
-                Parser(
-                    name="text_parser",
+                Parsers(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],
@@ -215,8 +211,7 @@ class TestParserRequirement:
             name="specific_strategy",
             description="Parser only matches specific patterns",
             parsers=[
-                Parser(
-                    name="text_md_parser",
+                Parsers(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt", "*.md"],
@@ -254,8 +249,7 @@ class TestParserFailure:
             name="failing_strategy",
             description="Strategy with parser that always fails",
             parsers=[
-                Parser(
-                    name="pdf_parser",
+                Parsers(
                     type="PDFParser_PyPDF2",
                     config={},
                     file_include_patterns=["*.pdf"],
@@ -289,8 +283,7 @@ class TestParserFailure:
             name="failing_strategy",
             description="Strategy with parser that always fails",
             parsers=[
-                Parser(
-                    name="pdf_parser",
+                Parsers(
                     type="PDFParser_PyPDF2",
                     config={},
                     file_include_patterns=["*.pdf"],
@@ -325,8 +318,7 @@ class TestBatchProcessingContinuesOnFailure:
             name="pdf_only",
             description="Only handles PDF files for testing",
             parsers=[
-                Parser(
-                    name="pdf_parser",
+                Parsers(
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -349,8 +341,7 @@ class TestBatchProcessingContinuesOnFailure:
             name="pdf_only",
             description="Only handles PDF files for testing",
             parsers=[
-                Parser(
-                    name="pdf_parser",
+                Parsers(
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -410,8 +401,7 @@ class TestExplicitConfiguration:
             name="text_strategy",
             description="Text parser matching txt files",
             parsers=[
-                Parser(
-                    name="text_parser",
+                Parsers(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],
@@ -431,8 +421,7 @@ class TestExplicitConfiguration:
             name="catch_all_strategy",
             description="Text parser without patterns matches all",
             parsers=[
-                Parser(
-                    name="text_parser",
+                Parsers(
                     type="TextParser_Python",
                     config={},
                     # No file_include_patterns = matches all
@@ -490,14 +479,12 @@ class TestExplicitConfiguration:
             name="multi_parser_strategy",
             description="Multiple parsers with different priorities",
             parsers=[
-                Parser(
-                    name="low_priority_parser",
+                Parsers(
                     type="MockLowPriorityParser",
                     config={},
                     priority=10,  # Lower priority (higher number)
                 ),
-                Parser(
-                    name="high_priority_parser",
+                Parsers(
                     type="MockHighPriorityParser",
                     config={},
                     priority=1,  # Higher priority (lower number = tried first)
