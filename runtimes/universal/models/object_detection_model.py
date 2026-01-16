@@ -11,15 +11,13 @@ Usage:
 """
 
 import asyncio
-import base64
 import logging
-from io import BytesIO
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
 
 from models.base import BaseModel
+from utils.image_utils import load_image
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -158,7 +156,7 @@ class ObjectDetectionModel(BaseModel):
     ) -> dict[str, Any]:
         """Synchronous object detection."""
         # Load image
-        pil_image = self._load_image(image)
+        pil_image = load_image(image)
         width, height = pil_image.size
 
         # Process image
@@ -237,45 +235,6 @@ class ObjectDetectionModel(BaseModel):
             result = await self.detect(image, threshold=threshold, labels=labels)
             results.append(result)
         return results
-
-    def _load_image(self, image: str | bytes | Any) -> "Image.Image":
-        """Load an image from various input formats."""
-        from PIL import Image
-
-        # Already a PIL Image
-        if isinstance(image, Image.Image):
-            return image.convert("RGB")
-
-        # Raw bytes
-        if isinstance(image, bytes):
-            return Image.open(BytesIO(image)).convert("RGB")
-
-        # String input - could be file path or base64
-        if isinstance(image, (str, Path)):
-            # Long strings are almost certainly base64
-            if isinstance(image, str) and len(image) > 4096:
-                try:
-                    img_bytes = base64.b64decode(image)
-                    return Image.open(BytesIO(img_bytes)).convert("RGB")
-                except Exception as e:
-                    raise ValueError(f"Invalid base64 image data: {str(e)[:100]}") from e
-
-            # Could be file path
-            path = Path(image)
-            try:
-                if path.exists():
-                    return Image.open(path).convert("RGB")
-            except OSError:
-                pass
-
-            # Try as base64
-            try:
-                img_bytes = base64.b64decode(image)
-                return Image.open(BytesIO(img_bytes)).convert("RGB")
-            except Exception as e:
-                raise ValueError(f"Invalid image path or base64: {str(e)[:100]}") from e
-
-        raise ValueError(f"Unsupported image type: {type(image)}")
 
     def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""

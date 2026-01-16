@@ -27,7 +27,9 @@ from .types import (
     AnomalyLoadRequest,
     AnomalySaveRequest,
     AnomalyScoreRequest,
-    BackgroundRemoveRequest,
+    AudioTranscriptionRequest,
+    AudioTranslationRequest,
+    ChangePointBatchRequest,
     ChangePointRequest,
     ClassifierFitRequest,
     ClassifierLoadRequest,
@@ -40,11 +42,11 @@ from .types import (
     KeywordExtractRequest,
     LanguageDetectBatchRequest,
     LanguageDetectRequest,
-    ObjectDetectBatchRequest,
-    ObjectDetectRequest,
     PIIDetectRequest,
     PIIRedactRequest,
+    TableQABatchRequest,
     TableQARequest,
+    TimeSeriesForecastBatchRequest,
     TimeSeriesForecastRequest,
 )
 
@@ -702,65 +704,9 @@ async def detect_changepoints(request: ChangePointRequest) -> dict[str, Any]:
 
 
 # =============================================================================
-# Vision Endpoints
-# =============================================================================
-
-
-@router.post("/vision/detect")
-async def detect_objects(request: ObjectDetectRequest) -> dict[str, Any]:
-    """Detect objects in an image.
-
-    Uses YOLO models for object detection.
-
-    Example request:
-    ```json
-    {
-        "image": "<base64-encoded-image>",
-        "threshold": 0.5
-    }
-    ```
-    """
-    return await UniversalRuntimeService.detect_objects(
-        image=request.image,
-        threshold=request.threshold,
-        labels=request.labels,
-        model=request.model,
-    )
-
-
-@router.post("/vision/detect/batch")
-async def detect_objects_batch(request: ObjectDetectBatchRequest) -> dict[str, Any]:
-    """Detect objects in multiple images."""
-    return await UniversalRuntimeService.detect_objects_batch(
-        images=request.images,
-        threshold=request.threshold,
-        labels=request.labels,
-        model=request.model,
-    )
-
-
-@router.post("/vision/background-remove")
-async def remove_background(request: BackgroundRemoveRequest) -> dict[str, Any]:
-    """Remove background from an image.
-
-    Returns the image with transparent background.
-
-    Example request:
-    ```json
-    {
-        "image": "<base64-encoded-image>"
-    }
-    ```
-    """
-    return await UniversalRuntimeService.remove_background(
-        image=request.image,
-        model=request.model,
-    )
-
-
-# =============================================================================
 # Analysis Endpoints
 # =============================================================================
+# Note: Vision endpoints have been moved to /v1/vision/*
 
 
 @router.post("/analysis/table-qa")
@@ -828,4 +774,138 @@ async def detect_drift(request: DriftDetectRequest) -> dict[str, Any]:
         reference_data=request.reference_data,
         current_data=request.current_data,
         algorithm=request.algorithm,
+    )
+
+
+# =============================================================================
+# Audio Endpoints
+# =============================================================================
+
+
+@router.post("/audio/transcriptions")
+async def transcribe_audio(request: AudioTranscriptionRequest) -> dict[str, Any]:
+    """Transcribe audio to text (speech-to-text).
+
+    Uses Whisper models for high-quality transcription.
+
+    Example request:
+    ```json
+    {
+        "file": "<base64-encoded-audio>",
+        "model": "openai/whisper-base",
+        "language": "en",
+        "response_format": "json"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.transcribe_audio(
+        file=request.file,
+        model=request.model,
+        language=request.language,
+        prompt=request.prompt,
+        response_format=request.response_format,
+        temperature=request.temperature,
+    )
+
+
+@router.post("/audio/translations")
+async def translate_audio(request: AudioTranslationRequest) -> dict[str, Any]:
+    """Translate audio to English text.
+
+    Uses Whisper models to translate any language to English.
+
+    Example request:
+    ```json
+    {
+        "file": "<base64-encoded-audio>",
+        "model": "openai/whisper-base",
+        "response_format": "json"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.translate_audio(
+        file=request.file,
+        model=request.model,
+        prompt=request.prompt,
+        response_format=request.response_format,
+        temperature=request.temperature,
+    )
+
+
+# =============================================================================
+# Batch Endpoints
+# =============================================================================
+
+
+@router.post("/timeseries/forecast/batch")
+async def forecast_timeseries_batch(
+    request: TimeSeriesForecastBatchRequest,
+) -> dict[str, Any]:
+    """Forecast multiple time series in batch.
+
+    Example request:
+    ```json
+    {
+        "data": [
+            [100, 102, 105, 103, 107],
+            [200, 202, 205, 203, 207]
+        ],
+        "horizon": 5,
+        "model": "amazon/chronos-t5-tiny"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.forecast_timeseries_batch(
+        data=request.data,
+        horizon=request.horizon,
+        model=request.model,
+    )
+
+
+@router.post("/timeseries/changepoints/batch")
+async def detect_changepoints_batch(
+    request: ChangePointBatchRequest,
+) -> dict[str, Any]:
+    """Detect change points in multiple time series.
+
+    Example request:
+    ```json
+    {
+        "data": [
+            [10, 11, 10, 12, 25, 26, 24, 27],
+            [5, 5, 5, 20, 20, 20, 5, 5]
+        ],
+        "algorithm": "binseg",
+        "n_changepoints": 2
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_changepoints_batch(
+        data=request.data,
+        algorithm=request.algorithm,
+        n_changepoints=request.n_changepoints,
+        penalty=request.penalty,
+    )
+
+
+@router.post("/analysis/table-qa/batch")
+async def table_qa_batch(request: TableQABatchRequest) -> dict[str, Any]:
+    """Answer questions about multiple tables in batch.
+
+    Example request:
+    ```json
+    {
+        "tables": [
+            [{"name": "Alice", "age": 30}],
+            [{"name": "Bob", "age": 25}]
+        ],
+        "queries": ["What is the age?", "Who is this?"],
+        "model": "google/tapas-base-finetuned-wtq"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.table_qa_batch(
+        tables=request.tables,
+        queries=request.queries,
+        model=request.model,
     )

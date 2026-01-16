@@ -315,3 +315,59 @@ class AnomalyExplainRequest(BaseModel):
     backend: str = "isolation_forest"
     background_samples: int = Field(default=100, ge=10, le=1000)
     nsamples: int = Field(default=100, ge=10, le=1000)
+
+
+# =============================================================================
+# Audio Types
+# =============================================================================
+
+
+class AudioTranscriptionRequest(BaseModel):
+    """Request for audio transcription (speech-to-text)."""
+
+    file: str  # Base64-encoded audio file or file ID
+    model: str = "openai/whisper-base"
+    language: str | None = None  # Optional language code (e.g., "en", "fr")
+    prompt: str | None = None  # Optional text to guide the model
+    response_format: str = "json"  # json, text, srt, vtt, verbose_json
+    temperature: float = Field(default=0.0, ge=0, le=1)
+
+
+class AudioTranslationRequest(BaseModel):
+    """Request for audio translation (speech-to-English)."""
+
+    file: str  # Base64-encoded audio file or file ID
+    model: str = "openai/whisper-base"
+    prompt: str | None = None  # Optional text to guide the model
+    response_format: str = "json"  # json, text, srt, vtt, verbose_json
+    temperature: float = Field(default=0.0, ge=0, le=1)
+
+
+# =============================================================================
+# Batch Endpoint Types
+# =============================================================================
+
+
+class TimeSeriesForecastBatchRequest(BaseModel):
+    """Request for batch time series forecasting."""
+
+    data: list[list[float]]  # Multiple time series to forecast
+    horizon: int = Field(default=12, ge=1, le=100)
+    model: str = "amazon/chronos-t5-tiny"
+
+
+class ChangePointBatchRequest(BaseModel):
+    """Request for batch change point detection."""
+
+    data: list[list[float]]  # Multiple time series
+    algorithm: str = "binseg"
+    n_changepoints: int | None = None
+    penalty: float | None = None
+
+
+class TableQABatchRequest(BaseModel):
+    """Request for batch table QA."""
+
+    tables: list[list[dict[str, Any]]]  # Multiple tables
+    queries: list[str]  # Query for each table
+    model: str = "google/tapas-base-finetuned-wtq"

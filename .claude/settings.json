@@ -1,9 +1,142 @@
 {
-  "permissions": {
-    "allow": [],
-    "deny": [],
-    "ask": []
+  "attribution": {
+    "commit": "",
+    "pr": ""
   },
-  "enabledPlugins": {},
-  "hooks": {}
+  "permissions": {
+    "allow": [
+      "Bash(npm:*)",
+      "Bash(node:*)",
+      "Bash(python:*)",
+      "Bash(uv:*)",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "Bash(ruff:*)",
+      "Bash(pytest:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(curl:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(echo:*)",
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "Glob(**)",
+      "Grep(**)"
+    ],
+    "deny": [],
+    "defaultMode": "bypassPermissions"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-check.py\"",
+            "timeout": 30
+          },
+          {
+            "type": "prompt",
+            "prompt": "The stop hook ran. If it output 'STOP BLOCKED', you MUST continue working.\n\nRESPOND WITH EXACTLY ONE OF:\n\n1. If blocked (work remains): {\"ok\": false, \"reason\": \"Continuing with: [task name]\"}\n   Then your NEXT message must be a TOOL CALL to do that task.\n\n2. If allowed (all complete): {\"ok\": true, \"reason\": \"All tasks complete\"}\n\nDO NOT explain. DO NOT summarize. Just output the JSON.",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/subagent-context.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "prompt",
+            "prompt": "Review your task completion:\n1. Did you complete ALL assigned work?\n2. Are there any errors or failures to report?\n3. What is the status of the main PLAN.md (if relevant)?\n\nOutput JSON:\n{\"ok\": true, \"reason\": \"[summary of what was completed]\"}\nOR\n{\"ok\": false, \"reason\": \"[what remains incomplete]\"}",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-compact-save.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/notify-slack.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-lint.sh\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/update-test-results.py\"",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/update-progress.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "ralph-wiggum@claude-code-plugins": true
+  }
 }

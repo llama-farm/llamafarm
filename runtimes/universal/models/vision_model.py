@@ -16,15 +16,13 @@ Usage:
 """
 
 import asyncio
-import base64
 import logging
-from io import BytesIO
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
 
 from models.base import BaseModel
+from utils.image_utils import load_image
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -153,7 +151,7 @@ class CLIPVisionModel(BaseModel):
         """Synchronous zero-shot classification."""
 
         # Load and process image
-        pil_image = self._load_image(image)
+        pil_image = load_image(image)
 
         # Normalize labels to lowercase for consistent output
         normalized_labels = [label.lower() for label in labels]
@@ -228,7 +226,7 @@ class CLIPVisionModel(BaseModel):
         """Synchronous batch zero-shot classification."""
 
         # Load all images
-        pil_images = [self._load_image(img) for img in images]
+        pil_images = [load_image(img) for img in images]
 
         # Normalize labels to lowercase for consistent output
         normalized_labels = [label.lower() for label in labels]
@@ -273,55 +271,6 @@ class CLIPVisionModel(BaseModel):
             })
 
         return results
-
-    def _load_image(self, image: str | bytes | Any) -> "Image.Image":
-        """Load an image from various input formats.
-
-        Args:
-            image: Image input - file path, base64 string, bytes, or PIL Image
-
-        Returns:
-            PIL Image object
-        """
-        from PIL import Image
-
-        # Already a PIL Image
-        if isinstance(image, Image.Image):
-            return image.convert("RGB")
-
-        # Raw bytes
-        if isinstance(image, bytes):
-            return Image.open(BytesIO(image)).convert("RGB")
-
-        # String input - could be file path or base64
-        if isinstance(image, (str, Path)):
-            # Short strings might be file paths, long strings are almost certainly base64
-            # File paths are typically < 4096 chars (OS limit), base64 images are much longer
-            if isinstance(image, str) and len(image) > 4096:
-                # Definitely base64 - skip file path check to avoid "File name too long" error
-                try:
-                    img_bytes = base64.b64decode(image)
-                    return Image.open(BytesIO(img_bytes)).convert("RGB")
-                except Exception as e:
-                    raise ValueError(f"Invalid base64 image data: {str(e)[:100]}") from e
-
-            # Could be file path - check if it exists
-            path = Path(image)
-            try:
-                if path.exists():
-                    return Image.open(path).convert("RGB")
-            except OSError:
-                # Path too long or other OS error - try as base64
-                pass
-
-            # Try as base64
-            try:
-                img_bytes = base64.b64decode(image)
-                return Image.open(BytesIO(img_bytes)).convert("RGB")
-            except Exception as e:
-                raise ValueError(f"Invalid image path or base64: {str(e)[:100]}") from e
-
-        raise ValueError(f"Unsupported image type: {type(image)}")
 
     def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""

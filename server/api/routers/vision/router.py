@@ -1,13 +1,18 @@
 """
-Vision Router - Endpoints for OCR and Document extraction.
+Vision Router - Endpoints for all vision-related ML tasks.
 
 Provides access to:
 - OCR (text extraction from images/PDFs)
 - Document Extraction (structured data from forms/invoices)
+- Object Detection (standard YOLO and open-vocabulary OWL-ViT)
+- Image Classification (zero-shot CLIP and few-shot SetFit)
+- Background Removal & Segmentation (RMBG, SAM)
 
-All endpoints accept multipart form data with either:
+OCR and Document endpoints accept multipart form data with either:
 - file: Upload a PDF or image file directly
 - images: Base64-encoded image data URIs (comma-separated or JSON array)
+
+Other endpoints use JSON request bodies.
 """
 
 import json
@@ -16,6 +21,23 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from server.services.universal_runtime_service import UniversalRuntimeService
+
+from .types import (
+    BackgroundRemoveRequest,
+    FewShotClassifyFitRequest,
+    FewShotClassifyPredictBatchRequest,
+    FewShotClassifyPredictRequest,
+    FewShotClassifyRefineRequest,
+    ObjectDetectBatchRequest,
+    ObjectDetectRequest,
+    OpenVocabDetectBatchRequest,
+    OpenVocabDetectByImageRequest,
+    OpenVocabDetectRequest,
+    SegmentBatchRequest,
+    SegmentRequest,
+    ZeroShotClassifyBatchRequest,
+    ZeroShotClassifyRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -319,4 +341,298 @@ async def extract_from_documents(
         images=image_list,
         prompts=prompt_list,
         task=task,  # type: ignore
+    )
+
+
+# =============================================================================
+# Object Detection Endpoints
+# =============================================================================
+
+
+@router.post("/detect-objects")
+async def detect_objects(request: ObjectDetectRequest) -> dict[str, Any]:
+    """Detect objects in an image using standard object detection (YOLO).
+
+    Uses pre-trained YOLO models to detect common objects.
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "threshold": 0.5,
+        "labels": ["person", "car"],
+        "model": "hustvl/yolos-tiny"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_objects(
+        image=request.image,
+        threshold=request.threshold,
+        labels=request.labels,
+        model=request.model,
+    )
+
+
+@router.post("/detect-objects/batch")
+async def detect_objects_batch(request: ObjectDetectBatchRequest) -> dict[str, Any]:
+    """Detect objects in multiple images."""
+    return await UniversalRuntimeService.detect_objects_batch(
+        images=request.images,
+        threshold=request.threshold,
+        labels=request.labels,
+        model=request.model,
+    )
+
+
+@router.post("/detect-open")
+async def detect_open_vocab(request: OpenVocabDetectRequest) -> dict[str, Any]:
+    """Detect arbitrary objects by text description (open-vocabulary detection).
+
+    Uses OWL-ViT to detect objects specified by natural language descriptions.
+    No pre-training required - can detect any object you describe.
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "labels": ["a red car", "a person wearing a hat", "a coffee mug"],
+        "threshold": 0.1,
+        "model": "google/owlvit-base-patch32"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_open_vocab(
+        image=request.image,
+        labels=request.labels,
+        threshold=request.threshold,
+        model=request.model,
+    )
+
+
+@router.post("/detect-open/batch")
+async def detect_open_vocab_batch(request: OpenVocabDetectBatchRequest) -> dict[str, Any]:
+    """Detect objects by text description in multiple images."""
+    return await UniversalRuntimeService.detect_open_vocab_batch(
+        images=request.images,
+        labels=request.labels,
+        threshold=request.threshold,
+        model=request.model,
+    )
+
+
+@router.post("/detect-open/by-image")
+async def detect_open_vocab_by_image(
+    request: OpenVocabDetectByImageRequest,
+) -> dict[str, Any]:
+    """Detect objects using reference images (one-shot detection).
+
+    Find instances of objects shown in reference images within a query image.
+
+    Example request:
+    ```json
+    {
+        "query_image": "<base64-image-to-search>",
+        "reference_images": ["<base64-example-1>", "<base64-example-2>"],
+        "threshold": 0.1,
+        "model": "google/owlvit-base-patch32"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.detect_open_vocab_by_image(
+        query_image=request.query_image,
+        reference_images=request.reference_images,
+        threshold=request.threshold,
+        model=request.model,
+    )
+
+
+# =============================================================================
+# Image Classification Endpoints
+# =============================================================================
+
+
+@router.post("/classify-zero-shot")
+async def classify_zero_shot(request: ZeroShotClassifyRequest) -> dict[str, Any]:
+    """Classify an image without training using CLIP (zero-shot classification).
+
+    Classify images into arbitrary categories without any training data.
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "labels": ["cat", "dog", "bird", "fish"],
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.classify_zero_shot(
+        image=request.image,
+        labels=request.labels,
+        model=request.model,
+    )
+
+
+@router.post("/classify-zero-shot/batch")
+async def classify_zero_shot_batch(
+    request: ZeroShotClassifyBatchRequest,
+) -> dict[str, Any]:
+    """Classify multiple images using zero-shot classification."""
+    return await UniversalRuntimeService.classify_zero_shot_batch(
+        images=request.images,
+        labels=request.labels,
+        model=request.model,
+    )
+
+
+@router.post("/classify/fit")
+async def fit_few_shot_classifier(request: FewShotClassifyFitRequest) -> dict[str, Any]:
+    """Train a few-shot image classifier with labeled examples.
+
+    Uses SetFit for few-shot learning - requires as few as 8-16 examples per class.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "product-classifier",
+        "training_data": [
+            {"image": "<base64>", "label": "shoes"},
+            {"image": "<base64>", "label": "shirts"},
+            {"image": "<base64>", "label": "shoes"}
+        ],
+        "model": "openai/clip-vit-base-patch32",
+        "num_iterations": 20
+    }
+    ```
+    """
+    return await UniversalRuntimeService.fit_few_shot_classifier(
+        classifier_id=request.classifier_id,
+        training_data=request.training_data,
+        model=request.model,
+        num_iterations=request.num_iterations,
+    )
+
+
+@router.post("/classify/predict")
+async def predict_few_shot(request: FewShotClassifyPredictRequest) -> dict[str, Any]:
+    """Classify an image using a fitted few-shot classifier.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "product-classifier",
+        "image": "<base64-encoded-image>"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.predict_few_shot(
+        classifier_id=request.classifier_id,
+        image=request.image,
+    )
+
+
+@router.post("/classify/predict/batch")
+async def predict_few_shot_batch(
+    request: FewShotClassifyPredictBatchRequest,
+) -> dict[str, Any]:
+    """Classify multiple images using a fitted few-shot classifier."""
+    return await UniversalRuntimeService.predict_few_shot_batch(
+        classifier_id=request.classifier_id,
+        images=request.images,
+    )
+
+
+@router.post("/classify/refine")
+async def refine_few_shot_classifier(
+    request: FewShotClassifyRefineRequest,
+) -> dict[str, Any]:
+    """Refine a few-shot classifier with additional training data.
+
+    Add more labeled examples to improve an existing classifier.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "product-classifier",
+        "training_data": [
+            {"image": "<base64>", "label": "pants"},
+            {"image": "<base64>", "label": "pants"}
+        ],
+        "num_iterations": 10
+    }
+    ```
+    """
+    return await UniversalRuntimeService.refine_few_shot_classifier(
+        classifier_id=request.classifier_id,
+        training_data=request.training_data,
+        num_iterations=request.num_iterations,
+    )
+
+
+@router.get("/classify/info/{classifier_id}")
+async def get_classifier_info(classifier_id: str) -> dict[str, Any]:
+    """Get information about a fitted few-shot classifier.
+
+    Returns metadata about the classifier including labels, model, and training stats.
+    """
+    return await UniversalRuntimeService.get_few_shot_classifier_info(classifier_id)
+
+
+# =============================================================================
+# Background Removal & Segmentation Endpoints
+# =============================================================================
+
+
+@router.post("/background-remove")
+async def remove_background(request: BackgroundRemoveRequest) -> dict[str, Any]:
+    """Remove background from an image.
+
+    Returns the image with transparent background (PNG with alpha channel).
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "model": "briaai/RMBG-1.4"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.remove_background(
+        image=request.image,
+        model=request.model,
+    )
+
+
+@router.post("/segment")
+async def segment_image(request: SegmentRequest) -> dict[str, Any]:
+    """Segment an image using SAM (Segment Anything Model).
+
+    Can segment with optional point or box prompts.
+
+    Example request:
+    ```json
+    {
+        "image": "<base64-encoded-image>",
+        "model": "facebook/sam-vit-base",
+        "points": [[100, 200], [300, 400]],
+        "boxes": [[50, 50, 200, 200]]
+    }
+    ```
+    """
+    return await UniversalRuntimeService.segment_image(
+        image=request.image,
+        model=request.model,
+        points=request.points,
+        boxes=request.boxes,
+    )
+
+
+@router.post("/segment/batch")
+async def segment_batch(request: SegmentBatchRequest) -> dict[str, Any]:
+    """Segment multiple images using SAM."""
+    return await UniversalRuntimeService.segment_batch(
+        images=request.images,
+        model=request.model,
+        points=request.points,
+        boxes=request.boxes,
     )

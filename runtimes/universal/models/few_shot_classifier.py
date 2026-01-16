@@ -19,16 +19,14 @@ Usage:
 """
 
 import asyncio
-import base64
 import logging
-from io import BytesIO
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.nn as nn
 
 from models.base import BaseModel
+from utils.image_utils import load_image
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -137,7 +135,7 @@ class FewShotImageClassifier(BaseModel):
         """Extract CLIP embeddings for a list of images."""
 
         # Load all images
-        pil_images = [self._load_image(img) for img in images]
+        pil_images = [load_image(img) for img in images]
 
         # Process in batches
         batch_size = 32
@@ -563,39 +561,6 @@ class FewShotImageClassifier(BaseModel):
         self.classifier.eval()
 
         self._is_trained = True
-
-    def _load_image(self, image: str | bytes | Any) -> "Image.Image":
-        """Load an image from various input formats."""
-        from PIL import Image
-
-        if isinstance(image, Image.Image):
-            return image.convert("RGB")
-
-        if isinstance(image, bytes):
-            return Image.open(BytesIO(image)).convert("RGB")
-
-        if isinstance(image, (str, Path)):
-            if isinstance(image, str) and len(image) > 4096:
-                try:
-                    img_bytes = base64.b64decode(image)
-                    return Image.open(BytesIO(img_bytes)).convert("RGB")
-                except Exception as e:
-                    raise ValueError(f"Invalid base64 image: {str(e)[:100]}") from e
-
-            path = Path(image)
-            try:
-                if path.exists():
-                    return Image.open(path).convert("RGB")
-            except OSError:
-                pass
-
-            try:
-                img_bytes = base64.b64decode(image)
-                return Image.open(BytesIO(img_bytes)).convert("RGB")
-            except Exception as e:
-                raise ValueError(f"Invalid image path or base64: {str(e)[:100]}") from e
-
-        raise ValueError(f"Unsupported image type: {type(image)}")
 
     def get_model_info(self) -> dict[str, Any]:
         """Get information about the classifier."""

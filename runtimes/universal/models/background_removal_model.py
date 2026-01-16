@@ -14,10 +14,10 @@ import asyncio
 import base64
 import logging
 from io import BytesIO
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from models.base import BaseModel
+from utils.image_utils import load_image
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 # Default RMBG model - high quality background removal
 DEFAULT_RMBG_MODEL = "briaai/RMBG-1.4"
 
+# Allowlist of trusted models that can use trust_remote_code=True
+# These models have been reviewed for security and are from trusted sources.
+# SECURITY: Only add models here after reviewing their repository code.
+TRUSTED_REMOTE_CODE_MODELS = frozenset([
+    "briaai/RMBG-1.4",
+    "briaai/RMBG-2.0",
+])
+
 
 class BackgroundRemovalModel(BaseModel):
     """Background removal model using RMBG.
@@ -34,10 +42,16 @@ class BackgroundRemovalModel(BaseModel):
     RMBG is a state-of-the-art background removal model that produces
     high-quality alpha masks for separating foreground from background.
 
+    Security Note:
+        This model uses `trust_remote_code=True` which allows execution of
+        code from the HuggingFace model repository. Only models listed in
+        TRUSTED_REMOTE_CODE_MODELS are allowed. Attempting to load other
+        models will raise a SecurityError.
+
     Attributes:
         model_id: Unique identifier for this model instance
         device: Device to run inference on (cpu, cuda, mps)
-        hf_model_name: HuggingFace model name
+        hf_model_name: HuggingFace model name (must be in allowlist)
     """
 
     def __init__(
@@ -68,10 +82,22 @@ class BackgroundRemovalModel(BaseModel):
         return self._is_loaded and self.pipe is not None
 
     async def load(self) -> None:
-        """Load the RMBG model pipeline."""
+        """Load the RMBG model pipeline.
+
+        Raises:
+            SecurityError: If the model is not in the trusted allowlist.
+        """
         if self.is_loaded:
             logger.info(f"Model {self.model_id} already loaded")
             return
+
+        # Security check: Only allow trusted models with remote code execution
+        if self.hf_model_name not in TRUSTED_REMOTE_CODE_MODELS:
+            raise ValueError(
+                f"Security Error: Model '{self.hf_model_name}' is not in the trusted "
+                f"allowlist for remote code execution. Allowed models: "
+                f"{sorted(TRUSTED_REMOTE_CODE_MODELS)}"
+            )
 
         logger.info(f"Loading RMBG background removal model: {self.hf_model_name}")
 
@@ -141,7 +167,7 @@ class BackgroundRemovalModel(BaseModel):
         from PIL import Image
 
         # Load image
-        pil_image = self._load_image(image)
+        pil_image = load_image(image)
         original_size = pil_image.size
 
         # Run the pipeline - returns list of segment results
@@ -223,45 +249,6 @@ class BackgroundRemovalModel(BaseModel):
             result = await self.remove_background(image, return_mask=return_mask)
             results.append(result)
         return results
-
-    def _load_image(self, image: str | bytes | Any) -> "Image.Image":
-        """Load an image from various input formats."""
-        from PIL import Image
-
-        # Already a PIL Image
-        if isinstance(image, Image.Image):
-            return image.convert("RGB")
-
-        # Raw bytes
-        if isinstance(image, bytes):
-            return Image.open(BytesIO(image)).convert("RGB")
-
-        # String input - could be file path or base64
-        if isinstance(image, (str, Path)):
-            # Long strings are almost certainly base64
-            if isinstance(image, str) and len(image) > 4096:
-                try:
-                    img_bytes = base64.b64decode(image)
-                    return Image.open(BytesIO(img_bytes)).convert("RGB")
-                except Exception as e:
-                    raise ValueError(f"Invalid base64 image data: {str(e)[:100]}") from e
-
-            # Could be file path
-            path = Path(image)
-            try:
-                if path.exists():
-                    return Image.open(path).convert("RGB")
-            except OSError:
-                pass
-
-            # Try as base64
-            try:
-                img_bytes = base64.b64decode(image)
-                return Image.open(BytesIO(img_bytes)).convert("RGB")
-            except Exception as e:
-                raise ValueError(f"Invalid image path or base64: {str(e)[:100]}") from e
-
-        raise ValueError(f"Unsupported image type: {type(image)}")
 
     def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""

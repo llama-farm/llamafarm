@@ -1007,3 +1007,293 @@ class UniversalRuntimeService:
             payload["feature_names"] = feature_names
 
         return await cls._make_request("POST", "/v1/anomaly/explain", json=payload)
+
+    # =========================================================================
+    # Vision - Open Vocabulary Detection
+    # =========================================================================
+
+    @classmethod
+    async def detect_open_vocab(
+        cls,
+        image: str,
+        labels: list[str],
+        threshold: float = 0.1,
+        model: str = "google/owlvit-base-patch32",
+    ) -> dict[str, Any]:
+        """Detect objects by text description (open-vocabulary)."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/detect-open",
+            {
+                "image": image,
+                "labels": labels,
+                "threshold": threshold,
+                "model": model,
+            },
+        )
+
+    @classmethod
+    async def detect_open_vocab_batch(
+        cls,
+        images: list[str],
+        labels: list[str],
+        threshold: float = 0.1,
+        model: str = "google/owlvit-base-patch32",
+    ) -> dict[str, Any]:
+        """Detect objects in multiple images by text description."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/detect-open/batch",
+            {
+                "images": images,
+                "labels": labels,
+                "threshold": threshold,
+                "model": model,
+            },
+        )
+
+    @classmethod
+    async def detect_open_vocab_by_image(
+        cls,
+        query_image: str,
+        reference_images: list[str],
+        threshold: float = 0.1,
+        model: str = "google/owlvit-base-patch32",
+    ) -> dict[str, Any]:
+        """Detect objects using reference images (one-shot detection)."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/detect-open/by-image",
+            {
+                "query_image": query_image,
+                "reference_images": reference_images,
+                "threshold": threshold,
+                "model": model,
+            },
+        )
+
+    # =========================================================================
+    # Vision - Zero-Shot Classification
+    # =========================================================================
+
+    @classmethod
+    async def classify_zero_shot(
+        cls,
+        image: str,
+        labels: list[str],
+        model: str = "openai/clip-vit-base-patch32",
+    ) -> dict[str, Any]:
+        """Classify an image without training (zero-shot)."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/classify-zero-shot",
+            {
+                "image": image,
+                "labels": labels,
+                "model": model,
+            },
+        )
+
+    @classmethod
+    async def classify_zero_shot_batch(
+        cls,
+        images: list[str],
+        labels: list[str],
+        model: str = "openai/clip-vit-base-patch32",
+    ) -> dict[str, Any]:
+        """Classify multiple images without training (zero-shot)."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/classify-zero-shot/batch",
+            {
+                "images": images,
+                "labels": labels,
+                "model": model,
+            },
+        )
+
+    # =========================================================================
+    # Vision - Few-Shot Classification
+    # =========================================================================
+
+    @classmethod
+    async def fit_few_shot_classifier(
+        cls,
+        classifier_id: str,
+        training_data: list[dict[str, str]],
+        model: str = "openai/clip-vit-base-patch32",
+        num_iterations: int = 20,
+    ) -> dict[str, Any]:
+        """Train a few-shot image classifier."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/classify/fit",
+            {
+                "classifier_id": classifier_id,
+                "training_data": training_data,
+                "model": model,
+                "num_iterations": num_iterations,
+            },
+        )
+
+    @classmethod
+    async def predict_few_shot(
+        cls,
+        classifier_id: str,
+        image: str,
+    ) -> dict[str, Any]:
+        """Predict using a fitted few-shot classifier."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/classify/predict",
+            {
+                "classifier_id": classifier_id,
+                "image": image,
+            },
+        )
+
+    @classmethod
+    async def predict_few_shot_batch(
+        cls,
+        classifier_id: str,
+        images: list[str],
+    ) -> dict[str, Any]:
+        """Predict on multiple images using a fitted few-shot classifier."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/classify/predict/batch",
+            {
+                "classifier_id": classifier_id,
+                "images": images,
+            },
+        )
+
+    @classmethod
+    async def refine_few_shot_classifier(
+        cls,
+        classifier_id: str,
+        training_data: list[dict[str, str]],
+        num_iterations: int = 10,
+    ) -> dict[str, Any]:
+        """Refine a few-shot classifier with additional data."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/classify/refine",
+            {
+                "classifier_id": classifier_id,
+                "training_data": training_data,
+                "num_iterations": num_iterations,
+            },
+        )
+
+    @classmethod
+    async def get_few_shot_classifier_info(cls, classifier_id: str) -> dict[str, Any]:
+        """Get information about a fitted few-shot classifier."""
+        return await cls._make_request(
+            "GET",
+            f"/v1/vision/classify/info/{classifier_id}",
+        )
+
+    # =========================================================================
+    # Vision - Segmentation
+    # =========================================================================
+
+    @classmethod
+    async def segment_image(
+        cls,
+        image: str,
+        model: str = "facebook/sam-vit-base",
+        points: list[list[float]] | None = None,
+        boxes: list[list[float]] | None = None,
+    ) -> dict[str, Any]:
+        """Segment an image using SAM."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/segment",
+            {
+                "image": image,
+                "model": model,
+                "points": points,
+                "boxes": boxes,
+            },
+        )
+
+    @classmethod
+    async def segment_batch(
+        cls,
+        images: list[str],
+        model: str = "facebook/sam-vit-base",
+        points: list[list[list[float]]] | None = None,
+        boxes: list[list[list[float]]] | None = None,
+    ) -> dict[str, Any]:
+        """Segment multiple images using SAM."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/segment/batch",
+            {
+                "images": images,
+                "model": model,
+                "points": points,
+                "boxes": boxes,
+            },
+        )
+
+    # =========================================================================
+    # Batch Endpoints
+    # =========================================================================
+
+    @classmethod
+    async def forecast_timeseries_batch(
+        cls,
+        data: list[list[float]],
+        horizon: int = 12,
+        model: str = "amazon/chronos-t5-tiny",
+    ) -> dict[str, Any]:
+        """Forecast multiple time series in batch."""
+        return await cls._make_request(
+            "POST",
+            "/v1/timeseries/forecast/batch",
+            {
+                "data": data,
+                "horizon": horizon,
+                "model": model,
+            },
+        )
+
+    @classmethod
+    async def detect_changepoints_batch(
+        cls,
+        data: list[list[float]],
+        algorithm: str = "binseg",
+        n_changepoints: int | None = None,
+        penalty: float | None = None,
+    ) -> dict[str, Any]:
+        """Detect change points in multiple time series."""
+        return await cls._make_request(
+            "POST",
+            "/v1/timeseries/changepoints/batch",
+            {
+                "data": data,
+                "algorithm": algorithm,
+                "n_changepoints": n_changepoints,
+                "penalty": penalty,
+            },
+        )
+
+    @classmethod
+    async def table_qa_batch(
+        cls,
+        tables: list[list[dict[str, Any]]],
+        queries: list[str],
+        model: str = "google/tapas-base-finetuned-wtq",
+    ) -> dict[str, Any]:
+        """Answer questions about multiple tables."""
+        return await cls._make_request(
+            "POST",
+            "/v1/analysis/table-qa/batch",
+            {
+                "tables": tables,
+                "queries": queries,
+                "model": model,
+            },
+        )

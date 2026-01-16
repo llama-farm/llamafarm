@@ -158,6 +158,56 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Error unloading open-vocab detection model {cache_key}: {e}")
         _open_vocab_detection_models.clear()
 
+    if _lang_detection_models:
+        logger.info(f"Unloading {len(_lang_detection_models)} remaining language detection model(s)")
+        for cache_key, model in list(_lang_detection_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded language detection model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading language detection model {cache_key}: {e}")
+        _lang_detection_models.clear()
+
+    if _pii_models:
+        logger.info(f"Unloading {len(_pii_models)} remaining PII model(s)")
+        for cache_key, model in list(_pii_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded PII model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading PII model {cache_key}: {e}")
+        _pii_models.clear()
+
+    if _object_detection_models:
+        logger.info(f"Unloading {len(_object_detection_models)} remaining object detection model(s)")
+        for cache_key, model in list(_object_detection_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded object detection model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading object detection model {cache_key}: {e}")
+        _object_detection_models.clear()
+
+    if _background_removal_models:
+        logger.info(f"Unloading {len(_background_removal_models)} remaining background removal model(s)")
+        for cache_key, model in list(_background_removal_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded background removal model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading background removal model {cache_key}: {e}")
+        _background_removal_models.clear()
+
+    if _timeseries_models:
+        logger.info(f"Unloading {len(_timeseries_models)} remaining time series model(s)")
+        for cache_key, model in list(_timeseries_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded time series model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading time series model {cache_key}: {e}")
+        _timeseries_models.clear()
+
     logger.info("Shutdown complete")
 
 
@@ -238,6 +288,11 @@ async def _cleanup_idle_models() -> None:
                 (_vision_models, "vision_models"),
                 (_few_shot_classifiers, "few_shot_classifiers"),
                 (_open_vocab_detection_models, "open_vocab_detection_models"),
+                (_lang_detection_models, "lang_detection_models"),
+                (_pii_models, "pii_models"),
+                (_object_detection_models, "object_detection_models"),
+                (_background_removal_models, "background_removal_models"),
+                (_timeseries_models, "timeseries_models"),
             ]:
                 expired_items = cache.pop_expired()
                 if expired_items:
