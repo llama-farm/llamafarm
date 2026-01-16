@@ -328,10 +328,23 @@ class TestDatabaseService:
         """Test that update_database raises ValueError for invalid default strategy."""
         mock_load_config.return_value = self.mock_project_config
 
-        # Mock the resolver to return the database (validation happens after resolution)
+        # Create a resolved database with an invalid default (strategy doesn't exist)
+        db_with_invalid_default = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=self.mock_rag_config.databases[0].retrieval_strategies,
+            default_retrieval_strategy="nonexistent_strategy",  # Invalid default
+        )
+
+        # Mock the resolver to return the database with invalid default
         mock_resolved_config = Mock()
         mock_resolved_config.rag = Mock()
-        mock_resolved_config.rag.databases = self.mock_rag_config.databases
+        mock_resolved_config.rag.databases = [
+            db_with_invalid_default,
+            self.mock_rag_config.databases[1],
+        ]
         mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         with pytest.raises(ValueError, match="not found"):
@@ -340,6 +353,56 @@ class TestDatabaseService:
                 "test_proj",
                 "main_db",
                 default_retrieval_strategy="nonexistent_strategy",
+            )
+
+    @patch("services.database_service.ComponentResolver")
+    @patch.object(ProjectService, "load_config")
+    def test_update_database_raises_when_strategy_update_orphans_default(
+        self, mock_load_config, mock_resolver_class
+    ):
+        """Test that updating strategies fails if it would orphan an existing default.
+
+        This tests the scenario where:
+        1. Database has default_retrieval_strategy="basic_search"
+        2. User updates retrieval_strategies to remove "basic_search"
+        3. Validation should fail because the existing default no longer exists
+        """
+        mock_load_config.return_value = self.mock_project_config
+
+        # Create new strategies that don't include "basic_search"
+        new_strategies = [
+            DatabaseRetrievalStrategy(
+                name="new_strategy",
+                type=DatabaseRetrievalType.CrossEncoderRerankedStrategy,
+                config={"model_name": "reranker"},
+            )
+        ]
+
+        # The resolved database still has default_retrieval_strategy="basic_search"
+        # but that strategy no longer exists in the list
+        db_with_orphaned_default = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=new_strategies,  # "basic_search" removed
+            default_retrieval_strategy="basic_search",  # Still points to removed strategy
+        )
+
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [
+            db_with_orphaned_default,
+            self.mock_rag_config.databases[1],
+        ]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
+
+        with pytest.raises(ValueError, match="basic_search.*not found"):
+            DatabaseService.update_database(
+                "test_ns",
+                "test_proj",
+                "main_db",
+                retrieval_strategies=new_strategies,  # User only updates strategies, not default
             )
 
     @patch.object(ProjectService, "load_config")

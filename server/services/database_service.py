@@ -227,19 +227,21 @@ class DatabaseService:
             raise ValueError("Failed to resolve database configuration")
 
         # Validate default strategies after resolution
-        if default_embedding_strategy is not None:
+        # Check whenever a default exists (not just when updated) because strategy
+        # updates may have removed the strategy that was previously set as default
+        if resolved_db.default_embedding_strategy:
             strategy_names = [s.name for s in (resolved_db.embedding_strategies or [])]
-            if default_embedding_strategy not in strategy_names:
+            if resolved_db.default_embedding_strategy not in strategy_names:
                 raise ValueError(
-                    f"Embedding strategy '{default_embedding_strategy}' not found. "
+                    f"Embedding strategy '{resolved_db.default_embedding_strategy}' not found. "
                     f"Available: {strategy_names}"
                 )
 
-        if default_retrieval_strategy is not None:
+        if resolved_db.default_retrieval_strategy:
             strategy_names = [s.name for s in (resolved_db.retrieval_strategies or [])]
-            if default_retrieval_strategy not in strategy_names:
+            if resolved_db.default_retrieval_strategy not in strategy_names:
                 raise ValueError(
-                    f"Retrieval strategy '{default_retrieval_strategy}' not found. "
+                    f"Retrieval strategy '{resolved_db.default_retrieval_strategy}' not found. "
                     f"Available: {strategy_names}"
                 )
 
