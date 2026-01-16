@@ -56,7 +56,13 @@ class ComponentResolver:
             if isinstance(components, dict)
             else getattr(components, "defaults", {}) or {}
         )
-        self._defaults = defaults_source if isinstance(defaults_source, dict) else {}
+        if isinstance(defaults_source, dict):
+            self._defaults = defaults_source
+        elif hasattr(defaults_source, "model_dump"):
+            # components.defaults may be a Pydantic model; normalize to dict
+            self._defaults = defaults_source.model_dump()
+        else:
+            self._defaults = {}
 
     @staticmethod
     def _build_component_map(
