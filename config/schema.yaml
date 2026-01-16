@@ -254,6 +254,14 @@ properties:
               items:
                 $ref: "#/definitions/Tool"
               default: []
+            keep_loaded:
+              type: boolean
+              description: |
+                Keep this model loaded in memory to prevent cache eviction.
+                When true, the runtime will not purge this model from cache
+                even under memory pressure. Useful for models that need fast
+                response times (e.g., voice chat LLMs).
+              default: false
 
   mcp:
     type: object
@@ -300,6 +308,91 @@ properties:
                 type: string
               example:
                 Authorization: Bearer ${env:MCP_SERVER_TOKEN}
+
+  voice:
+    type: object
+    description: Voice chat configuration for real-time speech interaction via WebSocket
+    properties:
+      enabled:
+        type: boolean
+        description: Enable or disable the voice chat endpoint
+        default: true
+      llm_model:
+        type: string
+        description: |
+          Reference to a model name in runtime.models[] to use for voice chat.
+          The model's prompts array will be applied to voice conversations.
+      tts:
+        type: object
+        description: Text-to-speech configuration
+        properties:
+          model:
+            type: string
+            description: TTS model ID (e.g., "kokoro")
+            default: kokoro
+          voice:
+            type: string
+            description: |
+              Voice ID for synthesis. Available voices:
+              - af_heart (American Female, default)
+              - af_bella, af_nicole, af_sarah, af_sky (American Female)
+              - am_adam, am_michael (American Male)
+              - bf_emma, bf_isabella (British Female)
+              - bm_george, bm_lewis (British Male)
+            default: af_heart
+          speed:
+            type: number
+            minimum: 0.5
+            maximum: 2.0
+            description: |
+              Speech speed multiplier (0.5-2.0). For more natural-sounding
+              speech, try 0.9-0.95 (slightly slower than default).
+              - 0.8-0.9: Slower, deliberate (good for complex topics)
+              - 0.9-0.95: Natural conversational pace (recommended)
+              - 1.0: Default speed
+              - 1.1-1.2: Faster, energetic
+            default: 0.95
+          keep_loaded:
+            type: boolean
+            description: |
+              Keep TTS model loaded in memory to prevent cache eviction.
+              When true, the runtime will not purge this model from cache
+              even under memory pressure. Reduces latency for voice responses.
+            default: false
+      stt:
+        type: object
+        description: Speech-to-text configuration
+        properties:
+          model:
+            type: string
+            enum: [tiny, base, small, medium, large-v3]
+            description: |
+              Whisper model size for transcription:
+              - tiny (39M, fastest, lower accuracy)
+              - base (74M, fast, good accuracy, default)
+              - small (244M, medium speed, better accuracy)
+              - medium (769M, slower, high accuracy)
+              - large-v3 (1.5B, slowest, highest accuracy)
+            default: base
+          language:
+            type: string
+            description: Language code for transcription (e.g., "en", "es", "fr")
+            default: en
+          keep_loaded:
+            type: boolean
+            description: |
+              Keep STT model loaded in memory to prevent cache eviction.
+              When true, the runtime will not purge this model from cache
+              even under memory pressure. Reduces latency for voice transcription.
+            default: false
+      enable_thinking:
+        type: boolean
+        description: |
+          Enable thinking/reasoning mode for the LLM. When false (default),
+          the LLM is instructed to skip chain-of-thought reasoning and respond
+          directly. This is recommended for voice chat since thinking output
+          would be spoken aloud by TTS.
+        default: false
 
 definitions:
   Tool:

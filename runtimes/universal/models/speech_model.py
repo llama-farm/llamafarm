@@ -330,6 +330,107 @@ class SpeechModel(BaseModel):
         for segment in segments:
             yield segment
 
+    async def transcribe_audio(
+        self,
+        audio: "np.ndarray",
+        language: str | None = None,
+        task: Literal["transcribe", "translate"] = "transcribe",
+        word_timestamps: bool = False,
+        initial_prompt: str | None = None,
+        vad_filter: bool = True,
+        beam_size: int = 5,
+        best_of: int = 5,
+        temperature: float | list[float] | None = None,
+    ) -> TranscriptionResult:
+        """Transcribe audio from a numpy array directly (no file I/O).
+
+        This is the most efficient transcription method for raw PCM data,
+        as it avoids writing to disk and file format parsing.
+
+        Args:
+            audio: Numpy array of audio samples (float32, mono).
+                   Values should be normalized to [-1.0, 1.0].
+                   Can be any sample rate (Whisper resamples to 16kHz internally).
+            language: Language code (e.g., "en", "es", "fr"). If None, auto-detected.
+            task: "transcribe" for same-language output, "translate" for English output
+            word_timestamps: Whether to include word-level timestamps
+            initial_prompt: Optional text to condition the model
+            vad_filter: Use voice activity detection to filter out silence
+            beam_size: Beam size for decoding (higher = more accurate, slower)
+            best_of: Number of candidates to consider (higher = more accurate, slower)
+            temperature: Temperature(s) for sampling. List enables fallback on failure.
+
+        Returns:
+            TranscriptionResult with full text, segments, and metadata
+        """
+        if self._whisper_model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        if temperature is None:
+            temperature = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+
+        def _sync_transcribe():
+            """Run transcription synchronously in thread pool."""
+            # faster-whisper accepts numpy array directly
+            segments_generator, info = self._whisper_model.transcribe(
+                audio,
+                language=language,
+                task=task,
+                word_timestamps=word_timestamps,
+                initial_prompt=initial_prompt,
+                vad_filter=vad_filter,
+                beam_size=beam_size,
+                best_of=best_of,
+                temperature=temperature,
+            )
+
+            # Collect all segments
+            segments = []
+            full_text_parts = []
+
+            for segment in segments_generator:
+                words = None
+                if word_timestamps and segment.words:
+                    words = [
+                        {
+                            "word": w.word,
+                            "start": w.start,
+                            "end": w.end,
+                            "probability": w.probability,
+                        }
+                        for w in segment.words
+                    ]
+
+                segments.append(
+                    TranscriptionSegment(
+                        id=segment.id,
+                        start=segment.start,
+                        end=segment.end,
+                        text=segment.text,
+                        words=words,
+                        avg_logprob=segment.avg_logprob,
+                        no_speech_prob=segment.no_speech_prob,
+                    )
+                )
+                full_text_parts.append(segment.text)
+
+            return segments, full_text_parts, info
+
+        # Run transcription in thread pool to avoid blocking the event loop
+        loop = asyncio.get_running_loop()
+        with ThreadPoolExecutor() as pool:
+            segments, full_text_parts, info = await loop.run_in_executor(
+                pool, _sync_transcribe
+            )
+
+        return TranscriptionResult(
+            text="".join(full_text_parts).strip(),
+            segments=segments,
+            language=info.language,
+            language_probability=info.language_probability,
+            duration=info.duration,
+        )
+
     async def transcribe_bytes(
         self,
         audio_bytes: bytes,

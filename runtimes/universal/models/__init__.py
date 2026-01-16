@@ -15,6 +15,7 @@ from .gguf_language_model import GGUFLanguageModel
 from .language_model import LanguageModel
 from .ocr_model import OCRModel
 from .speech_model import SpeechModel
+from .tts_model import TTSModel
 
 __all__ = [
     "BaseModel",
@@ -27,4 +28,5 @@ __all__ = [
     "AnomalyModel",
     "ClassifierModel",
     "SpeechModel",
+    "TTSModel",
 ]

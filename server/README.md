@@ -1,6 +1,15 @@
 # LlamaFarm Server
 
-FastAPI application that powers project chat, dataset APIs, and health checks. The server provides a REST API consumed by the `lf` CLI, the Designer web UI, and custom integrations.
+FastAPI application that powers project chat, dataset APIs, health checks, and real-time voice chat. The server provides a REST API and WebSocket endpoints consumed by the `lf` CLI, the Designer web UI, and custom integrations.
+
+## Features
+
+- **Project Management**: Create, configure, and manage LlamaFarm projects
+- **Chat Completions**: OpenAI-compatible chat API with RAG integration
+- **Dataset Management**: Upload, process, and manage document datasets
+- **RAG Operations**: Vector search, document retrieval, and knowledge base queries
+- **Vision/OCR**: Document extraction and OCR via Universal Runtime
+- **Voice Chat**: Real-time voice assistant via WebSocket (`/v1/{namespace}/{project}/voice/chat`)
 
 ## Running Locally
 
@@ -22,6 +31,31 @@ The server API is consumed by:
 - **Custom integrations**: Any OpenAI-compatible client
 
 Interactive API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+### Voice Chat
+
+The server provides a full-duplex WebSocket endpoint for real-time voice conversations:
+
+```javascript
+// Connect to voice chat (uses voice config from llamafarm.yaml)
+const ws = new WebSocket(
+  'ws://localhost:8000/v1/default/my-project/voice/chat'
+);
+
+// Or override settings via query params
+const ws2 = new WebSocket(
+  'ws://localhost:8000/v1/default/my-project/voice/chat?tts_voice=am_adam'
+);
+```
+
+Features:
+- Config-driven: Voice settings in `llamafarm.yaml`
+- Speech-to-Text via Universal Runtime (faster-whisper)
+- LLM inference with conversation history
+- Text-to-Speech via Universal Runtime (Kokoro TTS)
+- Barge-in support (interrupt TTS when user speaks)
+
+See the [API docs](../docs/website/docs/api/index.md) for complete WebSocket protocol details.
 
 ### Running via Nx from the Repository Root
 

@@ -51,7 +51,9 @@ from models import (
     LanguageModel,
     OCRModel,
     SpeechModel,
+    TTSModel,
 )
+from routers.audio_speech import router as audio_speech_router
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -144,6 +146,7 @@ app.add_middleware(
 )
 
 app.include_router(chat_completions_router)
+app.include_router(audio_speech_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -2625,7 +2628,7 @@ async def delete_classifier_model(model_name: str):
 
 # Safe audio file extensions (whitelist for security)
 SAFE_AUDIO_EXTENSIONS = frozenset({
-    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus",
+    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus", ".pcm",
 })
 
 # Silence detection threshold for decoded Opus audio (higher due to noise floor)
@@ -2671,6 +2674,61 @@ async def load_speech(
                     model_id=model_id,
                     device=device,
                     compute_type=compute_type,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
+
+
+# ==============================================================================
+# TTS (Text-to-Speech) Model Loading
+# ==============================================================================
+
+
+def _make_tts_cache_key(
+    model_id: str,
+    voice: str,
+) -> str:
+    """Generate cache key for TTS model.
+
+    Args:
+        model_id: TTS model identifier
+        voice: Default voice for the model
+
+    Returns:
+        Cache key string
+    """
+    return f"tts:{model_id}:{voice}"
+
+
+async def load_tts(
+    model_id: str = "kokoro",
+    voice: str = "af_heart",
+) -> TTSModel:
+    """Load a text-to-speech model.
+
+    Args:
+        model_id: TTS model identifier (e.g., "kokoro")
+        voice: Default voice ID to use
+
+    Returns:
+        Loaded TTSModel instance
+    """
+    cache_key = _make_tts_cache_key(model_id, voice)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading TTS model: {model_id} (voice={voice})")
+                device = get_device()
+
+                model = TTSModel(
+                    model_id=model_id,
+                    device=device,
+                    voice=voice,
                 )
 
                 await model.load()
@@ -2756,6 +2814,8 @@ async def create_transcription(
             )
 
         # Detect actual audio format from content (don't trust file extension)
+        import numpy as np
+
         from utils.audio_buffer import (
             decode_audio_bytes,
             detect_audio_format,
@@ -2764,17 +2824,6 @@ async def create_transcription(
 
         format_name, is_compressed = detect_audio_format(audio_bytes)
         logger.debug(f"Detected audio format: {format_name} (compressed={is_compressed})")
-
-        # If audio is compressed, decode to WAV for reliable processing
-        if is_compressed:
-            try:
-                pcm_data = decode_audio_bytes(audio_bytes)
-                audio_bytes = pcm_to_wav(pcm_data)
-                file_extension = ".wav"
-                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
-            except Exception as e:
-                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
-                # Fall back to original data - faster-whisper might handle it
 
         # Load speech model
         speech_model = await load_speech(model_id=model)
@@ -2790,7 +2839,87 @@ async def create_transcription(
             granularities = [g.strip() for g in timestamp_granularities.split(",")]
             word_timestamps = "word" in granularities
 
-        # Write audio to temp file (faster-whisper requires file path)
+        # Optimized path: if raw PCM, convert directly to numpy array (no file I/O)
+        if format_name == "PCM (assumed)":
+            logger.debug(f"Using optimized PCM path ({len(audio_bytes)} bytes)")
+            # Convert int16 PCM to float32 normalized to [-1.0, 1.0]
+            audio_array = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+
+            if stream:
+                # Streaming not yet supported for numpy array path
+                # Fall through to file-based path
+                logger.debug("Streaming requested, falling back to file-based path")
+            else:
+                # Non-streaming: use direct numpy transcription
+                result = await speech_model.transcribe_audio(
+                    audio=audio_array,
+                    language=language,
+                    word_timestamps=word_timestamps,
+                    initial_prompt=prompt,
+                    temperature=[temperature] if temperature > 0 else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                )
+
+                # Format response based on requested format
+                if response_format == "text":
+                    return result.text
+
+                if response_format == "srt":
+                    srt_lines = []
+                    for i, seg in enumerate(result.segments, 1):
+                        start_time = _format_timestamp_srt(seg.start)
+                        end_time = _format_timestamp_srt(seg.end)
+                        srt_lines.append(f"{i}")
+                        srt_lines.append(f"{start_time} --> {end_time}")
+                        srt_lines.append(seg.text.strip())
+                        srt_lines.append("")
+                    return "\n".join(srt_lines)
+
+                if response_format == "vtt":
+                    vtt_lines = ["WEBVTT", ""]
+                    for seg in result.segments:
+                        start_time = _format_timestamp_vtt(seg.start)
+                        end_time = _format_timestamp_vtt(seg.end)
+                        vtt_lines.append(f"{start_time} --> {end_time}")
+                        vtt_lines.append(seg.text.strip())
+                        vtt_lines.append("")
+                    return "\n".join(vtt_lines)
+
+                if response_format == "verbose_json":
+                    return {
+                        "task": "transcribe",
+                        "language": result.language,
+                        "duration": result.duration,
+                        "text": result.text,
+                        "segments": [
+                            {
+                                "id": seg.id,
+                                "start": seg.start,
+                                "end": seg.end,
+                                "text": seg.text,
+                                "words": seg.words,
+                                "avg_logprob": seg.avg_logprob,
+                                "no_speech_prob": seg.no_speech_prob,
+                            }
+                            for seg in result.segments
+                        ],
+                    }
+
+                # Default: simple JSON
+                return {"text": result.text}
+
+        # File-based path: for compressed formats or streaming
+        # If audio is compressed, decode to WAV for reliable processing
+        if is_compressed:
+            try:
+                pcm_data = decode_audio_bytes(audio_bytes)
+                audio_bytes = pcm_to_wav(pcm_data)
+                file_extension = ".wav"
+                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
+                # Fall back to original data - faster-whisper might handle it
+
+        # Write audio to temp file (faster-whisper requires file path for streaming)
         # Assign tmp_path before write to ensure cleanup even if write fails
         tmp_path = None
         try:

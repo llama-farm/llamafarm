@@ -545,6 +545,97 @@ class UniversalRuntimeService:
             ) from e
 
     # =========================================================================
+    # Text-to-Speech
+    # =========================================================================
+
+    @classmethod
+    async def synthesize_speech(
+        cls,
+        text: str,
+        model: str = "kokoro",
+        voice: str = "af_heart",
+        response_format: str = "mp3",
+        speed: float = 1.0,
+        timeout: float = 60.0,
+    ) -> bytes:
+        """Generate speech from text.
+
+        Args:
+            text: Text to synthesize (max 4096 characters)
+            model: TTS model identifier
+            voice: Voice ID to use
+            response_format: Audio format (mp3, opus, wav, pcm, flac, aac)
+            speed: Speech speed multiplier (0.25 to 4.0)
+            timeout: Request timeout in seconds
+
+        Returns:
+            Audio bytes in the requested format
+        """
+        url = f"{cls.get_base_url()}/v1/audio/speech"
+        logger.debug(f"Synthesizing speech via {url}")
+
+        payload = {
+            "model": model,
+            "input": text,
+            "voice": voice,
+            "response_format": response_format,
+            "speed": speed,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, json=payload)
+
+                if response.status_code >= 400:
+                    try:
+                        error_detail = response.json().get("detail", response.text)
+                    except Exception:
+                        error_detail = response.text
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=error_detail,
+                    )
+
+                return response.content
+
+        except httpx.ConnectError as e:
+            logger.error(f"Failed to connect to Universal Runtime at {url}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Universal Runtime not available at {cls.get_base_url()}. "
+                "Start it with: nx start universal",
+            ) from e
+        except httpx.TimeoutException as e:
+            logger.error(f"TTS request timed out: {e}")
+            raise HTTPException(
+                status_code=504,
+                detail="TTS request timed out. Text may be too long.",
+            ) from e
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error synthesizing speech: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error synthesizing speech: {str(e)}",
+            ) from e
+
+    @classmethod
+    async def list_tts_voices(cls, model: str | None = None) -> dict[str, Any]:
+        """List available TTS voices.
+
+        Args:
+            model: Filter by model ID (optional)
+
+        Returns:
+            List of available voices
+        """
+        path = "/v1/audio/voices"
+        if model:
+            path += f"?model={model}"
+        return await cls._make_request("GET", path, timeout=10.0)
+
+    # =========================================================================
     # Health Check
     # =========================================================================
 
