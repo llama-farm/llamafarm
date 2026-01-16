@@ -263,8 +263,8 @@ class SpeechModel(BaseModel):
         This is useful for streaming responses - segments are yielded
         as soon as they're transcribed rather than waiting for completion.
 
-        Note: Transcription runs in a thread pool to avoid blocking the event loop.
-        Segments are collected from the thread and then yielded asynchronously.
+        Transcription runs in a background thread while segments are yielded
+        via an asyncio.Queue, enabling true streaming behavior.
 
         Args:
             audio_path: Path to audio file
@@ -281,35 +281,38 @@ class SpeechModel(BaseModel):
         if self._whisper_model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
+        # Queue for passing segments from thread to async generator
+        # None signals completion, Exception signals error
+        queue: asyncio.Queue[TranscriptionSegment | None | Exception] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
         def _sync_transcribe_stream():
-            """Run transcription synchronously and collect segments."""
-            segments_generator, _info = self._whisper_model.transcribe(
-                str(audio_path),
-                language=language,
-                task=task,
-                word_timestamps=word_timestamps,
-                initial_prompt=initial_prompt,
-                vad_filter=vad_filter,
-                beam_size=beam_size,
-            )
+            """Run transcription synchronously and push segments to queue."""
+            try:
+                segments_generator, _info = self._whisper_model.transcribe(
+                    str(audio_path),
+                    language=language,
+                    task=task,
+                    word_timestamps=word_timestamps,
+                    initial_prompt=initial_prompt,
+                    vad_filter=vad_filter,
+                    beam_size=beam_size,
+                )
 
-            # Collect segments
-            segments = []
-            for segment in segments_generator:
-                words = None
-                if word_timestamps and segment.words:
-                    words = [
-                        {
-                            "word": w.word,
-                            "start": w.start,
-                            "end": w.end,
-                            "probability": w.probability,
-                        }
-                        for w in segment.words
-                    ]
+                for segment in segments_generator:
+                    words = None
+                    if word_timestamps and segment.words:
+                        words = [
+                            {
+                                "word": w.word,
+                                "start": w.start,
+                                "end": w.end,
+                                "probability": w.probability,
+                            }
+                            for w in segment.words
+                        ]
 
-                segments.append(
-                    TranscriptionSegment(
+                    transcription_segment = TranscriptionSegment(
                         id=segment.id,
                         start=segment.start,
                         end=segment.end,
@@ -318,17 +321,32 @@ class SpeechModel(BaseModel):
                         avg_logprob=segment.avg_logprob,
                         no_speech_prob=segment.no_speech_prob,
                     )
-                )
-            return segments
+                    # Thread-safe put to async queue
+                    loop.call_soon_threadsafe(queue.put_nowait, transcription_segment)
 
-        # Run transcription in thread pool to avoid blocking the event loop
-        loop = asyncio.get_running_loop()
+                # Signal completion
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+            except Exception as e:
+                # Signal error
+                loop.call_soon_threadsafe(queue.put_nowait, e)
+
+        # Start transcription in background thread
         with ThreadPoolExecutor() as pool:
-            segments = await loop.run_in_executor(pool, _sync_transcribe_stream)
+            future = pool.submit(_sync_transcribe_stream)
 
-        # Yield segments asynchronously
-        for segment in segments:
-            yield segment
+            # Yield segments as they arrive
+            while True:
+                item = await queue.get()
+                if item is None:
+                    # Completion signal
+                    break
+                if isinstance(item, Exception):
+                    # Re-raise exception from thread
+                    raise item
+                yield item
+
+            # Ensure thread completes (propagate any uncaught exceptions)
+            future.result()
 
     async def transcribe_bytes(
         self,

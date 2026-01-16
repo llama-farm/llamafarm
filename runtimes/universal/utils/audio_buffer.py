@@ -978,9 +978,9 @@ def float32_to_int16(audio_data: bytes) -> bytes:
     Returns:
         Audio as 16-bit integers
     """
-    # Unpack as floats
+    # Unpack as floats (slice to exact size to handle non-aligned buffers)
     num_samples = len(audio_data) // 4
-    floats = struct.unpack(f"{num_samples}f", audio_data)
+    floats = struct.unpack(f"{num_samples}f", audio_data[: num_samples * 4])
 
     # Convert to int16
     int16_samples = []
