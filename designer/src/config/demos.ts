@@ -171,6 +171,10 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     projectTypes: ['classifier'],
     modelType: 'classifier',
     sampleDataId: 'sentiment',
+    sampleQuestions: [
+      'I absolutely love this product! Best purchase ever.',
+      'This is the worst experience I have ever had.',
+    ],
   },
   {
     id: 'expense-classifier',
@@ -183,6 +187,10 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     projectTypes: ['classifier'],
     modelType: 'classifier',
     sampleDataId: 'expense',
+    sampleQuestions: [
+      'Uber ride to client meeting downtown - $24.50',
+      'Team lunch at Chipotle - $87.30',
+    ],
   },
 
   // Anomaly detection sample datasets
@@ -197,6 +205,10 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     projectTypes: ['anomaly'],
     modelType: 'anomaly',
     sampleDataId: 'fridge-temp',
+    sampleQuestions: [
+      '37.2',
+      '58.5',
+    ],
   },
   {
     id: 'biometric-anomaly',
@@ -209,6 +221,10 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     projectTypes: ['anomaly'],
     modelType: 'anomaly',
     sampleDataId: 'biometric',
+    sampleQuestions: [
+      '72, 120, 80, 98.6, 95',
+      '145, 180, 110, 103.2, 88',
+    ],
   },
   {
     id: 'build-status-anomaly',
@@ -221,6 +237,10 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     projectTypes: ['anomaly'],
     modelType: 'anomaly',
     sampleDataId: 'build-status',
+    sampleQuestions: [
+      'build passed - all 847 tests green',
+      'CRITICAL: deployment failed - database connection timeout after 3 retries',
+    ],
   },
   {
     id: 'support-ticket-anomaly',
@@ -233,6 +253,10 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
     projectTypes: ['anomaly'],
     modelType: 'anomaly',
     sampleDataId: 'support-ticket',
+    sampleQuestions: [
+      'password reset, low, web, 2 hours, resolved',
+      'URGENT system down, critical, phone, 72 hours, open',
+    ],
   },
 
   // Easy to add more demos:
