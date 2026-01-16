@@ -147,24 +147,48 @@ class ComponentResolver:
         # Default embedding strategy
         if not getattr(db_copy, "default_embedding_strategy", None):
             default_embed = self._defaults.get("embedding_strategy")
-            if default_embed and (not db_copy.embedding_strategies):
-                embed_def = self._resolve_named_component(
-                    default_embed, self._embedding_map, "embedding_strategy"
-                )
-                db_copy.embedding_strategies = [self._to_embedding_strategy(embed_def)]
             if default_embed:
-                db_copy.default_embedding_strategy = default_embed
+                inline_embeddings = db_copy.embedding_strategies or []
+                if not inline_embeddings:
+                    # No inline strategies: inline the default and mark it as default
+                    embed_def = self._resolve_named_component(
+                        default_embed, self._embedding_map, "embedding_strategy"
+                    )
+                    db_copy.embedding_strategies = [self._to_embedding_strategy(embed_def)]
+                    db_copy.default_embedding_strategy = default_embed
+                else:
+                    # Inline strategies present: only set default if it exists in the list
+                    inline_names = set()
+                    for strategy in inline_embeddings:
+                        name = getattr(strategy, "name", None)
+                        if name is None and isinstance(strategy, dict):
+                            name = strategy.get("name")
+                        if name:
+                            inline_names.add(name)
+                    if default_embed in inline_names:
+                        db_copy.default_embedding_strategy = default_embed
 
         # Default retrieval strategy
         if not getattr(db_copy, "default_retrieval_strategy", None):
             default_retrieval = self._defaults.get("retrieval_strategy")
-            if default_retrieval and (not db_copy.retrieval_strategies):
-                retrieval_def = self._resolve_named_component(
-                    default_retrieval, self._retrieval_map, "retrieval_strategy"
-                )
-                db_copy.retrieval_strategies = [self._to_retrieval_strategy(retrieval_def)]
             if default_retrieval:
-                db_copy.default_retrieval_strategy = default_retrieval
+                inline_retrievals = db_copy.retrieval_strategies or []
+                if not inline_retrievals:
+                    retrieval_def = self._resolve_named_component(
+                        default_retrieval, self._retrieval_map, "retrieval_strategy"
+                    )
+                    db_copy.retrieval_strategies = [self._to_retrieval_strategy(retrieval_def)]
+                    db_copy.default_retrieval_strategy = default_retrieval
+                else:
+                    inline_names = set()
+                    for strategy in inline_retrievals:
+                        name = getattr(strategy, "name", None)
+                        if name is None and isinstance(strategy, dict):
+                            name = strategy.get("name")
+                        if name:
+                            inline_names.add(name)
+                    if default_retrieval in inline_names:
+                        db_copy.default_retrieval_strategy = default_retrieval
 
         return db_copy
 
