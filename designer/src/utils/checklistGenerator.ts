@@ -10,7 +10,62 @@ import type {
 import type { SelectedHFDataset } from '../types/huggingface'
 import { getDemoById, isFileBasedDemo, type FileBasedDemo } from '../config/demos'
 
-// Base checklist definitions for each project type
+// ============================================================================
+// Factory Functions
+// ============================================================================
+
+/**
+ * Create a "Ship it" step with consistent structure
+ */
+function createShipStep(
+  id: string,
+  stepNumber: number,
+  modelLabel?: string
+): ChecklistStep {
+  const desc = modelLabel
+    ? `Package your project for deployment. This includes your trained ${modelLabel}.`
+    : 'Package your project for deployment.'
+  return {
+    id,
+    stepNumber,
+    title: 'Ship it',
+    descriptionFull: desc,
+    descriptionShort: 'Package your project for deployment.',
+    descriptionMinimal: 'Package for deployment.',
+    linkPath: '/chat/dashboard',
+    linkLabel: 'Package',
+  }
+}
+
+/**
+ * Create a test step for classifier or anomaly models
+ */
+function createModelTestStep(
+  type: 'classifier' | 'anomaly',
+  stepNumber: number,
+  id?: string
+): ChecklistStep {
+  const isClassifier = type === 'classifier'
+  return {
+    id: id || `${type}-test`,
+    stepNumber,
+    title: isClassifier ? 'Test your labels' : 'Test detection',
+    descriptionFull: isClassifier
+      ? 'Switch to Classifier mode in Test and see how it categorizes new content. Check if the labels make sense.'
+      : 'Switch to Anomaly Detection mode in Test and see if it catches the weird stuff. Try both normal and unusual inputs.',
+    descriptionShort: isClassifier
+      ? 'Test classification in Classifier mode.'
+      : 'Test detection in Anomaly Detection mode.',
+    descriptionMinimal: isClassifier ? 'Test your classifier.' : 'Test your detector.',
+    linkPath: `/chat/test?mode=${type}`,
+    linkLabel: 'Go to Test',
+  }
+}
+
+// ============================================================================
+// Base Checklist Definitions
+// ============================================================================
+
 const DOC_QA_CHECKLIST: ChecklistStep[] = [
   {
     id: 'doc-qa-data',
@@ -18,8 +73,7 @@ const DOC_QA_CHECKLIST: ChecklistStep[] = [
     title: 'Get your data in',
     descriptionFull:
       'Create a dataset, upload your files, and hit Process. You\'ll see "SUCCESS" when chunks are ready for your AI to use.',
-    descriptionShort:
-      'Create a dataset, upload files, and process them.',
+    descriptionShort: 'Create a dataset, upload files, and process them.',
     descriptionMinimal: 'Upload and process your files.',
     linkPath: '/chat/data?modal=create',
     linkLabel: 'Create dataset',
@@ -30,8 +84,7 @@ const DOC_QA_CHECKLIST: ChecklistStep[] = [
     title: 'Tweak your prompt',
     descriptionFull:
       "The default works, but you'll get better answers if you tell the AI what it's doing. Edit the system prompt to match your use case.",
-    descriptionShort:
-      'Edit the system prompt to match your use case.',
+    descriptionShort: 'Edit the system prompt to match your use case.',
     descriptionMinimal: 'Customize your system prompt.',
     linkPath: '/chat/prompt',
     linkLabel: 'Go to Prompts',
@@ -42,23 +95,12 @@ const DOC_QA_CHECKLIST: ChecklistStep[] = [
     title: 'Take it for a spin',
     descriptionFull:
       'Open Test, make sure you\'re in Text Generation mode, and ask questions about your docs. See if the answers make sense.',
-    descriptionShort:
-      'Test your setup in Text Generation mode.',
+    descriptionShort: 'Test your setup in Text Generation mode.',
     descriptionMinimal: 'Test your RAG setup.',
     linkPath: '/chat/test',
     linkLabel: 'Go to Test',
   },
-  {
-    id: 'doc-qa-ship',
-    stepNumber: 4,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This creates everything you need to run your AI assistant in production.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createShipStep('doc-qa-ship', 4),
 ]
 
 const CLASSIFIER_CHECKLIST: ChecklistStep[] = [
@@ -68,8 +110,7 @@ const CLASSIFIER_CHECKLIST: ChecklistStep[] = [
     title: 'Get training data ready',
     descriptionFull:
       "You'll need labeled examples for your classifier to learn from. Upload your own labeled data or use sample data within the training flow.",
-    descriptionShort:
-      'Prepare labeled examples for training.',
+    descriptionShort: 'Prepare labeled examples for training.',
     descriptionMinimal: 'Prepare labeled training data.',
     linkPath: '/chat/data?modal=create',
     linkLabel: 'Create dataset',
@@ -78,37 +119,14 @@ const CLASSIFIER_CHECKLIST: ChecklistStep[] = [
     id: 'classifier-create',
     stepNumber: 2,
     title: 'Create your classifier',
-    descriptionFull:
-      'Configure your categories and train a new classifier model on your labeled data.',
-    descriptionShort:
-      'Create and train a classifier model.',
+    descriptionFull: 'Configure your categories and train a new classifier model on your labeled data.',
+    descriptionShort: 'Create and train a classifier model.',
     descriptionMinimal: 'Train your classifier model.',
     linkPath: '/chat/models/train/classifier/new',
     linkLabel: 'Create classifier',
   },
-  {
-    id: 'classifier-test',
-    stepNumber: 3,
-    title: 'Test your labels',
-    descriptionFull:
-      'Switch to Classifier mode in Test and see how it categorizes new content. Check if the labels make sense.',
-    descriptionShort:
-      'Test classification in Classifier mode.',
-    descriptionMinimal: 'Test your classifier.',
-    linkPath: '/chat/test?mode=classifier',
-    linkLabel: 'Go to Test',
-  },
-  {
-    id: 'classifier-ship',
-    stepNumber: 4,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained classifier model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createModelTestStep('classifier', 3),
+  createShipStep('classifier-ship', 4, 'classifier model'),
 ]
 
 const ANOMALY_CHECKLIST: ChecklistStep[] = [
@@ -118,8 +136,7 @@ const ANOMALY_CHECKLIST: ChecklistStep[] = [
     title: 'Get baseline data ready',
     descriptionFull:
       "You'll need examples of \"normal\" so your detector can learn what's unusual. Upload representative samples of your typical data.",
-    descriptionShort:
-      'Prepare examples of normal data for training.',
+    descriptionShort: 'Prepare examples of normal data for training.',
     descriptionMinimal: 'Prepare baseline training data.',
     linkPath: '/chat/data?modal=create',
     linkLabel: 'Create dataset',
@@ -128,40 +145,17 @@ const ANOMALY_CHECKLIST: ChecklistStep[] = [
     id: 'anomaly-create',
     stepNumber: 2,
     title: 'Create your detector',
-    descriptionFull:
-      'Train a new anomaly detection model on your baseline data so it can spot unusual patterns.',
-    descriptionShort:
-      'Create and train an anomaly detector.',
+    descriptionFull: 'Train a new anomaly detection model on your baseline data so it can spot unusual patterns.',
+    descriptionShort: 'Create and train an anomaly detector.',
     descriptionMinimal: 'Train your anomaly detector.',
     linkPath: '/chat/models/train/anomaly/new',
     linkLabel: 'Create detector',
   },
-  {
-    id: 'anomaly-test',
-    stepNumber: 3,
-    title: 'Test detection',
-    descriptionFull:
-      'Switch to Anomaly Detection mode in Test and see if it catches the weird stuff. Try both normal and unusual inputs.',
-    descriptionShort:
-      'Test detection in Anomaly Detection mode.',
-    descriptionMinimal: 'Test your detector.',
-    linkPath: '/chat/test?mode=anomaly',
-    linkLabel: 'Go to Test',
-  },
-  {
-    id: 'anomaly-ship',
-    stepNumber: 4,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained anomaly detection model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createModelTestStep('anomaly', 3),
+  createShipStep('anomaly-ship', 4, 'anomaly detection model'),
 ]
 
-// Shortened checklists for sample-data flows (model already trained, skip "Create" step)
+// Sample data flows - model trains automatically, skip "Create" step
 const CLASSIFIER_SAMPLE_CHECKLIST: ChecklistStep[] = [
   {
     id: 'classifier-data',
@@ -169,35 +163,13 @@ const CLASSIFIER_SAMPLE_CHECKLIST: ChecklistStep[] = [
     title: 'View your trained classifier',
     descriptionFull:
       "Your sample classifier is training! Head over to see the progress and try it out when it's ready.",
-    descriptionShort:
-      'View your sample classifier training progress.',
+    descriptionShort: 'View your sample classifier training progress.',
     descriptionMinimal: 'View trained classifier.',
     linkPath: '/chat/models/train/classifier/new?autoTrain=true',
     linkLabel: 'View classifier',
   },
-  {
-    id: 'classifier-test',
-    stepNumber: 2,
-    title: 'Test your labels',
-    descriptionFull:
-      'Switch to Classifier mode in Test and see how it categorizes new content. Check if the labels make sense.',
-    descriptionShort:
-      'Test classification in Classifier mode.',
-    descriptionMinimal: 'Test your classifier.',
-    linkPath: '/chat/test?mode=classifier',
-    linkLabel: 'Go to Test',
-  },
-  {
-    id: 'classifier-ship',
-    stepNumber: 3,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained classifier model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createModelTestStep('classifier', 2),
+  createShipStep('classifier-ship', 3, 'classifier model'),
 ]
 
 const ANOMALY_SAMPLE_CHECKLIST: ChecklistStep[] = [
@@ -207,38 +179,16 @@ const ANOMALY_SAMPLE_CHECKLIST: ChecklistStep[] = [
     title: 'View your trained detector',
     descriptionFull:
       "Your sample anomaly detector is training! Head over to see the progress and try it out when it's ready.",
-    descriptionShort:
-      'View your sample detector training progress.',
+    descriptionShort: 'View your sample detector training progress.',
     descriptionMinimal: 'View trained detector.',
     linkPath: '/chat/models/train/anomaly/new?autoTrain=true',
     linkLabel: 'View detector',
   },
-  {
-    id: 'anomaly-test',
-    stepNumber: 2,
-    title: 'Test detection',
-    descriptionFull:
-      'Switch to Anomaly Detection mode in Test and see if it catches the weird stuff. Try both normal and unusual inputs.',
-    descriptionShort:
-      'Test detection in Anomaly Detection mode.',
-    descriptionMinimal: 'Test your detector.',
-    linkPath: '/chat/test?mode=anomaly',
-    linkLabel: 'Go to Test',
-  },
-  {
-    id: 'anomaly-ship',
-    stepNumber: 3,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained anomaly detection model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createModelTestStep('anomaly', 2),
+  createShipStep('anomaly-ship', 3, 'anomaly detection model'),
 ]
 
-// Shortened checklists for need-data flows (step 1 goes to training page with sample modal)
+// Need data flows - step 1 goes to training page with sample modal
 const CLASSIFIER_NEED_DATA_CHECKLIST: ChecklistStep[] = [
   {
     id: 'classifier-data',
@@ -256,25 +206,13 @@ const CLASSIFIER_NEED_DATA_CHECKLIST: ChecklistStep[] = [
     id: 'classifier-train',
     stepNumber: 2,
     title: 'Train & test',
-    descriptionFull:
-      'Head to Test to try your trained classifier with some sample content.',
-    descriptionShort:
-      'Test your trained model in the Test page.',
+    descriptionFull: 'Head to Test to try your trained classifier with some sample content.',
+    descriptionShort: 'Test your trained model in the Test page.',
     descriptionMinimal: 'Test your model.',
     linkPath: '/chat/test?mode=classifier',
     linkLabel: 'Test model',
   },
-  {
-    id: 'classifier-ship',
-    stepNumber: 3,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained classifier model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createShipStep('classifier-ship', 3, 'classifier model'),
 ]
 
 const ANOMALY_NEED_DATA_CHECKLIST: ChecklistStep[] = [
@@ -294,38 +232,23 @@ const ANOMALY_NEED_DATA_CHECKLIST: ChecklistStep[] = [
     id: 'anomaly-train',
     stepNumber: 2,
     title: 'Train & test',
-    descriptionFull:
-      'Head to Test to try your trained detector with normal and unusual inputs.',
-    descriptionShort:
-      'Test your trained model in the Test page.',
+    descriptionFull: 'Head to Test to try your trained detector with normal and unusual inputs.',
+    descriptionShort: 'Test your trained model in the Test page.',
     descriptionMinimal: 'Test your model.',
     linkPath: '/chat/test?mode=anomaly',
     linkLabel: 'Test model',
   },
-  {
-    id: 'anomaly-ship',
-    stepNumber: 3,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained anomaly detection model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createShipStep('anomaly-ship', 3, 'anomaly detection model'),
 ]
 
-// Checklists for has-data flows (user already has labeled data)
-// Steps 1 & 2 are on the SAME page - train then test in the inline input field
+// Has data flows - user already has labeled data, 4 steps with same-page transitions
 const CLASSIFIER_HAS_DATA_CHECKLIST: ChecklistStep[] = [
   {
     id: 'classifier-train',
     stepNumber: 1,
     title: 'Add data & train',
-    descriptionFull:
-      'Add your training data and hit Train to create your classifier.',
-    descriptionShort:
-      'Add training data and train your model.',
+    descriptionFull: 'Add your training data and hit Train to create your classifier.',
+    descriptionShort: 'Add training data and train your model.',
     descriptionMinimal: 'Train your classifier.',
     linkPath: '/chat/models/train/classifier/new',
     linkLabel: 'Create classifier',
@@ -334,38 +257,23 @@ const CLASSIFIER_HAS_DATA_CHECKLIST: ChecklistStep[] = [
     id: 'classifier-quick-test',
     stepNumber: 2,
     title: 'Quick test',
-    descriptionFull:
-      'Try a few examples in the test input field to see how your classifier categorizes content.',
-    descriptionShort:
-      'Test with the input field on this page.',
+    descriptionFull: 'Try a few examples in the test input field to see how your classifier categorizes content.',
+    descriptionShort: 'Test with the input field on this page.',
     descriptionMinimal: 'Quick test here.',
-    // Same page as step 1 - navigator won't navigate, just updates step
-    linkPath: '/chat/models/train/classifier/new',
+    linkPath: '/chat/models/train/classifier/new', // Same page as step 1
     linkLabel: 'Test here',
   },
   {
     id: 'classifier-full-test',
     stepNumber: 3,
     title: 'Test at scale',
-    descriptionFull:
-      'Head to the Test page to try your classifier with more examples and see detailed results.',
-    descriptionShort:
-      'Test more thoroughly in the Test page.',
+    descriptionFull: 'Head to the Test page to try your classifier with more examples and see detailed results.',
+    descriptionShort: 'Test more thoroughly in the Test page.',
     descriptionMinimal: 'Full testing.',
     linkPath: '/chat/test?mode=classifier',
     linkLabel: 'Go to Test',
   },
-  {
-    id: 'classifier-ship',
-    stepNumber: 4,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained classifier model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createShipStep('classifier-ship', 4, 'classifier model'),
 ]
 
 const ANOMALY_HAS_DATA_CHECKLIST: ChecklistStep[] = [
@@ -373,10 +281,8 @@ const ANOMALY_HAS_DATA_CHECKLIST: ChecklistStep[] = [
     id: 'anomaly-train',
     stepNumber: 1,
     title: 'Add data & train',
-    descriptionFull:
-      'Add your baseline data and hit Train to create your anomaly detector.',
-    descriptionShort:
-      'Add baseline data and train your model.',
+    descriptionFull: 'Add your baseline data and hit Train to create your anomaly detector.',
+    descriptionShort: 'Add baseline data and train your model.',
     descriptionMinimal: 'Train your detector.',
     linkPath: '/chat/models/train/anomaly/new',
     linkLabel: 'Create detector',
@@ -385,38 +291,23 @@ const ANOMALY_HAS_DATA_CHECKLIST: ChecklistStep[] = [
     id: 'anomaly-quick-test',
     stepNumber: 2,
     title: 'Quick test',
-    descriptionFull:
-      'Try a few examples in the test input field to see how your detector scores them.',
-    descriptionShort:
-      'Test with the input field on this page.',
+    descriptionFull: 'Try a few examples in the test input field to see how your detector scores them.',
+    descriptionShort: 'Test with the input field on this page.',
     descriptionMinimal: 'Quick test here.',
-    // Same page as step 1 - navigator won't navigate, just updates step
-    linkPath: '/chat/models/train/anomaly/new',
+    linkPath: '/chat/models/train/anomaly/new', // Same page as step 1
     linkLabel: 'Test here',
   },
   {
     id: 'anomaly-full-test',
     stepNumber: 3,
     title: 'Test at scale',
-    descriptionFull:
-      'Head to the Test page to try your detector with more examples and see detailed results.',
-    descriptionShort:
-      'Test more thoroughly in the Test page.',
+    descriptionFull: 'Head to the Test page to try your detector with more examples and see detailed results.',
+    descriptionShort: 'Test more thoroughly in the Test page.',
     descriptionMinimal: 'Full testing.',
     linkPath: '/chat/test?mode=anomaly',
     linkLabel: 'Go to Test',
   },
-  {
-    id: 'anomaly-ship',
-    stepNumber: 4,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This includes your trained anomaly detection model.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createShipStep('anomaly-ship', 4, 'anomaly detection model'),
 ]
 
 const DOC_SCAN_CHECKLIST: ChecklistStep[] = [
@@ -426,8 +317,7 @@ const DOC_SCAN_CHECKLIST: ChecklistStep[] = [
     title: 'Get your docs in',
     descriptionFull:
       'Create a dataset, upload the documents you want to extract information from, and process them.',
-    descriptionShort:
-      'Upload and process your documents.',
+    descriptionShort: 'Upload and process your documents.',
     descriptionMinimal: 'Upload your documents.',
     linkPath: '/chat/data?modal=create',
     linkLabel: 'Create dataset',
@@ -438,23 +328,12 @@ const DOC_SCAN_CHECKLIST: ChecklistStep[] = [
     title: 'Test extraction',
     descriptionFull:
       'Switch to Doc Scanning mode in Test and see what information it pulls out. Check if the extracted data looks right.',
-    descriptionShort:
-      'Test extraction in Doc Scanning mode.',
+    descriptionShort: 'Test extraction in Doc Scanning mode.',
     descriptionMinimal: 'Test document extraction.',
     linkPath: '/chat/test',
     linkLabel: 'Go to Test',
   },
-  {
-    id: 'doc-scan-ship',
-    stepNumber: 3,
-    title: 'Ship it',
-    descriptionFull:
-      'Package your project for deployment. This creates everything you need to run document scanning in production.',
-    descriptionShort: 'Package your project for deployment.',
-    descriptionMinimal: 'Package for deployment.',
-    linkPath: '/chat/dashboard',
-    linkLabel: 'Package',
-  },
+  createShipStep('doc-scan-ship', 3),
 ]
 
 const EXPLORING_CHECKLIST: ChecklistStep[] = [
@@ -462,10 +341,8 @@ const EXPLORING_CHECKLIST: ChecklistStep[] = [
     id: 'exploring-sample',
     stepNumber: 1,
     title: 'Find & import data',
-    descriptionFull:
-      "Find data on Hugging Face or generate synthetic data, then import it.",
-    descriptionShort:
-      'Import a sample dataset to experiment with.',
+    descriptionFull: "Find data on Hugging Face or generate synthetic data, then import it.",
+    descriptionShort: 'Import a sample dataset to experiment with.',
     descriptionMinimal: 'Import sample data.',
     linkPath: '/chat/data?modal=import',
     linkLabel: 'Import sample',
@@ -476,8 +353,7 @@ const EXPLORING_CHECKLIST: ChecklistStep[] = [
     title: 'Tweak your prompt',
     descriptionFull:
       "The system prompt tells your AI what it knows and how to behave. Try editing it to see how it changes responses.",
-    descriptionShort:
-      'Edit the system prompt to customize behavior.',
+    descriptionShort: 'Edit the system prompt to customize behavior.',
     descriptionMinimal: 'Edit system prompt.',
     linkPath: '/chat/prompt',
     linkLabel: 'Go to Prompts',
@@ -488,8 +364,7 @@ const EXPLORING_CHECKLIST: ChecklistStep[] = [
     title: 'Try the Test page',
     descriptionFull:
       'Chat with the sample data, try different modes (Text Generation, Classifier, etc.). Get a feel for what LlamaFarm can do.',
-    descriptionShort:
-      'Explore different modes in the Test page.',
+    descriptionShort: 'Explore different modes in the Test page.',
     descriptionMinimal: 'Explore the Test page.',
     linkPath: '/chat/test',
     linkLabel: 'Go to Test',
@@ -500,17 +375,41 @@ const EXPLORING_CHECKLIST: ChecklistStep[] = [
     title: 'Pick a direction',
     descriptionFull:
       "Ready to build something real? Come back here and start over with a specific project type. We'll give you a focused checklist.",
-    descriptionShort:
-      'Start over with a specific project type.',
+    descriptionShort: 'Start over with a specific project type.',
     descriptionMinimal: 'Choose a project type.',
     linkPath: '',
     linkLabel: 'Start over',
   },
 ]
 
+// ============================================================================
+// Checklist Lookup Map
+// ============================================================================
+
+type ModelType = 'classifier' | 'anomaly'
+type ChecklistMap = Partial<Record<DataStatus, Partial<Record<ModelType, ChecklistStep[]>>>>
+
+const MODEL_CHECKLIST_MAP: ChecklistMap = {
+  'sample-data': {
+    classifier: CLASSIFIER_SAMPLE_CHECKLIST,
+    anomaly: ANOMALY_SAMPLE_CHECKLIST,
+  },
+  'need-data': {
+    classifier: CLASSIFIER_NEED_DATA_CHECKLIST,
+    anomaly: ANOMALY_NEED_DATA_CHECKLIST,
+  },
+  'has-data': {
+    classifier: CLASSIFIER_HAS_DATA_CHECKLIST,
+    anomaly: ANOMALY_HAS_DATA_CHECKLIST,
+  },
+}
+
+// ============================================================================
+// Checklist Generation Functions
+// ============================================================================
+
 /**
  * Demo project checklist - simplified flow for pre-built demo projects
- * (LlamaEncyclopedia, Santa Helper, etc.)
  */
 function createDemoChecklist(demo: FileBasedDemo): ChecklistStep[] {
   return [
@@ -518,10 +417,8 @@ function createDemoChecklist(demo: FileBasedDemo): ChecklistStep[] {
       id: 'demo-prompt',
       stepNumber: 1,
       title: 'Check out the prompt',
-      descriptionFull:
-        `See how we set up ${demo.displayName}. The system prompt tells the AI what it knows and how to respond.`,
-      descriptionShort:
-        'Review the system prompt configuration.',
+      descriptionFull: `See how we set up ${demo.displayName}. The system prompt tells the AI what it knows and how to respond.`,
+      descriptionShort: 'Review the system prompt configuration.',
       descriptionMinimal: 'View system prompt.',
       linkPath: '/chat/prompt',
       linkLabel: 'View prompt',
@@ -534,8 +431,7 @@ function createDemoChecklist(demo: FileBasedDemo): ChecklistStep[] {
         demo.sampleQuestions && demo.sampleQuestions.length > 0
           ? `Ask questions and see how it responds! Try: "${demo.sampleQuestions[0]}"`
           : 'Chat with your demo project and see how it responds to your questions.',
-      descriptionShort:
-        'Test the demo in the chat interface.',
+      descriptionShort: 'Test the demo in the chat interface.',
       descriptionMinimal: 'Try the demo.',
       linkPath: '/chat/test',
       linkLabel: 'Go to Test',
@@ -544,10 +440,8 @@ function createDemoChecklist(demo: FileBasedDemo): ChecklistStep[] {
       id: 'demo-build',
       stepNumber: 3,
       title: 'Build your own',
-      descriptionFull:
-        "Ready to create something custom? Start fresh with your own data, prompts, and configuration.",
-      descriptionShort:
-        'Start over to build your own project.',
+      descriptionFull: "Ready to create something custom? Start fresh with your own data, prompts, and configuration.",
+      descriptionShort: 'Start over to build your own project.',
       descriptionMinimal: 'Build your own.',
       linkPath: '',
       linkLabel: 'Start over',
@@ -557,38 +451,18 @@ function createDemoChecklist(demo: FileBasedDemo): ChecklistStep[] {
 
 /**
  * Get the base checklist for a project type
- * For sample-data and need-data flows with classifier/anomaly, use shortened checklists (no "Create" step)
  */
 function getBaseChecklist(projectType: ProjectType, dataStatus?: DataStatus | null): ChecklistStep[] {
-  // Use shortened checklists for classifier/anomaly with sample-data or need-data
-  if (dataStatus === 'sample-data') {
-    if (projectType === 'classifier') {
-      return CLASSIFIER_SAMPLE_CHECKLIST.map(step => ({ ...step }))
-    }
-    if (projectType === 'anomaly') {
-      return ANOMALY_SAMPLE_CHECKLIST.map(step => ({ ...step }))
-    }
-  }
-
-  if (dataStatus === 'need-data') {
-    if (projectType === 'classifier') {
-      return CLASSIFIER_NEED_DATA_CHECKLIST.map(step => ({ ...step }))
-    }
-    if (projectType === 'anomaly') {
-      return ANOMALY_NEED_DATA_CHECKLIST.map(step => ({ ...step }))
+  // Check if we have a specialized checklist for classifier/anomaly with specific data status
+  if (dataStatus && (projectType === 'classifier' || projectType === 'anomaly')) {
+    const modelChecklists = MODEL_CHECKLIST_MAP[dataStatus]
+    const checklist = modelChecklists?.[projectType]
+    if (checklist) {
+      return checklist.map(step => ({ ...step }))
     }
   }
 
-  // Use shortened checklists for classifier/anomaly with has-data (skip data step, go straight to training)
-  if (dataStatus === 'has-data') {
-    if (projectType === 'classifier') {
-      return CLASSIFIER_HAS_DATA_CHECKLIST.map(step => ({ ...step }))
-    }
-    if (projectType === 'anomaly') {
-      return ANOMALY_HAS_DATA_CHECKLIST.map(step => ({ ...step }))
-    }
-  }
-
+  // Default checklists by project type
   switch (projectType) {
     case 'doc-qa':
       return DOC_QA_CHECKLIST.map(step => ({ ...step }))
@@ -621,13 +495,11 @@ function applyDataStatusModifications(
 
   if (dataStatus === 'sample-data') {
     // For classifier/anomaly, the first step should be "View your trained model"
-    // (training happens automatically in background)
     if (projectType === 'classifier') {
       firstStep.title = 'View your trained classifier'
       firstStep.descriptionFull =
         "Your sample classifier is training! Head over to see the progress and try it out when it's ready."
-      firstStep.descriptionShort =
-        'View your sample classifier training progress.'
+      firstStep.descriptionShort = 'View your sample classifier training progress.'
       firstStep.descriptionMinimal = 'View trained classifier.'
       firstStep.linkPath = '/chat/models/train/classifier/new?autoTrain=true'
       firstStep.linkLabel = 'View classifier'
@@ -635,53 +507,42 @@ function applyDataStatusModifications(
       firstStep.title = 'View your trained detector'
       firstStep.descriptionFull =
         "Your sample anomaly detector is training! Head over to see the progress and try it out when it's ready."
-      firstStep.descriptionShort =
-        'View your sample detector training progress.'
+      firstStep.descriptionShort = 'View your sample detector training progress.'
       firstStep.descriptionMinimal = 'View trained detector.'
       firstStep.linkPath = '/chat/models/train/anomaly/new?autoTrain=true'
       firstStep.linkLabel = 'View detector'
     } else {
       // For doc-qa and other types with sample data
-      // This case is now handled by passing selectedSampleDataset to the function
-      // and handled below after modifications
       firstStep.title = 'Load sample data'
       firstStep.descriptionFull =
         "Start with our sample dataset to see how things work. You can always swap in your own data later."
-      firstStep.descriptionShort =
-        'Import a sample dataset to get started.'
+      firstStep.descriptionShort = 'Import a sample dataset to get started.'
       firstStep.descriptionMinimal = 'Import sample data.'
       firstStep.linkPath = '/chat/data?modal=import'
       firstStep.linkLabel = 'Import sample'
     }
   } else if (dataStatus === 'need-data') {
-    // If a HF dataset was selected, customize the first step to show they're importing it
+    // If a HF dataset was selected, customize the first step
     if (selectedHFDataset) {
-      // Generate the same dataset name that Dashboard uses for the import
       const datasetName = `hf_${selectedHFDataset.id.replace(/\//g, '_')}`
       firstStep.title = 'Check out your imported dataset'
       firstStep.descriptionFull =
         `We're importing "${selectedHFDataset.name}" from Hugging Face in the background. Head to your dataset to see the import progress and explore your new data.`
-      firstStep.descriptionShort =
-        `Your "${selectedHFDataset.name}" dataset is being imported. Check its status.`
+      firstStep.descriptionShort = `Your "${selectedHFDataset.name}" dataset is being imported. Check its status.`
       firstStep.descriptionMinimal = 'View your imported HF dataset.'
       firstStep.linkPath = `/chat/data/${encodeURIComponent(datasetName)}`
       firstStep.linkLabel = 'View dataset'
     } else if (projectType !== 'classifier' && projectType !== 'anomaly') {
       // For non-classifier/anomaly types, show generic "find data" step
-      // (classifier/anomaly use pre-defined NEED_DATA checklists)
       firstStep.title = 'Find & import data'
       firstStep.descriptionFull =
         "Check out Hugging Face datasets or synthetic data generators to find data for your project. Once you have files, come back and create a dataset."
-      firstStep.descriptionShort =
-        'Find data on Hugging Face or generate synthetic data, then import it.'
+      firstStep.descriptionShort = 'Find data on Hugging Face or generate synthetic data, then import it.'
       firstStep.descriptionMinimal = 'Find and import data.'
       firstStep.linkPath = '/chat/data?modal=import'
       firstStep.linkLabel = 'Import sample'
     }
   }
-
-  // Note: classifier/anomaly with has-data now use dedicated HAS_DATA_CHECKLIST
-  // so no modifications needed here for those flows
 
   modified[0] = firstStep
   return modified
@@ -715,14 +576,12 @@ export function generateChecklist(
     return []
   }
 
-  // Pass dataStatus so we get the right base checklist (sample flows have fewer steps)
   let checklist = getBaseChecklist(projectType, dataStatus)
 
   // Apply modifications for non-sample flows (sample flows already have correct first step)
   if (dataStatus && dataStatus !== 'sample-data') {
     checklist = applyDataStatusModifications(checklist, dataStatus, projectType, selectedHFDataset)
   } else if (dataStatus === 'sample-data' && projectType !== 'classifier' && projectType !== 'anomaly') {
-    // For non-classifier/anomaly sample data flows, still apply modifications
     checklist = applyDataStatusModifications(checklist, dataStatus, projectType, selectedHFDataset)
   }
 
@@ -737,8 +596,7 @@ export function generateChecklist(
         title: 'View your uploaded data',
         descriptionFull:
           `You added ${uploadedFilesCount} ${fileWord} during setup. View your "${dsName}" dataset and hit Process to prepare it for your AI.`,
-        descriptionShort:
-          `Check your ${uploadedFilesCount} uploaded ${fileWord} and process them.`,
+        descriptionShort: `Check your ${uploadedFilesCount} uploaded ${fileWord} and process them.`,
         descriptionMinimal: 'View and process uploaded data.',
         linkPath: `/chat/data/${encodeURIComponent(dsName)}`,
         linkLabel: 'View dataset',
@@ -746,7 +604,7 @@ export function generateChecklist(
     }
   }
 
-  // If user selected a file-based sample dataset (doc-qa), update the first step to "View sample data"
+  // If user selected a file-based sample dataset (doc-qa), update the first step
   if (dataStatus === 'sample-data' && selectedSampleDataset && projectType !== 'classifier' && projectType !== 'anomaly') {
     const demo = getDemoById(selectedSampleDataset)
 
@@ -757,8 +615,7 @@ export function generateChecklist(
           title: 'View sample data',
           descriptionFull:
             `Your "${demo.displayName}" sample data is importing! Head to the Data page to see the import progress.`,
-          descriptionShort:
-            `View your "${demo.displayName}" sample dataset.`,
+          descriptionShort: `View your "${demo.displayName}" sample dataset.`,
           descriptionMinimal: 'View sample data.',
           linkPath: `/chat/data/${encodeURIComponent(demo.datasetName)}`,
           linkLabel: 'View data',
@@ -773,16 +630,11 @@ export function generateChecklist(
     const modelLabel = trainedModelType === 'classifier' ? 'classifier' : 'detector'
     const newLinkPath = `/chat/models/train/${modelPath}/${encodeURIComponent(trainedModelName)}`
 
-    console.log('[checklistGenerator] Updating link path to trained model:', newLinkPath)
-
-    // Update the first step to point to the trained model (with updated description)
     if (checklist.length > 0) {
       checklist[0] = {
         ...checklist[0],
-        descriptionFull:
-          `Your sample ${modelLabel} is ready! Check it out and try it with some test inputs.`,
-        descriptionShort:
-          `View and test your trained ${modelLabel}.`,
+        descriptionFull: `Your sample ${modelLabel} is ready! Check it out and try it with some test inputs.`,
+        descriptionShort: `View and test your trained ${modelLabel}.`,
         descriptionMinimal: `View trained ${modelLabel}.`,
         linkPath: newLinkPath,
       }
@@ -813,7 +665,7 @@ export function getDescriptionForLevel(
 
 /**
  * Generate a simplified checklist for demo projects
- * Returns null if not a demo project (call generateChecklist instead)
+ * Returns null if not a demo project
  */
 export function generateDemoChecklist(demoConfig: FileBasedDemo | undefined): ChecklistStep[] | null {
   if (!demoConfig) return null

@@ -258,26 +258,6 @@ export const AVAILABLE_DEMOS: DemoConfig[] = [
       'URGENT system down, critical, phone, 72 hours, open',
     ],
   },
-
-  // Easy to add more demos:
-  // {
-  //   id: 'legal-contracts',
-  //   name: 'contract-analyzer',
-  //   displayName: 'Legal Contract Analyzer',
-  //   description: 'Analyze and understand complex legal contracts',
-  //   icon: '⚖️',
-  //   category: 'Legal',
-  //   estimatedTime: '~45 seconds',
-  //   configPath: '/demo-files/legal/llamafarm.yaml',
-  //   files: [
-  //     { path: '/demo-files/legal/sample-contract.pdf', filename: 'sample-contract.pdf', type: 'application/pdf' }
-  //   ],
-  //   datasetName: 'legal_contracts',
-  //   sampleQuestions: [
-  //     'What are the key terms of this contract?',
-  //     'What are my obligations under this agreement?'
-  //   ]
-  // }
 ]
 
 export function getDemoById(id: string): DemoConfig | undefined {

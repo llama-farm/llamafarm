@@ -4,8 +4,6 @@
 
 export { OnboardingWizard } from './OnboardingWizard'
 export { GettingStartedChecklist } from './GettingStartedChecklist'
-export { ChecklistEmptyState } from './ChecklistEmptyState'
-export { ChecklistItem } from './ChecklistItem'
 export { WizardProgress } from './WizardProgress'
 export { ProjectTypeSelector } from './ProjectTypeSelector'
 export { DataStatusSelector } from './DataStatusSelector'

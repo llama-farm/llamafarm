@@ -7,7 +7,6 @@ import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useProjectModalContext } from '../../contexts/ProjectModalContext'
 import { useOnboardingContext } from '../../contexts/OnboardingContext'
 import { useProject } from '../../hooks/useProjects'
-// import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets, useUploadFileToDataset, useCreateDataset, useAvailableStrategies } from '../../hooks/useDatasets'
 import { useImportHFDataset } from '../../hooks/useHFDatasets'
@@ -30,7 +29,6 @@ import { parseNumericTrainingData } from '../../types/ml'
 const Dashboard = () => {
   const navigate = useNavigate()
   const { toast } = useToast()
-  // const namespace = getCurrentNamespace()
   const activeProject = useActiveProject()
 
   // All state declarations first
@@ -192,7 +190,6 @@ const Dashboard = () => {
         const demo = getDemoById(demoId)
         if (demo && isModelBasedDemo(demo)) {
           // For classifier/anomaly demos, queue auto-training
-          console.log('[Dashboard] Queuing auto-train for:', demo.modelType, demo.sampleDataId)
           setPendingModelTraining({
             demoId,
             modelType: demo.modelType,
@@ -201,7 +198,6 @@ const Dashboard = () => {
         } else if (demo && isFileBasedDemo(demo)) {
           // For RAG/doc-qa demos, queue import in background (don't navigate away)
           // This lets user see their checklist first
-          console.log('[Dashboard] Queuing file-based demo import:', demo.name)
           setPendingFileBasedDemo(demo)
         }
       }
@@ -220,8 +216,6 @@ const Dashboard = () => {
     const { modelType, sampleDataId } = pendingModelTraining
     setPendingModelTraining(null)
 
-    console.log('[Dashboard] Auto-training', modelType, 'with sample data:', sampleDataId)
-
     // Set training flag to disable the checklist button
     onboardingRef.current.setIsTrainingSampleModel(true)
 
@@ -229,7 +223,6 @@ const Dashboard = () => {
       // Find the classifier sample dataset
       const dataset = CLASSIFIER_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
       if (!dataset?.data) {
-        console.error('[Dashboard] Classifier sample dataset not found:', sampleDataId)
         onboardingRef.current.setIsTrainingSampleModel(false)
         toast({
           message: 'Sample dataset not found.',
@@ -255,19 +248,16 @@ const Dashboard = () => {
         },
         {
           onSuccess: result => {
-            console.log('[Dashboard] Classifier training completed:', result)
             toast({
               message: `${dataset.name} classifier trained successfully!`,
               icon: 'checkmark-filled',
             })
             // Store the trained model name in onboarding state
             // This updates the checklist link to point to the trained model
-            console.log('[Dashboard] Setting trained model name:', result.fitResult.versioned_name)
             onboardingRef.current.setTrainedModel(result.fitResult.versioned_name, 'classifier')
             // Don't auto-complete the step - let user click to view it first
           },
           onError: (error: Error) => {
-            console.error('[Dashboard] Classifier training failed:', error)
             onboardingRef.current.setIsTrainingSampleModel(false)
             toast({
               message: error.message || 'Failed to train classifier.',
@@ -281,7 +271,6 @@ const Dashboard = () => {
       // Find the anomaly sample dataset
       const dataset = ANOMALY_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
       if (!dataset?.data) {
-        console.error('[Dashboard] Anomaly sample dataset not found:', sampleDataId)
         onboardingRef.current.setIsTrainingSampleModel(false)
         toast({
           message: 'Sample dataset not found.',
@@ -322,7 +311,6 @@ const Dashboard = () => {
       }
 
       if (!parsedData) {
-        console.error('[Dashboard] Failed to parse anomaly training data')
         onboardingRef.current.setIsTrainingSampleModel(false)
         toast({
           message: 'Failed to parse training data.',
@@ -342,7 +330,6 @@ const Dashboard = () => {
         },
         {
           onSuccess: result => {
-            console.log('[Dashboard] Anomaly training completed:', result)
             toast({
               message: `${dataset.name} detector trained successfully!`,
               icon: 'checkmark-filled',
@@ -353,7 +340,6 @@ const Dashboard = () => {
             // Don't auto-complete the step - let user click to view it first
           },
           onError: (error: Error) => {
-            console.error('[Dashboard] Anomaly training failed:', error)
             onboardingRef.current.setIsTrainingSampleModel(false)
             toast({
               message: error.message || 'Failed to train detector.',
@@ -372,14 +358,11 @@ const Dashboard = () => {
       return
     }
     if (!activeProject?.namespace || !activeProject?.project) {
-      console.log('[Dashboard] No active project yet for file-based demo, waiting...', activeProject)
       return
     }
 
     const demo = pendingFileBasedDemo
     setPendingFileBasedDemo(null)
-
-    console.log('[Dashboard] Starting file-based demo import:', demo.name)
 
     const importDemo = async () => {
       try {
@@ -392,8 +375,6 @@ const Dashboard = () => {
         const processingStrategy = strategiesData?.data_processing_strategies?.[0] || 'universal_processor'
         const database = strategiesData?.databases?.[0] || 'main_database'
 
-        console.log('[Dashboard] Creating dataset:', demo.datasetName, 'with strategy:', processingStrategy, 'database:', database)
-
         // Create dataset
         try {
           await createDatasetMutation.mutateAsync({
@@ -403,19 +384,15 @@ const Dashboard = () => {
             data_processing_strategy: processingStrategy,
             database: database,
           })
-          console.log('[Dashboard] Dataset created successfully')
         } catch (error: any) {
           // If dataset already exists, that's fine - continue with upload
-          if (error?.response?.status === 409 || error?.message?.includes('already exists')) {
-            console.log('[Dashboard] Dataset already exists, continuing with upload')
-          } else {
+          if (!(error?.response?.status === 409 || error?.message?.includes('already exists'))) {
             throw error
           }
         }
 
         // Upload each demo file
         for (const file of demo.files) {
-          console.log('[Dashboard] Fetching demo file:', file.path)
           const fileResponse = await fetch(file.path)
           if (!fileResponse.ok) {
             throw new Error(`Failed to fetch ${file.filename}`)
@@ -423,14 +400,12 @@ const Dashboard = () => {
           const blob = await fileResponse.blob()
           const fileObj = new File([blob], file.filename, { type: file.type })
 
-          console.log('[Dashboard] Uploading file:', file.filename)
           await uploadMutation.mutateAsync({
             namespace: activeProject.namespace,
             project: activeProject.project,
             dataset: demo.datasetName,
             file: fileObj,
           })
-          console.log('[Dashboard] File uploaded successfully:', file.filename)
         }
 
         toast({
@@ -441,7 +416,6 @@ const Dashboard = () => {
         // Refresh datasets list
         refetchDatasets()
       } catch (error) {
-        console.error('[Dashboard] Demo import failed:', error)
         toast({
           message: `Failed to import demo: ${error}`,
           variant: 'destructive',
@@ -481,7 +455,6 @@ const Dashboard = () => {
     const handleBackgroundImportHF = (event: Event) => {
       const hfDataset = (event as CustomEvent<{ hfDataset: SelectedHFDataset }>).detail?.hfDataset
       if (hfDataset) {
-        console.log('[Dashboard] Received HF import event:', hfDataset)
         setPendingHFImport(hfDataset)
       }
     }
@@ -498,7 +471,6 @@ const Dashboard = () => {
       return
     }
     if (!activeProject?.namespace || !activeProject?.project) {
-      console.log('[Dashboard] No active project yet, waiting...', activeProject)
       return
     }
 
@@ -507,15 +479,6 @@ const Dashboard = () => {
 
     // Generate a safe dataset name from the HF ID
     const datasetName = `hf_${hfDataset.id.replace(/\//g, '_')}`
-
-    console.log('[Dashboard] Starting HF import:', {
-      namespace: activeProject.namespace,
-      project: activeProject.project,
-      dataset: datasetName,
-      hf_dataset_id: hfDataset.id,
-      config: hfDataset.config,
-      split: hfDataset.split,
-    })
 
     // Import in background
     importHFMutationRef.current.mutate(
@@ -533,14 +496,12 @@ const Dashboard = () => {
       },
       {
         onSuccess: data => {
-          console.log('[Dashboard] HF import completed successfully:', data)
           toast({
             message: `Successfully imported ${data.row_count} rows from Hugging Face.`,
             icon: 'checkmark-filled',
           })
         },
         onError: (error: Error) => {
-          console.error('[Dashboard] HF import failed:', error)
           toast({
             message: error.message || 'Failed to import dataset from Hugging Face.',
             variant: 'destructive',
@@ -562,7 +523,6 @@ const Dashboard = () => {
     const handleUploadFiles = (event: Event) => {
       const detail = (event as CustomEvent<{ files: File[]; datasetName: string }>).detail
       if (detail?.files && detail.files.length > 0) {
-        console.log('[Dashboard] Received file upload event:', detail.datasetName, detail.files.length, 'files')
         setPendingFileUpload({
           files: detail.files,
           datasetName: detail.datasetName,
@@ -582,19 +542,11 @@ const Dashboard = () => {
       return
     }
     if (!activeProject?.namespace || !activeProject?.project) {
-      console.log('[Dashboard] No active project yet for file upload, waiting...', activeProject)
       return
     }
 
     const { files, datasetName } = pendingFileUpload
     setPendingFileUpload(null)
-
-    console.log('[Dashboard] Starting file upload:', {
-      namespace: activeProject.namespace,
-      project: activeProject.project,
-      dataset: datasetName,
-      fileCount: files.length,
-    })
 
     // Create dataset first, then upload files
     const createAndUploadFiles = async () => {
@@ -608,7 +560,6 @@ const Dashboard = () => {
       const database = strategiesData?.databases?.[0] || 'main_database'
 
       try {
-        console.log('[Dashboard] Creating dataset:', datasetName, 'with strategy:', strategy, 'database:', database)
         await createDatasetMutation.mutateAsync({
           namespace: activeProject.namespace,
           project: activeProject.project,
@@ -616,13 +567,9 @@ const Dashboard = () => {
           data_processing_strategy: strategy,
           database: database,
         })
-        console.log('[Dashboard] Dataset created successfully')
       } catch (error: any) {
         // If dataset already exists, that's fine - continue with upload
-        if (error?.response?.status === 409 || error?.message?.includes('already exists')) {
-          console.log('[Dashboard] Dataset already exists, continuing with upload')
-        } else {
-          console.error('[Dashboard] Failed to create dataset:', error)
+        if (!(error?.response?.status === 409 || error?.message?.includes('already exists'))) {
           toast({
             message: `Failed to create dataset: ${error?.message || 'Unknown error'}`,
             variant: 'destructive',
@@ -640,7 +587,6 @@ const Dashboard = () => {
       let successCount = 0
       for (const file of files) {
         try {
-          console.log('[Dashboard] Uploading file:', file.name)
           await uploadMutation.mutateAsync({
             namespace: activeProject.namespace,
             project: activeProject.project,
@@ -648,9 +594,8 @@ const Dashboard = () => {
             file,
           })
           successCount++
-          console.log('[Dashboard] File uploaded successfully:', file.name)
-        } catch (error) {
-          console.error('[Dashboard] File upload failed:', file.name, error)
+        } catch {
+          // Continue with other files even if one fails
         }
       }
 
