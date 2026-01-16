@@ -214,6 +214,9 @@ def _add_file_from_bytes(
     index_dir = os.path.join(data_dir, "index", "by_name")
     os.makedirs(index_dir, exist_ok=True)
     symlink_path = os.path.join(index_dir, resolved_file_name)
+    # Validate path stays within index_dir (prevent path traversal)
+    if not os.path.normpath(symlink_path).startswith(os.path.normpath(index_dir) + os.sep):
+        raise ValueError("Invalid filename - path traversal detected")
     if not os.path.exists(symlink_path):
         os.symlink(raw_path, symlink_path)
 
