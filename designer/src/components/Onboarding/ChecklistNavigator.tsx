@@ -56,25 +56,37 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
   }, [location.pathname])
 
   // Find current step based on path
-  // We look for the step whose linkPath (without query params) matches the current pathname
-  // When multiple steps have similar paths, prefer exact match over partial match
+  // When multiple steps have the same path (e.g., train then test on same page),
+  // we use the first uncompleted step, or the last completed one if all matching steps are done
   const currentStepIndex = (() => {
     const pathname = location.pathname
 
-    // First, try to find an exact match
-    const exactMatchIndex = checklist.findIndex(step => {
-      if (!step.linkPath) return false
-      const stepPath = step.linkPath.split('?')[0]
-      return stepPath === pathname
-    })
-    if (exactMatchIndex >= 0) return exactMatchIndex
+    // Find all steps that match this path
+    const matchingIndices: number[] = []
 
-    // Fall back to partial match (pathname includes step path)
-    return checklist.findIndex(step => {
-      if (!step.linkPath) return false
+    checklist.forEach((step, index) => {
+      if (!step.linkPath) return
       const stepPath = step.linkPath.split('?')[0]
-      return pathname.includes(stepPath)
+      // Check for exact match or partial match
+      if (stepPath === pathname || pathname.includes(stepPath)) {
+        matchingIndices.push(index)
+      }
     })
+
+    if (matchingIndices.length === 0) return -1
+
+    // If only one match, use it
+    if (matchingIndices.length === 1) return matchingIndices[0]
+
+    // Multiple steps on same page - find first uncompleted one
+    for (const idx of matchingIndices) {
+      if (!isStepCompleted(checklist[idx].id)) {
+        return idx
+      }
+    }
+
+    // All matching steps completed - return the last one
+    return matchingIndices[matchingIndices.length - 1]
   })()
   const currentStep = currentStepIndex >= 0 ? checklist[currentStepIndex] : null
 
@@ -112,7 +124,7 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
     handleDismiss()
   }, [handleDismiss])
 
-  // Handle "Next step" button - completes current step and navigates to next
+  // Handle "Next step" button - completes current step and navigates to next (if different page)
   const handleNextStep = useCallback((e: React.MouseEvent) => {
     e.stopPropagation() // Prevent triggering the parent click (back to guide)
 
@@ -121,8 +133,19 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
       completeChecklistStep(currentStep.id)
     }
 
-    // Navigate to next step if available
+    // Navigate to next step if available AND if it's a different page
     if (nextStep?.linkPath) {
+      const currentPath = currentStep?.linkPath?.split('?')[0]
+      const nextPath = nextStep.linkPath.split('?')[0]
+
+      // If next step is on the same page, just complete current step (don't navigate)
+      // The navigator will auto-update to show the next step
+      if (currentPath === nextPath) {
+        // Already completed the step above - component will re-render with new step
+        return
+      }
+
+      // Different page - navigate there
       const separator = nextStep.linkPath.includes('?') ? '&' : '?'
       const pathWithParam = `${nextStep.linkPath}${separator}from=checklist`
       navigate(pathWithParam)
@@ -169,7 +192,8 @@ export function ChecklistNavigator({ className }: ChecklistNavigatorProps) {
       className={cn(
         // Position: fixed bottom-right
         // If upgrade banner is visible, position higher to avoid overlap
-        'fixed right-4 z-40 transition-all duration-300',
+        // z-[9999] ensures we sit above browser dev tools
+        'fixed right-4 z-[9999] transition-all duration-300',
         upgradeBannerVisible ? 'bottom-20' : 'bottom-4',
         // Sizing: larger card
         'w-[320px]',

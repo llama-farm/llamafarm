@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import FontIcon from '../common/FontIcon'
 import ModeToggle from './ModeToggle'
 import { Button } from './ui/button'
@@ -32,6 +32,7 @@ const SAMPLE_TEST_INPUTS: Record<string, string> = {
 
 const Test = () => {
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { openPackageModal } = usePackageModal()
   const onboarding = useOnboardingContext()
 
@@ -42,6 +43,30 @@ const Test = () => {
     if (stored === 'anomaly' || stored === 'classifier' || stored === 'document_scanning' || stored === 'encoder') return stored
     return 'inference'
   })
+
+  // Apply mode from URL param (takes precedence over localStorage/onboarding defaults)
+  // This is used when navigating from checklist with ?mode=classifier or ?mode=anomaly
+  useEffect(() => {
+    const modeParam = searchParams.get('mode')
+    if (modeParam === 'classifier' || modeParam === 'anomaly') {
+      setModelType(modeParam)
+
+      // Also set the model override from onboarding if available
+      // This ensures the trained model is auto-selected when coming from checklist
+      const { trainedModelName, trainedModelType } = onboarding.state.answers
+      if (trainedModelName && trainedModelType === modeParam) {
+        const overrideKey = modeParam === 'classifier'
+          ? 'lf_test_classifierModel_override'
+          : 'lf_test_anomalyModel_override'
+        localStorage.setItem(overrideKey, trainedModelName)
+      }
+
+      // Clean up the URL param without triggering navigation
+      const newParams = new URLSearchParams(searchParams)
+      newParams.delete('mode')
+      setSearchParams(newParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams, onboarding.state.answers])
 
   // Track if we've applied onboarding defaults (only do once per session)
   const appliedOnboardingDefaultsRef = useRef(false)

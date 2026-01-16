@@ -130,7 +130,7 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     }
 
     // Regular checklist based on user answers
-    const { projectType, dataStatus, selectedHFDataset, trainedModelName, trainedModelType, uploadedFiles, datasetName } = state.answers
+    const { projectType, dataStatus, selectedHFDataset, trainedModelName, trainedModelType, uploadedFiles, datasetName, selectedSampleDataset } = state.answers
     return generateChecklist(
       projectType,
       dataStatus,
@@ -138,7 +138,8 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
       trainedModelName,
       trainedModelType,
       uploadedFiles?.length || 0,
-      datasetName
+      datasetName,
+      selectedSampleDataset
     )
   }, [state.answers, demoConfig])
 

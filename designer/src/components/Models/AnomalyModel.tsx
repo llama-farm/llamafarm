@@ -1433,17 +1433,30 @@ function AnomalyModel() {
                   />
                 </div>
                 <div className="flex-1" />
-                {hasVersions && (
+                <div className="flex items-center gap-2">
+                  {/* Primary Train button at top for visibility */}
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsTrainingExpanded(false)}
-                    className="h-8"
+                    onClick={handleTrain}
+                    disabled={!canTrain || trainingState === 'training'}
                   >
-                    <FontIcon type="chevron-up" className="w-4 h-4 mr-1" />
-                    Collapse
+                    {trainingState === 'training'
+                      ? 'Training...'
+                      : hasVersions
+                        ? `Retrain as v${versions.length + 1}`
+                        : 'Train'}
                   </Button>
-                )}
+                  {hasVersions && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsTrainingExpanded(false)}
+                      className="h-8"
+                    >
+                      <FontIcon type="chevron-up" className="w-4 h-4 mr-1" />
+                      Collapse
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Training Data section */}

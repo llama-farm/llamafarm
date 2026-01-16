@@ -1511,7 +1511,7 @@ function ClassifierModel() {
             </div>
           ) : (
             <>
-              {/* Base model row with collapse button */}
+              {/* Base model row with Train button */}
               <div className="flex items-center justify-between pb-3 border-b border-border">
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="base-model" className="text-xs text-muted-foreground">
@@ -1542,17 +1542,30 @@ function ClassifierModel() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                {hasVersions && (
+                <div className="flex items-center gap-2">
+                  {/* Primary Train button at top for visibility */}
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsTrainingExpanded(false)}
-                    className="h-6 w-6 p-0"
-                    title="Collapse"
+                    onClick={handleTrain}
+                    disabled={!canTrain || trainingState === 'training'}
                   >
-                    <FontIcon type="chevron-up" className="w-4 h-4" />
+                    {trainingState === 'training'
+                      ? 'Training...'
+                      : hasVersions
+                        ? `Retrain as v${versions.length + 1}`
+                        : 'Train'}
                   </Button>
-                )}
+                  {hasVersions && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsTrainingExpanded(false)}
+                      className="h-6 w-6 p-0"
+                      title="Collapse"
+                    >
+                      <FontIcon type="chevron-up" className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Training data header */}

@@ -23,7 +23,7 @@ import {
   CollapsedChecklist,
 } from '../Onboarding'
 import { useToast } from '../ui/toast'
-import { getDemoById, isModelBasedDemo } from '../../config/demos'
+import { getDemoById, isModelBasedDemo, isFileBasedDemo, type FileBasedDemo } from '../../config/demos'
 import { CLASSIFIER_SAMPLE_DATASETS, ANOMALY_SAMPLE_DATASETS } from '../Models/sampleDatasets'
 import { parseNumericTrainingData } from '../../types/ml'
 
@@ -181,6 +181,9 @@ const Dashboard = () => {
     sampleDataId: string
   } | null>(null)
 
+  // State for pending file-based demo import (RAG/doc-qa demos)
+  const [pendingFileBasedDemo, setPendingFileBasedDemo] = useState<FileBasedDemo | null>(null)
+
   // Listen for onboarding sample import event and navigate appropriately
   useEffect(() => {
     const handleImportSample = (event: Event) => {
@@ -195,9 +198,11 @@ const Dashboard = () => {
             modelType: demo.modelType,
             sampleDataId: demo.sampleDataId,
           })
-        } else {
-          // For RAG/doc-qa demos, navigate to Data page with auto-import param
-          navigate(`/chat/data?autoImportDemo=${encodeURIComponent(demoId)}`)
+        } else if (demo && isFileBasedDemo(demo)) {
+          // For RAG/doc-qa demos, queue import in background (don't navigate away)
+          // This lets user see their checklist first
+          console.log('[Dashboard] Queuing file-based demo import:', demo.name)
+          setPendingFileBasedDemo(demo)
         }
       }
     }
@@ -360,6 +365,93 @@ const Dashboard = () => {
       )
     }
   }, [pendingModelTraining, toast])
+
+  // Process pending file-based demo import when we have active project
+  useEffect(() => {
+    if (!pendingFileBasedDemo) {
+      return
+    }
+    if (!activeProject?.namespace || !activeProject?.project) {
+      console.log('[Dashboard] No active project yet for file-based demo, waiting...', activeProject)
+      return
+    }
+
+    const demo = pendingFileBasedDemo
+    setPendingFileBasedDemo(null)
+
+    console.log('[Dashboard] Starting file-based demo import:', demo.name)
+
+    const importDemo = async () => {
+      try {
+        toast({
+          message: `Importing "${demo.displayName}"...`,
+        })
+
+        // Always use the project's available strategies and databases
+        // Demo configs have their own database names that won't exist in the user's project
+        const processingStrategy = strategiesData?.data_processing_strategies?.[0] || 'universal_processor'
+        const database = strategiesData?.databases?.[0] || 'main_database'
+
+        console.log('[Dashboard] Creating dataset:', demo.datasetName, 'with strategy:', processingStrategy, 'database:', database)
+
+        // Create dataset
+        try {
+          await createDatasetMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            name: demo.datasetName,
+            data_processing_strategy: processingStrategy,
+            database: database,
+          })
+          console.log('[Dashboard] Dataset created successfully')
+        } catch (error: any) {
+          // If dataset already exists, that's fine - continue with upload
+          if (error?.response?.status === 409 || error?.message?.includes('already exists')) {
+            console.log('[Dashboard] Dataset already exists, continuing with upload')
+          } else {
+            throw error
+          }
+        }
+
+        // Upload each demo file
+        for (const file of demo.files) {
+          console.log('[Dashboard] Fetching demo file:', file.path)
+          const fileResponse = await fetch(file.path)
+          if (!fileResponse.ok) {
+            throw new Error(`Failed to fetch ${file.filename}`)
+          }
+          const blob = await fileResponse.blob()
+          const fileObj = new File([blob], file.filename, { type: file.type })
+
+          console.log('[Dashboard] Uploading file:', file.filename)
+          await uploadMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            dataset: demo.datasetName,
+            file: fileObj,
+          })
+          console.log('[Dashboard] File uploaded successfully:', file.filename)
+        }
+
+        toast({
+          message: `"${demo.displayName}" imported successfully!`,
+          icon: 'checkmark-filled',
+        })
+
+        // Refresh datasets list
+        refetchDatasets()
+      } catch (error) {
+        console.error('[Dashboard] Demo import failed:', error)
+        toast({
+          message: `Failed to import demo: ${error}`,
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+      }
+    }
+
+    importDemo()
+  }, [pendingFileBasedDemo, activeProject, toast, createDatasetMutation, uploadMutation, refetchDatasets, strategiesData])
 
   // Listen for onboarding HF dataset import event and navigate to Data page
   useEffect(() => {
