@@ -10,11 +10,11 @@ from unittest.mock import Mock, patch
 import pytest
 from config.datamodel import (
     Database,
-    EmbeddingStrategy,
-    RetrievalStrategy,
-    Type,
-    Type1,
-    Type2,
+    DatabaseEmbeddingStrategy,
+    DatabaseEmbeddingType,
+    DatabaseRetrievalStrategy,
+    DatabaseRetrievalType,
+    DatabaseType,
 )
 
 from api.errors import DatabaseNotFoundError
@@ -32,19 +32,19 @@ class TestDatabaseService:
         self.mock_rag_config.databases = [
             Database(
                 name="main_db",
-                type=Type.ChromaStore,
+                type=DatabaseType.ChromaStore,
                 config={"collection_name": "documents"},
                 embedding_strategies=[
-                    EmbeddingStrategy(
+                    DatabaseEmbeddingStrategy(
                         name="default_embeddings",
-                        type=Type1.OllamaEmbedder,
+                        type=DatabaseEmbeddingType.OllamaEmbedder,
                         config={"model": "nomic-embed-text"},
                     )
                 ],
                 retrieval_strategies=[
-                    RetrievalStrategy(
+                    DatabaseRetrievalStrategy(
                         name="basic_search",
-                        type=Type2.BasicSimilarityStrategy,
+                        type=DatabaseRetrievalType.BasicSimilarityStrategy,
                         config={"top_k": 10},
                         default=True,
                     )
@@ -54,19 +54,19 @@ class TestDatabaseService:
             ),
             Database(
                 name="secondary_db",
-                type=Type.ChromaStore,
+                type=DatabaseType.ChromaStore,
                 config={"collection_name": "secondary"},
                 embedding_strategies=[
-                    EmbeddingStrategy(
+                    DatabaseEmbeddingStrategy(
                         name="secondary_embeddings",
-                        type=Type1.OllamaEmbedder,
+                        type=DatabaseEmbeddingType.OllamaEmbedder,
                         config={"model": "nomic-embed-text"},
                     )
                 ],
                 retrieval_strategies=[
-                    RetrievalStrategy(
+                    DatabaseRetrievalStrategy(
                         name="secondary_search",
-                        type=Type2.BasicSimilarityStrategy,
+                        type=DatabaseRetrievalType.BasicSimilarityStrategy,
                         config={},
                         default=True,
                     )
@@ -78,6 +78,7 @@ class TestDatabaseService:
         self.mock_project_config = Mock()
         self.mock_project_config.rag = self.mock_rag_config
         self.mock_project_config.datasets = []
+        self.mock_project_config.components = None
 
     # =========================================================================
     # list_databases tests
@@ -126,7 +127,7 @@ class TestDatabaseService:
         result = DatabaseService.get_database("test_ns", "test_proj", "main_db")
 
         assert result.name == "main_db"
-        assert result.type == Type.ChromaStore
+        assert result.type == DatabaseType.ChromaStore
 
     @patch.object(ProjectService, "load_config")
     def test_get_database_raises_not_found(self, mock_load_config):
@@ -140,17 +141,41 @@ class TestDatabaseService:
     # create_database tests
     # =========================================================================
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_create_database_success(self, mock_load_config, mock_save_config):
+    def test_create_database_success(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that create_database adds new database to config."""
         mock_load_config.return_value = self.mock_project_config
 
         new_db = Database(
             name="new_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "new_collection"},
+            embedding_strategies=[
+                DatabaseEmbeddingStrategy(
+                    name="test_embeddings",
+                    type=DatabaseEmbeddingType.OllamaEmbedder,
+                    config={"model": "nomic-embed-text"},
+                )
+            ],
+            retrieval_strategies=[
+                DatabaseRetrievalStrategy(
+                    name="test_retrieval",
+                    type=DatabaseRetrievalType.BasicSimilarityStrategy,
+                    config={"top_k": 10},
+                    default=True,
+                )
+            ],
         )
+
+        # Mock the resolver to return a config with the new database resolved
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = self.mock_rag_config.databases + [new_db]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         result = DatabaseService.create_database("test_ns", "test_proj", new_db)
 
@@ -164,7 +189,7 @@ class TestDatabaseService:
 
         duplicate_db = Database(
             name="main_db",  # Already exists
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
         )
 
         with pytest.raises(ValueError, match="already exists"):
@@ -176,7 +201,7 @@ class TestDatabaseService:
         self.mock_project_config.rag = None
         mock_load_config.return_value = self.mock_project_config
 
-        new_db = Database(name="new_db", type=Type.ChromaStore)
+        new_db = Database(name="new_db", type=DatabaseType.ChromaStore)
 
         with pytest.raises(ValueError, match="RAG not configured"):
             DatabaseService.create_database("test_ns", "test_proj", new_db)
@@ -208,9 +233,9 @@ class TestDatabaseService:
         mock_load_config.return_value = self.mock_project_config
 
         new_strategies = [
-            RetrievalStrategy(
+            DatabaseRetrievalStrategy(
                 name="new_strategy",
-                type=Type2.CrossEncoderRerankedStrategy,
+                type=DatabaseRetrievalType.CrossEncoderRerankedStrategy,
                 config={"model_name": "reranker"},
             )
         ]
@@ -418,7 +443,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test vector store collection deletion success case using RAG abstraction."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "test_collection"},
         )
 
@@ -445,7 +470,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test vector store collection deletion when collection doesn't exist."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "nonexistent"},
         )
 
@@ -491,7 +516,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test vector store collection deletion failure case."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "test_collection"},
         )
 
@@ -518,7 +543,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test that import errors are handled gracefully."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "test_collection"},
         )
 
