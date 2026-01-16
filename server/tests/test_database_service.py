@@ -210,11 +210,29 @@ class TestDatabaseService:
     # update_database tests
     # =========================================================================
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_config(self, mock_load_config, mock_save_config):
+    def test_update_database_config(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that update_database updates config field."""
         mock_load_config.return_value = self.mock_project_config
+
+        # Create updated database with new config
+        updated_db = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "updated_collection"},
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=self.mock_rag_config.databases[0].retrieval_strategies,
+        )
+
+        # Mock the resolver to return the updated database
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [updated_db, self.mock_rag_config.databases[1]]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         result = DatabaseService.update_database(
             "test_ns",
@@ -226,9 +244,12 @@ class TestDatabaseService:
         assert result.config == {"collection_name": "updated_collection"}
         mock_save_config.assert_called_once()
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_strategies(self, mock_load_config, mock_save_config):
+    def test_update_database_strategies(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that update_database updates strategies."""
         mock_load_config.return_value = self.mock_project_config
 
@@ -240,6 +261,21 @@ class TestDatabaseService:
             )
         ]
 
+        # Create updated database with new strategies
+        updated_db = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=new_strategies,
+        )
+
+        # Mock the resolver to return the updated database
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [updated_db, self.mock_rag_config.databases[1]]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
+
         result = DatabaseService.update_database(
             "test_ns",
             "test_proj",
@@ -250,11 +286,30 @@ class TestDatabaseService:
         assert len(result.retrieval_strategies) == 1
         assert result.retrieval_strategies[0].name == "new_strategy"
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_default_strategy(self, mock_load_config, mock_save_config):
+    def test_update_database_default_strategy(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that update_database validates default strategy references."""
         mock_load_config.return_value = self.mock_project_config
+
+        # Create updated database with new default strategy
+        updated_db = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=self.mock_rag_config.databases[0].retrieval_strategies,
+            default_retrieval_strategy="basic_search",
+        )
+
+        # Mock the resolver to return the updated database
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [updated_db, self.mock_rag_config.databases[1]]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         result = DatabaseService.update_database(
             "test_ns",
@@ -265,10 +320,19 @@ class TestDatabaseService:
 
         assert result.default_retrieval_strategy == "basic_search"
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_raises_on_invalid_default(self, mock_load_config):
+    def test_update_database_raises_on_invalid_default(
+        self, mock_load_config, mock_resolver_class
+    ):
         """Test that update_database raises ValueError for invalid default strategy."""
         mock_load_config.return_value = self.mock_project_config
+
+        # Mock the resolver to return the database (validation happens after resolution)
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = self.mock_rag_config.databases
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         with pytest.raises(ValueError, match="not found"):
             DatabaseService.update_database(
