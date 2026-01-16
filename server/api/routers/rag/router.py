@@ -4,7 +4,11 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
+from config.datamodel import (
+    Database,
+    EmbeddingStrategy2,
+    RetrievalStrategy2,
+)
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -585,14 +589,14 @@ async def create_database(
         embedding_strategies = None
         if request.embedding_strategies:
             embedding_strategies = [
-                EmbeddingStrategy(**s) for s in request.embedding_strategies
+                EmbeddingStrategy2(**s) for s in request.embedding_strategies
             ]
 
         # Build retrieval strategies if provided
         retrieval_strategies = None
         if request.retrieval_strategies:
             retrieval_strategies = [
-                RetrievalStrategy(**s) for s in request.retrieval_strategies
+                RetrievalStrategy2(**s) for s in request.retrieval_strategies
             ]
 
         database = Database(
@@ -687,7 +691,7 @@ async def update_database(
     if request.embedding_strategies is not None:
         try:
             embedding_strategies = [
-                EmbeddingStrategy(**s) for s in request.embedding_strategies
+                EmbeddingStrategy2(**s) for s in request.embedding_strategies
             ]
         except Exception as e:
             raise HTTPException(
@@ -698,7 +702,7 @@ async def update_database(
     if request.retrieval_strategies is not None:
         try:
             retrieval_strategies = [
-                RetrievalStrategy(**s) for s in request.retrieval_strategies
+                RetrievalStrategy2(**s) for s in request.retrieval_strategies
             ]
         except Exception as e:
             raise HTTPException(
