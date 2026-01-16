@@ -375,6 +375,176 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/anomaly/models/{filename}")
 
     # =========================================================================
+    # Speech-to-Text
+    # =========================================================================
+
+    @classmethod
+    async def transcribe_audio(
+        cls,
+        audio_bytes: bytes,
+        filename: str = "audio.wav",
+        model: str = "distil-large-v3",
+        language: str | None = None,
+        prompt: str | None = None,
+        response_format: str = "json",
+        temperature: float = 0.0,
+        timestamp_granularities: str | None = None,
+        timeout: float = 600.0,
+    ) -> dict[str, Any]:
+        """Transcribe audio to text.
+
+        Args:
+            audio_bytes: Raw audio file bytes
+            filename: Original filename (for format detection)
+            model: Whisper model size (tiny, base, small, medium, large-v3, distil-large-v3)
+            language: ISO language code (auto-detected if None)
+            prompt: Optional conditioning text
+            response_format: Output format (json, text, srt, vtt, verbose_json)
+            temperature: Sampling temperature
+            timestamp_granularities: Comma-separated list (word, segment)
+            timeout: Request timeout (default 10 minutes for long audio)
+
+        Returns:
+            Transcription result
+        """
+        url = f"{cls.get_base_url()}/v1/audio/transcriptions"
+        logger.debug(f"Transcribing audio via {url}")
+
+        try:
+            # Build form data
+            files = {"file": (filename, audio_bytes)}
+            data = {
+                "model": model,
+                "response_format": response_format,
+                "temperature": str(temperature),
+            }
+            if language:
+                data["language"] = language
+            if prompt:
+                data["prompt"] = prompt
+            if timestamp_granularities:
+                data["timestamp_granularities"] = timestamp_granularities
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, files=files, data=data)
+
+                if response.status_code >= 400:
+                    try:
+                        error_detail = response.json().get("detail", response.text)
+                    except Exception:
+                        error_detail = response.text
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=error_detail,
+                    )
+
+                # Handle text response formats
+                if response_format in ("text", "srt", "vtt"):
+                    return {"text": response.text}
+
+                return response.json()
+
+        except httpx.ConnectError as e:
+            logger.error(f"Failed to connect to Universal Runtime at {url}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Universal Runtime not available at {cls.get_base_url()}. "
+                "Start it with: nx start universal",
+            ) from e
+        except httpx.TimeoutException as e:
+            logger.error(f"Transcription request timed out: {e}")
+            raise HTTPException(
+                status_code=504,
+                detail="Transcription request timed out. Audio may be too long.",
+            ) from e
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error transcribing audio: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error transcribing audio: {str(e)}",
+            ) from e
+
+    @classmethod
+    async def translate_audio(
+        cls,
+        audio_bytes: bytes,
+        filename: str = "audio.wav",
+        model: str = "distil-large-v3",
+        prompt: str | None = None,
+        response_format: str = "json",
+        temperature: float = 0.0,
+        timeout: float = 600.0,
+    ) -> dict[str, Any]:
+        """Translate audio to English text.
+
+        Args:
+            audio_bytes: Raw audio file bytes
+            filename: Original filename
+            model: Whisper model size
+            prompt: Optional conditioning text
+            response_format: Output format (json, text)
+            temperature: Sampling temperature
+            timeout: Request timeout
+
+        Returns:
+            Translation result
+        """
+        url = f"{cls.get_base_url()}/v1/audio/translations"
+        logger.debug(f"Translating audio via {url}")
+
+        try:
+            files = {"file": (filename, audio_bytes)}
+            data = {
+                "model": model,
+                "response_format": response_format,
+                "temperature": str(temperature),
+            }
+            if prompt:
+                data["prompt"] = prompt
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, files=files, data=data)
+
+                if response.status_code >= 400:
+                    try:
+                        error_detail = response.json().get("detail", response.text)
+                    except Exception:
+                        error_detail = response.text
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=error_detail,
+                    )
+
+                if response_format == "text":
+                    return {"text": response.text}
+
+                return response.json()
+
+        except httpx.ConnectError as e:
+            logger.error(f"Failed to connect to Universal Runtime at {url}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Universal Runtime not available at {cls.get_base_url()}. "
+                "Start it with: nx start universal",
+            ) from e
+        except httpx.TimeoutException as e:
+            logger.error(f"Translation request timed out: {e}")
+            raise HTTPException(
+                status_code=504,
+                detail="Translation request timed out. Audio may be too long.",
+            ) from e
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error translating audio: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error translating audio: {str(e)}",
+            ) from e
+
+    # =========================================================================
     # Health Check
     # =========================================================================
 

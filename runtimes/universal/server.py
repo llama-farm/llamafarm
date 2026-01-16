@@ -28,10 +28,13 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import (
+    BackgroundTasks,
     FastAPI,
     Form,
     HTTPException,
     UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel as PydanticBaseModel
@@ -47,6 +50,7 @@ from models import (
     GGUFLanguageModel,
     LanguageModel,
     OCRModel,
+    SpeechModel,
 )
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
@@ -2615,6 +2619,695 @@ async def delete_classifier_model(model_name: str):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+# ============================================================================
+# Speech-to-Text Endpoints (Whisper-based transcription)
+# ============================================================================
+
+# Safe audio file extensions (whitelist for security)
+SAFE_AUDIO_EXTENSIONS = frozenset({
+    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus",
+})
+
+# Silence detection threshold for decoded Opus audio (higher due to noise floor)
+SILENCE_THRESHOLD_OPUS = 0.03
+
+
+def _make_speech_cache_key(model_id: str, compute_type: str | None = None) -> str:
+    """Generate a cache key for a speech model.
+
+    Args:
+        model_id: Model size/name (e.g., "large-v3", "distil-large-v3")
+        compute_type: Compute type for inference
+
+    Returns:
+        Cache key string
+    """
+    ct_key = compute_type if compute_type is not None else "auto"
+    return f"speech:{model_id}:{ct_key}"
+
+
+async def load_speech(
+    model_id: str = "distil-large-v3",
+    compute_type: str | None = None,
+) -> SpeechModel:
+    """Load a speech-to-text model.
+
+    Args:
+        model_id: Model size/name (e.g., "large-v3", "distil-large-v3", "medium")
+        compute_type: Compute type for inference (auto-selected based on device if None)
+
+    Returns:
+        Loaded SpeechModel instance
+    """
+    cache_key = _make_speech_cache_key(model_id, compute_type)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading speech model: {model_id}")
+                device = get_device()
+
+                model = SpeechModel(
+                    model_id=model_id,
+                    device=device,
+                    compute_type=compute_type,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
+
+
+@app.post("/v1/audio/transcriptions")
+async def create_transcription(
+    background_tasks: BackgroundTasks,
+    file: UploadFile | None = None,
+    model: str = Form(default="distil-large-v3"),
+    language: str | None = Form(default=None),
+    prompt: str | None = Form(default=None),
+    response_format: str = Form(default="json"),
+    temperature: float = Form(default=0.0),
+    timestamp_granularities: str | None = Form(default=None),
+    stream: bool = Form(default=False),
+):
+    """
+    OpenAI-compatible audio transcription endpoint.
+
+    Transcribe audio files to text using Whisper models. Supports multiple
+    model sizes, languages, and output formats.
+
+    **Supported audio formats:** mp3, wav, m4a, webm, flac, ogg, mp4
+
+    **Model sizes:**
+    - tiny, base, small: Fast, lower accuracy
+    - medium: Good balance of speed and accuracy
+    - large-v3: Best accuracy, slower
+    - distil-large-v3: Near large-v3 accuracy, much faster (recommended)
+
+    **Streaming:** Set `stream=true` to receive transcription segments via SSE
+    as they're processed, rather than waiting for the complete transcription.
+
+    Example with curl:
+    ```bash
+    curl -X POST http://localhost:11540/v1/audio/transcriptions \\
+        -F "file=@audio.mp3" \\
+        -F "model=distil-large-v3" \\
+        -F "language=en" \\
+        -F "response_format=json"
+    ```
+
+    Example streaming:
+    ```bash
+    curl -X POST http://localhost:11540/v1/audio/transcriptions \\
+        -F "file=@audio.mp3" \\
+        -F "model=distil-large-v3" \\
+        -F "stream=true"
+    ```
+    """
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from fastapi.responses import StreamingResponse
+
+    try:
+        # Get audio content from file upload or file_id
+        audio_bytes: bytes | None = None
+        file_extension = ".wav"
+
+        if file is not None:
+            audio_bytes = await file.read()
+            if file.filename:
+                # Sanitize file extension against whitelist
+                ext = Path(file.filename).suffix.lower()
+                file_extension = ext if ext in SAFE_AUDIO_EXTENSIONS else ".wav"
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Audio file is required. Upload via 'file' field.",
+            )
+
+        if not audio_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty audio file",
+            )
+
+        # Detect actual audio format from content (don't trust file extension)
+        from utils.audio_buffer import (
+            decode_audio_bytes,
+            detect_audio_format,
+            pcm_to_wav,
+        )
+
+        format_name, is_compressed = detect_audio_format(audio_bytes)
+        logger.debug(f"Detected audio format: {format_name} (compressed={is_compressed})")
+
+        # If audio is compressed, decode to WAV for reliable processing
+        if is_compressed:
+            try:
+                pcm_data = decode_audio_bytes(audio_bytes)
+                audio_bytes = pcm_to_wav(pcm_data)
+                file_extension = ".wav"
+                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
+                # Fall back to original data - faster-whisper might handle it
+
+        # Load speech model
+        speech_model = await load_speech(model_id=model)
+        if speech_model is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to load speech model",
+            )
+
+        # Parse timestamp granularities
+        word_timestamps = False
+        if timestamp_granularities:
+            granularities = [g.strip() for g in timestamp_granularities.split(",")]
+            word_timestamps = "word" in granularities
+
+        # Write audio to temp file (faster-whisper requires file path)
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=file_extension, delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(audio_bytes)
+            if stream:
+                # Streaming response - yield segments as they're transcribed
+                async def generate_sse():
+                    async for segment in speech_model.transcribe_stream(
+                        audio_path=tmp_path,
+                        language=language,
+                        word_timestamps=word_timestamps,
+                        initial_prompt=prompt,
+                    ):
+                        segment_data = {
+                            "id": segment.id,
+                            "start": segment.start,
+                            "end": segment.end,
+                            "text": segment.text,
+                        }
+                        if segment.words:
+                            segment_data["words"] = segment.words
+
+                        yield f"data: {json.dumps(segment_data)}\n\n"
+
+                    yield "data: [DONE]\n\n"
+
+                # Use BackgroundTasks to ensure temp file cleanup even on client disconnect
+                background_tasks.add_task(Path(tmp_path).unlink, missing_ok=True)
+
+                return StreamingResponse(
+                    generate_sse(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",
+                    },
+                    background=background_tasks,
+                )
+
+            # Non-streaming response
+            result = await speech_model.transcribe(
+                audio_path=tmp_path,
+                language=language,
+                word_timestamps=word_timestamps,
+                initial_prompt=prompt,
+                temperature=[temperature] if temperature > 0 else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            )
+
+            # Format response based on requested format
+            if response_format == "text":
+                return result.text
+
+            if response_format == "srt":
+                # Generate SRT subtitle format
+                srt_lines = []
+                for i, seg in enumerate(result.segments, 1):
+                    start_time = _format_timestamp_srt(seg.start)
+                    end_time = _format_timestamp_srt(seg.end)
+                    srt_lines.append(f"{i}")
+                    srt_lines.append(f"{start_time} --> {end_time}")
+                    srt_lines.append(seg.text.strip())
+                    srt_lines.append("")
+                return "\n".join(srt_lines)
+
+            if response_format == "vtt":
+                # Generate WebVTT subtitle format
+                vtt_lines = ["WEBVTT", ""]
+                for seg in result.segments:
+                    start_time = _format_timestamp_vtt(seg.start)
+                    end_time = _format_timestamp_vtt(seg.end)
+                    vtt_lines.append(f"{start_time} --> {end_time}")
+                    vtt_lines.append(seg.text.strip())
+                    vtt_lines.append("")
+                return "\n".join(vtt_lines)
+
+            if response_format == "verbose_json":
+                # Detailed JSON with segments
+                return {
+                    "task": "transcribe",
+                    "language": result.language,
+                    "duration": result.duration,
+                    "text": result.text,
+                    "segments": [
+                        {
+                            "id": seg.id,
+                            "start": seg.start,
+                            "end": seg.end,
+                            "text": seg.text,
+                            "words": seg.words,
+                            "avg_logprob": seg.avg_logprob,
+                            "no_speech_prob": seg.no_speech_prob,
+                        }
+                        for seg in result.segments
+                    ],
+                }
+
+            # Default: simple JSON
+            return {
+                "text": result.text,
+            }
+
+        finally:
+            # Clean up temp file (if not streaming)
+            if not stream and tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    except ImportError as e:
+        logger.error(f"Speech model dependencies not installed: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Speech-to-text not available. Install with: uv pip install 'universal-runtime[speech]'. Error: {e}",
+        ) from e
+    except Exception as e:
+        logger.error(f"Error in create_transcription: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def _format_timestamp_srt(seconds: float) -> str:
+    """Format seconds as SRT timestamp (HH:MM:SS,mmm)."""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _format_timestamp_vtt(seconds: float) -> str:
+    """Format seconds as VTT timestamp (HH:MM:SS.mmm)."""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
+
+
+@app.post("/v1/audio/translations")
+async def create_translation(
+    file: UploadFile,
+    model: str = Form(default="distil-large-v3"),
+    prompt: str | None = Form(default=None),
+    response_format: str = Form(default="json"),
+    temperature: float = Form(default=0.0),
+):
+    """
+    OpenAI-compatible audio translation endpoint.
+
+    Translate audio to English text. Works the same as transcription but
+    always outputs English regardless of the input language.
+
+    Example:
+    ```bash
+    curl -X POST http://localhost:11540/v1/audio/translations \\
+        -F "file=@french_audio.mp3" \\
+        -F "model=distil-large-v3"
+    ```
+    """
+    import tempfile
+    from pathlib import Path
+
+    from utils.audio_buffer import decode_audio_bytes, detect_audio_format, pcm_to_wav
+
+    try:
+        audio_bytes = await file.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="Empty audio file")
+
+        file_extension = Path(file.filename).suffix if file.filename else ".wav"
+
+        # Detect actual audio format from content (don't trust file extension)
+        format_name, is_compressed = detect_audio_format(audio_bytes)
+        logger.debug(f"Detected audio format: {format_name} (compressed={is_compressed})")
+
+        # If audio is compressed, decode to WAV for reliable processing
+        if is_compressed:
+            try:
+                pcm_data = decode_audio_bytes(audio_bytes)
+                audio_bytes = pcm_to_wav(pcm_data)
+                file_extension = ".wav"
+                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
+
+        # Load speech model
+        speech_model = await load_speech(model_id=model)
+        if speech_model is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to load speech model",
+            )
+
+        # Write to temp file
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=file_extension, delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(audio_bytes)
+
+            # Transcribe with translation task
+            result = await speech_model.transcribe(
+                audio_path=tmp_path,
+                task="translate",  # Translate to English
+                initial_prompt=prompt,
+                temperature=[temperature] if temperature > 0 else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            )
+
+            if response_format == "text":
+                return result.text
+
+            return {
+                "text": result.text,
+            }
+
+        finally:
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    except ImportError as e:
+        logger.error(f"Speech model dependencies not installed: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Speech-to-text not available. Install with: uv pip install 'universal-runtime[speech]'. Error: {e}",
+        ) from e
+    except Exception as e:
+        logger.error(f"Error in create_translation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.websocket("/v1/audio/transcriptions/stream")
+async def websocket_transcription(
+    websocket: WebSocket,
+    model: str = "base",
+    language: str | None = None,
+    word_timestamps: bool = False,
+    chunk_interval: float = 2.0,
+):
+    """
+    WebSocket endpoint for real-time audio streaming transcription.
+
+    Connect via WebSocket and send audio chunks to receive live transcription.
+    Audio should be sent as binary messages (raw PCM: 16kHz, 16-bit, mono).
+
+    **IMPORTANT - Model Selection for Real-Time:**
+    For real-time on CPU, use small models:
+    - "tiny": ~0.5s to process 2s audio - fastest, lower accuracy
+    - "base": ~1-2s to process 2s audio - good balance (DEFAULT)
+    - "small": ~3-4s to process 2s audio - better accuracy
+
+    Larger models (medium, large-v3, distil-large-v3) require GPU for real-time.
+
+    **Protocol:**
+    1. Connect with query params (model, language, chunk_interval)
+    2. Send binary audio chunks (raw PCM: 16kHz, 16-bit, mono)
+    3. Receive JSON transcription segments as processed
+    4. Send text "END" to flush remaining audio and close
+
+    **Query Parameters:**
+    - model: Whisper model (default: "base" for CPU real-time)
+    - language: ISO language code (auto-detect if not set)
+    - word_timestamps: Include word-level timestamps (default: false)
+    - chunk_interval: Seconds of audio per chunk (default: 2.0)
+
+    **Response format:**
+    ```json
+    {"type": "segment", "id": 0, "start": 0.0, "end": 2.0, "text": "Hello", "is_final": false}
+    ```
+
+    **Example (JavaScript):**
+    ```javascript
+    const ws = new WebSocket('ws://localhost:11540/v1/audio/transcriptions/stream');
+    ws.onmessage = (e) => console.log(JSON.parse(e.data).text);
+    mediaRecorder.ondataavailable = (e) => ws.send(e.data);
+    ws.send('END');  // When done
+    ```
+    """
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from utils.audio_buffer import (
+        StreamingAudioBuffer,
+        detect_audio_format,
+        is_silence,
+    )
+
+    await websocket.accept()
+    logger.info(
+        f"WebSocket connection opened for transcription "
+        f"(model={model}, chunk_interval={chunk_interval}s)"
+    )
+
+    # Initialize audio buffer with time-based chunking for predictable output
+    audio_buffer = StreamingAudioBuffer(
+        min_speech_duration=0.5,
+        max_speech_duration=30.0,
+        chunk_interval=chunk_interval,
+    )
+
+    # Track if we've warned about compressed audio (only warn once)
+    compressed_audio_warned = False
+
+    # Load speech model
+    try:
+        speech_model = await load_speech(model_id=model)
+        if speech_model is None:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Failed to load speech model",
+            })
+            await websocket.close(code=1011)
+            return
+    except ImportError as e:
+        await websocket.send_json({
+            "type": "error",
+            "message": f"Speech dependencies not installed: {e}",
+        })
+        await websocket.close(code=1011)
+        return
+
+    # Warn about CPU performance with large models
+    large_models = {"medium", "large", "large-v1", "large-v2", "large-v3", "distil-large-v3"}
+    if speech_model.device == "cpu" and model in large_models:
+        logger.warning(
+            f"Using '{model}' on CPU - real-time transcription not possible. "
+            f"Use 'tiny', 'base', or 'small' for real-time on CPU, or use GPU."
+        )
+        await websocket.send_json({
+            "type": "warning",
+            "message": f"Model '{model}' is too slow for real-time on CPU. "
+            f"Consider using 'base' or 'tiny' instead.",
+        })
+
+    segment_id = 0
+    cumulative_offset = 0.0  # Track total time offset across chunks
+
+    async def transcribe_audio(wav_bytes: bytes, is_final: bool = False) -> None:
+        """Transcribe audio and send results."""
+        nonlocal segment_id, cumulative_offset
+        import asyncio
+        import concurrent.futures
+
+        # Write to temp file
+        # Assign tmp_path before write to ensure cleanup even if write fails
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(wav_bytes)
+
+            def sync_transcribe():
+                """Run transcription synchronously in thread pool."""
+                # Use faster settings for real-time streaming:
+                # - vad_filter=False: We handle chunking, don't filter our chunks
+                # - beam_size=1: Greedy decoding for speed
+                # - best_of=1: No multiple candidates
+                segments, info = speech_model._whisper_model.transcribe(
+                    tmp_path,
+                    language=language,
+                    word_timestamps=word_timestamps,
+                    vad_filter=False,  # Critical: don't filter our pre-chunked audio
+                    beam_size=1,  # Greedy decoding for speed
+                    best_of=1,
+                    temperature=0.0,  # Deterministic
+                    no_speech_threshold=1.0,  # Don't skip segments marked as "no speech"
+                    log_prob_threshold=-2.0,  # Lower threshold to avoid skipping low-confidence
+                    compression_ratio_threshold=3.0,  # Higher threshold for repetitive text
+                )
+                return list(segments), info
+
+            # Run transcription in thread pool to avoid blocking event loop
+            loop = asyncio.get_running_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                segments, info = await loop.run_in_executor(pool, sync_transcribe)
+
+            # Send segments with adjusted timestamps
+            for segment in segments:
+                # Skip segments with high probability of being non-speech
+                # This helps prevent Whisper hallucinations like "I'm sorry" on silence
+                if hasattr(segment, "no_speech_prob") and segment.no_speech_prob > 0.6:
+                    logger.debug(
+                        f"Skipping segment with high no_speech_prob: "
+                        f"{segment.no_speech_prob:.2f} - '{segment.text.strip()}'"
+                    )
+                    continue
+
+                words = None
+                if word_timestamps and segment.words:
+                    words = [
+                        {
+                            "word": w.word,
+                            "start": w.start + cumulative_offset,
+                            "end": w.end + cumulative_offset,
+                            "probability": w.probability,
+                        }
+                        for w in segment.words
+                    ]
+
+                response = {
+                    "type": "final" if is_final else "segment",
+                    "id": segment_id,
+                    "start": segment.start + cumulative_offset,
+                    "end": segment.end + cumulative_offset,
+                    "text": segment.text.strip(),
+                    "is_final": is_final,
+                }
+                if words:
+                    response["words"] = words
+
+                # Only send if there's actual text
+                if response["text"]:
+                    await websocket.send_json(response)
+                    segment_id += 1
+
+            # Update cumulative offset for next chunk
+            cumulative_offset += chunk_interval
+
+        finally:
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    try:
+        while True:
+            # Receive message (binary audio or text command)
+            message = await websocket.receive()
+
+            if message["type"] == "websocket.disconnect":
+                break
+
+            if "text" in message:
+                text = message["text"]
+                if text.upper() == "END":
+                    # Flush remaining audio
+                    remaining = audio_buffer.flush()
+                    if remaining:
+                        await transcribe_audio(remaining, is_final=True)
+
+                    await websocket.send_json({
+                        "type": "done",
+                        "message": "Transcription complete",
+                    })
+                    break
+
+                # Handle JSON config messages
+                try:
+                    config = json.loads(text)
+                    if "language" in config:
+                        language = config["language"]
+                        logger.info(f"Updated language to: {language}")
+                except json.JSONDecodeError:
+                    pass
+
+            elif "bytes" in message:
+                # Process audio chunk
+                audio_data = message["bytes"]
+
+                # Check for compressed audio and warn (once) about performance
+                if not compressed_audio_warned:
+                    format_name, is_compressed = detect_audio_format(audio_data)
+                    if is_compressed:
+                        compressed_audio_warned = True
+                        logger.warning(
+                            f"Receiving compressed audio ({format_name}). "
+                            "For better real-time performance, send raw PCM "
+                            "(16kHz, 16-bit, mono)."
+                        )
+                        await websocket.send_json({
+                            "type": "warning",
+                            "message": f"Compressed audio detected ({format_name}). "
+                            "For better real-time performance, configure your client "
+                            "to send raw PCM audio (16kHz, 16-bit signed, mono). "
+                            "Decoding adds ~50-200ms latency per chunk.",
+                        })
+
+                # Add to buffer and check if we should transcribe
+                should_transcribe, wav_bytes = audio_buffer.add(audio_data)
+
+                if should_transcribe and wav_bytes:
+                    # Skip transcription if audio is silence (prevents Whisper hallucinations)
+                    # Extract PCM from WAV for silence check (skip 44-byte header)
+                    pcm_data = wav_bytes[44:] if wav_bytes[:4] == b"RIFF" else wav_bytes
+                    if is_silence(pcm_data, threshold=SILENCE_THRESHOLD_OPUS):
+                        logger.debug("Skipping silent audio chunk")
+                        # Still update cumulative offset to maintain timing
+                        cumulative_offset += chunk_interval
+                        continue
+
+                    await transcribe_audio(wav_bytes)
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}", exc_info=True)
+        # Only suppress connection-related errors when sending error response
+        with suppress(WebSocketDisconnect, RuntimeError):
+            await websocket.send_json({
+                "type": "error",
+                "message": str(e),
+            })
+    finally:
+        # Flush any remaining audio
+        try:
+            remaining = audio_buffer.flush()
+            if remaining:
+                await transcribe_audio(remaining, is_final=True)
+        except Exception:
+            pass
+
+        logger.info("WebSocket connection closed")
+
+
 if __name__ == "__main__":
     import uvicorn
     from llamafarm_common.pidfile import write_pid
@@ -2634,4 +3327,6 @@ if __name__ == "__main__":
         port=port,
         log_config=None,  # Disable uvicorn's log config (handled in setup_logging)
         access_log=False,  # Disable uvicorn access logs (handled by structlog)
+        ws_ping_interval=30.0,  # Send ping every 30s (default: 20s)
+        ws_ping_timeout=60.0,  # Wait 60s for pong (default: 20s) - allows for slow transcription
     )

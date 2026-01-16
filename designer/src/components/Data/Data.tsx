@@ -33,6 +33,7 @@ import { useImportExampleDataset } from '../../hooks/useExamples'
 import PageActions from '../common/PageActions'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
+import { Switch } from '../ui/switch'
 import { useToast } from '../ui/toast'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -41,9 +42,7 @@ import {
   useCreateDataset,
   useDeleteDataset,
   useAvailableStrategies,
-  useProcessDataset,
 } from '../../hooks/useDatasets'
-import { uploadFileToDataset } from '../../api/datasets'
 import datasetService from '../../api/datasets'
 import projectService from '../../api/projectService'
 import { useProject } from '../../hooks/useProjects'
@@ -298,6 +297,7 @@ const Data = () => {
     useState(false)
   const [shouldUploadAfterCreate, setShouldUploadAfterCreate] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [autoProcessUploads, setAutoProcessUploads] = useState(true)
   const [uploadingFileCount, setUploadingFileCount] = useState(0)
   const activeUploadControllersRef = useRef<AbortController[]>([])
   const [isTransitioningToCreate, setIsTransitioningToCreate] = useState(false)
@@ -366,30 +366,27 @@ const Data = () => {
   const deleteDatasetMutation = useDeleteDataset()
   const importExampleDataset = useImportExampleDataset()
 
-  // Custom upload mutation with proper AbortSignal handling
-  const uploadMutation = useMutation({
+  // Bulk upload mutation to leverage the bulk endpoint (supports cancellation)
+  const bulkUploadMutation = useMutation({
     mutationFn: async ({
       namespace,
       project,
       dataset,
-      file,
+      files,
+      autoProcess,
       signal,
     }: {
       namespace: string
       project: string
       dataset: string
-      file: File
+      files: File[]
+      autoProcess?: boolean
       signal?: AbortSignal
-    }) => {
-      // Use the API service which properly handles the signal
-      return await uploadFileToDataset(
-        namespace,
-        project,
-        dataset,
-        file,
-        signal
-      )
-    },
+    }) =>
+      datasetService.uploadFilesBulk(namespace, project, dataset, files, {
+        autoProcess,
+        signal,
+      }),
     onError: error => {
       // Don't show error toast for aborted uploads
       if (
@@ -401,9 +398,6 @@ const Data = () => {
       // Error toasts for actual failures are handled in handleDatasetSelect
     },
   })
-
-  // Process dataset mutation for auto-processing after upload
-  const processMutation = useProcessDataset()
 
   // Fetch available strategies and databases from API
   const { data: availableOptions } = useAvailableStrategies(
@@ -1008,92 +1002,85 @@ const Data = () => {
       datasetId: string,
       namespace: string,
       project: string,
+      autoProcess: boolean,
       batchSize: number = UPLOAD_BATCH_SIZE
     ) => {
-      const results = []
+      type UploadBatchAggregate = {
+        files: string[]
+        uploaded: number
+        skipped: number
+        failed: number
+        status?: 'processing' | 'uploaded'
+        taskId?: string | null
+        cancelled?: boolean
+        error?: unknown
+      }
+
+      const results: UploadBatchAggregate[] = []
       let cancelled = false
 
       for (let i = 0; i < files.length; i += batchSize) {
-        // CHECK FOR CANCELLATION AT START OF EACH BATCH
-        if (cancelled) {
-          // Add cancelled results for remaining files
-          const remainingFiles = files.slice(i)
-          remainingFiles.forEach(file => {
-            results.push({
-              file: file.name,
-              success: false,
-              error: new Error('Cancelled'),
-              cancelled: true,
-            })
+        const batch = files.slice(i, i + batchSize)
+        const controller = new AbortController()
+        activeUploadControllersRef.current.push(controller)
+        const batchFiles = batch.map(file => file.name)
+
+        try {
+          const bulkResult = await bulkUploadMutation.mutateAsync({
+            namespace,
+            project,
+            dataset: datasetId,
+            files: batch,
+            autoProcess,
+            signal: controller.signal,
           })
-          break
+
+          results.push({
+            files: batchFiles,
+            uploaded: bulkResult.uploaded,
+            skipped: bulkResult.skipped,
+            failed: bulkResult.failed,
+            status: bulkResult.status,
+            taskId: bulkResult.task_id ?? null,
+          })
+        } catch (error) {
+          // Check if this is an abort/cancellation error
+          if (
+            (error instanceof Error && error.name === 'AbortError') ||
+            (error as any)?.code === 'ERR_CANCELED' ||
+            (error as any)?.message?.includes('cancel')
+          ) {
+            cancelled = true // Set flag to stop processing more batches
+            results.push({
+              files: batchFiles,
+              uploaded: 0,
+              skipped: 0,
+              failed: batchFiles.length,
+              cancelled: true,
+              error,
+            })
+          } else {
+            results.push({
+              files: batchFiles,
+              uploaded: 0,
+              skipped: 0,
+              failed: batchFiles.length,
+              error,
+            })
+          }
+        } finally {
+          activeUploadControllersRef.current =
+            activeUploadControllersRef.current.filter(c => c !== controller)
         }
 
-        const batch = files.slice(i, i + batchSize)
-        const batchResults = await Promise.all(
-          batch.map(async file => {
-            const controller = new AbortController()
-            activeUploadControllersRef.current.push(controller)
-
-            try {
-              const result = await uploadMutation.mutateAsync({
-                namespace,
-                project,
-                dataset: datasetId,
-                file,
-                signal: controller.signal,
-              })
-              return {
-                file: file.name,
-                success: true,
-                result,
-                skipped: result.skipped || false,
-              }
-            } catch (error) {
-              // Check if this is an abort/cancellation error
-              if (
-                (error instanceof Error && error.name === 'AbortError') ||
-                (error as any)?.code === 'ERR_CANCELED' ||
-                (error as any)?.message?.includes('cancel')
-              ) {
-                cancelled = true // Set flag to stop processing more batches
-                return {
-                  file: file.name,
-                  success: false,
-                  error,
-                  cancelled: true,
-                }
-              }
-              return { file: file.name, success: false, error }
-            } finally {
-              activeUploadControllersRef.current =
-                activeUploadControllersRef.current.filter(c => c !== controller)
-            }
-          })
-        )
-
-        results.push(...batchResults)
-
-        // Check if any upload in this batch was cancelled
-        if (batchResults.some(r => (r as any).cancelled)) {
-          cancelled = true
-          // Add cancelled results for remaining files
-          const remainingFiles = files.slice(i + batchSize)
-          remainingFiles.forEach(file => {
-            results.push({
-              file: file.name,
-              success: false,
-              error: new Error('Cancelled'),
-              cancelled: true,
-            })
-          })
+        if (cancelled) {
           break
         }
       }
 
       return results
     },
-    [uploadMutation]
+    [bulkUploadMutation]
   )
 
   // Handle file upload to selected dataset
@@ -1104,6 +1091,16 @@ const Data = () => {
       }
 
       const fileCount = pendingFiles.length // Store count before clearing
+
+      if (autoProcessUploads && fileCount > 100) {
+        toast({
+          message:
+            'Auto-process supports up to 100 files per upload. Please reduce the batch size or disable auto-process.',
+          variant: 'destructive',
+        })
+        return
+      }
+
       setUploadingFileCount(fileCount)
       setIsUploading(true)
       setIsSelectDatasetModalOpen(false)
@@ -1111,20 +1108,30 @@ const Data = () => {
       const { namespace, project } = activeProject
 
       try {
+        const batchSize =
+          autoProcessUploads && pendingFiles.length > 0
+            ? Math.min(pendingFiles.length, 100)
+            : UPLOAD_BATCH_SIZE
+
         // Upload all files to the selected dataset in batches
         const results = await uploadFilesInBatches(
           pendingFiles,
           datasetId,
           namespace,
-          project
+          project,
+          autoProcessUploads,
+          batchSize
         )
 
-        const cancelled = results.some(r => (r as any).cancelled)
-        const failures = results.filter(
-          r => !r.success && !(r as any).cancelled
-        )
-        const successes = results.filter(r => r.success && !(r as any).skipped)
-        const skipped = results.filter(r => r.success && (r as any).skipped)
+        const cancelled = results.some(r => r.cancelled)
+        const totalUploaded = results.reduce((sum, r) => sum + r.uploaded, 0)
+        const totalSkipped = results.reduce((sum, r) => sum + r.skipped, 0)
+        const totalFailed = results.reduce((sum, r) => sum + r.failed, 0)
+        const taskIds = results.map(r => r.taskId).filter(Boolean) as string[]
+        const hasProcessing =
+          results.some(r => r.status === 'processing') || taskIds.length > 0
+        const hasPending =
+          results.some(r => r.status === 'uploaded') || !autoProcessUploads
 
         // If upload was cancelled, don't show success/failure toast (already shown in handleCancelUpload)
         if (cancelled) {
@@ -1132,87 +1139,74 @@ const Data = () => {
         }
 
         // Show appropriate toast based on results
-        if (failures.length > 0 && successes.length > 0) {
+        if (totalFailed > 0 && totalUploaded > 0) {
           // Partial success: some uploads succeeded, some failed
           const skippedMsg =
-            skipped.length > 0 ? `, skipped ${skipped.length} duplicate(s)` : ''
+            totalSkipped > 0 ? `, skipped ${totalSkipped} duplicate(s)` : ''
           toast({
-            message: `Uploaded ${successes.length} of ${fileCount} file(s)${skippedMsg}. Failed: ${failures.map(f => f.file).join(', ')}`,
+            message: `Uploaded ${totalUploaded} of ${fileCount} file(s)${skippedMsg}. Failed: ${totalFailed} file(s).`,
             variant: 'destructive',
           })
-        } else if (failures.length > 0 && skipped.length > 0) {
+        } else if (totalFailed > 0 && totalSkipped > 0) {
           // All files either failed or were skipped
           toast({
-            message: `Upload failed for ${failures.length} file(s), skipped ${skipped.length} duplicate(s). Failed: ${failures.map(f => f.file).join(', ')}`,
+            message: `Upload failed for ${totalFailed} file(s), skipped ${totalSkipped} duplicate(s).`,
             variant: 'destructive',
           })
-        } else if (failures.length > 0) {
+        } else if (totalFailed > 0) {
           // All files failed
           toast({
-            message: `Upload failed for all files. Failed: ${failures.map(f => f.file).join(', ')}`,
+            message: `Upload failed for all files (${totalFailed}).`,
             variant: 'destructive',
           })
-        } else if (skipped.length > 0 && successes.length === 0) {
+        } else if (totalSkipped > 0 && totalUploaded === 0) {
           // All files were duplicates
           toast({
-            message: `All ${skipped.length} file(s) were already in ${datasetName}`,
+            message: `All ${totalSkipped} file(s) were already in ${datasetName}`,
             variant: 'default',
             icon: 'alert-triangle',
           })
-        } else if (skipped.length > 0) {
+        } else if (totalSkipped > 0) {
           // Some successes with some skipped
           toast({
-            message: `Uploaded ${successes.length} file(s) to ${datasetName}, skipped ${skipped.length} duplicate(s)`,
+            message: `Uploaded ${totalUploaded} file(s) to ${datasetName}, skipped ${totalSkipped} duplicate(s)`,
             variant: 'default',
           })
         } else {
           // All files succeeded
-          toast({
-            message: `Successfully uploaded ${fileCount} file(s) to ${datasetName}`,
-            variant: 'default',
-          })
+          const message =
+            hasPending && !hasProcessing
+              ? `Uploaded ${totalUploaded} file(s) to ${datasetName}. Processing is paused.`
+              : hasProcessing
+                ? `Uploaded ${totalUploaded} file(s) to ${datasetName}. Processing started.`
+                : `Successfully uploaded ${totalUploaded} file(s) to ${datasetName}`
+          toast({ message, variant: 'default' })
+        }
+
+        if (
+          taskIds.length > 0 &&
+          activeProject?.namespace &&
+          activeProject?.project
+        ) {
+          saveDatasetTaskId(
+            activeProject.namespace,
+            activeProject.project,
+            datasetId,
+            taskIds[0]
+          )
         }
 
         // Navigate to the dataset view to see uploaded files (only if some succeeded)
-        if (successes.length > 0) {
+        if (totalUploaded > 0) {
           // Explicitly refetch to ensure fresh data before navigating
           await refetchDatasets()
 
-          // Auto-trigger processing after successful uploads
-          if (activeProject?.namespace && activeProject?.project) {
-            // Check if processing is already running for this dataset
-            const existingTaskId = loadDatasetTaskId(
-              activeProject.namespace,
-              activeProject.project,
-              datasetId
-            )
-
-            if (!existingTaskId) {
-              // No processing running, trigger immediately
-              try {
-                const result = await processMutation.mutateAsync({
-                  namespace: activeProject.namespace,
-                  project: activeProject.project,
-                  dataset: datasetId,
-                })
-
-                if (result.task_id) {
-                  saveDatasetTaskId(
-                    activeProject.namespace,
-                    activeProject.project,
-                    datasetId,
-                    result.task_id
-                  )
-                }
-              } catch (error) {
-                console.error('Failed to auto-start processing:', error)
-                // Don't show error toast - processing can be triggered manually in dataset view
-              }
-            }
-            // If processing is already running, DatasetView will handle queuing
-          }
-
-          navigate(`/chat/data/${datasetId}`)
+          navigate(`/chat/data/${datasetId}`, {
+            state: {
+              taskId: taskIds[0] || null,
+              pendingProcessing: hasPending && !hasProcessing,
+            },
+          })
         }
       } catch (error) {
         console.error('Upload failed:', error)
@@ -1248,7 +1242,7 @@ const Data = () => {
       toast,
       navigate,
       refetchDatasets,
-      processMutation,
+      autoProcessUploads,
     ]
   )
 
@@ -1368,7 +1362,21 @@ const Data = () => {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+      <div className="space-y-4 py-4">
+        <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">Auto-process after upload</span>
+            <span className="text-xs text-muted-foreground">
+              Turn off for batch uploads or when you want to review before processing.
+            </span>
+          </div>
+          <Switch
+            checked={autoProcessUploads}
+            onCheckedChange={setAutoProcessUploads}
+            aria-label="Toggle automatic processing after upload"
+          />
+        </div>
+
           {/* Create new dataset with dropped files */}
           <button
             onClick={() => {
@@ -2057,7 +2065,7 @@ const Data = () => {
                   type: demoFile.type,
                 })
 
-                await uploadFileToDataset(
+                await datasetService.uploadFileToDataset(
                   activeProject.namespace,
                   activeProject.project,
                   name,
