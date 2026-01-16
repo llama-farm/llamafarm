@@ -43,6 +43,7 @@ export function RadioSelector<T extends string>({
       <div className="space-y-3">
         {options.map((option, index) => (
           <button
+            type="button"
             key={option.id}
             onClick={() => onSelect(option.id)}
             className={cn(

@@ -150,7 +150,7 @@ class HFDatasetImportRequest(BaseModel):
     hf_dataset_id: str  # e.g., "squad", "username/dataset-name"
     config: str = "default"
     split: str = "train"
-    max_rows: int = Field(default=100, le=100)  # HF datasets-server API limit
+    max_rows: int = Field(default=100, ge=1, le=100)  # HF datasets-server API limit
     format: Literal["jsonl", "csv"] = "jsonl"
     data_processing_strategy: str
     database: str
@@ -297,11 +297,13 @@ async def import_hf_dataset(request: HFDatasetImportRequest) -> HFDatasetImportR
                     )
 
     # 2. Fetch rows from HF datasets-server
+    from urllib.parse import quote
+
     hf_url = (
         f"{HF_DATASETS_SERVER}/rows"
-        f"?dataset={request.hf_dataset_id}"
-        f"&config={config_to_use}"
-        f"&split={split_to_use}"
+        f"?dataset={quote(request.hf_dataset_id, safe='')}"
+        f"&config={quote(config_to_use, safe='')}"
+        f"&split={quote(split_to_use, safe='')}"
         f"&offset=0"
         f"&length={request.max_rows}"
     )

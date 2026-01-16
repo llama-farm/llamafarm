@@ -645,7 +645,7 @@ const Data = () => {
             const file = new File([fileBlob], demoFile.filename, {
               type: demoFile.type,
             })
-            await uploadFileToDataset(
+            await datasetService.uploadFileToDataset(
               activeProject.namespace,
               activeProject.project,
               demo.datasetName,
@@ -659,11 +659,12 @@ const Data = () => {
             variant: 'default',
           })
 
-          await processMutation.mutateAsync({
-            namespace: activeProject.namespace,
-            project: activeProject.project,
-            dataset: demo.datasetName,
-          })
+          await datasetService.executeDatasetAction(
+            activeProject.namespace,
+            activeProject.project,
+            demo.datasetName,
+            { action_type: 'process' }
+          )
 
           toast({
             message: `Sample dataset "${demo.datasetName}" imported successfully!`,
@@ -685,7 +686,7 @@ const Data = () => {
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [activeProject, projectResp, navigate, toast, createDatasetMutation, processMutation, refetchDatasets])
+  }, [activeProject, projectResp, navigate, toast, createDatasetMutation, refetchDatasets])
 
   // Auto-import HF dataset when triggered from onboarding
   useEffect(() => {

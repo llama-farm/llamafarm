@@ -263,19 +263,14 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
 
       // If user uploaded files during onboarding, dispatch event to trigger upload
       // Only do this once - check if we already dispatched by looking for a flag
-      if (prev.answers.dataStatus === 'has-data' && prev.answers.uploadedFiles.length > 0 && !(window as any).__onboardingFilesDispatched) {
+      const fileStorageKey = '__lf_onboarding_files_27a9c3'
+      const dispatchedKey = '__lf_onboarding_dispatched_27a9c3'
+      if (prev.answers.dataStatus === 'has-data' && prev.answers.uploadedFiles.length > 0 && !(window as any)[dispatchedKey]) {
         // Get actual files from temporary storage
-        const files = (window as any).__onboardingFiles || []
-        console.log('[useOnboarding] completeWizard - checking files:', {
-          dataStatus: prev.answers.dataStatus,
-          uploadedFilesCount: prev.answers.uploadedFiles.length,
-          actualFilesCount: files.length,
-          fileNames: files.map((f: File) => f.name),
-        })
+        const files = (window as any)[fileStorageKey] || []
         if (files.length > 0) {
-          console.log('[useOnboarding] Dispatching lf-onboarding-upload-files event')
           // Mark as dispatched BEFORE dispatching to prevent duplicate events
-          ;(window as any).__onboardingFilesDispatched = true
+          ;(window as any)[dispatchedKey] = true
           window.dispatchEvent(
             new CustomEvent('lf-onboarding-upload-files', {
               detail: {
@@ -286,11 +281,9 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
           )
           // Clear temporary storage after a brief delay to ensure event is processed
           setTimeout(() => {
-            delete (window as any).__onboardingFiles
-            delete (window as any).__onboardingFilesDispatched
+            delete (window as any)[fileStorageKey]
+            delete (window as any)[dispatchedKey]
           }, 100)
-        } else {
-          console.warn('[useOnboarding] No actual files found in window.__onboardingFiles!')
         }
       }
 

@@ -102,12 +102,10 @@ export function DataStatusSelector({
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
   // Initialize file storage if not present
-  if (!(window as any).__onboardingFiles) {
-    ;(window as any).__onboardingFiles = []
+  if (!(window as any).__lf_onboarding_files_27a9c3) {
+    ;(window as any).__lf_onboarding_files_27a9c3 = []
   }
 
-  // Debug: Log current state of file storage on each render
-  console.log('[DataStatusSelector] Render - uploadedFiles:', uploadedFiles.length, 'window.__onboardingFiles:', (window as any).__onboardingFiles?.length || 0)
 
   // Show inline HF finder for RAG/chatbot use cases, external links for others
   const supportsHFImport = projectType && HF_IMPORT_PROJECT_TYPES.includes(projectType)
@@ -154,12 +152,8 @@ export function DataStatusSelector({
       }))
       onUploadedFilesChange([...uploadedFiles, ...fileInfos])
       // Store actual files in a temporary location for later upload
-      const existingFiles = (window as any).__onboardingFiles || []
-      ;(window as any).__onboardingFiles = [...existingFiles, ...files]
-      console.log('[DataStatusSelector] Files dropped and stored:', {
-        newFiles: files.map(f => f.name),
-        totalStored: (window as any).__onboardingFiles.length,
-      })
+      const existingFiles = (window as any).__lf_onboarding_files_27a9c3 || []
+      ;(window as any).__lf_onboarding_files_27a9c3 = [...existingFiles, ...files]
     }
   }, [uploadedFiles, onUploadedFilesChange])
 
@@ -173,12 +167,8 @@ export function DataStatusSelector({
       }))
       onUploadedFilesChange([...uploadedFiles, ...fileInfos])
       // Store actual files in a temporary location for later upload
-      const existingFiles = (window as any).__onboardingFiles || []
-      ;(window as any).__onboardingFiles = [...existingFiles, ...files]
-      console.log('[DataStatusSelector] Files selected via input and stored:', {
-        newFiles: files.map(f => f.name),
-        totalStored: (window as any).__onboardingFiles.length,
-      })
+      const existingFiles = (window as any).__lf_onboarding_files_27a9c3 || []
+      ;(window as any).__lf_onboarding_files_27a9c3 = [...existingFiles, ...files]
     }
     // Reset input so same file can be selected again
     e.target.value = ''
@@ -188,8 +178,8 @@ export function DataStatusSelector({
     const newFiles = uploadedFiles.filter((_, i) => i !== index)
     onUploadedFilesChange(newFiles)
     // Also remove from temporary storage
-    const existingFiles = (window as any).__onboardingFiles || []
-    ;(window as any).__onboardingFiles = existingFiles.filter((_: File, i: number) => i !== index)
+    const existingFiles = (window as any).__lf_onboarding_files_27a9c3 || []
+    ;(window as any).__lf_onboarding_files_27a9c3 = existingFiles.filter((_: File, i: number) => i !== index)
   }, [uploadedFiles, onUploadedFilesChange])
   return (
     <div className={cn('space-y-6', className)}>

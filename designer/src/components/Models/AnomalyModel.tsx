@@ -366,7 +366,10 @@ function AnomalyModel() {
           setInputMode('text')
         }
         // Clear the URL parameter so it doesn't re-trigger
-        setSearchParams({}, { replace: true })
+        setSearchParams(prev => {
+          prev.delete('sampleData')
+          return prev
+        }, { replace: true })
       }
     }
   }, [searchParams, setSearchParams, isNewModel])
@@ -377,7 +380,10 @@ function AnomalyModel() {
     if (showModal === 'true' && isNewModel) {
       setShowSampleDataModal(true)
       // Clear the URL parameter so it doesn't re-trigger
-      setSearchParams({}, { replace: true })
+      setSearchParams(prev => {
+        prev.delete('showSampleModal')
+        return prev
+      }, { replace: true })
     }
   }, [searchParams, setSearchParams, isNewModel])
 

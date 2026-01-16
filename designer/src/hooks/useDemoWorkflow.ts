@@ -473,7 +473,12 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         setActiveProject(newProjectName)
 
         // Mark this project as a demo project (for checklist and onboarding logic)
-        const storedDemoProjects = JSON.parse(localStorage.getItem('lf_demo_projects') || '[]')
+        let storedDemoProjects: string[] = []
+        try {
+          storedDemoProjects = JSON.parse(localStorage.getItem('lf_demo_projects') || '[]')
+        } catch {
+          storedDemoProjects = []
+        }
         if (!storedDemoProjects.includes(newProjectName)) {
           storedDemoProjects.push(newProjectName)
           localStorage.setItem('lf_demo_projects', JSON.stringify(storedDemoProjects))

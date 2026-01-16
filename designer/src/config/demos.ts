@@ -281,7 +281,7 @@ export interface FileBasedDemo extends DemoConfig {
 }
 
 export function isFileBasedDemo(demo: DemoConfig): demo is FileBasedDemo {
-  return !!demo.configPath && !!demo.files && !!demo.datasetName
+  return !!demo.configPath && !!demo.files && !!demo.datasetName && !!demo.sampleQuestions
 }
 
 /**

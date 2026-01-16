@@ -124,7 +124,6 @@ export function GettingStartedChecklist({
         // Navigate to the step - completion happens via the floating navigator's "Next step" button
         const separator = step.linkPath.includes('?') ? '&' : '?'
         const pathWithParam = `${step.linkPath}${separator}from=checklist`
-        console.log('[GettingStartedChecklist] Navigating to:', pathWithParam)
         navigate(pathWithParam)
       }
     }
