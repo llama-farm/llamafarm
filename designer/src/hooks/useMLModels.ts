@@ -314,16 +314,19 @@ export function useScanDocument() {
       model,
       languages,
       returnBoxes,
+      parseByPage,
     }: {
       file: File
       model?: string
       languages?: string
       returnBoxes?: boolean
+      parseByPage?: boolean
     }) =>
       mlService.scanDocument(file, {
         model,
         languages,
         return_boxes: returnBoxes,
+        parse_by_page: parseByPage,
       }),
   })
 }

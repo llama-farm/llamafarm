@@ -9,6 +9,7 @@ import {
   DeleteChunksResponse,
   DeleteAllChunksResponse,
   FileUploadResponse,
+  BulkFileUploadResponse,
   FileDeleteResponse,
   FileDeleteParams,
   TaskStatusResponse,
@@ -205,7 +206,11 @@ export async function uploadFileToDataset(
   project: string,
   dataset: string,
   file: File,
-  signal?: AbortSignal
+  options?: {
+    signal?: AbortSignal
+    autoProcess?: boolean
+    parserOverrides?: Record<string, any>
+  }
 ): Promise<FileUploadResponse> {
   const formData = new FormData()
 
@@ -223,18 +228,76 @@ export async function uploadFileToDataset(
       : file
 
   formData.append('file', fileToUpload)
+  if (options?.parserOverrides) {
+    formData.append('parser_overrides', JSON.stringify(options.parserOverrides))
+  }
 
   const response = await apiClient.post<FileUploadResponse>(
     `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data`,
     formData,
     {
-      signal,
+      signal: options?.signal,
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      params:
+        options?.autoProcess === undefined
+          ? undefined
+          : { auto_process: options.autoProcess },
       timeout: 300000, // 5 minutes for file uploads (larger files need more time)
     }
   )
+  return response.data
+}
+
+/**
+ * Bulk upload files to a dataset
+ * @param namespace - The project namespace
+ * @param project - The project identifier
+ * @param dataset - The dataset name
+ * @param files - Array of files to upload
+ * @param options - Optional controls for processing and overrides
+ * @returns Promise<BulkFileUploadResponse> - Aggregate upload response
+ */
+export async function uploadFilesBulk(
+  namespace: string,
+  project: string,
+  dataset: string,
+  files: File[],
+  options?: {
+    signal?: AbortSignal
+    autoProcess?: boolean
+  }
+): Promise<BulkFileUploadResponse> {
+  const formData = new FormData()
+  files.forEach(file => {
+    const cleanFileName = file.name.split('/').pop() || file.name
+    const fileToUpload =
+      file.name !== cleanFileName
+        ? new File([file], cleanFileName, {
+            type: file.type,
+            lastModified: file.lastModified,
+          })
+        : file
+    formData.append('files', fileToUpload)
+  })
+
+  const response = await apiClient.post<BulkFileUploadResponse>(
+    `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(project)}/datasets/${encodeURIComponent(dataset)}/data/bulk`,
+    formData,
+    {
+      signal: options?.signal,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      params:
+        options?.autoProcess === undefined
+          ? undefined
+          : { auto_process: options.autoProcess },
+      timeout: 300000,
+    }
+  )
+
   return response.data
 }
 
@@ -363,6 +426,7 @@ export default {
   deleteFileChunks,
   deleteAllChunks,
   uploadFileToDataset,
+  uploadFilesBulk,
   deleteFileFromDataset,
   ingestDataset,
   getTaskStatus,

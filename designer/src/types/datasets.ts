@@ -34,6 +34,8 @@ export interface Dataset {
   data_processing_strategy: string
   /** Database used for processing */
   database: string
+  /** Whether uploads should auto-process by default (from config, optional) */
+  auto_process?: boolean | null
   /** Array of file hashes included in this dataset */
   files: string[]
   /** Extra details about the dataset */
@@ -146,6 +148,26 @@ export interface FileUploadResponse {
   processed: boolean
   /** Whether the file was skipped (duplicate) */
   skipped: boolean
+  /** Current status of the upload/processing */
+  status?: 'processing' | 'uploaded' | 'skipped'
+  /** Processing task id when auto-processing is triggered */
+  task_id?: string | null
+}
+
+/**
+ * Response from bulk uploading files to a dataset
+ */
+export interface BulkFileUploadResponse {
+  /** Number of files successfully uploaded */
+  uploaded: number
+  /** Number of files skipped as duplicates */
+  skipped: number
+  /** Number of files that failed to upload */
+  failed: number
+  /** Current status of the bulk operation */
+  status: 'processing' | 'uploaded'
+  /** Processing task id when auto-processing is triggered */
+  task_id?: string | null
 }
 
 /**

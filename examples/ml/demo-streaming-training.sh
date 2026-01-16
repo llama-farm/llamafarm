@@ -14,6 +14,16 @@ set -e
 PORT="${1:-8000}"
 BASE_URL="http://localhost:${PORT}"
 
+# Get the repository root directory for running Python with uv
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+RUNTIME_DIR="${REPO_ROOT}/runtimes/universal"
+
+# Helper function to run Python via uv in the universal runtime
+run_python() {
+    (cd "${RUNTIME_DIR}" && uv run python "$@")
+}
+
 echo "=============================================="
 echo "    Streaming Training Demo"
 echo "    Phase 4: Memory-Efficient Training"
@@ -41,7 +51,7 @@ echo "Creating 100,000 rows of sensor data (~10MB)..."
 echo "Columns: timestamp, temp, pressure, vibration, flow_rate, humidity, power, rpm"
 echo ""
 
-cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python << PYEOF
+run_python << PYEOF
 import csv
 import numpy as np
 import os
@@ -95,11 +105,11 @@ UPLOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/upload-training-data" 
     -F "skip_columns=timestamp")
 
 echo "Upload response:"
-echo "${UPLOAD_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -m json.tool) 2>/dev/null || echo "${UPLOAD_RESPONSE}"
+echo "${UPLOAD_RESPONSE}" | (run_python -m json.tool) 2>/dev/null || echo "${UPLOAD_RESPONSE}"
 echo ""
 
 # Extract file_id from response
-FILE_ID=$(echo "${UPLOAD_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -c "import sys, json; print(json.load(sys.stdin).get('file_id', ''))") 2>/dev/null)
+FILE_ID=$(echo "${UPLOAD_RESPONSE}" | (run_python -c "import sys, json; print(json.load(sys.stdin).get('file_id', ''))") 2>/dev/null)
 
 if [ -z "$FILE_ID" ] || [ "$FILE_ID" == "None" ]; then
     echo "Note: File upload endpoint not yet implemented."
@@ -111,7 +121,7 @@ if [ -z "$FILE_ID" ] || [ "$FILE_ID" == "None" ]; then
     echo ""
 
     # Create smaller dataset for demo
-    TRAIN_DATA=$(cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python << PYEOF
+    TRAIN_DATA=$(run_python << PYEOF
 import json
 import numpy as np
 np.random.seed(42)
@@ -136,7 +146,7 @@ PYEOF
         }")
 
     echo "Training response:"
-    echo "${FIT_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -m json.tool) 2>/dev/null || echo "${FIT_RESPONSE}"
+    echo "${FIT_RESPONSE}" | (run_python -m json.tool) 2>/dev/null || echo "${FIT_RESPONSE}"
 else
     # Use the file reference for training
     echo "Training from uploaded file (file_id: ${FILE_ID})..."
@@ -151,7 +161,7 @@ else
         }")
 
     echo "Training response:"
-    echo "${FIT_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -m json.tool) 2>/dev/null || echo "${FIT_RESPONSE}"
+    echo "${FIT_RESPONSE}" | (run_python -m json.tool) 2>/dev/null || echo "${FIT_RESPONSE}"
 fi
 
 echo ""
@@ -160,7 +170,7 @@ echo ""
 echo "=== Step 3: Test Anomaly Detection ==="
 echo ""
 
-TEST_DATA=$(cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python << PYEOF
+TEST_DATA=$(run_python << PYEOF
 import json
 import numpy as np
 np.random.seed(123)
@@ -194,7 +204,7 @@ DETECT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/detect" \
     }")
 
 echo "Detection results:"
-echo "${DETECT_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -m json.tool) 2>/dev/null || echo "${DETECT_RESPONSE}"
+echo "${DETECT_RESPONSE}" | (run_python -m json.tool) 2>/dev/null || echo "${DETECT_RESPONSE}"
 echo ""
 
 # Cleanup

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import datasetService from '../api/datasets'
 import {
+  BulkFileUploadResponse,
   CreateDatasetRequest,
   DatasetActionRequest,
   FileDeleteParams,
@@ -193,13 +194,19 @@ export function useUploadFileToDataset() {
       dataset: string
       file: File
       signal?: AbortSignal
+      autoProcess?: boolean
+      parserOverrides?: Record<string, any>
     }) =>
       datasetService.uploadFileToDataset(
         data.namespace,
         data.project,
         data.dataset,
         data.file,
-        data.signal
+        {
+          signal: data.signal,
+          autoProcess: data.autoProcess,
+          parserOverrides: data.parserOverrides,
+        }
       ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh file counts
@@ -242,31 +249,29 @@ export function useDeleteFileFromDataset() {
 }
 
 /**
- * Hook to upload multiple files to a dataset sequentially
+ * Hook to upload multiple files to a dataset using the bulk endpoint
  * @returns Mutation for uploading multiple files
  */
 export function useUploadMultipleFiles() {
   const queryClient = useQueryClient()
 
-  return useMutation({
-    mutationFn: async (data: {
-      namespace: string
-      project: string
-      dataset: string
-      files: File[]
-    }) => {
-      const results = []
-      for (const file of data.files) {
-        const result = await datasetService.uploadFileToDataset(
-          data.namespace,
-          data.project,
-          data.dataset,
-          file
-        )
-        results.push(result)
-      }
-      return results
-    },
+  return useMutation<BulkFileUploadResponse, unknown, {
+    namespace: string
+    project: string
+    dataset: string
+    files: File[]
+    autoProcess?: boolean
+  }>({
+    mutationFn: data =>
+      datasetService.uploadFilesBulk(
+        data.namespace,
+        data.project,
+        data.dataset,
+        data.files,
+        {
+          autoProcess: data.autoProcess,
+        }
+      ),
     onSuccess: (_, variables) => {
       // Invalidate datasets list to refresh file counts
       queryClient.invalidateQueries({

@@ -736,15 +736,36 @@ class AnomalyModel(BaseModel):
 
         # Split data for validation
         n_samples = len(X)
-        n_val = max(1, int(n_samples * self.validation_split))
+
+        # Guard against small datasets that can't be split
+        if n_samples < 3:
+            # Not enough data for train/val split - skip validation
+            logger.warning(
+                f"Dataset too small ({n_samples} samples) for train/val split. "
+                "Training without validation."
+            )
+            n_val = 0
+        else:
+            n_val = max(1, int(n_samples * self.validation_split))
+            # Ensure we have at least 2 training samples
+            n_val = min(n_val, n_samples - 2)
+
         indices = np.random.permutation(n_samples)
-        train_idx, val_idx = indices[n_val:], indices[:n_val]
+        train_idx = indices[n_val:] if n_val > 0 else indices
+        val_idx = indices[:n_val] if n_val > 0 else None
 
         X_train = torch.FloatTensor(X[train_idx]).to(self.device)
-        X_val = torch.FloatTensor(X[val_idx]).to(self.device)
+        X_val = torch.FloatTensor(X[val_idx]).to(self.device) if val_idx is not None else None
 
         train_dataset = TensorDataset(X_train)
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+        # Guard against empty DataLoader
+        if len(train_loader) == 0:
+            raise ValueError(
+                f"Not enough training samples ({len(X_train)}) for batch_size={batch_size}. "
+                "Reduce batch_size or provide more data."
+            )
 
         # Training setup
         optimizer = torch.optim.Adam(
@@ -762,7 +783,7 @@ class AnomalyModel(BaseModel):
         self._encoder.train()
         self._decoder.train()
 
-        for epoch in range(epochs):
+        for epoch in range(epochs if epochs > 0 else 1):
             # Training phase
             epoch_loss = 0.0
             for (batch,) in train_loader:
@@ -776,46 +797,51 @@ class AnomalyModel(BaseModel):
 
             train_loss = epoch_loss / len(train_loader)
 
-            # Validation phase
-            self._encoder.eval()
-            self._decoder.eval()
-            with torch.no_grad():
-                val_encoded = self._encoder(X_val)
-                val_decoded = self._decoder(val_encoded)
-                val_loss = criterion(val_decoded, X_val).item()
-            self._encoder.train()
-            self._decoder.train()
+            # Validation phase (skip if no validation data)
+            if X_val is not None:
+                self._encoder.eval()
+                self._decoder.eval()
+                with torch.no_grad():
+                    val_encoded = self._encoder(X_val)
+                    val_decoded = self._decoder(val_encoded)
+                    val_loss = criterion(val_decoded, X_val).item()
+                self._encoder.train()
+                self._decoder.train()
 
-            # Early stopping check
-            if val_loss < best_val_loss - self.min_delta:
-                best_val_loss = val_loss
-                best_encoder_state = copy.deepcopy(self._encoder.state_dict())
-                best_decoder_state = copy.deepcopy(self._decoder.state_dict())
-                epochs_without_improvement = 0
+                # Early stopping check
+                if val_loss < best_val_loss - self.min_delta:
+                    best_val_loss = val_loss
+                    best_encoder_state = copy.deepcopy(self._encoder.state_dict())
+                    best_decoder_state = copy.deepcopy(self._decoder.state_dict())
+                    epochs_without_improvement = 0
+                else:
+                    epochs_without_improvement += 1
+
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(
+                        f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, "
+                        f"Val Loss: {val_loss:.4f}"
+                    )
+
+                if epochs_without_improvement >= self.patience:
+                    logger.info(
+                        f"Early stopping at epoch {epoch + 1}. "
+                        f"Best val loss: {best_val_loss:.4f}"
+                    )
+                    self._early_stopped = True
+                    break
             else:
-                epochs_without_improvement += 1
+                # No validation data - just log training loss
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}")
 
-            if (epoch + 1) % 20 == 0:
-                logger.debug(
-                    f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, "
-                    f"Val Loss: {val_loss:.4f}"
-                )
-
-            if epochs_without_improvement >= self.patience:
-                logger.info(
-                    f"Early stopping at epoch {epoch + 1}. "
-                    f"Best val loss: {best_val_loss:.4f}"
-                )
-                self._early_stopped = True
-                break
-
-        # Restore best weights
+        # Restore best weights (if validation was used)
         if best_encoder_state is not None:
             self._encoder.load_state_dict(best_encoder_state)
             self._decoder.load_state_dict(best_decoder_state)
 
-        self._best_val_loss = best_val_loss
-        self._epochs_trained = epoch + 1
+        self._best_val_loss = best_val_loss if X_val is not None else train_loss
+        self._epochs_trained = epoch + 1 if epochs > 0 else 0
         self._encoder.eval()
         self._decoder.eval()
 
@@ -870,15 +896,36 @@ class AnomalyModel(BaseModel):
 
         # Split data for validation
         n_samples = len(X)
-        n_val = max(1, int(n_samples * self.validation_split))
+
+        # Guard against small datasets that can't be split
+        if n_samples < 3:
+            # Not enough data for train/val split - skip validation
+            logger.warning(
+                f"Dataset too small ({n_samples} samples) for train/val split. "
+                "Training without validation."
+            )
+            n_val = 0
+        else:
+            n_val = max(1, int(n_samples * self.validation_split))
+            # Ensure we have at least 2 training samples
+            n_val = min(n_val, n_samples - 2)
+
         indices = np.random.permutation(n_samples)
-        train_idx, val_idx = indices[n_val:], indices[:n_val]
+        train_idx = indices[n_val:] if n_val > 0 else indices
+        val_idx = indices[:n_val] if n_val > 0 else None
 
         X_train = torch.FloatTensor(X[train_idx]).to(self.device)
-        X_val = torch.FloatTensor(X[val_idx]).to(self.device)
+        X_val = torch.FloatTensor(X[val_idx]).to(self.device) if val_idx is not None else None
 
         train_dataset = TensorDataset(X_train)
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+        # Guard against empty DataLoader
+        if len(train_loader) == 0:
+            raise ValueError(
+                f"Not enough training samples ({len(X_train)}) for batch_size={batch_size}. "
+                "Reduce batch_size or provide more data."
+            )
 
         # Training setup
         all_params = (
@@ -911,7 +958,7 @@ class AnomalyModel(BaseModel):
         self._encoder.train()
         self._decoder.train()
 
-        for epoch in range(epochs):
+        for epoch in range(epochs if epochs > 0 else 1):
             # Training phase
             epoch_loss = 0.0
             for (batch,) in train_loader:
@@ -928,55 +975,60 @@ class AnomalyModel(BaseModel):
 
             train_loss = epoch_loss / len(train_loader)
 
-            # Validation phase
-            self._encoder.eval()
-            self._decoder.eval()
-            with torch.no_grad():
-                h_val = self._encoder(X_val)
-                mu_val = self._mu_layer(h_val)
-                logvar_val = self._logvar_layer(h_val)
-                z_val = reparameterize(mu_val, logvar_val)
-                recon_val = self._decoder(z_val)
-                val_loss = vae_loss(X_val, recon_val, mu_val, logvar_val).item()
-            self._encoder.train()
-            self._decoder.train()
+            # Validation phase (skip if no validation data)
+            if X_val is not None:
+                self._encoder.eval()
+                self._decoder.eval()
+                with torch.no_grad():
+                    h_val = self._encoder(X_val)
+                    mu_val = self._mu_layer(h_val)
+                    logvar_val = self._logvar_layer(h_val)
+                    z_val = reparameterize(mu_val, logvar_val)
+                    recon_val = self._decoder(z_val)
+                    val_loss = vae_loss(X_val, recon_val, mu_val, logvar_val).item()
+                self._encoder.train()
+                self._decoder.train()
 
-            # Early stopping check
-            if val_loss < best_val_loss - self.min_delta:
-                best_val_loss = val_loss
-                best_state = {
-                    "encoder": copy.deepcopy(self._encoder.state_dict()),
-                    "mu_layer": copy.deepcopy(self._mu_layer.state_dict()),
-                    "logvar_layer": copy.deepcopy(self._logvar_layer.state_dict()),
-                    "decoder": copy.deepcopy(self._decoder.state_dict()),
-                }
-                epochs_without_improvement = 0
+                # Early stopping check
+                if val_loss < best_val_loss - self.min_delta:
+                    best_val_loss = val_loss
+                    best_state = {
+                        "encoder": copy.deepcopy(self._encoder.state_dict()),
+                        "mu_layer": copy.deepcopy(self._mu_layer.state_dict()),
+                        "logvar_layer": copy.deepcopy(self._logvar_layer.state_dict()),
+                        "decoder": copy.deepcopy(self._decoder.state_dict()),
+                    }
+                    epochs_without_improvement = 0
+                else:
+                    epochs_without_improvement += 1
+
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(
+                        f"VAE Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, "
+                        f"Val Loss: {val_loss:.4f}"
+                    )
+
+                if epochs_without_improvement >= self.patience:
+                    logger.info(
+                        f"VAE early stopping at epoch {epoch + 1}. "
+                        f"Best val loss: {best_val_loss:.4f}"
+                    )
+                    self._early_stopped = True
+                    break
             else:
-                epochs_without_improvement += 1
+                # No validation data - just log training loss
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(f"VAE Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}")
 
-            if (epoch + 1) % 20 == 0:
-                logger.debug(
-                    f"VAE Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, "
-                    f"Val Loss: {val_loss:.4f}"
-                )
-
-            if epochs_without_improvement >= self.patience:
-                logger.info(
-                    f"VAE early stopping at epoch {epoch + 1}. "
-                    f"Best val loss: {best_val_loss:.4f}"
-                )
-                self._early_stopped = True
-                break
-
-        # Restore best weights
+        # Restore best weights (if validation was used)
         if best_state is not None:
             self._encoder.load_state_dict(best_state["encoder"])
             self._mu_layer.load_state_dict(best_state["mu_layer"])
             self._logvar_layer.load_state_dict(best_state["logvar_layer"])
             self._decoder.load_state_dict(best_state["decoder"])
 
-        self._best_val_loss = best_val_loss
-        self._epochs_trained = epoch + 1
+        self._best_val_loss = best_val_loss if X_val is not None else train_loss
+        self._epochs_trained = epoch + 1 if epochs > 0 else 0
         self._encoder.eval()
         self._decoder.eval()
 

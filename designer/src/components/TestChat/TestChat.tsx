@@ -984,7 +984,7 @@ function DocumentScanningHistoryItem({
             ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
             : 'bg-sky-500/20 text-sky-400 border-sky-500/30'
         }`}>
-          {isError ? 'Error' : `${item.pageCount} pg`}
+          {isError ? 'Error' : item.pagesCombined ? `Full (${item.pagesCombined} pg)` : `${item.pageCount} pg`}
         </Badge>
         {!isError && (
           <span className="text-[10px] text-muted-foreground">
@@ -1593,6 +1593,18 @@ export default function TestChat({
       localStorage.setItem('lf_test_scanLanguage', selectedScanLanguage)
     }
   }, [selectedScanLanguage])
+
+  // Parse by page setting (persisted) - when checked, returns separate results per page
+  const [parseByPage, setParseByPage] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('lf_test_parseByPage') === 'true'
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_parseByPage', String(parseByPage))
+    }
+  }, [parseByPage])
 
   // Document scanning file state
   const [scanFile, setScanFile] = useState<File | null>(null)
@@ -2255,7 +2267,7 @@ export default function TestChat({
       lastUserInputRef.current = content
       const assistantId = addMessage({
         type: 'assistant',
-        content: 'Loading model (may take a moment if downloading)…',
+        content: 'Thinking…',
         timestamp: new Date(),
         isLoading: true,
       })
@@ -2938,6 +2950,7 @@ export default function TestChat({
         model: selectedScanBackend,
         languages: selectedScanLanguage,
         returnBoxes: false,
+        parseByPage,
       })
 
       if (result.data) {
@@ -2952,12 +2965,14 @@ export default function TestChat({
         // Add to history
         const avgConfidence = result.data.reduce((sum, r) => sum + r.confidence, 0) / result.data.length
         const previewText = result.data[0]?.text?.substring(0, 100) || ''
+        const pagesCombined = result.usage?.pages_combined
 
         setScanHistory(prev => [{
           id: `scan-${Date.now()}`,
           timestamp: new Date(),
           fileName: file.name,
           pageCount: result.data.length,
+          pagesCombined,
           avgConfidence,
           previewText,
           backend: selectedScanBackend,
@@ -2981,7 +2996,7 @@ export default function TestChat({
         error: errorMsg,
       }, ...prev].slice(0, 50))
     }
-  }, [selectedScanBackend, selectedScanLanguage, scanDocumentMutation, hasScannedBefore])
+  }, [selectedScanBackend, selectedScanLanguage, parseByPage, scanDocumentMutation, hasScannedBefore])
 
   const clearScanResults = useCallback(() => {
     setScanResults(null)
@@ -3330,6 +3345,18 @@ export default function TestChat({
                 label="Language"
                 className="min-w-[100px]"
               />
+              <div>
+                <div className="text-xs text-muted-foreground mb-1 invisible">Spacer</div>
+                <label className="h-9 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={parseByPage}
+                    onChange={(e) => setParseByPage(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Parse by page
+                </label>
+              </div>
             </>
           )}
 
@@ -4374,7 +4401,7 @@ export function TestChatMessage({
         }
       >
         {message.isLoading && isAssistant ? (
-          <TypingDots label="Loading model (may take a moment if downloading)" />
+          <TypingDots label="Thinking" />
         ) : message.metadata?.isTest && isUser ? (
           <div className="whitespace-pre-wrap">
             <div className="mb-2">
@@ -4785,7 +4812,7 @@ function References({ sources }: { sources: any[] }) {
   )
 }
 
-function TypingDots({ label = 'Loading model' }: { label?: string }) {
+function TypingDots({ label = 'Thinking' }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-1 opacity-80">
       <span>{label}</span>

@@ -75,7 +75,7 @@ max_size = 512
 if max(img.size) > max_size:
     ratio = max_size / max(img.size)
     new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-    img = img.resize(new_size, Image.LANCZOS)
+    img = img.resize(new_size, Image.Resampling.LANCZOS)
 
 # Convert to base64
 buffer = BytesIO()
@@ -197,7 +197,7 @@ max_size = 512
 if max(img.size) > max_size:
     ratio = max_size / max(img.size)
     new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-    img = img.resize(new_size, Image.LANCZOS)
+    img = img.resize(new_size, Image.Resampling.LANCZOS)
 
 buffer = BytesIO()
 img.save(buffer, format="PNG")

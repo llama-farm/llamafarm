@@ -2,7 +2,7 @@
 Model wrappers for Universal Runtime.
 
 Supports HuggingFace Transformers, Diffusers, GGUF models, OCR, document understanding,
-anomaly detection, and text classification.
+anomaly detection, text classification, and speech-to-text.
 """
 
 from .anomaly_model import AnomalyModel
@@ -20,6 +20,7 @@ from .object_detection_model import ObjectDetectionModel
 from .ocr_model import OCRModel
 from .open_vocab_detection_model import OpenVocabDetectionModel
 from .pii_model import PIIModel
+from .speech_model import SpeechModel
 from .table_qa_model import TableQAModel
 from .timeseries_model import TimeSeriesModel
 from .vision_model import CLIPVisionModel
@@ -43,4 +44,5 @@ __all__ = [
     "BackgroundRemovalModel",
     "TimeSeriesModel",
     "TableQAModel",
+    "SpeechModel",
 ]

@@ -172,7 +172,7 @@ class BackgroundRemovalModel(BaseModel):
 
         # Resize mask to original size if needed
         if mask.size != original_size:
-            mask = mask.resize(original_size, Image.LANCZOS)
+            mask = mask.resize(original_size, Image.Resampling.LANCZOS)
 
         # Convert mask to L mode (grayscale) if needed
         if mask.mode != "L":

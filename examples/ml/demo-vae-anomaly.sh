@@ -14,8 +14,15 @@ set -e
 PORT="${1:-8000}"
 BASE_URL="http://localhost:${PORT}"
 
-# Use UV python from universal-runtime venv (has numpy)
-UV_PYTHON="cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python"
+# Get the repository root directory for running Python with uv
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+RUNTIME_DIR="${REPO_ROOT}/runtimes/universal"
+
+# Helper function to run Python via uv in the universal runtime
+run_python() {
+    (cd "${RUNTIME_DIR}" && uv run python "$@")
+}
 
 echo "=============================================="
 echo "    VAE Anomaly Detection Demo"
@@ -41,7 +48,7 @@ echo "Each sample has 4 features: temperature, pressure, vibration, flow_rate"
 echo ""
 
 # Create training data JSON - normal patterns
-TRAIN_DATA=$(cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -c "
+TRAIN_DATA=$(run_python -c "
 import json
 import numpy as np
 np.random.seed(42)
@@ -87,11 +94,11 @@ FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/fit" \
     }")
 
 echo "Training response:"
-echo "${FIT_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -m json.tool) 2>/dev/null || echo "${FIT_RESPONSE}"
+echo "${FIT_RESPONSE}" | (run_python -m json.tool) 2>/dev/null || echo "${FIT_RESPONSE}"
 echo ""
 
 # Check if early stopping was triggered
-TRAINING_TIME=$(echo "${FIT_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -c "import sys, json; print(json.load(sys.stdin).get('training_time_ms', 'N/A'))") 2>/dev/null || echo "N/A")
+TRAINING_TIME=$(echo "${FIT_RESPONSE}" | (run_python -c "import sys, json; print(json.load(sys.stdin).get('training_time_ms', 'N/A'))") 2>/dev/null || echo "N/A")
 echo "Training completed in ${TRAINING_TIME} ms"
 echo ""
 
@@ -99,7 +106,7 @@ echo ""
 echo "=== Step 3: Generate Test Data with Anomalies ==="
 echo ""
 
-TEST_DATA=$(cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -c "
+TEST_DATA=$(run_python -c "
 import json
 import numpy as np
 np.random.seed(123)
@@ -150,14 +157,14 @@ DETECT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/detect" \
     }")
 
 echo "Detection results:"
-echo "${DETECT_RESPONSE}" | (cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python -m json.tool) 2>/dev/null || echo "${DETECT_RESPONSE}"
+echo "${DETECT_RESPONSE}" | (run_python -m json.tool) 2>/dev/null || echo "${DETECT_RESPONSE}"
 echo ""
 
 # Analyze results
 echo "=== Step 5: Analysis ==="
 echo ""
 
-cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal && uv run python << PYEOF
+run_python << PYEOF
 import json
 import sys
 
