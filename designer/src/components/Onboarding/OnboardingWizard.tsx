@@ -30,7 +30,6 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
     setProjectType,
     setDataStatus,
     setSelectedSampleDataset,
-    setSelectedHFDataset,
     setDeployTarget,
     setExperienceLevel,
     setUploadedFiles,
@@ -179,8 +178,6 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
                 onSelect={setDataStatus}
                 selectedSampleDataset={answers.selectedSampleDataset}
                 onSelectSampleDataset={setSelectedSampleDataset}
-                selectedHFDataset={answers.selectedHFDataset}
-                onSelectHFDataset={setSelectedHFDataset}
                 projectType={answers.projectType}
                 uploadedFiles={answers.uploadedFiles}
                 onUploadedFilesChange={setUploadedFiles}

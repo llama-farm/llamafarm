@@ -15,7 +15,6 @@ import type {
   ChecklistStep,
   OnboardingUploadedFile,
 } from '../types/onboarding'
-import type { SelectedHFDataset } from '../types/huggingface'
 import {
   DEFAULT_ONBOARDING_STATE,
   PROJECT_TYPE_LABELS,
@@ -130,11 +129,10 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     }
 
     // Regular checklist based on user answers
-    const { projectType, dataStatus, selectedHFDataset, trainedModelName, trainedModelType, uploadedFiles, datasetName, selectedSampleDataset } = state.answers
+    const { projectType, dataStatus, trainedModelName, trainedModelType, uploadedFiles, datasetName, selectedSampleDataset } = state.answers
     return generateChecklist(
       projectType,
       dataStatus,
-      selectedHFDataset,
       trainedModelName,
       trainedModelType,
       uploadedFiles?.length || 0,
@@ -251,16 +249,6 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
         )
       }
 
-      // If HF dataset was selected, dispatch event to trigger background import
-      // (but DON'T navigate away - let user see their checklist first)
-      if (prev.answers.dataStatus === 'need-data' && prev.answers.selectedHFDataset) {
-        window.dispatchEvent(
-          new CustomEvent('lf-onboarding-import-hf-background', {
-            detail: { hfDataset: prev.answers.selectedHFDataset },
-          })
-        )
-      }
-
       // If user uploaded files during onboarding, dispatch event to trigger upload
       // Only do this once - check if we already dispatched by looking for a flag
       const fileStorageKey = '__lf_onboarding_files_27a9c3'
@@ -314,8 +302,6 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
         dataStatus: status,
         // Clear sample dataset selection if not using sample-data
         selectedSampleDataset: status === 'sample-data' ? prev.answers.selectedSampleDataset : null,
-        // Clear HF dataset selection if not using need-data
-        selectedHFDataset: status === 'need-data' ? prev.answers.selectedHFDataset : null,
       },
     }))
   }, [])
@@ -324,13 +310,6 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setState(prev => ({
       ...prev,
       answers: { ...prev.answers, selectedSampleDataset: demoId },
-    }))
-  }, [])
-
-  const setSelectedHFDataset = useCallback((dataset: SelectedHFDataset | null) => {
-    setState(prev => ({
-      ...prev,
-      answers: { ...prev.answers, selectedHFDataset: dataset },
     }))
   }, [])
 
@@ -493,7 +472,6 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setProjectType,
     setDataStatus,
     setSelectedSampleDataset,
-    setSelectedHFDataset,
     setDeployTarget,
     setExperienceLevel,
     setTrainedModel,

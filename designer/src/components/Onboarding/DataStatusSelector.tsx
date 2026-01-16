@@ -1,7 +1,6 @@
 /**
  * Data status selection screen (Step 2 of wizard)
  * Shows sample dataset picker when "sample-data" is selected
- * Adapts options based on project type (HF finder only for doc-qa/exploring)
  */
 
 import { useState, useCallback, useRef } from 'react'
@@ -9,9 +8,7 @@ import { cn } from '@/lib/utils'
 import { Check, Gamepad2, FolderOpen, Search, Upload, X, FileText, ExternalLink } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import type { DataStatus, ProjectType, OnboardingUploadedFile } from '../../types/onboarding'
-import type { SelectedHFDataset } from '../../types/huggingface'
 import { getDemosByProjectType } from '../../config/demos'
-import { HFDatasetFinder } from './HFDatasetFinder'
 import { validateDatasetName } from '../../utils/datasetValidation'
 
 interface DataStatusSelectorProps {
@@ -19,8 +16,6 @@ interface DataStatusSelectorProps {
   onSelect: (status: DataStatus) => void
   selectedSampleDataset: string | null
   onSelectSampleDataset: (demoId: string | null) => void
-  selectedHFDataset: SelectedHFDataset | null
-  onSelectHFDataset: (dataset: SelectedHFDataset | null) => void
   projectType: ProjectType | null
   uploadedFiles: OnboardingUploadedFile[]
   onUploadedFilesChange: (files: OnboardingUploadedFile[]) => void
@@ -60,13 +55,16 @@ const dataStatusOptions = [
   },
 ]
 
-// Project types that support direct HF dataset import (RAG/chatbot use cases)
-const HF_IMPORT_PROJECT_TYPES: ProjectType[] = ['doc-qa', 'exploring']
-
 // HuggingFace task filter URLs for different project types
-const HF_TASK_URLS: Record<ProjectType, { url: string; label: string } | null> = {
-  'doc-qa': null, // Uses inline HF finder
-  'exploring': null, // Uses inline HF finder
+const HF_TASK_URLS: Record<ProjectType, { url: string; label: string }> = {
+  'doc-qa': {
+    url: 'https://huggingface.co/datasets?task_categories=task_categories%3Atext-generation&sort=downloads',
+    label: 'text generation datasets',
+  },
+  'exploring': {
+    url: 'https://huggingface.co/datasets?task_categories=task_categories%3Atext-generation&sort=downloads',
+    label: 'text datasets',
+  },
   'classifier': {
     url: 'https://huggingface.co/datasets?task_categories=task_categories%3Atext-classification&sort=downloads',
     label: 'text classification datasets',
@@ -86,8 +84,6 @@ export function DataStatusSelector({
   onSelect,
   selectedSampleDataset,
   onSelectSampleDataset,
-  selectedHFDataset,
-  onSelectHFDataset,
   projectType,
   uploadedFiles,
   onUploadedFilesChange,
@@ -106,9 +102,6 @@ export function DataStatusSelector({
     ;(window as any).__lf_onboarding_files_27a9c3 = []
   }
 
-
-  // Show inline HF finder for RAG/chatbot use cases, external links for others
-  const supportsHFImport = projectType && HF_IMPORT_PROJECT_TYPES.includes(projectType)
   const hfTaskInfo = projectType ? HF_TASK_URLS[projectType] : null
 
   // Drag-and-drop handlers
@@ -181,6 +174,7 @@ export function DataStatusSelector({
     const existingFiles = (window as any).__lf_onboarding_files_27a9c3 || []
     ;(window as any).__lf_onboarding_files_27a9c3 = existingFiles.filter((_: File, i: number) => i !== index)
   }, [uploadedFiles, onUploadedFilesChange])
+
   return (
     <div className={cn('space-y-6', className)}>
       <div className="text-center">
@@ -210,6 +204,7 @@ export function DataStatusSelector({
                 )}
               >
                 <button
+                  type="button"
                   onClick={() => {
                     onSelect(option.id)
                   }}
@@ -266,46 +261,47 @@ export function DataStatusSelector({
                               const isDemoSelected = selectedSampleDataset === demo.id
                               return (
                                 <button
+                                  type="button"
                                   key={demo.id}
                                   onClick={e => {
                                     e.stopPropagation()
                                     onSelectSampleDataset(demo.id)
-                              }}
-                              className={cn(
-                                'w-full flex items-center gap-4 p-3 rounded-lg border text-left transition-all duration-200',
-                                'hover:shadow-sm',
-                                isDemoSelected
-                                  ? 'border-primary bg-primary/5 dark:bg-primary/10'
-                                  : 'border-border bg-card/50 hover:bg-white dark:hover:bg-card hover:border-primary/40'
-                              )}
-                            >
-                              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-violet-500/20 dark:bg-violet-500/25 flex items-center justify-center text-xl">
-                                {demo.icon}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium text-sm text-foreground">
-                                  {demo.displayName}
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-0.5">
-                                  {demo.description}
-                                </div>
-                              </div>
-                              {/* Selection indicator */}
-                              <div
-                                className={cn(
-                                  'flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200',
-                                  isDemoSelected
-                                    ? 'border-primary bg-primary'
-                                    : 'border-muted-foreground/30'
-                                )}
-                              >
-                                {isDemoSelected && (
-                                  <Check className="w-3 h-3 text-primary-foreground" />
-                                )}
-                              </div>
-                            </button>
-                          )
-                        })}
+                                  }}
+                                  className={cn(
+                                    'w-full flex items-center gap-4 p-3 rounded-lg border text-left transition-all duration-200',
+                                    'hover:shadow-sm',
+                                    isDemoSelected
+                                      ? 'border-primary bg-primary/5 dark:bg-primary/10'
+                                      : 'border-border bg-card/50 hover:bg-white dark:hover:bg-card hover:border-primary/40'
+                                  )}
+                                >
+                                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-violet-500/20 dark:bg-violet-500/25 flex items-center justify-center text-xl">
+                                    {demo.icon}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-sm text-foreground">
+                                      {demo.displayName}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                      {demo.description}
+                                    </div>
+                                  </div>
+                                  {/* Selection indicator */}
+                                  <div
+                                    className={cn(
+                                      'flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200',
+                                      isDemoSelected
+                                        ? 'border-primary bg-primary'
+                                        : 'border-muted-foreground/30'
+                                    )}
+                                  >
+                                    {isDemoSelected && (
+                                      <Check className="w-3 h-3 text-primary-foreground" />
+                                    )}
+                                  </div>
+                                </button>
+                              )
+                            })}
                           </div>
                         </>
                       ) : (
@@ -320,7 +316,7 @@ export function DataStatusSelector({
             )
           }
 
-          // For need-data option, show HF dataset finder or external links when selected
+          // For need-data option, show helpful links to browse datasets
           if (option.id === 'need-data') {
             return (
               <div
@@ -333,6 +329,7 @@ export function DataStatusSelector({
                 )}
               >
                 <button
+                  type="button"
                   onClick={() => {
                     onSelect(option.id)
                     onSelectSampleDataset(null)
@@ -376,48 +373,34 @@ export function DataStatusSelector({
                   </div>
                 </button>
 
-                {/* HF Dataset content - expands inside the card */}
-                {isSelected && (
+                {/* Resource links - expands inside the card */}
+                {isSelected && hfTaskInfo && (
                   <div className="px-4 pb-4 pt-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                    {supportsHFImport ? (
-                      // Inline HF finder for doc-qa/exploring
-                      <>
-                        <p className="text-sm text-muted-foreground mb-3">
-                          Find a dataset from Hugging Face (optional):
-                        </p>
-                        <HFDatasetFinder
-                          selectedDataset={selectedHFDataset}
-                          onSelectDataset={onSelectHFDataset}
-                        />
-                      </>
-                    ) : hfTaskInfo ? (
-                      // External HF link for classifier/anomaly/doc-scan
-                      <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                          Browse Hugging Face for {hfTaskInfo.label}:
-                        </p>
-                        <a
-                          href={hfTaskInfo.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 p-3 rounded-lg border border-border bg-card/50 hover:bg-white dark:hover:bg-card hover:border-primary/40 transition-all"
-                        >
-                          <span className="text-lg">🤗</span>
-                          <div className="flex-1">
-                            <div className="text-sm font-medium text-foreground">
-                              Browse {hfTaskInfo.label}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              huggingface.co/datasets
-                            </div>
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Browse Hugging Face for {hfTaskInfo.label}:
+                      </p>
+                      <a
+                        href={hfTaskInfo.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-3 rounded-lg border border-border bg-card/50 hover:bg-white dark:hover:bg-card hover:border-primary/40 transition-all"
+                      >
+                        <span className="text-lg">🤗</span>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-foreground">
+                            Browse {hfTaskInfo.label}
                           </div>
-                          <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                        </a>
-                        <p className="text-xs text-muted-foreground">
-                          Download a dataset and upload it on the Data page after setup.
-                        </p>
-                      </div>
-                    ) : null}
+                          <div className="text-xs text-muted-foreground">
+                            huggingface.co/datasets
+                          </div>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                      </a>
+                      <p className="text-xs text-muted-foreground">
+                        Download a dataset and upload it on the Data page after setup.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -437,10 +420,10 @@ export function DataStatusSelector({
                 )}
               >
                 <button
+                  type="button"
                   onClick={() => {
                     onSelect(option.id)
                     onSelectSampleDataset(null)
-                    onSelectHFDataset(null)
                   }}
                   className={cn(
                     'group w-full flex items-center gap-4 p-4 text-left transition-all duration-200',
@@ -556,6 +539,7 @@ export function DataStatusSelector({
                                     {formatFileSize(file.size)}
                                   </span>
                                   <button
+                                    type="button"
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       removeFile(index)
@@ -576,46 +560,46 @@ export function DataStatusSelector({
                                 type="text"
                                 placeholder="Dataset name (optional)"
                                 value={datasetName || ''}
-                            onChange={(e) => {
-                              const newName = e.target.value || null
-                              onDatasetNameChange(newName)
-                              // Validate on change (only if there's a value)
-                              if (newName) {
-                                const validation = validateDatasetName(newName)
-                                setDatasetNameError(validation.isValid ? null : validation.error || 'Invalid name')
-                              } else {
-                                setDatasetNameError(null)
-                              }
-                            }}
-                            className={cn(
-                              'h-9 text-sm',
-                              datasetNameError && 'border-destructive'
-                            )}
-                          />
-                          {datasetNameError && (
-                            <p className="text-xs text-destructive mt-1">
-                              {datasetNameError}
-                            </p>
+                                onChange={(e) => {
+                                  const newName = e.target.value || null
+                                  onDatasetNameChange(newName)
+                                  // Validate on change (only if there's a value)
+                                  if (newName) {
+                                    const validation = validateDatasetName(newName)
+                                    setDatasetNameError(validation.isValid ? null : validation.error || 'Invalid name')
+                                  } else {
+                                    setDatasetNameError(null)
+                                  }
+                                }}
+                                className={cn(
+                                  'h-9 text-sm',
+                                  datasetNameError && 'border-destructive'
+                                )}
+                              />
+                              {datasetNameError && (
+                                <p className="text-xs text-destructive mt-1">
+                                  {datasetNameError}
+                                </p>
+                              )}
+                            </div>
                           )}
-                        </div>
+                        </>
                       )}
-                    </>
-                  )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
             )
           }
 
           // Standard option card (fallback, shouldn't be reached)
           return (
             <button
+              type="button"
               key={option.id}
               onClick={() => {
                 onSelect(option.id)
                 onSelectSampleDataset(null)
-                onSelectHFDataset(null)
               }}
               className={cn(
                 'group w-full flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all duration-200',

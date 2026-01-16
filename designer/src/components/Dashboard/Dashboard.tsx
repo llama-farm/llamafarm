@@ -9,12 +9,10 @@ import { useOnboardingContext } from '../../contexts/OnboardingContext'
 import { useProject } from '../../hooks/useProjects'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useListDatasets, useUploadFileToDataset, useCreateDataset, useAvailableStrategies } from '../../hooks/useDatasets'
-import { useImportHFDataset } from '../../hooks/useHFDatasets'
 import { useTrainAndSaveClassifier, useTrainAndSaveAnomaly } from '../../hooks/useMLModels'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
-import type { SelectedHFDataset } from '../../types/huggingface'
 import {
   GettingStartedChecklist,
   OnboardingWizard,
@@ -426,91 +424,6 @@ const Dashboard = () => {
 
     importDemo()
   }, [pendingFileBasedDemo, activeProject, toast, createDatasetMutation, uploadMutation, refetchDatasets, strategiesData])
-
-  // Listen for onboarding HF dataset import event and navigate to Data page
-  useEffect(() => {
-    const handleImportHF = (event: Event) => {
-      const hfDataset = (event as CustomEvent<{ hfDataset: { id: string; name: string; rowCount: number; config: string; split: string } }>).detail?.hfDataset
-      if (hfDataset) {
-        // Navigate to Data page with auto-import HF param
-        navigate(`/chat/data?autoImportHF=${encodeURIComponent(JSON.stringify(hfDataset))}`)
-      }
-    }
-
-    window.addEventListener('lf-onboarding-import-hf', handleImportHF)
-    return () => {
-      window.removeEventListener('lf-onboarding-import-hf', handleImportHF)
-    }
-  }, [navigate])
-
-  // HF import mutation for background import
-  const importHFMutation = useImportHFDataset()
-  const importHFMutationRef = useRef(importHFMutation)
-  importHFMutationRef.current = importHFMutation
-
-  const [pendingHFImport, setPendingHFImport] = useState<SelectedHFDataset | null>(null)
-
-  // Listen for background HF import event (doesn't navigate away - lets user see checklist)
-  useEffect(() => {
-    const handleBackgroundImportHF = (event: Event) => {
-      const hfDataset = (event as CustomEvent<{ hfDataset: SelectedHFDataset }>).detail?.hfDataset
-      if (hfDataset) {
-        setPendingHFImport(hfDataset)
-      }
-    }
-
-    window.addEventListener('lf-onboarding-import-hf-background', handleBackgroundImportHF)
-    return () => {
-      window.removeEventListener('lf-onboarding-import-hf-background', handleBackgroundImportHF)
-    }
-  }, [])
-
-  // Process pending HF import when we have active project
-  useEffect(() => {
-    if (!pendingHFImport) {
-      return
-    }
-    if (!activeProject?.namespace || !activeProject?.project) {
-      return
-    }
-
-    const hfDataset = pendingHFImport
-    setPendingHFImport(null)
-
-    // Generate a safe dataset name from the HF ID
-    const datasetName = `hf_${hfDataset.id.replace(/\//g, '_')}`
-
-    // Import in background
-    importHFMutationRef.current.mutate(
-      {
-        namespace: activeProject.namespace,
-        project: activeProject.project,
-        dataset: datasetName,
-        hf_dataset_id: hfDataset.id,
-        config: hfDataset.config,
-        split: hfDataset.split,
-        max_rows: hfDataset.rowCount,
-        format: 'jsonl',
-        data_processing_strategy: 'default',
-        database: 'default',
-      },
-      {
-        onSuccess: data => {
-          toast({
-            message: `Successfully imported ${data.row_count} rows from Hugging Face.`,
-            icon: 'checkmark-filled',
-          })
-        },
-        onError: (error: Error) => {
-          toast({
-            message: error.message || 'Failed to import dataset from Hugging Face.',
-            variant: 'destructive',
-            icon: 'alert-triangle',
-          })
-        },
-      }
-    )
-  }, [pendingHFImport, activeProject, toast])
 
   // State for pending file upload from onboarding
   const [pendingFileUpload, setPendingFileUpload] = useState<{

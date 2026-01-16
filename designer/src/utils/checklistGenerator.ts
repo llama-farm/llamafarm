@@ -7,7 +7,6 @@ import type {
   DataStatus,
   ChecklistStep,
 } from '../types/onboarding'
-import type { SelectedHFDataset } from '../types/huggingface'
 import { getDemoById, isFileBasedDemo, type FileBasedDemo } from '../config/demos'
 
 // ============================================================================
@@ -480,13 +479,12 @@ function getBaseChecklist(projectType: ProjectType, dataStatus?: DataStatus | nu
 }
 
 /**
- * Modify the first step based on data status and selected HF dataset
+ * Modify the first step based on data status
  */
 function applyDataStatusModifications(
   checklist: ChecklistStep[],
   dataStatus: DataStatus,
-  projectType: ProjectType,
-  selectedHFDataset?: SelectedHFDataset | null
+  projectType: ProjectType
 ): ChecklistStep[] {
   if (checklist.length === 0) return checklist
 
@@ -522,22 +520,12 @@ function applyDataStatusModifications(
       firstStep.linkLabel = 'Import sample'
     }
   } else if (dataStatus === 'need-data') {
-    // If a HF dataset was selected, customize the first step
-    if (selectedHFDataset) {
-      const datasetName = `hf_${selectedHFDataset.id.replace(/\//g, '_')}`
-      firstStep.title = 'Check out your imported dataset'
-      firstStep.descriptionFull =
-        `We're importing "${selectedHFDataset.name}" from Hugging Face in the background. Head to your dataset to see the import progress and explore your new data.`
-      firstStep.descriptionShort = `Your "${selectedHFDataset.name}" dataset is being imported. Check its status.`
-      firstStep.descriptionMinimal = 'View your imported HF dataset.'
-      firstStep.linkPath = `/chat/data/${encodeURIComponent(datasetName)}`
-      firstStep.linkLabel = 'View dataset'
-    } else if (projectType !== 'classifier' && projectType !== 'anomaly') {
-      // For non-classifier/anomaly types, show generic "find data" step
+    // For non-classifier/anomaly types, show generic "find data" step
+    if (projectType !== 'classifier' && projectType !== 'anomaly') {
       firstStep.title = 'Find & import data'
       firstStep.descriptionFull =
-        "Check out Hugging Face datasets or synthetic data generators to find data for your project. Once you have files, come back and create a dataset."
-      firstStep.descriptionShort = 'Find data on Hugging Face or generate synthetic data, then import it.'
+        "Check out [Hugging Face datasets](https://huggingface.co/datasets) or synthetic data generators to find data for your project. Once you have files, come back and create a dataset."
+      firstStep.descriptionShort = 'Find data on [Hugging Face](https://huggingface.co/datasets) or generate synthetic data, then import it.'
       firstStep.descriptionMinimal = 'Find and import data.'
       firstStep.linkPath = '/chat/data?modal=import'
       firstStep.linkLabel = 'Import sample'
@@ -554,7 +542,6 @@ function applyDataStatusModifications(
 export interface GenerateChecklistOptions {
   projectType: ProjectType | null
   dataStatus: DataStatus | null
-  selectedHFDataset?: SelectedHFDataset | null
   trainedModelName?: string | null
   trainedModelType?: 'classifier' | 'anomaly' | null
 }
@@ -565,7 +552,6 @@ export interface GenerateChecklistOptions {
 export function generateChecklist(
   projectType: ProjectType | null,
   dataStatus: DataStatus | null,
-  selectedHFDataset?: SelectedHFDataset | null,
   trainedModelName?: string | null,
   trainedModelType?: 'classifier' | 'anomaly' | null,
   uploadedFilesCount?: number,
@@ -580,9 +566,9 @@ export function generateChecklist(
 
   // Apply modifications for non-sample flows (sample flows already have correct first step)
   if (dataStatus && dataStatus !== 'sample-data') {
-    checklist = applyDataStatusModifications(checklist, dataStatus, projectType, selectedHFDataset)
+    checklist = applyDataStatusModifications(checklist, dataStatus, projectType)
   } else if (dataStatus === 'sample-data' && projectType !== 'classifier' && projectType !== 'anomaly') {
-    checklist = applyDataStatusModifications(checklist, dataStatus, projectType, selectedHFDataset)
+    checklist = applyDataStatusModifications(checklist, dataStatus, projectType)
   }
 
   // If user uploaded files during onboarding, update the first step

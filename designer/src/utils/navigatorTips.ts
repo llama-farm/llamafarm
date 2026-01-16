@@ -20,12 +20,11 @@ export function generateNavigatorTip(
 ): NavigatorTip | null {
   if (!currentStep) return null
 
-  const { projectType, dataStatus, uploadedFiles, datasetName, selectedHFDataset, selectedSampleDataset } = answers
+  const { projectType, dataStatus, uploadedFiles, datasetName, selectedSampleDataset } = answers
   const fileCount = uploadedFiles?.length || 0
 
   // Get demo name if sample data was selected
   const demoName = selectedSampleDataset ? getDemoById(selectedSampleDataset)?.displayName ?? null : null
-  const hfDatasetName = selectedHFDataset?.name ?? null
 
   // Determine which page we're on by step ID patterns
   const isDataStep = currentStep.id.includes('data') || currentStep.id.includes('sample')
@@ -37,7 +36,7 @@ export function generateNavigatorTip(
 
   // Data page tips (step 1)
   if (isDataStep) {
-    return getDataPageTip(projectType, dataStatus, fileCount, datasetName, hfDatasetName, demoName)
+    return getDataPageTip(projectType, dataStatus, fileCount, datasetName, demoName)
   }
 
   // Create model step (classifier/anomaly step 2)
@@ -52,7 +51,7 @@ export function generateNavigatorTip(
 
   // Prompt page tips (step 2 for doc-qa)
   if (isPromptStep) {
-    return getPromptPageTip(projectType, dataStatus, fileCount, hfDatasetName, demoName)
+    return getPromptPageTip(projectType, dataStatus, fileCount, demoName)
   }
 
   // Test page tips (step 3)
@@ -73,7 +72,6 @@ function getDataPageTip(
   dataStatus: string | null,
   fileCount: number,
   datasetName: string | null,
-  hfDatasetName: string | null,
   demoName: string | null
 ): NavigatorTip | null {
   switch (projectType) {
@@ -87,9 +85,6 @@ function getDataPageTip(
       }
       if (dataStatus === 'sample-data' && demoName) {
         return { text: `${demoName} data is loading. Once processed, you can ask questions about it.` }
-      }
-      if (dataStatus === 'need-data' && hfDatasetName) {
-        return { text: `Your "${hfDatasetName}" dataset is here. Hit Process to prepare it for your AI.` }
       }
       return { text: 'Add documents to create a knowledge base for your AI assistant.' }
 
@@ -148,7 +143,6 @@ function getPromptPageTip(
   projectType: string | null,
   dataStatus: string | null,
   fileCount: number,
-  hfDatasetName: string | null,
   demoName: string | null
 ): NavigatorTip | null {
   switch (projectType) {
@@ -158,9 +152,6 @@ function getPromptPageTip(
       }
       if (dataStatus === 'sample-data' && demoName) {
         return { text: `See how we configured ${demoName}. Edit the prompt to change the AI's personality.` }
-      }
-      if (dataStatus === 'need-data' && hfDatasetName) {
-        return { text: `Tell your AI what it's doing with "${hfDatasetName}". A good prompt = better answers.` }
       }
       return { text: 'The system prompt shapes how your AI responds. Be specific about its role.' }
 

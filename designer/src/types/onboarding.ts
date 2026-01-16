@@ -2,7 +2,6 @@
  * TypeScript types for the onboarding wizard and checklist
  */
 
-import type { SelectedHFDataset } from './huggingface'
 import type { FileBasedDemo } from '../config/demos'
 
 // Project type options (Screen 1)
@@ -61,7 +60,6 @@ export interface OnboardingAnswers {
   projectType: ProjectType | null
   dataStatus: DataStatus | null
   selectedSampleDataset: string | null // Demo ID when sample-data is selected
-  selectedHFDataset: SelectedHFDataset | null // HF dataset when need-data is selected
   deployTarget: DeployTarget | null
   experienceLevel: ExperienceLevel | null
   // For classifier/anomaly sample data: the name of the trained model
@@ -130,7 +128,6 @@ export interface UseOnboardingReturn {
   setProjectType: (type: ProjectType) => void
   setDataStatus: (status: DataStatus) => void
   setSelectedSampleDataset: (demoId: string | null) => void
-  setSelectedHFDataset: (dataset: SelectedHFDataset | null) => void
   setDeployTarget: (target: DeployTarget) => void
   setExperienceLevel: (level: ExperienceLevel) => void
   setTrainedModel: (modelName: string, modelType: 'classifier' | 'anomaly') => void
@@ -162,7 +159,6 @@ export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
     projectType: null,
     dataStatus: null,
     selectedSampleDataset: null,
-    selectedHFDataset: null,
     deployTarget: 'local', // Default to "On my own turf"
     experienceLevel: 'beginner', // Default to "Hold my hand"
     trainedModelName: null,
