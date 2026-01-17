@@ -41,9 +41,9 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Don't handle Enter if user is typing in an input or textarea
+      // Don't handle Enter if user is typing in an input, textarea, or contenteditable
       const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return
       }
       if (e.key === 'Escape') {
