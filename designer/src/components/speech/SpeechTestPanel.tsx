@@ -8,6 +8,7 @@ import { ConversationView } from './ConversationView'
 import { TranscriptionOutput } from './TranscriptionOutput'
 import { AudioPlayer } from './AudioPlayer'
 import { MicPermissionPrompt } from './MicPermissionPrompt'
+import { Waveform } from './Waveform'
 import {
   STT_MODELS,
   TTS_MODELS,
@@ -60,6 +61,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [micPermission, setMicPermission] = useState<MicPermissionState>('prompt')
   const [micError, setMicError] = useState<string | undefined>()
+  const [activeStream, setActiveStream] = useState<MediaStream | null>(null)
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -126,6 +128,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
+      setActiveStream(stream) // Set active stream for waveform visualization
 
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
@@ -140,6 +143,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
         stream.getTracks().forEach(track => track.stop())
+        setActiveStream(null) // Clear active stream
 
         // Process the recording based on mode
         if (mode === 'stt') {
@@ -459,14 +463,46 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                 />
               )}
 
-              {/* STT-only prompt */}
+              {/* STT-only prompt or waveform */}
               {mode === 'stt' && (
-                <div className="flex-1 text-sm text-muted-foreground py-2">
-                  {recordingState === 'idle'
-                    ? 'Click the microphone to start recording'
-                    : recordingState === 'recording'
-                      ? 'Recording... Click to stop'
-                      : 'Processing audio...'}
+                <div className="flex-1 py-2">
+                  {recordingState === 'recording' && activeStream ? (
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 text-red-500">
+                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-sm font-medium">Recording</span>
+                      </div>
+                      <Waveform
+                        stream={activeStream}
+                        isActive={true}
+                        height={32}
+                        barCount={24}
+                        color="rgb(239, 68, 68)"
+                        className="flex-1"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      {recordingState === 'idle'
+                        ? 'Click the microphone to start recording'
+                        : 'Processing audio...'}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Waveform for conversation mode when recording */}
+              {mode === 'conversation' && recordingState === 'recording' && activeStream && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <Waveform
+                    stream={activeStream}
+                    isActive={true}
+                    height={32}
+                    barCount={16}
+                    color="rgb(239, 68, 68)"
+                    className="w-24"
+                  />
                 </div>
               )}
 
