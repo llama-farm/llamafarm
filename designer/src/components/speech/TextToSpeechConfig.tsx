@@ -3,8 +3,7 @@ import { Play, Pause } from 'lucide-react'
 import { Switch } from '../ui/switch'
 import { Selector } from '../ui/selector'
 import { Button } from '../ui/button'
-import { ModelStatusBadge } from './ModelStatusBadge'
-import { TTS_MODELS, PRESET_VOICES } from '../../types/ml'
+import { TTS_MODELS, getVoicesForModel } from '../../types/ml'
 import type { TTSModel, VoiceClone } from '../../types/ml'
 
 interface TextToSpeechConfigProps {
@@ -37,9 +36,10 @@ export function TextToSpeechConfig({
   const [isPreviewing, setIsPreviewing] = useState(false)
   const currentModel = models.find(m => m.id === selectedModel)
 
-  // Combine preset and custom voices
+  // Get voices for the selected model + custom voices
+  const modelVoices = getVoicesForModel(selectedModel)
   const allVoices = [
-    ...PRESET_VOICES.map(v => ({
+    ...modelVoices.map(v => ({
       value: v.id,
       label: v.name,
       description: `${v.gender}, ${v.language.toUpperCase()}`,
@@ -58,7 +58,7 @@ export function TextToSpeechConfig({
       return
     }
 
-    // Mock: Play preview
+    // Start preview
     setIsPreviewing(true)
     // Simulate audio playback duration
     setTimeout(() => {
@@ -72,7 +72,11 @@ export function TextToSpeechConfig({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Text-to-Speech</h3>
-          {currentModel && <ModelStatusBadge status={currentModel.status} progress={currentModel.progress} />}
+          {currentModel?.supportsVoiceCloning && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+              Voice Cloning
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Switch
@@ -94,7 +98,7 @@ export function TextToSpeechConfig({
           options={models.map(m => ({
             value: m.id,
             label: m.name,
-            description: `${m.size}${m.status === 'downloading' ? ` (${m.progress}%)` : ''}`,
+            description: m.description || m.size,
           }))}
           onChange={onModelChange}
           label="Model"
@@ -117,7 +121,7 @@ export function TextToSpeechConfig({
             size="icon"
             className="h-9 w-9 mb-0.5"
             onClick={handlePreview}
-            disabled={!enabled || currentModel?.status !== 'ready'}
+            disabled={!enabled}
             aria-label={isPreviewing ? 'Stop preview' : 'Preview voice'}
           >
             {isPreviewing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -155,37 +159,18 @@ export function TextToSpeechConfig({
           </div>
         </div>
 
-        {/* Download prompt for not-downloaded models */}
-        {currentModel && currentModel.status === 'not_downloaded' && enabled && (
-          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
-            <span className="text-muted-foreground">
-              Model not downloaded ({currentModel.size})
-            </span>
-            <button
-              className="text-primary hover:underline text-sm"
-              onClick={() => {
-                // Mock: In real implementation, this would trigger download
-                console.log('Download model:', currentModel.id)
-              }}
-            >
-              Download
-            </button>
-          </div>
-        )}
-
-        {/* Download progress for downloading models */}
-        {currentModel && currentModel.status === 'downloading' && (
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Downloading {currentModel.name}...</span>
-              <span className="text-muted-foreground">{currentModel.progress}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${currentModel.progress}%` }}
-              />
-            </div>
+        {/* Model info */}
+        {currentModel && (
+          <div className="text-xs text-muted-foreground p-2 rounded-lg bg-muted/30">
+            <span className="font-medium">{currentModel.name}</span>
+            <span className="mx-1.5">•</span>
+            <span>{currentModel.size}</span>
+            {currentModel.description && (
+              <>
+                <span className="mx-1.5">•</span>
+                <span>{currentModel.description}</span>
+              </>
+            )}
           </div>
         )}
       </div>

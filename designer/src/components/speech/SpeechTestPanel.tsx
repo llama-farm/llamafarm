@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Mic, Send, MicOff, StopCircle, Volume2 } from 'lucide-react'
+import { Mic, Send, MicOff, StopCircle, Volume2, Wifi, WifiOff, AlertCircle } from 'lucide-react'
 import { Button } from '../ui/button'
 import { SpeechToTextConfig } from './SpeechToTextConfig'
 import { TextToSpeechConfig } from './TextToSpeechConfig'
@@ -12,12 +12,19 @@ import { Waveform } from './Waveform'
 import {
   STT_MODELS,
   TTS_MODELS,
+  getVoicesForModel,
   type VoiceClone,
   type SpeechMessage,
   type TranscriptionResult,
   type MicPermissionState,
   type RecordingState,
 } from '../../types/ml'
+import {
+  transcribeAudio,
+  synthesizeSpeech,
+  listVoices,
+  type VoiceInfo,
+} from '../../api/voiceService'
 
 interface SpeechTestPanelProps {
   className?: string
@@ -26,20 +33,22 @@ interface SpeechTestPanelProps {
 export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   // STT Config State
   const [sttEnabled, setSttEnabled] = useState(true)
-  const [sttModel, setSttModel] = useState('base')
-  const [sttLanguage, setSttLanguage] = useState('auto')
+  const [sttModel, setSttModel] = useState('distil-large-v3-turbo')
+  const [sttLanguage, setSttLanguage] = useState('en')
   const [wordTimestamps, setWordTimestamps] = useState(false)
 
   // TTS Config State
   const [ttsEnabled, setTtsEnabled] = useState(true)
-  const [ttsModel, setTtsModel] = useState('xtts-v2')
-  const [ttsVoice, setTtsVoice] = useState('allison')
+  const [ttsModel, setTtsModel] = useState('kokoro')
+  const [ttsVoice, setTtsVoice] = useState('af_heart')
   const [ttsSpeed, setTtsSpeed] = useState(1.0)
 
+  // Available voices from backend (fetched but used for validation)
+  const [, setAvailableVoices] = useState<VoiceInfo[]>([])
+  const [, setVoicesLoading] = useState(false)
+
   // Voice Cloning State
-  const [customVoices, setCustomVoices] = useState<VoiceClone[]>([
-    { id: 'custom-1', name: 'My Voice', duration: 24, createdAt: '2025-01-15' },
-  ])
+  const [customVoices, setCustomVoices] = useState<VoiceClone[]>([])
   const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null)
 
   // Conversation State
@@ -55,6 +64,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   const [ttsInputText, setTtsInputText] = useState('')
   const [ttsOutputBlob, setTtsOutputBlob] = useState<Blob | null>(null)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
+  const [ttsError, setTtsError] = useState<string | null>(null)
 
   // Input State
   const [textInput, setTextInput] = useState('')
@@ -62,6 +72,9 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   const [micPermission, setMicPermission] = useState<MicPermissionState>('prompt')
   const [micError, setMicError] = useState<string | undefined>()
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null)
+
+  // Backend connectivity
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -71,6 +84,32 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // Determine which mode we're in
   const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
+
+  // Fetch available voices from backend
+  useEffect(() => {
+    const fetchVoices = async () => {
+      setVoicesLoading(true)
+      try {
+        const voices = await listVoices(ttsModel)
+        setAvailableVoices(voices)
+        setBackendConnected(true)
+
+        // If current voice isn't in the list, switch to first available
+        if (voices.length > 0 && !voices.find(v => v.id === ttsVoice)) {
+          setTtsVoice(voices[0].id)
+        }
+      } catch (err) {
+        console.warn('Failed to fetch voices from backend:', err)
+        setBackendConnected(false)
+        // Fall back to static voices
+        setAvailableVoices([])
+      } finally {
+        setVoicesLoading(false)
+      }
+    }
+
+    fetchVoices()
+  }, [ttsModel])
 
   // Check microphone permission on mount
   useEffect(() => {
@@ -109,7 +148,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // Start recording
   const startRecording = useCallback(async () => {
-    // Request permission if not granted - note that micPermission state may not update synchronously
+    // Request permission if not granted
     if (micPermission !== 'granted') {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -126,11 +165,20 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      })
       streamRef.current = stream
-      setActiveStream(stream) // Set active stream for waveform visualization
+      setActiveStream(stream)
 
-      const mediaRecorder = new MediaRecorder(stream)
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus',
+      })
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
 
@@ -143,7 +191,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
         stream.getTracks().forEach(track => track.stop())
-        setActiveStream(null) // Clear active stream
+        setActiveStream(null)
 
         // Process the recording based on mode
         if (mode === 'stt') {
@@ -159,7 +207,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       console.error('Failed to start recording:', err)
       setRecordingState('error')
     }
-  }, [micPermission, mode, requestMicPermission])
+  }, [micPermission, mode])
 
   // Stop recording
   const stopRecording = useCallback(() => {
@@ -169,73 +217,120 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     }
   }, [])
 
-  // Mock transcription processing
-  const processTranscription = useCallback(async (_audioBlob: Blob) => {
+  // Process transcription using real backend
+  const processTranscription = useCallback(async (audioBlob: Blob) => {
     setIsTranscribing(true)
     setTranscriptionError(null)
 
-    // Mock API delay
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    try {
+      const result = await transcribeAudio(audioBlob, {
+        model: sttModel,
+        language: sttLanguage === 'auto' ? undefined : sttLanguage,
+        responseFormat: 'verbose_json',
+      })
 
-    // Mock transcription result
-    const mockResult: TranscriptionResult = {
-      text: "Hello, this is a test transcription. The quick brown fox jumps over the lazy dog.",
-      language: sttLanguage === 'auto' ? 'en' : sttLanguage,
-      confidence: 0.92,
-      duration: 4.5,
-      segments: wordTimestamps ? [
-        { id: 1, start: 0, end: 0.5, text: "Hello,", confidence: 0.95 },
-        { id: 2, start: 0.5, end: 0.8, text: "this", confidence: 0.94 },
-        { id: 3, start: 0.8, end: 1.0, text: "is", confidence: 0.98 },
-        { id: 4, start: 1.0, end: 1.2, text: "a", confidence: 0.97 },
-        { id: 5, start: 1.2, end: 1.5, text: "test", confidence: 0.93 },
-        { id: 6, start: 1.5, end: 2.2, text: "transcription.", confidence: 0.91 },
-      ] : undefined,
+      // Convert backend response to our TranscriptionResult format
+      const transcriptionResult: TranscriptionResult = {
+        text: result.text,
+        language: result.language,
+        confidence: result.language_probability,
+        duration: result.duration,
+        segments: wordTimestamps && result.segments
+          ? result.segments.map(seg => ({
+              id: seg.id,
+              start: seg.start,
+              end: seg.end,
+              text: seg.text,
+              confidence: seg.avg_logprob ? Math.exp(seg.avg_logprob) : undefined,
+            }))
+          : undefined,
+      }
+
+      setTranscriptionResult(transcriptionResult)
+      setBackendConnected(true)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Transcription failed'
+      setTranscriptionError(message)
+      setBackendConnected(false)
+    } finally {
+      setIsTranscribing(false)
+      setRecordingState('idle')
     }
+  }, [sttModel, sttLanguage, wordTimestamps])
 
-    setTranscriptionResult(mockResult)
-    setIsTranscribing(false)
-    setRecordingState('idle')
-  }, [sttLanguage, wordTimestamps])
+  // Process conversation input (voice) using real backend
+  const processConversationInput = useCallback(async (audioBlob: Blob) => {
+    try {
+      // Transcribe the audio
+      const result = await transcribeAudio(audioBlob, {
+        model: sttModel,
+        language: sttLanguage === 'auto' ? undefined : sttLanguage,
+      })
 
-  // Process conversation input (voice)
-  const processConversationInput = useCallback(async (_audioBlob: Blob) => {
-    // Mock transcription
-    await new Promise(resolve => setTimeout(resolve, 800))
+      const transcription: TranscriptionResult = {
+        text: result.text,
+        language: result.language,
+        confidence: result.language_probability,
+      }
 
-    const transcription: TranscriptionResult = {
-      text: "Hello, how are you doing today?",
-      language: 'en',
-      confidence: 0.94,
+      // Add user message
+      const userMessage: SpeechMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        text: transcription.text,
+        timestamp: new Date(),
+        transcription,
+      }
+      setMessages(prev => [...prev, userMessage])
+
+      // For now, we'll use a simple echo response since we don't have
+      // the full voice chat WebSocket connected yet.
+      // In production, this would use useVoiceChat hook with LLM + TTS
+      if (ttsEnabled) {
+        // Generate TTS response (simple echo for demo)
+        const responseText = `I heard you say: "${transcription.text}"`
+
+        try {
+          const audioBlob = await synthesizeSpeech({
+            model: ttsModel,
+            input: responseText,
+            voice: ttsVoice,
+            speed: ttsSpeed,
+            response_format: 'mp3',
+          })
+
+          const audioUrl = URL.createObjectURL(audioBlob)
+
+          const assistantMessage: SpeechMessage = {
+            id: `msg-${Date.now() + 1}`,
+            role: 'assistant',
+            text: responseText,
+            timestamp: new Date(),
+            audioUrl,
+          }
+          setMessages(prev => [...prev, assistantMessage])
+        } catch (ttsErr) {
+          // TTS failed, just add text response
+          const assistantMessage: SpeechMessage = {
+            id: `msg-${Date.now() + 1}`,
+            role: 'assistant',
+            text: responseText,
+            timestamp: new Date(),
+          }
+          setMessages(prev => [...prev, assistantMessage])
+        }
+      }
+
+      setBackendConnected(true)
+    } catch (err) {
+      console.error('Conversation processing failed:', err)
+      setBackendConnected(false)
+    } finally {
+      setRecordingState('idle')
     }
+  }, [sttModel, sttLanguage, ttsEnabled, ttsModel, ttsVoice, ttsSpeed])
 
-    // Add user message
-    const userMessage: SpeechMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
-      text: transcription.text,
-      timestamp: new Date(),
-      transcription,
-    }
-    setMessages(prev => [...prev, userMessage])
-
-    // Mock TTS response
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // Add assistant message
-    const assistantMessage: SpeechMessage = {
-      id: `msg-${Date.now() + 1}`,
-      role: 'assistant',
-      text: "I'm doing great, thank you for asking! How can I help you today?",
-      timestamp: new Date(),
-      audioUrl: '#mock-audio', // Would be a real URL in production
-    }
-    setMessages(prev => [...prev, assistantMessage])
-
-    setRecordingState('idle')
-  }, [])
-
-  // Send text message
+  // Send text message / synthesize TTS
   const sendTextMessage = useCallback(async () => {
     if (!textInput.trim()) return
 
@@ -243,16 +338,29 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       // TTS-only mode: synthesize the text
       setIsSynthesizing(true)
       setTtsInputText(textInput)
+      setTtsError(null)
 
-      // Mock synthesis delay
-      await new Promise(resolve => setTimeout(resolve, 1200))
+      try {
+        const audioBlob = await synthesizeSpeech({
+          model: ttsModel,
+          input: textInput,
+          voice: ttsVoice,
+          speed: ttsSpeed,
+          response_format: 'mp3',
+        })
 
-      // Mock audio blob (in production, this would come from the API)
-      setTtsOutputBlob(new Blob([], { type: 'audio/mp3' }))
-      setIsSynthesizing(false)
-      setTextInput('')
+        setTtsOutputBlob(audioBlob)
+        setBackendConnected(true)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Speech synthesis failed'
+        setTtsError(message)
+        setBackendConnected(false)
+      } finally {
+        setIsSynthesizing(false)
+        setTextInput('')
+      }
     } else {
-      // Conversation mode
+      // Conversation mode - text input
       const userMessage: SpeechMessage = {
         id: `msg-${Date.now()}`,
         role: 'user',
@@ -262,19 +370,43 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       setMessages(prev => [...prev, userMessage])
       setTextInput('')
 
-      // Mock response
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Generate TTS response if enabled
+      if (ttsEnabled) {
+        const responseText = `I heard you say: "${textInput}"`
 
-      const assistantMessage: SpeechMessage = {
-        id: `msg-${Date.now() + 1}`,
-        role: 'assistant',
-        text: "That's an interesting question! Let me think about that...",
-        timestamp: new Date(),
-        audioUrl: '#mock-audio',
+        try {
+          const audioBlob = await synthesizeSpeech({
+            model: ttsModel,
+            input: responseText,
+            voice: ttsVoice,
+            speed: ttsSpeed,
+            response_format: 'mp3',
+          })
+
+          const audioUrl = URL.createObjectURL(audioBlob)
+
+          const assistantMessage: SpeechMessage = {
+            id: `msg-${Date.now() + 1}`,
+            role: 'assistant',
+            text: responseText,
+            timestamp: new Date(),
+            audioUrl,
+          }
+          setMessages(prev => [...prev, assistantMessage])
+          setBackendConnected(true)
+        } catch (err) {
+          // TTS failed, add text-only response
+          const assistantMessage: SpeechMessage = {
+            id: `msg-${Date.now() + 1}`,
+            role: 'assistant',
+            text: responseText,
+            timestamp: new Date(),
+          }
+          setMessages(prev => [...prev, assistantMessage])
+        }
       }
-      setMessages(prev => [...prev, assistantMessage])
     }
-  }, [textInput, mode])
+  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled])
 
   // Handle key press in textarea
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -291,21 +423,37 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   const handleDeleteVoice = useCallback((voiceId: string) => {
     setCustomVoices(prev => prev.filter(v => v.id !== voiceId))
-    // If this voice was selected for TTS, switch to a preset
     if (ttsVoice === voiceId) {
-      setTtsVoice('allison')
+      const defaultVoices = getVoicesForModel(ttsModel)
+      setTtsVoice(defaultVoices[0]?.id || 'af_heart')
     }
-  }, [ttsVoice])
+  }, [ttsVoice, ttsModel])
 
-  const handlePreviewVoice = useCallback((voiceId: string) => {
+  const handlePreviewVoice = useCallback(async (voiceId: string) => {
     if (previewingVoiceId === voiceId) {
       setPreviewingVoiceId(null)
-    } else {
-      setPreviewingVoiceId(voiceId)
-      // Mock: stop preview after 2 seconds
+      return
+    }
+
+    setPreviewingVoiceId(voiceId)
+
+    try {
+      // Synthesize a preview phrase
+      const previewText = 'Hello! This is a preview of my voice.'
+      await synthesizeSpeech({
+        model: ttsModel,
+        input: previewText,
+        voice: voiceId,
+        speed: ttsSpeed,
+        response_format: 'mp3',
+      })
+      // Note: In a full implementation, we'd play this audio
+    } catch (err) {
+      console.error('Voice preview failed:', err)
+    } finally {
       setTimeout(() => setPreviewingVoiceId(null), 2000)
     }
-  }, [previewingVoiceId])
+  }, [previewingVoiceId, ttsModel, ttsSpeed])
 
   // Play message audio
   const handlePlayMessageAudio = useCallback((messageId: string) => {
@@ -313,8 +461,6 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       setPlayingMessageId(null)
     } else {
       setPlayingMessageId(messageId)
-      // Mock: stop playing after 2 seconds
-      setTimeout(() => setPlayingMessageId(null), 2000)
     }
   }, [playingMessageId])
 
@@ -323,6 +469,25 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
+      {/* Backend status indicator */}
+      {backendConnected !== null && (
+        <div className={`flex-shrink-0 px-4 py-1.5 text-xs flex items-center gap-1.5 ${
+          backendConnected ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'
+        }`}>
+          {backendConnected ? (
+            <>
+              <Wifi className="h-3 w-3" />
+              <span>Connected to Universal Runtime</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="h-3 w-3" />
+              <span>Backend unavailable - check that Universal Runtime is running</span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Configuration Section */}
       <div className="flex-shrink-0 p-4 border-b border-border space-y-3 overflow-y-auto max-h-[40%]">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -342,7 +507,12 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
             enabled={ttsEnabled}
             onEnabledChange={setTtsEnabled}
             selectedModel={ttsModel}
-            onModelChange={setTtsModel}
+            onModelChange={(model) => {
+              setTtsModel(model)
+              // Reset voice to first available for new model
+              const modelVoices = getVoicesForModel(model)
+              setTtsVoice(modelVoices[0]?.id || 'af_heart')
+            }}
             selectedVoice={ttsVoice}
             onVoiceChange={setTtsVoice}
             speed={ttsSpeed}
@@ -352,13 +522,16 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
           />
         </div>
 
-        <VoiceCloning
-          voices={customVoices}
-          onAddVoice={handleAddVoice}
-          onDeleteVoice={handleDeleteVoice}
-          onPreviewVoice={handlePreviewVoice}
-          previewingVoiceId={previewingVoiceId}
-        />
+        {/* Only show voice cloning if the selected TTS model supports it */}
+        {TTS_MODELS.find(m => m.id === ttsModel)?.supportsVoiceCloning && (
+          <VoiceCloning
+            voices={customVoices}
+            onAddVoice={handleAddVoice}
+            onDeleteVoice={handleDeleteVoice}
+            onPreviewVoice={handlePreviewVoice}
+            previewingVoiceId={previewingVoiceId}
+          />
+        )}
       </div>
 
       {/* Test Area */}
@@ -375,7 +548,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
           </div>
         )}
 
-        {/* Main content area based on mode - hidden when mic permission prompt is showing */}
+        {/* Main content area based on mode */}
         {!needsMicPermission && (
         <div className="flex-1 min-h-0 overflow-hidden">
           {mode === 'conversation' && (
@@ -413,6 +586,14 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                   />
                 </div>
 
+                {/* Error message */}
+                {ttsError && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-600 text-sm">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{ttsError}</span>
+                  </div>
+                )}
+
                 {/* Synthesize button */}
                 <Button
                   onClick={sendTextMessage}
@@ -445,7 +626,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         </div>
         )}
 
-        {/* Input Area (for conversation and STT modes) - hidden when mic permission prompt is showing */}
+        {/* Input Area (for conversation and STT modes) */}
         {!needsMicPermission && (mode === 'conversation' || mode === 'stt') && (
           <div className="flex-shrink-0 p-3 border-t border-border bg-background/60">
             <div className="flex items-end gap-2">

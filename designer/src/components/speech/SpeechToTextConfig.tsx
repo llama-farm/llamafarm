@@ -1,7 +1,6 @@
 import { Switch } from '../ui/switch'
 import { Selector } from '../ui/selector'
 import { Checkbox } from '../ui/checkbox'
-import { ModelStatusBadge } from './ModelStatusBadge'
 import { STT_MODELS, STT_LANGUAGES } from '../../types/ml'
 import type { STTModel } from '../../types/ml'
 
@@ -38,7 +37,6 @@ export function SpeechToTextConfig({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Speech-to-Text</h3>
-          {currentModel && <ModelStatusBadge status={currentModel.status} progress={currentModel.progress} />}
         </div>
         <div className="flex items-center gap-2">
           <Switch
@@ -61,7 +59,7 @@ export function SpeechToTextConfig({
             options={models.map(m => ({
               value: m.id,
               label: m.name,
-              description: `${m.size}${m.status === 'downloading' ? ` (${m.progress}%)` : ''}`,
+              description: m.description || m.size,
             }))}
             onChange={onModelChange}
             label="Model"
@@ -91,37 +89,18 @@ export function SpeechToTextConfig({
           <span className="text-sm text-muted-foreground">Word timestamps</span>
         </label>
 
-        {/* Download prompt for not-downloaded models */}
-        {currentModel && currentModel.status === 'not_downloaded' && enabled && (
-          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
-            <span className="text-muted-foreground">
-              Model not downloaded ({currentModel.size})
-            </span>
-            <button
-              className="text-primary hover:underline text-sm"
-              onClick={() => {
-                // Mock: In real implementation, this would trigger download
-                console.log('Download model:', currentModel.id)
-              }}
-            >
-              Download
-            </button>
-          </div>
-        )}
-
-        {/* Download progress for downloading models */}
-        {currentModel && currentModel.status === 'downloading' && (
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Downloading {currentModel.name}...</span>
-              <span className="text-muted-foreground">{currentModel.progress}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${currentModel.progress}%` }}
-              />
-            </div>
+        {/* Model info */}
+        {currentModel && (
+          <div className="text-xs text-muted-foreground p-2 rounded-lg bg-muted/30">
+            <span className="font-medium">{currentModel.name}</span>
+            <span className="mx-1.5">•</span>
+            <span>{currentModel.size}</span>
+            {currentModel.description && (
+              <>
+                <span className="mx-1.5">•</span>
+                <span>{currentModel.description}</span>
+              </>
+            )}
           </div>
         )}
       </div>
