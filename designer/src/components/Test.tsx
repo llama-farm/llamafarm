@@ -21,11 +21,11 @@ const Test = () => {
   const location = useLocation()
   const { openPackageModal } = usePackageModal()
 
-  // Model type for Test page: 'inference' (default), 'anomaly', 'classifier', 'document_scanning', or 'encoder'
-  const [modelType, setModelType] = useState<'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder'>(() => {
+  // Model type for Test page: 'inference' (default), 'anomaly', 'classifier', 'document_scanning', 'encoder', or 'speech'
+  const [modelType, setModelType] = useState<'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech'>(() => {
     if (typeof window === 'undefined') return 'inference'
     const stored = localStorage.getItem('lf_test_modelType')
-    if (stored === 'anomaly' || stored === 'classifier' || stored === 'document_scanning' || stored === 'encoder') return stored
+    if (stored === 'anomaly' || stored === 'classifier' || stored === 'document_scanning' || stored === 'encoder' || stored === 'speech') return stored
     return 'inference'
   })
 

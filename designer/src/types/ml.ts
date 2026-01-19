@@ -802,3 +802,135 @@ export const RERANKING_SAMPLES = [
     ],
   },
 ]
+
+// =============================================================================
+// Speech Types (STT, TTS, Voice Cloning)
+// =============================================================================
+
+export type SpeechModelStatus = 'ready' | 'downloading' | 'not_downloaded' | 'error'
+
+// Speech-to-Text (STT) Models
+export interface STTModel {
+  id: string
+  name: string
+  size: string
+  status: SpeechModelStatus
+  progress?: number // 0-100 for downloading status
+}
+
+export const STT_MODELS: STTModel[] = [
+  { id: 'tiny', name: 'Tiny', size: '75MB', status: 'ready' },
+  { id: 'base', name: 'Base', size: '142MB', status: 'ready' },
+  { id: 'small', name: 'Small', size: '466MB', status: 'not_downloaded' },
+  { id: 'medium', name: 'Medium', size: '1.5GB', status: 'not_downloaded' },
+  { id: 'large-v3', name: 'Large V3', size: '3.1GB', status: 'not_downloaded' },
+  { id: 'distil-large-v3', name: 'Distil Large V3', size: '1.5GB', status: 'downloading', progress: 45 },
+]
+
+// Text-to-Speech (TTS) Models
+export interface TTSModel {
+  id: string
+  name: string
+  size: string
+  status: SpeechModelStatus
+  progress?: number
+}
+
+export const TTS_MODELS: TTSModel[] = [
+  { id: 'xtts-v2', name: 'XTTS v2', size: '2.1GB', status: 'ready' },
+  { id: 'bark', name: 'Bark', size: '5.0GB', status: 'not_downloaded' },
+]
+
+// Voice presets
+export interface VoicePreset {
+  id: string
+  name: string
+  gender: 'male' | 'female' | 'neutral'
+  language: string
+  isCustom?: boolean
+  duration?: number // in seconds, for custom voices
+  createdAt?: string
+}
+
+export const PRESET_VOICES: VoicePreset[] = [
+  { id: 'ada', name: 'Ada', gender: 'female', language: 'en' },
+  { id: 'allison', name: 'Allison', gender: 'female', language: 'en' },
+  { id: 'james', name: 'James', gender: 'male', language: 'en' },
+  { id: 'sofia', name: 'Sofia', gender: 'female', language: 'es' },
+  { id: 'hans', name: 'Hans', gender: 'male', language: 'de' },
+  { id: 'yuki', name: 'Yuki', gender: 'female', language: 'ja' },
+]
+
+// Languages for STT
+export const STT_LANGUAGES: Array<{ code: string; name: string }> = [
+  { code: 'auto', name: 'Auto-detect' },
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'it', name: 'Italian' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'ar', name: 'Arabic' },
+]
+
+// Microphone permission states
+export type MicPermissionState = 'prompt' | 'granted' | 'denied' | 'error'
+
+// Recording states
+export type RecordingState = 'idle' | 'recording' | 'processing' | 'error'
+
+// Custom voice clone
+export interface VoiceClone {
+  id: string
+  name: string
+  duration: number // in seconds
+  createdAt: string
+  audioBlob?: Blob
+}
+
+// Transcription result
+export interface TranscriptionResult {
+  text: string
+  language?: string
+  confidence?: number
+  duration?: number
+  segments?: TranscriptionSegment[]
+}
+
+export interface TranscriptionSegment {
+  id: number
+  start: number
+  end: number
+  text: string
+  confidence?: number
+}
+
+// Speech message for conversation view
+export interface SpeechMessage {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  audioUrl?: string
+  timestamp: Date
+  transcription?: TranscriptionResult
+}
+
+// Speech test history entry
+export interface SpeechHistoryEntry {
+  id: string
+  timestamp: Date
+  mode: 'stt' | 'tts' | 'conversation'
+  // STT fields
+  transcription?: TranscriptionResult
+  inputAudioUrl?: string
+  // TTS fields
+  inputText?: string
+  outputAudioUrl?: string
+  voiceId?: string
+  // Shared
+  error?: string
+}

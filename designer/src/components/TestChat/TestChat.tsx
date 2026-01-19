@@ -16,6 +16,7 @@ import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
 import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument, useCreateEmbeddings, useRerankDocuments } from '../../hooks/useMLModels'
 import { Selector } from '../ui/selector'
+import { SpeechTestPanel } from '../speech'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
   DOCUMENT_SCANNING_LANGUAGES,
@@ -33,8 +34,8 @@ import {
 
 export interface TestChatProps {
   // Mode selection
-  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder'
-  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder') => void
+  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech'
+  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech') => void
   // Existing props
   showReferences: boolean
   allowRanking: boolean
@@ -3186,6 +3187,7 @@ export default function TestChat({
                 // Encoder mode: clear results
                 clearEncoderResults()
               }
+              // Speech mode: panel handles its own state clearing
             }}
             disabled={
               modelType === 'inference'
@@ -3196,7 +3198,9 @@ export default function TestChat({
                     ? (!classifierResult && !classifierError)
                     : modelType === 'document_scanning'
                       ? (!scanResults && !scanError && !scanFile)
-                      : (!embeddingResult && !rerankResult && !encoderError)
+                      : modelType === 'encoder'
+                        ? (!embeddingResult && !rerankResult && !encoderError)
+                        : true // Speech mode: always disabled, has its own controls
             }
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -3214,8 +3218,9 @@ export default function TestChat({
               { value: 'classifier', label: 'Classifier' },
               { value: 'document_scanning', label: 'Document Scanning' },
               { value: 'encoder', label: 'Encoder' },
+              { value: 'speech', label: 'Speech' },
             ]}
-            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder')}
+            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech')}
             label="Model Type"
             className="w-[200px]"
           />
@@ -3744,6 +3749,11 @@ export default function TestChat({
               </div>
             )}
           </div>
+        ) : modelType === 'speech' ? (
+          /* Speech: Full speech test panel with STT, TTS, and voice cloning */
+          <div className="absolute inset-0 overflow-hidden">
+            <SpeechTestPanel className="h-full" />
+          </div>
         ) : (
           /* Encoder: Embedding similarity or Reranking */
           <div className="absolute inset-0 flex overflow-hidden">
@@ -4033,8 +4043,8 @@ export default function TestChat({
         )}
       </div>
 
-      {/* Input Area - mode conditional (hidden for encoder/reranking since inputs are in right panel) */}
-      {!(modelType === 'encoder' && encoderSubMode === 'reranking') && (
+      {/* Input Area - mode conditional (hidden for encoder/reranking and speech since they have their own inputs) */}
+      {!(modelType === 'encoder' && encoderSubMode === 'reranking') && modelType !== 'speech' && (
       <div className={inputContainerClasses}>
         {modelType === 'inference' ? (
           /* Inference: Chat input */
