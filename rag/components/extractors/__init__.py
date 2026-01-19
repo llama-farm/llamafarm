@@ -82,6 +82,13 @@ try:
 except ImportError:
     pass
 
+try:
+    from .lightweight import LightweightExtractor
+
+    registry.register("LightweightExtractor", LightweightExtractor)
+except ImportError:
+    pass
+
 __all__ = [
     "BaseExtractor",
     "ExtractorRegistry",
@@ -97,4 +104,5 @@ __all__ = [
     "PathExtractor",
     "StatisticsExtractor",
     "TableExtractor",
+    "LightweightExtractor",
 ]

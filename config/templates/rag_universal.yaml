@@ -1,0 +1,56 @@
+# LlamaFarm RAG Configuration - Universal/Lightweight Mode
+# =========================================================
+# This configuration uses the lightweight RAG stack built into the main server.
+# No separate RAG service required. Uses minimal dependencies.
+#
+# Components:
+# - Parser: UniversalParser (MarkItDown + SemChunk)
+# - Extractor: LightweightExtractor (YAKE keywords + optional GLiNER entities)
+# - Vector Store: ChromaDB (embedded mode)
+# - Embedder: Universal Runtime or Ollama (HTTP API)
+#
+# Best for: 90% of use cases, simple document processing, quick setup
+
+rag:
+  # Parser configuration
+  parser:
+    type: "universal"
+    chunk_size: 512
+    chunk_strategy: "semantic"  # Options: semantic, page
+    use_ocr: true
+    ocr_min_text_threshold: 50
+    model_for_tokens: "gpt-4"
+
+  # Extractor configuration
+  extractors:
+    - type: "lightweight"
+      config:
+        keyword_count: 5
+        summary_sentences: 3
+        entity_labels:
+          - "person"
+          - "organization"
+          - "location"
+          - "software"
+          - "date"
+        use_gliner: false  # Set to true if GLiNER is installed
+
+  # Vector store configuration
+  vector_store:
+    type: "chromadb"
+    mode: "embedded"  # No external service needed
+    persist_directory: "./chroma_data"
+    collection_name: "documents"
+
+  # Embedder configuration
+  embedder:
+    type: "universal"
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+    api_base: "http://127.0.0.1:11540/v1"
+    dimension: 384
+
+  # Retrieval configuration
+  retrieval:
+    strategy: "basic_similarity"
+    top_k: 5
+    score_threshold: 0.5
