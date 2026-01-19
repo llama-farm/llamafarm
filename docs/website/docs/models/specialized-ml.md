@@ -1731,6 +1731,6 @@ Files are stored temporarily (5-minute TTL by default).
 ## Next Steps
 
 - [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
-- [Vision Models](./vision.md) - Image classification, object detection, OCR
+- [Vision Models](./vision-ml.md) - Image classification, object detection, OCR
 - [Universal Runtime Overview](./index.md#universal-runtime) - General runtime configuration
 - [API Reference](../api/index.md) - Full API documentation
