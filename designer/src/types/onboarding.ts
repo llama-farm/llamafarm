@@ -135,6 +135,12 @@ export interface UseOnboardingReturn {
   setUploadedFiles: (files: OnboardingUploadedFile[]) => void
   setDatasetName: (name: string | null) => void
 
+  // File storage actions (actual File objects stored in ref, not persisted)
+  addActualFiles: (files: File[]) => void
+  removeActualFile: (index: number) => void
+  getActualFiles: () => File[]
+  clearActualFiles: () => void
+
   // Checklist actions
   completeChecklistStep: (stepId: string) => void
   uncompleteChecklistStep: (stepId: string) => void

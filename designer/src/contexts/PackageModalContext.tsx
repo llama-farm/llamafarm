@@ -7,6 +7,7 @@ import React, {
   useRef,
   useEffect,
 } from 'react'
+import confetti from 'canvas-confetti'
 import {
   Dialog,
   DialogContent,
@@ -184,53 +185,35 @@ export const PackageModalProvider: React.FC<ProviderProps> = ({ children }) => {
       }
     } catch {}
 
-    const fire = () => {
-      const confetti = (window as any).confetti
-      if (!confetti) return
-      const isDark = document.documentElement.classList.contains('dark')
-      const colors = isDark
-        ? ['#14b8a6', '#f472b6', '#38bdf8', '#ffffff'] // teal-500, pink-400, sky-400, white
-        : ['#0d9488', '#ec4899', '#38bdf8', '#0f172a'] // teal-600, pink-500, sky-400, slate-900
+    const isDark = document.documentElement.classList.contains('dark')
+    const colors = isDark
+      ? ['#14b8a6', '#f472b6', '#38bdf8', '#ffffff'] // teal-500, pink-400, sky-400, white
+      : ['#0d9488', '#ec4899', '#38bdf8', '#0f172a'] // teal-600, pink-500, sky-400, slate-900
 
-      confetti({
-        particleCount: 60,
-        spread: 60,
-        angle: 60,
-        origin: { x: 0.15, y: 0.2 },
-        colors,
-      })
-      confetti({
-        particleCount: 60,
-        spread: 60,
-        angle: 120,
-        origin: { x: 0.85, y: 0.2 },
-        colors,
-      })
-      setTimeout(
-        () =>
-          confetti({
-            particleCount: 80,
-            spread: 70,
-            origin: { x: 0.5, y: 0.25 },
-            colors,
-          }),
-        300
-      )
-    }
-
-    const existing = (window as any).confetti
-    if (existing) {
-      fire()
-      return
-    }
-    try {
-      const script = document.createElement('script')
-      script.src =
-        'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js'
-      script.async = true
-      script.onload = () => fire()
-      document.body.appendChild(script)
-    } catch {}
+    confetti({
+      particleCount: 60,
+      spread: 60,
+      angle: 60,
+      origin: { x: 0.15, y: 0.2 },
+      colors,
+    })
+    confetti({
+      particleCount: 60,
+      spread: 60,
+      angle: 120,
+      origin: { x: 0.85, y: 0.2 },
+      colors,
+    })
+    setTimeout(
+      () =>
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { x: 0.5, y: 0.25 },
+          colors,
+        }),
+      300
+    )
   }, [isSuccess])
 
   return (

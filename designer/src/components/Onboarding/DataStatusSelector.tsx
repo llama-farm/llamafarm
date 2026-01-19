@@ -21,6 +21,9 @@ interface DataStatusSelectorProps {
   onUploadedFilesChange: (files: OnboardingUploadedFile[]) => void
   datasetName: string | null
   onDatasetNameChange: (name: string | null) => void
+  // File storage actions (actual File objects stored in context ref)
+  onAddActualFiles: (files: File[]) => void
+  onRemoveActualFile: (index: number) => void
   className?: string
 }
 
@@ -89,6 +92,8 @@ export function DataStatusSelector({
   onUploadedFilesChange,
   datasetName,
   onDatasetNameChange,
+  onAddActualFiles,
+  onRemoveActualFile,
   className,
 }: DataStatusSelectorProps) {
   // Drag-and-drop state
@@ -96,11 +101,6 @@ export function DataStatusSelector({
   const [datasetNameError, setDatasetNameError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
-
-  // Initialize file storage if not present
-  if (!(window as any).__lf_onboarding_files_27a9c3) {
-    ;(window as any).__lf_onboarding_files_27a9c3 = []
-  }
 
   const hfTaskInfo = projectType ? HF_TASK_URLS[projectType] : null
 
@@ -144,11 +144,10 @@ export function DataStatusSelector({
         type: f.type,
       }))
       onUploadedFilesChange([...uploadedFiles, ...fileInfos])
-      // Store actual files in a temporary location for later upload
-      const existingFiles = (window as any).__lf_onboarding_files_27a9c3 || []
-      ;(window as any).__lf_onboarding_files_27a9c3 = [...existingFiles, ...files]
+      // Store actual files in the onboarding context ref (not window)
+      onAddActualFiles(files)
     }
-  }, [uploadedFiles, onUploadedFilesChange])
+  }, [uploadedFiles, onUploadedFilesChange, onAddActualFiles])
 
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -159,21 +158,19 @@ export function DataStatusSelector({
         type: f.type,
       }))
       onUploadedFilesChange([...uploadedFiles, ...fileInfos])
-      // Store actual files in a temporary location for later upload
-      const existingFiles = (window as any).__lf_onboarding_files_27a9c3 || []
-      ;(window as any).__lf_onboarding_files_27a9c3 = [...existingFiles, ...files]
+      // Store actual files in the onboarding context ref (not window)
+      onAddActualFiles(files)
     }
     // Reset input so same file can be selected again
     e.target.value = ''
-  }, [uploadedFiles, onUploadedFilesChange])
+  }, [uploadedFiles, onUploadedFilesChange, onAddActualFiles])
 
   const removeFile = useCallback((index: number) => {
     const newFiles = uploadedFiles.filter((_, i) => i !== index)
     onUploadedFilesChange(newFiles)
-    // Also remove from temporary storage
-    const existingFiles = (window as any).__lf_onboarding_files_27a9c3 || []
-    ;(window as any).__lf_onboarding_files_27a9c3 = existingFiles.filter((_: File, i: number) => i !== index)
-  }, [uploadedFiles, onUploadedFilesChange])
+    // Also remove from the onboarding context ref
+    onRemoveActualFile(index)
+  }, [uploadedFiles, onUploadedFilesChange, onRemoveActualFile])
 
   return (
     <div className={cn('space-y-6', className)}>

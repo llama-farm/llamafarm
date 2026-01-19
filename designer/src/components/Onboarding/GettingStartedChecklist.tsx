@@ -5,6 +5,7 @@
 
 import { useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import confetti from 'canvas-confetti'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -27,40 +28,19 @@ const fireConfettiAt = (element: HTMLElement) => {
   const x = (rect.left + rect.width / 2) / window.innerWidth
   const y = (rect.top + rect.height / 2) / window.innerHeight
 
-  const fire = () => {
-    const confetti = (window as any).confetti
-    if (!confetti) return
+  const isDark = document.documentElement.classList.contains('dark')
+  const colors = isDark
+    ? ['#14b8a6', '#f472b6', '#38bdf8', '#ffffff']
+    : ['#0d9488', '#ec4899', '#38bdf8', '#0f172a']
 
-    const isDark = document.documentElement.classList.contains('dark')
-    const colors = isDark
-      ? ['#14b8a6', '#f472b6', '#38bdf8', '#ffffff']
-      : ['#0d9488', '#ec4899', '#38bdf8', '#0f172a']
-
-    confetti({
-      particleCount: 30,
-      spread: 50,
-      origin: { x, y },
-      colors,
-      scalar: 0.8,
-      gravity: 1.2,
-    })
-  }
-
-  // Load confetti script if not already loaded
-  const existing = (window as any).confetti
-  if (existing) {
-    fire()
-    return
-  }
-
-  try {
-    const script = document.createElement('script')
-    script.src =
-      'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js'
-    script.async = true
-    script.onload = () => fire()
-    document.body.appendChild(script)
-  } catch {}
+  confetti({
+    particleCount: 30,
+    spread: 50,
+    origin: { x, y },
+    colors,
+    scalar: 0.8,
+    gravity: 1.2,
+  })
 }
 
 interface GettingStartedChecklistProps {

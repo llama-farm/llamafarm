@@ -3,7 +3,7 @@
  * Follows the pattern established by useProjectModal.ts
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import type {
   OnboardingState,
   WizardStep,
@@ -85,6 +85,10 @@ function saveState(state: OnboardingState, projectId: string | null): void {
  */
 export function useOnboarding(projectId: string | null = null): UseOnboardingReturn {
   const [state, setState] = useState<OnboardingState>(() => loadState(projectId))
+
+  // Ref to store actual File objects (not persisted to localStorage)
+  // This avoids storing files on the global window object
+  const actualFilesRef = useRef<File[]>([])
 
   // Check if this is a demo project
   const demoConfig = useMemo(() => getDemoConfigForProject(projectId), [projectId])
@@ -250,15 +254,10 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
       }
 
       // If user uploaded files during onboarding, dispatch event to trigger upload
-      // Only do this once - check if we already dispatched by looking for a flag
-      const fileStorageKey = '__lf_onboarding_files_27a9c3'
-      const dispatchedKey = '__lf_onboarding_dispatched_27a9c3'
-      if (prev.answers.dataStatus === 'has-data' && prev.answers.uploadedFiles.length > 0 && !(window as any)[dispatchedKey]) {
-        // Get actual files from temporary storage
-        const files = (window as any)[fileStorageKey] || []
+      if (prev.answers.dataStatus === 'has-data' && prev.answers.uploadedFiles.length > 0) {
+        // Get actual files from the ref (stored in React context, not window)
+        const files = actualFilesRef.current
         if (files.length > 0) {
-          // Mark as dispatched BEFORE dispatching to prevent duplicate events
-          ;(window as any)[dispatchedKey] = true
           window.dispatchEvent(
             new CustomEvent('lf-onboarding-upload-files', {
               detail: {
@@ -267,11 +266,8 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
               },
             })
           )
-          // Clear temporary storage after a brief delay to ensure event is processed
-          setTimeout(() => {
-            delete (window as any)[fileStorageKey]
-            delete (window as any)[dispatchedKey]
-          }, 100)
+          // Clear the ref after dispatching
+          actualFilesRef.current = []
         }
       }
 
@@ -361,6 +357,23 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
       ...prev,
       answers: { ...prev.answers, datasetName: name },
     }))
+  }, [])
+
+  // File storage actions (actual File objects stored in ref, not persisted)
+  const addActualFiles = useCallback((files: File[]) => {
+    actualFilesRef.current = [...actualFilesRef.current, ...files]
+  }, [])
+
+  const removeActualFile = useCallback((index: number) => {
+    actualFilesRef.current = actualFilesRef.current.filter((_, i) => i !== index)
+  }, [])
+
+  const getActualFiles = useCallback(() => {
+    return actualFilesRef.current
+  }, [])
+
+  const clearActualFiles = useCallback(() => {
+    actualFilesRef.current = []
   }, [])
 
   // Checklist actions
@@ -478,6 +491,12 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     setIsTrainingSampleModel,
     setUploadedFiles,
     setDatasetName,
+
+    // File storage actions (actual File objects stored in ref, not persisted)
+    addActualFiles,
+    removeActualFile,
+    getActualFiles,
+    clearActualFiles,
 
     // Checklist actions
     completeChecklistStep,

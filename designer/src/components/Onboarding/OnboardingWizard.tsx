@@ -34,6 +34,8 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
     setExperienceLevel,
     setUploadedFiles,
     setDatasetName,
+    addActualFiles,
+    removeActualFile,
   } = useOnboardingContext()
 
   const { currentStep, answers } = state
@@ -183,6 +185,8 @@ export function OnboardingWizard({ className }: OnboardingWizardProps) {
                 onUploadedFilesChange={setUploadedFiles}
                 datasetName={answers.datasetName}
                 onDatasetNameChange={setDatasetName}
+                onAddActualFiles={addActualFiles}
+                onRemoveActualFile={removeActualFile}
               />
             )}
             {currentStep === 3 && (
