@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/llamafarm/cli/cmd/utils"
+	"github.com/llamafarm/cli/internal/buildinfo"
 )
 
 // LlamaCppVersion is the pinned llama.cpp release version
@@ -77,10 +78,17 @@ var WindowsBinarySpec = map[HardwareCapability]BinaryInfo{
 // This is hosted on LlamaFarm releases as it's not provided by upstream
 var LinuxARM64BinarySpec = BinaryInfo{
 	// TODO: Update URL pattern when release strategy is finalized
-	URL:     fmt.Sprintf("https://github.com/llama-farm/llamafarm/releases/download/v0.0.1/llama-%s-bin-linux-arm64.zip", LlamaCppVersion),
+	URL:     fmt.Sprintf("https://github.com/llama-farm/llamafarm/releases/download/%s/llama-%s-bin-linux-arm64.zip", getLlamaFarmReleaseVersion(), LlamaCppVersion),
 	SHA256:  "",
 	LibPath: "bin/libllama.so",
 	LibName: "libllama.so",
+}
+
+func getLlamaFarmReleaseVersion() string {
+	if buildinfo.CurrentVersion == "dev" {
+		return "v0.0.1"
+	}
+	return buildinfo.CurrentVersion
 }
 
 // GetLlamaCacheDir returns the cache directory for llama.cpp binaries.

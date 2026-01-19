@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from importlib import metadata
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,12 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
         "lib": "build/bin/libllama.so",
         "sha256": None,
     },
-    # Note: Linux ARM64 binaries are not published by llama.cpp
-    # Users on ARM64 Linux will need to compile from source or use
-    # a different inference backend
+    # Linux ARM64 (LlamaFarm provided)
+    ("linux", "arm64", "cpu"): {
+        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{version}/llama-b7376-bin-linux-arm64.zip",
+        "lib": "bin/libllama.so",
+        "sha256": None,
+    },
     # macOS
     ("darwin", "arm64", "metal"): {
         "artifact": "llama-{version}-bin-macos-arm64.zip",
@@ -79,8 +83,8 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
 
 def _should_build_from_source(platform_key: tuple[str, str, str]) -> bool:
     """Return True when llama.cpp should be built from source."""
-    system, machine, _ = platform_key
-    return system == "linux" and machine == "arm64"
+    return False
+
 
 
 def _build_from_source(dest_dir: Path, version: str, backend: str) -> Path:
@@ -406,6 +410,19 @@ def download_binary(
 
     version = os.environ.get("LLAMAFARM_LLAMA_VERSION", LLAMA_CPP_VERSION)
 
+    # For Linux ARM64, we need the LlamaFarm package version to construct the URL
+    if platform_key == ("linux", "arm64", "cpu"):
+        try:
+            package_version = metadata.version("llamafarm-llama")
+            # If dev version, fallback or handle appropriately. For now assume v0.0.1 for dev
+            if "dev" in package_version or "0.1.0" in package_version: # 0.1.0 is the pyproject default
+                 version = "v0.0.1"
+            else:
+                 version = f"v{package_version}"
+        except metadata.PackageNotFoundError:
+            version = "v0.0.1"
+
+
     if platform_key not in BINARY_MANIFEST:
         if _should_build_from_source(platform_key):
             logger.warning(
@@ -422,8 +439,13 @@ def download_binary(
             raise RuntimeError(f"No pre-built binary available for {platform_key}")
 
     manifest = BINARY_MANIFEST[platform_key]
-    artifact = manifest["artifact"].format(version=version)
-    url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
+    if platform_key == ("linux", "arm64", "cpu"):
+         # Use full URL from manifest for our custom builds
+         url = manifest["artifact"].format(version=version)
+         artifact = url.split("/")[-1]
+    else:
+         artifact = manifest["artifact"].format(version=version)
+         url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
 
     print(f"Downloading llama.cpp {version} for {platform_key}...")
     print(f"  URL: {url}")
