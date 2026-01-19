@@ -328,17 +328,31 @@ properties:
         properties:
           model:
             type: string
-            description: TTS model ID (e.g., "kokoro")
+            description: |
+              TTS model/backend ID:
+              - kokoro: High-quality neural TTS with built-in voices (default)
+              - chatterbox-turbo: Fast voice cloning TTS (350M params, sub-200ms)
+                Requires voice_profiles configuration for voice cloning.
+              - pocket-tts: Lightweight CPU TTS from Kyutai (100M params, ~6x realtime)
+                Fast and efficient, no GPU required.
             default: kokoro
           voice:
             type: string
             description: |
-              Voice ID for synthesis. Available voices:
+              Voice identifier for synthesis.
+
+              For Kokoro, use built-in voice IDs:
               - af_heart (American Female, default)
               - af_bella, af_nicole, af_sarah, af_sky (American Female)
               - am_adam, am_michael (American Male)
               - bf_emma, bf_isabella (British Female)
               - bm_george, bm_lewis (British Male)
+
+              For Pocket TTS, use built-in voice IDs:
+              - alba (default), marius, javert, jean
+              - fantine, cosette, eponine, azelma
+
+              For Chatterbox Turbo, use a voice profile name defined in voice_profiles.
             default: af_heart
           speed:
             type: number
@@ -359,6 +373,59 @@ properties:
               When true, the runtime will not purge this model from cache
               even under memory pressure. Reduces latency for voice responses.
             default: false
+          voice_profiles:
+            type: object
+            description: |
+              Named voice profiles for voice cloning (Chatterbox Turbo only).
+              Each profile maps a name to a reference audio file (~10s of speech).
+            additionalProperties:
+              type: object
+              properties:
+                audio_path:
+                  type: string
+                  description: |
+                    Path to reference audio file for voice cloning.
+                    Can be relative to project directory or absolute.
+                description:
+                  type: string
+                  description: Human-readable description of this voice
+              required:
+                - audio_path
+          temperature:
+            type: number
+            minimum: 0.1
+            maximum: 2.0
+            description: |
+              Chatterbox Turbo temperature (ignored for Kokoro).
+              Controls randomness in generation. Higher = more varied output.
+              - 0.5: More deterministic
+              - 0.8: Balanced (default)
+              - 1.2: More creative/varied
+            default: 0.8
+          top_k:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            description: |
+              Chatterbox Turbo top-k sampling (ignored for Kokoro).
+              Number of highest probability tokens to consider.
+            default: 1000
+          top_p:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: |
+              Chatterbox Turbo nucleus sampling threshold (ignored for Kokoro).
+              Cumulative probability cutoff for token selection.
+            default: 0.95
+          repetition_penalty:
+            type: number
+            minimum: 1.0
+            maximum: 2.0
+            description: |
+              Chatterbox Turbo repetition penalty (ignored for Kokoro).
+              Penalty applied to repeating tokens. Higher = less repetition.
+            default: 1.2
       stt:
         type: object
         description: Speech-to-text configuration

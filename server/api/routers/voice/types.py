@@ -48,6 +48,7 @@ class ConfigMessage(BaseModel):
     llm_model: str | None = None
     language: str | None = None
     speed: float | None = None
+    sentence_boundary_only: bool | None = None
 
 
 # ============================================================================
@@ -137,4 +138,9 @@ class VoiceSessionConfig(BaseModel):
     enable_thinking: bool = Field(
         default=False,
         description="Enable LLM thinking/reasoning mode. Disabled by default for voice.",
+    )
+    sentence_boundary_only: bool = Field(
+        default=True,
+        description="Only split text on sentence boundaries (. ! ?) for natural speech. "
+        "Set to False for aggressive chunking (lower latency but choppier speech).",
     )

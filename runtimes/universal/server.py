@@ -43,6 +43,7 @@ from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     AnomalyModel,
     BaseModel,
+    ChatterboxConfig,
     ClassifierModel,
     DocumentModel,
     EncoderModel,
@@ -52,6 +53,7 @@ from models import (
     OCRModel,
     SpeechModel,
     TTSModel,
+    VoiceProfile,
 )
 from routers.audio_speech import router as audio_speech_router
 from routers.chat_completions import router as chat_completions_router
@@ -2691,33 +2693,64 @@ async def load_speech(
 def _make_tts_cache_key(
     model_id: str,
     voice: str,
+    voice_profile_path: str | None = None,
 ) -> str:
     """Generate cache key for TTS model.
 
     Args:
         model_id: TTS model identifier
         voice: Default voice for the model
+        voice_profile_path: Path to voice profile audio (for Chatterbox)
 
     Returns:
         Cache key string
     """
+    if voice_profile_path:
+        # Hash the path to keep key reasonable length
+        import hashlib
+
+        path_hash = hashlib.md5(voice_profile_path.encode()).hexdigest()[:8]
+        return f"tts:{model_id}:{voice}:{path_hash}"
     return f"tts:{model_id}:{voice}"
 
 
 async def load_tts(
     model_id: str = "kokoro",
     voice: str = "af_heart",
+    voice_profiles: dict[str, dict] | None = None,
+    temperature: float = 0.8,
+    top_k: int = 1000,
+    top_p: float = 0.95,
+    repetition_penalty: float = 1.2,
 ) -> TTSModel:
     """Load a text-to-speech model.
 
     Args:
-        model_id: TTS model identifier (e.g., "kokoro")
-        voice: Default voice ID to use
+        model_id: TTS model identifier ("kokoro" or "chatterbox-turbo")
+        voice: Default voice ID (Kokoro) or profile name (Chatterbox)
+        voice_profiles: Dict of {name: {audio_path, description}} for Chatterbox
+        temperature: Chatterbox Turbo temperature (0.1-2.0)
+        top_k: Chatterbox Turbo top-k sampling (1-5000)
+        top_p: Chatterbox Turbo nucleus sampling (0.0-1.0)
+        repetition_penalty: Chatterbox Turbo repetition penalty (1.0-2.0)
 
     Returns:
         Loaded TTSModel instance
     """
-    cache_key = _make_tts_cache_key(model_id, voice)
+    # Convert voice_profiles dict to VoiceProfile objects
+    profiles: dict[str, VoiceProfile] | None = None
+    voice_profile_path: str | None = None
+
+    if voice_profiles:
+        profiles = {
+            name: VoiceProfile(name=name, audio_path=cfg["audio_path"], description=cfg.get("description", ""))
+            for name, cfg in voice_profiles.items()
+        }
+        # Get the path for the selected voice for cache key
+        if voice in profiles:
+            voice_profile_path = profiles[voice].audio_path
+
+    cache_key = _make_tts_cache_key(model_id, voice, voice_profile_path)
 
     if cache_key not in _models:
         async with _model_load_lock:
@@ -2725,10 +2758,22 @@ async def load_tts(
                 logger.info(f"Loading TTS model: {model_id} (voice={voice})")
                 device = get_device()
 
+                # Create Chatterbox config if applicable
+                chatterbox_config = None
+                if model_id == "chatterbox-turbo":
+                    chatterbox_config = ChatterboxConfig(
+                        temperature=temperature,
+                        top_k=top_k,
+                        top_p=top_p,
+                        repetition_penalty=repetition_penalty,
+                    )
+
                 model = TTSModel(
                     model_id=model_id,
                     device=device,
                     voice=voice,
+                    voice_profiles=profiles,
+                    chatterbox_config=chatterbox_config,
                 )
 
                 await model.load()

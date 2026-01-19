@@ -37,6 +37,79 @@ from .types import (
 logger = logging.getLogger(__name__)
 
 
+class StreamingThinkingFilter:
+    """Filters <think>...</think> blocks from a token stream.
+
+    Tracks state across token boundaries to handle cases where tags
+    are split across multiple tokens.
+    """
+
+    def __init__(self):
+        self._in_thinking = False
+        self._buffer = ""
+        # Patterns to detect tag boundaries
+        self._open_tag = re.compile(r"<think>", re.IGNORECASE)
+        self._close_tag = re.compile(r"</think>", re.IGNORECASE)
+
+    def filter_token(self, token: str) -> str:
+        """Filter a token, removing thinking content.
+
+        Args:
+            token: Incoming token from LLM stream.
+
+        Returns:
+            Filtered token (may be empty if inside thinking block).
+        """
+        # Add token to buffer for pattern matching
+        self._buffer += token
+
+        # Process buffer to extract non-thinking content
+        result = ""
+        while True:
+            if self._in_thinking:
+                # Look for closing tag
+                match = self._close_tag.search(self._buffer)
+                if match:
+                    # Found closing tag - exit thinking mode
+                    self._in_thinking = False
+                    self._buffer = self._buffer[match.end():]
+                else:
+                    # Still in thinking mode, discard buffer but keep last 8 chars
+                    # (to catch split </think> tag)
+                    if len(self._buffer) > 8:
+                        self._buffer = self._buffer[-8:]
+                    break
+            else:
+                # Look for opening tag
+                match = self._open_tag.search(self._buffer)
+                if match:
+                    # Found opening tag - emit content before it, enter thinking mode
+                    result += self._buffer[:match.start()]
+                    self._in_thinking = True
+                    self._buffer = self._buffer[match.end():]
+                else:
+                    # No tag found - emit most of buffer, keep last 7 chars
+                    # (to catch split <think> tag)
+                    if len(self._buffer) > 7:
+                        emit_len = len(self._buffer) - 7
+                        result += self._buffer[:emit_len]
+                        self._buffer = self._buffer[emit_len:]
+                    break
+
+        return result
+
+    def flush(self) -> str:
+        """Flush remaining buffer content.
+
+        Call at end of stream to get any remaining non-thinking content.
+        """
+        if self._in_thinking:
+            return ""
+        result = self._buffer
+        self._buffer = ""
+        return result
+
+
 class VoiceChatService:
     """Orchestrates the voice assistant pipeline.
 
@@ -381,7 +454,8 @@ class VoiceChatService:
 
         Reuses existing connection to avoid handshake overhead (~50-100ms per connection).
         """
-        if self._tts_ws is None or self._tts_ws.closed:
+        from websockets import State
+        if self._tts_ws is None or self._tts_ws.state != State.OPEN:
             ws_url = (
                 f"{self._runtime_ws_url}/v1/audio/speech/stream"
                 f"?model={self.session.config.tts_model}"
@@ -393,7 +467,8 @@ class VoiceChatService:
 
     async def _close_tts_websocket(self) -> None:
         """Close TTS WebSocket connection."""
-        if self._tts_ws is not None and not self._tts_ws.closed:
+        from websockets import State
+        if self._tts_ws is not None and self._tts_ws.state == State.OPEN:
             await self._tts_ws.close()
             self._tts_ws = None
 
@@ -558,7 +633,12 @@ class VoiceChatService:
             await websocket.send_json(StatusMessage(state=VoiceState.SPEAKING).model_dump())
 
             # Use phrase detector to accumulate LLM tokens
-            phrase_detector = PhraseBoundaryDetector()
+            # Pass sentence_boundary_only config for natural speech (avoids mid-sentence breaks)
+            phrase_detector = PhraseBoundaryDetector(
+                sentence_boundary_only=self.session.config.sentence_boundary_only,
+            )
+            # Filter out <think>...</think> blocks at the token level
+            thinking_filter = StreamingThinkingFilter()
             full_response = ""
             first_token_logged = False
             first_phrase_logged = False
@@ -577,10 +657,16 @@ class VoiceChatService:
                     logger.info("Turn interrupted by user")
                     break
 
-                full_response += token
+                # Filter thinking content at token level (before phrase detection)
+                filtered_token = thinking_filter.filter_token(token)
+                full_response += token  # Keep full response for history
 
-                # Detect phrase boundaries
-                phrase = phrase_detector.add_token(token)
+                # Skip empty tokens (thinking content filtered out)
+                if not filtered_token:
+                    continue
+
+                # Detect phrase boundaries on filtered content
+                phrase = phrase_detector.add_token(filtered_token)
                 if phrase:
                     if not first_phrase_logged:
                         t_first_phrase = time.perf_counter()
@@ -608,6 +694,18 @@ class VoiceChatService:
 
             # Flush remaining text
             if not self.session.is_interrupted():
+                # First flush any remaining content from thinking filter
+                remaining_filtered = thinking_filter.flush()
+                if remaining_filtered:
+                    # Add filtered content to phrase detector
+                    phrase = phrase_detector.add_token(remaining_filtered)
+                    if phrase:
+                        await websocket.send_json(
+                            LLMTextMessage(text=phrase, is_final=False).model_dump()
+                        )
+                        await self._synthesize_and_stream_phrase(websocket, phrase)
+
+                # Then flush the phrase detector
                 remaining = phrase_detector.flush()
                 if remaining:
                     await websocket.send_json(

@@ -17,6 +17,7 @@ from core.logging import FastAPIStructLogger
 from core.mcp_registry import cleanup_all_mcp_services
 from core.settings import settings
 from core.version import version
+from services.universal_runtime_service import close_runtime_client
 
 logger = FastAPIStructLogger()
 
@@ -33,6 +34,7 @@ async def lifespan(app: fastapi.FastAPI):
     # Shutdown
     logger.info("Shutting down LlamaFarm API")
     await cleanup_all_mcp_services()
+    await close_runtime_client()
     logger.info("Shutdown complete")
 
 

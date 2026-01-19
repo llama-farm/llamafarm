@@ -395,6 +395,7 @@ class VoiceSession:
         llm_model: str | None = None,
         language: str | None = None,
         speed: float | None = None,
+        sentence_boundary_only: bool | None = None,
     ) -> None:
         """Update session configuration."""
         if stt_model is not None:
@@ -409,6 +410,8 @@ class VoiceSession:
             self.config.language = language
         if speed is not None:
             self.config.speed = speed
+        if sentence_boundary_only is not None:
+            self.config.sentence_boundary_only = sentence_boundary_only
 
 
 class SessionManager:
@@ -457,6 +460,7 @@ class SessionManager:
                         llm_model=config.llm_model,
                         language=config.language,
                         speed=config.speed,
+                        sentence_boundary_only=config.sentence_boundary_only,
                     )
                 return session
 

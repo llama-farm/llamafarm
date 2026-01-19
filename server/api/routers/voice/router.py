@@ -62,6 +62,7 @@ def _get_voice_config_defaults(
         "language": DEFAULT_LANGUAGE,
         "speed": DEFAULT_SPEED,
         "enable_thinking": False,  # Disabled by default for voice
+        "sentence_boundary_only": True,  # Natural speech by default
     }
 
     if project_config and project_config.voice:
@@ -110,6 +111,7 @@ async def voice_chat_websocket(
     language: str | None = None,
     speed: float | None = None,
     system_prompt: str | None = None,
+    sentence_boundary_only: bool | None = None,
 ):
     """Real-time voice chat WebSocket endpoint.
 
@@ -133,6 +135,8 @@ async def voice_chat_websocket(
         language: STT language code (default: en)
         speed: TTS speed multiplier (0.5-2.0, default: 1.0)
         system_prompt: System prompt for LLM (optional)
+        sentence_boundary_only: Only split on sentence endings (. ! ?) for natural speech.
+            Set to false for aggressive chunking (lower latency but choppier). Default: true.
 
     Configuration:
         Voice settings are loaded from the project's llamafarm.yaml `voice`
@@ -183,6 +187,11 @@ async def voice_chat_websocket(
     effective_speed = speed if speed is not None else defaults["speed"]
     # Thinking is controlled by config only (no query param override)
     effective_enable_thinking = defaults["enable_thinking"]
+    # Sentence boundary only - can be overridden via query param
+    effective_sentence_boundary_only = (
+        sentence_boundary_only if sentence_boundary_only is not None
+        else defaults["sentence_boundary_only"]
+    )
 
     # Validate required parameters
     if not effective_llm_model:
@@ -232,6 +241,7 @@ async def voice_chat_websocket(
         speed=effective_speed,
         system_prompt=None,  # Handled below
         enable_thinking=effective_enable_thinking,
+        sentence_boundary_only=effective_sentence_boundary_only,
     )
 
     session = await session_manager.get_or_create_session(session_id, config)
@@ -366,6 +376,7 @@ async def voice_chat_websocket(
                             llm_model=data.get("llm_model"),
                             language=data.get("language"),
                             speed=data.get("speed"),
+                            sentence_boundary_only=data.get("sentence_boundary_only"),
                         )
                         logger.debug(f"Session config updated: {session.session_id}")
 
