@@ -8,6 +8,7 @@ from .projects import router as projects_router
 from .rag import router as rag_router
 from .system import disk_router, upgrades_router
 from .vision import vision_router
+from .voice import voice_router
 
 __all__ = [
     "projects_router",
@@ -21,4 +22,5 @@ __all__ = [
     "models_router",
     "ml_router",
     "vision_router",
+    "voice_router",
 ]

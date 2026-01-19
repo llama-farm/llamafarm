@@ -41,12 +41,13 @@ The Universal Runtime is a FastAPI-based inference server that bridges HuggingFa
 
 ## Features
 
-✅ **6 Model Categories**
+✅ **7 Model Categories**
 - Text generation (CausalLM: GPT, Llama, Mistral, Qwen, Phi)
 - Text embeddings & classification (Encoder: BERT, sentence-transformers)
 - Image generation (Diffusion: Stable Diffusion, SDXL, FLUX)
 - Image understanding (Vision: ViT, CLIP, DINOv2)
-- Speech-to-text (Audio: Whisper, Wav2Vec2)
+- Speech-to-text (Audio STT: faster-whisper, Whisper)
+- Text-to-speech (Audio TTS: Kokoro)
 - Vision-language (Multimodal: BLIP, LLaVA, Florence)
 
 ✅ **Smart Hardware Detection**
@@ -88,7 +89,8 @@ The Universal Runtime supports 6 major model categories. See [MODEL_TYPES.md](./
 | **Encoder** | `/v1/embeddings` | BERT, sentence-transformers, BGE | Semantic search, RAG, classification |
 | **Diffusion** | `/v1/images/generations` | Stable Diffusion, SDXL, FLUX | Image generation, editing, inpainting |
 | **Vision** | `/v1/vision/classify` | ViT, CLIP, DINOv2, ResNet | Image classification, zero-shot |
-| **Audio** | `/v1/audio/transcriptions` | Whisper, Wav2Vec2 | Speech-to-text, translation |
+| **Audio (STT)** | `/v1/audio/transcriptions` | Whisper, faster-whisper | Speech-to-text, translation |
+| **Audio (TTS)** | `/v1/audio/speech` | Kokoro | Text-to-speech, voice synthesis |
 | **Multimodal** | `/v1/multimodal/caption` | BLIP, LLaVA, Florence | Image captioning, visual QA |
 
 **Quick Model Recommendations:**
@@ -931,6 +933,177 @@ Translate audio to English.
   "model": "openai/whisper-large-v3"
 }
 ```
+
+---
+
+### Audio (Text-to-Speech)
+
+Generate speech from text using neural TTS models. Supports multiple output formats and streaming for low-latency playback.
+
+#### `POST /v1/audio/speech`
+
+Generate audio from text (OpenAI-compatible).
+
+**Request:**
+```json
+{
+  "model": "kokoro",
+  "input": "Hello, this is a test of text-to-speech synthesis.",
+  "voice": "af_heart",
+  "response_format": "mp3",
+  "speed": 1.0,
+  "stream": false
+}
+```
+
+**Parameters:**
+- `model` (string): TTS model ID. Currently supports `"kokoro"`.
+- `input` (string): Text to synthesize (max 4096 characters recommended).
+- `voice` (string): Voice ID. See available voices below.
+- `response_format` (string): Output format: `"mp3"`, `"opus"`, `"wav"`, `"flac"`, `"aac"`, or `"pcm"`. Default: `"mp3"`.
+- `speed` (float): Speed multiplier (0.5 to 2.0). Default: 1.0.
+- `stream` (bool): Enable SSE streaming for low-latency playback. Default: false.
+
+**Response (Non-Streaming):**
+Returns binary audio data with appropriate Content-Type header.
+
+**Response (Streaming, `stream: true`):**
+Returns Server-Sent Events with base64-encoded PCM audio chunks:
+```
+data: {"type": "audio", "data": "<base64_pcm>", "format": "pcm", "sample_rate": 24000}
+data: {"type": "audio", "data": "<base64_pcm>", "format": "pcm", "sample_rate": 24000}
+data: {"type": "done", "duration": 2.5}
+```
+
+**Example:**
+```bash
+# Generate MP3 audio
+curl -X POST http://localhost:11540/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kokoro",
+    "input": "Hello world!",
+    "voice": "af_heart"
+  }' \
+  --output speech.mp3
+
+# Generate with different voice and format
+curl -X POST http://localhost:11540/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kokoro",
+    "input": "Testing text-to-speech",
+    "voice": "am_adam",
+    "response_format": "wav",
+    "speed": 1.2
+  }' \
+  --output speech.wav
+```
+
+**Python Example:**
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:11540/v1", api_key="not-used")
+
+# Generate speech
+response = client.audio.speech.create(
+    model="kokoro",
+    input="Hello, this is a test!",
+    voice="af_heart",
+    response_format="mp3"
+)
+
+# Save to file
+response.stream_to_file("output.mp3")
+```
+
+#### `GET /v1/audio/voices`
+
+List available TTS voices.
+
+**Parameters:**
+- `model` (query, optional): Filter voices by model ID.
+
+**Response:**
+```json
+{
+  "object": "list",
+  "data": [
+    {"id": "af_heart", "name": "Heart (American Female)", "language": "en-US", "model": "kokoro"},
+    {"id": "af_bella", "name": "Bella (American Female)", "language": "en-US", "model": "kokoro"},
+    {"id": "am_adam", "name": "Adam (American Male)", "language": "en-US", "model": "kokoro"},
+    {"id": "bf_emma", "name": "Emma (British Female)", "language": "en-GB", "model": "kokoro"},
+    {"id": "bm_george", "name": "George (British Male)", "language": "en-GB", "model": "kokoro"}
+  ]
+}
+```
+
+#### `WebSocket /v1/audio/speech/stream`
+
+Real-time TTS streaming via WebSocket for ultra-low-latency applications.
+
+**Query Parameters:**
+- `model`: TTS model ID (default: `"kokoro"`)
+- `voice`: Voice ID (default: `"af_heart"`)
+- `response_format`: Audio format (default: `"pcm"`)
+- `sample_rate`: Output sample rate (default: `24000`)
+
+**Protocol:**
+1. Connect with query params
+2. Send JSON: `{"text": "Hello world", "speed": 1.0, "final": true}`
+3. Receive binary PCM audio chunks
+4. Receive JSON: `{"type": "done", "duration": 1.5}` when complete
+
+**Example (JavaScript):**
+```javascript
+const ws = new WebSocket('ws://localhost:11540/v1/audio/speech/stream?voice=af_heart');
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({text: "Hello world!", final: true}));
+};
+
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // Binary audio chunk - play it
+    playAudioChunk(event.data);
+  } else {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'done') {
+      console.log(`Audio duration: ${msg.duration}s`);
+    }
+  }
+};
+```
+
+#### Available Voices (Kokoro)
+
+| Voice ID | Name | Language | Gender |
+|----------|------|----------|--------|
+| `af_heart` | Heart | American English | Female |
+| `af_bella` | Bella | American English | Female |
+| `af_nicole` | Nicole | American English | Female |
+| `af_sarah` | Sarah | American English | Female |
+| `af_sky` | Sky | American English | Female |
+| `am_adam` | Adam | American English | Male |
+| `am_michael` | Michael | American English | Male |
+| `bf_emma` | Emma | British English | Female |
+| `bf_isabella` | Isabella | British English | Female |
+| `bm_george` | George | British English | Male |
+| `bm_lewis` | Lewis | British English | Male |
+
+#### Installation
+
+TTS requires additional dependencies. Install with:
+
+```bash
+uv pip install "universal-runtime[tts]"
+```
+
+This installs:
+- `kokoro`: High-quality neural TTS (~82M parameters)
+- `spacy` + `en_core_web_sm`: For text processing
+- `pydub` + `av`: For audio format conversion
 
 ---
 

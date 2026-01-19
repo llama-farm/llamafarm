@@ -43,6 +43,7 @@ from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     AnomalyModel,
     BaseModel,
+    ChatterboxConfig,
     ClassifierModel,
     DocumentModel,
     EncoderModel,
@@ -51,7 +52,10 @@ from models import (
     LanguageModel,
     OCRModel,
     SpeechModel,
+    TTSModel,
+    VoiceProfile,
 )
+from routers.audio_speech import router as audio_speech_router
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -144,6 +148,7 @@ app.add_middleware(
 )
 
 app.include_router(chat_completions_router)
+app.include_router(audio_speech_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -2625,7 +2630,7 @@ async def delete_classifier_model(model_name: str):
 
 # Safe audio file extensions (whitelist for security)
 SAFE_AUDIO_EXTENSIONS = frozenset({
-    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus",
+    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus", ".pcm",
 })
 
 # Silence detection threshold for decoded Opus audio (higher due to noise floor)
@@ -2680,11 +2685,109 @@ async def load_speech(
     return _models.get(cache_key)
 
 
+# ==============================================================================
+# TTS (Text-to-Speech) Model Loading
+# ==============================================================================
+
+
+def _make_tts_cache_key(
+    model_id: str,
+    voice: str,
+    voice_profile_path: str | None = None,
+) -> str:
+    """Generate cache key for TTS model.
+
+    Args:
+        model_id: TTS model identifier
+        voice: Default voice for the model
+        voice_profile_path: Path to voice profile audio (for Chatterbox)
+
+    Returns:
+        Cache key string
+    """
+    if voice_profile_path:
+        # Hash the path to keep key reasonable length
+        import hashlib
+
+        path_hash = hashlib.md5(voice_profile_path.encode()).hexdigest()[:8]
+        return f"tts:{model_id}:{voice}:{path_hash}"
+    return f"tts:{model_id}:{voice}"
+
+
+async def load_tts(
+    model_id: str = "kokoro",
+    voice: str = "af_heart",
+    voice_profiles: dict[str, dict] | None = None,
+    temperature: float = 0.8,
+    top_k: int = 1000,
+    top_p: float = 0.95,
+    repetition_penalty: float = 1.2,
+) -> TTSModel:
+    """Load a text-to-speech model.
+
+    Args:
+        model_id: TTS model identifier ("kokoro" or "chatterbox-turbo")
+        voice: Default voice ID (Kokoro) or profile name (Chatterbox)
+        voice_profiles: Dict of {name: {audio_path, description}} for Chatterbox
+        temperature: Chatterbox Turbo temperature (0.1-2.0)
+        top_k: Chatterbox Turbo top-k sampling (1-5000)
+        top_p: Chatterbox Turbo nucleus sampling (0.0-1.0)
+        repetition_penalty: Chatterbox Turbo repetition penalty (1.0-2.0)
+
+    Returns:
+        Loaded TTSModel instance
+    """
+    # Convert voice_profiles dict to VoiceProfile objects
+    profiles: dict[str, VoiceProfile] | None = None
+    voice_profile_path: str | None = None
+
+    if voice_profiles:
+        profiles = {
+            name: VoiceProfile(name=name, audio_path=cfg["audio_path"], description=cfg.get("description", ""))
+            for name, cfg in voice_profiles.items()
+        }
+        # Get the path for the selected voice for cache key
+        if voice in profiles:
+            voice_profile_path = profiles[voice].audio_path
+
+    cache_key = _make_tts_cache_key(model_id, voice, voice_profile_path)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading TTS model: {model_id} (voice={voice})")
+                device = get_device()
+
+                # Create Chatterbox config if applicable
+                chatterbox_config = None
+                if model_id == "chatterbox-turbo":
+                    chatterbox_config = ChatterboxConfig(
+                        temperature=temperature,
+                        top_k=top_k,
+                        top_p=top_p,
+                        repetition_penalty=repetition_penalty,
+                    )
+
+                model = TTSModel(
+                    model_id=model_id,
+                    device=device,
+                    voice=voice,
+                    voice_profiles=profiles,
+                    chatterbox_config=chatterbox_config,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
+
+
 @app.post("/v1/audio/transcriptions")
 async def create_transcription(
     background_tasks: BackgroundTasks,
     file: UploadFile | None = None,
-    model: str = Form(default="distil-large-v3"),
+    model: str = Form(default="distil-large-v3-turbo"),
     language: str | None = Form(default=None),
     prompt: str | None = Form(default=None),
     response_format: str = Form(default="json"),
@@ -2756,6 +2859,8 @@ async def create_transcription(
             )
 
         # Detect actual audio format from content (don't trust file extension)
+        import numpy as np
+
         from utils.audio_buffer import (
             decode_audio_bytes,
             detect_audio_format,
@@ -2764,17 +2869,6 @@ async def create_transcription(
 
         format_name, is_compressed = detect_audio_format(audio_bytes)
         logger.debug(f"Detected audio format: {format_name} (compressed={is_compressed})")
-
-        # If audio is compressed, decode to WAV for reliable processing
-        if is_compressed:
-            try:
-                pcm_data = decode_audio_bytes(audio_bytes)
-                audio_bytes = pcm_to_wav(pcm_data)
-                file_extension = ".wav"
-                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
-            except Exception as e:
-                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
-                # Fall back to original data - faster-whisper might handle it
 
         # Load speech model
         speech_model = await load_speech(model_id=model)
@@ -2790,7 +2884,87 @@ async def create_transcription(
             granularities = [g.strip() for g in timestamp_granularities.split(",")]
             word_timestamps = "word" in granularities
 
-        # Write audio to temp file (faster-whisper requires file path)
+        # Optimized path: if raw PCM, convert directly to numpy array (no file I/O)
+        if format_name == "PCM (assumed)":
+            logger.debug(f"Using optimized PCM path ({len(audio_bytes)} bytes)")
+            # Convert int16 PCM to float32 normalized to [-1.0, 1.0]
+            audio_array = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+
+            if stream:
+                # Streaming not yet supported for numpy array path
+                # Fall through to file-based path
+                logger.debug("Streaming requested, falling back to file-based path")
+            else:
+                # Non-streaming: use direct numpy transcription
+                result = await speech_model.transcribe_audio(
+                    audio=audio_array,
+                    language=language,
+                    word_timestamps=word_timestamps,
+                    initial_prompt=prompt,
+                    temperature=[temperature] if temperature > 0 else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                )
+
+                # Format response based on requested format
+                if response_format == "text":
+                    return result.text
+
+                if response_format == "srt":
+                    srt_lines = []
+                    for i, seg in enumerate(result.segments, 1):
+                        start_time = _format_timestamp_srt(seg.start)
+                        end_time = _format_timestamp_srt(seg.end)
+                        srt_lines.append(f"{i}")
+                        srt_lines.append(f"{start_time} --> {end_time}")
+                        srt_lines.append(seg.text.strip())
+                        srt_lines.append("")
+                    return "\n".join(srt_lines)
+
+                if response_format == "vtt":
+                    vtt_lines = ["WEBVTT", ""]
+                    for seg in result.segments:
+                        start_time = _format_timestamp_vtt(seg.start)
+                        end_time = _format_timestamp_vtt(seg.end)
+                        vtt_lines.append(f"{start_time} --> {end_time}")
+                        vtt_lines.append(seg.text.strip())
+                        vtt_lines.append("")
+                    return "\n".join(vtt_lines)
+
+                if response_format == "verbose_json":
+                    return {
+                        "task": "transcribe",
+                        "language": result.language,
+                        "duration": result.duration,
+                        "text": result.text,
+                        "segments": [
+                            {
+                                "id": seg.id,
+                                "start": seg.start,
+                                "end": seg.end,
+                                "text": seg.text,
+                                "words": seg.words,
+                                "avg_logprob": seg.avg_logprob,
+                                "no_speech_prob": seg.no_speech_prob,
+                            }
+                            for seg in result.segments
+                        ],
+                    }
+
+                # Default: simple JSON
+                return {"text": result.text}
+
+        # File-based path: for compressed formats or streaming
+        # If audio is compressed, decode to WAV for reliable processing
+        if is_compressed:
+            try:
+                pcm_data = decode_audio_bytes(audio_bytes)
+                audio_bytes = pcm_to_wav(pcm_data)
+                file_extension = ".wav"
+                logger.debug(f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to decode {format_name}: {e}, using original data")
+                # Fall back to original data - faster-whisper might handle it
+
+        # Write audio to temp file (faster-whisper requires file path for streaming)
         # Assign tmp_path before write to ensure cleanup even if write fails
         tmp_path = None
         try:
@@ -2934,7 +3108,7 @@ def _format_timestamp_vtt(seconds: float) -> str:
 @app.post("/v1/audio/translations")
 async def create_translation(
     file: UploadFile,
-    model: str = Form(default="distil-large-v3"),
+    model: str = Form(default="distil-large-v3-turbo"),
     prompt: str | None = Form(default=None),
     response_format: str = Form(default="json"),
     temperature: float = Form(default=0.0),
