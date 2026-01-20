@@ -58,8 +58,11 @@ dev = [
   "pytest-timeout>=2.1.0",
   "httpx>=0.24.0",
   "numpy>=1.24.0",
-  # For testing: torch will use CPU wheels via UV_EXTRA_INDEX_URL in CI
+  # For testing: torch/torchvision will use CPU wheels via UV_EXTRA_INDEX_URL in CI
+  # Both must be specified to ensure UV resolves compatible versions from pypi.org
+  # and doesn't pick incompatible versions from the PyTorch CPU index
   "torch>=2.0.0",
+  "torchvision>=0.15.0",
 ]
 
 [project.optional-dependencies]
