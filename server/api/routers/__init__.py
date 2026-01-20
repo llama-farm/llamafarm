@@ -6,7 +6,6 @@ from .ml import router as ml_router
 from .models import router as models_router
 from .projects import router as projects_router
 from .rag import router as rag_router
-from .rag_lite import router as rag_lite_router
 from .system import disk_router, upgrades_router
 from .vision import vision_router
 
@@ -15,7 +14,6 @@ __all__ = [
     "datasets_router",
     "health_router",
     "rag_router",
-    "rag_lite_router",
     "disk_router",
     "upgrades_router",
     "examples_router",

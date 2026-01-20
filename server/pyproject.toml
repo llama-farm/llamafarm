@@ -39,17 +39,13 @@ dependencies = [
   # Fix dotenv parsing
   "python-dotenv>=1.0.0",
   "llamafarm-config",
-  "llamafarm-common",  # Includes llamafarm_rag_common
+  "llamafarm-common",
   "types-requests>=2.31.0.6",
   "fastapi-mcp>=0.4.0",
   "ollama>=0.6.0",
   "huggingface-hub>=1.0.1",
   "psutil>=5.9.0",
   "pymupdf>=1.26.0",  # PDF to image conversion
-  # Lightweight RAG dependencies
-  "markitdown[all]>=0.1.4",  # Document parsing (Microsoft) with all converters
-  "chromadb>=0.4.22",  # Vector database (embedded mode)
-  "pytest-asyncio>=0.24.0",  # For async tests
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
 ]

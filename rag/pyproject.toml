@@ -61,11 +61,6 @@ dependencies = [
   "lxml>=4.9.0",
   # Document parsing dependencies
   "python-docx>=1.0.0",
-  # Lightweight RAG dependencies (UniversalParser + LightweightExtractor)
-  "markitdown[all]>=0.1.4",
-  "semchunk>=2.0.0",
-  "tiktoken>=0.5.0",
-  "yake>=0.4.8",
   # Character encoding detection
   "chardet>=5.0.0",
   "pytest>=8.4.1",
@@ -144,11 +139,6 @@ embeddings = [
   "openai>=1.0.0",
   "cohere>=4.32.0",
   "transformers>=4.53.0",
-]
-
-# GLiNER for zero-shot NER in LightweightExtractor
-gliner = [
-  "gliner>=0.1.0",
 ]
 
 # LlamaIndex parsers and advanced document processing
