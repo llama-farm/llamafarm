@@ -4,8 +4,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from rag.core.base import Parser
-
 # Use the common config module instead of direct YAML loading
 # Add the repo root to the path to find the config module
 from core.logging import RAGStructLogger
@@ -30,6 +28,46 @@ except ImportError as e:
     ) from e
 
 logger = RAGStructLogger("rag.core.strategies.handler")
+
+
+def _create_default_universal_rag_strategy() -> DataProcessingStrategy:
+    """Create the default universal_rag data processing strategy.
+
+    This provides a sensible default for zero-config RAG that handles
+    90% of document types with no configuration needed.
+    """
+    return DataProcessingStrategy(
+        name="universal_rag",
+        description="Universal RAG pipeline using MarkItDown parser with semantic chunking and comprehensive metadata extraction",
+        parsers=[
+            Parser(
+                type="UniversalParser",
+                config={
+                    "chunk_size": 1024,
+                    "chunk_overlap": 100,
+                    "chunk_strategy": "semantic",
+                    "use_ocr": True,
+                    "ocr_endpoint": "http://127.0.0.1:8000/v1/vision/ocr",
+                    "extract_metadata": True,
+                    "min_chunk_size": 50,
+                    "max_chunk_size": 8000,
+                },
+            )
+        ],
+        extractors=[
+            Extractor(
+                type="UniversalExtractor",
+                config={
+                    "keyword_count": 10,
+                    "use_gliner": False,
+                    "extract_entities": True,
+                    "generate_summary": True,
+                    "summary_sentences": 3,
+                    "detect_language": True,
+                },
+            )
+        ],
+    )
 
 
 class DbProcessingConfig:
@@ -94,11 +132,30 @@ class SchemaHandler:
         return [db.name for db in self.rag_config.databases or []]
 
     def get_data_processing_strategy_names(self) -> list[str]:
-        """Get list of available data processing strategy names."""
-        return [
+        """Get list of available data processing strategy names.
+
+        Always includes 'universal_rag' as the default strategy.
+        """
+        strategies = [
             strategy.name
             for strategy in self.rag_config.data_processing_strategies or []
         ]
+
+        # Always include universal_rag as an available strategy
+        if "universal_rag" not in strategies:
+            strategies.append("universal_rag")
+
+        return strategies
+
+    def get_default_processing_strategy(self) -> DataProcessingStrategy:
+        """Get the default processing strategy.
+
+        Returns universal_rag if no strategies are defined, otherwise
+        returns the first defined strategy.
+        """
+        if self.rag_config and self.rag_config.data_processing_strategies:
+            return self.rag_config.data_processing_strategies[0]
+        return _create_default_universal_rag_strategy()
 
     def get_database_retrieval_strategies(self, database_name: str) -> list[str]:
         """Get available retrieval strategies for a database."""
@@ -120,15 +177,23 @@ class SchemaHandler:
         raise ValueError(f"Database '{database_name}' not found")
 
     def create_processing_config(self, strategy_name: str) -> DataProcessingStrategy:
-        """Create data processing strategy configuration."""
-        if not self.rag_config or not self.rag_config.data_processing_strategies:
-            raise ValueError("No data processing strategies found")
+        """Create data processing strategy configuration.
 
+        If the strategy is 'universal_rag' and not explicitly defined,
+        returns the default universal_rag strategy.
+        """
+        # Search for explicitly defined strategy
         for strategy in self.rag_config.data_processing_strategies or []:
             if strategy.name == strategy_name:
                 # Return a deep copy so downstream mutations (e.g., parser overrides)
                 # do not affect the cached configuration on the handler
                 return strategy.model_copy(deep=True)
+
+        # If universal_rag is requested but not defined, return the default
+        if strategy_name == "universal_rag":
+            logger.info("Using default universal_rag strategy")
+            return _create_default_universal_rag_strategy()
+
         raise ValueError(f"Data processing strategy '{strategy_name}' not found")
 
     def parse_strategy_name(self, strategy_name: str) -> tuple[str | None, str | None]:

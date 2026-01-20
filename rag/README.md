@@ -2,6 +2,97 @@
 
 Python helpers used by the server and CLI for ingestion, parsing, and retrieval. Day-to-day usage is through the `lf` CLI—this package exists so you can run workers/tests locally and extend the pipeline.
 
+## 🚀 Universal RAG (Zero-Config Default)
+
+**New in v0.1.0:** The `universal_rag` strategy is now the default! Simply define a database and start ingesting documents—no parser configuration required.
+
+### Quick Start (Zero Config)
+
+```yaml
+# llamafarm.yaml - THAT'S IT!
+rag:
+  databases:
+    - name: my_docs
+      type: ChromaStore
+      config:
+        collection_name: documents
+
+# No data_processing_strategies needed - universal_rag is automatic!
+```
+
+### What universal_rag Provides
+
+| Component | Feature | Description |
+|-----------|---------|-------------|
+| **UniversalParser** | Format Support | PDF, DOCX, XLSX, PPTX, HTML, TXT, MD, CSV, JSON, XML, images |
+| | Semantic Chunking | AI-based content boundaries via SemChunk |
+| | OCR Fallback | Automatic OCR for scanned documents and images |
+| | Configurable Strategies | semantic, sections, paragraphs, sentences, characters |
+| **UniversalExtractor** | Keywords | Automatic keyword extraction via YAKE |
+| | Metadata | Document name, size, type, timestamps, word/char counts |
+| | Chunk Labels | Human-readable "1/5", "2/5" labeling |
+| | Language Detection | Automatic language identification |
+
+### Configuration Options
+
+```yaml
+# Optional: Customize universal_rag settings
+data_processing_strategies:
+  - name: universal_rag
+    parsers:
+      - type: UniversalParser
+        config:
+          chunk_size: 1024        # Target chunk size
+          chunk_overlap: 100      # Overlap between chunks
+          chunk_strategy: semantic # semantic, sections, paragraphs, sentences, characters
+          use_ocr: true           # Enable OCR fallback
+          ocr_endpoint: "http://127.0.0.1:8000/v1/vision/ocr"
+    extractors:
+      - type: UniversalExtractor
+        config:
+          keyword_count: 10       # Keywords per chunk
+          extract_entities: true  # Extract named entities
+          generate_summary: true  # Generate chunk summaries
+          detect_language: true   # Detect document language
+```
+
+### Chunk Metadata
+
+Every document chunk includes rich metadata:
+
+```python
+{
+    # Document-level
+    "document_name": "report.pdf",
+    "document_type": ".pdf",
+    "document_size": 245000,
+    "processed_at": "2024-01-15T10:30:00Z",
+
+    # Chunk-level
+    "chunk_index": 0,
+    "chunk_label": "1/5",
+    "total_chunks": 5,
+    "chunk_position": "start",
+    "character_count": 1024,
+    "word_count": 180,
+
+    # Extracted features
+    "keywords": ["machine learning", "neural networks", ...],
+    "language": "en",
+    "has_tables": false,
+    "has_code": true
+}
+```
+
+### Backward Compatibility
+
+Universal RAG is **100% backward compatible**:
+- Explicit `data_processing_strategies` in your config override the default
+- Legacy parsers (`PDFParser_PyPDF2`, `TextParser_LlamaIndex`, etc.) still work
+- Mixed configs (some files universal, some legacy) are supported
+
+See `examples/universal_rag/` for a complete working example.
+
 ## Run the Celery Worker (development)
 ```bash
 uv sync
@@ -97,12 +188,15 @@ All parsers follow the naming convention `{Type}_{Implementation}`:
 
 | Parser Type | Implementations | File Types |
 |------------|----------------|------------|
+| **Universal** | `UniversalParser` (default, priority 10) | `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.html`, `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.png`, `.jpg` |
 | **PDF** | `PDFParser_LlamaIndex`, `PDFParser_PyPDF2` | `.pdf` |
 | **Text** | `TextParser_LlamaIndex`, `TextParser_Python` | `.txt`, `.log` |
 | **CSV** | `CSVParser_LlamaIndex`, `CSVParser_Pandas`, `CSVParser_Python` | `.csv`, `.tsv` |
 | **Excel** | `ExcelParser_LlamaIndex`, `ExcelParser_Pandas`, `ExcelParser_OpenPyXL` | `.xlsx`, `.xls` |
 | **Word** | `DocxParser_LlamaIndex`, `DocxParser_PythonDocx` | `.docx` |
 | **Markdown** | `MarkdownParser_LlamaIndex`, `MarkdownParser_Python` | `.md`, `.markdown` |
+
+> **Note:** `UniversalParser` has priority 10 (highest). Legacy parsers have priority 100. When using `universal_rag` strategy, UniversalParser handles all file types. Legacy parsers can still be used with explicit `data_processing_strategies`.
 
 ## 🎯 Strategy Naming Convention
 
@@ -130,7 +224,11 @@ Examples:
 
 ## 📋 Built-in Strategies
 
-From `config/templates/default.yaml`:
+### Default Strategy (No Config Needed)
+
+- **universal_rag** - Zero-config default using UniversalParser + UniversalExtractor. Handles 90%+ of document formats automatically.
+
+### Legacy Strategies (from `config/templates/default.yaml`)
 
 1. **pdf_processing** - Optimized for PDF documents
 2. **text_processing** - Plain text file processing

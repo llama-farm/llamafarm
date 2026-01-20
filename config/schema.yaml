@@ -68,7 +68,6 @@ properties:
       type: object
       required:
         - name
-        - data_processing_strategy
         - database
       properties:
         name:
@@ -80,7 +79,8 @@ properties:
           default: true
         data_processing_strategy:
           type: string
-          description: RAG data processing strategy to use for the dataset
+          description: RAG data processing strategy to use for the dataset. Defaults to universal_rag if not specified.
+          default: universal_rag
         database:
           type: string
           description: RAG database to use for the dataset

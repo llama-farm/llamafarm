@@ -1,0 +1,95 @@
+# Universal Parser Configuration
+# Uses Microsoft MarkItDown for document extraction with configurable chunking
+
+parsers:
+  - name: UniversalParser
+    display_name: Universal Parser (MarkItDown)
+    tool: MarkItDown
+    version: 1.0.0
+    description: Universal document parser using MarkItDown with configurable chunking strategies. Handles PDF, DOCX, XLSX, PPTX, HTML, TXT, MD, CSV, JSON, XML, images, and more with semantic chunking.
+
+    supported_extensions:
+      - .pdf
+      - .docx
+      - .doc
+      - .xlsx
+      - .xls
+      - .pptx
+      - .ppt
+      - .html
+      - .htm
+      - .txt
+      - .md
+      - .markdown
+      - .csv
+      - .tsv
+      - .json
+      - .xml
+      - .png
+      - .jpg
+      - .jpeg
+      - .gif
+      - .bmp
+      - .tiff
+      - .webp
+      - .rtf
+      - .epub
+      - .mobi
+      - .eml
+      - .msg
+
+    mime_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.ms-excel
+      - application/vnd.openxmlformats-officedocument.presentationml.presentation
+      - application/vnd.ms-powerpoint
+      - text/html
+      - text/plain
+      - text/markdown
+      - text/csv
+      - application/json
+      - application/xml
+      - text/xml
+      - image/png
+      - image/jpeg
+      - image/gif
+      - image/webp
+      - application/rtf
+      - application/epub+zip
+      - message/rfc822
+      - application/vnd.ms-outlook
+
+    capabilities:
+      - text_extraction
+      - semantic_chunking
+      - section_chunking
+      - paragraph_chunking
+      - sentence_chunking
+      - character_chunking
+      - metadata_extraction
+      - ocr_fallback
+      - multi_format_support
+
+    dependencies:
+      required:
+        - markitdown
+      optional:
+        - semchunk
+        - tiktoken
+
+    # Parser priority (lower = higher priority, checked first)
+    # UniversalParser has priority 10 to be checked before legacy parsers (100)
+    priority: 10
+
+    default_config:
+      chunk_size: 1024
+      chunk_overlap: 100
+      chunk_strategy: semantic  # semantic, sections, paragraphs, sentences, characters
+      use_ocr: true
+      ocr_endpoint: "http://127.0.0.1:8000/v1/vision/ocr"
+      extract_metadata: true
+      min_chunk_size: 50
+      max_chunk_size: 8000
