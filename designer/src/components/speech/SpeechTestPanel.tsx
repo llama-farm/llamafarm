@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Mic, Send, MicOff, StopCircle, Volume2, Wifi, WifiOff, AlertCircle } from 'lucide-react'
+import { Mic, Send, MicOff, StopCircle, Volume2, Wifi, WifiOff, AlertCircle, ChevronDown, ChevronRight, Settings2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { SpeechToTextConfig } from './SpeechToTextConfig'
 import { TextToSpeechConfig } from './TextToSpeechConfig'
@@ -82,6 +82,9 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   const [sttModelLoading, setSttModelLoading] = useState(false)
   const [, setSttModelReady] = useState(false)
   const [, setSttModelError] = useState<string | null>(null)
+
+  // UI State
+  const [configExpanded, setConfigExpanded] = useState(true)
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -543,49 +546,78 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         </div>
       )}
 
-      {/* Configuration Section */}
-      <div className="flex-shrink-0 p-4 border-b border-border space-y-3 overflow-y-auto max-h-[40%]">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <SpeechToTextConfig
-            enabled={sttEnabled}
-            onEnabledChange={setSttEnabled}
-            selectedModel={sttModel}
-            onModelChange={setSttModel}
-            selectedLanguage={sttLanguage}
-            onLanguageChange={setSttLanguage}
-            wordTimestamps={wordTimestamps}
-            onWordTimestampsChange={setWordTimestamps}
-            models={STT_MODELS}
-          />
+      {/* Configuration Section - Collapsible */}
+      <div className="flex-shrink-0 border-b border-border">
+        {/* Header - always visible */}
+        <button
+          onClick={() => setConfigExpanded(!configExpanded)}
+          className="w-full px-4 py-2 flex items-center justify-between hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Settings2 className="h-4 w-4 text-muted-foreground" />
+            <span>Model Configuration</span>
+            {/* Compact summary when collapsed */}
+            {!configExpanded && (
+              <span className="text-xs text-muted-foreground font-normal ml-2">
+                {sttEnabled && `STT: ${STT_MODELS.find(m => m.id === sttModel)?.name || sttModel}`}
+                {sttEnabled && ttsEnabled && ' • '}
+                {ttsEnabled && `TTS: ${TTS_MODELS.find(m => m.id === ttsModel)?.name || ttsModel}`}
+              </span>
+            )}
+          </div>
+          {configExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
 
-          <TextToSpeechConfig
-            enabled={ttsEnabled}
-            onEnabledChange={setTtsEnabled}
-            selectedModel={ttsModel}
-            onModelChange={(model) => {
-              setTtsModel(model)
-              // Reset voice to first available for new model
-              const modelVoices = getVoicesForModel(model)
-              setTtsVoice(modelVoices[0]?.id || 'af_heart')
-            }}
-            selectedVoice={ttsVoice}
-            onVoiceChange={setTtsVoice}
-            speed={ttsSpeed}
-            onSpeedChange={setTtsSpeed}
-            models={TTS_MODELS}
-            customVoices={customVoices}
-          />
-        </div>
+        {/* Expandable content */}
+        {configExpanded && (
+          <div className="px-4 pb-3 space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <SpeechToTextConfig
+                enabled={sttEnabled}
+                onEnabledChange={setSttEnabled}
+                selectedModel={sttModel}
+                onModelChange={setSttModel}
+                selectedLanguage={sttLanguage}
+                onLanguageChange={setSttLanguage}
+                wordTimestamps={wordTimestamps}
+                onWordTimestampsChange={setWordTimestamps}
+                models={STT_MODELS}
+              />
 
-        {/* Only show voice cloning if the selected TTS model supports it */}
-        {TTS_MODELS.find(m => m.id === ttsModel)?.supportsVoiceCloning && (
-          <VoiceCloning
-            voices={customVoices}
-            onAddVoice={handleAddVoice}
-            onDeleteVoice={handleDeleteVoice}
-            onPreviewVoice={handlePreviewVoice}
-            previewingVoiceId={previewingVoiceId}
-          />
+              <TextToSpeechConfig
+                enabled={ttsEnabled}
+                onEnabledChange={setTtsEnabled}
+                selectedModel={ttsModel}
+                onModelChange={(model) => {
+                  setTtsModel(model)
+                  // Reset voice to first available for new model
+                  const modelVoices = getVoicesForModel(model)
+                  setTtsVoice(modelVoices[0]?.id || 'af_heart')
+                }}
+                selectedVoice={ttsVoice}
+                onVoiceChange={setTtsVoice}
+                speed={ttsSpeed}
+                onSpeedChange={setTtsSpeed}
+                models={TTS_MODELS}
+                customVoices={customVoices}
+              />
+            </div>
+
+            {/* Only show voice cloning if the selected TTS model supports it */}
+            {TTS_MODELS.find(m => m.id === ttsModel)?.supportsVoiceCloning && (
+              <VoiceCloning
+                voices={customVoices}
+                onAddVoice={handleAddVoice}
+                onDeleteVoice={handleDeleteVoice}
+                onPreviewVoice={handlePreviewVoice}
+                previewingVoiceId={previewingVoiceId}
+              />
+            )}
+          </div>
         )}
       </div>
 

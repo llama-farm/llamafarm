@@ -32,12 +32,10 @@ export function SpeechToTextConfig({
   const currentModel = models.find(m => m.id === selectedModel)
 
   return (
-    <div className={`rounded-xl border border-border bg-card/40 p-4 ${className}`}>
+    <div className={`rounded-lg border border-border bg-card/40 p-3 ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium">Speech-to-Text</h3>
-        </div>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-medium">Speech-to-Text</h3>
         <div className="flex items-center gap-2">
           <Switch
             checked={enabled}
@@ -50,10 +48,10 @@ export function SpeechToTextConfig({
         </div>
       </div>
 
-      {/* Controls */}
-      <div className={`space-y-3 ${!enabled ? 'opacity-50 pointer-events-none' : ''}`}>
-        {/* Model selector */}
-        <div className="grid grid-cols-2 gap-3">
+      {/* Controls - more compact */}
+      <div className={`space-y-2 ${!enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        {/* Model and Language on same row */}
+        <div className="grid grid-cols-2 gap-2">
           <Selector
             value={selectedModel}
             options={models.map(m => ({
@@ -65,8 +63,6 @@ export function SpeechToTextConfig({
             label="Model"
             disabled={!enabled}
           />
-
-          {/* Language selector */}
           <Selector
             value={selectedLanguage}
             options={STT_LANGUAGES.map(l => ({
@@ -79,30 +75,22 @@ export function SpeechToTextConfig({
           />
         </div>
 
-        {/* Word timestamps toggle */}
-        <label className="flex items-center gap-2 cursor-pointer">
-          <Checkbox
-            checked={wordTimestamps}
-            onCheckedChange={(checked) => onWordTimestampsChange(checked === true)}
-            disabled={!enabled}
-          />
-          <span className="text-sm text-muted-foreground">Word timestamps</span>
-        </label>
-
-        {/* Model info */}
-        {currentModel && (
-          <div className="text-xs text-muted-foreground p-2 rounded-lg bg-muted/30">
-            <span className="font-medium">{currentModel.name}</span>
-            <span className="mx-1.5">•</span>
-            <span>{currentModel.size}</span>
-            {currentModel.description && (
-              <>
-                <span className="mx-1.5">•</span>
-                <span>{currentModel.description}</span>
-              </>
-            )}
-          </div>
-        )}
+        {/* Word timestamps and model info on same row */}
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <Checkbox
+              checked={wordTimestamps}
+              onCheckedChange={(checked) => onWordTimestampsChange(checked === true)}
+              disabled={!enabled}
+            />
+            <span className="text-xs text-muted-foreground">Word timestamps</span>
+          </label>
+          {currentModel && (
+            <span className="text-xs text-muted-foreground">
+              {currentModel.size} • {currentModel.description}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

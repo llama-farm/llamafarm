@@ -67,14 +67,14 @@ export function TextToSpeechConfig({
   }, [isPreviewing])
 
   return (
-    <div className={`rounded-xl border border-border bg-card/40 p-4 ${className}`}>
+    <div className={`rounded-lg border border-border bg-card/40 p-3 ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Text-to-Speech</h3>
           {currentModel?.supportsVoiceCloning && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-              Voice Cloning
+              Cloning
             </span>
           )}
         </div>
@@ -90,89 +90,74 @@ export function TextToSpeechConfig({
         </div>
       </div>
 
-      {/* Controls */}
-      <div className={`space-y-3 ${!enabled ? 'opacity-50 pointer-events-none' : ''}`}>
-        {/* Model selector */}
-        <Selector
-          value={selectedModel}
-          options={models.map(m => ({
-            value: m.id,
-            label: m.name,
-            description: m.description || m.size,
-          }))}
-          onChange={onModelChange}
-          label="Model"
-          disabled={!enabled}
-        />
-
-        {/* Voice selector with preview */}
-        <div className="flex gap-2 items-end">
-          <div className="flex-1">
-            <Selector
-              value={selectedVoice}
-              options={allVoices}
-              onChange={onVoiceChange}
-              label="Voice"
-              disabled={!enabled}
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 mb-0.5"
-            onClick={handlePreview}
+      {/* Controls - more compact */}
+      <div className={`space-y-2 ${!enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        {/* Model and Voice on same row */}
+        <div className="grid grid-cols-2 gap-2">
+          <Selector
+            value={selectedModel}
+            options={models.map(m => ({
+              value: m.id,
+              label: m.name,
+              description: m.description || m.size,
+            }))}
+            onChange={onModelChange}
+            label="Model"
             disabled={!enabled}
-            aria-label={isPreviewing ? 'Stop preview' : 'Preview voice'}
-          >
-            {isPreviewing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        {/* Speed slider */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-muted-foreground">Speed</label>
-            <span className="text-xs text-muted-foreground tabular-nums">{speed.toFixed(1)}x</span>
-          </div>
-          <input
-            type="range"
-            min={0.5}
-            max={2.0}
-            step={0.1}
-            value={speed}
-            onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
-            disabled={!enabled}
-            className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer
-              [&::-webkit-slider-thumb]:appearance-none
-              [&::-webkit-slider-thumb]:h-3
-              [&::-webkit-slider-thumb]:w-3
-              [&::-webkit-slider-thumb]:rounded-full
-              [&::-webkit-slider-thumb]:bg-primary
-              [&::-webkit-slider-thumb]:cursor-pointer
-              disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Speech speed"
           />
-          <div className="flex justify-between text-[10px] text-muted-foreground">
-            <span>0.5x</span>
-            <span>1.0x</span>
-            <span>2.0x</span>
+          <div className="flex gap-1.5 items-end">
+            <div className="flex-1">
+              <Selector
+                value={selectedVoice}
+                options={allVoices}
+                onChange={onVoiceChange}
+                label="Voice"
+                disabled={!enabled}
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 mb-0.5 flex-shrink-0"
+              onClick={handlePreview}
+              disabled={!enabled}
+              aria-label={isPreviewing ? 'Stop preview' : 'Preview voice'}
+            >
+              {isPreviewing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            </Button>
           </div>
         </div>
 
-        {/* Model info */}
-        {currentModel && (
-          <div className="text-xs text-muted-foreground p-2 rounded-lg bg-muted/30">
-            <span className="font-medium">{currentModel.name}</span>
-            <span className="mx-1.5">•</span>
-            <span>{currentModel.size}</span>
-            {currentModel.description && (
-              <>
-                <span className="mx-1.5">•</span>
-                <span>{currentModel.description}</span>
-              </>
-            )}
+        {/* Speed slider - inline with model info */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-1">
+            <label className="text-xs text-muted-foreground whitespace-nowrap">Speed</label>
+            <input
+              type="range"
+              min={0.5}
+              max={2.0}
+              step={0.1}
+              value={speed}
+              onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
+              disabled={!enabled}
+              className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer
+                [&::-webkit-slider-thumb]:appearance-none
+                [&::-webkit-slider-thumb]:h-2.5
+                [&::-webkit-slider-thumb]:w-2.5
+                [&::-webkit-slider-thumb]:rounded-full
+                [&::-webkit-slider-thumb]:bg-primary
+                [&::-webkit-slider-thumb]:cursor-pointer
+                disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Speech speed"
+            />
+            <span className="text-xs text-muted-foreground tabular-nums w-8">{speed.toFixed(1)}x</span>
           </div>
-        )}
+          {currentModel && (
+            <span className="text-xs text-muted-foreground">
+              {currentModel.size} • {currentModel.description}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )
